@@ -43,11 +43,14 @@ jobs:
 
       - name: Verify APK Generated
         run: |
-          if compgen -G "app/build/outputs/apk/debug/*.apk" > /dev/null; then
-            echo "APK successfully generated:"
-            ls -lh app/build/outputs/apk/debug/*.apk
+          APK_FILE="app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$APK_FILE" ]; then
+            echo "SUCCESS: APK file exists at $APK_FILE"
+            echo "APK file details and size:"
+            ls -lh "$APK_FILE"
+            ls -l "$APK_FILE"
           else
-            echo "Error: No APK found in app/build/outputs/apk/debug/"
+            echo "ERROR: Expected APK file does not exist at $APK_FILE"
             exit 1
           fi
 
@@ -55,6 +58,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: TradeLab-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
