@@ -1,0 +1,111 @@
+<resources>
+    <string name="app_name">TradeLab</string>
+    <string name="nav_account">Account</string>
+    <string name="nav_market">Market</string>
+    <string name="nav_chart">Chart</string>
+    <string name="nav_trade">Trade</string>
+    <string name="nav_results">Results</string>
+
+    <string name="title_history">Trade History</string>
+    <string name="title_strategies">Strategies</string>
+    <string name="title_backtest">Backtest</string>
+    <string name="title_replay">Historical Replay</string>
+    <string name="title_calendar">Trading Calendar</string>
+    <string name="title_journal">Trade Journal</string>
+    <string name="title_settings">Settings</string>
+    <string name="title_data_source">Market Data Provider</string>
+    <string name="title_account_rules">Rules &amp; Discipline</string>
+
+    <string name="term_balance">Balance</string>
+    <string name="term_equity">Equity</string>
+    <string name="term_margin">Margin</string>
+    <string name="term_free_margin">Free Margin</string>
+    <string name="term_margin_level">Margin Level</string>
+    <string name="term_leverage">Leverage</string>
+    <string name="term_profit">Profit</string>
+    <string name="term_loss">Loss</string>
+    <string name="term_net_profit">Net Profit</string>
+    <string name="term_win_rate">Win Rate</string>
+    <string name="term_profit_factor">Profit Factor</string>
+    <string name="term_drawdown">Max Drawdown</string>
+    <string name="term_gross_profit">Gross Profit</string>
+    <string name="term_gross_loss">Gross Loss</string>
+    <string name="term_sharpe_ratio">Sharpe Ratio</string>
+    <string name="term_sortino_ratio">Sortino Ratio</string>
+    <string name="term_recovery_factor">Recovery Factor</string>
+    <string name="term_expectancy">Expectancy</string>
+    <string name="term_total_trades">Total Trades</string>
+    <string name="term_winning_trades">Winning Trades</string>
+    <string name="term_losing_trades">Losing Trades</string>
+    <string name="term_avg_win">Avg Win</string>
+    <string name="term_avg_loss">Avg Loss</string>
+    <string name="term_consecutive_wins">Max Consecutive Wins</string>
+    <string name="term_consecutive_losses">Max Consecutive Losses</string>
+    <string name="term_best_trade">Best Trade</string>
+    <string name="term_worst_trade">Worst Trade</string>
+    <string name="term_total_volume">Total Volume</string>
+    <string name="term_r_multiple">R Multiple</string>
+    <string name="term_avg_duration">Avg Duration</string>
+
+    <string name="action_buy">BUY</string>
+    <string name="action_sell">SELL</string>
+    <string name="action_close">Close</string>
+    <string name="action_partial_close">Partial Close</string>
+    <string name="action_modify">Modify</string>
+    <string name="action_modify_sl_tp">Modify SL / TP</string>
+    <string name="action_break_even">Break Even</string>
+    <string name="action_trailing_stop">Trailing Stop</string>
+    <string name="action_place_order">Place Virtual Order</string>
+    <string name="action_reset_account">Reset Account</string>
+    <string name="action_create_account">Create Account</string>
+    <string name="action_delete_account">Delete Account</string>
+    <string name="action_start_backtest">Start Backtest</string>
+    <string name="action_reset_backtest">Reset</string>
+
+    <string name="order_type_market">Market</string>
+    <string name="order_type_limit">Limit</string>
+    <string name="order_type_stop">Stop</string>
+
+    <string name="label_symbol">Symbol</string>
+    <string name="label_lot_size">Volume (Lots)</string>
+    <string name="label_stop_loss">Stop Loss (SL)</string>
+    <string name="label_take_profit">Take Profit (TP)</string>
+    <string name="label_entry_price">Entry Price</string>
+    <string name="label_current_price">Current Price</string>
+    <string name="label_risk_pct">Risk %</string>
+    <string name="label_risk_amount">Risk Amount $</string>
+    <string name="label_potential_profit">Potential Profit</string>
+    <string name="label_potential_loss">Potential Loss</string>
+    <string name="label_spread">Spread</string>
+    <string name="label_commission">Commission</string>
+    <string name="label_swap">Swap</string>
+    <string name="label_slippage">Slippage</string>
+    <string name="label_timeframe">Timeframe</string>
+    <string name="label_start_date">Start Date</string>
+    <string name="label_end_date">End Date</string>
+    <string name="label_initial_balance">Initial Balance</string>
+
+    <string name="mode_live">Live Paper Trading</string>
+    <string name="mode_replay">Historical Replay</string>
+    <string name="mode_backtest">Algorithmic Backtest</string>
+
+    <string name="source_live">LIVE DATA</string>
+    <string name="source_demo">DEMO DATA</string>
+    <string name="source_replay">REPLAY DATA</string>
+
+    <string name="virtual_money_disclaimer">Notice: All funds and orders in this app are 100% virtual for training and research. No connection to real brokers.</string>
+    <string name="err_insufficient_margin">Insufficient virtual margin for this order</string>
+    <string name="err_invalid_lot">Invalid lot size</string>
+    <string name="err_invalid_sl_tp">Invalid Stop Loss or Take Profit levels for this position direction</string>
+    <string name="err_connection_lost">Market data connection lost, please check your network</string>
+    <string name="err_no_candles">Insufficient candles in the selected range</string>
+
+    <string name="discipline_score">Discipline Score</string>
+    <string name="daily_loss_limit">Daily Loss Limit</string>
+    <string name="max_loss_limit">Maximum Overall Loss</string>
+    <string name="profit_target">Profit Target</string>
+    <string name="trading_days">Trading Days</string>
+    <string name="daily_pl">Daily P/L</string>
+    <string name="remaining_daily_loss">Remaining Daily Loss</string>
+    <string name="remaining_max_loss">Remaining Max Loss</string>
+</resources>

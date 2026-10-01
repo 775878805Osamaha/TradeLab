@@ -1,0 +1,390 @@
+package com.example.feature.chart
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.core.market.DefaultSymbols
+import com.example.core.model.OrderSide
+import com.example.core.model.Timeframe
+import com.example.feature.chart.model.DrawingTool
+import com.example.feature.results.TradeDetailDialog
+import com.example.ui.components.CandlestickChart
+import com.example.ui.components.DataSourceBadge
+import com.example.ui.theme.*
+import java.util.Locale
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChartScreen(
+    viewModel: ChartViewModel,
+    onNavigateToReplay: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    var showSymbolSheet by remember { mutableStateOf(false) }
+    var showToolsMenu by remember { mutableStateOf(false) }
+    var showIndicatorsDialog by remember { mutableStateOf(false) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(uiState.message) {
+        uiState.message?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessage()
+        }
+    }
+
+    // Trade detail dialog when tapping a marker on chart
+    uiState.selectedTradeForDetail?.let { trade ->
+        TradeDetailDialog(trade = trade, onDismiss = { viewModel.selectTradeForDetail(null) })
+    }
+
+    if (showIndicatorsDialog) {
+        ChartIndicatorsDialog(
+            currentSettings = uiState.indicatorSettings,
+            onSaveSettings = { viewModel.updateIndicatorSettings(it) },
+            onDismiss = { showIndicatorsDialog = false }
+        )
+    }
+
+    Scaffold(
+        modifier = modifier.testTag("chart_screen"),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clickable { showSymbolSheet = true }
+                            .testTag("symbol_selector_btn")
+                    ) {
+                        Text(
+                            text = uiState.selectedSymbol,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 17.sp,
+                            color = TradingTextPrimary
+                        )
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = TradingTextSecondary)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        DataSourceBadge(sourceType = uiState.dataSourceType)
+                    }
+                },
+                actions = {
+                    // Replay shortcut
+                    IconButton(
+                        onClick = onNavigateToReplay,
+                        modifier = Modifier.testTag("chart_to_replay_btn")
+                    ) {
+                        Icon(Icons.Default.PlayCircle, contentDescription = "إعادة العرض Replay", tint = TradingAccentLight)
+                    }
+                    // Crosshair toggle
+                    IconButton(
+                        onClick = { viewModel.toggleCrosshair() },
+                        modifier = Modifier.testTag("chart_crosshair_btn")
+                    ) {
+                        Icon(
+                            Icons.Default.FilterCenterFocus,
+                            contentDescription = "التقاطع",
+                            tint = if (uiState.isCrosshairActive) TradingAccent else TradingTextSecondary
+                        )
+                    }
+                    // Indicators dialog button
+                    IconButton(
+                        onClick = { showIndicatorsDialog = true },
+                        modifier = Modifier.testTag("chart_indicators_btn")
+                    ) {
+                        Icon(Icons.Default.Timeline, contentDescription = "المؤشرات الفنية", tint = TradingCyan)
+                    }
+                    // Drawings menu button
+                    IconButton(
+                        onClick = { showToolsMenu = !showToolsMenu },
+                        modifier = Modifier.testTag("drawing_tools_menu_btn")
+                    ) {
+                        Icon(
+                            Icons.Default.Draw,
+                            contentDescription = "أدوات الرسم",
+                            tint = if (uiState.activeDrawingTool != DrawingTool.NONE) TradingGold else TradingTextSecondary
+                        )
+                    }
+                    // Reset / Auto-fit view button
+                    IconButton(
+                        onClick = { viewModel.triggerResetView() },
+                        modifier = Modifier.testTag("chart_reset_view_btn")
+                    ) {
+                        Icon(Icons.Default.CenterFocusWeak, contentDescription = "إعادة ضبط العرض", tint = TradingTextSecondary)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TradingBackground)
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            // Timeframe selection scrollable row (all 10 timeframes)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Timeframe.values().forEach { tf ->
+                    val isSelected = uiState.selectedTimeframe == tf
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isSelected) TradingAccent else TradingElevated)
+                            .clickable { viewModel.selectTimeframe(tf) }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                            .testTag("tf_chip_${tf.code}")
+                    ) {
+                        Text(
+                            text = tf.displayName,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) Color.White else TradingTextSecondary
+                        )
+                    }
+                }
+
+                // Volume toggle chip
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (uiState.isVolumeVisible) TradingGold.copy(alpha = 0.2f) else TradingElevated)
+                        .clickable { viewModel.toggleVolume() }
+                        .padding(horizontal = 7.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = "VOL",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (uiState.isVolumeVisible) TradingGold else TradingTextSecondary
+                    )
+                }
+            }
+
+            // Drawing tools active banner if tool active
+            if (uiState.activeDrawingTool != DrawingTool.NONE) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(TradingGold.copy(alpha = 0.15f))
+                        .padding(horizontal = 14.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "أداة نشطة: ${uiState.activeDrawingTool.displayNameAr} (اسحب على الشارت)",
+                        fontSize = 11.sp,
+                        color = TradingGold,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "إلغاء",
+                        fontSize = 12.sp,
+                        color = TradingNegative,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable { viewModel.setDrawingTool(DrawingTool.NONE) }
+                    )
+                }
+            }
+
+            // Professional Candlestick Chart
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                CandlestickChart(
+                    candles = uiState.candles,
+                    latestTick = uiState.latestTick,
+                    openPositions = uiState.openPositions,
+                    pendingOrders = uiState.pendingOrders,
+                    historicalTrades = uiState.historicalTrades,
+                    activeDrawingTool = uiState.activeDrawingTool,
+                    drawings = uiState.drawings,
+                    indicatorSettings = uiState.indicatorSettings,
+                    smaValues = uiState.smaValues,
+                    emaValues = uiState.emaValues,
+                    bollingerValues = uiState.bollingerValues,
+                    vwapValues = uiState.vwapValues,
+                    rsiValues = uiState.rsiValues,
+                    macdValues = uiState.macdValues,
+                    atrValues = uiState.atrValues,
+                    isCrosshairActive = uiState.isCrosshairActive,
+                    isVolumeVisible = uiState.isVolumeVisible,
+                    resetViewTrigger = uiState.resetViewTrigger,
+                    onAddDrawing = { viewModel.addDrawing(it) },
+                    onSelectTrade = { viewModel.selectTradeForDetail(it) }
+                )
+            }
+
+            // Quick Execution Bar
+            Surface(
+                color = TradingCard,
+                tonalElevation = 4.dp,
+                border = androidx.compose.foundation.BorderStroke(1.dp, TradingBorder)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // SELL Button (Red)
+                    val bidText = uiState.latestTick?.let { String.format(Locale.US, "%.2f", it.bid) } ?: "--"
+                    Button(
+                        onClick = { viewModel.quickOrder(OrderSide.SELL, 0.01) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .testTag("chart_quick_sell_btn"),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = TradingNegative)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("بيع (SELL)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(bidText, fontSize = 11.sp)
+                        }
+                    }
+
+                    // Spread / Info Chip
+                    val spreadText = uiState.latestTick?.let {
+                        val sym = DefaultSymbols.getSymbol(uiState.selectedSymbol)
+                        String.format(Locale.US, "%.1f", it.spread / sym.pipSize)
+                    } ?: "0.0"
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "السبريد", fontSize = 10.sp, color = TradingTextSecondary)
+                        Text(text = "$spreadText pips", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TradingTextPrimary)
+                    }
+
+                    // BUY Button (Green)
+                    val askText = uiState.latestTick?.let { String.format(Locale.US, "%.2f", it.ask) } ?: "--"
+                    Button(
+                        onClick = { viewModel.quickOrder(OrderSide.BUY, 0.01) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .testTag("chart_quick_buy_btn"),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = TradingPositive)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("شراء (BUY)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(askText, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Symbol Picker Bottom Sheet
+    if (showSymbolSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSymbolSheet = false },
+            containerColor = TradingCard
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = "اختر أداة التداول",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                DefaultSymbols.SYMBOLS.forEach { sym ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.selectSymbol(sym.symbol)
+                                showSymbolSheet = false
+                            }
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(text = sym.symbol, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text(text = sym.name, fontSize = 12.sp, color = TradingTextSecondary)
+                        }
+                        Text(text = sym.category, fontSize = 11.sp, color = TradingAccentLight)
+                    }
+                    HorizontalDivider(color = TradingBorder)
+                }
+            }
+        }
+    }
+
+    // Drawing Tools Menu Dialog
+    if (showToolsMenu) {
+        AlertDialog(
+            onDismissRequest = { showToolsMenu = false },
+            title = { Text("أدوات التحليل والرسم الفني", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val tools = listOf(
+                        DrawingTool.HORIZONTAL_LINE to "خط أفقي (دعم ومقاومة)",
+                        DrawingTool.VERTICAL_LINE to "خط رأسي (توقيت)",
+                        DrawingTool.TRENDLINE to "خط اتجاه (Trendline)",
+                        DrawingTool.RECTANGLE to "مستطيل منطقة (Supply / Demand)",
+                        DrawingTool.FIBONACCI to "مستويات فيبوناتشي (Fibonacci)",
+                        DrawingTool.MEASUREMENT to "أداة القياس والمدى (Ruler)"
+                    )
+                    tools.forEach { (tool, label) ->
+                        TextButton(
+                            onClick = {
+                                viewModel.setDrawingTool(tool)
+                                showToolsMenu = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(label, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                        }
+                    }
+                    HorizontalDivider(color = TradingBorder)
+                    TextButton(
+                        onClick = {
+                            viewModel.clearDrawings()
+                            showToolsMenu = false
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = TradingNegative)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("مسح جميع الرسومات من الشارت", color = TradingNegative)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showToolsMenu = false }) { Text("إغلاق") }
+            }
+        )
+    }
+}

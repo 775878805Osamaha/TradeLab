@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Candle 1: Red/Bearish -->
+    <path
+        android:strokeColor="#EF4444"
+        android:strokeWidth="1.5"
+        android:pathData="M34,36 L34,74" />
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M30,44 h8 v20 h-8 z" />
+
+    <!-- Candle 2: Bullish Green -->
+    <path
+        android:strokeColor="#22C55E"
+        android:strokeWidth="1.5"
+        android:pathData="M52,28 L52,78" />
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M48,36 h8 v28 h-8 z" />
+
+    <!-- Candle 3: Bullish Cyan / Breakout -->
+    <path
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="1.5"
+        android:pathData="M70,22 L70,68" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M66,28 h8 v24 h-8 z" />
+
+    <!-- Dynamic Trendline with Glowing Violet/Cyan Gradient -->
+    <path
+        android:strokeColor="#8B5CF6"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M26,76 L44,56 L60,60 L84,30" />
+
+    <!-- Arrow head at top right of trendline -->
+    <path
+        android:fillColor="#8B5CF6"
+        android:pathData="M76,28 L86,28 L86,38 Z" />
+
+</vector>

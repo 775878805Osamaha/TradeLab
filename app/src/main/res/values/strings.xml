@@ -1,0 +1,120 @@
+<resources>
+    <string name="app_name">TradeLab</string>
+    <string name="nav_account">الحساب</string>
+    <string name="nav_market">السوق</string>
+    <string name="nav_chart">الشارت</string>
+    <string name="nav_trade">التداول</string>
+    <string name="nav_results">النتائج</string>
+
+    <!-- Additional screen titles -->
+    <string name="title_history">سجل الصفقات</string>
+    <string name="title_strategies">الاستراتيجيات</string>
+    <string name="title_backtest">الاختبار التاريخي</string>
+    <string name="title_replay">إعادة العرض التاريخي</string>
+    <string name="title_calendar">التقويم التداولي</string>
+    <string name="title_journal">يوميات التداول</string>
+    <string name="title_settings">الإعدادات</string>
+    <string name="title_data_source">مزود بيانات السوق</string>
+    <string name="title_account_rules">قواعد التحدي والالتزام</string>
+
+    <!-- Trading Terms -->
+    <string name="term_balance">الرصيد</string>
+    <string name="term_equity">حقوق الملكية</string>
+    <string name="term_margin">الهامش المستخدم</string>
+    <string name="term_free_margin">الهامش المتاح</string>
+    <string name="term_margin_level">مستوى الهامش</string>
+    <string name="term_leverage">الرافعة المالية</string>
+    <string name="term_profit">الربح</string>
+    <string name="term_loss">الخسارة</string>
+    <string name="term_net_profit">صافي الربح</string>
+    <string name="term_win_rate">معدل الفوز</string>
+    <string name="term_profit_factor">عامل الربح</string>
+    <string name="term_drawdown">أقصى تراجع</string>
+    <string name="term_gross_profit">إجمالي الأرباح</string>
+    <string name="term_gross_loss">إجمالي الخسائر</string>
+    <string name="term_sharpe_ratio">مؤشر شارب</string>
+    <string name="term_sortino_ratio">مؤشر سورتينو</string>
+    <string name="term_recovery_factor">معامل الاسترداد</string>
+    <string name="term_expectancy">العائد المتوقع</string>
+    <string name="term_total_trades">إجمالي الصفقات</string>
+    <string name="term_winning_trades">الصفقات الرابحة</string>
+    <string name="term_losing_trades">الصفقات الخاسرة</string>
+    <string name="term_avg_win">متوسط الربح</string>
+    <string name="term_avg_loss">متوسط الخسارة</string>
+    <string name="term_consecutive_wins">أقصى توالي فوز</string>
+    <string name="term_consecutive_losses">أقصى توالي خسارة</string>
+    <string name="term_best_trade">أفضل صفقة</string>
+    <string name="term_worst_trade">أسوأ صفقة</string>
+    <string name="term_total_volume">إجمالي العقود</string>
+    <string name="term_r_multiple">مضاعف المخاطرة R</string>
+    <string name="term_avg_duration">متوسط مدة الصفقة</string>
+
+    <!-- Trading Actions -->
+    <string name="action_buy">شراء</string>
+    <string name="action_sell">بيع</string>
+    <string name="action_close">إغلاق</string>
+    <string name="action_partial_close">إغلاق جزئي</string>
+    <string name="action_modify">تعديل</string>
+    <string name="action_modify_sl_tp">تعديل SL / TP</string>
+    <string name="action_break_even">نقل للتعادل BE</string>
+    <string name="action_trailing_stop">وقف متحرك Trailing</string>
+    <string name="action_place_order">تنفيذ الأمر الافتراضي</string>
+    <string name="action_reset_account">إعادة تعيين الحساب</string>
+    <string name="action_create_account">إنشاء حساب افتراضي جديد</string>
+    <string name="action_delete_account">حذف الحساب</string>
+    <string name="action_start_backtest">بدء الاختبار التاريخي</string>
+    <string name="action_reset_backtest">إعادة الضبط</string>
+
+    <!-- Order Types -->
+    <string name="order_type_market">أمر فوري Market</string>
+    <string name="order_type_limit">أمر معلق Limit</string>
+    <string name="order_type_stop">أمر إيقاف Stop</string>
+
+    <!-- Labels & Form -->
+    <string name="label_symbol">الرمز</string>
+    <string name="label_lot_size">حجم العقد (لوت)</string>
+    <string name="label_stop_loss">وقف الخسارة (SL)</string>
+    <string name="label_take_profit">جني الأرباح (TP)</string>
+    <string name="label_entry_price">سعر الدخول</string>
+    <string name="label_current_price">السعر الحالي</string>
+    <string name="label_risk_pct">نسبة المخاطرة %</string>
+    <string name="label_risk_amount">مبلغ المخاطرة $</string>
+    <string name="label_potential_profit">الربح المتوقع</string>
+    <string name="label_potential_loss">الخسارة المحتملة</string>
+    <string name="label_spread">الفارق (السبريد)</string>
+    <string name="label_commission">العمولة</string>
+    <string name="label_swap">التبييت (سواب)</string>
+    <string name="label_slippage">الانزلاق السعري</string>
+    <string name="label_timeframe">الإطار الزمني</string>
+    <string name="label_start_date">تاريخ البدء</string>
+    <string name="label_end_date">تاريخ الانتهاء</string>
+    <string name="label_initial_balance">الرصيد المبدئي</string>
+
+    <!-- Market Modes -->
+    <string name="mode_live">تداول ورقي حي (أسعار حقيقية)</string>
+    <string name="mode_replay">إعادة العرض التاريخي (Replay)</string>
+    <string name="mode_backtest">اختبار خوارزمي (Backtest)</string>
+
+    <!-- Data Sources -->
+    <string name="source_live">LIVE DATA</string>
+    <string name="source_demo">DEMO DATA</string>
+    <string name="source_replay">REPLAY DATA</string>
+
+    <!-- Warnings and Info -->
+    <string name="virtual_money_disclaimer">تنبيه: جميع الأموال والأوامر في هذا التطبيق افتراضية 100% لأغراض التدريب والبحث. التطبيق لا يتصل بأي وسيط حقيقي ولا يقبل إيداعات مالية حقيقية.</string>
+    <string name="err_insufficient_margin">الهامش الافتراضي غير كافٍ لتنفيذ هذا الأمر</string>
+    <string name="err_invalid_lot">حجم اللوت غير صالح</string>
+    <string name="err_invalid_sl_tp">مستويات وقف الخسارة أو جني الأرباح غير صحيحة بالنسبة لاتجاه الصفقة</string>
+    <string name="err_connection_lost">انقطع الاتصال بمزود البيانات، يرجى التحقق من الشبكة</string>
+    <string name="err_no_candles">لا تتوفر شموع كافية في النطاق الزمني المحدد</string>
+
+    <!-- Challenge / Rules -->
+    <string name="discipline_score">مؤشر الانضباط</string>
+    <string name="daily_loss_limit">حد الخسارة اليومي</string>
+    <string name="max_loss_limit">حد أقصى تراجع كلي</string>
+    <string name="profit_target">الهدف الربحي المستهدف</string>
+    <string name="trading_days">أيام التداول الفعلية</string>
+    <string name="daily_pl">الربح/الخسارة اليومية</string>
+    <string name="remaining_daily_loss">المتبقي من حد الخسارة اليومي</string>
+    <string name="remaining_max_loss">المتبقي من أقصى تراجع كلي</string>
+</resources>

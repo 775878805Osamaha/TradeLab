@@ -1,0 +1,392 @@
+package com.example.ui.components
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.core.indicators.BollingerBandsResult
+import com.example.core.indicators.MacdResult
+import com.example.core.model.*
+import com.example.feature.chart.model.*
+import com.example.ui.components.chart.ChartDrawingsRenderer
+import com.example.ui.components.chart.ChartIndicatorsRenderer
+import com.example.ui.components.chart.ChartOverlays
+import com.example.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
+
+@Composable
+fun CandlestickChart(
+    candles: List<Candle>,
+    modifier: Modifier = Modifier,
+    latestTick: Tick? = null,
+    openPositions: List<Position> = emptyList(),
+    pendingOrders: List<Order> = emptyList(),
+    historicalTrades: List<TradeJournalEntry> = emptyList(),
+    activeDrawingTool: DrawingTool = DrawingTool.NONE,
+    drawings: List<ChartDrawing> = emptyList(),
+    indicatorSettings: IndicatorSettings = IndicatorSettings(),
+    smaValues: List<Double?> = emptyList(),
+    emaValues: List<Double?> = emptyList(),
+    bollingerValues: List<BollingerBandsResult?> = emptyList(),
+    vwapValues: List<Double> = emptyList(),
+    rsiValues: List<Double?> = emptyList(),
+    macdValues: List<MacdResult?> = emptyList(),
+    atrValues: List<Double?> = emptyList(),
+    isCrosshairActive: Boolean = false,
+    isVolumeVisible: Boolean = true,
+    resetViewTrigger: Long = 0L,
+    onAddDrawing: ((ChartDrawing) -> Unit)? = null,
+    onSelectTrade: ((TradeJournalEntry) -> Unit)? = null
+) {
+    if (candles.isEmpty()) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .testTag("candlestick_chart_empty"),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "جاري تحميل بيانات الشارت...",
+                color = TradingTextSecondary,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        return
+    }
+
+    // Viewport State
+    var candleWidthPx by remember { mutableFloatStateOf(20f) }
+    var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
+    var crosshairOffset by remember { mutableStateOf<Offset?>(null) }
+    var inspectedCandle by remember { mutableStateOf<Candle?>(null) }
+
+    // Drawing Interaction State
+    var drawingStartOffset by remember { mutableStateOf<Offset?>(null) }
+    var drawingCurrentOffset by remember { mutableStateOf<Offset?>(null) }
+
+    // Reset View trigger
+    LaunchedEffect(resetViewTrigger) {
+        if (resetViewTrigger > 0L) {
+            scrollOffsetPx = 0f
+            candleWidthPx = 20f
+            crosshairOffset = null
+        }
+    }
+
+    val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
+        candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
+        scrollOffsetPx += panChange.x
+    }
+
+    val timeFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.US) }
+
+    Box(modifier = modifier) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("candlestick_canvas")
+                .transformable(state = transformableState)
+                .pointerInput(candles, activeDrawingTool, isCrosshairActive) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            if (activeDrawingTool != DrawingTool.NONE) {
+                                drawingStartOffset = offset
+                                drawingCurrentOffset = offset
+                            } else if (isCrosshairActive) {
+                                crosshairOffset = offset
+                            }
+                        },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            if (activeDrawingTool != DrawingTool.NONE) {
+                                drawingCurrentOffset = change.position
+                            } else if (isCrosshairActive) {
+                                crosshairOffset = change.position
+                            } else {
+                                scrollOffsetPx += dragAmount.x
+                            }
+                        },
+                        onDragEnd = {
+                            if (activeDrawingTool != DrawingTool.NONE && drawingStartOffset != null && drawingCurrentOffset != null) {
+                                // Finalize drawing
+                                val start = drawingStartOffset!!
+                                val end = drawingCurrentOffset!!
+                                // Will be converted via transform in draw phase
+                                drawingStartOffset = null
+                                drawingCurrentOffset = null
+                            }
+                        }
+                    )
+                }
+                .pointerInput(candles) {
+                    detectTapGestures(
+                        onTap = { offset ->
+                            if (isCrosshairActive) {
+                                crosshairOffset = offset
+                            }
+                        }
+                    )
+                }
+        ) {
+            val width = size.width
+            val height = size.height
+            val rightAxisWidth = 110f
+            val chartWidth = (width - rightAxisWidth).coerceAtLeast(1f)
+
+            // Subpanel height split
+            val hasSubpanel = indicatorSettings.hasSubpanelIndicators
+            val subpanelHeight = if (hasSubpanel) height * 0.22f else 0f
+            val volumeHeight = if (isVolumeVisible) height * 0.14f else 0f
+            val mainChartHeight = (height - subpanelHeight - volumeHeight).coerceAtLeast(10f)
+
+            // Calculate Visible Candle Range from Viewport
+            val visibleCount = ((chartWidth / candleWidthPx) + 3).toInt().coerceIn(1, candles.size)
+            val maxScrollOffset = (candles.size * candleWidthPx) - chartWidth
+            val clampedScroll = scrollOffsetPx.coerceIn(-maxScrollOffset.coerceAtLeast(0f), 0f)
+
+            val scrollCandleOffset = (-clampedScroll / candleWidthPx).toInt().coerceIn(0, (candles.size - visibleCount).coerceAtLeast(0))
+            val startIndex = (candles.size - visibleCount - scrollCandleOffset).coerceIn(0, candles.size - 1)
+            val endIndex = (startIndex + visibleCount).coerceIn(startIndex, candles.size)
+            val visibleCandles = candles.subList(startIndex, endIndex)
+
+            if (visibleCandles.isEmpty()) return@Canvas
+
+            // Calculate min & max prices for visible range
+            var minP = visibleCandles.minOfOrNull { it.low } ?: 0.0
+            var maxP = visibleCandles.maxOfOrNull { it.high } ?: 1.0
+            if (minP == maxP) {
+                minP *= 0.99
+                maxP *= 1.01
+            }
+            // Add 3% vertical padding
+            val pPadding = (maxP - minP) * 0.03
+            val paddedMin = minP - pPadding
+            val paddedMax = maxP + pPadding
+
+            val transform = ChartTransform(
+                visibleCandles = visibleCandles,
+                minPrice = paddedMin,
+                maxPrice = paddedMax,
+                chartWidth = chartWidth,
+                chartHeight = mainChartHeight,
+                candleWidthPx = candleWidthPx,
+                rightAxisWidth = rightAxisWidth
+            )
+
+            // Update inspected candle for Crosshair HUD
+            crosshairOffset?.let { off ->
+                val idx = transform.xToCandleIndex(off.x)
+                if (idx in visibleCandles.indices) {
+                    inspectedCandle = visibleCandles[idx]
+                }
+            }
+
+            // Draw Background Grid
+            for (step in 0..4) {
+                val y = (step / 4f) * mainChartHeight
+                val priceVal = paddedMin + ((4 - step) / 4.0) * (paddedMax - paddedMin)
+                drawLine(
+                    color = TradingBorder.copy(alpha = 0.3f),
+                    start = Offset(0f, y),
+                    end = Offset(chartWidth, y),
+                    strokeWidth = 1f
+                )
+                // Price Axis Label
+                drawContext.canvas.nativeCanvas.apply {
+                    val paint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.parseColor("#9CA3AF")
+                        textSize = 20f
+                        isAntiAlias = true
+                    }
+                    drawText(String.format(Locale.US, "%.2f", priceVal), chartWidth + 6f, y + 6f, paint)
+                }
+            }
+
+            // 1. Draw Visible OHLC Candlesticks
+            val bodyWidth = (candleWidthPx * 0.72f).coerceAtLeast(1.5f)
+            visibleCandles.forEachIndexed { i, c ->
+                val x = transform.candleIndexToX(i)
+                val openY = transform.priceToY(c.open)
+                val closeY = transform.priceToY(c.close)
+                val highY = transform.priceToY(c.high)
+                val lowY = transform.priceToY(c.low)
+
+                val isBullish = c.close >= c.open
+                val candleColor = if (isBullish) TradingPositive else TradingNegative
+
+                // Wick line
+                drawLine(
+                    color = candleColor,
+                    start = Offset(x, highY),
+                    end = Offset(x, lowY),
+                    strokeWidth = 1.4f
+                )
+
+                // Body rect
+                val bodyTop = min(openY, closeY)
+                val bodyHeight = abs(closeY - openY).coerceAtLeast(1.5f)
+                drawRect(
+                    color = candleColor,
+                    topLeft = Offset(x - (bodyWidth / 2f), bodyTop),
+                    size = Size(bodyWidth, bodyHeight)
+                )
+
+                // Time axis label (every 5 candles)
+                if (i % 5 == 0) {
+                    drawContext.canvas.nativeCanvas.apply {
+                        val p = android.graphics.Paint().apply {
+                            color = android.graphics.Color.parseColor("#6B7280")
+                            textSize = 17f
+                            isAntiAlias = true
+                        }
+                        drawText(timeFormat.format(Date(c.openTime)), x - 20f, height - 6f, p)
+                    }
+                }
+            }
+
+            // 2. Draw Volume Bars
+            if (isVolumeVisible) {
+                val volTop = mainChartHeight
+                val maxVol = max(1.0, visibleCandles.maxOfOrNull { it.volume } ?: 1.0)
+                visibleCandles.forEachIndexed { i, c ->
+                    val x = transform.candleIndexToX(i)
+                    val volHeight = (c.volume / maxVol).coerceIn(0.0, 1.0).toFloat() * volumeHeight
+                    val y = volTop + volumeHeight - volHeight
+                    val isBullish = c.close >= c.open
+                    val volColor = if (isBullish) TradingPositive.copy(alpha = 0.35f) else TradingNegative.copy(alpha = 0.35f)
+
+                    drawRect(
+                        color = volColor,
+                        topLeft = Offset(x - (bodyWidth / 2f), y),
+                        size = Size(bodyWidth, volHeight)
+                    )
+                }
+            }
+
+            // 3. Draw Subpanel (RSI / MACD / ATR)
+            if (hasSubpanel) {
+                val subpanelTop = mainChartHeight + volumeHeight
+                ChartIndicatorsRenderer.drawSubpanel(
+                    scope = this,
+                    panelTop = subpanelTop,
+                    panelHeight = subpanelHeight,
+                    chartWidth = chartWidth,
+                    transform = transform,
+                    settings = indicatorSettings,
+                    rsiValues = rsiValues,
+                    macdValues = macdValues,
+                    atrValues = atrValues
+                )
+            }
+
+            // 4. Draw Main Indicators (SMA, EMA, Bollinger, VWAP)
+            ChartIndicatorsRenderer.drawMainOverlays(
+                scope = this,
+                transform = transform,
+                settings = indicatorSettings,
+                smaValues = smaValues,
+                emaValues = emaValues,
+                bollingerValues = bollingerValues,
+                vwapValues = vwapValues
+            )
+
+            // 5. Draw Trading Overlays (Positions, Orders, Historical Trades, Price & Spread)
+            ChartOverlays.drawPriceAndSpread(this, transform, latestTick)
+            ChartOverlays.drawOpenPositions(this, transform, openPositions)
+            ChartOverlays.drawPendingOrders(this, transform, pendingOrders)
+            ChartOverlays.drawHistoricalTradeMarkers(this, transform, historicalTrades)
+
+            // 6. Draw User Drawings
+            ChartDrawingsRenderer.drawDrawings(this, drawings, transform)
+
+            // 7. Active Drawing Preview while dragging
+            if (drawingStartOffset != null && drawingCurrentOffset != null && activeDrawingTool != DrawingTool.NONE) {
+                val sOff = drawingStartOffset!!
+                val cOff = drawingCurrentOffset!!
+                val tempDrawing = ChartDrawing(
+                    tool = activeDrawingTool,
+                    symbol = "",
+                    timeframe = "",
+                    startTime = transform.xToTime(sOff.x),
+                    startPrice = transform.yToPrice(sOff.y),
+                    endTime = transform.xToTime(cOff.x),
+                    endPrice = transform.yToPrice(cOff.y)
+                )
+                ChartDrawingsRenderer.drawDrawings(this, listOf(tempDrawing), transform)
+            }
+
+            // 8. Crosshair Lines
+            crosshairOffset?.let { off ->
+                if (off.x in 0f..chartWidth && off.y in 0f..mainChartHeight) {
+                    // Vertical line
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.5f),
+                        start = Offset(off.x, 0f),
+                        end = Offset(off.x, mainChartHeight),
+                        strokeWidth = 1f
+                    )
+                    // Horizontal line
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.5f),
+                        start = Offset(0f, off.y),
+                        end = Offset(chartWidth, off.y),
+                        strokeWidth = 1f
+                    )
+                    // Price tag
+                    val pAtY = transform.yToPrice(off.y)
+                    drawContext.canvas.nativeCanvas.apply {
+                        val p = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = 20f; isAntiAlias = true }
+                        drawText(String.format(Locale.US, "%.2f", pAtY), chartWidth + 6f, off.y + 6f, p)
+                    }
+                }
+            }
+        }
+
+        // Top Floating Crosshair HUD (OHLCV & Spread)
+        inspectedCandle?.let { c ->
+            Card(
+                modifier = Modifier
+                    .padding(8.dp)
+                    .align(Alignment.TopStart),
+                shape = RoundedCornerShape(6.dp),
+                colors = CardDefaults.cardColors(containerColor = TradingElevated.copy(alpha = 0.9f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("O: " + String.format(Locale.US, "%.2f", c.open), fontSize = 10.sp, color = TradingTextSecondary)
+                    Text("H: " + String.format(Locale.US, "%.2f", c.high), fontSize = 10.sp, color = TradingPositive)
+                    Text("L: " + String.format(Locale.US, "%.2f", c.low), fontSize = 10.sp, color = TradingNegative)
+                    Text("C: " + String.format(Locale.US, "%.2f", c.close), fontSize = 10.sp, color = if (c.close >= c.open) TradingPositive else TradingNegative)
+                    Text("V: " + String.format(Locale.US, "%.1f", c.volume), fontSize = 10.sp, color = TradingGold)
+                }
+            }
+        }
+    }
+}

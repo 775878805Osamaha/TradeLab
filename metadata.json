@@ -1,0 +1,6 @@
+{
+  "name": "TradeLab",
+  "description": "Professional virtual trading, paper trading, historical replay, backtesting, and strategy analysis platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
