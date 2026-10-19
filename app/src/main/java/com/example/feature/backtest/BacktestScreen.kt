@@ -139,25 +139,34 @@ private fun BacktestConfigContent(
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(text = "اختر الاستراتيجية الخوارزمية", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(10.dp))
-                    uiState.availableStrategies.forEach { st ->
-                        val isSel = uiState.selectedStrategy.id == st.id
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSel) TradingElevated else Color.Transparent)
-                                .clickable { viewModel.selectStrategy(st) }
-                                .padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = isSel,
-                                onClick = { viewModel.selectStrategy(st) }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(text = st.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                Text(text = st.description, fontSize = 11.sp, color = TradingTextSecondary)
+                    if (uiState.availableStrategies.isEmpty()) {
+                        Text(
+                            text = "لا توجد استراتيجيات مدمجة حالياً. يمكنك تسجيل استراتيجيات مخصصة للبدء في الاختبار.",
+                            fontSize = 12.sp,
+                            color = TradingTextSecondary,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        uiState.availableStrategies.forEach { st ->
+                            val isSel = uiState.selectedStrategy?.id == st.id
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSel) TradingElevated else Color.Transparent)
+                                    .clickable { viewModel.selectStrategy(st) }
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = isSel,
+                                    onClick = { viewModel.selectStrategy(st) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(text = st.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    Text(text = st.description, fontSize = 11.sp, color = TradingTextSecondary)
+                                }
                             }
                         }
                     }
@@ -485,6 +494,7 @@ private fun BacktestConfigContent(
 
                     Button(
                         onClick = { viewModel.runBacktest() },
+                        enabled = uiState.selectedStrategy != null,
                         modifier = Modifier
                             .weight(1.2f)
                             .height(48.dp)

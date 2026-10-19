@@ -7,7 +7,6 @@ import com.example.core.execution.PositionEvaluation
 import com.example.core.model.*
 import com.example.core.replay.HistoricalReplayEngine
 import com.example.core.replay.ReplayDataView
-import com.example.core.strategy.EmaCrossoverStrategy
 import com.example.core.strategy.SignalAction
 import com.example.core.strategy.Strategy
 import com.example.core.strategy.StrategyContext
@@ -38,7 +37,7 @@ data class ReplayUiState(
     val totalCandles: Int = 0,
     val currentReplayTime: Long = 0L,
     val interactionMode: ReplayInteractionMode = ReplayInteractionMode.MANUAL,
-    val selectedStrategyName: String = "تقاطع المتوسطات EMA Crossover",
+    val selectedStrategyName: String? = null,
     val lastSignalMessage: String? = null,
     val isLoading: Boolean = false,
     val message: String? = null
@@ -58,7 +57,12 @@ class ReplayViewModel(
     private val closedTrades = mutableListOf<TradeJournalEntry>()
     private var nextId = 1L
 
-    private val activeStrategy: Strategy = EmaCrossoverStrategy()
+    private var activeStrategy: Strategy? = null
+
+    fun setStrategy(strategy: Strategy?) {
+        activeStrategy = strategy
+        _uiState.update { it.copy(selectedStrategyName = strategy?.name) }
+    }
 
     init {
         setupReplayEngineCallbacks()
@@ -300,7 +304,8 @@ class ReplayViewModel(
 
         // 2. Evaluate Strategy if in STRATEGY mode (strictly using ReplayDataView)
         var lastSignalText: String? = null
-        if (_uiState.value.interactionMode == ReplayInteractionMode.STRATEGY) {
+        val strat = activeStrategy
+        if (_uiState.value.interactionMode == ReplayInteractionMode.STRATEGY && strat != null) {
             val visible = dataView.getVisibleCandles()
             if (visible.size >= 25) {
                 val replayAcc = VirtualAccount(
@@ -320,7 +325,7 @@ class ReplayViewModel(
                     account = replayAcc,
                     latestTick = tick
                 )
-                val signal = activeStrategy.onCandle(context, activeStrategy.defaultParameters)
+                val signal = strat.onCandle(context, strat.defaultParameters)
                 if (signal.action != SignalAction.HOLD) {
                     lastSignalText = "إشارة ${signal.action}: ${signal.reason}"
                     if (signal.action == SignalAction.BUY && openPositions.none { it.side == PositionSide.BUY }) {

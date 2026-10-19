@@ -34,7 +34,7 @@ enum class BacktestTab {
 
 data class BacktestUiState(
     val availableStrategies: List<Strategy> = StrategyRegistry.AVAILABLE_STRATEGIES,
-    val selectedStrategy: Strategy = StrategyRegistry.AVAILABLE_STRATEGIES.first(),
+    val selectedStrategy: Strategy? = StrategyRegistry.AVAILABLE_STRATEGIES.firstOrNull(),
     val symbol: String = "XAUUSD",
     val timeframe: Timeframe = Timeframe.M15,
     val initialBalance: String = "50.0",
@@ -82,9 +82,19 @@ class BacktestViewModel(
         }
     }
 
-    fun selectStrategy(strategy: Strategy) = _uiState.update { it.copy(selectedStrategy = strategy) }
+    fun selectStrategy(strategy: Strategy?) = _uiState.update { it.copy(selectedStrategy = strategy) }
     fun selectSymbol(symbol: String) = _uiState.update { it.copy(symbol = symbol) }
     fun selectTimeframe(tf: Timeframe) = _uiState.update { it.copy(timeframe = tf) }
+
+    fun refreshAvailableStrategies() {
+        val strats = StrategyRegistry.getAllStrategies()
+        _uiState.update {
+            it.copy(
+                availableStrategies = strats,
+                selectedStrategy = it.selectedStrategy?.let { sel -> strats.find { s -> s.id == sel.id } } ?: strats.firstOrNull()
+            )
+        }
+    }
 
     fun setInitialBalance(b: String) = _uiState.update { it.copy(initialBalance = b) }
     fun setPositionSizingMode(mode: PositionSizingMode) = _uiState.update { it.copy(positionSizingMode = mode) }
@@ -113,6 +123,12 @@ class BacktestViewModel(
 
     fun runBacktest() {
         val state = _uiState.value
+        val strategy = state.selectedStrategy
+        if (strategy == null) {
+            _uiState.update { it.copy(message = "يرجى تحديد أو إنشاء استراتيجية لبدء الاختبار") }
+            return
+        }
+
         _uiState.update {
             it.copy(
                 isRunning = true,
@@ -132,7 +148,7 @@ class BacktestViewModel(
                 val candles = marketDataRepository.getCandles(state.symbol, state.timeframe, from, now)
 
                 val config = BacktestConfig(
-                    strategy = state.selectedStrategy,
+                    strategy = strategy,
                     symbol = state.symbol,
                     timeframe = state.timeframe,
                     initialBalance = state.initialBalance.toDoubleOrNull() ?: 50.0,

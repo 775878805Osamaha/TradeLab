@@ -3,8 +3,6 @@ package com.example
 import com.example.core.backtest.BacktestConfig
 import com.example.core.backtest.BacktestEngine
 import com.example.core.model.*
-import com.example.core.strategy.EmaCrossoverStrategy
-import com.example.core.strategy.RsiMeanReversionStrategy
 import com.example.core.strategy.Signal
 import com.example.core.strategy.SignalAction
 import com.example.core.strategy.Strategy
@@ -185,10 +183,10 @@ class BacktestEngineTests {
     }
 
     @Test
-    fun `test BacktestEngine EMA Crossover Strategy`() = runBlocking {
+    fun `test BacktestEngine execution with test strategy`() = runBlocking {
         val candles = generateCandleSeries(count = 90, trendPerCandle = 0.8, waveAmplitude = 4.0)
         val config = BacktestConfig(
-            strategy = EmaCrossoverStrategy(),
+            strategy = AlwaysBuyStrategy(),
             symbol = "XAUUSD",
             timeframe = Timeframe.M15,
             initialBalance = 50.0,
@@ -201,10 +199,24 @@ class BacktestEngineTests {
     }
 
     @Test
-    fun `test BacktestEngine RSI Mean Reversion Strategy`() = runBlocking {
+    fun `test BacktestEngine metrics with test mean reversion strategy`() = runBlocking {
         val candles = generateCandleSeries(count = 80, trendPerCandle = 0.0, waveAmplitude = 10.0)
+        val testStrategy = object : Strategy {
+            override val id: String = "TEST_REVERSION"
+            override val name: String = "Test Reversion Strategy"
+            override val description: String = "Test strategy"
+            override val defaultParameters: Map<String, Any> = emptyMap()
+            override fun onCandle(context: StrategyContext, parameters: Map<String, Any>): Signal {
+                val candle = context.currentCandle
+                return if (candle.close < 2650.0 && context.openPositions.none { it.side == PositionSide.BUY }) {
+                    Signal(action = SignalAction.BUY, direction = OrderSide.BUY, symbol = context.symbol, entryPrice = candle.close, stopLoss = candle.close - 5.0, takeProfit = candle.close + 10.0)
+                } else {
+                    Signal(action = SignalAction.HOLD)
+                }
+            }
+        }
         val config = BacktestConfig(
-            strategy = RsiMeanReversionStrategy(),
+            strategy = testStrategy,
             symbol = "XAUUSD",
             timeframe = Timeframe.M15,
             initialBalance = 100.0
@@ -415,7 +427,7 @@ class BacktestEngineTests {
     fun `test BacktestEngine large dataset processing`() = runBlocking {
         val largeCandles = generateCandleSeries(count = 1000, trendPerCandle = 0.05, waveAmplitude = 5.0)
         val config = BacktestConfig(
-            strategy = EmaCrossoverStrategy(),
+            strategy = AlwaysBuyStrategy(),
             symbol = "XAUUSD",
             timeframe = Timeframe.M15,
             initialBalance = 100.0

@@ -10,8 +10,9 @@ import com.example.core.model.*
 import com.example.core.replay.HistoricalReplayEngine
 import com.example.core.risk.RiskEngine
 import com.example.core.statistics.StatisticsCalculator
-import com.example.core.strategy.EmaCrossoverStrategy
+import com.example.core.strategy.Signal
 import com.example.core.strategy.SignalAction
+import com.example.core.strategy.Strategy
 import com.example.core.strategy.StrategyContext
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
@@ -236,8 +237,16 @@ class TradeLabEngineTests {
             )
         }
 
+        val dummyStrategy = object : Strategy {
+            override val id: String = "DUMMY_TEST"
+            override val name: String = "Dummy Test Strategy"
+            override val description: String = "Test-only strategy"
+            override val defaultParameters: Map<String, Any> = emptyMap()
+            override fun onCandle(context: StrategyContext, parameters: Map<String, Any>): Signal = Signal(action = SignalAction.HOLD)
+        }
+
         val config = BacktestConfig(
-            strategy = EmaCrossoverStrategy(),
+            strategy = dummyStrategy,
             symbol = "XAUUSD",
             timeframe = Timeframe.M15,
             initialBalance = 50.0,

@@ -2,6 +2,7 @@ package com.example
 
 import com.example.core.backtest.BacktestConfig
 import com.example.core.backtest.BacktestEngine
+import com.example.core.indicators.TechnicalIndicators
 import com.example.core.model.*
 import com.example.core.strategy.*
 import kotlinx.coroutines.runBlocking
@@ -17,6 +18,94 @@ class StrategyEngineTests {
     fun setUp() {
         backtestEngine = BacktestEngine()
         StrategyRegistry.resetToDefaults()
+    }
+
+    // Test-only mock crossover strategy to test validation, execution, and determinism
+    private class TestMockCrossoverStrategy : Strategy {
+        override val id: String = "TEST_CROSSOVER"
+        override val name: String = "Test Crossover Strategy"
+        override val description: String = "Test-only crossover strategy"
+        override val category: StrategyCategory = StrategyCategory.TREND
+        override val version: Int = 1
+
+        override val parameterDefinitions: List<StrategyParameterDefinition> = listOf(
+            StrategyParameterDefinition("fastPeriod", "Fast Period", ParameterType.INT, 9, minimum = 1.0, maximum = 50.0),
+            StrategyParameterDefinition("slowPeriod", "Slow Period", ParameterType.INT, 21, minimum = 2.0, maximum = 200.0),
+            StrategyParameterDefinition("stopLossPips", "Stop Loss Pips", ParameterType.DOUBLE, 25.0, minimum = 5.0, maximum = 500.0),
+            StrategyParameterDefinition("takeProfitPips", "Take Profit Pips", ParameterType.DOUBLE, 50.0, minimum = 5.0, maximum = 1000.0)
+        )
+
+        override val defaultParameters: Map<String, Any> = mapOf(
+            "fastPeriod" to 9,
+            "slowPeriod" to 21,
+            "stopLossPips" to 25.0,
+            "takeProfitPips" to 50.0
+        )
+
+        private var lastProcessedCandleTime: Long = 0L
+
+        override fun reset() {
+            lastProcessedCandleTime = 0L
+        }
+
+        override fun onCandle(context: StrategyContext, parameters: Map<String, Any>): Signal {
+            val currentCandleTime = context.currentCandle.openTime
+            if (currentCandleTime == lastProcessedCandleTime) {
+                return Signal(action = SignalAction.HOLD)
+            }
+
+            val fastPeriod = (parameters["fastPeriod"] as? Number)?.toInt() ?: 9
+            val slowPeriod = (parameters["slowPeriod"] as? Number)?.toInt() ?: 21
+            val candles = context.historicalCandles
+            if (candles.size < slowPeriod + 2) return Signal(action = SignalAction.HOLD)
+
+            val fast = TechnicalIndicators.calculateEma(candles, fastPeriod)
+            val slow = TechnicalIndicators.calculateEma(candles, slowPeriod)
+            val n = candles.size - 1
+            val prevF = fast[n - 1] ?: return Signal(action = SignalAction.HOLD)
+            val currF = fast[n] ?: return Signal(action = SignalAction.HOLD)
+            val prevS = slow[n - 1] ?: return Signal(action = SignalAction.HOLD)
+            val currS = slow[n] ?: return Signal(action = SignalAction.HOLD)
+
+            if (prevF <= prevS && currF > currS) {
+                if (context.openPositions.none { it.side == PositionSide.BUY }) {
+                    lastProcessedCandleTime = currentCandleTime
+                    return Signal(
+                        action = SignalAction.BUY,
+                        direction = OrderSide.BUY,
+                        symbol = context.symbol,
+                        entryPrice = context.currentCandle.close,
+                        stopLoss = context.currentCandle.close - 2.5,
+                        takeProfit = context.currentCandle.close + 5.0,
+                        timestamp = currentCandleTime
+                    )
+                }
+            }
+            return Signal(action = SignalAction.HOLD)
+        }
+    }
+
+    // Test-only mock RSI strategy to test parameter validation
+    private class TestMockRsiStrategy : Strategy {
+        override val id: String = "TEST_RSI"
+        override val name: String = "Test RSI Strategy"
+        override val description: String = "Test-only RSI strategy"
+        override val category: StrategyCategory = StrategyCategory.MEAN_REVERSION
+        override val version: Int = 1
+
+        override val parameterDefinitions: List<StrategyParameterDefinition> = listOf(
+            StrategyParameterDefinition("rsiPeriod", "RSI Period", ParameterType.INT, 14, minimum = 2.0, maximum = 50.0),
+            StrategyParameterDefinition("oversoldLevel", "Oversold Level", ParameterType.DOUBLE, 30.0, minimum = 5.0, maximum = 45.0),
+            StrategyParameterDefinition("overboughtLevel", "Overbought Level", ParameterType.DOUBLE, 70.0, minimum = 55.0, maximum = 95.0)
+        )
+
+        override val defaultParameters: Map<String, Any> = mapOf(
+            "rsiPeriod" to 14,
+            "oversoldLevel" to 30.0,
+            "overboughtLevel" to 70.0
+        )
+
+        override fun onCandle(context: StrategyContext, parameters: Map<String, Any>): Signal = Signal(action = SignalAction.HOLD)
     }
 
     private fun createCandle(
@@ -65,45 +154,49 @@ class StrategyEngineTests {
     }
 
     @Test
-    fun `test StrategyRegistry registers built-in strategies and default presets`() {
+    fun `test StrategyRegistry has no built-in strategies and presets by default`() {
         val all = StrategyRegistry.getAllStrategies()
-        assertTrue("Must contain at least 4 built-in strategies", all.size >= 4)
+        assertTrue("StrategyRegistry must be empty of built-in strategies by default", all.isEmpty())
 
-        assertNotNull(StrategyRegistry.getStrategy("EMA_CROSSOVER"))
-        assertNotNull(StrategyRegistry.getStrategy("SMA_CROSSOVER"))
-        assertNotNull(StrategyRegistry.getStrategy("RSI_REVERSION"))
-        assertNotNull(StrategyRegistry.getStrategy("BOLLINGER_REVERSION"))
+        assertNull(StrategyRegistry.getStrategy("EMA_CROSSOVER"))
+        assertNull(StrategyRegistry.getStrategy("SMA_CROSSOVER"))
+        assertNull(StrategyRegistry.getStrategy("RSI_REVERSION"))
+        assertNull(StrategyRegistry.getStrategy("BOLLINGER_REVERSION"))
 
         val emaPresets = StrategyRegistry.getPresetsForStrategy("EMA_CROSSOVER")
-        assertTrue("EMA must have presets", emaPresets.isNotEmpty())
-        assertTrue(emaPresets.any { it.isDefault })
+        assertTrue("Must have no presets", emaPresets.isEmpty())
     }
 
     @Test
     fun `test StrategyFactory creates and resets strategy instance`() {
-        val strat = StrategyFactory.createStrategy("EMA_CROSSOVER")
+        val custom = TestMockCrossoverStrategy()
+        StrategyRegistry.register(custom)
+
+        val strat = StrategyFactory.createStrategy(custom.id)
         assertNotNull(strat)
-        assertEquals("EMA_CROSSOVER", strat!!.id)
+        assertEquals(custom.id, strat!!.id)
         assertEquals(StrategyCategory.TREND, strat.category)
         assertEquals(1, strat.version)
+
+        StrategyRegistry.unregister(custom.id)
     }
 
     @Test
     fun `test StrategyValidator validates parameter boundaries and cross-field rules`() {
-        val ema = EmaCrossoverStrategy()
+        val custom = TestMockCrossoverStrategy()
 
         // Valid parameters
-        val validRes = StrategyValidator.validate(ema, mapOf("fastPeriod" to 9, "slowPeriod" to 21))
+        val validRes = StrategyValidator.validate(custom, mapOf("fastPeriod" to 9, "slowPeriod" to 21))
         assertTrue(validRes.isValid)
         assertTrue(validRes.errors.isEmpty())
 
         // Invalid: fast >= slow
-        val invalidCrossover = StrategyValidator.validate(ema, mapOf("fastPeriod" to 25, "slowPeriod" to 10))
+        val invalidCrossover = StrategyValidator.validate(custom, mapOf("fastPeriod" to 25, "slowPeriod" to 10))
         assertFalse(invalidCrossover.isValid)
         assertTrue(invalidCrossover.errors.any { it.field == "slowPeriod" })
 
         // RSI validations
-        val rsi = RsiMeanReversionStrategy()
+        val rsi = TestMockRsiStrategy()
         val badRsi = StrategyValidator.validate(rsi, mapOf("oversoldLevel" to 60.0, "overboughtLevel" to 40.0))
         assertFalse(badRsi.isValid)
         assertTrue(badRsi.errors.any { it.field == "oversoldLevel" })
@@ -112,8 +205,8 @@ class StrategyEngineTests {
 
     @Test
     fun `test duplicate signal prevention for the same candle bar`() {
-        val ema = EmaCrossoverStrategy()
-        ema.reset()
+        val strategy = TestMockCrossoverStrategy()
+        strategy.reset()
 
         val candles = generateCandleSeries(count = 30, trend = 2.0)
         val current = candles.last()
@@ -127,19 +220,19 @@ class StrategyEngineTests {
         )
 
         // First call may generate BUY or HOLD
-        val firstSignal = ema.onCandle(context, ema.defaultParameters)
+        val firstSignal = strategy.onCandle(context, strategy.defaultParameters)
 
         // If it was a trade signal, second call with the exact same candle MUST return HOLD
         if (firstSignal.action != SignalAction.HOLD) {
-            val secondSignal = ema.onCandle(context, ema.defaultParameters)
+            val secondSignal = strategy.onCandle(context, strategy.defaultParameters)
             assertEquals("Duplicate signal on same bar must return HOLD", SignalAction.HOLD, secondSignal.action)
         }
     }
 
     @Test
     fun `test strategy position awareness prevents re-entering same direction`() {
-        val ema = EmaCrossoverStrategy()
-        ema.reset()
+        val strategy = TestMockCrossoverStrategy()
+        strategy.reset()
 
         val candles = generateCandleSeries(count = 35, trend = 2.5)
         val current = candles.last()
@@ -164,14 +257,14 @@ class StrategyEngineTests {
             account = VirtualAccount(id = 1, name = "Test", balance = 100.0)
         )
 
-        val signal = ema.onCandle(contextWithLong, ema.defaultParameters)
+        val signal = strategy.onCandle(contextWithLong, strategy.defaultParameters)
         // Must NOT emit duplicate BUY while already positioned Long
         assertNotEquals("Should not emit duplicate BUY while already long", SignalAction.BUY, signal.action)
     }
 
     @Test
     fun `test strategy state reset allows fresh evaluation`() {
-        val ema = EmaCrossoverStrategy()
+        val strategy = TestMockCrossoverStrategy()
         val candles = generateCandleSeries(count = 30, trend = 2.0)
         val current = candles.last()
         val context = StrategyContext(
@@ -183,19 +276,19 @@ class StrategyEngineTests {
             account = VirtualAccount(id = 1, name = "Test", balance = 100.0)
         )
 
-        val sig1 = ema.onCandle(context, ema.defaultParameters)
+        val sig1 = strategy.onCandle(context, strategy.defaultParameters)
         // Reset strategy internal state
-        ema.reset()
+        strategy.reset()
 
         // Calling onCandle after reset on same context behaves identically to first execution
-        val sig2 = ema.onCandle(context, ema.defaultParameters)
+        val sig2 = strategy.onCandle(context, strategy.defaultParameters)
         assertEquals(sig1.action, sig2.action)
     }
 
     @Test
     fun `test Strategy determinism across identical evaluations`() {
-        val sma = SmaCrossoverStrategy()
-        sma.reset()
+        val strategy = TestMockCrossoverStrategy()
+        strategy.reset()
         val candles = generateCandleSeries(count = 45, trend = 1.0)
         val current = candles.last()
 
@@ -208,9 +301,9 @@ class StrategyEngineTests {
             account = VirtualAccount(id = 1, name = "Test", balance = 100.0)
         )
 
-        val sig1 = sma.onCandle(context1, sma.defaultParameters)
+        val sig1 = strategy.onCandle(context1, strategy.defaultParameters)
 
-        sma.reset()
+        strategy.reset()
         val context2 = StrategyContext(
             symbol = "XAUUSD",
             timeframe = Timeframe.M15,
@@ -220,7 +313,7 @@ class StrategyEngineTests {
             account = VirtualAccount(id = 1, name = "Test", balance = 100.0)
         )
 
-        val sig2 = sma.onCandle(context2, sma.defaultParameters)
+        val sig2 = strategy.onCandle(context2, strategy.defaultParameters)
 
         assertEquals(sig1.action, sig2.action)
         assertEquals(sig1.direction, sig2.direction)
@@ -244,10 +337,6 @@ class StrategyEngineTests {
             allHtfCandles = h1Candles
         )
 
-        // At M5 time 5,000,000 ms:
-        // H1 candle 1 (closed at 3.6m) is COMPLETED.
-        // H1 candle 2 (closes at 7.2m) is STILL FORMING (in progress).
-        // H1 candle 3 (closes at 10.8m) is in the FUTURE.
         val completedAt5m = mtfProvider.getCompletedHtfCandles(currentExecutionTimestamp = 5000000L)
 
         assertEquals("Only completed H1 candles must be accessible", 1, completedAt5m.size)
@@ -257,8 +346,6 @@ class StrategyEngineTests {
         assertNotNull(latest)
         assertEquals(104.0, latest!!.close, 0.001)
 
-        // At M5 time 7,500,000 ms:
-        // H1 candle 1 and 2 are completed
         val completedAt75m = mtfProvider.getCompletedHtfCandles(currentExecutionTimestamp = 7500000L)
         assertEquals(2, completedAt75m.size)
     }
@@ -281,7 +368,6 @@ class StrategyEngineTests {
             allHtfCandles = listOf(h1CandleFuture)
         )
 
-        // Current execution time is 5,000,000 ms (before candle closes at 7,200,000 ms)
         try {
             mtfProvider.enforceNoLookahead(h1CandleFuture, currentExecutionTimestamp = 5000000L)
             fail("Expected HtfLookaheadViolation when accessing unclosed HTF candle")
@@ -291,32 +377,24 @@ class StrategyEngineTests {
     }
 
     @Test
-    fun `test BacktestEngine integration with all 4 built-in strategies`() = runBlocking {
+    fun `test BacktestEngine integration with custom test strategy`() = runBlocking {
         val candles = generateCandleSeries(count = 70, trend = 0.5, waveAmplitude = 3.0)
+        val custom = TestMockCrossoverStrategy()
+        custom.reset()
 
-        val strategies = listOf(
-            EmaCrossoverStrategy(),
-            SmaCrossoverStrategy(),
-            RsiMeanReversionStrategy(),
-            BollingerMeanReversionStrategy()
+        val config = BacktestConfig(
+            strategy = custom,
+            symbol = "XAUUSD",
+            timeframe = Timeframe.M15,
+            initialBalance = 100.0,
+            fixedLot = 0.01
         )
 
-        for (strat in strategies) {
-            strat.reset()
-            val config = BacktestConfig(
-                strategy = strat,
-                symbol = "XAUUSD",
-                timeframe = Timeframe.M15,
-                initialBalance = 100.0,
-                fixedLot = 0.01
-            )
-
-            val result = backtestEngine.runBacktest(candles, config)
-            assertNotNull("Backtest result for ${strat.name} must not be null", result)
-            assertEquals(70, result.totalCandlesProcessed)
-            assertNotNull(result.metrics)
-            assertTrue("Equity curve must be populated", result.equityCurve.isNotEmpty())
-        }
+        val result = backtestEngine.runBacktest(candles, config)
+        assertNotNull("Backtest result for custom strategy must not be null", result)
+        assertEquals(70, result.totalCandlesProcessed)
+        assertNotNull(result.metrics)
+        assertTrue("Equity curve must be populated", result.equityCurve.isNotEmpty())
     }
 
     @Test

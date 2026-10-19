@@ -123,8 +123,49 @@ fun StrategyScreen(
                 }
             }
 
-            // Strategy Cards
-            items(filteredStrategies, key = { it.id }) { strategy ->
+            // Strategy Cards / Empty State
+            if (filteredStrategies.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = TradingCard),
+                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Psychology,
+                                contentDescription = null,
+                                tint = TradingTextSecondary,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "لا توجد استراتيجيات تداول مدمجة حالياً",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = TradingTextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "تمت إزالة جميع الاستراتيجيات المدمجة. يمكنك إضافة وتسجيل استراتيجيات مخصصة للعمل بها.",
+                                fontSize = 12.sp,
+                                color = TradingTextSecondary,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(filteredStrategies, key = { it.id }) { strategy ->
                 val isExpanded = expandedStrategyId == strategy.id
                 val currentParams = userParameters.getOrPut(strategy.id) {
                     strategy.defaultParameters.toMutableMap()
@@ -331,4 +372,5 @@ fun StrategyScreen(
             }
         }
     }
+}
 }
