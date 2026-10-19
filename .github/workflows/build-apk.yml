@@ -32,15 +32,42 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Restore Debug Keystore
+      - name: Restore or Generate Debug Keystore
         run: |
-          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
-            echo "Restoring debug.keystore from debug.keystore.base64..."
-            base64 -d debug.keystore.base64 > debug.keystore
+          TARGET_KEYSTORE="${GITHUB_WORKSPACE:-.}/debug.keystore"
+          if [ -f "debug.keystore.base64" ]; then
+            echo "Attempting to restore debug.keystore from debug.keystore.base64..."
+            base64 -d debug.keystore.base64 > "$TARGET_KEYSTORE" 2>/dev/null || base64 -D debug.keystore.base64 > "$TARGET_KEYSTORE" 2>/dev/null || true
           fi
+          if [ ! -s "$TARGET_KEYSTORE" ]; then
+            echo "Generating standard Android debug keystore at $TARGET_KEYSTORE..."
+            keytool -genkeypair -v -keystore "$TARGET_KEYSTORE" \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Verify Debug Keystore
+        run: |
+          TARGET_KEYSTORE="${GITHUB_WORKSPACE:-.}/debug.keystore"
+          test -f "$TARGET_KEYSTORE" || {
+            echo "ERROR: Debug keystore not found at $TARGET_KEYSTORE"
+            exit 1
+          }
+          echo "SUCCESS: Debug keystore verified at $TARGET_KEYSTORE"
+          ls -lh "$TARGET_KEYSTORE"
 
       - name: Make Gradle Executable
         run: chmod +x gradlew
+
+      - name: Toolchain Diagnostics
+        run: |
+          echo "================ TOOLCHAIN DIAGNOSTICS ================"
+          echo "Java version:"
+          java -version
+          echo "Gradle & Runner Environment:"
+          ./gradlew --version
+          echo "======================================================="
 
       - name: Run Unit Tests
         run: ./gradlew test --stacktrace
