@@ -160,6 +160,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Chart.route) {
                                 ChartScreen(
                                     viewModel = chartViewModel,
+                                    replayViewModel = replayViewModel,
                                     onNavigateToReplay = { navController.navigate(Screen.Replay.route) }
                                 )
                             }
