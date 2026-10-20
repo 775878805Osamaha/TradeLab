@@ -227,6 +227,35 @@ fun ChartScreen(
                 }
             }
 
+            // Market data provenance: never present missing or stale quotes as live.
+            val marketTick = uiState.latestTick
+            val marketTickIsLive = marketTick != null &&
+                marketTick.symbol == uiState.selectedSymbol &&
+                marketTick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
+                System.currentTimeMillis() - marketTick.timestamp in 0..15_000L
+            val verifiedBinancePair = uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")
+            val marketStatus = when {
+                !verifiedBinancePair -> "لا يوجد مصدر أسعار مباشر معتمد لهذا الرمز"
+                !marketTickIsLive -> "بانتظار سعر حديث من Binance"
+                marketTick?.source == "BINANCE_WEBSOCKET" -> "Binance · بث مباشر"
+                else -> "Binance · تحديث عبر الإنترنت"
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = marketStatus,
+                    color = if (marketTickIsLive) TradingPositive else TradingGold,
+                    fontSize = 11.sp,
+                    modifier = Modifier.testTag("chart_market_source_status")
+                )
+                if (!marketTickIsLive) {
+                    Text("السعر غير متاح", color = TradingTextSecondary, fontSize = 10.sp)
+                }
+            }
+
             // Professional Candlestick Chart
             Box(
                 modifier = Modifier
@@ -272,7 +301,7 @@ fun ChartScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // SELL Button (Red)
-                    val bidText = uiState.latestTick?.let { String.format(Locale.US, "%.2f", it.bid) } ?: "--"
+                    val bidText = if (marketTickIsLive) marketTick?.let { String.format(Locale.US, "%.2f", it.bid) } ?: "--" else "--"
                     Button(
                         onClick = { viewModel.quickOrder(OrderSide.SELL, 0.01) },
                         modifier = Modifier
@@ -289,17 +318,17 @@ fun ChartScreen(
                     }
 
                     // Spread / Info Chip
-                    val spreadText = uiState.latestTick?.let {
+                    val spreadText = (if (marketTickIsLive) marketTick else null)?.let {
                         val sym = DefaultSymbols.getSymbol(uiState.selectedSymbol)
                         String.format(Locale.US, "%.1f", it.spread / sym.pipSize)
-                    } ?: "0.0"
+                    } ?: "--"
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(text = "السبريد", fontSize = 10.sp, color = TradingTextSecondary)
                         Text(text = "$spreadText pips", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TradingTextPrimary)
                     }
 
                     // BUY Button (Green)
-                    val askText = uiState.latestTick?.let { String.format(Locale.US, "%.2f", it.ask) } ?: "--"
+                    val askText = if (marketTickIsLive) marketTick?.let { String.format(Locale.US, "%.2f", it.ask) } ?: "--" else "--"
                     Button(
                         onClick = { viewModel.quickOrder(OrderSide.BUY, 0.01) },
                         modifier = Modifier
