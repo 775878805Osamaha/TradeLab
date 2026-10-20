@@ -121,7 +121,21 @@ class ReplayViewModel(
 
     fun loadReplayData(symbol: String = "BTCUSDT", tf: Timeframe = Timeframe.M15) {
         replayLoadJob?.cancel()
-        _uiState.update { it.copy(symbol = symbol, timeframe = tf, isLoading = true, message = null) }
+        replayEngine.pause()
+        // Do not continue displaying a previous instrument's replay while switching.
+        _uiState.update {
+            it.copy(
+                symbol = symbol, timeframe = tf, isLoading = true, message = null,
+                visibleCandles = emptyList(), currentCandle = null, latestTick = null,
+                isPlaying = false
+            )
+        }
+        if (symbol !in setOf("BTCUSDT", "ETHUSDT")) {
+            _uiState.update {
+                it.copy(isLoading = false, message = "لا تتوفر بيانات تاريخية معتمدة لهذا الرمز. اختر BTCUSDT أو ETHUSDT.")
+            }
+            return
+        }
         replayLoadJob = viewModelScope.launch {
             try {
                 val now = System.currentTimeMillis()
