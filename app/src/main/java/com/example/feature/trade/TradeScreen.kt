@@ -39,6 +39,11 @@ fun TradeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val account = uiState.selectedAccount
     val tick = uiState.latestTick
+    val quoteIsVerified = tick != null &&
+        tick.symbol == uiState.selectedSymbol &&
+        tick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
+        System.currentTimeMillis() - tick.timestamp in 0..15_000L
+    val verifiedTick = tick?.takeIf { quoteIsVerified }
     val symInfo = remember(uiState.selectedSymbol) { DefaultSymbols.getSymbol(uiState.selectedSymbol) }
 
     var showSymbolSheet by remember { mutableStateOf(false) }
@@ -78,7 +83,7 @@ fun TradeScreen(
                         )
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = TradingTextSecondary)
                         Spacer(modifier = Modifier.width(6.dp))
-                        DataSourceBadge(sourceType = DataSourceType.LIVE_DATA)
+                        DataSourceBadge(sourceType = if (quoteIsVerified) DataSourceType.LIVE_DATA else DataSourceType.STALE_DATA)
                     }
                 },
                 actions = {
@@ -93,6 +98,8 @@ fun TradeScreen(
                             )
                             Text(
                                 text = String.format(Locale.US, "$%.2f", acc.balance),
+                                style = TextStyle(textDirection = TextDirection.Ltr),
+                                maxLines = 1,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TradingTextPrimary
@@ -132,14 +139,16 @@ fun TradeScreen(
                     ) {
                         Column {
                             Text(text = "سعر العرض (Bid)", fontSize = 11.sp, color = TradingTextSecondary)
-                            val bidStr = tick?.let { symInfo.formatPrice(it.bid) } ?: "--"
+                            val bidStr = verifiedTick?.let { symInfo.formatPrice(it.bid) } ?: "--"
                             Text(text = bidStr, style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TradingTextPrimary)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(text = "السبريد", fontSize = 10.sp, color = TradingTextSecondary)
-                            val spreadPips = tick?.let { String.format(Locale.US, "%.1f", it.spread / symInfo.pipSize) } ?: "0.0"
+                            val spreadPips = verifiedTick?.let { String.format(Locale.US, "%.1f", it.spread / symInfo.pipSize) } ?: "--"
                             Text(
                                 text = "$spreadPips pips",
+                                style = TextStyle(textDirection = TextDirection.Ltr),
+                                maxLines = 1,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TradingGold
@@ -147,7 +156,7 @@ fun TradeScreen(
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text(text = "سعر الطلب (Ask)", fontSize = 11.sp, color = TradingTextSecondary)
-                            val askStr = tick?.let { symInfo.formatPrice(it.ask) } ?: "--"
+                            val askStr = verifiedTick?.let { symInfo.formatPrice(it.ask) } ?: "--"
                             Text(text = askStr, style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TradingCyan)
                         }
                     }

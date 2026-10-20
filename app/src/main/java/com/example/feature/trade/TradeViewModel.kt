@@ -23,7 +23,7 @@ data class TradeUiState(
     val selectedAccount: VirtualAccount? = null,
     val openPositions: List<Position> = emptyList(),
     val pendingOrders: List<Order> = emptyList(),
-    val selectedSymbol: String = "XAUUSD",
+    val selectedSymbol: String = "BTCUSDT",
     val orderType: OrderType = OrderType.MARKET,
     val orderSide: OrderSide = OrderSide.BUY,
     val volume: String = "0.01",
