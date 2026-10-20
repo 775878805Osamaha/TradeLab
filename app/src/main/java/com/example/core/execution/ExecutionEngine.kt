@@ -215,22 +215,42 @@ class ExecutionEngine(
         tick: Tick,
         protectionOffsetPips: Double = 1.0
     ): Result<Double> {
+        if (!position.symbol.equals(tick.symbol, ignoreCase = true) ||
+            !tick.bid.isFinite() || !tick.ask.isFinite() ||
+            tick.bid <= 0.0 || tick.ask < tick.bid ||
+            !position.entryPrice.isFinite() || position.entryPrice <= 0.0 ||
+            !protectionOffsetPips.isFinite() || protectionOffsetPips < 0.0) {
+            return Result.failure(Exception("بيانات السعر أو حماية نقطة التعادل غير صالحة"))
+        }
         val symInfo = DefaultSymbols.getSymbol(position.symbol)
         val offset = protectionOffsetPips * symInfo.pipSize
+        if (!offset.isFinite()) {
+            return Result.failure(Exception("قيمة حماية نقطة التعادل غير صالحة"))
+        }
 
         return when (position.side) {
             PositionSide.BUY -> {
                 if (tick.bid <= position.entryPrice) {
                     Result.failure(Exception("لا يمكن تفعيل نقطة التعادل: سعر البيع الحالي (${tick.bid}) أقل من أو يساوي سعر الدخول (${position.entryPrice})"))
                 } else {
-                    Result.success(position.entryPrice + offset)
+                    val stop = position.entryPrice + offset
+                    if (!stop.isFinite() || stop >= tick.bid) {
+                        Result.failure(Exception("مستوى التعادل للشراء يجب أن يبقى دون سعر البيع الحالي"))
+                    } else {
+                        Result.success(stop)
+                    }
                 }
             }
             PositionSide.SELL -> {
                 if (tick.ask >= position.entryPrice) {
                     Result.failure(Exception("لا يمكن تفعيل نقطة التعادل: سعر الشراء الحالي (${tick.ask}) أعلى من أو يساوي سعر الدخول (${position.entryPrice})"))
                 } else {
-                    Result.success(position.entryPrice - offset)
+                    val stop = position.entryPrice - offset
+                    if (!stop.isFinite() || stop <= tick.ask || stop <= 0.0) {
+                        Result.failure(Exception("مستوى التعادل للبيع يجب أن يبقى فوق سعر الشراء الحالي"))
+                    } else {
+                        Result.success(stop)
+                    }
                 }
             }
         }
