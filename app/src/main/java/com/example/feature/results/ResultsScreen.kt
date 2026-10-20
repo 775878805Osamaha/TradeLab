@@ -17,6 +17,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.model.ExitReason
@@ -58,7 +60,7 @@ fun ResultsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "لوحة التحليلات والنتائج",
+                        text = "النتائج",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -130,7 +132,7 @@ private fun ResultsOverviewContent(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(bottom = 28.dp)
     ) {
         // Hero Return Card
@@ -139,11 +141,11 @@ private fun ResultsOverviewContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("results_hero_card"),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(containerColor = TradingCard),
                 border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -183,7 +185,9 @@ private fun ResultsOverviewContent(
                             } else {
                                 String.format(Locale.US, "%s$%.2f", if (isPos) "+" else "", netProfit)
                             },
-                            fontSize = 24.sp,
+                            fontSize = 22.sp,
+                            style = TextStyle(textDirection = TextDirection.Ltr),
+                            maxLines = 1,
                             fontWeight = FontWeight.Bold,
                             color = if (isPos) TradingPositive else TradingNegative
                         )
@@ -266,7 +270,7 @@ private fun ResultsOverviewContent(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = TradingCard),
                     border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
                 ) {
