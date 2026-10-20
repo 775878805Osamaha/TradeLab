@@ -157,8 +157,8 @@ fun TradeScreen(
             // 3. Compact Integrated Trading Chart
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth().height(220.dp).testTag("trade_chart_card"),
-                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().height(180.dp).testTag("trade_chart_card"),
+                    shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = TradingCard),
                     border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
                 ) {
@@ -175,7 +175,7 @@ fun TradeScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth().testTag("trade_order_panel"),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = TradingCard),
                     border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
                 ) {
@@ -347,12 +347,12 @@ fun TradeScreen(
                                     .weight(1f)
                                     .height(56.dp)
                                     .testTag("action_sell_btn"),
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 enabled = !uiState.isSubmittingOrder,
                                 colors = ButtonDefaults.buttonColors(containerColor = TradingNegative)
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("SELL (بيع)", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                                    Text("بيع", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
                                     Text(bidText, fontSize = 12.sp)
                                 }
                             }
@@ -365,12 +365,12 @@ fun TradeScreen(
                                     .weight(1f)
                                     .height(56.dp)
                                     .testTag("action_buy_btn"),
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 enabled = !uiState.isSubmittingOrder,
                                 colors = ButtonDefaults.buttonColors(containerColor = TradingPositive)
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("BUY (شراء)", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                                    Text("شراء", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
                                     Text(askText, fontSize = 12.sp)
                                 }
                             }
@@ -422,7 +422,7 @@ fun TradeScreen(
 
                     Card(
                         modifier = Modifier.fillMaxWidth().testTag("position_item_${pos.id}"),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = CardDefaults.cardColors(containerColor = TradingCard),
                         border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
                     ) {
@@ -569,7 +569,7 @@ fun TradeScreen(
                     val po = uiState.pendingOrders[idx]
                     Card(
                         modifier = Modifier.fillMaxWidth().testTag("pending_order_${po.id}"),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = CardDefaults.cardColors(containerColor = TradingElevated)
                     ) {
                         Row(
