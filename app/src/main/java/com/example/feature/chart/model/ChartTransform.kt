@@ -3,6 +3,7 @@ package com.example.feature.chart.model
 import com.example.core.model.Candle
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * Handles two-way conversion between Market Coordinates (Timestamp, Price)
@@ -43,21 +44,27 @@ data class ChartTransform(
         val totalVisible = visibleCandles.size
         if (totalVisible <= 0) return -1
         val distFromRight = chartWidth - x - (candleWidthPx / 2f)
-        val offset = (distFromRight / candleWidthPx.coerceAtLeast(1f)).toInt()
-        val index = (totalVisible - 1 - offset)
-        return index.coerceIn(0, totalVisible - 1)
+        val offset = (distFromRight / candleWidthPx.coerceAtLeast(1f)).roundToInt()
+        return (totalVisible - 1 - offset).coerceIn(0, totalVisible - 1)
     }
 
     fun timeToX(time: Long): Float? {
         if (visibleCandles.isEmpty()) return null
-        // Find closest candle index
-        val idx = visibleCandles.indexOfFirst { it.openTime >= time }
-        val targetIdx = if (idx >= 0) idx else visibleCandles.lastIndex
-        return candleIndexToX(targetIdx)
+        val exactIndex = visibleCandles.indexOfFirst { it.openTime == time }
+        if (exactIndex >= 0) return candleIndexToX(exactIndex)
+        val right = visibleCandles.indexOfFirst { it.openTime > time }
+        if (right == 0) return candleIndexToX(0)
+        if (right < 0) return candleIndexToX(visibleCandles.lastIndex)
+        val left = right - 1
+        val start = visibleCandles[left].openTime
+        val end = visibleCandles[right].openTime
+        if (end <= start) return candleIndexToX(left)
+        val fraction = ((time - start).toDouble() / (end - start)).coerceIn(0.0, 1.0)
+        return candleIndexToX(left) + (candleIndexToX(right) - candleIndexToX(left)) * fraction.toFloat()
     }
 
     fun xToTime(x: Float): Long {
         val idx = xToCandleIndex(x)
-        return if (idx in visibleCandles.indices) visibleCandles[idx].openTime else System.currentTimeMillis()
+        return if (idx in visibleCandles.indices) visibleCandles[idx].openTime else 0L
     }
 }
