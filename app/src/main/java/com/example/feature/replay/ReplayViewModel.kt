@@ -131,6 +131,7 @@ class ReplayViewModel(
             it.copy(
                 symbol = symbol, timeframe = tf, isLoading = true, message = null,
                 visibleCandles = emptyList(), currentCandle = null, latestTick = null,
+                currentIndex = 0, totalCandles = 0, currentReplayTime = 0L,
                 isPlaying = false
             )
         }
