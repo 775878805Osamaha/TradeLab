@@ -13,7 +13,7 @@ class DefaultMarketDataProvider(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) : MarketDataProvider, HistoricalDataProvider, StreamingMarketDataProvider {
 
-    override val providerName: String = "TradeLab Production Market Engine (Binance WebSocket + Benchmark FX)"
+    override val providerName: String = "TradeLab Binance Spot Market Data (BTCUSDT / ETHUSDT)"
 
     private val _isConnected = MutableStateFlow(false)
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -47,7 +47,7 @@ class DefaultMarketDataProvider(
             latestCandleTimestamp = 0L,
             latestTickTimestamp = 0L,
             validationErrorsCount = 0,
-            isStale = false,
+            isStale = true,
             approximateLatencyMs = 0L
         )
     )
@@ -240,7 +240,7 @@ class DefaultMarketDataProvider(
                         emitTick(tick)
                     }
                     _dataSourceType.value = DataSourceType.LIVE_DATA
-                    _connectionStatus.value = ProviderConnectionStatus.CONNECTED
+                    // REST fallback is not a WebSocket connection.
                     return@withContext true
                 }
             }
@@ -332,7 +332,7 @@ class DefaultMarketDataProvider(
             while (isActive) {
                 delay(5000)
                 val elapsed = System.currentTimeMillis() - _lastSuccessfulUpdate.value
-                val isStale = elapsed > 15000L // 15 seconds stale threshold
+                val isStale = _lastSuccessfulUpdate.value == 0L || elapsed > 15000L // 15 seconds stale threshold
                 if (isStale && _connectionStatus.value == ProviderConnectionStatus.CONNECTED) {
                     _connectionStatus.value = ProviderConnectionStatus.DEGRADED
                     _dataSourceType.value = DataSourceType.STALE_DATA
