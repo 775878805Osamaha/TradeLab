@@ -378,6 +378,16 @@ class TradingRepository(
      * Throttles database updates so only real triggers (SL/TP, pending fills, trailing stops) write to disk.
      */
     suspend fun onTickUpdate(tick: Tick) = withContext(Dispatchers.IO) {
+        // Reject corrupted provider ticks before caching quotes or touching any account.
+        if (!com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid) {
+            return@withContext
+        }
+        // Ignore delayed out-of-order ticks to avoid reverting market state and
+        // accidentally triggering orders on prices older than the last accepted quote.
+        val previous = latestTicks[tick.symbol]
+        if (previous != null && tick.timestamp < previous.timestamp) {
+            return@withContext
+        }
         latestTicks[tick.symbol] = tick
         val currentAccount = accountDao.getSelectedAccount() ?: return@withContext
 
