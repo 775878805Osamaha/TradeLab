@@ -283,6 +283,7 @@ class ReplayViewModel(
         val candle = replayEngine.currentCandle.value ?: return
         val tick = replayEngine.currentTick.value ?: return
         if (_uiState.value.isLoading || tick.symbol != _uiState.value.symbol ||
+            candle.symbol != tick.symbol ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
             !volume.isFinite() || volume <= 0.0) {
             _uiState.update { it.copy(message = "تعذر تنفيذ الأمر: سعر أو حجم Replay غير صالح") }
