@@ -84,7 +84,7 @@ fun ChartScreen(
                             style = TextStyle(textDirection = TextDirection.Ltr),
                             maxLines = 1,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 17.sp,
+                            fontSize = 16.sp,
                             color = TradingTextPrimary
                         )
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = TradingTextSecondary)
@@ -114,7 +114,7 @@ fun ChartScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -126,7 +126,7 @@ fun ChartScreen(
                             .clip(RoundedCornerShape(6.dp))
                             .background(if (isSelected) TradingAccent else TradingElevated)
                             .clickable { viewModel.selectTimeframe(tf) }
-                            .padding(horizontal = 10.dp, vertical = 10.dp)
+                            .padding(horizontal = 9.dp, vertical = 7.dp)
                             .testTag("tf_chip_${tf.code}")
                     ) {
                         Text(
@@ -238,7 +238,7 @@ fun ChartScreen(
                 else -> "Binance · تحديث عبر الإنترنت"
             }
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -297,7 +297,7 @@ fun ChartScreen(
                 ) {
                     Column(
                         modifier = Modifier
-                            .heightIn(max = 312.dp)
+                            .heightIn(max = 228.dp)
                             .verticalScroll(rememberScrollState())
                             .padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -314,20 +314,20 @@ fun ChartScreen(
                             val selected = uiState.activeDrawingTool == tool
                             IconButton(
                                 onClick = { viewModel.setDrawingTool(tool) },
-                                modifier = Modifier.size(44.dp).testTag("chart_toolbar_${tool.name}")
+                                modifier = Modifier.size(34.dp).testTag("chart_toolbar_${tool.name}")
                             ) {
                                 Icon(
                                     imageVector = icon,
                                     contentDescription = description,
                                     tint = if (selected) TradingAccent else TradingTextSecondary,
-                                    modifier = Modifier.size(21.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
                         HorizontalDivider(modifier = Modifier.width(30.dp), color = TradingBorder)
                         IconButton(
                             onClick = { viewModel.toggleCrosshair() },
-                            modifier = Modifier.size(44.dp).testTag("chart_toolbar_crosshair")
+                            modifier = Modifier.size(34.dp).testTag("chart_toolbar_crosshair")
                         ) {
                             Icon(
                                 Icons.Default.FilterCenterFocus,
@@ -337,7 +337,7 @@ fun ChartScreen(
                         }
                         IconButton(
                             onClick = { showToolsMenu = true },
-                            modifier = Modifier.size(44.dp).testTag("chart_toolbar_more")
+                            modifier = Modifier.size(34.dp).testTag("chart_toolbar_more")
                         ) {
                             Icon(Icons.Default.MoreHoriz, contentDescription = "المزيد من أدوات الرسم", tint = TradingTextSecondary)
                         }
@@ -354,7 +354,7 @@ fun ChartScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -365,7 +365,7 @@ fun ChartScreen(
                         enabled = marketTickIsLive,
                         modifier = Modifier
                             .weight(1f)
-                            .height(46.dp)
+                            .height(42.dp)
                             .testTag("chart_quick_sell_btn"),
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TradingNegative)
