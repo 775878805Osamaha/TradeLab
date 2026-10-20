@@ -89,6 +89,7 @@ fun CandlestickChart(
     // Viewport State
     var candleWidthPx by remember { mutableFloatStateOf(20f) }
     var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
+    var manualPriceScale by remember { mutableFloatStateOf(1f) }
     var crosshairOffset by remember { mutableStateOf<Offset?>(null) }
     var inspectedCandle by remember { mutableStateOf<Candle?>(null) }
 
@@ -104,6 +105,7 @@ fun CandlestickChart(
         if (resetViewTrigger > 0L) {
             scrollOffsetPx = 0f
             candleWidthPx = 20f
+            manualPriceScale = 1f
             crosshairOffset = null
             transformRef[0] = null
         }
@@ -224,8 +226,12 @@ fun CandlestickChart(
             }
             // Add 3% vertical padding
             val pPadding = (maxP - minP) * 0.03
-            val paddedMin = minP - pPadding
-            val paddedMax = maxP + pPadding
+            val autoMin = minP - pPadding
+            val autoMax = maxP + pPadding
+            val midpoint = (autoMin + autoMax) / 2.0
+            val halfRange = ((autoMax - autoMin) / 2.0) * manualPriceScale
+            val paddedMin = midpoint - halfRange
+            val paddedMax = midpoint + halfRange
 
             val transform = ChartTransform(
                 visibleCandles = visibleCandles,
@@ -431,6 +437,22 @@ fun CandlestickChart(
                 }
             }
         }
+
+        // Vertical price-axis scaling; reset-view restores automatic fitting.
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .width(38.dp)
+                .fillMaxHeight()
+                .testTag("chart_price_axis_scale")
+                .pointerInput(Unit) {
+                    detectDragGestures { change, dragAmount ->
+                        change.consume()
+                        manualPriceScale = (manualPriceScale * (1f + dragAmount.y / 400f))
+                            .coerceIn(0.25f, 8f)
+                    }
+                }
+        )
 
         // Top Floating Crosshair HUD (OHLCV & Spread)
         inspectedCandle?.let { c ->
