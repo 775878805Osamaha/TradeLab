@@ -11,6 +11,8 @@ import com.example.core.strategy.SignalAction
 import com.example.core.strategy.Strategy
 import com.example.core.strategy.StrategyContext
 import com.example.data.repository.MarketDataRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -20,7 +22,7 @@ enum class ReplayInteractionMode {
 }
 
 data class ReplayUiState(
-    val symbol: String = "XAUUSD",
+    val symbol: String = "BTCUSDT",
     val timeframe: Timeframe = Timeframe.M15,
     val initialBalance: Double = 50.0,
     val currentBalance: Double = 50.0,
@@ -56,6 +58,7 @@ class ReplayViewModel(
     private val pendingOrders = mutableListOf<Order>()
     private val closedTrades = mutableListOf<TradeJournalEntry>()
     private var nextId = 1L
+    private var replayLoadJob: Job? = null
 
     private var activeStrategy: Strategy? = null
 
@@ -116,17 +119,34 @@ class ReplayViewModel(
         }
     }
 
-    fun loadReplayData(symbol: String = "XAUUSD", tf: Timeframe = Timeframe.M15) {
-        _uiState.update { it.copy(symbol = symbol, timeframe = tf, isLoading = true) }
-        viewModelScope.launch {
-            val now = System.currentTimeMillis()
-            val interval = tf.minutes * 60 * 1000L
-            val from = now - (interval * 300)
-
-            val candles = marketDataRepository.getCandles(symbol, tf, from, now)
-            replayEngine.initialize(candles, startIndex = 20)
-            resetReplayAccount()
-            _uiState.update { it.copy(isLoading = false) }
+    fun loadReplayData(symbol: String = "BTCUSDT", tf: Timeframe = Timeframe.M15) {
+        replayLoadJob?.cancel()
+        _uiState.update { it.copy(symbol = symbol, timeframe = tf, isLoading = true, message = null) }
+        replayLoadJob = viewModelScope.launch {
+            try {
+                val now = System.currentTimeMillis()
+                val interval = tf.minutes * 60 * 1000L
+                val from = now - (interval * 300)
+                val candles = marketDataRepository.getCandles(symbol, tf, from, now)
+                if (candles.isEmpty()) {
+                    _uiState.update {
+                        it.copy(isLoading = false, message = "لا توجد شموع تاريخية موثوقة لهذا الرمز. اختر BTCUSDT أو ETHUSDT.")
+                    }
+                    return@launch
+                }
+                replayEngine.initialize(candles, startIndex = minOf(20, candles.lastIndex))
+                resetReplayAccount()
+                _uiState.update { it.copy(isLoading = false) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        message = "تعذر تحميل بيانات إعادة العرض لهذا الرمز. اختر BTCUSDT أو ETHUSDT وتحقق من الاتصال."
+                    )
+                }
+            }
         }
     }
 
