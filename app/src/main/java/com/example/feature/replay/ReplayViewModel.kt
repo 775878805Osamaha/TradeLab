@@ -61,6 +61,46 @@ class ReplayViewModel(
     private var nextId = 1L
     private var replayLoadJob: Job? = null
 
+    private data class AccountSnapshot(
+        val balance: Double,
+        val equity: Double,
+        val positions: List<Position>,
+        val orders: List<Order>,
+        val trades: List<TradeJournalEntry>,
+        val nextOrderId: Long
+    )
+    private val accountSnapshots = mutableMapOf<Int, AccountSnapshot>()
+
+    private fun saveAccountSnapshot() {
+        accountSnapshots[replayEngine.currentIndex.value] = AccountSnapshot(
+            balance = _uiState.value.currentBalance,
+            equity = _uiState.value.currentEquity,
+            positions = openPositions.toList(),
+            orders = pendingOrders.toList(),
+            trades = closedTrades.toList(),
+            nextOrderId = nextId
+        )
+    }
+
+    private fun restoreAccountSnapshot(snapshot: AccountSnapshot) {
+        openPositions.clear()
+        openPositions.addAll(snapshot.positions)
+        pendingOrders.clear()
+        pendingOrders.addAll(snapshot.orders)
+        closedTrades.clear()
+        closedTrades.addAll(snapshot.trades)
+        nextId = snapshot.nextOrderId
+        _uiState.update {
+            it.copy(
+                currentBalance = snapshot.balance,
+                currentEquity = snapshot.equity,
+                openPositions = openPositions.toList(),
+                pendingOrders = pendingOrders.toList(),
+                closedTrades = closedTrades.toList()
+            )
+        }
+    }
+
     private var activeStrategy: Strategy? = null
 
     fun setStrategy(strategy: Strategy?) {
@@ -127,6 +167,7 @@ class ReplayViewModel(
         // from the previous replay session, even if loading subsequently fails.
         resetReplayAccount()
         nextId = 1L
+        accountSnapshots.clear()
         // Do not continue displaying a previous instrument's replay while switching.
         _uiState.update {
             it.copy(
@@ -208,7 +249,9 @@ class ReplayViewModel(
         replayEngine.pause()
         resetReplayAccount()
         nextId = 1L
+        accountSnapshots.clear()
         replayEngine.reset()
+        saveAccountSnapshot()
     }
 
     private fun resetReplayAccount() {
