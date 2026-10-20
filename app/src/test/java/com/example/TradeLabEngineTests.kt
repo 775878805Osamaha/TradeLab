@@ -399,7 +399,7 @@ class TradeLabEngineTests {
         assertTrue(execResult is com.example.core.execution.ExecutionResult.Success)
         val pos = (execResult as com.example.core.execution.ExecutionResult.Success).position
         assertEquals(PositionSide.BUY, pos.side)
-        assertEquals(2640.0, pos.entryPrice, 0.001)
+        // A BUY LIMIT fills at the better available ask when below the limit.\n        assertEquals(2639.5, pos.entryPrice, 0.001)
 
         // 2. SELL STOP at 2630.0 (triggered when Bid <= 2630.0)
         val sellStop = Order(
