@@ -21,7 +21,7 @@ class DefaultMarketDataProvider(
     private val _connectionStatus = MutableStateFlow(ProviderConnectionStatus.DISCONNECTED)
     override val connectionStatus: StateFlow<ProviderConnectionStatus> = _connectionStatus.asStateFlow()
 
-    private val _dataSourceType = MutableStateFlow(DataSourceType.LIVE_DATA)
+    private val _dataSourceType = MutableStateFlow(DataSourceType.STALE_DATA)
     override val dataSourceType: StateFlow<DataSourceType> = _dataSourceType.asStateFlow()
 
     private val _streamReconnectAttempts = MutableStateFlow(0)
@@ -40,7 +40,7 @@ class DefaultMarketDataProvider(
         MarketDataDiagnostic(
             providerName = providerName,
             connectionStatus = ProviderConnectionStatus.DISCONNECTED,
-            dataSourceType = DataSourceType.LIVE_DATA,
+            dataSourceType = DataSourceType.STALE_DATA,
             lastUpdateTimestamp = 0L,
             reconnectCount = 0,
             cachedCandlesCount = 0L,
@@ -133,9 +133,9 @@ class DefaultMarketDataProvider(
         benchmarkJob = scope.launch {
             while (isActive) {
                 // REST polling is a fallback for real crypto quotes only.
-                if (binanceWsClient?.connectionStatus?.value != ProviderConnectionStatus.CONNECTED) {
-                    fetchLiveCryptoQuotes()
-                }
+                // Some mobile networks connect the socket but block bookTicker frames.
+                // Keep a verified REST quote fallback running regardless of socket status.
+                fetchLiveCryptoQuotes()
                 delay(3000)
             }
         }
@@ -214,43 +214,47 @@ class DefaultMarketDataProvider(
     }
 
     private suspend fun fetchLiveCryptoQuotes(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val request = Request.Builder()
-                .url("https://api.binance.com/api/v3/ticker/bookTicker?symbols=[\"BTCUSDT\",\"ETHUSDT\"]")
-                .header("User-Agent", "TradeLab/2.0")
-                .build()
-
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val body = response.body?.string()
-                if (!body.isNullOrBlank()) {
-                    rawStreamFlow.tryEmit(body)
-                    val array = JSONArray(body)
-                    val now = System.currentTimeMillis()
-                    for (i in 0 until array.length()) {
-                        val item = array.getJSONObject(i)
-                        val binanceSymbol = item.getString("symbol")
-                        val bid = item.getDouble("bidPrice")
-                        val ask = item.getDouble("askPrice")
-                        val tick = Tick(
-                            symbol = binanceSymbol,
-                            bid = bid,
-                            ask = ask,
-                            last = (bid + ask) / 2.0,
-                            timestamp = now,
-                            source = "BINANCE_REST_POLL"
-                        )
+        var received = false
+        for (symbol in listOf("BTCUSDT", "ETHUSDT")) {
+            try {
+                val url = okhttp3.HttpUrl.Builder()
+                    .scheme("https")
+                    .host("api.binance.com")
+                    .addPathSegments("api/v3/ticker/bookTicker")
+                    .addQueryParameter("symbol", symbol)
+                    .build()
+                val request = Request.Builder().url(url)
+                    .header("User-Agent", "TradeLab/2.0")
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use
+                    val body = response.body?.string() ?: return@use
+                    val item = org.json.JSONObject(body)
+                    if (item.optString("symbol") != symbol) return@use
+                    val bid = item.getDouble("bidPrice")
+                    val ask = item.getDouble("askPrice")
+                    val tick = Tick(
+                        symbol = symbol,
+                        bid = bid,
+                        ask = ask,
+                        last = (bid + ask) / 2.0,
+                        timestamp = System.currentTimeMillis(),
+                        source = "BINANCE_REST_POLL"
+                    )
+                    if (DataIntegrityValidator.validateTick(tick).isValid) {
                         emitTick(tick)
+                        rawStreamFlow.tryEmit(body)
+                        _dataSourceType.value = DataSourceType.LIVE_DATA
+                        received = true
                     }
-                    _dataSourceType.value = DataSourceType.LIVE_DATA
-                    // REST fallback is not a WebSocket connection.
-                    return@withContext true
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // No fabricated quote when Binance is unreachable on this network.
             }
-        } catch (e: Exception) {
-            // Silently handle offline/restricted network
         }
-        return@withContext false
+        received
     }
 
     override suspend fun getHistoricalCandles(
