@@ -236,6 +236,17 @@ class TradeViewModel(
             return
         }
 
+        // Never submit a virtual market order using an old or unsupported quote.
+        val verifiedMarketQuote = state.latestTick?.let { quote ->
+            quote.symbol == state.selectedSymbol &&
+                quote.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
+                System.currentTimeMillis() - quote.timestamp in 0..15_000L
+        } == true
+        if (state.orderType == OrderType.MARKET && !verifiedMarketQuote) {
+            _uiState.update { it.copy(message = "السعر المباشر غير متاح أو متأخر. انتظر تحديث Binance قبل تنفيذ الأمر.") }
+            return
+        }
+
         val tick = state.latestTick ?: run {
             _uiState.update { it.copy(message = "بيانات السوق غير متصلة حالياً") }
             return
