@@ -244,7 +244,7 @@ fun MarketScreen(
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "السبريد: ${if (quoteIsVerified) String.format(Locale.US, "%.1f", row.spreadPips) else "--"} نقطة",
+                                            text = "السبريد: ${row.spreadPips?.let { String.format(Locale.US, "%.1f", it) } ?: "--"} نقطة",
                                             fontSize = 11.sp,
                                             color = TradingTextMuted
                                         )
