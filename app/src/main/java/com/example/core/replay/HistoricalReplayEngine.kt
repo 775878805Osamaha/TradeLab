@@ -156,8 +156,21 @@ class HistoricalReplayEngine(
         replayClock.setSpeed(speedFactor)
     }
 
+    fun clear() {
+        pause()
+        checkpoints.clear()
+        allCandles = emptyList()
+        _totalCandles.value = 0
+        _currentIndex.value = 0
+        _visibleCandles.value = emptyList()
+        _currentCandle.value = null
+        _currentTick.value = null
+        _status.value = ReplayStatus.READY
+    }
+
     fun reset() {
         pause()
+        checkpoints.clear()
         _currentIndex.value = if (allCandles.isNotEmpty()) minOf(10, allCandles.size - 1) else 0
         _status.value = ReplayStatus.READY
         // Reset is navigation, not a new strategy signal or SL/TP event.
