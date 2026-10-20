@@ -10,6 +10,8 @@ import com.example.data.repository.MarketDataRepository
 import com.example.data.repository.TradingRepository
 import com.example.feature.chart.model.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -52,6 +54,7 @@ class ChartViewModel(
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
 
     private var tickJob: Job? = null
+    private var klineRefreshJob: Job? = null
     private var drawingJob: Job? = null
 
     init {
@@ -66,6 +69,7 @@ class ChartViewModel(
     fun selectSymbol(symbol: String) {
         if (_uiState.value.selectedSymbol == symbol) return
         tickJob?.cancel()
+        klineRefreshJob?.cancel()
         _uiState.update { it.copy(selectedSymbol = symbol, isLoading = true, latestTick = null, candles = emptyList()) }
         loadCandlesForCurrentSymbol()
         observeDrawings()
@@ -74,6 +78,7 @@ class ChartViewModel(
     fun selectTimeframe(timeframe: Timeframe) {
         if (_uiState.value.selectedTimeframe == timeframe) return
         tickJob?.cancel()
+        klineRefreshJob?.cancel()
         _uiState.update { it.copy(selectedTimeframe = timeframe, isLoading = true, latestTick = null, candles = emptyList()) }
         loadCandlesForCurrentSymbol()
         observeDrawings()
@@ -208,12 +213,56 @@ class ChartViewModel(
                 if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf) return@launch
                 _uiState.update { it.copy(candles = aggregated, isLoading = false, message = null) }
                 recalculateIndicators(aggregated, _uiState.value.indicatorSettings)
+                startKlineRefresh(symbol, tf)
             } catch (error: Exception) {
                 if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
                     _uiState.update {
                         it.copy(candles = emptyList(), isLoading = false,
                             message = "تعذر تحميل بيانات السوق: " + (error.message ?: "تحقق من الاتصال"))
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * Refresh genuine exchange OHLCV candles independently of bookTicker quotes.
+     * Binance REST klines include actual trade volume; bid/ask events do not.
+     * This is polling, not a WebSocket kline feed.
+     */
+    private fun startKlineRefresh(symbol: String, timeframe: Timeframe) {
+        klineRefreshJob?.cancel()
+        if (symbol != "BTCUSDT" && symbol != "ETHUSDT") return
+        klineRefreshJob = viewModelScope.launch {
+            while (isActive) {
+                delay(10_000L)
+                if (_uiState.value.selectedSymbol != symbol ||
+                    _uiState.value.selectedTimeframe != timeframe) break
+                try {
+                    val now = System.currentTimeMillis()
+                    val interval = timeframe.minutes * 60_000L
+                    val from = (now / interval) * interval - interval
+                    val fresh = marketDataRepository.provider.getHistoricalCandles(
+                        symbol, timeframe, from, now
+                    )
+                    if (fresh.isEmpty()) continue
+                    if (_uiState.value.selectedSymbol != symbol ||
+                        _uiState.value.selectedTimeframe != timeframe) break
+                    val previous = _uiState.value.candles
+                    val merged = (previous + fresh)
+                        .associateBy { it.openTime }
+                        .toSortedMap()
+                        .values
+                        .toList()
+                        .takeLast(500)
+                    _uiState.update { state ->
+                        if (state.selectedSymbol == symbol && state.selectedTimeframe == timeframe) {
+                            state.copy(candles = merged)
+                        } else state
+                    }
+                    recalculateIndicators(merged, _uiState.value.indicatorSettings)
+                } catch (error: Exception) {
+                    // Preserve last verified candles during temporary network failure.
                 }
             }
         }
