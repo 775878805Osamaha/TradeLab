@@ -37,6 +37,16 @@ class ExecutionEngine(
         strategyId: String? = null,
         mode: String = "LIVE_PAPER"
     ): ExecutionResult {
+        // A market fill must never use a quote from a different instrument.
+        if (!symbol.equals(tick.symbol, ignoreCase = true) &&
+            !(symbol.equals("BTCUSD", ignoreCase = true) && tick.symbol.equals("BTCUSDT", ignoreCase = true)) &&
+            !(symbol.equals("ETHUSD", ignoreCase = true) && tick.symbol.equals("ETHUSDT", ignoreCase = true))) {
+            return ExecutionResult.Error("رمز سعر السوق لا يطابق رمز الصفقة")
+        }
+        if (!config.slippagePips.isFinite() || config.slippagePips < 0.0 ||
+            !config.defaultCommissionPerLot.isFinite() || config.defaultCommissionPerLot < 0.0) {
+            return ExecutionResult.Error("إعدادات الانزلاق السعري أو العمولة غير صالحة")
+        }
         // Enforce strict order validation
         val validation = OrderValidator.validate(
             account = account,
@@ -63,13 +73,17 @@ class ExecutionEngine(
             OrderSide.SELL -> tick.bid - slippageOffset
         }
 
+        if (!executedPrice.isFinite() || executedPrice <= 0.0) {
+            return ExecutionResult.Error("سعر التنفيذ بعد الانزلاق السعري غير صالح")
+        }
+
         // Commission
         val commission = config.defaultCommissionPerLot * volume
 
         // Required margin
         val margin = (volume * symInfo.contractSize * executedPrice) / account.leverage
 
-        if (margin > account.freeMargin) {
+        if (!margin.isFinite() || margin <= 0.0 || margin > account.freeMargin) {
             return ExecutionResult.Error("الهامش الافتراضي غير كافٍ لتنفيذ هذا العقد")
         }
 
