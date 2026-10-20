@@ -44,7 +44,7 @@ fun MarketScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "مراقبة السوق (Market Watch)",
+                            text = "السوق",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -95,7 +95,7 @@ fun MarketScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("market_search_input"),
-                placeholder = { Text("بحث عن رمز (XAUUSD, BTCUSDT, EURUSD...)", fontSize = 13.sp) },
+                placeholder = { Text("ابحث عن رمز", fontSize = 13.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TradingTextSecondary) },
                 trailingIcon = {
                     if (uiState.searchQuery.isNotEmpty()) {
@@ -173,8 +173,8 @@ fun MarketScreen(
             // Symbols List
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 8.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                contentPadding = PaddingValues(vertical = 4.dp)
             ) {
                 items(uiState.rows.size) { index ->
                     val row = uiState.rows[index]
@@ -186,14 +186,14 @@ fun MarketScreen(
                             .fillMaxWidth()
                             .clickable { onSelectSymbol(sym.symbol) }
                             .testTag("symbol_card_${sym.symbol}"),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(6.dp),
                         colors = CardDefaults.cardColors(containerColor = TradingCard),
                         border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
