@@ -246,15 +246,21 @@ class ExecutionEngine(
         minStepPips: Double = 1.0
     ): Double? {
         val distance = position.trailingStopDistance ?: return null
-        if (distance <= 0.0) return null
+        if (!distance.isFinite() || distance <= 0.0 ||
+            !minStepPips.isFinite() || minStepPips <= 0.0 ||
+            !tick.bid.isFinite() || !tick.ask.isFinite() ||
+            tick.bid <= 0.0 || tick.ask < tick.bid ||
+            !position.symbol.equals(tick.symbol, ignoreCase = true)) return null
         val symInfo = DefaultSymbols.getSymbol(position.symbol)
         val minStep = minStepPips * symInfo.pipSize
+        if (!minStep.isFinite() || minStep <= 0.0) return null
 
         return when (position.side) {
             PositionSide.BUY -> {
                 val candidateSl = tick.bid - distance
                 val currentSl = position.stopLoss
-                if (currentSl == null || candidateSl >= currentSl + minStep) {
+                if (candidateSl.isFinite() && candidateSl > 0.0 &&
+                    (currentSl == null || candidateSl >= currentSl + minStep)) {
                     candidateSl
                 } else {
                     null
@@ -263,7 +269,8 @@ class ExecutionEngine(
             PositionSide.SELL -> {
                 val candidateSl = tick.ask + distance
                 val currentSl = position.stopLoss
-                if (currentSl == null || candidateSl <= currentSl - minStep) {
+                if (candidateSl.isFinite() && candidateSl > 0.0 &&
+                    (currentSl == null || candidateSl <= currentSl - minStep)) {
                     candidateSl
                 } else {
                     null
