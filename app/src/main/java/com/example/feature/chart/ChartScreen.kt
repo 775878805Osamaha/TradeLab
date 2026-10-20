@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -366,6 +367,7 @@ fun ChartScreen(
                     val bidText = if (marketTickIsLive) marketTick?.let { String.format(Locale.US, "%.2f", it.bid) } ?: "--" else "--"
                     Button(
                         onClick = { viewModel.quickOrder(OrderSide.SELL, 0.01) },
+                        enabled = marketTickIsLive,
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
@@ -374,8 +376,8 @@ fun ChartScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = TradingNegative)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("بيع (SELL)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text(bidText, fontSize = 11.sp)
+                            Text("بيع", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(bidText, style = TextStyle(textDirection = TextDirection.Ltr, textAlign = TextAlign.Center), maxLines = 1, fontSize = 12.sp)
                         }
                     }
 
@@ -386,13 +388,14 @@ fun ChartScreen(
                     } ?: "--"
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(text = "السبريد", fontSize = 10.sp, color = TradingTextSecondary)
-                        Text(text = "$spreadText pips", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TradingTextPrimary)
+                        Text(text = "$spreadText pips", style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TradingTextPrimary)
                     }
 
                     // BUY Button (Green)
                     val askText = if (marketTickIsLive) marketTick?.let { String.format(Locale.US, "%.2f", it.ask) } ?: "--" else "--"
                     Button(
                         onClick = { viewModel.quickOrder(OrderSide.BUY, 0.01) },
+                        enabled = marketTickIsLive,
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
@@ -401,8 +404,8 @@ fun ChartScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = TradingPositive)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("شراء (BUY)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text(askText, fontSize = 11.sp)
+                            Text("شراء", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(askText, style = TextStyle(textDirection = TextDirection.Ltr, textAlign = TextAlign.Center), maxLines = 1, fontSize = 12.sp)
                         }
                     }
                 }
@@ -440,7 +443,7 @@ fun ChartScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text(text = sym.symbol, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text(text = sym.symbol, style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                             Text(text = sym.name, fontSize = 12.sp, color = TradingTextSecondary)
                         }
                         Text(text = sym.category, fontSize = 11.sp, color = TradingAccentLight)
