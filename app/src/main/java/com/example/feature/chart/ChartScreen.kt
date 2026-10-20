@@ -298,6 +298,34 @@ fun ChartScreen(
                     onSelectTrade = { viewModel.selectTradeForDetail(it) }
                 )
 
+                // Distinguish a failed Binance request from an in-progress load.
+                if (uiState.candles.isEmpty() && !uiState.isLoading && uiState.candleLoadError != null) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(horizontal = 50.dp)
+                            .background(TradingCard, RoundedCornerShape(12.dp))
+                            .padding(16.dp)
+                            .testTag("chart_load_error"),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = uiState.candleLoadError ?: "",
+                            color = TradingTextSecondary,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Button(
+                            onClick = { viewModel.retryCandleLoad() },
+                            modifier = Modifier.testTag("chart_retry_load_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = TradingAccent)
+                        ) {
+                            Text("إعادة المحاولة")
+                        }
+                    }
+                }
+
                 // Compact TradingView-style tools on the chart itself.
                 // Buttons select the existing functional drawing tools; no image overlay.
                 Surface(
