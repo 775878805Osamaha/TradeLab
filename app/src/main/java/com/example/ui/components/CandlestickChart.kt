@@ -111,8 +111,18 @@ fun CandlestickChart(
         }
     }
 
+        // Show the inspected candle only while crosshair mode is enabled.
+        // Avoid stale OHLC data lingering after the user exits inspection.
+        LaunchedEffect(isCrosshairActive) {
+            if (!isCrosshairActive) {
+                crosshairOffset = null
+                inspectedCandle = null
+            }
+        }
+
     val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
         candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
+        // Pinch and two-finger pan share this transformable gesture.
         scrollOffsetPx += panChange.x
     }
 
