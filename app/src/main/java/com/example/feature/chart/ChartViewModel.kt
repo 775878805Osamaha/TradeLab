@@ -41,6 +41,7 @@ data class ChartUiState(
     val selectedTradeForDetail: TradeJournalEntry? = null,
     val resetViewTrigger: Long = 0L,
     val isLoading: Boolean = false,
+    val candleLoadError: String? = null,
     val message: String? = null
 )
 
@@ -74,7 +75,7 @@ class ChartViewModel(
         tickJob?.cancel()
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
-        _uiState.update { it.copy(selectedSymbol = symbol, isLoading = true, latestTick = null, candles = emptyList()) }
+        _uiState.update { it.copy(selectedSymbol = symbol, isLoading = true, candleLoadError = null, latestTick = null, candles = emptyList()) }
         loadCandlesForCurrentSymbol()
         observeDrawings()
     }
@@ -84,7 +85,7 @@ class ChartViewModel(
         tickJob?.cancel()
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
-        _uiState.update { it.copy(selectedTimeframe = timeframe, isLoading = true, latestTick = null, candles = emptyList()) }
+        _uiState.update { it.copy(selectedTimeframe = timeframe, isLoading = true, candleLoadError = null, latestTick = null, candles = emptyList()) }
         loadCandlesForCurrentSymbol()
         observeDrawings()
     }
@@ -217,7 +218,7 @@ class ChartViewModel(
                 val aggregated = CandleAggregator.aggregate(rawCandles, tf)
                 // Ignore responses that arrive after the user changes symbol or timeframe.
                 if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf) return@launch
-                _uiState.update { it.copy(candles = aggregated, isLoading = false, message = null) }
+                _uiState.update { it.copy(candles = aggregated, isLoading = false, candleLoadError = if (aggregated.isEmpty()) "لا تتوفر شموع مؤكدة لهذا الرمز والفاصل الزمني. حاول مجددًا." else null, message = null) }
                 recalculateIndicators(aggregated, _uiState.value.indicatorSettings)
                 startKlineRefresh(symbol, tf)
                 startKlineStream(symbol, tf)
@@ -227,7 +228,7 @@ class ChartViewModel(
                 if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
                     _uiState.update {
                         it.copy(candles = emptyList(), isLoading = false,
-                            message = "تعذر تحميل بيانات السوق: " + (error.message ?: "تحقق من الاتصال"))
+                            candleLoadError = "تعذر تحميل الشارت من Binance. تحقق من اتصال الإنترنت ثم أعد المحاولة.")
                     }
                 }
             }
@@ -412,6 +413,14 @@ class ChartViewModel(
                 _uiState.update { it.copy(dataSourceType = ds) }
             }
         }
+    }
+
+    fun retryCandleLoad() {
+        candleLoadJob?.cancel()
+        klineRefreshJob?.cancel()
+        klineStreamJob?.cancel()
+        _uiState.update { it.copy(isLoading = true, candleLoadError = null) }
+        loadCandlesForCurrentSymbol()
     }
 
     fun clearMessage() {
