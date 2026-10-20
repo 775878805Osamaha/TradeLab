@@ -106,7 +106,7 @@ fun AccountScreen(
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth().testTag("margin_warning_banner"),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = CardDefaults.cardColors(containerColor = Color(0x33EF4444)),
                         border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingNegative))
                     ) {
@@ -172,7 +172,7 @@ fun AccountScreen(
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -196,7 +196,7 @@ fun AccountScreen(
                                         text = String.format(Locale.US, "$%.2f", account.equity),
                                         style = TextStyle(textDirection = TextDirection.Ltr),
                                         maxLines = 1,
-                                        fontSize = 24.sp,
+                                        fontSize = 21.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = if (isProfit) TradingPositive else TradingNegative
                                     )
@@ -347,7 +347,7 @@ fun AccountScreen(
                             .fillMaxWidth()
                             .clickable { onNavigateToRules() }
                             .testTag("discipline_card"),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = CardDefaults.cardColors(containerColor = TradingCard),
                         border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
                     ) {
@@ -439,7 +439,7 @@ fun AccountScreen(
                         .fillMaxWidth()
                         .clickable { viewModel.selectAccount(acc.id) }
                         .testTag("account_item_${acc.id}"),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (isSelected) TradingElevated else TradingCard
                     ),
