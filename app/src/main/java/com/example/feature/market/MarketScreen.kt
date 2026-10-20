@@ -133,8 +133,7 @@ fun MarketScreen(
                 )
                 listOf(
                     Pair(MarketSort.SYMBOL, "الرمز"),
-                    Pair(MarketSort.SPREAD, "أقل سبريد"),
-                    Pair(MarketSort.CHANGE_PCT, "التغير %")
+                    Pair(MarketSort.SPREAD, "أقل سبريد")
                 ).forEach { (sortOpt, title) ->
                     val isSel = uiState.sortOption == sortOpt
                     Box(
