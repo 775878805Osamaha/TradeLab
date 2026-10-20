@@ -207,6 +207,16 @@ class ChartViewModel(
 
         candleLoadJob?.cancel()
         candleLoadJob = viewModelScope.launch {
+            if (symbol !in setOf("BTCUSDT", "ETHUSDT")) {
+                // Do not pretend Binance provides verified Forex or gold candles.
+                if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
+                    _uiState.update {
+                        it.copy(candles = emptyList(), latestTick = null, isLoading = false,
+                            candleLoadError = "لا يتوفر مصدر بيانات تاريخية موثوق لهذا الرمز حاليًا. اختر BTCUSDT أو ETHUSDT.")
+                    }
+                }
+                return@launch
+            }
             val now = System.currentTimeMillis()
             val interval = tf.minutes * 60 * 1000L
             val from = now - (interval * 250)
