@@ -118,11 +118,11 @@ class ExecutionEngine(
         val validation = OrderValidator.validate(
             account = account,
             symbol = order.symbol,
-            type = order.type,
+            // Validate execution-time constraints, not placement-time trigger geometry.
+            type = OrderType.MARKET,
             side = order.direction,
             volume = order.volume,
             tick = tick,
-            requestedPrice = order.requestedPrice,
             stopLoss = order.stopLoss,
             takeProfit = order.takeProfit
         )
