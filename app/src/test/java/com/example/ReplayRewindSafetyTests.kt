@@ -68,4 +68,22 @@ class ReplayRewindSafetyTests {
         assertEquals(baseline, evaluations)
     }
 
+    @Test fun initializeAndResetNeverExecuteStrategyOrders() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        var evaluations = 0
+        engine.onCandleRevealed = { _, _, _ -> evaluations++ }
+        engine.initialize((0..9).map(::candle), startIndex = 4)
+        assertEquals(0, evaluations)
+        assertEquals(4, engine.currentIndex.value)
+        assertTrue(engine.stepForward())
+        assertEquals(1, evaluations)
+        engine.reset()
+        assertEquals(9, engine.currentIndex.value)
+        assertEquals(1, evaluations)
+        engine.initialize((0..9).map(::candle), startIndex = 2)
+        assertEquals(1, evaluations)
+        assertTrue(engine.stepForward())
+        assertEquals(2, evaluations)
+    }
+
 }
