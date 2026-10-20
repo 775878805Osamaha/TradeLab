@@ -108,6 +108,27 @@ class ExecutionEngine(
         tick: Tick,
         account: VirtualAccount
     ): ExecutionResult? {
+        // Never fill a pending order using another symbol's quote or invalid market data.
+        if (!order.symbol.equals(tick.symbol, ignoreCase = true) ||
+            !tick.bid.isFinite() || !tick.ask.isFinite() ||
+            tick.bid <= 0.0 || tick.ask < tick.bid ||
+            !order.requestedPrice.isFinite() || order.requestedPrice <= 0.0) {
+            return ExecutionResult.Error("سعر السوق أو رمز الأمر المعلق غير صالح")
+        }
+        val validation = OrderValidator.validate(
+            account = account,
+            symbol = order.symbol,
+            // Validate execution-time constraints, not placement-time trigger geometry.
+            type = OrderType.MARKET,
+            side = order.direction,
+            volume = order.volume,
+            tick = tick,
+            stopLoss = order.stopLoss,
+            takeProfit = order.takeProfit
+        )
+        if (validation is OrderValidationResult.Rejected) {
+            return ExecutionResult.Error(validation.message)
+        }
         val symInfo = DefaultSymbols.getSymbol(order.symbol)
         val slippageOffset = config.slippagePips * symInfo.pipSize
 
@@ -136,7 +157,7 @@ class ExecutionEngine(
         val commission = config.defaultCommissionPerLot * order.volume
         val margin = (order.volume * symInfo.contractSize * executedPrice) / account.leverage
 
-        if (margin > account.freeMargin) {
+        if (!margin.isFinite() || margin <= 0.0 || margin > account.freeMargin) {
             return ExecutionResult.Error("الهامش الافتراضي غير كافٍ لتنفيذ الأمر المعلق")
         }
 
