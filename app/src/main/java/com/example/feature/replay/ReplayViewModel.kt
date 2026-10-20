@@ -197,6 +197,7 @@ class ReplayViewModel(
                 }
                 replayEngine.initialize(candles, startIndex = minOf(20, candles.lastIndex))
                 _uiState.update { it.copy(isLoading = false) }
+                saveAccountSnapshot()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -215,28 +216,30 @@ class ReplayViewModel(
     fun stepForward() = replayEngine.stepForward()
 
     fun stepBackward() {
-        // A checkpoint currently snapshots open positions but not the full
-        // trade journal, pending orders or ID generator. Rewinding an account
-        // that has traded would duplicate or erase financial history.
-        if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty()) {
-            _uiState.update {
-                it.copy(message = "لا يمكن الرجوع بعد تنفيذ صفقات Replay. أعد بدء المحاكاة أولاً.")
-            }
+        replayEngine.pause()
+        val targetIndex = replayEngine.currentIndex.value - 1
+        val snapshot = accountSnapshots[targetIndex]
+        if (snapshot == null) {
+            _uiState.update { it.copy(message = "لا تتوفر نقطة استعادة مالية لهذه الشمعة") }
             return
         }
-        replayEngine.pause()
-        replayEngine.stepBackward()
+        if (replayEngine.stepBackward()) {
+            restoreAccountSnapshot(snapshot)
+            // Future checkpoints belong to an abandoned timeline.
+            accountSnapshots.keys.removeAll { it > targetIndex }
+        }
     }
 
     fun jumpToTimestamp(timestamp: Long) {
+        // Arbitrary jumps can skip execution of stops and strategies.
+        // Keep jumps disabled after trades until timeline replay is transactional.
         if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty()) {
-            _uiState.update {
-                it.copy(message = "لا يمكن القفز بين التواريخ بعد التداول. أعد بدء المحاكاة أولاً.")
-            }
+            _uiState.update { it.copy(message = "القفز بعد التداول غير متاح؛ استخدم الرجوع شمعة واحدة") }
             return
         }
         replayEngine.pause()
         replayEngine.jumpToTimestamp(timestamp)
+        saveAccountSnapshot()
     }
 
     fun setSpeed(sp: Float) = replayEngine.setSpeed(sp)
@@ -313,6 +316,8 @@ class ReplayViewModel(
                         message = "تم تنفيذ أمر Replay ${side.displayNameAr} $volume لوت"
                     )
                 }
+            }
+                saveAccountSnapshot()
             }
             is com.example.core.execution.ExecutionResult.Error -> {
                 _uiState.update { it.copy(message = result.message) }
