@@ -19,6 +19,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.model.ProviderConnectionStatus
@@ -215,6 +217,8 @@ fun MarketScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
                                             text = sym.symbol,
+                                            style = TextStyle(textDirection = TextDirection.Ltr),
+                                            maxLines = 1,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 15.sp,
                                             color = TradingTextPrimary
@@ -241,7 +245,7 @@ fun MarketScreen(
                                             color = TradingTextMuted
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        val sourceLabel = tick?.source ?: if (sym.category == "Crypto") "BINANCE" else "BENCHMARK"
+                                        val sourceLabel = tick?.source ?: "لا توجد أسعار"
                                         Text(
                                             text = "• $sourceLabel",
                                             fontSize = 9.sp,
@@ -267,6 +271,8 @@ fun MarketScreen(
                                     val askStr = if (tick != null) sym.formatPrice(tick.ask) else "--"
                                     Text(
                                         text = askStr,
+                                        style = TextStyle(textDirection = TextDirection.Ltr),
+                                        maxLines = 1,
                                         color = TradingCyan,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold
@@ -284,6 +290,8 @@ fun MarketScreen(
                                     val bidStr = if (tick != null) sym.formatPrice(tick.bid) else "--"
                                     Text(
                                         text = bidStr,
+                                        style = TextStyle(textDirection = TextDirection.Ltr),
+                                        maxLines = 1,
                                         color = TradingTextPrimary,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold
