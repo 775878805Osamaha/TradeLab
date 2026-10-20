@@ -107,6 +107,7 @@ fun CandlestickChart(
             candleWidthPx = 12f
             manualPriceScale = 1f
             crosshairOffset = null
+            inspectedCandle = null
             transformRef[0] = null
         }
     }
