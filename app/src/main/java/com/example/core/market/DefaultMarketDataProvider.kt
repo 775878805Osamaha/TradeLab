@@ -79,6 +79,9 @@ class DefaultMarketDataProvider(
                 _dataSourceType.value = DataSourceType.LIVE_DATA
                 _connectionStatus.value = ProviderConnectionStatus.CONNECTED
             },
+            onCandleReceived = { candle ->
+                emitCandle(candle)
+            },
             onRawMessage = { msg ->
                 rawStreamFlow.tryEmit(msg)
             },
