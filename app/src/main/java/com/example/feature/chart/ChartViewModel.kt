@@ -53,6 +53,7 @@ class ChartViewModel(
     private val _uiState = MutableStateFlow(ChartUiState())
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
 
+    private var candleLoadJob: Job? = null
     private var tickJob: Job? = null
     private var klineRefreshJob: Job? = null
     private var klineStreamJob: Job? = null
@@ -69,6 +70,7 @@ class ChartViewModel(
 
     fun selectSymbol(symbol: String) {
         if (_uiState.value.selectedSymbol == symbol) return
+        candleLoadJob?.cancel()
         tickJob?.cancel()
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
@@ -202,7 +204,8 @@ class ChartViewModel(
         val symbol = _uiState.value.selectedSymbol
         val tf = _uiState.value.selectedTimeframe
 
-        viewModelScope.launch {
+        candleLoadJob?.cancel()
+        candleLoadJob = viewModelScope.launch {
             val now = System.currentTimeMillis()
             val interval = tf.minutes * 60 * 1000L
             val from = now - (interval * 250)
@@ -218,6 +221,8 @@ class ChartViewModel(
                 recalculateIndicators(aggregated, _uiState.value.indicatorSettings)
                 startKlineRefresh(symbol, tf)
                 startKlineStream(symbol, tf)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
                     _uiState.update {
