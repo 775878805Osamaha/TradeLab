@@ -16,6 +16,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.market.DefaultSymbols
@@ -76,7 +78,9 @@ fun ChartScreen(
                             .testTag("symbol_selector_btn")
                     ) {
                         Text(
-                            text = uiState.selectedSymbol,
+                            text = uiState.selectedSymbol.chunked(3).joinToString(" / ", limit = 2).takeIf { uiState.selectedSymbol.length == 6 } ?: uiState.selectedSymbol,
+                            style = TextStyle(textDirection = TextDirection.Ltr),
+                            maxLines = 1,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 17.sp,
                             color = TradingTextPrimary
@@ -156,12 +160,12 @@ fun ChartScreen(
                             .clip(RoundedCornerShape(6.dp))
                             .background(if (isSelected) TradingAccent else TradingElevated)
                             .clickable { viewModel.selectTimeframe(tf) }
-                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
                             .testTag("tf_chip_${tf.code}")
                     ) {
                         Text(
                             text = tf.displayName,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelected) Color.White else TradingTextSecondary
                         )
@@ -290,7 +294,7 @@ fun ChartScreen(
             // Quick Execution Bar
             Surface(
                 color = TradingCard,
-                tonalElevation = 4.dp,
+                tonalElevation = 0.dp,
                 border = androidx.compose.foundation.BorderStroke(1.dp, TradingBorder)
             ) {
                 Row(
