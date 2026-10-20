@@ -61,6 +61,46 @@ class ReplayViewModel(
     private var nextId = 1L
     private var replayLoadJob: Job? = null
 
+    private data class AccountSnapshot(
+        val balance: Double,
+        val equity: Double,
+        val positions: List<Position>,
+        val orders: List<Order>,
+        val trades: List<TradeJournalEntry>,
+        val nextOrderId: Long
+    )
+    private val accountSnapshots = mutableMapOf<Int, AccountSnapshot>()
+
+    private fun saveAccountSnapshot() {
+        accountSnapshots[replayEngine.currentIndex.value] = AccountSnapshot(
+            balance = _uiState.value.currentBalance,
+            equity = _uiState.value.currentEquity,
+            positions = openPositions.toList(),
+            orders = pendingOrders.toList(),
+            trades = closedTrades.toList(),
+            nextOrderId = nextId
+        )
+    }
+
+    private fun restoreAccountSnapshot(snapshot: AccountSnapshot) {
+        openPositions.clear()
+        openPositions.addAll(snapshot.positions)
+        pendingOrders.clear()
+        pendingOrders.addAll(snapshot.orders)
+        closedTrades.clear()
+        closedTrades.addAll(snapshot.trades)
+        nextId = snapshot.nextOrderId
+        _uiState.update {
+            it.copy(
+                currentBalance = snapshot.balance,
+                currentEquity = snapshot.equity,
+                openPositions = openPositions.toList(),
+                pendingOrders = pendingOrders.toList(),
+                closedTrades = closedTrades.toList()
+            )
+        }
+    }
+
     private var activeStrategy: Strategy? = null
 
     fun setStrategy(strategy: Strategy?) {
@@ -127,6 +167,7 @@ class ReplayViewModel(
         // from the previous replay session, even if loading subsequently fails.
         resetReplayAccount()
         nextId = 1L
+        accountSnapshots.clear()
         // Do not continue displaying a previous instrument's replay while switching.
         _uiState.update {
             it.copy(
@@ -156,6 +197,7 @@ class ReplayViewModel(
                 }
                 replayEngine.initialize(candles, startIndex = minOf(20, candles.lastIndex))
                 _uiState.update { it.copy(isLoading = false) }
+                saveAccountSnapshot()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -174,28 +216,30 @@ class ReplayViewModel(
     fun stepForward() = replayEngine.stepForward()
 
     fun stepBackward() {
-        // A checkpoint currently snapshots open positions but not the full
-        // trade journal, pending orders or ID generator. Rewinding an account
-        // that has traded would duplicate or erase financial history.
-        if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty()) {
-            _uiState.update {
-                it.copy(message = "لا يمكن الرجوع بعد تنفيذ صفقات Replay. أعد بدء المحاكاة أولاً.")
-            }
+        replayEngine.pause()
+        val targetIndex = replayEngine.currentIndex.value - 1
+        val snapshot = accountSnapshots[targetIndex]
+        if (snapshot == null) {
+            _uiState.update { it.copy(message = "لا تتوفر نقطة استعادة مالية لهذه الشمعة") }
             return
         }
-        replayEngine.pause()
-        replayEngine.stepBackward()
+        if (replayEngine.stepBackward()) {
+            restoreAccountSnapshot(snapshot)
+            // Future checkpoints belong to an abandoned timeline.
+            accountSnapshots.keys.removeAll { it > targetIndex }
+        }
     }
 
     fun jumpToTimestamp(timestamp: Long) {
+        // Arbitrary jumps can skip execution of stops and strategies.
+        // Keep jumps disabled after trades until timeline replay is transactional.
         if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty()) {
-            _uiState.update {
-                it.copy(message = "لا يمكن القفز بين التواريخ بعد التداول. أعد بدء المحاكاة أولاً.")
-            }
+            _uiState.update { it.copy(message = "القفز بعد التداول غير متاح؛ استخدم الرجوع شمعة واحدة") }
             return
         }
         replayEngine.pause()
         replayEngine.jumpToTimestamp(timestamp)
+        saveAccountSnapshot()
     }
 
     fun setSpeed(sp: Float) = replayEngine.setSpeed(sp)
@@ -208,7 +252,9 @@ class ReplayViewModel(
         replayEngine.pause()
         resetReplayAccount()
         nextId = 1L
+        accountSnapshots.clear()
         replayEngine.reset()
+        saveAccountSnapshot()
     }
 
     private fun resetReplayAccount() {
@@ -270,6 +316,7 @@ class ReplayViewModel(
                         message = "تم تنفيذ أمر Replay ${side.displayNameAr} $volume لوت"
                     )
                 }
+                saveAccountSnapshot()
             }
             is com.example.core.execution.ExecutionResult.Error -> {
                 _uiState.update { it.copy(message = result.message) }
@@ -330,6 +377,7 @@ class ReplayViewModel(
                         message = "تم نقل وقف الخسارة إلى نقطة التعادل ($bePrice)"
                     )
                 }
+                saveAccountSnapshot()
             }
         }.onFailure { err ->
             _uiState.update { it.copy(message = err.message ?: "فشل تفعيل نقطة التعادل") }
@@ -424,6 +472,7 @@ class ReplayViewModel(
                 lastSignalMessage = lastSignalText ?: it.lastSignalMessage
             )
         }
+        saveAccountSnapshot()
     }
 
     fun clearMessage() {
