@@ -39,6 +39,12 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
+enum class ChartDisplayStyle(val label: String) {
+    CANDLES("شموع"),
+    LINE("خطي"),
+    HEIKIN_ASHI("هيكين آشي")
+}
+
 @Composable
 fun CandlestickChart(
     candles: List<Candle>,
@@ -60,6 +66,7 @@ fun CandlestickChart(
     isCrosshairActive: Boolean = false,
     isVolumeVisible: Boolean = true,
     resetViewTrigger: Long = 0L,
+    displayStyle: ChartDisplayStyle = ChartDisplayStyle.CANDLES,
     onAddDrawing: ((ChartDrawing) -> Unit)? = null,
     onSelectTrade: ((TradeJournalEntry) -> Unit)? = null
 ) {
@@ -246,9 +253,33 @@ fun CandlestickChart(
                 }
             }
 
+            // Heikin-Ashi is display-only: raw market candles remain unchanged.
+            val displayedCandles = if (displayStyle == ChartDisplayStyle.HEIKIN_ASHI) {
+                val converted = ArrayList<Candle>(candles.size)
+                candles.forEachIndexed { index, raw ->
+                    val haClose = (raw.open + raw.high + raw.low + raw.close) / 4.0
+                    val haOpen = if (index == 0) (raw.open + raw.close) / 2.0
+                        else (converted.last().open + converted.last().close) / 2.0
+                    converted.add(raw.copy(
+                        open = haOpen, close = haClose,
+                        high = maxOf(raw.high, haOpen, haClose),
+                        low = minOf(raw.low, haOpen, haClose)
+                    ))
+                }
+                converted.subList(startIndex, endIndex)
+            } else visibleCandles
+
             // 1. Draw Visible OHLC Candlesticks
             val bodyWidth = (candleWidthPx * 0.72f).coerceAtLeast(1.5f)
-            visibleCandles.forEachIndexed { i, c ->
+            if (displayStyle == ChartDisplayStyle.LINE) {
+                val linePath = Path()
+                visibleCandles.forEachIndexed { i, candle ->
+                    val x = transform.candleIndexToX(i)
+                    val y = transform.priceToY(candle.close)
+                    if (i == 0) linePath.moveTo(x, y) else linePath.lineTo(x, y)
+                }
+                drawPath(linePath, color = TradingAccentLight, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f))
+            } else displayedCandles.forEachIndexed { i, c ->
                 val x = transform.candleIndexToX(i)
                 val openY = transform.priceToY(c.open)
                 val closeY = transform.priceToY(c.close)
