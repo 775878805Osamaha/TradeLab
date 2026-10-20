@@ -324,13 +324,22 @@ class TradingRepository(
         val posEntity = positionDao.getPositionById(positionId)
             ?: return@withContext Result.failure(Exception("الصفقة غير موجودة"))
 
-        // Validate SL/TP orientation against position side & entry price
-        if (stopLoss != null) {
-            if (posEntity.side == PositionSide.BUY.name && stopLoss >= posEntity.entryPrice) {
-                // Allowed if position is in profit (Break-Even or Trailing)
+        // Never persist nonfinite or nonpositive risk levels. A profitable
+        // trailing/break-even stop may cross entry, so validate against the
+        // current executable quote when available rather than entry alone.
+        if ((stopLoss != null && (!stopLoss.isFinite() || stopLoss <= 0.0)) ||
+            (takeProfit != null && (!takeProfit.isFinite() || takeProfit <= 0.0))) {
+            return@withContext Result.failure(Exception("مستوى وقف الخسارة أو جني الأرباح غير صالح"))
+        }
+        val tick = latestTicks[posEntity.symbol]
+        if (tick != null) {
+            val isBuy = posEntity.side == PositionSide.BUY.name
+            val executablePrice = if (isBuy) tick.bid else tick.ask
+            if (stopLoss != null && (if (isBuy) stopLoss >= executablePrice else stopLoss <= executablePrice)) {
+                return@withContext Result.failure(Exception("وقف الخسارة يجب أن يكون في الجانب الصحيح من سعر السوق"))
             }
-            if (posEntity.side == PositionSide.SELL.name && stopLoss <= posEntity.entryPrice) {
-                // Allowed if position is in profit
+            if (takeProfit != null && (if (isBuy) takeProfit <= executablePrice else takeProfit >= executablePrice)) {
+                return@withContext Result.failure(Exception("جني الأرباح يجب أن يكون في الجانب الصحيح من سعر السوق"))
             }
         }
 
@@ -364,8 +373,14 @@ class TradingRepository(
         val posEntity = positionDao.getPositionById(positionId)
             ?: return@withContext Result.failure(Exception("الصفقة غير موجودة"))
 
+        if (!distancePips.isFinite() || distancePips <= 0.0) {
+            return@withContext Result.failure(Exception("مسافة الوقف المتحرك يجب أن تكون موجبة وصالحة"))
+        }
         val symInfo = DefaultSymbols.getSymbol(posEntity.symbol)
         val distancePrice = distancePips * symInfo.pipSize
+        if (!distancePrice.isFinite() || distancePrice <= 0.0) {
+            return@withContext Result.failure(Exception("مسافة الوقف المتحرك المحسوبة غير صالحة"))
+        }
 
         positionDao.updatePosition(
             posEntity.copy(trailingStopDistance = distancePrice)
