@@ -53,6 +53,35 @@ class StopGapExecutionTests {
         assertEquals(110.0, (result as PositionEvaluation.TriggerClose).exitPrice, 0.0001)
     }
 
+    @Test fun sellStopWithoutGapUsesStopLevel() {
+        val result = engine.evaluatePositionOnCandle(
+            position(PositionSide.SELL, 105.0),
+            candle(open = 100.0, high = 106.0, low = 99.0, close = 102.0)
+        )
+        assertTrue(result is PositionEvaluation.TriggerClose)
+        assertEquals(105.0, (result as PositionEvaluation.TriggerClose).exitPrice, 0.0001)
+    }
+
+    @Test fun buyTakeProfitRemainsAtTargetDuringPriceJump() {
+        val pos = position(PositionSide.BUY, 90.0).copy(takeProfit = 105.0)
+        val result = engine.evaluatePositionOnTick(
+            pos, Tick(symbol = "BTCUSDT", bid = 110.0, ask = 110.2)
+        )
+        assertTrue(result is PositionEvaluation.TriggerClose)
+        assertEquals(105.0, (result as PositionEvaluation.TriggerClose).exitPrice, 0.0001)
+        assertEquals(ExitReason.TAKE_PROFIT, result.exitReason)
+    }
+
+    @Test fun buyGapWithBothStopsTouchedPrioritizesStopLoss() {
+        val pos = position(PositionSide.BUY, 95.0).copy(takeProfit = 105.0)
+        val result = engine.evaluatePositionOnCandle(
+            pos, candle(open = 90.0, high = 110.0, low = 88.0, close = 100.0)
+        )
+        assertTrue(result is PositionEvaluation.TriggerClose)
+        assertEquals(90.0, (result as PositionEvaluation.TriggerClose).exitPrice, 0.0001)
+        assertEquals(ExitReason.STOP_LOSS, result.exitReason)
+    }
+
     @Test fun candleWithoutGapUsesStopLevel() {
         val result = engine.evaluatePositionOnCandle(
             position(PositionSide.BUY, 95.0),
