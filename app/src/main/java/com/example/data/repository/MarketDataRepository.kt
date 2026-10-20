@@ -62,6 +62,9 @@ class MarketDataRepository(
         require(pageSize in 1..1000) { "pageSize must be between 1 and 1000" }
         val intervalMillis = timeframe.minutes * 60_000L
         val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
+        if (!isCrypto) {
+            throw java.io.IOException("No verified live/historical provider for $symbol. Demo candles are disabled.")
+        }
         val local = DataIntegrityValidator.sanitizeCandles(
             candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
         )
