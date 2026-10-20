@@ -31,6 +31,12 @@ object DataIntegrityValidator {
         if (candle.closeTime <= candle.openTime) {
             return ValidationResult.Invalid("Candle closeTime (${candle.closeTime}) must be strictly greater than openTime (${candle.openTime})")
         }
+        if (listOf(candle.open, candle.high, candle.low, candle.close).any { !it.isFinite() || it <= 0.0 }) {
+            return ValidationResult.Invalid("Candle OHLC values must be positive and finite")
+        }
+        if (!candle.volume.isFinite()) {
+            return ValidationResult.Invalid("Candle volume must be finite")
+        }
         val maxOC = maxOf(candle.open, candle.close)
         val minOC = minOf(candle.open, candle.close)
 
@@ -79,6 +85,10 @@ object DataIntegrityValidator {
      * Validates a market tick.
      */
     fun validateTick(tick: Tick): ValidationResult {
+        if (!tick.bid.isFinite() || !tick.ask.isFinite() ||
+            !tick.last.isFinite() || tick.last <= 0.0) {
+            return ValidationResult.Invalid("Tick prices must be positive and finite")
+        }
         if (tick.bid <= 0.0) {
             return ValidationResult.Invalid("Tick bid must be positive: ${tick.bid}")
         }
