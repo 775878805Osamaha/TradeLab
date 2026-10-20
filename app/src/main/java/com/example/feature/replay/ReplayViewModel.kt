@@ -316,7 +316,6 @@ class ReplayViewModel(
                         message = "تم تنفيذ أمر Replay ${side.displayNameAr} $volume لوت"
                     )
                 }
-            }
                 saveAccountSnapshot()
             }
             is com.example.core.execution.ExecutionResult.Error -> {
@@ -378,6 +377,7 @@ class ReplayViewModel(
                         message = "تم نقل وقف الخسارة إلى نقطة التعادل ($bePrice)"
                     )
                 }
+                saveAccountSnapshot()
             }
         }.onFailure { err ->
             _uiState.update { it.copy(message = err.message ?: "فشل تفعيل نقطة التعادل") }
@@ -472,6 +472,7 @@ class ReplayViewModel(
                 lastSignalMessage = lastSignalText ?: it.lastSignalMessage
             )
         }
+        saveAccountSnapshot()
     }
 
     fun clearMessage() {
