@@ -24,6 +24,7 @@ import com.example.core.model.Timeframe
 import com.example.feature.chart.model.DrawingTool
 import com.example.feature.results.TradeDetailDialog
 import com.example.ui.components.CandlestickChart
+import com.example.ui.components.ChartDisplayStyle
 import com.example.ui.components.DataSourceBadge
 import com.example.ui.theme.*
 import java.util.Locale
@@ -39,6 +40,7 @@ fun ChartScreen(
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
+    var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(uiState.message) {
@@ -166,6 +168,22 @@ fun ChartScreen(
                     }
                 }
 
+                // Chart rendering style selector (visual only; no impact on market data).
+                ChartDisplayStyle.values().forEach { style ->
+                    val selected = chartDisplayStyle == style
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (selected) TradingAccent else TradingElevated)
+                            .clickable { chartDisplayStyle = style }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                            .testTag("chart_style_${style.name}")
+                    ) {
+                        Text(style.label, fontSize = 10.sp,
+                            color = if (selected) Color.White else TradingTextSecondary)
+                    }
+                }
+
                 // Volume toggle chip
                 Box(
                     modifier = Modifier
@@ -234,6 +252,7 @@ fun ChartScreen(
                     isCrosshairActive = uiState.isCrosshairActive,
                     isVolumeVisible = uiState.isVolumeVisible,
                     resetViewTrigger = uiState.resetViewTrigger,
+                    displayStyle = chartDisplayStyle,
                     onAddDrawing = { viewModel.addDrawing(it) },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) }
                 )
