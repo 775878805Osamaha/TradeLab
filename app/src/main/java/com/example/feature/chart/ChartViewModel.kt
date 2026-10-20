@@ -269,6 +269,8 @@ class ChartViewModel(
     }
 
     private fun recalculateIndicators(candles: List<Candle>, settings: IndicatorSettings) {
+        val requestedSymbol = _uiState.value.selectedSymbol
+        val requestedTimeframe = _uiState.value.selectedTimeframe
         viewModelScope.launch(Dispatchers.Default) {
             val sma = if (settings.isSmaEnabled) TechnicalIndicators.calculateSma(candles, settings.smaPeriod) else emptyList()
             val ema = if (settings.isEmaEnabled) TechnicalIndicators.calculateEma(candles, settings.emaPeriod) else emptyList()
@@ -280,6 +282,12 @@ class ChartViewModel(
             val atr = if (settings.isAtrEnabled) TechnicalIndicators.calculateAtr(candles, settings.atrPeriod) else emptyList()
 
             _uiState.update {
+                // Indicator calculations run off the UI thread and can finish after
+                // switching symbol/timeframe or indicator settings.
+                if (it.selectedSymbol != requestedSymbol ||
+                    it.selectedTimeframe != requestedTimeframe ||
+                    it.indicatorSettings != settings ||
+                    it.candles != candles) return@update it
                 it.copy(
                     smaValues = sma,
                     emaValues = ema,
