@@ -121,6 +121,12 @@ fun CandlestickChart(
             }
         }
 
+    // Switching drawing tools must cancel unfinished drag previews.
+    LaunchedEffect(activeDrawingTool) {
+        drawingStartOffset = null
+        drawingCurrentOffset = null
+    }
+
     val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
         candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
         // Pinch and two-finger pan share this transformable gesture.
@@ -179,6 +185,10 @@ fun CandlestickChart(
                                 drawingStartOffset = null
                                 drawingCurrentOffset = null
                             }
+                        },
+                        onDragCancel = {
+                            drawingStartOffset = null
+                            drawingCurrentOffset = null
                         }
                     )
                 }
