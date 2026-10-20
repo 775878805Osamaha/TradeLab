@@ -196,6 +196,56 @@ fun ChartScreen(
                         Text("إنهاء", color = TradingNegative)
                     }
                 }
+                // Historical paper orders are isolated from the live-paper account.
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(TradingCard)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .testTag("chart_replay_trading_bar"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val canTradeReplay = !replayState.isLoading &&
+                        replayState.currentCandle != null && replayState.latestTick != null
+                    Button(
+                        onClick = { replayViewModel.executeOrder(OrderSide.SELL, 0.01) },
+                        enabled = canTradeReplay,
+                        colors = ButtonDefaults.buttonColors(containerColor = TradingNegative),
+                        modifier = Modifier.weight(1f).testTag("chart_replay_sell")
+                    ) { Text("بيع 0.01", fontSize = 12.sp) }
+                    Button(
+                        onClick = { replayViewModel.executeOrder(OrderSide.BUY, 0.01) },
+                        enabled = canTradeReplay,
+                        colors = ButtonDefaults.buttonColors(containerColor = TradingPositive),
+                        modifier = Modifier.weight(1f).testTag("chart_replay_buy")
+                    ) { Text("شراء 0.01", fontSize = 12.sp) }
+                    Text(
+                        "رصيد: ${String.format(Locale.US, "%.2f", replayState.currentBalance)}",
+                        color = TradingTextSecondary, fontSize = 10.sp
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .testTag("chart_replay_speed"),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("السرعة", color = TradingTextSecondary, fontSize = 11.sp)
+                    listOf(0.5f, 1f, 2f, 5f, 10f, 25f, 50f, 100f).forEach { speed ->
+                        val selected = replayState.speed == speed
+                        Text(
+                            text = "${speed}x",
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(if (selected) TradingAccent else TradingElevated)
+                                .clickable { replayViewModel.setSpeed(speed) }
+                                .padding(horizontal = 7.dp, vertical = 5.dp)
+                                .testTag("chart_replay_speed_${speed}"),
+                            color = if (selected) Color.White else TradingTextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
                 if (replayState.isLoading || replayState.totalCandles == 0) {
                     Text(if (replayState.isLoading) "جار تحميل بيانات الإعادة..." else "لا تتوفر شموع تاريخية للإعادة",
                         color = TradingTextSecondary, fontSize = 11.sp,
