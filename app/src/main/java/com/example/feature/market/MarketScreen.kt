@@ -182,6 +182,11 @@ fun MarketScreen(
                     val row = uiState.rows[index]
                     val sym = row.symbolInfo
                     val tick = row.tick
+                    val quoteIsVerified = tick != null &&
+                        tick.symbol == sym.symbol &&
+                        tick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
+                        System.currentTimeMillis() - tick.timestamp in 0..15_000L
+                    val displayTick = tick?.takeIf { quoteIsVerified }
 
                     Card(
                         modifier = Modifier
@@ -240,16 +245,16 @@ fun MarketScreen(
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "السبريد: ${String.format(Locale.US, "%.1f", row.spreadPips)} نقطة",
+                                            text = "السبريد: ${if (quoteIsVerified) String.format(Locale.US, "%.1f", row.spreadPips) else "--"} نقطة",
                                             fontSize = 11.sp,
                                             color = TradingTextMuted
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        val sourceLabel = tick?.source ?: "لا توجد أسعار"
+                                        val sourceLabel = if (quoteIsVerified) "Binance · مباشر" else "لا يوجد سعر مباشر"
                                         Text(
                                             text = "• $sourceLabel",
                                             fontSize = 9.sp,
-                                            color = if (sourceLabel.contains("LIVE") || sourceLabel.contains("BINANCE")) TradingCyan else TradingTextMuted
+                                            color = if (quoteIsVerified) TradingCyan else TradingTextMuted
                                         )
                                     }
                                 }
@@ -268,7 +273,7 @@ fun MarketScreen(
                                         .border(1.dp, TradingCyan.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
                                         .padding(horizontal = 8.dp, vertical = 6.dp)
                                 ) {
-                                    val askStr = if (tick != null) sym.formatPrice(tick.ask) else "--"
+                                    val askStr = displayTick?.let { sym.formatPrice(it.ask) } ?: "--"
                                     Text(
                                         text = askStr,
                                         style = TextStyle(textDirection = TextDirection.Ltr),
@@ -287,7 +292,7 @@ fun MarketScreen(
                                         .border(1.dp, TradingBorder, RoundedCornerShape(6.dp))
                                         .padding(horizontal = 8.dp, vertical = 6.dp)
                                 ) {
-                                    val bidStr = if (tick != null) sym.formatPrice(tick.bid) else "--"
+                                    val bidStr = displayTick?.let { sym.formatPrice(it.bid) } ?: "--"
                                     Text(
                                         text = bidStr,
                                         style = TextStyle(textDirection = TextDirection.Ltr),
