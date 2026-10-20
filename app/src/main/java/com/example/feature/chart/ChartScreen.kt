@@ -223,6 +223,14 @@ fun ChartScreen(
                         color = TradingTextSecondary, fontSize = 10.sp
                     )
                 }
+                Text(
+                    "حقوق الحساب: ${String.format(Locale.US, "%.2f", replayState.currentEquity)} · " +
+                        "العائم: ${String.format(Locale.US, "%.2f", replayState.currentEquity - replayState.currentBalance)}",
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+                        .testTag("chart_replay_equity"),
+                    color = TradingTextSecondary,
+                    fontSize = 11.sp
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(horizontal = 8.dp, vertical = 2.dp)
