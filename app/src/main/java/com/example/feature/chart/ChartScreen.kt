@@ -23,6 +23,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.market.DefaultSymbols
+import com.example.core.model.DataSourceType
 import com.example.core.model.OrderSide
 import com.example.core.model.Timeframe
 import com.example.feature.chart.model.DrawingTool
@@ -45,6 +46,20 @@ fun ChartScreen(
     var showToolsMenu by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
+
+    // Refresh the freshness indicator even when the market stream stops emitting.
+    var quoteClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(1_000L)
+            quoteClock = System.currentTimeMillis()
+        }
+    }
+    val headerTick = uiState.latestTick
+    val headerQuoteVerified = headerTick != null &&
+        headerTick.symbol == uiState.selectedSymbol &&
+        headerTick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
+        quoteClock - headerTick.timestamp in 0..15_000L
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(uiState.message) {
@@ -89,7 +104,7 @@ fun ChartScreen(
                         )
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = TradingTextSecondary)
                         Spacer(modifier = Modifier.width(4.dp))
-                        DataSourceBadge(sourceType = uiState.dataSourceType)
+                        DataSourceBadge(sourceType = if (headerQuoteVerified) uiState.dataSourceType else DataSourceType.STALE_DATA)
                     }
                 },
                 actions = {
@@ -229,7 +244,7 @@ fun ChartScreen(
             val marketTickIsLive = marketTick != null &&
                 marketTick.symbol == uiState.selectedSymbol &&
                 marketTick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
-                System.currentTimeMillis() - marketTick.timestamp in 0..15_000L
+                quoteClock - marketTick.timestamp in 0..15_000L
             val verifiedBinancePair = uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")
             val marketStatus = when {
                 !verifiedBinancePair -> "لا يوجد مصدر أسعار مباشر معتمد لهذا الرمز"
