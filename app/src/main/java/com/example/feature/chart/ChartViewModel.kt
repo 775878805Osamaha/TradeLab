@@ -55,6 +55,7 @@ class ChartViewModel(
 
     private var tickJob: Job? = null
     private var klineRefreshJob: Job? = null
+    private var klineStreamJob: Job? = null
     private var drawingJob: Job? = null
 
     init {
@@ -70,6 +71,7 @@ class ChartViewModel(
         if (_uiState.value.selectedSymbol == symbol) return
         tickJob?.cancel()
         klineRefreshJob?.cancel()
+        klineStreamJob?.cancel()
         _uiState.update { it.copy(selectedSymbol = symbol, isLoading = true, latestTick = null, candles = emptyList()) }
         loadCandlesForCurrentSymbol()
         observeDrawings()
@@ -79,6 +81,7 @@ class ChartViewModel(
         if (_uiState.value.selectedTimeframe == timeframe) return
         tickJob?.cancel()
         klineRefreshJob?.cancel()
+        klineStreamJob?.cancel()
         _uiState.update { it.copy(selectedTimeframe = timeframe, isLoading = true, latestTick = null, candles = emptyList()) }
         loadCandlesForCurrentSymbol()
         observeDrawings()
@@ -214,6 +217,7 @@ class ChartViewModel(
                 _uiState.update { it.copy(candles = aggregated, isLoading = false, message = null) }
                 recalculateIndicators(aggregated, _uiState.value.indicatorSettings)
                 startKlineRefresh(symbol, tf)
+                startKlineStream(symbol, tf)
             } catch (error: Exception) {
                 if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
                     _uiState.update {
@@ -221,6 +225,34 @@ class ChartViewModel(
                             message = "تعذر تحميل بيانات السوق: " + (error.message ?: "تحقق من الاتصال"))
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Consume real Binance 1-minute kline stream. For larger timeframes,
+     * REST polling remains the authoritative OHLCV update mechanism.
+     */
+    private fun startKlineStream(symbol: String, timeframe: Timeframe) {
+        klineStreamJob?.cancel()
+        if (timeframe != Timeframe.M1 || (symbol != "BTCUSDT" && symbol != "ETHUSDT")) return
+        klineStreamJob = viewModelScope.launch {
+            marketDataRepository.provider.observeCandles(symbol, timeframe).collect { candle ->
+                if (_uiState.value.selectedSymbol != symbol ||
+                    _uiState.value.selectedTimeframe != timeframe) return@collect
+                val existing = _uiState.value.candles
+                val merged = (existing + candle)
+                    .associateBy { it.openTime }
+                    .toSortedMap()
+                    .values
+                    .toList()
+                    .takeLast(500)
+                _uiState.update { state ->
+                    if (state.selectedSymbol == symbol && state.selectedTimeframe == timeframe) {
+                        state.copy(candles = merged)
+                    } else state
+                }
+                recalculateIndicators(merged, _uiState.value.indicatorSettings)
             }
         }
     }
