@@ -19,7 +19,7 @@ enum class MarketSort {
 data class SymbolMarketRow(
     val symbolInfo: SymbolInfo,
     val tick: Tick?,
-    val dailyChangePct: Double = 0.0
+    val dailyChangePct: Double? = null
 ) {
     val spreadPips: Double
         get() = if (tick != null) tick.spread / symbolInfo.pipSize else symbolInfo.defaultSpreadPips
@@ -30,8 +30,8 @@ data class MarketUiState(
     val searchQuery: String = "",
     val showOnlyFavorites: Boolean = false,
     val sortOption: MarketSort = MarketSort.SYMBOL,
-    val connectionStatus: ProviderConnectionStatus = ProviderConnectionStatus.CONNECTED,
-    val dataSourceType: DataSourceType = DataSourceType.LIVE_DATA,
+    val connectionStatus: ProviderConnectionStatus = ProviderConnectionStatus.DISCONNECTED,
+    val dataSourceType: DataSourceType = DataSourceType.STALE_DATA,
     val isLoading: Boolean = false
 )
 
@@ -69,17 +69,16 @@ class MarketViewModel(
             matchesQuery && matchesFav
         }.map { sym ->
             val tick = ticks[sym.symbol]
-            val change = 0.15 * (sym.symbol.hashCode() % 5)
             SymbolMarketRow(
                 symbolInfo = sym,
                 tick = tick,
-                dailyChangePct = change
+                dailyChangePct = null // No real 24h change feed: never fabricate market performance
             )
         }.let { list ->
             when (sort) {
                 MarketSort.SYMBOL -> list.sortedBy { it.symbolInfo.symbol }
                 MarketSort.SPREAD -> list.sortedBy { it.spreadPips }
-                MarketSort.CHANGE_PCT -> list.sortedByDescending { it.dailyChangePct }
+                MarketSort.CHANGE_PCT -> list.sortedWith(compareByDescending<SymbolMarketRow> { it.dailyChangePct != null }.thenByDescending { it.dailyChangePct ?: Double.NEGATIVE_INFINITY })
             }
         }
 
