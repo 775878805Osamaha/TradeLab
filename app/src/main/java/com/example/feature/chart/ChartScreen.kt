@@ -108,6 +108,19 @@ fun ChartScreen(
                     }
                 },
                 actions = {
+                    // Refresh is only actionable for instruments backed by verified candle feeds.
+                    if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
+                        IconButton(
+                            onClick = { viewModel.retryCandleLoad() },
+                            modifier = Modifier.testTag("chart_header_refresh_btn")
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "تحديث بيانات الشارت",
+                                tint = TradingTextSecondary
+                            )
+                        }
+                    }
                     // Replay shortcut
                     IconButton(
                         onClick = onNavigateToReplay,
@@ -125,6 +138,25 @@ fun ChartScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // Distinguish a verified live quote from delayed or unsupported data.
+            if (!headerQuoteVerified) {
+                Text(
+                    text = if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
+                        "السعر المباشر غير مؤكد حاليًا — لا تعتمد عليه لتنفيذ صفقة"
+                    } else {
+                        "لا يوجد مصدر أسعار مباشر موثوق لهذا الرمز"
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(TradingElevated)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .testTag("chart_quote_freshness_warning"),
+                    color = TradingTextSecondary,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+
             // Timeframe selection scrollable row (all 10 timeframes)
             Row(
                 modifier = Modifier
