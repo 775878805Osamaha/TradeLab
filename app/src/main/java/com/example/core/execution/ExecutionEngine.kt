@@ -354,7 +354,11 @@ class ExecutionEngine(
         partialVolume: Double? = null
     ): Pair<TradeJournalEntry, Position?> {
         val symInfo = DefaultSymbols.getSymbol(position.symbol)
-        val closingVolume = (partialVolume ?: position.volume).coerceAtMost(position.volume)
+        require(position.volume.isFinite() && position.volume > 0.0) { "Invalid position volume" }
+        require(exitPrice.isFinite() && exitPrice > 0.0) { "Invalid exit price" }
+        require(partialVolume == null || (partialVolume.isFinite() &&
+            partialVolume > 0.0 && partialVolume <= position.volume)) { "Invalid partial close volume" }
+        val closingVolume = partialVolume ?: position.volume
 
         val grossPl = when (position.side) {
             PositionSide.BUY -> (exitPrice - position.entryPrice) * closingVolume * symInfo.contractSize
@@ -398,8 +402,9 @@ class ExecutionEngine(
         )
 
         val remainingVolume = position.volume - closingVolume
-        val remainingPosition = if (remainingVolume >= 0.009) {
-            val remMargin = (remainingVolume * symInfo.contractSize * position.entryPrice) / 100.0
+        val remainingPosition = if (remainingVolume > 1e-9) {
+            // Preserve the actual original margin basis instead of assuming 1:100 leverage.
+            val remMargin = position.margin * (remainingVolume / position.volume)
             position.copy(
                 volume = remainingVolume,
                 commission = (position.commission - closingCommission).coerceAtLeast(0.0),
