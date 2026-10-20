@@ -289,6 +289,64 @@ fun ChartScreen(
                     onAddDrawing = { viewModel.addDrawing(it) },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) }
                 )
+
+                // Compact TradingView-style tools on the chart itself.
+                // Buttons select the existing functional drawing tools; no image overlay.
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(horizontal = 5.dp)
+                        .testTag("chart_floating_drawing_toolbar"),
+                    shape = RoundedCornerShape(8.dp),
+                    color = TradingCard.copy(alpha = 0.96f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TradingBorder),
+                    tonalElevation = 0.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        val tools = listOf(
+                            Triple(DrawingTool.NONE, Icons.Default.PanTool, "تحريك الشارت"),
+                            Triple(DrawingTool.TRENDLINE, Icons.Default.ShowChart, "خط اتجاه"),
+                            Triple(DrawingTool.HORIZONTAL_LINE, Icons.Default.HorizontalRule, "خط أفقي"),
+                            Triple(DrawingTool.VERTICAL_LINE, Icons.Default.MoreVert, "خط رأسي"),
+                            Triple(DrawingTool.RECTANGLE, Icons.Default.CropSquare, "مستطيل"),
+                            Triple(DrawingTool.FIBONACCI, Icons.Default.AutoGraph, "فيبوناتشي")
+                        )
+                        tools.forEach { (tool, icon, description) ->
+                            val selected = uiState.activeDrawingTool == tool
+                            IconButton(
+                                onClick = { viewModel.setDrawingTool(tool) },
+                                modifier = Modifier.size(44.dp).testTag("chart_toolbar_${tool.name}")
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = description,
+                                    tint = if (selected) TradingAccent else TradingTextSecondary,
+                                    modifier = Modifier.size(21.dp)
+                                )
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.width(30.dp), color = TradingBorder)
+                        IconButton(
+                            onClick = { viewModel.toggleCrosshair() },
+                            modifier = Modifier.size(44.dp).testTag("chart_toolbar_crosshair")
+                        ) {
+                            Icon(
+                                Icons.Default.FilterCenterFocus,
+                                contentDescription = "مؤشر التقاطع",
+                                tint = if (uiState.isCrosshairActive) TradingAccent else TradingTextSecondary
+                            )
+                        }
+                        IconButton(
+                            onClick = { showToolsMenu = true },
+                            modifier = Modifier.size(44.dp).testTag("chart_toolbar_more")
+                        ) {
+                            Icon(Icons.Default.MoreHoriz, contentDescription = "المزيد من أدوات الرسم", tint = TradingTextSecondary)
+                        }
+                    }
+                }
             }
 
             // Quick Execution Bar
