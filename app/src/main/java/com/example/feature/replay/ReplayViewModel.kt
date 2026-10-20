@@ -169,24 +169,27 @@ class ReplayViewModel(
     fun stepForward() = replayEngine.stepForward()
 
     fun stepBackward() {
-        val targetIdx = replayEngine.currentIndex.value - 1
-        val checkpoint = replayEngine.getCheckpoint(targetIdx)
-        if (checkpoint != null) {
-            // Restore safe checkpoint
-            openPositions.clear()
-            openPositions.addAll(checkpoint.openPositions)
+        // A checkpoint currently snapshots open positions but not the full
+        // trade journal, pending orders or ID generator. Rewinding an account
+        // that has traded would duplicate or erase financial history.
+        if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty()) {
             _uiState.update {
-                it.copy(
-                    currentBalance = checkpoint.balance,
-                    currentEquity = checkpoint.equity,
-                    openPositions = openPositions.toList()
-                )
+                it.copy(message = "لا يمكن الرجوع بعد تنفيذ صفقات Replay. أعد بدء المحاكاة أولاً.")
             }
+            return
         }
+        replayEngine.pause()
         replayEngine.stepBackward()
     }
 
     fun jumpToTimestamp(timestamp: Long) {
+        if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty()) {
+            _uiState.update {
+                it.copy(message = "لا يمكن القفز بين التواريخ بعد التداول. أعد بدء المحاكاة أولاً.")
+            }
+            return
+        }
+        replayEngine.pause()
         replayEngine.jumpToTimestamp(timestamp)
     }
 
