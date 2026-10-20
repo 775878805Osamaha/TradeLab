@@ -295,7 +295,7 @@ fun ChartScreen(
                 // Buttons select the existing functional drawing tools; no image overlay.
                 Surface(
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
+                        .align(Alignment.CenterStart)
                         .padding(horizontal = 5.dp)
                         .testTag("chart_floating_drawing_toolbar"),
                     shape = RoundedCornerShape(8.dp),
