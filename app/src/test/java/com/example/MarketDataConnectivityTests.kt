@@ -72,6 +72,23 @@ class MarketDataConnectivityTests {
     }
 
     @Test
+    fun `test market validator rejects nonfinite candle values`() {
+        val valid = createCandle(openTime = 1000L, open = 100.0, high = 110.0, low = 95.0, close = 105.0)
+        assertFalse(DataIntegrityValidator.validateCandle(valid.copy(open = Double.NaN)).isValid)
+        assertFalse(DataIntegrityValidator.validateCandle(valid.copy(high = Double.POSITIVE_INFINITY)).isValid)
+        assertFalse(DataIntegrityValidator.validateCandle(valid.copy(low = 0.0)).isValid)
+        assertFalse(DataIntegrityValidator.validateCandle(valid.copy(volume = Double.NaN)).isValid)
+    }
+
+    @Test
+    fun `test market validator rejects nonfinite ticks`() {
+        val valid = Tick(symbol = "BTCUSDT", bid = 100.0, ask = 100.5, last = 100.25, timestamp = 1000L)
+        assertFalse(DataIntegrityValidator.validateTick(valid.copy(bid = Double.NaN)).isValid)
+        assertFalse(DataIntegrityValidator.validateTick(valid.copy(ask = Double.POSITIVE_INFINITY)).isValid)
+        assertFalse(DataIntegrityValidator.validateTick(valid.copy(last = Double.NaN)).isValid)
+    }
+
+    @Test
     fun `test sanitizeCandles eliminates duplicates and sorts chronologically`() {
         val c1 = createCandle(openTime = 3000L, open = 100.0, high = 105.0, low = 98.0, close = 102.0)
         val c2 = createCandle(openTime = 1000L, open = 95.0, high = 100.0, low = 94.0, close = 99.0)
