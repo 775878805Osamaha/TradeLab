@@ -122,6 +122,10 @@ class ReplayViewModel(
     fun loadReplayData(symbol: String = "BTCUSDT", tf: Timeframe = Timeframe.M15) {
         replayLoadJob?.cancel()
         replayEngine.pause()
+        // A new dataset must never inherit positions, pending orders, journal or IDs
+        // from the previous replay session, even if loading subsequently fails.
+        resetReplayAccount()
+        nextId = 1L
         // Do not continue displaying a previous instrument's replay while switching.
         _uiState.update {
             it.copy(
@@ -149,7 +153,6 @@ class ReplayViewModel(
                     return@launch
                 }
                 replayEngine.initialize(candles, startIndex = minOf(20, candles.lastIndex))
-                resetReplayAccount()
                 _uiState.update { it.copy(isLoading = false) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -200,8 +203,10 @@ class ReplayViewModel(
     }
 
     fun resetReplay() {
-        replayEngine.reset()
+        replayEngine.pause()
         resetReplayAccount()
+        nextId = 1L
+        replayEngine.reset()
     }
 
     private fun resetReplayAccount() {
