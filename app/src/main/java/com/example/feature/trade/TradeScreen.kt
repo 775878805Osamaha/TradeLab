@@ -74,7 +74,7 @@ fun TradeScreen(
                         modifier = Modifier.clickable { showSymbolSheet = true }.testTag("trade_symbol_selector")
                     ) {
                         Text(
-                            text = uiState.selectedSymbol,
+                            text = if (uiState.selectedSymbol.endsWith("USDT")) "${uiState.selectedSymbol.removeSuffix("USDT")} / USDT" else uiState.selectedSymbol,
                             style = TextStyle(textDirection = TextDirection.Ltr),
                             maxLines = 1,
                             fontWeight = FontWeight.ExtraBold,
@@ -349,7 +349,7 @@ fun TradeScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             // Large SELL Button (Red)
-                            val bidText = tick?.let { symInfo.formatPrice(it.bid) } ?: "--"
+                            val bidText = verifiedTick?.let { symInfo.formatPrice(it.bid) } ?: "--"
                             Button(
                                 onClick = { viewModel.placeOrder(OrderSide.SELL) },
                                 modifier = Modifier
@@ -357,17 +357,17 @@ fun TradeScreen(
                                     .height(56.dp)
                                     .testTag("action_sell_btn"),
                                 shape = RoundedCornerShape(8.dp),
-                                enabled = !uiState.isSubmittingOrder,
+                                enabled = !uiState.isSubmittingOrder && quoteIsVerified,
                                 colors = ButtonDefaults.buttonColors(containerColor = TradingNegative)
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("بيع", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                                    Text(bidText, fontSize = 12.sp)
+                                    Text(bidText, style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontSize = 12.sp)
                                 }
                             }
 
                             // Large BUY Button (Green)
-                            val askText = tick?.let { symInfo.formatPrice(it.ask) } ?: "--"
+                            val askText = verifiedTick?.let { symInfo.formatPrice(it.ask) } ?: "--"
                             Button(
                                 onClick = { viewModel.placeOrder(OrderSide.BUY) },
                                 modifier = Modifier
@@ -375,12 +375,12 @@ fun TradeScreen(
                                     .height(56.dp)
                                     .testTag("action_buy_btn"),
                                 shape = RoundedCornerShape(8.dp),
-                                enabled = !uiState.isSubmittingOrder,
+                                enabled = !uiState.isSubmittingOrder && quoteIsVerified,
                                 colors = ButtonDefaults.buttonColors(containerColor = TradingPositive)
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("شراء", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                                    Text(askText, fontSize = 12.sp)
+                                    Text(askText, style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontSize = 12.sp)
                                 }
                             }
                         }
