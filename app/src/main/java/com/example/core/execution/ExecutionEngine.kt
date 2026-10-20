@@ -159,13 +159,24 @@ class ExecutionEngine(
         if (!isTriggered) return null
 
         val executedPrice = when (order.type) {
-            OrderType.BUY_LIMIT -> order.requestedPrice
-            OrderType.SELL_LIMIT -> order.requestedPrice
+            // Limit orders can fill at the limit or a better available market quote.
+            OrderType.BUY_LIMIT -> minOf(order.requestedPrice, tick.ask)
+            OrderType.SELL_LIMIT -> maxOf(order.requestedPrice, tick.bid)
             OrderType.BUY_STOP -> tick.ask + slippageOffset
             OrderType.SELL_STOP -> tick.bid - slippageOffset
-            OrderType.LIMIT -> order.requestedPrice
+            OrderType.LIMIT -> if (order.direction == OrderSide.BUY) {
+                minOf(order.requestedPrice, tick.ask)
+            } else {
+                maxOf(order.requestedPrice, tick.bid)
+            }
             OrderType.STOP -> if (order.direction == OrderSide.BUY) tick.ask + slippageOffset else tick.bid - slippageOffset
             else -> order.requestedPrice
+        }
+
+        if (!executedPrice.isFinite() || executedPrice <= 0.0 ||
+            !config.slippagePips.isFinite() || config.slippagePips < 0.0 ||
+            !config.defaultCommissionPerLot.isFinite() || config.defaultCommissionPerLot < 0.0) {
+            return ExecutionResult.Error("سعر التنفيذ أو إعدادات التداول غير صالحة")
         }
 
         val commission = config.defaultCommissionPerLot * order.volume
