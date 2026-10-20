@@ -219,6 +219,12 @@ class ReplayViewModel(
     fun executeOrder(side: OrderSide, volume: Double = 0.01, sl: Double? = null, tp: Double? = null) {
         val candle = _uiState.value.currentCandle ?: return
         val tick = _uiState.value.latestTick ?: return
+        if (_uiState.value.isLoading || tick.symbol != _uiState.value.symbol ||
+            !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
+            !volume.isFinite() || volume <= 0.0) {
+            _uiState.update { it.copy(message = "تعذر تنفيذ الأمر: سعر أو حجم Replay غير صالح") }
+            return
+        }
 
         // Isolated Replay Account
         val replayAcc = VirtualAccount(
@@ -264,7 +270,12 @@ class ReplayViewModel(
     fun closePosition(posId: Long) {
         val pos = openPositions.firstOrNull { it.id == posId } ?: return
         val tick = _uiState.value.latestTick
-        val exitPrice = if (pos.side == PositionSide.BUY) (tick?.bid ?: pos.currentPrice) else (tick?.ask ?: pos.currentPrice)
+        if (tick == null || tick.symbol != pos.symbol ||
+            !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid) {
+            _uiState.update { it.copy(message = "لا يمكن إغلاق الصفقة دون سعر Replay صالح") }
+            return
+        }
+        val exitPrice = if (pos.side == PositionSide.BUY) tick.bid else tick.ask
         val candle = _uiState.value.currentCandle
 
         val (trade, _) = executionEngine.closePosition(
@@ -290,6 +301,11 @@ class ReplayViewModel(
     fun setBreakEven(posId: Long) {
         val pos = openPositions.firstOrNull { it.id == posId } ?: return
         val tick = _uiState.value.latestTick ?: return
+        if (tick.symbol != pos.symbol ||
+            !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid) {
+            _uiState.update { it.copy(message = "سعر Replay غير صالح لتفعيل التعادل") }
+            return
+        }
 
         val beResult = executionEngine.calculateBreakEven(pos, tick)
         beResult.onSuccess { bePrice ->
