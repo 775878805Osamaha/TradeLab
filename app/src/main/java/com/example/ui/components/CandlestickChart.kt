@@ -87,7 +87,7 @@ fun CandlestickChart(
     }
 
     // Viewport State
-    var candleWidthPx by remember { mutableFloatStateOf(20f) }
+    var candleWidthPx by remember { mutableFloatStateOf(12f) }
     var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
     var manualPriceScale by remember { mutableFloatStateOf(1f) }
     var crosshairOffset by remember { mutableStateOf<Offset?>(null) }
@@ -104,7 +104,7 @@ fun CandlestickChart(
     LaunchedEffect(resetViewTrigger) {
         if (resetViewTrigger > 0L) {
             scrollOffsetPx = 0f
-            candleWidthPx = 20f
+            candleWidthPx = 12f
             manualPriceScale = 1f
             crosshairOffset = null
             transformRef[0] = null
@@ -327,15 +327,21 @@ fun CandlestickChart(
                     size = Size(bodyWidth, bodyHeight)
                 )
 
-                // Time axis label (every 5 candles)
-                if (i % 5 == 0) {
+
+            }
+
+            // Render time labels for all display modes, including the line chart.
+            val labelStride = (110f / candleWidthPx).toInt().coerceAtLeast(1)
+            visibleCandles.forEachIndexed { i, c ->
+                if (i % labelStride == 0) {
+                    val x = transform.candleIndexToX(i)
                     drawContext.canvas.nativeCanvas.apply {
-                        val p = android.graphics.Paint().apply {
+                        val labelPaint = android.graphics.Paint().apply {
                             color = android.graphics.Color.parseColor("#6B7280")
                             textSize = 17f
                             isAntiAlias = true
                         }
-                        drawText(timeFormat.format(Date(c.openTime)), x - 20f, height - 6f, p)
+                        drawText(timeFormat.format(Date(c.openTime)), x - 20f, height - 6f, labelPaint)
                     }
                 }
             }
