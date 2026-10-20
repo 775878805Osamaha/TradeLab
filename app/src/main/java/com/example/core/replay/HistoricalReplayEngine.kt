@@ -82,7 +82,9 @@ class HistoricalReplayEngine(
             replayClock.initialize(allCandles[safeStart].openTime)
         }
 
-        updateVisibleState()
+        // Loading a dataset positions the cursor; it must not trade on the
+        // initial candle before the replay account is ready.
+        updateVisibleState(evaluateTrades = false)
     }
 
     /**
@@ -158,7 +160,8 @@ class HistoricalReplayEngine(
         pause()
         _currentIndex.value = if (allCandles.isNotEmpty()) minOf(10, allCandles.size - 1) else 0
         _status.value = ReplayStatus.READY
-        updateVisibleState()
+        // Reset is navigation, not a new strategy signal or SL/TP event.
+        updateVisibleState(evaluateTrades = false)
     }
 
     /**
