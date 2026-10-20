@@ -27,6 +27,7 @@ import com.example.core.model.DataSourceType
 import com.example.core.model.OrderSide
 import com.example.core.model.Timeframe
 import com.example.feature.chart.model.DrawingTool
+import com.example.feature.replay.ReplayViewModel
 import com.example.feature.results.TradeDetailDialog
 import com.example.ui.components.CandlestickChart
 import com.example.ui.components.ChartDisplayStyle
@@ -38,10 +39,13 @@ import java.util.Locale
 @Composable
 fun ChartScreen(
     viewModel: ChartViewModel,
+    replayViewModel: ReplayViewModel,
     onNavigateToReplay: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val replayState by replayViewModel.uiState.collectAsState()
+    var isEmbeddedReplay by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
@@ -123,10 +127,18 @@ fun ChartScreen(
                     }
                     // Replay shortcut
                     IconButton(
-                        onClick = onNavigateToReplay,
+                        onClick = {
+                            if (isEmbeddedReplay) {
+                                replayViewModel.pause()
+                                isEmbeddedReplay = false
+                            } else {
+                                replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
+                                isEmbeddedReplay = true
+                            }
+                        },
                         modifier = Modifier.testTag("chart_to_replay_btn")
                     ) {
-                        Icon(Icons.Default.PlayCircle, contentDescription = "إعادة العرض Replay", tint = TradingAccentLight)
+                        Icon(Icons.Default.PlayCircle, contentDescription = if (isEmbeddedReplay) "إنهاء الإعادة" else "إعادة العرض داخل الشارت", tint = TradingAccentLight)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = TradingBackground)
@@ -155,6 +167,40 @@ fun ChartScreen(
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center
                 )
+            }
+
+            if (isEmbeddedReplay) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(TradingCard)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .testTag("chart_embedded_replay_controls"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("REPLAY", color = TradingGold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    IconButton(onClick = { replayViewModel.stepBackward() }, enabled = !replayState.isLoading) {
+                        Icon(Icons.Default.SkipPrevious, contentDescription = "شمعة سابقة", tint = TradingTextPrimary)
+                    }
+                    IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
+                        enabled = !replayState.isLoading && replayState.totalCandles > 0) {
+                        Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (replayState.isPlaying) "إيقاف مؤقت" else "تشغيل الإعادة",
+                            tint = TradingAccentLight)
+                    }
+                    IconButton(onClick = { replayViewModel.stepForward() }, enabled = !replayState.isLoading) {
+                        Icon(Icons.Default.SkipNext, contentDescription = "شمعة تالية", tint = TradingTextPrimary)
+                    }
+                    Text("${(replayState.currentIndex + 1).coerceAtMost(replayState.totalCandles)}/${replayState.totalCandles}",
+                        color = TradingTextSecondary, fontSize = 11.sp)
+                    TextButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false }) {
+                        Text("إنهاء", color = TradingNegative)
+                    }
+                }
+                if (replayState.isLoading || replayState.totalCandles == 0) {
+                    Text(if (replayState.isLoading) "جار تحميل بيانات الإعادة..." else "لا تتوفر شموع تاريخية للإعادة",
+                        color = TradingTextSecondary, fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                }
             }
 
             // Timeframe selection scrollable row (all 10 timeframes)
@@ -307,11 +353,11 @@ fun ChartScreen(
                     .fillMaxWidth()
             ) {
                 CandlestickChart(
-                    candles = uiState.candles,
-                    latestTick = uiState.latestTick,
-                    openPositions = uiState.openPositions,
-                    pendingOrders = uiState.pendingOrders,
-                    historicalTrades = uiState.historicalTrades,
+                    candles = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles,
+                    latestTick = if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick,
+                    openPositions = if (isEmbeddedReplay) replayState.openPositions else uiState.openPositions,
+                    pendingOrders = if (isEmbeddedReplay) replayState.pendingOrders else uiState.pendingOrders,
+                    historicalTrades = if (isEmbeddedReplay) replayState.closedTrades else uiState.historicalTrades,
                     activeDrawingTool = uiState.activeDrawingTool,
                     drawings = uiState.drawings,
                     indicatorSettings = uiState.indicatorSettings,
@@ -331,7 +377,7 @@ fun ChartScreen(
                 )
 
                 // Distinguish a failed Binance request from an in-progress load.
-                if (uiState.candles.isEmpty() && !uiState.isLoading && uiState.candleLoadError != null) {
+                if (!isEmbeddedReplay && uiState.candles.isEmpty() && !uiState.isLoading && uiState.candleLoadError != null) {
                     Column(
                         modifier = Modifier
                             .align(Alignment.Center)
