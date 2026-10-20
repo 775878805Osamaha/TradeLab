@@ -331,8 +331,62 @@ class DefaultMarketDataProvider(
         timeframe: Timeframe,
         fromTimestamp: Long,
         toTimestamp: Long
-    ): List<Candle> = withContext(Dispatchers.Default) {
+    ): List<Candle> = withContext(Dispatchers.IO) {
         val sym = normalizeSymbol(symbol)
+        if (sym == "BTCUSDT" || sym == "ETHUSDT") {
+            require(fromTimestamp <= toTimestamp) { "Invalid historical date range" }
+            val interval = timeframe.displayName.lowercase().let {
+                when (timeframe) {
+                    Timeframe.D1 -> "1d"
+                    Timeframe.W1 -> "1w"
+                    else -> it
+                }
+            }
+            val results = mutableListOf<Candle>()
+            var cursor = fromTimestamp
+            val step = timeframe.minutes * 60_000L
+            while (cursor <= toTimestamp) {
+                val url = okhttp3.HttpUrl.Builder()
+                    .scheme("https").host("api.binance.com")
+                    .addPathSegments("api/v3/klines")
+                    .addQueryParameter("symbol", sym)
+                    .addQueryParameter("interval", interval)
+                    .addQueryParameter("startTime", cursor.toString())
+                    .addQueryParameter("endTime", toTimestamp.toString())
+                    .addQueryParameter("limit", "1000")
+                    .build()
+                val request = Request.Builder().url(url).build()
+                val batch = httpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw java.io.IOException("Binance historical request failed: HTTP ${response.code}")
+                    }
+                    val body = response.body?.string()
+                        ?: throw java.io.IOException("Empty Binance historical response")
+                    val json = JSONArray(body)
+                    (0 until json.length()).map { index ->
+                        val row = json.getJSONArray(index)
+                        Candle(
+                            symbol = sym, timeframe = timeframe,
+                            openTime = row.getLong(0),
+                            closeTime = row.getLong(6) + 1L,
+                            open = row.getString(1).toDouble(),
+                            high = row.getString(2).toDouble(),
+                            low = row.getString(3).toDouble(),
+                            close = row.getString(4).toDouble(),
+                            volume = row.getString(5).toDouble(),
+                            source = "BINANCE_HISTORICAL"
+                        )
+                    }
+                }
+                if (batch.isEmpty()) break
+                results.addAll(batch.filter { it.isValid() })
+                val next = batch.last().openTime + step
+                if (next <= cursor) break
+                cursor = next
+                if (batch.size < 1000) break
+            }
+            return@withContext DataIntegrityValidator.sanitizeCandles(results)
+        }
         val symInfo = DefaultSymbols.getSymbol(sym)
         val basePrice = basePrices[sym] ?: 100.0
         val intervalMillis = timeframe.minutes * 60 * 1000L
@@ -367,7 +421,7 @@ class DefaultMarketDataProvider(
                 low = low,
                 close = close,
                 volume = volume,
-                source = if (sym.contains("USDT")) "BINANCE_HISTORICAL" else "BENCHMARK_SERIES"
+                source = "BENCHMARK_SERIES"
             )
 
             if (candle.isValid()) {
