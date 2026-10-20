@@ -327,16 +327,21 @@ fun CandlestickChart(
                     size = Size(bodyWidth, bodyHeight)
                 )
 
-                // Time labels adapt to candle density instead of overlapping.
-                val timeLabelStride = (110f / candleWidthPx).toInt().coerceAtLeast(1)
-                if (i % timeLabelStride == 0) {
+
+            }
+
+            // Render time labels for all display modes, including the line chart.
+            val labelStride = (110f / candleWidthPx).toInt().coerceAtLeast(1)
+            visibleCandles.forEachIndexed { i, c ->
+                if (i % labelStride == 0) {
+                    val x = transform.candleIndexToX(i)
                     drawContext.canvas.nativeCanvas.apply {
-                        val p = android.graphics.Paint().apply {
+                        val labelPaint = android.graphics.Paint().apply {
                             color = android.graphics.Color.parseColor("#6B7280")
                             textSize = 17f
                             isAntiAlias = true
                         }
-                        drawText(timeFormat.format(Date(c.openTime)), x - 20f, height - 6f, p)
+                        drawText(timeFormat.format(Date(c.openTime)), x - 20f, height - 6f, labelPaint)
                     }
                 }
             }
