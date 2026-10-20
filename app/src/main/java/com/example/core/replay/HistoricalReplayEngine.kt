@@ -189,6 +189,15 @@ class HistoricalReplayEngine(
     }
 
     /**
+     * Drop snapshots from the abandoned future after a financial rollback.
+     * Without this, getCheckpoint() could return balances from a discarded
+     * trading timeline after the user takes different trades.
+     */
+    fun discardCheckpointsAfter(candleIndex: Int) {
+        checkpoints.keys.removeAll { it > candleIndex }
+    }
+
+    /**
      * Evaluates open position SL/TP against a replay candle under the conservative execution policy.
      * If both SL and TP are touched inside the same candle: SL triggers first.
      */
