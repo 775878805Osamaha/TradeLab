@@ -253,8 +253,8 @@ class ChartViewModel(
                         .associateBy { it.openTime }
                         .toSortedMap()
                         .values
-                        .takeLast(500)
                         .toList()
+                        .takeLast(500)
                     _uiState.update { state ->
                         if (state.selectedSymbol == symbol && state.selectedTimeframe == timeframe) {
                             state.copy(candles = merged)
