@@ -53,15 +53,15 @@ class MainActivity : ComponentActivity() {
             val app = LocalContext.current.applicationContext as TradeLabApplication
 
             // ViewModels scoped cleanly with dependencies
-            val accountViewModel = remember { AccountViewModel(app.tradingRepository) }
+            val accountViewModel by remember { lazy { AccountViewModel(app.tradingRepository) } }
             val marketViewModel = remember { MarketViewModel(app.marketDataRepository) }
             val chartViewModel = remember { ChartViewModel(app.marketDataRepository, app.tradingRepository, app.database.drawingDao()) }
-            val tradeViewModel = remember { TradeViewModel(app.tradingRepository, app.marketDataRepository) }
-            val resultsViewModel = remember { ResultsViewModel(app.tradingRepository) }
-            val historyViewModel = remember { HistoryViewModel(app.tradingRepository) }
-            val replayViewModel = remember { ReplayViewModel(app.marketDataRepository) }
-            val backtestViewModel = remember { BacktestViewModel(app.marketDataRepository, tradingRepository = app.tradingRepository) }
-            val calendarViewModel = remember { TradingCalendarViewModel(app.tradingRepository) }
+            val tradeViewModel by remember { lazy { TradeViewModel(app.tradingRepository, app.marketDataRepository) } }
+            val resultsViewModel by remember { lazy { ResultsViewModel(app.tradingRepository) } }
+            val historyViewModel by remember { lazy { HistoryViewModel(app.tradingRepository) } }
+            val replayViewModel by remember { lazy { ReplayViewModel(app.marketDataRepository) } }
+            val backtestViewModel by remember { lazy { BacktestViewModel(app.marketDataRepository, tradingRepository = app.tradingRepository) } }
+            val calendarViewModel by remember { lazy { TradingCalendarViewModel(app.tradingRepository) } }
 
             TradeLabTheme {
                 // Arabic RTL as primary layout direction
