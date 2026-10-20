@@ -3,6 +3,7 @@ package com.example.feature.chart
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -99,42 +100,6 @@ fun ChartScreen(
                     ) {
                         Icon(Icons.Default.PlayCircle, contentDescription = "إعادة العرض Replay", tint = TradingAccentLight)
                     }
-                    // Crosshair toggle
-                    IconButton(
-                        onClick = { viewModel.toggleCrosshair() },
-                        modifier = Modifier.testTag("chart_crosshair_btn")
-                    ) {
-                        Icon(
-                            Icons.Default.FilterCenterFocus,
-                            contentDescription = "التقاطع",
-                            tint = if (uiState.isCrosshairActive) TradingAccent else TradingTextSecondary
-                        )
-                    }
-                    // Indicators dialog button
-                    IconButton(
-                        onClick = { showIndicatorsDialog = true },
-                        modifier = Modifier.testTag("chart_indicators_btn")
-                    ) {
-                        Icon(Icons.Default.Timeline, contentDescription = "المؤشرات الفنية", tint = TradingCyan)
-                    }
-                    // Drawings menu button
-                    IconButton(
-                        onClick = { showToolsMenu = !showToolsMenu },
-                        modifier = Modifier.testTag("drawing_tools_menu_btn")
-                    ) {
-                        Icon(
-                            Icons.Default.Draw,
-                            contentDescription = "أدوات الرسم",
-                            tint = if (uiState.activeDrawingTool != DrawingTool.NONE) TradingAccent else TradingTextSecondary
-                        )
-                    }
-                    // Reset / Auto-fit view button
-                    IconButton(
-                        onClick = { viewModel.triggerResetView() },
-                        modifier = Modifier.testTag("chart_reset_view_btn")
-                    ) {
-                        Icon(Icons.Default.CenterFocusWeak, contentDescription = "إعادة ضبط العرض", tint = TradingTextSecondary)
-                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = TradingBackground)
             )
@@ -203,6 +168,33 @@ fun ChartScreen(
                         fontWeight = FontWeight.Bold,
                         color = if (uiState.isVolumeVisible) TradingGold else TradingTextSecondary
                     )
+                }
+            }
+
+            // Secondary chart actions stay scrollable on narrow phones instead of
+            // squeezing the symbol title in the top app bar.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.testTag("chart_indicators_btn")) {
+                    Icon(Icons.Default.Timeline, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("المؤشرات", fontSize = 12.sp)
+                }
+                TextButton(onClick = { showToolsMenu = true }, modifier = Modifier.testTag("drawing_tools_menu_btn")) {
+                    Icon(Icons.Default.Draw, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("الرسم", fontSize = 12.sp)
+                }
+                TextButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.testTag("chart_reset_view_btn")) {
+                    Icon(Icons.Default.CenterFocusWeak, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("ضبط العرض", fontSize = 12.sp)
                 }
             }
 
@@ -304,7 +296,10 @@ fun ChartScreen(
                     tonalElevation = 0.dp
                 ) {
                     Column(
-                        modifier = Modifier.padding(vertical = 4.dp),
+                        modifier = Modifier
+                            .heightIn(max = 312.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         val tools = listOf(
