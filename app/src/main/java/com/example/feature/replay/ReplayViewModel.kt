@@ -6,6 +6,7 @@ import com.example.core.execution.ExecutionEngine
 import com.example.core.execution.PositionEvaluation
 import com.example.core.model.*
 import com.example.core.replay.HistoricalReplayEngine
+import com.example.core.replay.ReplayAccountMath
 import com.example.core.replay.ReplayDataView
 import com.example.core.strategy.SignalAction
 import com.example.core.strategy.Strategy
@@ -265,7 +266,7 @@ class ReplayViewModel(
                 _uiState.update {
                     it.copy(
                         openPositions = openPositions.toList(),
-                        currentEquity = it.currentBalance + openPositions.sumOf { position -> position.profitLoss },
+                        currentEquity = ReplayAccountMath.equity(it.currentBalance, openPositions),
                         message = "تم تنفيذ أمر Replay ${side.displayNameAr} $volume لوت"
                     )
                 }
@@ -296,12 +297,12 @@ class ReplayViewModel(
         )
         openPositions.remove(pos)
         closedTrades.add(trade)
-        val newBal = _uiState.value.currentBalance + trade.netProfitLoss
+        val newBal = ReplayAccountMath.realizedBalance(_uiState.value.currentBalance, trade.netProfitLoss)
 
         _uiState.update {
             it.copy(
                 currentBalance = newBal,
-                currentEquity = newBal + openPositions.sumOf { position -> position.profitLoss },
+                currentEquity = ReplayAccountMath.equity(newBal, openPositions),
                 openPositions = openPositions.toList(),
                 closedTrades = closedTrades.toList(),
                 message = "تم إغلاق الصفقة #${pos.id} في Replay"
