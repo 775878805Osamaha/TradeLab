@@ -148,7 +148,9 @@ fun CandlestickChart(
                                 val end = drawingCurrentOffset!!
                                 val transform = transformRef[0]
                                 val distance = (end - start).getDistance()
-                                if (transform != null && onAddDrawing != null && distance >= 10f) {
+                                if (transform != null && onAddDrawing != null && distance >= 10f &&
+                                    activeDrawingTool != DrawingTool.HORIZONTAL_LINE &&
+                                    activeDrawingTool != DrawingTool.VERTICAL_LINE) {
                                     onAddDrawing(
                                         ChartDrawing(
                                             tool = activeDrawingTool,
@@ -167,10 +169,23 @@ fun CandlestickChart(
                         }
                     )
                 }
-                .pointerInput(candles) {
+                .pointerInput(candles, activeDrawingTool, isCrosshairActive) {
                     detectTapGestures(
                         onTap = { offset ->
-                            if (isCrosshairActive) {
+                            val transform = transformRef[0]
+                            if (transform != null && onAddDrawing != null &&
+                                (activeDrawingTool == DrawingTool.HORIZONTAL_LINE ||
+                                 activeDrawingTool == DrawingTool.VERTICAL_LINE)) {
+                                onAddDrawing(
+                                    ChartDrawing(
+                                        tool = activeDrawingTool,
+                                        symbol = "",
+                                        timeframe = "",
+                                        startTime = transform.xToTime(offset.x),
+                                        startPrice = transform.yToPrice(offset.y)
+                                    )
+                                )
+                            } else if (isCrosshairActive) {
                                 crosshairOffset = offset
                             }
                         }
