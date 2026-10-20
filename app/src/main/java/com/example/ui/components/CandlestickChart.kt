@@ -87,7 +87,7 @@ fun CandlestickChart(
     }
 
     // Viewport State
-    var candleWidthPx by remember { mutableFloatStateOf(20f) }
+    var candleWidthPx by remember { mutableFloatStateOf(12f) }
     var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
     var manualPriceScale by remember { mutableFloatStateOf(1f) }
     var crosshairOffset by remember { mutableStateOf<Offset?>(null) }
@@ -104,7 +104,7 @@ fun CandlestickChart(
     LaunchedEffect(resetViewTrigger) {
         if (resetViewTrigger > 0L) {
             scrollOffsetPx = 0f
-            candleWidthPx = 20f
+            candleWidthPx = 12f
             manualPriceScale = 1f
             crosshairOffset = null
             transformRef[0] = null
@@ -327,8 +327,9 @@ fun CandlestickChart(
                     size = Size(bodyWidth, bodyHeight)
                 )
 
-                // Time axis label (every 5 candles)
-                if (i % 5 == 0) {
+                // Time labels adapt to candle density instead of overlapping.
+                val timeLabelStride = (110f / candleWidthPx).toInt().coerceAtLeast(1)
+                if (i % timeLabelStride == 0) {
                     drawContext.canvas.nativeCanvas.apply {
                         val p = android.graphics.Paint().apply {
                             color = android.graphics.Color.parseColor("#6B7280")
