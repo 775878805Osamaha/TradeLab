@@ -246,6 +246,40 @@ fun ChartScreen(
                         )
                     }
                 }
+                if (replayState.openPositions.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().background(TradingCard)
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .testTag("chart_replay_open_positions"),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text("الصفقات المفتوحة في المحاكاة", color = TradingTextSecondary, fontSize = 11.sp)
+                        replayState.openPositions.forEach { position ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    "#${position.id} ${position.side.name} · ${position.volume}",
+                                    color = TradingTextPrimary,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(
+                                    onClick = { replayViewModel.setBreakEven(position.id) },
+                                    enabled = !replayState.isLoading && replayState.latestTick != null,
+                                    modifier = Modifier.testTag("chart_replay_breakeven_${position.id}")
+                                ) { Text("تعادل", fontSize = 11.sp) }
+                                TextButton(
+                                    onClick = { replayViewModel.closePosition(position.id) },
+                                    enabled = !replayState.isLoading && replayState.latestTick != null,
+                                    modifier = Modifier.testTag("chart_replay_close_${position.id}")
+                                ) { Text("إغلاق", color = TradingNegative, fontSize = 11.sp) }
+                            }
+                        }
+                    }
+                }
                 if (replayState.isLoading || replayState.totalCandles == 0) {
                     Text(if (replayState.isLoading) "جار تحميل بيانات الإعادة..." else "لا تتوفر شموع تاريخية للإعادة",
                         color = TradingTextSecondary, fontSize = 11.sp,
