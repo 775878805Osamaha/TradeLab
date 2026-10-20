@@ -251,16 +251,11 @@ class ChartViewModel(
             marketDataRepository.observeTicks(symbol).collect { tick ->
                 if (_uiState.value.selectedSymbol != symbol) return@collect
                 _uiState.update { state ->
-                    val updatedCandles = if (state.candles.isNotEmpty() && state.selectedSymbol == tick.symbol) {
-                        CandleAggregator.updateWithTick(state.candles, tick, state.selectedTimeframe)
-                    } else {
-                        state.candles
-                    }
-
-                    state.copy(
-                        latestTick = tick,
-                        candles = updatedCandles
-                    )
+                    // Binance bookTicker carries best bid/ask only, not executed trades,
+                    // OHLC or traded volume. Never turn quote events into fabricated candles.
+                    // Chart OHLCV stays sourced from Binance historical klines until a
+                    // genuine Binance kline stream is implemented.
+                    state.copy(latestTick = tick)
                 }
                 tradingRepository.onTickUpdate(tick)
             }
