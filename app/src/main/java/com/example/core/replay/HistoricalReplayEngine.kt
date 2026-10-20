@@ -138,7 +138,9 @@ class HistoricalReplayEngine(
         if (allCandles.isEmpty()) return
         val clamped = targetIndex.coerceIn(0, allCandles.size - 1)
         _currentIndex.value = clamped
-        updateVisibleState()
+        // A seek is navigation, not a candle execution. Executing a strategy
+        // only on the destination candle would silently skip intermediate bars.
+        updateVisibleState(evaluateTrades = false)
     }
 
     fun jumpToTimestamp(targetTimestamp: Long) {
