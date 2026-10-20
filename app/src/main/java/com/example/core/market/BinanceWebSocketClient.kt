@@ -33,7 +33,6 @@ class BinanceWebSocketClient(
     private var webSocket: WebSocket? = null
     private var isExplicitlyStopped = false
     private var reconnectJob: Job? = null
-    private var pingJob: Job? = null
 
     private val okHttpClient = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
@@ -49,7 +48,6 @@ class BinanceWebSocketClient(
     fun stop() {
         isExplicitlyStopped = true
         reconnectJob?.cancel()
-        pingJob?.cancel()
         webSocket?.close(1000, "Normal closure")
         webSocket = null
         _connectionStatus.value = ProviderConnectionStatus.DISCONNECTED
@@ -69,7 +67,6 @@ class BinanceWebSocketClient(
                 if (isExplicitlyStopped) return
                 _connectionStatus.value = ProviderConnectionStatus.CONNECTED
                 _reconnectAttempts.value = 0
-                startHeartbeat(webSocket)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
