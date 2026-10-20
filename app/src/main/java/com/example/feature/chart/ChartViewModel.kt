@@ -200,13 +200,14 @@ class ChartViewModel(
             val from = now - (interval * 250)
 
             try {
+                // Start live subscription even if historical REST loading fails.
+                subscribeToTicks(symbol)
                 val rawCandles = marketDataRepository.getCandles(symbol, tf, from, now)
                 val aggregated = CandleAggregator.aggregate(rawCandles, tf)
                 // Ignore responses that arrive after the user changes symbol or timeframe.
                 if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf) return@launch
                 _uiState.update { it.copy(candles = aggregated, isLoading = false, message = null) }
                 recalculateIndicators(aggregated, _uiState.value.indicatorSettings)
-                subscribeToTicks(symbol)
             } catch (error: Exception) {
                 if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
                     _uiState.update {
