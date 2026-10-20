@@ -65,14 +65,16 @@ class ChartViewModel(
 
     fun selectSymbol(symbol: String) {
         if (_uiState.value.selectedSymbol == symbol) return
-        _uiState.update { it.copy(selectedSymbol = symbol, isLoading = true) }
+        tickJob?.cancel()
+        _uiState.update { it.copy(selectedSymbol = symbol, isLoading = true, latestTick = null, candles = emptyList()) }
         loadCandlesForCurrentSymbol()
         observeDrawings()
     }
 
     fun selectTimeframe(timeframe: Timeframe) {
         if (_uiState.value.selectedTimeframe == timeframe) return
-        _uiState.update { it.copy(selectedTimeframe = timeframe, isLoading = true) }
+        tickJob?.cancel()
+        _uiState.update { it.copy(selectedTimeframe = timeframe, isLoading = true, latestTick = null, candles = emptyList()) }
         loadCandlesForCurrentSymbol()
         observeDrawings()
     }
@@ -158,7 +160,13 @@ class ChartViewModel(
 
     fun quickOrder(side: OrderSide, volume: Double = 0.01) {
         val state = _uiState.value
-        val tick = state.latestTick ?: return
+        val tick = state.latestTick
+        if (tick == null || tick.symbol != state.selectedSymbol ||
+            tick.source !in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") ||
+            System.currentTimeMillis() - tick.timestamp > 15_000L) {
+            _uiState.update { it.copy(message = "لا يمكن تنفيذ أمر بسعر غير متصل أو قديم") }
+            return
+        }
         viewModelScope.launch {
             val account = tradingRepository.selectedAccount.first()
             if (account == null) {
@@ -238,7 +246,9 @@ class ChartViewModel(
     private fun subscribeToTicks(symbol: String) {
         tickJob?.cancel()
         tickJob = viewModelScope.launch {
+            marketDataRepository.provider.subscribe(symbol)
             marketDataRepository.observeTicks(symbol).collect { tick ->
+                if (_uiState.value.selectedSymbol != symbol) return@collect
                 _uiState.update { state ->
                     val updatedCandles = if (state.candles.isNotEmpty() && state.selectedSymbol == tick.symbol) {
                         CandleAggregator.updateWithTick(state.candles, tick, state.selectedTimeframe)
