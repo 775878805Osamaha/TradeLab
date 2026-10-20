@@ -2,6 +2,8 @@ package com.example.core.market
 
 import com.example.core.model.ProviderConnectionStatus
 import com.example.core.model.Tick
+import com.example.core.model.Candle
+import com.example.core.model.Timeframe
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +16,7 @@ import kotlin.random.Random
 
 class BinanceWebSocketClient(
     private val onTickReceived: (Tick) -> Unit,
+    private val onCandleReceived: (Candle) -> Unit = {},
     private val onRawMessage: ((String) -> Unit)? = null,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) {
@@ -59,7 +62,7 @@ class BinanceWebSocketClient(
         _connectionStatus.value = if (_reconnectAttempts.value > 0) ProviderConnectionStatus.RECONNECTING else ProviderConnectionStatus.CONNECTING
 
         val request = Request.Builder()
-            .url("wss://stream.binance.com:9443/stream?streams=btcusdt@bookTicker/ethusdt@bookTicker")
+            .url("wss://stream.binance.com:9443/stream?streams=btcusdt@bookTicker/ethusdt@bookTicker/btcusdt@kline_1m/ethusdt@kline_1m")
             .build()
 
         webSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
@@ -78,6 +81,26 @@ class BinanceWebSocketClient(
                 try {
                     val envelope = JSONObject(text)
                     val json = envelope.optJSONObject("data") ?: envelope
+                    // Binance kline stream contains genuine executed-trade OHLCV.
+                    val kline = json.optJSONObject("k")
+                    if (json.optString("e") == "kline" && kline != null &&
+                        kline.optString("i") == "1m") {
+                        val candle = Candle(
+                            symbol = kline.getString("s"),
+                            timeframe = Timeframe.M1,
+                            openTime = kline.getLong("t"),
+                            closeTime = kline.getLong("T") + 1L,
+                            open = kline.getString("o").toDouble(),
+                            high = kline.getString("h").toDouble(),
+                            low = kline.getString("l").toDouble(),
+                            close = kline.getString("c").toDouble(),
+                            volume = kline.getString("v").toDouble(),
+                            source = "BINANCE_WEBSOCKET_KLINE"
+                        )
+                        if (DataIntegrityValidator.validateCandle(candle).isValid) {
+                            onCandleReceived(candle)
+                        }
+                    }
                     if (json.has("s") && json.has("b") && json.has("a")) {
                         val sym = json.getString("s")
                         val bid = json.getDouble("b")
