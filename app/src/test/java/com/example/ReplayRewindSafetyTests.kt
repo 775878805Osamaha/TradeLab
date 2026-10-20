@@ -106,4 +106,18 @@ class ReplayRewindSafetyTests {
         assertEquals(0, evaluations)
     }
 
+    @Test fun discardedFutureCheckpointsCannotBeRestored() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        engine.initialize((0..9).map(::candle), startIndex = 3)
+        val old = com.example.core.replay.ReplayCheckpoint(
+            sessionId = 1, candleIndex = 5, timestamp = candle(5).openTime,
+            balance = 950.0, equity = 950.0, openPositions = emptyList(),
+            closedTradesCount = 1
+        )
+        engine.recordCheckpoint(old)
+        assertNotNull(engine.getCheckpoint(5))
+        engine.discardCheckpointsAfter(3)
+        assertNull(engine.getCheckpoint(5))
+    }
+
 }
