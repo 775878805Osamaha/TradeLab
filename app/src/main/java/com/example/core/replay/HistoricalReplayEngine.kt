@@ -126,7 +126,9 @@ class HistoricalReplayEngine(
     fun stepBackward(): Boolean {
         if (_currentIndex.value > 1) {
             _currentIndex.value--
-            updateVisibleState()
+            // Rewinding only restores chart/clock; ViewModel restores the financial
+            // snapshot. Re-running strategies or SL/TP here corrupts trade history.
+            updateVisibleState(evaluateTrades = false)
             return true
         }
         return false
@@ -235,7 +237,7 @@ class HistoricalReplayEngine(
         }
     }
 
-    private fun updateVisibleState() {
+    private fun updateVisibleState(evaluateTrades: Boolean = true) {
         val idx = _currentIndex.value
         if (idx in allCandles.indices) {
             val active = allCandles[idx]
@@ -265,8 +267,10 @@ class HistoricalReplayEngine(
             )
             _currentTick.value = tick
 
-            val dataView = ReplayDataView(allCandles, idx, tick)
-            onCandleRevealed?.invoke(active, tick, dataView)
+            if (evaluateTrades) {
+                val dataView = ReplayDataView(allCandles, idx, tick)
+                onCandleRevealed?.invoke(active, tick, dataView)
+            }
         }
     }
 }
