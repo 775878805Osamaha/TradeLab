@@ -114,11 +114,6 @@ class BinanceWebSocketClient(
         })
     }
 
-    private fun startHeartbeat(ws: WebSocket) {
-        pingJob?.cancel()
-        // OkHttp handles WebSocket protocol-level ping/pong via pingInterval.
-        // Binance does not accept a custom JSON PING subscription command.
-    }
 
     private fun scheduleReconnect() {
         if (isExplicitlyStopped) return
