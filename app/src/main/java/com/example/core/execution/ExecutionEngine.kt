@@ -297,7 +297,11 @@ class ExecutionEngine(
             }
             if (isSlTriggered) {
                 return PositionEvaluation.TriggerClose(
-                    exitPrice = updatedStopLoss,
+                    // A stop is not a guaranteed fill price: gaps can execute worse.
+                    exitPrice = when (position.side) {
+                        PositionSide.BUY -> minOf(tick.bid, updatedStopLoss)
+                        PositionSide.SELL -> maxOf(tick.ask, updatedStopLoss)
+                    },
                     exitReason = if (position.isBreakEven) ExitReason.BREAK_EVEN else ExitReason.STOP_LOSS
                 )
             }
@@ -343,7 +347,12 @@ class ExecutionEngine(
             }
             if (isSlTriggered) {
                 return PositionEvaluation.TriggerClose(
-                    exitPrice = position.stopLoss,
+                    // A candle opening beyond the stop indicates a gap; do not
+                    // credit an impossible fill at the original stop level.
+                    exitPrice = when (position.side) {
+                        PositionSide.BUY -> minOf(candle.open, position.stopLoss)
+                        PositionSide.SELL -> maxOf(candle.open, position.stopLoss)
+                    },
                     exitReason = if (position.isBreakEven) ExitReason.BREAK_EVEN else ExitReason.STOP_LOSS
                 )
             }
