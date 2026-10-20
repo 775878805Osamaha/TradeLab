@@ -265,6 +265,7 @@ class ReplayViewModel(
                 _uiState.update {
                     it.copy(
                         openPositions = openPositions.toList(),
+                        currentEquity = it.currentBalance + openPositions.sumOf { position -> position.profitLoss },
                         message = "تم تنفيذ أمر Replay ${side.displayNameAr} $volume لوت"
                     )
                 }
@@ -300,6 +301,7 @@ class ReplayViewModel(
         _uiState.update {
             it.copy(
                 currentBalance = newBal,
+                currentEquity = newBal + openPositions.sumOf { position -> position.profitLoss },
                 openPositions = openPositions.toList(),
                 closedTrades = closedTrades.toList(),
                 message = "تم إغلاق الصفقة #${pos.id} في Replay"
