@@ -219,12 +219,16 @@ class ReplayViewModel(
         replayEngine.pause()
         val targetIndex = replayEngine.currentIndex.value - 1
         val snapshot = accountSnapshots[targetIndex]
-        if (snapshot == null) {
+        val hasTradingHistory = openPositions.isNotEmpty() ||
+            pendingOrders.isNotEmpty() || closedTrades.isNotEmpty() ||
+            accountSnapshots.values.any { it.positions.isNotEmpty() || it.orders.isNotEmpty() || it.trades.isNotEmpty() }
+        if (snapshot == null && hasTradingHistory) {
             _uiState.update { it.copy(message = "لا تتوفر نقطة استعادة مالية لهذه الشمعة") }
             return
         }
         if (replayEngine.stepBackward()) {
-            restoreAccountSnapshot(snapshot)
+            if (snapshot != null) restoreAccountSnapshot(snapshot)
+            else saveAccountSnapshot() // A no-trade timeline can safely navigate freely.
             // Future checkpoints belong to an abandoned timeline.
             accountSnapshots.keys.removeAll { it > targetIndex }
         }
@@ -238,6 +242,9 @@ class ReplayViewModel(
             return
         }
         replayEngine.pause()
+        // Seeking on a pristine account starts a fresh, non-trading timeline.
+        // Discard old checkpoint history so it cannot be restored accidentally.
+        accountSnapshots.clear()
         replayEngine.jumpToTimestamp(timestamp)
         saveAccountSnapshot()
     }
