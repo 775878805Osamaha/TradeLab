@@ -8,6 +8,7 @@ import com.example.core.model.SymbolInfo
 import com.example.core.model.Tick
 import com.example.data.repository.MarketDataRepository
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 enum class MarketSort {
@@ -43,6 +44,7 @@ class MarketViewModel(
     private val _showOnlyFavorites = MutableStateFlow(false)
     private val _sortOption = MutableStateFlow(MarketSort.SYMBOL)
     private val ticksMap = MutableStateFlow<Map<String, Tick>>(emptyMap())
+    private val symbolTickJobs = mutableMapOf<String, Job>()
 
     val uiState: StateFlow<MarketUiState> = combine(
         marketDataRepository.symbols,
@@ -97,12 +99,25 @@ class MarketViewModel(
             marketDataRepository.initializeSymbolsIfNeeded()
             marketDataRepository.provider.connect()
 
-            // Observe ticks for all symbols
-            marketDataRepository.symbols.first().forEach { sym ->
-                launch {
-                    marketDataRepository.observeTicks(sym.symbol).collect { tick ->
-                        ticksMap.update { current ->
-                            current + (tick.symbol to tick)
+            // React to changes in the available symbol list, including symbols added
+            // after initial repository initialization. Avoid duplicate subscriptions.
+            marketDataRepository.symbols.collect { symbols ->
+                val currentSymbols = symbols.map { it.symbol }.toSet()
+                val removed = symbolTickJobs.keys - currentSymbols
+                removed.forEach { symbol ->
+                    symbolTickJobs.remove(symbol)?.cancel()
+                }
+                if (removed.isNotEmpty()) {
+                    ticksMap.update { current -> current.filterKeys { it in currentSymbols } }
+                }
+                currentSymbols.forEach { symbol ->
+                    if (symbol !in symbolTickJobs) {
+                        symbolTickJobs[symbol] = launch {
+                            marketDataRepository.observeTicks(symbol).collect { tick ->
+                                if (tick.symbol == symbol) {
+                                    ticksMap.update { current -> current + (symbol to tick) }
+                                }
+                            }
                         }
                     }
                 }
