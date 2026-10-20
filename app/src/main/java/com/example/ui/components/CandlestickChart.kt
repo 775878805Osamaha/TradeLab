@@ -438,6 +438,22 @@ fun CandlestickChart(
             }
         }
 
+        // Drag on the price axis to adjust vertical scale; reset-view restores auto-fit.
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .width(38.dp)
+                .fillMaxHeight()
+                .testTag("chart_price_axis_scale")
+                .pointerInput(Unit) {
+                    detectDragGestures { change, dragAmount ->
+                        change.consume()
+                        manualPriceScale = (manualPriceScale * (1f + dragAmount.y / 400f))
+                            .coerceIn(0.25f, 8f)
+                    }
+                }
+        )
+
         // Top Floating Crosshair HUD (OHLCV & Spread)
         inspectedCandle?.let { c ->
             Card(
