@@ -78,7 +78,7 @@ fun ChartScreen(
                             .testTag("symbol_selector_btn")
                     ) {
                         Text(
-                            text = uiState.selectedSymbol.chunked(3).joinToString(" / ", limit = 2).takeIf { uiState.selectedSymbol.length == 6 } ?: uiState.selectedSymbol,
+                            text = if (uiState.selectedSymbol.endsWith("USDT")) "${uiState.selectedSymbol.removeSuffix("USDT")} / USDT" else uiState.selectedSymbol,
                             style = TextStyle(textDirection = TextDirection.Ltr),
                             maxLines = 1,
                             fontWeight = FontWeight.ExtraBold,
@@ -124,7 +124,7 @@ fun ChartScreen(
                         Icon(
                             Icons.Default.Draw,
                             contentDescription = "أدوات الرسم",
-                            tint = if (uiState.activeDrawingTool != DrawingTool.NONE) TradingGold else TradingTextSecondary
+                            tint = if (uiState.activeDrawingTool != DrawingTool.NONE) TradingAccent else TradingTextSecondary
                         )
                     }
                     // Reset / Auto-fit view button
@@ -210,7 +210,7 @@ fun ChartScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(TradingGold.copy(alpha = 0.15f))
+                        .background(TradingAccent.copy(alpha = 0.12f))
                         .padding(horizontal = 14.dp, vertical = 5.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -218,7 +218,7 @@ fun ChartScreen(
                     Text(
                         text = "أداة نشطة: ${uiState.activeDrawingTool.displayNameAr} (اسحب على الشارت)",
                         fontSize = 11.sp,
-                        color = TradingGold,
+                        color = TradingAccentLight,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
