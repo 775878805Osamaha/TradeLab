@@ -218,7 +218,7 @@ class ChartViewModel(
                 val aggregated = CandleAggregator.aggregate(rawCandles, tf)
                 // Ignore responses that arrive after the user changes symbol or timeframe.
                 if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf) return@launch
-                _uiState.update { it.copy(candles = aggregated, isLoading = false, candleLoadError = null, message = null) }
+                _uiState.update { it.copy(candles = aggregated, isLoading = false, candleLoadError = if (aggregated.isEmpty()) "لا تتوفر شموع مؤكدة لهذا الرمز والفاصل الزمني. حاول مجددًا." else null, message = null) }
                 recalculateIndicators(aggregated, _uiState.value.indicatorSettings)
                 startKlineRefresh(symbol, tf)
                 startKlineStream(symbol, tf)
