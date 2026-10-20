@@ -86,4 +86,24 @@ class ReplayRewindSafetyTests {
         assertEquals(2, evaluations)
     }
 
+    @Test fun clearInvalidatesOldQuotesCandlesAndTradeCallbacks() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        var evaluations = 0
+        engine.onCandleRevealed = { _, _, _ -> evaluations++ }
+        engine.initialize((0..9).map(::candle), startIndex = 4)
+        assertNotNull(engine.currentTick.value)
+        engine.clear()
+        assertNull(engine.currentTick.value)
+        assertNull(engine.currentCandle.value)
+        assertTrue(engine.visibleCandles.value.isEmpty())
+        assertEquals(0, engine.totalCandles.value)
+        assertEquals(0, engine.currentIndex.value)
+        assertFalse(engine.stepForward())
+        assertEquals(0, evaluations)
+        engine.initialize((0..9).map(::candle), startIndex = 2)
+        assertEquals(2, engine.currentIndex.value)
+        assertNotNull(engine.currentTick.value)
+        assertEquals(0, evaluations)
+    }
+
 }

@@ -162,7 +162,9 @@ class ReplayViewModel(
 
     fun loadReplayData(symbol: String = "BTCUSDT", tf: Timeframe = Timeframe.M15) {
         replayLoadJob?.cancel()
-        replayEngine.pause()
+        // Immediately invalidate the previous engine quote as well as UI flows:
+        // executeOrder reads the engine directly and must never trade old data.
+        replayEngine.clear()
         // A new dataset must never inherit positions, pending orders, journal or IDs
         // from the previous replay session, even if loading subsequently fails.
         resetReplayAccount()
