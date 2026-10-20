@@ -362,6 +362,9 @@ class ReplayViewModel(
                 message = "تم إغلاق الصفقة #${pos.id} في Replay"
             )
         }
+        // Manual close changes realized P&L and the journal at the current index.
+        // Persist both so a later rewind cannot restore a stale checkpoint.
+        saveAccountSnapshot()
     }
 
     fun setBreakEven(posId: Long) {
@@ -407,7 +410,7 @@ class ReplayViewModel(
                         closeTime = candle.openTime
                     )
                     closedTrades.add(trade)
-                    curBal += trade.netProfitLoss
+                    curBal = ReplayAccountMath.realizedBalance(curBal, trade.netProfitLoss)
                     iterator.remove()
                 }
                 is PositionEvaluation.KeepOpen -> {
@@ -417,6 +420,18 @@ class ReplayViewModel(
                     }
                 }
             }
+        }
+
+        // Settle closed trades and mark remaining positions to market BEFORE strategy
+        // execution. Otherwise executeOrder() reads the previous candle's balance
+        // and equity, and may reject valid orders or accept orders on stale margin.
+        _uiState.update {
+            it.copy(
+                currentBalance = curBal,
+                currentEquity = ReplayAccountMath.equity(curBal, openPositions),
+                openPositions = openPositions.toList(),
+                closedTrades = closedTrades.toList()
+            )
         }
 
         // 2. Evaluate Strategy if in STRATEGY mode (strictly using ReplayDataView)
@@ -429,9 +444,9 @@ class ReplayViewModel(
                     id = 9999,
                     name = "Strategy Replay Account",
                     balance = curBal,
-                    equity = curBal + openPositions.sumOf { it.profitLoss },
+                    equity = ReplayAccountMath.equity(curBal, openPositions),
                     margin = openPositions.sumOf { it.margin },
-                    freeMargin = maxOf(0.0, curBal - openPositions.sumOf { it.margin })
+                    freeMargin = maxOf(0.0, ReplayAccountMath.equity(curBal, openPositions) - openPositions.sumOf { it.margin })
                 )
                 val context = StrategyContext(
                     symbol = candle.symbol,
@@ -454,8 +469,7 @@ class ReplayViewModel(
             }
         }
 
-        val floatingPl = openPositions.sumOf { it.profitLoss }
-        val curEq = curBal + floatingPl
+        val curEq = ReplayAccountMath.equity(curBal, openPositions)
 
         // 3. Record snapshot checkpoint for safe rollback
         replayEngine.recordCheckpoint(
