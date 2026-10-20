@@ -43,4 +43,29 @@ class ReplayRewindSafetyTests {
         assertEquals(before, evaluations)
         assertEquals(2, engine.currentIndex.value)
     }
+    @Test fun seekingToIndexDoesNotEvaluateSkippedOrDestinationCandles() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        var evaluations = 0
+        engine.onCandleRevealed = { _, _, _ -> evaluations++ }
+        engine.initialize((0..9).map(::candle), startIndex = 2)
+        val baseline = evaluations
+        engine.jumpToIndex(8)
+        assertEquals(8, engine.currentIndex.value)
+        assertEquals(baseline, evaluations)
+        assertEquals(candle(8).openTime, engine.currentCandle.value?.openTime)
+        assertTrue(engine.stepForward())
+        assertEquals(baseline + 1, evaluations)
+    }
+
+    @Test fun seekingToTimestampDoesNotFireStrategyCallback() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        var evaluations = 0
+        engine.onCandleRevealed = { _, _, _ -> evaluations++ }
+        engine.initialize((0..9).map(::candle), startIndex = 2)
+        val baseline = evaluations
+        engine.jumpToTimestamp(candle(6).openTime)
+        assertEquals(6, engine.currentIndex.value)
+        assertEquals(baseline, evaluations)
+    }
+
 }
