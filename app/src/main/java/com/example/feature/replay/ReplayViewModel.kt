@@ -218,6 +218,10 @@ class ReplayViewModel(
     fun stepBackward() {
         replayEngine.pause()
         val targetIndex = replayEngine.currentIndex.value - 1
+        if (targetIndex < 1) {
+            _uiState.update { it.copy(message = "وصلت إلى بداية بيانات Replay") }
+            return
+        }
         val snapshot = accountSnapshots[targetIndex]
         val hasTradingHistory = openPositions.isNotEmpty() ||
             pendingOrders.isNotEmpty() || closedTrades.isNotEmpty() ||
@@ -237,7 +241,8 @@ class ReplayViewModel(
     fun jumpToTimestamp(timestamp: Long) {
         // Arbitrary jumps can skip execution of stops and strategies.
         // Keep jumps disabled after trades until timeline replay is transactional.
-        if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty()) {
+        if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty() ||
+            accountSnapshots.values.any { it.positions.isNotEmpty() || it.orders.isNotEmpty() || it.trades.isNotEmpty() }) {
             _uiState.update { it.copy(message = "القفز بعد التداول غير متاح؛ استخدم الرجوع شمعة واحدة") }
             return
         }
