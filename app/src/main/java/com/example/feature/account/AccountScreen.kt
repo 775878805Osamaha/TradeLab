@@ -17,6 +17,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.model.VirtualAccount
@@ -63,7 +65,7 @@ fun AccountScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "منصة TradeLab — لوحة الحسابات",
+                        text = "الحساب",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -92,7 +94,7 @@ fun AccountScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item {
@@ -132,11 +134,11 @@ fun AccountScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("account_summary_card"),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = CardDefaults.cardColors(containerColor = TradingCard),
                         border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
                     ) {
-                        Column(modifier = Modifier.padding(18.dp)) {
+                        Column(modifier = Modifier.padding(12.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -180,7 +182,9 @@ fun AccountScreen(
                                     Text(text = "رصيد الحساب (Balance)", fontSize = 12.sp, color = TradingTextSecondary)
                                     Text(
                                         text = String.format(Locale.US, "$%.2f", account.balance),
-                                        fontSize = 24.sp,
+                                        style = TextStyle(textDirection = TextDirection.Ltr),
+                                        maxLines = 1,
+                                        fontSize = 21.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = TradingTextPrimary
                                     )
@@ -190,6 +194,8 @@ fun AccountScreen(
                                     val isProfit = account.equity >= account.initialBalance
                                     Text(
                                         text = String.format(Locale.US, "$%.2f", account.equity),
+                                        style = TextStyle(textDirection = TextDirection.Ltr),
+                                        maxLines = 1,
                                         fontSize = 24.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = if (isProfit) TradingPositive else TradingNegative
