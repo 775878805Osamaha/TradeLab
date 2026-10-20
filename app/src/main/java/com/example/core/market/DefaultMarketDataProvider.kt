@@ -8,13 +8,12 @@ import okhttp3.Request
 import org.json.JSONArray
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
-import kotlin.math.sin
 
 class DefaultMarketDataProvider(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) : MarketDataProvider, HistoricalDataProvider, StreamingMarketDataProvider {
 
-    override val providerName: String = "TradeLab Production Market Engine (Binance WebSocket + Benchmark FX)"
+    override val providerName: String = "TradeLab Binance Spot Market Data (BTCUSDT / ETHUSDT)"
 
     private val _isConnected = MutableStateFlow(false)
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -31,10 +30,10 @@ class DefaultMarketDataProvider(
     private val _validationErrorsCount = MutableStateFlow(0)
     val validationErrorsCount: StateFlow<Int> = _validationErrorsCount.asStateFlow()
 
-    private val _lastSuccessfulUpdate = MutableStateFlow(System.currentTimeMillis())
+    private val _lastSuccessfulUpdate = MutableStateFlow(0L)
     val lastSuccessfulUpdate: StateFlow<Long> = _lastSuccessfulUpdate.asStateFlow()
 
-    private val _latencyMs = MutableStateFlow(45L)
+    private val _latencyMs = MutableStateFlow(0L)
     val latencyMs: StateFlow<Long> = _latencyMs.asStateFlow()
 
     private val _diagnosticInfo = MutableStateFlow(
@@ -42,14 +41,14 @@ class DefaultMarketDataProvider(
             providerName = providerName,
             connectionStatus = ProviderConnectionStatus.DISCONNECTED,
             dataSourceType = DataSourceType.LIVE_DATA,
-            lastUpdateTimestamp = System.currentTimeMillis(),
+            lastUpdateTimestamp = 0L,
             reconnectCount = 0,
             cachedCandlesCount = 0L,
             latestCandleTimestamp = 0L,
             latestTickTimestamp = 0L,
             validationErrorsCount = 0,
-            isStale = false,
-            approximateLatencyMs = 45L
+            isStale = true,
+            approximateLatencyMs = 0L
         )
     )
     val diagnosticInfo: StateFlow<MarketDataDiagnostic> = _diagnosticInfo.asStateFlow()
@@ -69,32 +68,9 @@ class DefaultMarketDataProvider(
     private var healthCheckJob: Job? = null
     private var binanceWsClient: BinanceWebSocketClient? = null
 
-    // Base market references
-    private val basePrices = mapOf(
-        "XAUUSD" to 2654.50,
-        "EURUSD" to 1.08450,
-        "GBPUSD" to 1.30120,
-        "USDJPY" to 152.350,
-        "BTCUSDT" to 64280.00,
-        "ETHUSDT" to 2645.00
-    )
 
     init {
-        // Initialize baseline ticks for standard symbols
-        DefaultSymbols.SYMBOLS.forEach { symbolInfo ->
-            val basePrice = basePrices[symbolInfo.symbol] ?: 100.0
-            val halfSpread = (symbolInfo.defaultSpreadPips * symbolInfo.pipSize) / 2.0
-            val initialTick = Tick(
-                symbol = symbolInfo.symbol,
-                bid = basePrice - halfSpread,
-                ask = basePrice + halfSpread,
-                last = basePrice,
-                timestamp = System.currentTimeMillis(),
-                source = if (symbolInfo.category == "Crypto") "BINANCE_LIVE" else "DEMO_BENCHMARK"
-            )
-            latestTicks[symbolInfo.symbol] = initialTick
-        }
-
+        // Do not fabricate an initial live quote before an exchange message arrives.
         // Initialize Binance WebSocket client
         binanceWsClient = BinanceWebSocketClient(
             onTickReceived = { tick ->
@@ -136,7 +112,7 @@ class DefaultMarketDataProvider(
     override suspend fun connect() {
         if (_isConnected.value) return
         _isConnected.value = true
-        _connectionStatus.value = ProviderConnectionStatus.CONNECTED
+        _connectionStatus.value = ProviderConnectionStatus.CONNECTING
         binanceWsClient?.start()
         startStreaming(subscribedSymbols.toList())
     }
@@ -152,41 +128,12 @@ class DefaultMarketDataProvider(
     override suspend fun startStreaming(symbols: List<String>) {
         benchmarkJob?.cancel()
         benchmarkJob = scope.launch {
-            var step = 0
             while (isActive) {
-                // If WebSocket is not connected, use REST polling as fallback for crypto
-                if (_connectionStatus.value != ProviderConnectionStatus.CONNECTED) {
-                    try {
-                        fetchLiveCryptoQuotes()
-                    } catch (e: Exception) {
-                        // Handled
-                    }
+                // REST polling is a fallback for real crypto quotes only.
+                if (binanceWsClient?.connectionStatus?.value != ProviderConnectionStatus.CONNECTED) {
+                    fetchLiveCryptoQuotes()
                 }
-
-                // Generate benchmark ticks for non-crypto symbols (strictly labeled DEMO_BENCHMARK)
-                step++
-                for (sym in DefaultSymbols.SYMBOLS) {
-                    val symbol = sym.symbol
-                    if (symbol != "BTCUSDT" && symbol != "ETHUSDT") {
-                        val current = latestTicks[symbol]
-                        val base = basePrices[symbol] ?: 100.0
-                        val delta = sin(step * 0.15 + symbol.hashCode() % 10) * sym.pipSize * 2.0
-                        val mid = (current?.mid ?: base) + delta
-                        val halfSpread = (sym.defaultSpreadPips * sym.pipSize) / 2.0
-                        val newTick = Tick(
-                            symbol = symbol,
-                            bid = mid - halfSpread,
-                            ask = mid + halfSpread,
-                            last = mid,
-                            timestamp = System.currentTimeMillis(),
-                            source = "DEMO_BENCHMARK",
-                            volume = 1.0 + (step % 5)
-                        )
-                        emitTick(newTick)
-                    }
-                }
-
-                delay(1000)
+                delay(3000)
             }
         }
     }
@@ -213,21 +160,7 @@ class DefaultMarketDataProvider(
 
     override suspend fun getLatestTick(symbol: String): Tick? {
         val sym = normalizeSymbol(symbol)
-        return latestTicks[sym] ?: run {
-            val basePrice = basePrices[sym] ?: 100.0
-            val symInfo = DefaultSymbols.getSymbol(sym)
-            val halfSpread = (symInfo.defaultSpreadPips * symInfo.pipSize) / 2.0
-            val tick = Tick(
-                symbol = sym,
-                bid = basePrice - halfSpread,
-                ask = basePrice + halfSpread,
-                last = basePrice,
-                timestamp = System.currentTimeMillis(),
-                source = if (sym.contains("USDT")) "BINANCE_LIVE" else "DEMO_BENCHMARK"
-            )
-            latestTicks[sym] = tick
-            tick
-        }
+        return latestTicks[sym]
     }
 
     override fun observeTicks(symbol: String): Flow<Tick> {
@@ -307,7 +240,7 @@ class DefaultMarketDataProvider(
                         emitTick(tick)
                     }
                     _dataSourceType.value = DataSourceType.LIVE_DATA
-                    _connectionStatus.value = ProviderConnectionStatus.CONNECTED
+                    // REST fallback is not a WebSocket connection.
                     return@withContext true
                 }
             }
@@ -387,53 +320,10 @@ class DefaultMarketDataProvider(
             }
             return@withContext DataIntegrityValidator.sanitizeCandles(results)
         }
-        val symInfo = DefaultSymbols.getSymbol(sym)
-        val basePrice = basePrices[sym] ?: 100.0
-        val intervalMillis = timeframe.minutes * 60 * 1000L
+        // Forex and XAUUSD require a separate licensed/verified data provider.
+        // Never generate synthetic candles in production market mode.
+        throw java.io.IOException("No verified live market feed configured for $sym")
 
-        val candles = mutableListOf<Candle>()
-        val start = fromTimestamp - (fromTimestamp % intervalMillis)
-        val end = toTimestamp
-
-        var currentPrice = basePrice * 0.985
-        var t = start
-        var index = 0
-
-        while (t <= end && candles.size < 500) {
-            val trend = sin(index * 0.05) * (symInfo.pipSize * 30.0)
-            val noise = (sin(index * 0.3) + sin(index * 0.7)) * (symInfo.pipSize * 15.0)
-            val open = currentPrice
-            val close = open + trend + noise
-            val upperPeak = maxOf(open, close)
-            val lowerPeak = minOf(open, close)
-
-            val high = upperPeak + (kotlin.math.abs(sin(index * 0.4)) * (symInfo.pipSize * 15.0)) + (symInfo.pipSize * 1.0)
-            val low = lowerPeak - (kotlin.math.abs(sin(index * 0.6)) * (symInfo.pipSize * 15.0)) - (symInfo.pipSize * 1.0)
-            val volume = 100.0 + kotlin.math.abs(sin(index * 0.2)) * 500.0
-
-            val candle = Candle(
-                symbol = sym,
-                timeframe = timeframe,
-                openTime = t,
-                closeTime = t + intervalMillis,
-                open = open,
-                high = high,
-                low = low,
-                close = close,
-                volume = volume,
-                source = "BENCHMARK_SERIES"
-            )
-
-            if (candle.isValid()) {
-                candles.add(candle)
-            }
-
-            currentPrice = close
-            t += intervalMillis
-            index++
-        }
-
-        DataIntegrityValidator.sanitizeCandles(candles)
     }
 
     private fun startHealthCheck() {
@@ -442,7 +332,7 @@ class DefaultMarketDataProvider(
             while (isActive) {
                 delay(5000)
                 val elapsed = System.currentTimeMillis() - _lastSuccessfulUpdate.value
-                val isStale = elapsed > 15000L // 15 seconds stale threshold
+                val isStale = _lastSuccessfulUpdate.value == 0L || elapsed > 15000L // 15 seconds stale threshold
                 if (isStale && _connectionStatus.value == ProviderConnectionStatus.CONNECTED) {
                     _connectionStatus.value = ProviderConnectionStatus.DEGRADED
                     _dataSourceType.value = DataSourceType.STALE_DATA

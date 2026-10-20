@@ -33,7 +33,6 @@ class BinanceWebSocketClient(
     private var webSocket: WebSocket? = null
     private var isExplicitlyStopped = false
     private var reconnectJob: Job? = null
-    private var pingJob: Job? = null
 
     private val okHttpClient = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
@@ -49,7 +48,6 @@ class BinanceWebSocketClient(
     fun stop() {
         isExplicitlyStopped = true
         reconnectJob?.cancel()
-        pingJob?.cancel()
         webSocket?.close(1000, "Normal closure")
         webSocket = null
         _connectionStatus.value = ProviderConnectionStatus.DISCONNECTED
@@ -61,7 +59,7 @@ class BinanceWebSocketClient(
         _connectionStatus.value = if (_reconnectAttempts.value > 0) ProviderConnectionStatus.RECONNECTING else ProviderConnectionStatus.CONNECTING
 
         val request = Request.Builder()
-            .url("wss://stream.binance.com:9443/ws/btcusdt@bookTicker/ethusdt@bookTicker")
+            .url("wss://stream.binance.com:9443/stream?streams=btcusdt@bookTicker/ethusdt@bookTicker")
             .build()
 
         webSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
@@ -69,7 +67,6 @@ class BinanceWebSocketClient(
                 if (isExplicitlyStopped) return
                 _connectionStatus.value = ProviderConnectionStatus.CONNECTED
                 _reconnectAttempts.value = 0
-                startHeartbeat(webSocket)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -79,7 +76,8 @@ class BinanceWebSocketClient(
                 onRawMessage?.invoke(text)
 
                 try {
-                    val json = JSONObject(text)
+                    val envelope = JSONObject(text)
+                    val json = envelope.optJSONObject("data") ?: envelope
                     if (json.has("s") && json.has("b") && json.has("a")) {
                         val sym = json.getString("s")
                         val bid = json.getDouble("b")
@@ -118,18 +116,8 @@ class BinanceWebSocketClient(
 
     private fun startHeartbeat(ws: WebSocket) {
         pingJob?.cancel()
-        pingJob = scope.launch {
-            while (isActive && !isExplicitlyStopped) {
-                delay(15000)
-                try {
-                    val pingSentTime = System.currentTimeMillis()
-                    ws.send("{\"method\":\"PING\"}")
-                    _latencyMs.value = System.currentTimeMillis() - pingSentTime
-                } catch (e: Exception) {
-                    // Ignored
-                }
-            }
-        }
+        // OkHttp handles WebSocket protocol-level ping/pong via pingInterval.
+        // Binance does not accept a custom JSON PING subscription command.
     }
 
     private fun scheduleReconnect() {
