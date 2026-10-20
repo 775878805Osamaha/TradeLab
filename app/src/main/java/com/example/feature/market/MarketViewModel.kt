@@ -22,8 +22,18 @@ data class SymbolMarketRow(
     val tick: Tick?,
     val dailyChangePct: Double? = null
 ) {
-    val spreadPips: Double
-        get() = if (tick != null) tick.spread / symbolInfo.pipSize else symbolInfo.defaultSpreadPips
+    // Null means the exchange has not provided a fresh, verified spread.
+    // Do not silently substitute an instrument's configured default spread.
+    val spreadPips: Double?
+        get() {
+            val quote = tick ?: return null
+            if (quote.symbol != symbolInfo.symbol ||
+                quote.source !in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") ||
+                System.currentTimeMillis() - quote.timestamp !in 0..15_000L ||
+                symbolInfo.pipSize <= 0.0
+            ) return null
+            return quote.spread / symbolInfo.pipSize
+        }
 }
 
 data class MarketUiState(
@@ -79,7 +89,7 @@ class MarketViewModel(
         }.let { list ->
             when (sort) {
                 MarketSort.SYMBOL -> list.sortedBy { it.symbolInfo.symbol }
-                MarketSort.SPREAD -> list.sortedBy { it.spreadPips }
+                MarketSort.SPREAD -> list.sortedWith(compareBy<SymbolMarketRow> { it.spreadPips == null }.thenBy { it.spreadPips ?: Double.POSITIVE_INFINITY })
                 MarketSort.CHANGE_PCT -> list.sortedWith(compareByDescending<SymbolMarketRow> { it.dailyChangePct != null }.thenByDescending { it.dailyChangePct ?: Double.NEGATIVE_INFINITY })
             }
         }
