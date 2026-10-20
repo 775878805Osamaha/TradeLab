@@ -44,6 +44,28 @@ object OrderValidator {
             (symbol.equals("ETHUSD", ignoreCase = true) && it.symbol == "ETHUSDT")
         } ?: return OrderValidationResult.Rejected(OrderRejectionReason.INVALID_SYMBOL)
 
+        // Reject NaN/Infinity before any margin or step calculations.
+        if (!volume.isFinite() || volume <= 0.0) {
+            return OrderValidationResult.Rejected(OrderRejectionReason.INVALID_VOLUME)
+        }
+        if (account.leverage <= 0.0 || !account.leverage.isFinite() ||
+            !account.freeMargin.isFinite() || account.freeMargin < 0.0) {
+            return OrderValidationResult.Rejected(OrderRejectionReason.INSUFFICIENT_MARGIN)
+        }
+        if (tick != null && (!tick.bid.isFinite() || !tick.ask.isFinite() ||
+                    tick.bid <= 0.0 || tick.ask <= 0.0 || tick.bid > tick.ask)) {
+            return OrderValidationResult.Rejected(OrderRejectionReason.INVALID_PRICE)
+        }
+        if (requestedPrice != null && (!requestedPrice.isFinite() || requestedPrice <= 0.0)) {
+            return OrderValidationResult.Rejected(OrderRejectionReason.INVALID_PRICE)
+        }
+        if (stopLoss != null && (!stopLoss.isFinite() || stopLoss <= 0.0)) {
+            return OrderValidationResult.Rejected(OrderRejectionReason.INVALID_SL)
+        }
+        if (takeProfit != null && (!takeProfit.isFinite() || takeProfit <= 0.0)) {
+            return OrderValidationResult.Rejected(OrderRejectionReason.INVALID_TP)
+        }
+
         // 2. Volume validation
         if (volume < symInfo.minLot) {
             return OrderValidationResult.Rejected(
@@ -87,6 +109,10 @@ object OrderValidator {
             }
         }
 
+        if (!referencePrice.isFinite() || referencePrice <= 0.0) {
+            return OrderValidationResult.Rejected(OrderRejectionReason.INVALID_PRICE)
+        }
+
         // 4. Pending Order Price logic
         if (tick != null) {
             when (type) {
@@ -128,7 +154,7 @@ object OrderValidator {
 
         // 5. Margin validation
         val requiredMargin = (volume * symInfo.contractSize * referencePrice) / account.leverage
-        if (requiredMargin > account.freeMargin) {
+        if (!requiredMargin.isFinite() || requiredMargin <= 0.0 || requiredMargin > account.freeMargin) {
             return OrderValidationResult.Rejected(
                 OrderRejectionReason.INSUFFICIENT_MARGIN,
                 "الهامش المطلوب (${String.format("%.2f", requiredMargin)}$) يتجاوز الهامش الحر المتاح (${String.format("%.2f", account.freeMargin)}$)"
