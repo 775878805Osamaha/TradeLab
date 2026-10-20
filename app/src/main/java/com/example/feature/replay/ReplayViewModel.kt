@@ -280,8 +280,8 @@ class ReplayViewModel(
     }
 
     fun executeOrder(side: OrderSide, volume: Double = 0.01, sl: Double? = null, tp: Double? = null) {
-        val candle = _uiState.value.currentCandle ?: return
-        val tick = _uiState.value.latestTick ?: return
+        val candle = replayEngine.currentCandle.value ?: return
+        val tick = replayEngine.currentTick.value ?: return
         if (_uiState.value.isLoading || tick.symbol != _uiState.value.symbol ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
             !volume.isFinite() || volume <= 0.0) {
@@ -334,14 +334,14 @@ class ReplayViewModel(
 
     fun closePosition(posId: Long) {
         val pos = openPositions.firstOrNull { it.id == posId } ?: return
-        val tick = _uiState.value.latestTick
+        val tick = replayEngine.currentTick.value
         if (tick == null || tick.symbol != pos.symbol ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid) {
             _uiState.update { it.copy(message = "لا يمكن إغلاق الصفقة دون سعر Replay صالح") }
             return
         }
         val exitPrice = if (pos.side == PositionSide.BUY) tick.bid else tick.ask
-        val candle = _uiState.value.currentCandle
+        val candle = replayEngine.currentCandle.value
 
         val (trade, _) = executionEngine.closePosition(
             position = pos,
@@ -369,7 +369,7 @@ class ReplayViewModel(
 
     fun setBreakEven(posId: Long) {
         val pos = openPositions.firstOrNull { it.id == posId } ?: return
-        val tick = _uiState.value.latestTick ?: return
+        val tick = replayEngine.currentTick.value ?: return
         if (tick.symbol != pos.symbol ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid) {
             _uiState.update { it.copy(message = "سعر Replay غير صالح لتفعيل التعادل") }
