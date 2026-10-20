@@ -58,42 +58,60 @@ class MarketDataRepository(
         to: Long,
         pageSize: Int = 500
     ): List<Candle> = withContext(Dispatchers.IO) {
+        require(from <= to) { "Invalid candle range" }
+        require(pageSize in 1..1000) { "pageSize must be between 1 and 1000" }
         val intervalMillis = timeframe.minutes * 60_000L
-        val expectedCount = ((to - from) / intervalMillis).coerceAtLeast(1L).toInt()
+        val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
+        val local = DataIntegrityValidator.sanitizeCandles(
+            candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
+        )
+        // A synthetic historical candle must never be treated as verified exchange data.
+        val trustedLocal = if (isCrypto) {
+            local.filter { it.source == "BINANCE_HISTORICAL" || it.source == "BINANCE_HISTORICAL_CACHED" }
+        } else local
 
-        // 1. Check local Room cache
-        val localEntities = candleDao.getCandlesRange(symbol, timeframe.code, from, to)
-        if (localEntities.size >= (expectedCount * 0.9).toInt().coerceAtLeast(50)) {
-            val domainCandles = localEntities.map { it.toDomain() }
-            return@withContext DataIntegrityValidator.sanitizeCandles(domainCandles)
+        val expectedCount = ((to - from) / intervalMillis + 1).coerceAtLeast(1L)
+        val fullyCovered = trustedLocal.isNotEmpty() &&
+            trustedLocal.first().openTime <= from + intervalMillis &&
+            trustedLocal.last().openTime >= to - intervalMillis &&
+            trustedLocal.zipWithNext().all { (a, b) ->
+                b.openTime - a.openTime <= intervalMillis
+            }
+        if (fullyCovered && trustedLocal.size.toLong() >= expectedCount - 1L) {
+            return@withContext trustedLocal
         }
 
-        // 2. Fetch from provider in bounded paginated windows
-        val fetchedCandles = mutableListOf<Candle>()
-        var currentWindowStart = from
-
-        while (currentWindowStart < to && fetchedCandles.size < 5000) {
-            val windowEnd = minOf(to, currentWindowStart + (intervalMillis * pageSize))
-            val page = provider.getHistoricalCandles(symbol, timeframe, currentWindowStart, windowEnd)
-            if (page.isEmpty()) break
-
-            fetchedCandles.addAll(page)
-            currentWindowStart = windowEnd + intervalMillis
+        val fetched = mutableListOf<Candle>()
+        var cursor = from
+        try {
+            while (cursor <= to && fetched.size < 5000) {
+                val windowEnd = minOf(to, cursor + intervalMillis * (pageSize - 1L))
+                val page = provider.getHistoricalCandles(symbol, timeframe, cursor, windowEnd)
+                if (page.isEmpty()) break
+                fetched.addAll(page)
+                val lastOpen = page.maxOf { it.openTime }
+                val next = lastOpen + intervalMillis
+                if (next <= cursor) break
+                cursor = next
+            }
+        } catch (error: Exception) {
+            if (trustedLocal.isNotEmpty()) {
+                return@withContext trustedLocal.map {
+                    if (isCrypto) it.copy(source = "BINANCE_HISTORICAL_CACHED") else it
+                }
+            }
+            throw error
         }
 
-        // 3. Validate, deduplicate, and persist
-        val sanitized = DataIntegrityValidator.sanitizeCandles(fetchedCandles)
+        val sanitized = DataIntegrityValidator.sanitizeCandles(fetched)
         if (sanitized.isNotEmpty()) {
             candleDao.insertCandles(sanitized.map { it.toEntity() })
         }
-
-        // 4. Return combined chronological dataset
-        val finalEntities = candleDao.getCandlesRange(symbol, timeframe.code, from, to)
-        if (finalEntities.isNotEmpty()) {
-            DataIntegrityValidator.sanitizeCandles(finalEntities.map { it.toDomain() })
-        } else {
-            sanitized
+        val combined = DataIntegrityValidator.sanitizeCandles(trustedLocal + sanitized)
+        if (combined.isEmpty() && isCrypto) {
+            throw java.io.IOException("No verified Binance historical candles available for $symbol")
         }
+        combined
     }
 
     suspend fun clearCandlesCache(symbol: String, timeframe: Timeframe) = withContext(Dispatchers.IO) {

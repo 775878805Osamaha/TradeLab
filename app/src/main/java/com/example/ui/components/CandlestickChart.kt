@@ -85,6 +85,9 @@ fun CandlestickChart(
     var crosshairOffset by remember { mutableStateOf<Offset?>(null) }
     var inspectedCandle by remember { mutableStateOf<Candle?>(null) }
 
+    val transformRef = remember { arrayOfNulls<ChartTransform>(1) }
+    LaunchedEffect(candles) { transformRef[0] = null }
+
     // Drawing Interaction State
     var drawingStartOffset by remember { mutableStateOf<Offset?>(null) }
     var drawingCurrentOffset by remember { mutableStateOf<Offset?>(null) }
@@ -95,6 +98,7 @@ fun CandlestickChart(
             scrollOffsetPx = 0f
             candleWidthPx = 20f
             crosshairOffset = null
+            transformRef[0] = null
         }
     }
 
@@ -110,7 +114,7 @@ fun CandlestickChart(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("candlestick_canvas")
-                .transformable(state = transformableState)
+                .transformable(state = transformableState, enabled = activeDrawingTool == DrawingTool.NONE && !isCrosshairActive)
                 .pointerInput(candles, activeDrawingTool, isCrosshairActive) {
                     detectDragGestures(
                         onDragStart = { offset ->
@@ -133,10 +137,23 @@ fun CandlestickChart(
                         },
                         onDragEnd = {
                             if (activeDrawingTool != DrawingTool.NONE && drawingStartOffset != null && drawingCurrentOffset != null) {
-                                // Finalize drawing
                                 val start = drawingStartOffset!!
                                 val end = drawingCurrentOffset!!
-                                // Will be converted via transform in draw phase
+                                val transform = transformRef[0]
+                                val distance = (end - start).getDistance()
+                                if (transform != null && onAddDrawing != null && distance >= 10f) {
+                                    onAddDrawing(
+                                        ChartDrawing(
+                                            tool = activeDrawingTool,
+                                            symbol = "",
+                                            timeframe = "",
+                                            startTime = transform.xToTime(start.x),
+                                            startPrice = transform.yToPrice(start.y),
+                                            endTime = transform.xToTime(end.x),
+                                            endPrice = transform.yToPrice(end.y)
+                                        )
+                                    )
+                                }
                                 drawingStartOffset = null
                                 drawingCurrentOffset = null
                             }
@@ -197,6 +214,8 @@ fun CandlestickChart(
                 candleWidthPx = candleWidthPx,
                 rightAxisWidth = rightAxisWidth
             )
+
+            transformRef[0] = transform
 
             // Update inspected candle for Crosshair HUD
             crosshairOffset?.let { off ->

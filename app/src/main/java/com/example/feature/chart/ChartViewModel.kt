@@ -191,12 +191,22 @@ class ChartViewModel(
             val interval = tf.minutes * 60 * 1000L
             val from = now - (interval * 250)
 
-            val rawCandles = marketDataRepository.getCandles(symbol, tf, from, now)
-            val aggregated = CandleAggregator.aggregate(rawCandles, tf)
-
-            _uiState.update { it.copy(candles = aggregated, isLoading = false) }
-            recalculateIndicators(aggregated, _uiState.value.indicatorSettings)
-            subscribeToTicks(symbol)
+            try {
+                val rawCandles = marketDataRepository.getCandles(symbol, tf, from, now)
+                val aggregated = CandleAggregator.aggregate(rawCandles, tf)
+                // Ignore responses that arrive after the user changes symbol or timeframe.
+                if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf) return@launch
+                _uiState.update { it.copy(candles = aggregated, isLoading = false, message = null) }
+                recalculateIndicators(aggregated, _uiState.value.indicatorSettings)
+                subscribeToTicks(symbol)
+            } catch (error: Exception) {
+                if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
+                    _uiState.update {
+                        it.copy(candles = emptyList(), isLoading = false,
+                            message = "تعذر تحميل بيانات السوق: " + (error.message ?: "تحقق من الاتصال"))
+                    }
+                }
+            }
         }
     }
 
