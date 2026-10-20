@@ -18,6 +18,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.market.DefaultSymbols
@@ -68,8 +70,10 @@ fun TradeScreen(
                     ) {
                         Text(
                             text = uiState.selectedSymbol,
+                            style = TextStyle(textDirection = TextDirection.Ltr),
+                            maxLines = 1,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 18.sp,
+                            fontSize = 17.sp,
                             color = TradingTextPrimary
                         )
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = TradingTextSecondary)
@@ -105,7 +109,7 @@ fun TradeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             // 1. Mandatory Virtual Trading Disclaimer Banner
@@ -117,7 +121,7 @@ fun TradeScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth().testTag("trade_quote_banner"),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = TradingCard),
                     border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
                 ) {
@@ -129,7 +133,7 @@ fun TradeScreen(
                         Column {
                             Text(text = "سعر العرض (Bid)", fontSize = 11.sp, color = TradingTextSecondary)
                             val bidStr = tick?.let { symInfo.formatPrice(it.bid) } ?: "--"
-                            Text(text = bidStr, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TradingTextPrimary)
+                            Text(text = bidStr, style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TradingTextPrimary)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(text = "السبريد", fontSize = 10.sp, color = TradingTextSecondary)
@@ -144,7 +148,7 @@ fun TradeScreen(
                         Column(horizontalAlignment = Alignment.End) {
                             Text(text = "سعر الطلب (Ask)", fontSize = 11.sp, color = TradingTextSecondary)
                             val askStr = tick?.let { symInfo.formatPrice(it.ask) } ?: "--"
-                            Text(text = askStr, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TradingCyan)
+                            Text(text = askStr, style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TradingCyan)
                         }
                     }
                 }
