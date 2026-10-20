@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -81,9 +82,9 @@ class MainActivity : ComponentActivity() {
                                 NavigationBar(
                                     containerColor = TradingCard,
                                     modifier = Modifier
-                                        .testTag("bottom_nav_bar")
-                                        .windowInsetsPadding(WindowInsets.navigationBars),
-                                    tonalElevation = 8.dp
+                                        .testTag("bottom_nav_bar"),
+                                    windowInsets = NavigationBarDefaults.windowInsets,
+                                    tonalElevation = 0.dp
                                 ) {
                                     Screen.bottomNavItems.forEach { screen ->
                                         val isSelected = currentRoute == screen.route
@@ -110,6 +111,13 @@ class MainActivity : ComponentActivity() {
                                                     style = MaterialTheme.typography.labelSmall
                                                 )
                                             },
+                                            colors = NavigationBarItemDefaults.colors(
+                                                selectedIconColor = com.example.ui.theme.TradingAccent,
+                                                selectedTextColor = com.example.ui.theme.TradingAccent,
+                                                unselectedIconColor = com.example.ui.theme.TradingTextSecondary,
+                                                unselectedTextColor = com.example.ui.theme.TradingTextSecondary,
+                                                indicatorColor = Color.Transparent
+                                            ),
                                             modifier = Modifier.testTag("nav_item_${screen.route}")
                                         )
                                     }
