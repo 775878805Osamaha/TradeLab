@@ -130,17 +130,23 @@ class MarketDataRepository(
         }.getOrDefault(emptyList())
         val fetched = mutableListOf<Candle>()
         var cursor = from
+        var cachedIndex = 0
         try {
             while (cursor <= to && fetched.size < 20_000) {
                 currentCoroutineContext().ensureActive()
                 val windowEnd = minOf(to, cursor + intervalMillis * (pageSize - 1L))
-                // The validated cache is timestamp-sorted. Binary-search the
-                // page boundaries instead of scanning up to 20,000 bars per page.
-                val startIndex = validCached.binarySearchBy(cursor) { it.openTime }
-                    .let { if (it < 0) -it - 1 else it }
-                val endIndex = validCached.binarySearchBy(windowEnd) { it.openTime }
-                    .let { if (it < 0) -it - 1 else it + 1 }
-                val cachedPage = validCached.subList(startIndex, endIndex)
+                // Both the cursor and validated cache are monotonically ordered.
+                // Advance the cache index once instead of searching for each page.
+                while (cachedIndex < validCached.size &&
+                    validCached[cachedIndex].openTime < cursor) {
+                    cachedIndex++
+                }
+                val startIndex = cachedIndex
+                while (cachedIndex < validCached.size &&
+                    validCached[cachedIndex].openTime <= windowEnd) {
+                    cachedIndex++
+                }
+                val cachedPage = validCached.subList(startIndex, cachedIndex)
                 if (HistoricalCandleCoverage.isComplete(cachedPage, cursor, windowEnd, intervalMillis)) {
                     cursor = cachedPage.last().openTime + intervalMillis
                     yield()
