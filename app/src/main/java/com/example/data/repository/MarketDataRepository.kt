@@ -75,14 +75,12 @@ class MarketDataRepository(
             local.filter { it.source == "BINANCE_HISTORICAL" || it.source == "BINANCE_HISTORICAL_CACHED" }
         } else local
 
-        val expectedCount = ((to - from) / intervalMillis + 1).coerceAtLeast(1L)
-        val fullyCovered = trustedLocal.isNotEmpty() &&
-            trustedLocal.first().openTime <= from + intervalMillis &&
-            trustedLocal.last().openTime >= to - intervalMillis &&
-            trustedLocal.zipWithNext().all { (a, b) ->
-                b.openTime - a.openTime <= intervalMillis
-            }
-        if (fullyCovered && trustedLocal.size.toLong() >= expectedCount - 1L) {
+        // A candle cache is complete only when every expected bar exists.
+        // Never mistake sparse history for a complete backtest window.
+        val fullyCovered = HistoricalCandleCoverage.isComplete(
+            trustedLocal, from, to, intervalMillis
+        )
+        if (fullyCovered) {
             return@withContext trustedLocal
         }
 
