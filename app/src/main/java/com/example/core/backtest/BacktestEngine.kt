@@ -132,7 +132,7 @@ class BacktestEngine(
         // 2. Validate, deduplicate, and sort chronologically (Strict Zero-Lookahead)
         val cleanCandles = DataIntegrityValidator.sanitizeCandles(rangeFiltered)
 
-        if (cleanCandles.size < 15) {
+        if (cleanCandles.size <= 15) {
             val emptyMetrics = StatisticsCalculator.calculate(config.initialBalance, emptyList())
             onProgress?.invoke(BacktestProgressStage.COMPLETED, 1.0f)
             val emptyRun = BacktestRun(
@@ -210,6 +210,10 @@ class BacktestEngine(
             val historicalCandlesSoFar = cleanCandles.subList(0, i + 1)
 
             val halfSpread = (config.spreadPips * symInfo.pipSize) / 2.0
+            // The configured spread cannot produce a non-positive bid.
+            require(currentCandle.close > halfSpread && halfSpread.isFinite()) {
+                "Configured spread exceeds the available candle price"
+            }
             val tick = Tick(
                 symbol = config.symbol,
                 bid = currentCandle.close - halfSpread,
