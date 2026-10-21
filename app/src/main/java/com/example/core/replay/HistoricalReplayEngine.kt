@@ -126,7 +126,7 @@ class HistoricalReplayEngine(
      * Reverses replay by one candle safely.
      */
     fun stepBackward(): Boolean {
-        if (_currentIndex.value > 1) {
+        if (_currentIndex.value > 0) {
             _currentIndex.value--
             // Rewinding only restores chart/clock; ViewModel restores the financial
             // snapshot. Re-running strategies or SL/TP here corrupts trade history.
@@ -151,9 +151,16 @@ class HistoricalReplayEngine(
 
     fun jumpToTimestamp(targetTimestamp: Long) {
         if (allCandles.isEmpty()) return
-        val foundIndex = allCandles.indexOfFirst { it.openTime >= targetTimestamp }
-        val targetIdx = if (foundIndex != -1) foundIndex else allCandles.lastIndex
-        jumpToIndex(targetIdx)
+        // Candles are sanitized into chronological order on initialize().
+        // Binary search avoids scanning the entire history for each seek.
+        var low = 0
+        var high = allCandles.size
+        while (low < high) {
+            val mid = low + (high - low) / 2
+            if (allCandles[mid].openTime < targetTimestamp) low = mid + 1
+            else high = mid
+        }
+        jumpToIndex(low.coerceAtMost(allCandles.lastIndex))
     }
 
     fun setSpeed(speedFactor: Float) {

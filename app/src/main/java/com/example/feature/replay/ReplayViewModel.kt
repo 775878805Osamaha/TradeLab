@@ -220,7 +220,7 @@ class ReplayViewModel(
     fun stepBackward() {
         replayEngine.pause()
         val targetIndex = replayEngine.currentIndex.value - 1
-        if (targetIndex < 1) {
+        if (targetIndex < 0) {
             _uiState.update { it.copy(message = "وصلت إلى بداية بيانات Replay") }
             return
         }
