@@ -413,7 +413,7 @@ class BacktestEngine(
                             }
                         }
 
-                        if (!lotSize.isFinite() || lotSize <= 0.0) continue
+                        if (lotSize.isFinite() && lotSize > 0.0) {
                         // The execution engine is the source of truth for
                         // fill price, slippage, margin and order validation.
                         // Do not duplicate an approximate margin check here.
@@ -431,6 +431,7 @@ class BacktestEngine(
 
                         if (execResult is ExecutionResult.Success) {
                             openPositions.add(execResult.position.copy(id = nextPositionId++))
+                        }
                         }
                     }
                 }
