@@ -18,6 +18,18 @@ class PendingExecutionStateTests {
         type = type, volume = 0.01, requestedPrice = 100.0
     )
 
+    @Test fun pendingOrderCannotExecuteOnDifferentAccount() {
+        val foreign = order().copy(accountId = 999L)
+        val result = engine.evaluatePendingOrder(foreign, tick, account)
+        assertTrue(result is ExecutionResult.Error)
+    }
+
+    @Test fun pendingOrderCannotExecuteAgainstAnotherAccountsBalance() {
+        val otherAccount = account.copy(id = 2L)
+        val result = engine.evaluatePendingOrder(order(), tick, otherAccount)
+        assertTrue(result is ExecutionResult.Error)
+    }
+
     @Test fun filledCancelledAndExpiredOrdersCannotExecuteAgain() {
         for (status in listOf(OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.EXPIRED, OrderStatus.REJECTED)) {
             val result = engine.evaluatePendingOrder(order().copy(status = status), tick, account)
