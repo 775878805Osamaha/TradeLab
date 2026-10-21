@@ -16,6 +16,13 @@ class QuotePriceFormatterTest {
         assertEquals("—", QuotePriceFormatter.spread(-1.0))
     }
 
+    @Test fun tinyPositiveQuotesAreNotRoundedToZero() {
+        assertEquals("0.000000000123", QuotePriceFormatter.price(0.000000000123))
+        assertEquals("0.000000000123", QuotePriceFormatter.spread(0.000000000123))
+        assertEquals("0.00", QuotePriceFormatter.price(0.0))
+        assertEquals("—", QuotePriceFormatter.price(-1.0))
+    }
+
     @Test fun retainsSmallRawSpreads() {
         assertEquals("0.00012000", QuotePriceFormatter.spread(0.00012))
         assertEquals("0.250000", QuotePriceFormatter.spread(0.25))
