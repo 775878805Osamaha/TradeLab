@@ -195,4 +195,29 @@ class ReplayRewindSafetyTests {
         assertEquals(104.0, close.exitPrice, 0.0001)
     }
 
+    @Test fun replayRejectsCrossSymbolPositionRiskEvaluation() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        val position = com.example.core.model.Position(
+            id = 1L, accountId = 1L, symbol = "ETHUSDT",
+            side = com.example.core.model.PositionSide.BUY,
+            volume = 0.01, entryPrice = 100.0, currentPrice = 100.0,
+            stopLoss = 99.0, takeProfit = 105.0
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            engine.evaluatePositionConservative(position, candle(4))
+        }
+    }
+
+    @Test fun replayRejectsNonFiniteRiskInputs() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        val position = com.example.core.model.Position(
+            id = 1L, accountId = 1L, symbol = "BTCUSDT",
+            side = com.example.core.model.PositionSide.BUY,
+            volume = Double.NaN, entryPrice = 100.0, currentPrice = 100.0
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            engine.evaluatePositionConservative(position, candle(4))
+        }
+    }
+
 }
