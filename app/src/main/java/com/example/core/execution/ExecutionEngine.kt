@@ -125,6 +125,7 @@ class ExecutionEngine(
         // Never execute an order already filled, cancelled, rejected or expired.
         // Explicit BUY/SELL order types must also agree with their direction.
         if (order.status != OrderStatus.PENDING ||
+            order.type == OrderType.MARKET ||
             when (order.type) {
                 OrderType.BUY_LIMIT, OrderType.BUY_STOP -> order.direction != OrderSide.BUY
                 OrderType.SELL_LIMIT, OrderType.SELL_STOP -> order.direction != OrderSide.SELL
