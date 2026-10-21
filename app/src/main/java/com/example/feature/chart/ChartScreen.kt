@@ -1,3 +1,25 @@
+            if (showQuickOrders) {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { showExtraControls = !showExtraControls }, modifier = Modifier.testTag("chart_controls_toggle")) {
+                    Icon(Icons.Default.Tune, contentDescription = null)
+                    Text(" ${uiState.selectedTimeframe.displayName}")
+                }
+                IconButton(onClick = { showIndicatorsDialog = true }) {
+                    Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
+                }
+                IconButton(onClick = { showToolsMenu = true }) {
+                    Icon(Icons.Default.Draw, contentDescription = "الرسم", tint = TradingAccentLight)
+                }
+                IconButton(onClick = { viewModel.triggerResetView() }) {
+                    Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط الشارت", tint = TradingAccentLight)
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { showQuickOrders = !showQuickOrders }, modifier = Modifier.testTag("chart_orders_toggle")) {
+                    Text(if (showQuickOrders) "إخفاء" else "تداول")
+                }
+            }
+            if (showExtraControls) {
 package com.example.feature.chart
 
 import androidx.compose.foundation.background
@@ -52,6 +74,8 @@ fun ChartScreen(
     var showQuickTrade by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
+    var showExtraControls by remember { mutableStateOf(false) }
+    var showQuickOrders by remember { mutableStateOf(false) }
     var showChartControls by remember { mutableStateOf(false) }
     var showReplayControls by remember { mutableStateOf(false) }
     var showChartOptions by remember { mutableStateOf(false) }
@@ -446,6 +470,7 @@ fun ChartScreen(
                 }
             }
 
+            }
             // Market data provenance: never present missing or stale quotes as live.
             val marketTick = uiState.latestTick
             val marketTickIsLive = marketTick != null &&
@@ -640,7 +665,8 @@ fun ChartScreen(
                         }
                     }
                 }
-            }
+            }            }
+
         }
     }
 
