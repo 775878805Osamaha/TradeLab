@@ -56,6 +56,7 @@ class TradeViewModel(
     val uiState: StateFlow<TradeUiState> = _uiState.asStateFlow()
 
     private var tickJob: Job? = null
+    private var candleLoadJob: Job? = null
     private var lastOrderExecutionTime = 0L
 
     init {
@@ -86,7 +87,13 @@ class TradeViewModel(
 
     fun selectSymbol(symbol: String) {
         val symInfo = DefaultSymbols.getSymbol(symbol)
-        _uiState.update { it.copy(selectedSymbol = symInfo.symbol, volume = symInfo.minLot.toString()) }
+        _uiState.update {
+            it.copy(
+                selectedSymbol = symInfo.symbol, volume = symInfo.minLot.toString(),
+                latestTick = null, candles = emptyList(), riskAnalysis = null,
+                message = null, isOrderPreviewVisible = false
+            )
+        }
         subscribeToSymbolTicks(symInfo.symbol)
         loadCandles(symInfo.symbol)
         recalculateRisk()
@@ -377,10 +384,17 @@ class TradeViewModel(
     }
 
     private fun loadCandles(symbol: String) {
-        viewModelScope.launch {
-            val now = System.currentTimeMillis()
-            val candles = marketDataRepository.getCandles(symbol, Timeframe.M15, now - 86400000L, now)
-            _uiState.update { it.copy(candles = candles) }
+        candleLoadJob?.cancel()
+        candleLoadJob = viewModelScope.launch {
+            val result = loadTradeCandles(symbol) {
+                val now = System.currentTimeMillis()
+                marketDataRepository.getCandles(symbol, Timeframe.M15, now - 86_400_000L, now)
+            }
+            _uiState.update { state ->
+                if (state.selectedSymbol == symbol) {
+                    state.copy(candles = result.candles, message = result.message)
+                } else state
+            }
         }
     }
 
@@ -388,6 +402,7 @@ class TradeViewModel(
         tickJob?.cancel()
         tickJob = viewModelScope.launch {
             marketDataRepository.observeTicks(symbol).collect { tick ->
+                if (_uiState.value.selectedSymbol != symbol || tick.symbol != symbol) return@collect
                 _uiState.update { it.copy(latestTick = tick) }
                 tradingRepository.onTickUpdate(tick)
                 recalculateRisk()
