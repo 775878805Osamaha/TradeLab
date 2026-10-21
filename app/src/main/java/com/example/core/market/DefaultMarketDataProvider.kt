@@ -94,7 +94,12 @@ class DefaultMarketDataProvider(
         // Observe WebSocket connection status
         scope.launch {
             binanceWsClient?.connectionStatus?.collect { status ->
-                _connectionStatus.value = status
+                // An open socket is not proof of a usable quote. The
+                // health monitor owns CONNECTED/DEGRADED after first tick.
+                if (status != ProviderConnectionStatus.CONNECTED ||
+                    hasFreshVerifiedQuote()) {
+                    _connectionStatus.value = status
+                }
                 updateDiagnostics()
             }
         }
@@ -384,16 +389,24 @@ class DefaultMarketDataProvider(
 
     }
 
+    private fun hasFreshVerifiedQuote(now: Long = System.currentTimeMillis()): Boolean =
+        latestTicks.values.any { tick ->
+            tick.symbol in setOf("BTCUSDT", "ETHUSDT") &&
+                tick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
+                now - tick.timestamp in 0..15_000L
+        }
+
     private fun startHealthCheck() {
         healthCheckJob?.cancel()
         healthCheckJob = scope.launch {
             while (isActive) {
-                delay(5000)
-                val elapsed = System.currentTimeMillis() - _lastSuccessfulUpdate.value
-                val isStale = _lastSuccessfulUpdate.value == 0L || elapsed > 15000L // 15 seconds stale threshold
-                if (isStale && _connectionStatus.value == ProviderConnectionStatus.CONNECTED) {
-                    _connectionStatus.value = ProviderConnectionStatus.DEGRADED
-                    _dataSourceType.value = DataSourceType.STALE_DATA
+                delay(3000)
+                val fresh = hasFreshVerifiedQuote()
+                _dataSourceType.value = if (fresh) DataSourceType.LIVE_DATA
+                    else DataSourceType.STALE_DATA
+                if (_isConnected.value) {
+                    _connectionStatus.value = if (fresh) ProviderConnectionStatus.CONNECTED
+                        else ProviderConnectionStatus.DEGRADED
                 }
                 updateDiagnostics()
             }
@@ -402,8 +415,7 @@ class DefaultMarketDataProvider(
 
     private fun updateDiagnostics() {
         val now = System.currentTimeMillis()
-        val elapsed = now - _lastSuccessfulUpdate.value
-        val isStale = elapsed > 15000L
+        val isStale = !hasFreshVerifiedQuote(now)
 
         _diagnosticInfo.value = MarketDataDiagnostic(
             providerName = providerName,
