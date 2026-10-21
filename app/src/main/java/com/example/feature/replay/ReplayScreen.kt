@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -203,7 +204,7 @@ fun ReplayScreen(
                 color = TradingCard,
                 border = androidx.compose.foundation.BorderStroke(1.dp, TradingBorder)
             ) {
-                Column(modifier = Modifier.padding(10.dp)) {
+                Column(modifier = Modifier.heightIn(max = 330.dp).verticalScroll(rememberScrollState()).padding(10.dp)) {
                     // Replay Speed Selector: 0.5x, 1x, 2x, 5x, 10x, 25x, 50x, 100x
                     Row(
                         modifier = Modifier
