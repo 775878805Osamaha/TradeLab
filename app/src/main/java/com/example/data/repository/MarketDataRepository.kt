@@ -64,6 +64,12 @@ class MarketDataRepository(
         require(to <= Long.MAX_VALUE - timeframe.minutes * 60_000L) { "Candle range overflow" }
         require(pageSize in 1..1000) { "pageSize must be between 1 and 1000" }
         val intervalMillis = timeframe.minutes * 60_000L
+        // Avoid silently returning partial history after the pagination safety cap.
+        // Large ranges should be requested in separate bounded chunks by the caller.
+        val requestedBars = (to - from) / intervalMillis + 1L
+        require(requestedBars <= 5000L) {
+            "Historical range exceeds 5000 candles. Request a shorter range."
+        }
         val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
         if (!isCrypto) {
             throw java.io.IOException("No verified live/historical provider for $symbol. Demo candles are disabled.")
@@ -72,9 +78,11 @@ class MarketDataRepository(
             candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
         )
         // A synthetic historical candle must never be treated as verified exchange data.
-        val trustedLocal = if (isCrypto) {
-            local.filter { it.source == "BINANCE_HISTORICAL" || it.source == "BINANCE_HISTORICAL_CACHED" }
-        } else local
+        val trustedLocal = local.filter { candle ->
+            candle.symbol.equals(symbol, ignoreCase = true) &&
+                candle.timeframe == timeframe &&
+                (candle.source == "BINANCE_HISTORICAL" || candle.source == "BINANCE_HISTORICAL_CACHED")
+        }
 
         // A candle cache is complete only when every expected bar exists.
         // Never mistake sparse history for a complete backtest window.
