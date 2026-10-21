@@ -36,6 +36,8 @@ class BinanceWebSocketClient(
     private var webSocket: WebSocket? = null
     private var isExplicitlyStopped = false
     private var reconnectJob: Job? = null
+    private var endpointIndex = 0
+    private val endpoints = listOf("wss://stream.binance.com:9443", "wss://stream.binance.com:443", "wss://data-stream.binance.vision")
 
     private val okHttpClient = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
@@ -62,7 +64,7 @@ class BinanceWebSocketClient(
         _connectionStatus.value = if (_reconnectAttempts.value > 0) ProviderConnectionStatus.RECONNECTING else ProviderConnectionStatus.CONNECTING
 
         val request = Request.Builder()
-            .url("wss://stream.binance.com:9443/stream?streams=btcusdt@bookTicker/ethusdt@bookTicker/btcusdt@kline_1m/ethusdt@kline_1m")
+            .url("${endpoints[endpointIndex]}/stream?streams=btcusdt@bookTicker/ethusdt@bookTicker/btcusdt@kline_1m/ethusdt@kline_1m")
             .build()
 
         webSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
@@ -144,6 +146,7 @@ class BinanceWebSocketClient(
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
             _reconnectAttempts.value += 1
+            endpointIndex = (endpointIndex + 1) % endpoints.size
             _connectionStatus.value = ProviderConnectionStatus.RECONNECTING
 
             // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s + jitter
