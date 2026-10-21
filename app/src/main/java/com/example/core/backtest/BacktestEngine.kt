@@ -272,6 +272,10 @@ class BacktestEngine(
                 }
             }
 
+            // The account and equity snapshot must reflect the current bar
+            // after all intrabar exits have been processed.
+            // Strategy actions at this close are reconciled at the next bar,
+            // except for the terminal snapshot which is finalized below.
             // Step 3: Floating equity, margin, and drawdown calculation
             val floatingPl = openPositions.sumOf { it.profitLoss }
             val usedMargin = openPositions.sumOf { it.margin }
