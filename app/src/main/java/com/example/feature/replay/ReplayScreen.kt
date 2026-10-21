@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.sp
 import com.example.core.indicators.TechnicalIndicators
 import com.example.feature.chart.ChartIndicatorsDialog
 import com.example.feature.chart.model.IndicatorSettings
+import com.example.feature.chart.model.DrawingTool
+import com.example.feature.chart.model.ChartDrawing
 import com.example.core.model.DataSourceType
 import com.example.core.model.OrderSide
 import com.example.core.model.OrderType
@@ -58,6 +60,8 @@ fun ReplayScreen(
     val macdValues = remember(indicatorCandles, indicatorSettings) { if (indicatorSettings.isMacdEnabled) TechnicalIndicators.calculateMacd(indicatorCandles, indicatorSettings.macdFast, indicatorSettings.macdSlow, indicatorSettings.macdSignal) else emptyList() }
     val atrValues = remember(indicatorCandles, indicatorSettings) { if (indicatorSettings.isAtrEnabled) TechnicalIndicators.calculateAtr(indicatorCandles, indicatorSettings.atrPeriod) else emptyList() }
     var crosshairEnabled by remember { mutableStateOf(false) }
+    var activeDrawingTool by remember { mutableStateOf(DrawingTool.NONE) }
+    val replayDrawings = remember(uiState.symbol, uiState.timeframe) { mutableStateListOf<ChartDrawing>() }
     var volumeVisible by remember { mutableStateOf(true) }
     var replayChartStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var chartResetTrigger by remember { mutableLongStateOf(0L) }
@@ -243,6 +247,35 @@ fun ReplayScreen(
                 ) { Text("إعادة ضبط الشارت", fontSize = 11.sp) }
             }
 
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 10.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                DrawingTool.entries.forEach { tool ->
+                    FilterChip(
+                        selected = activeDrawingTool == tool,
+                        onClick = {
+                            activeDrawingTool = tool
+                            if (tool != DrawingTool.NONE) crosshairEnabled = false
+                        },
+                        label = { Text(tool.displayNameAr, fontSize = 10.sp) },
+                        modifier = Modifier.testTag("replay_drawing_${tool.name.lowercase(Locale.US)}")
+                    )
+                }
+                TextButton(
+                    enabled = replayDrawings.isNotEmpty(),
+                    onClick = { replayDrawings.removeAt(replayDrawings.lastIndex) },
+                    modifier = Modifier.testTag("replay_drawing_undo")
+                ) { Text("تراجع عن الرسم") }
+                TextButton(
+                    enabled = replayDrawings.isNotEmpty(),
+                    onClick = { replayDrawings.clear() },
+                    modifier = Modifier.testTag("replay_drawing_clear")
+                ) { Text("مسح الرسومات") }
+            }
+
             // 2. Large Central Candlestick Chart (Zero future candles, strictly visible subset!)
             Box(
                 modifier = Modifier
@@ -258,6 +291,20 @@ fun ReplayScreen(
                     isCrosshairActive = crosshairEnabled,
                     isVolumeVisible = volumeVisible,
                     resetViewTrigger = chartResetTrigger,
+                    activeDrawingTool = activeDrawingTool,
+                    drawings = replayDrawings,
+                    onAddDrawing = { drawing ->
+                        if (drawing.startPrice.isFinite() && drawing.startPrice > 0.0 &&
+                            (drawing.endPrice == null || (drawing.endPrice.isFinite() && drawing.endPrice > 0.0)) &&
+                            drawing.startTime <= (uiState.currentCandle?.openTime ?: Long.MIN_VALUE) &&
+                            (drawing.endTime == null || drawing.endTime <= (uiState.currentCandle?.openTime ?: Long.MIN_VALUE))) {
+                            replayDrawings.add(drawing.copy(
+                                id = (replayDrawings.lastOrNull()?.id ?: 0L) + 1L,
+                                symbol = uiState.symbol,
+                                timeframe = uiState.timeframe.name
+                            ))
+                        }
+                    },
                     displayStyle = replayChartStyle,
                     indicatorSettings = indicatorSettings,
                     smaValues = smaValues,
