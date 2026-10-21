@@ -184,13 +184,25 @@ class MarketDataRepository(
         if (!HistoricalCandleCoverage.isComplete(combined, from, to, intervalMillis)) {
             throw java.io.IOException("Incomplete verified Binance history for $symbol")
         }
+        // Completeness only verifies timestamps/count. Validate every returned
+        // OHLC value and provenance before handing candles to the backtester.
+        val verifiedCombined = HistoricalCandleIntegrity.validate(
+            combined,
+            requestedFrom = from,
+            requestedTo = to + intervalMillis,
+            expectedSymbol = symbol,
+            expectedTimeframe = timeframe
+        )
+        require(verifiedCombined.all {
+            it.source == "BINANCE_HISTORICAL" || it.source == "BINANCE_HISTORICAL_CACHED"
+        }) { "Unverified historical source for $symbol" }
         // Cancellation after the final page must not commit stale history.
         currentCoroutineContext().ensureActive()
         // Persist only after the entire requested range has passed validation.
         if (sanitized.isNotEmpty()) {
             candleDao.insertCandles(sanitized.map { it.toEntity() })
         }
-        combined
+        verifiedCombined
     }
 
     suspend fun clearCandlesCache(symbol: String, timeframe: Timeframe) = withContext(Dispatchers.IO) {
