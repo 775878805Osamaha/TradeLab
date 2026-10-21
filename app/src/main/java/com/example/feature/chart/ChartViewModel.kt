@@ -290,6 +290,7 @@ class ChartViewModel(
         klineRefreshJob?.cancel()
         if (symbol != "BTCUSDT" && symbol != "ETHUSDT") return
         klineRefreshJob = viewModelScope.launch {
+            var lastSuccessfullyRefreshedOpen = Long.MIN_VALUE
             while (isActive) {
                 delay(10_000L)
                 if (_uiState.value.selectedSymbol != symbol ||
@@ -302,10 +303,15 @@ class ChartViewModel(
                     // verified closed candle and can repaint the chart.
                     val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
                         .currentOpen(now, interval) - interval
+                    // One successful fetch per completed candle is sufficient.
+                    // Repeating the same historical request every 10 seconds
+                    // wastes bandwidth and risks exchange rate limits.
+                    if (lastClosedOpen == lastSuccessfullyRefreshedOpen) continue
                     val fresh = marketDataRepository.provider.getHistoricalCandles(
                         symbol, timeframe, lastClosedOpen, lastClosedOpen
                     )
                     if (fresh.isEmpty()) continue
+                    lastSuccessfullyRefreshedOpen = lastClosedOpen
                     if (_uiState.value.selectedSymbol != symbol ||
                         _uiState.value.selectedTimeframe != timeframe) break
                     val previous = _uiState.value.candles
