@@ -59,7 +59,8 @@ class MarketDataRepository(
         to: Long,
         pageSize: Int = 500
     ): List<Candle> = withContext(Dispatchers.IO) {
-        require(from <= to) { "Invalid candle range" }
+        require(from >= 0 && from < to) { "Invalid candle range" }
+        require(to <= Long.MAX_VALUE - timeframe.minutes * 60_000L) { "Candle range overflow" }
         require(pageSize in 1..1000) { "pageSize must be between 1 and 1000" }
         val intervalMillis = timeframe.minutes * 60_000L
         val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
