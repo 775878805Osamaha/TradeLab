@@ -397,7 +397,11 @@ class BacktestEngine(
                     if (canOpen) {
                         val lotSize = when (config.positionSizingMode) {
                             PositionSizingMode.FIXED_LOT -> {
-                                (signal.suggestedVolume ?: config.fixedLot).coerceIn(symInfo.minLot, symInfo.maxLot)
+                                BacktestLotSizing.fixedLot(
+                                    signal.suggestedVolume ?: config.fixedLot,
+                                    symInfo.minLot,
+                                    symInfo.maxLot
+                                )
                             }
                             PositionSizingMode.RISK_PERCENTAGE -> {
                                 val slDistancePips = if (signal.stopLoss != null) {
@@ -413,7 +417,7 @@ class BacktestEngine(
                             }
                         }
 
-                        if (lotSize.isFinite() && lotSize > 0.0) {
+                        if (lotSize != null && lotSize.isFinite() && lotSize > 0.0) {
                         // The execution engine is the source of truth for
                         // fill price, slippage, margin and order validation.
                         // Do not duplicate an approximate margin check here.
