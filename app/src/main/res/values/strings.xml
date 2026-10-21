@@ -117,4 +117,24 @@
     <string name="daily_pl">الربح/الخسارة اليومية</string>
     <string name="remaining_daily_loss">المتبقي من حد الخسارة اليومي</string>
     <string name="remaining_max_loss">المتبقي من أقصى تراجع كلي</string>
+    <string name="history_title">بيانات الباك تيست — Twelve Data</string>
+    <string name="history_key_label">مفتاح Twelve Data</string>
+    <string name="history_key_required">أضف مفتاح Twelve Data من الإعدادات لتنزيل بيانات الذهب والفوركس.</string>
+    <string name="history_symbol_error">هذا الرمز غير مدعوم في مصدر البيانات التاريخية.</string>
+    <string name="history_interval_error">الفاصل غير مدعوم حالياً. اختر دقيقة، 5، 15، 30 دقيقة، ساعة، ساعتين، 4 ساعات أو يوم.</string>
+    <string name="history_range_error">الفترة غير صالحة أو تتجاوز 10000 شمعة. اختر فترة أقصر أو فاصلاً أكبر.</string>
+    <string name="history_access_error">تحقق من مفتاح Twelve Data وصلاحية اشتراكك للوصول إلى هذا الرمز.</string>
+    <string name="history_limit_error">وصلت إلى حد طلبات Twelve Data. انتظر ثم أعد المحاولة؛ لم يتم تشغيل اختبار جزئي.</string>
+    <string name="history_network_error">تعذر تنزيل البيانات التاريخية. تحقق من الاتصال ثم أعد المحاولة.</string>
+    <string name="history_invalid_error">رفضت بيانات غير صالحة أو غير مطابقة للرمز والفاصل المطلوبين.</string>
+    <string name="history_empty_error">لا تتوفر بيانات للفترة المطلوبة أو أنها غير مشمولة في اشتراكك.</string>
+    <string name="history_source_note">الذهب والفوركس: شموع تاريخية من Twelve Data للباك تيست، وليست أسعار تنفيذ لحظية.</string>
+    <string name="history_disclosure">المصدر: Twelve Data · شموع مكتملة بتوقيت UTC. السبريد والانزلاق افتراضات. قد توجد فجوات أو جلسات مغلقة. الحجم غير المتاح يسجل بصفر؛ تجنب استراتيجيات الحجم. لا تُضمن المطابقة مع مصدر TradingView آخر.</string>
+    <string name="history_help">أدخل مفتاحك مرة واحدة؛ يحفظ مشفراً على هذا الجهاز. تعاد قراءة الفترات المحملة محلياً، مع حد تخزين 32 ميجابايت. توفر الذهب وعمق التاريخ يعتمدان على اشتراكك.</string>
+    <string name="history_save">حفظ المفتاح</string>
+    <string name="history_remove">حذف المفتاح</string>
+    <string name="history_saved">المفتاح محفوظ؛ لم يتم التحقق من الاشتراك بعد.</string>
+    <string name="history_removed">تم حذف المفتاح.</string>
+    <string name="history_save_error">تعذر حفظ المفتاح على الجهاز.</string>
+    <string name="history_configured">يوجد مفتاح محفوظ على الجهاز.</string>
 </resources>

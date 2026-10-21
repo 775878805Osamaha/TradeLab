@@ -136,6 +136,13 @@ fun ReplayScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            if (uiState.symbol in com.example.core.history.TwelveDataHistory.SYMBOLS) {
+                Text(
+                    text = androidx.compose.ui.res.stringResource(com.example.R.string.history_disclosure),
+                    fontSize = 11.sp, color = TradingTextSecondary,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
             // 1. Mandatory Historical Replay Zero Lookahead Info Banner
             Surface(
                 color = TradingCard,

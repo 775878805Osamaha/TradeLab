@@ -179,12 +179,6 @@ class ReplayViewModel(
                 isPlaying = false
             )
         }
-        if (symbol !in setOf("BTCUSDT", "ETHUSDT")) {
-            _uiState.update {
-                it.copy(isLoading = false, message = "لا تتوفر بيانات تاريخية معتمدة لهذا الرمز. اختر BTCUSDT أو ETHUSDT.")
-            }
-            return
-        }
         replayLoadJob = viewModelScope.launch {
             try {
                 val now = System.currentTimeMillis()
@@ -193,7 +187,7 @@ class ReplayViewModel(
                 val candles = marketDataRepository.getCandles(symbol, tf, from, now)
                 if (candles.isEmpty()) {
                     _uiState.update {
-                        it.copy(isLoading = false, message = "لا توجد شموع تاريخية موثوقة لهذا الرمز. اختر BTCUSDT أو ETHUSDT.")
+                        it.copy(isLoading = false, message = "لا توجد شموع تاريخية موثوقة للفترة المطلوبة.")
                     }
                     return@launch
                 }
@@ -206,7 +200,7 @@ class ReplayViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        message = "تعذر تحميل بيانات إعادة العرض لهذا الرمز. اختر BTCUSDT أو ETHUSDT وتحقق من الاتصال."
+                        message = error.message ?: "تعذر تحميل بيانات إعادة العرض."
                     )
                 }
             }

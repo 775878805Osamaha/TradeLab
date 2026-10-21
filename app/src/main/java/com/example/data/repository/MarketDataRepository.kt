@@ -18,7 +18,8 @@ import kotlinx.coroutines.withContext
 class MarketDataRepository(
     val provider: DefaultMarketDataProvider,
     private val candleDao: CandleDao,
-    private val symbolDao: SymbolDao
+    private val symbolDao: SymbolDao,
+    private val forexHistory: com.example.core.history.TwelveDataHistory? = null
 ) {
 
     val providerDiagnostics: StateFlow<MarketDataDiagnostic> = provider.diagnosticInfo
@@ -63,7 +64,8 @@ class MarketDataRepository(
         val intervalMillis = timeframe.minutes * 60_000L
         val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
         if (!isCrypto) {
-            throw java.io.IOException("No verified live/historical provider for $symbol. Demo candles are disabled.")
+            val history = forexHistory ?: throw java.io.IOException("Historical provider is not configured")
+            return@withContext history.load(symbol, timeframe, from, to)
         }
         val local = DataIntegrityValidator.sanitizeCandles(
             candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
@@ -97,6 +99,8 @@ class MarketDataRepository(
                 if (next <= cursor) break
                 cursor = next
             }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             if (trustedLocal.isNotEmpty()) {
                 return@withContext trustedLocal.map {

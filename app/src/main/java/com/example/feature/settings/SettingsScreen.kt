@@ -58,6 +58,8 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
+            item { HistorySettingsCard() }
+
             // Live Connectivity & Quality Diagnostic Card (Section 36)
             item {
                 Card(
@@ -124,7 +126,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "• BTCUSDT و ETHUSDT متصلان مباشرة ببيانات السوق اللحظية عبر Binance Public WebSocket.\n" +
-                                    "• XAUUSD والعملات الأخرى تعمل بنظام Benchmark مسجل ومحدد بعلامة DEMO DATA واضحة.\n" +
+                                    androidx.compose.ui.res.stringResource(com.example.R.string.history_source_note) + "\n" +
                                     "• التطبيق لا يتصل بأي وسيط مالي، ولا يدعم التداول بأموال حقيقية نهائياً. كل الأوامر افتراضية 100%.",
                             fontSize = 12.sp,
                             color = TradingTextSecondary,
