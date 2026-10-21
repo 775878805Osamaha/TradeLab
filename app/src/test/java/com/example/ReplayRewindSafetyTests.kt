@@ -126,7 +126,7 @@ class ReplayRewindSafetyTests {
             id = 1L, accountId = 1L, symbol = "BTCUSDT",
             side = com.example.core.model.PositionSide.BUY, volume = 0.01,
             entryPrice = 104.0, currentPrice = 104.0,
-            stopLoss = 101.0, takeProfit = 110.0
+            stopLoss = 104.0, takeProfit = 110.0
         )
         var open = true
         var settlements = 0
@@ -137,7 +137,7 @@ class ReplayRewindSafetyTests {
                 val outcome = engine.evaluatePositionConservative(position, bar)
                 if (outcome is com.example.core.execution.PositionEvaluation.TriggerClose) {
                     assertEquals(com.example.core.model.ExitReason.STOP_LOSS, outcome.exitReason)
-                    assertEquals(101.0, outcome.exitPrice, 0.0001)
+                    assertEquals(104.0, outcome.exitPrice, 0.0001)
                     settlements++
                     open = false
                 }
