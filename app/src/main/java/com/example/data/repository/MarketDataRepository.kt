@@ -92,33 +92,8 @@ class MarketDataRepository(
                 (candle.source == "BINANCE_HISTORICAL" || candle.source == "BINANCE_HISTORICAL_CACHED")
         }
 
-        // A candle cache is complete only when every expected bar exists.
-        // Never mistake sparse history for a complete backtest window.
-        val fullyCovered = HistoricalCandleCoverage.isComplete(
-            trustedLocal, from, to, intervalMillis
-        )
-        if (fullyCovered) {
-            // Cache coverage alone does not guarantee authentic OHLC, source
-            // and timestamp invariants. Revalidate before any replay.
-            val verifiedCache = runCatching {
-                HistoricalCandleIntegrity.validate(
-                    trustedLocal,
-                    requestedFrom = from,
-                    requestedTo = to + intervalMillis,
-                    expectedSymbol = symbol,
-                    expectedTimeframe = timeframe
-                )
-            }.getOrNull()
-            if (verifiedCache != null && verifiedCache.all {
-                    it.source == "BINANCE_HISTORICAL" || it.source == "BINANCE_HISTORICAL_CACHED"
-                }) {
-                return@withContext verifiedCache
-            }
-            // Invalid cached history is never returned as trusted data.
-            // Fetch fresh exchange history instead.
-        }
-
-        // Validate cache once; reuse complete cached pages rather than re-downloading them.
+        // Validate once and reuse the same verified cache for full-window
+        // returns and for page-by-page retrieval of missing data.
         val validCached = runCatching {
             HistoricalCandleIntegrity.validate(
                 trustedLocal,
@@ -128,6 +103,9 @@ class MarketDataRepository(
                 expectedTimeframe = timeframe
             )
         }.getOrDefault(emptyList())
+        if (HistoricalCandleCoverage.isComplete(validCached, from, to, intervalMillis)) {
+            return@withContext validCached
+        }
         val fetched = mutableListOf<Candle>()
         var cursor = from
         var cachedIndex = 0
