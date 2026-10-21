@@ -64,6 +64,10 @@ class MarketDataRepository(
         require(to <= Long.MAX_VALUE - timeframe.minutes * 60_000L) { "Candle range overflow" }
         require(pageSize in 1..1000) { "pageSize must be between 1 and 1000" }
         val intervalMillis = timeframe.minutes * 60_000L
+        // Never backtest the still-forming exchange candle.
+        require(to <= System.currentTimeMillis() - intervalMillis) {
+            "Historical range includes an unfinished candle"
+        }
         // Avoid silently returning partial history after the pagination safety cap.
         // Large ranges should be requested in separate bounded chunks by the caller.
         val requestedBars = (to - from) / intervalMillis + 1L
