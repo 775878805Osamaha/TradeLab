@@ -218,13 +218,18 @@ class ChartViewModel(
                 return@launch
             }
             val now = System.currentTimeMillis()
-            val interval = tf.minutes * 60 * 1000L
-            val from = now - (interval * 250)
+            val interval = tf.minutes * 60_000L
+            // The repository intentionally rejects an unfinished Binance bar.
+            // Request only fully closed candle OPEN timestamps, aligned to UTC
+            // (including Monday UTC alignment for weekly bars).
+            val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
+                .currentOpen(now, interval) - interval
+            val from = (lastClosedOpen - interval * 249L).coerceAtLeast(0L)
 
             try {
                 // Start live subscription even if historical REST loading fails.
                 subscribeToTicks(symbol)
-                val rawCandles = marketDataRepository.getCandles(symbol, tf, from, now)
+                val rawCandles = marketDataRepository.getCandles(symbol, tf, from, lastClosedOpen)
                 val aggregated = CandleAggregator.aggregate(rawCandles, tf)
                 // Ignore responses that arrive after the user changes symbol or timeframe.
                 if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf) return@launch

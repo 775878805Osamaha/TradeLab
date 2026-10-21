@@ -21,4 +21,29 @@ class HistoricalCandleBoundaryTest {
         assertTrue(HistoricalCandleBoundary.isClosedRange(monday, now, week))
         assertFalse(HistoricalCandleBoundary.isClosedRange(monday + week, now, week))
     }
+    @Test fun chartRequestsLastClosedMinuteNotCurrentBar() {
+        val now = 185_000L
+        val interval = 60_000L
+        val lastClosedOpen = HistoricalCandleBoundary.currentOpen(now, interval) - interval
+        assertEquals(120_000L, lastClosedOpen)
+        assertTrue(HistoricalCandleBoundary.isClosedRange(lastClosedOpen, now, interval))
+    }
+
+    @Test fun chartRequestsLastClosedFifteenMinuteBar() {
+        val interval = 15L * 60_000L
+        val now = 2L * interval + 12_345L
+        val lastClosedOpen = HistoricalCandleBoundary.currentOpen(now, interval) - interval
+        assertEquals(interval, lastClosedOpen)
+        assertTrue(HistoricalCandleBoundary.isClosedRange(lastClosedOpen, now, interval))
+    }
+
+    @Test fun chartRequestsPreviousWeeklyMondayOpen() {
+        val week = 604_800_000L
+        val mondayOffset = 345_600_000L
+        val now = mondayOffset + 3L * week + 20_000L
+        val lastClosedOpen = HistoricalCandleBoundary.currentOpen(now, week) - week
+        assertEquals(mondayOffset + 2L * week, lastClosedOpen)
+        assertTrue(HistoricalCandleBoundary.isClosedRange(lastClosedOpen, now, week))
+    }
+
 }
