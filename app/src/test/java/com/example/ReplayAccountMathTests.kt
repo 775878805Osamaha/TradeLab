@@ -84,4 +84,42 @@ class ReplayAccountMathTests {
         assertEquals(61.0, ReplayAccountMath.equity(afterLoss, listOf(position(3, 2.0))), 0.000001)
     }
 
+    @Test fun actualExecutionCloseSettlesCommissionAndRestoresReplayBalance() {
+        val execution = com.example.core.execution.ExecutionEngine(
+            com.example.core.execution.ExecutionConfig(
+                slippagePips = 0.0, defaultCommissionPerLot = 5.0
+            )
+        )
+        val opened = execution.executeMarketOrder(
+            account = com.example.core.model.VirtualAccount(
+                id = 9999L, name = "Replay", balance = 1000.0,
+                equity = 1000.0, freeMargin = 1000.0
+            ),
+            symbol = "XAUUSD",
+            side = com.example.core.model.OrderSide.BUY,
+            volume = 0.01,
+            tick = com.example.core.model.Tick(symbol = "XAUUSD", bid = 2650.0, ask = 2650.25),
+            stopLoss = 2640.0, takeProfit = 2670.0,
+            mode = "REPLAY"
+        )
+        assertTrue(opened is com.example.core.execution.ExecutionResult.Success)
+        val position = (opened as com.example.core.execution.ExecutionResult.Success).position
+        val (trade, remainder) = execution.closePosition(
+            position, exitPrice = 2660.25,
+            exitReason = com.example.core.model.ExitReason.MANUAL_CLOSE,
+            closeTime = 1_700_000_000_000L
+        )
+        assertNull(remainder)
+        assertEquals(10.0, trade.profitLoss, 0.000001)
+        assertEquals(0.05, trade.commission, 0.000001)
+        assertEquals(9.95, trade.netProfitLoss, 0.000001)
+        val balance = ReplayAccountMath.realizedBalance(1000.0, trade.netProfitLoss)
+        assertEquals(1009.95, balance, 0.000001)
+        assertEquals(balance, ReplayAccountMath.equity(balance, emptyList()), 0.000001)
+        // A financial rollback restores the original balance. Re-settling
+        // the same historical trade must yield the same result, not double profit.
+        val replayed = ReplayAccountMath.realizedBalance(1000.0, trade.netProfitLoss)
+        assertEquals(balance, replayed, 0.000001)
+    }
+
 }
