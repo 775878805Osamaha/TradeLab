@@ -84,6 +84,8 @@ fun SettingsScreen(
                         DiagnosticRow("زمن الوصول التقريبي", "${diag.approximateLatencyMs} ms")
                         DiagnosticRow("محاولات إعادة الاتصال", "${diag.reconnectCount}")
                         DiagnosticRow("أخطاء سلامة البيانات", "${diag.validationErrorsCount}", isError = diag.validationErrorsCount > 0)
+                        Text("آخر نتيجة HTTP من Binance", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text(diag.lastHttpDiagnostic, fontSize = 11.sp, color = TradingTextSecondary)
                         DiagnosticRow("حالة حداثة البيانات", if (diag.isStale) "قديمة / متأخرة (Stale)" else "طازجة ولحظية (Fresh)", isError = diag.isStale)
 
                         Spacer(modifier = Modifier.height(4.dp))
@@ -124,7 +126,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "• BTCUSDT و ETHUSDT متصلان مباشرة ببيانات السوق اللحظية عبر Binance Public WebSocket.\n" +
-                                    "• XAUUSD والعملات الأخرى تعمل بنظام Benchmark مسجل ومحدد بعلامة DEMO DATA واضحة.\n" +
+                                    "• XAUUSD وأزواج الفوركس لا تملك حاليًا مصدر أسعار موثوقًا؛ لا تُعرض أسعار وهمية على أنها مباشرة.\n" +
                                     "• التطبيق لا يتصل بأي وسيط مالي، ولا يدعم التداول بأموال حقيقية نهائياً. كل الأوامر افتراضية 100%.",
                             fontSize = 12.sp,
                             color = TradingTextSecondary,
