@@ -134,7 +134,13 @@ class MarketDataRepository(
             while (cursor <= to && fetched.size < 20_000) {
                 currentCoroutineContext().ensureActive()
                 val windowEnd = minOf(to, cursor + intervalMillis * (pageSize - 1L))
-                val cachedPage = validCached.filter { it.openTime in cursor..windowEnd }
+                // The validated cache is timestamp-sorted. Binary-search the
+                // page boundaries instead of scanning up to 20,000 bars per page.
+                val startIndex = validCached.binarySearchBy(cursor) { it.openTime }
+                    .let { if (it < 0) -it - 1 else it }
+                val endIndex = validCached.binarySearchBy(windowEnd) { it.openTime }
+                    .let { if (it < 0) -it - 1 else it + 1 }
+                val cachedPage = validCached.subList(startIndex, endIndex)
                 if (HistoricalCandleCoverage.isComplete(cachedPage, cursor, windowEnd, intervalMillis)) {
                     cursor = cachedPage.last().openTime + intervalMillis
                     yield()
