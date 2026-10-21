@@ -120,4 +120,60 @@ class ReplayRewindSafetyTests {
         assertNull(engine.getCheckpoint(5))
     }
 
+    @Test fun replayStopLossClosesExactlyOnceAndRewindDoesNotDuplicateSettlement() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        val position = com.example.core.model.Position(
+            id = 1L, accountId = 1L, symbol = "BTCUSDT",
+            side = com.example.core.model.PositionSide.BUY, volume = 0.01,
+            entryPrice = 104.0, currentPrice = 104.0,
+            stopLoss = 101.0, takeProfit = 110.0
+        )
+        var open = true
+        var settlements = 0
+        var callbacks = 0
+        engine.onCandleRevealed = { bar, _, _ ->
+            callbacks++
+            if (open) {
+                val outcome = engine.evaluatePositionConservative(position, bar)
+                if (outcome is com.example.core.execution.PositionEvaluation.TriggerClose) {
+                    assertEquals(com.example.core.model.ExitReason.STOP_LOSS, outcome.exitReason)
+                    assertEquals(101.0, outcome.exitPrice, 0.0001)
+                    settlements++
+                    open = false
+                }
+            }
+        }
+        engine.initialize((0..9).map(::candle), startIndex = 3)
+        assertEquals(0, callbacks)
+        assertTrue(engine.stepForward())
+        assertEquals(1, settlements)
+        assertEquals(1, callbacks)
+        assertTrue(engine.stepForward())
+        assertEquals(1, settlements)
+        assertEquals(2, callbacks)
+        assertTrue(engine.stepBackward())
+        assertEquals(1, settlements)
+        assertEquals(2, callbacks)
+        assertTrue(engine.stepForward())
+        assertEquals(1, settlements)
+        assertEquals(3, callbacks)
+    }
+
+    @Test fun conservativeReplayChoosesStopLossWhenStopAndTargetHitSameCandle() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        val position = com.example.core.model.Position(
+            id = 1L, accountId = 1L, symbol = "BTCUSDT",
+            side = com.example.core.model.PositionSide.BUY, volume = 0.01,
+            entryPrice = 104.0, currentPrice = 104.0,
+            stopLoss = 102.0, takeProfit = 106.0
+        )
+        val bar = candle(5)
+        assertTrue(bar.low <= 102.0 && bar.high >= 106.0)
+        val outcome = engine.evaluatePositionConservative(position, bar)
+        assertTrue(outcome is com.example.core.execution.PositionEvaluation.TriggerClose)
+        val close = outcome as com.example.core.execution.PositionEvaluation.TriggerClose
+        assertEquals(com.example.core.model.ExitReason.STOP_LOSS, close.exitReason)
+        assertEquals(102.0, close.exitPrice, 0.0001)
+    }
+
 }
