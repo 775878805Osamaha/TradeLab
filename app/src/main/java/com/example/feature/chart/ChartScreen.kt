@@ -48,6 +48,8 @@ fun ChartScreen(
     var isEmbeddedReplay by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
+    var showReplayDetails by remember { mutableStateOf(false) }
+    var showChartExtras by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
 
@@ -151,7 +153,7 @@ fun ChartScreen(
                 .padding(paddingValues)
         ) {
             // Distinguish a verified live quote from delayed or unsupported data.
-            if (!headerQuoteVerified) {
+            if (!headerQuoteVerified && !isEmbeddedReplay) {
                 Text(
                     text = if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
                         "السعر المباشر غير مؤكد حاليًا — لا تعتمد عليه لتنفيذ صفقة"
@@ -196,6 +198,10 @@ fun ChartScreen(
                         Text("إنهاء", color = TradingNegative)
                     }
                 }
+                TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
+                    Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
+                }
+                if (showReplayDetails) {
                 // Historical paper orders are isolated from the live-paper account.
                 Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard)
@@ -294,6 +300,7 @@ fun ChartScreen(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                 }
             }
+            }
 
             // Timeframe selection scrollable row (all 10 timeframes)
             Row(
@@ -323,63 +330,41 @@ fun ChartScreen(
                     }
                 }
 
-                // Chart rendering style selector (visual only; no impact on market data).
-                ChartDisplayStyle.values().forEach { style ->
-                    val selected = chartDisplayStyle == style
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (selected) TradingAccent else TradingElevated)
-                            .clickable { chartDisplayStyle = style }
-                            .padding(horizontal = 8.dp, vertical = 5.dp)
-                            .testTag("chart_style_${style.name}")
-                    ) {
-                        Text(style.label, fontSize = 10.sp,
-                            color = if (selected) Color.White else TradingTextSecondary)
-                    }
-                }
-
-                // Volume toggle chip
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (uiState.isVolumeVisible) TradingGold.copy(alpha = 0.2f) else TradingElevated)
-                        .clickable { viewModel.toggleVolume() }
-                        .padding(horizontal = 7.dp, vertical = 5.dp)
-                ) {
-                    Text(
-                        text = "VOL",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (uiState.isVolumeVisible) TradingGold else TradingTextSecondary
-                    )
-                }
             }
 
-            // Secondary chart actions stay scrollable on narrow phones instead of
-            // squeezing the symbol title in the top app bar.
+            // Compact icon toolbar: keep the chart as the primary surface.
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                TextButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.testTag("chart_indicators_btn")) {
-                    Icon(Icons.Default.Timeline, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text("المؤشرات", fontSize = 12.sp)
+                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.testTag("chart_indicators_btn")) {
+                    Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
                 }
-                TextButton(onClick = { showToolsMenu = true }, modifier = Modifier.testTag("drawing_tools_menu_btn")) {
-                    Icon(Icons.Default.Draw, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text("الرسم", fontSize = 12.sp)
+                IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.testTag("drawing_tools_menu_btn")) {
+                    Icon(Icons.Default.Draw, contentDescription = "أدوات الرسم", tint = TradingAccentLight)
                 }
-                TextButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.testTag("chart_reset_view_btn")) {
-                    Icon(Icons.Default.CenterFocusWeak, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text("ضبط العرض", fontSize = 12.sp)
+                IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.testTag("chart_reset_view_btn")) {
+                    Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط الشارت", tint = TradingAccentLight)
+                }
+                IconButton(onClick = { showChartExtras = !showChartExtras }, modifier = Modifier.testTag("chart_extras_btn")) {
+                    Icon(Icons.Default.Tune, contentDescription = "إعدادات الشارت", tint = TradingTextSecondary)
+                }
+            }
+            if (showChartExtras) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ChartDisplayStyle.values().forEach { style ->
+                        TextButton(onClick = { chartDisplayStyle = style }, modifier = Modifier.testTag("chart_style_${style.name}")) {
+                            Text(style.label, color = if (chartDisplayStyle == style) TradingAccentLight else TradingTextSecondary)
+                        }
+                    }
+                    TextButton(onClick = { viewModel.toggleVolume() }) {
+                        Text("VOL", color = if (uiState.isVolumeVisible) TradingGold else TradingTextSecondary)
+                    }
                 }
             }
 
@@ -422,7 +407,7 @@ fun ChartScreen(
                 marketTick?.source == "BINANCE_WEBSOCKET" -> "Binance · بث مباشر"
                 else -> "Binance · تحديث عبر الإنترنت"
             }
-            Row(
+            if (!isEmbeddedReplay) Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
