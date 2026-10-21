@@ -280,15 +280,22 @@ class HistoricalReplayEngine(
      * Evaluates pending orders against a candle under conservative intrabar limits.
      */
     fun isPendingOrderTriggeredByCandle(order: Order, candle: Candle): Boolean {
-        if (!order.symbol.equals(candle.symbol, ignoreCase = true) ||
+        if (order.status != OrderStatus.PENDING ||
+            !order.symbol.equals(candle.symbol, ignoreCase = true) ||
             !order.requestedPrice.isFinite() || order.requestedPrice <= 0.0 ||
+            !order.volume.isFinite() || order.volume <= 0.0 ||
             !candle.low.isFinite() || !candle.high.isFinite() ||
-            candle.low <= 0.0 || candle.high < candle.low) return false
+            !candle.open.isFinite() || !candle.close.isFinite() ||
+            candle.low <= 0.0 || candle.high < candle.low ||
+            candle.open !in candle.low..candle.high ||
+            candle.close !in candle.low..candle.high) return false
         return when (order.type) {
-            OrderType.BUY_LIMIT -> candle.low <= order.requestedPrice
-            OrderType.SELL_LIMIT -> candle.high >= order.requestedPrice
-            OrderType.BUY_STOP -> candle.high >= order.requestedPrice
-            OrderType.SELL_STOP -> candle.low <= order.requestedPrice
+            OrderType.BUY_LIMIT -> order.direction == OrderSide.BUY && candle.low <= order.requestedPrice
+            OrderType.SELL_LIMIT -> order.direction == OrderSide.SELL && candle.high >= order.requestedPrice
+            OrderType.BUY_STOP -> order.direction == OrderSide.BUY && candle.high >= order.requestedPrice
+            OrderType.SELL_STOP -> order.direction == OrderSide.SELL && candle.low <= order.requestedPrice
+            OrderType.LIMIT -> if (order.direction == OrderSide.BUY) candle.low <= order.requestedPrice else candle.high >= order.requestedPrice
+            OrderType.STOP -> if (order.direction == OrderSide.BUY) candle.high >= order.requestedPrice else candle.low <= order.requestedPrice
             else -> false
         }
     }
