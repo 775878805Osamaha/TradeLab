@@ -74,6 +74,7 @@ class MarketDataRepository(
             to, System.currentTimeMillis(), intervalMillis
         )) { "Historical range includes an unfinished candle" }
         // Bound replay memory while fetching and validating one network page at a time.
+        // A non-aligned start/end can span an extra partial interval.
         val requestedBars = (to - from) / intervalMillis + 1L
         require(requestedBars <= 20_000L) {
             "Historical range exceeds 20000 candles. Request a shorter range."
@@ -112,7 +113,17 @@ class MarketDataRepository(
         try {
             while (cursor <= to && fetched.size < 20_000) {
                 currentCoroutineContext().ensureActive()
-                val windowEnd = minOf(to, cursor + intervalMillis * (pageSize - 1L))
+                // Align the end to the last candle opening in the requested page.
+                // Otherwise non-aligned start times can cause a one-bar page
+                // to contain no candle, or require an unnecessary extra request.
+                val weekMillis = 7L * 24 * 60 * 60 * 1000
+                val offset = if (intervalMillis == weekMillis) 4L * 24 * 60 * 60 * 1000 else 0L
+                val firstOpen = cursor + Math.floorMod(
+                    intervalMillis - Math.floorMod(cursor - offset, intervalMillis),
+                    intervalMillis
+                )
+                val windowEnd = minOf(to, firstOpen + intervalMillis * (pageSize - 1L))
+                if (firstOpen > to) break
                 // Both the cursor and validated cache are monotonically ordered.
                 // Advance the cache index once instead of searching for each page.
                 while (cachedIndex < validCached.size &&
