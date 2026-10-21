@@ -252,6 +252,7 @@ fun CandlestickChart(
             val clampedScroll = scrollOffsetPx.coerceIn(-maxScrollOffset.coerceAtLeast(0f), 0f)
 
             val scrollCandleOffset = (-clampedScroll / candleWidthPx).toInt().coerceIn(0, (candles.size - visibleCount).coerceAtLeast(0))
+            val fractionalScrollPx = (-clampedScroll) % candleWidthPx
             val startIndex = (candles.size - visibleCount - scrollCandleOffset).coerceIn(0, candles.size - 1)
             val endIndex = (startIndex + visibleCount).coerceIn(startIndex, candles.size)
             val visibleCandles = candles.subList(startIndex, endIndex)
@@ -281,7 +282,8 @@ fun CandlestickChart(
                 chartWidth = chartWidth,
                 chartHeight = mainChartHeight,
                 candleWidthPx = candleWidthPx,
-                rightAxisWidth = rightAxisWidth
+                rightAxisWidth = rightAxisWidth,
+                fractionalScrollPx = fractionalScrollPx
             )
 
             transformRef[0] = transform
