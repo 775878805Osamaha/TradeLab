@@ -120,6 +120,25 @@ class ReplayRewindSafetyTests {
         assertNull(engine.getCheckpoint(5))
     }
 
+    @Test fun seekingDiscardsStaleFinancialCheckpointsWithoutExecutingTrades() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        var executions = 0
+        engine.onCandleRevealed = { _, _, _ -> executions++ }
+        engine.initialize((0..9).map(::candle), startIndex = 3)
+        engine.recordCheckpoint(com.example.core.model.ReplayCheckpoint(
+            sessionId = 1L, candleIndex = 3, timestamp = candle(3).openTime,
+            balance = 900.0, equity = 900.0,
+            openPositions = emptyList(), closedTradesCount = 1
+        ))
+        assertNotNull(engine.getCheckpoint(3))
+        engine.jumpToIndex(7)
+        assertEquals(7, engine.currentIndex.value)
+        assertNull(engine.getCheckpoint(3))
+        assertEquals(0, executions)
+        assertTrue(engine.stepForward())
+        assertEquals(1, executions)
+    }
+
     @Test fun replayStopLossClosesExactlyOnceAndRewindDoesNotDuplicateSettlement() {
         val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
         val position = com.example.core.model.Position(
