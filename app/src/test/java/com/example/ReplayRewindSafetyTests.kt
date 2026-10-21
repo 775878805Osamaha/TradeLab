@@ -17,6 +17,32 @@ class ReplayRewindSafetyTests {
         low = 99.0 + index, close = 101.0 + index
     )
 
+    @Test fun canRewindToFirstCandleWithoutTradingCallback() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        var evaluations = 0
+        engine.onCandleRevealed = { _, _, _ -> evaluations++ }
+        engine.initialize((0..5).map(::candle), startIndex = 2)
+        assertTrue(engine.stepBackward())
+        assertTrue(engine.stepBackward())
+        assertEquals(0, engine.currentIndex.value)
+        assertFalse(engine.stepBackward())
+        assertEquals(0, evaluations)
+        assertEquals(candle(0).openTime, engine.currentCandle.value?.openTime)
+    }
+
+    @Test fun timestampSeekUsesFirstMatchingOrNextCandle() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        engine.initialize((0..9).map(::candle), startIndex = 3)
+        engine.jumpToTimestamp(candle(5).openTime)
+        assertEquals(5, engine.currentIndex.value)
+        engine.jumpToTimestamp(candle(5).openTime + 1L)
+        assertEquals(6, engine.currentIndex.value)
+        engine.jumpToTimestamp(candle(0).openTime - 1000L)
+        assertEquals(0, engine.currentIndex.value)
+        engine.jumpToTimestamp(candle(9).openTime + 1000L)
+        assertEquals(9, engine.currentIndex.value)
+    }
+
     @Test fun steppingBackwardDoesNotReexecuteOrdersOrStrategies() {
         val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
         var evaluations = 0
