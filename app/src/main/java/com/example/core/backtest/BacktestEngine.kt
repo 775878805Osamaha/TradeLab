@@ -263,7 +263,16 @@ class BacktestEngine(
             val posIterator = openPositions.iterator()
             while (posIterator.hasNext()) {
                 val pos = posIterator.next()
-                when (val eval = runExecutionEngine.evaluatePositionOnCandle(pos, currentCandle)) {
+                // Candle OHLC represents the mid-price. A BUY exits at bid
+                // and a SELL exits at ask, including intrabar SL/TP triggers.
+                val exitSideAdjustment = if (pos.side == PositionSide.BUY) -halfSpread else halfSpread
+                val executableCandle = currentCandle.copy(
+                    open = currentCandle.open + exitSideAdjustment,
+                    high = currentCandle.high + exitSideAdjustment,
+                    low = currentCandle.low + exitSideAdjustment,
+                    close = currentCandle.close + exitSideAdjustment
+                )
+                when (val eval = runExecutionEngine.evaluatePositionOnCandle(pos, executableCandle)) {
                     is PositionEvaluation.TriggerClose -> {
                         val (trade, _) = runExecutionEngine.closePosition(
                             position = pos,
