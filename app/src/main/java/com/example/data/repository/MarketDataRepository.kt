@@ -102,11 +102,6 @@ class MarketDataRepository(
             // Cancellation must propagate; never turn a cancelled request into cached success.
             throw error
         } catch (error: Exception) {
-            if (trustedLocal.isNotEmpty()) {
-                return@withContext trustedLocal.map {
-                    if (isCrypto) it.copy(source = "BINANCE_HISTORICAL_CACHED") else it
-                }
-            }
             throw error
         }
 
@@ -129,6 +124,9 @@ class MarketDataRepository(
         )
         if (combined.isEmpty() && isCrypto) {
             throw java.io.IOException("No verified Binance historical candles available for $symbol")
+        }
+        if (!HistoricalCandleCoverage.isComplete(combined, from, to, intervalMillis)) {
+            throw java.io.IOException("Incomplete verified Binance history for $symbol")
         }
         combined
     }
