@@ -62,6 +62,7 @@ fun ReplayScreen(
     var crosshairEnabled by remember { mutableStateOf(false) }
     var activeDrawingTool by remember { mutableStateOf(DrawingTool.NONE) }
     val replayDrawings = remember(uiState.symbol, uiState.timeframe) { mutableStateListOf<ChartDrawing>() }
+    val revealedDrawings = visibleReplayDrawings(replayDrawings, uiState.currentCandle?.openTime)
     var volumeVisible by remember { mutableStateOf(true) }
     var replayChartStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var chartResetTrigger by remember { mutableLongStateOf(0L) }
@@ -265,8 +266,8 @@ fun ReplayScreen(
                     )
                 }
                 TextButton(
-                    enabled = replayDrawings.isNotEmpty(),
-                    onClick = { replayDrawings.removeAt(replayDrawings.lastIndex) },
+                    enabled = revealedDrawings.isNotEmpty(),
+                    onClick = { revealedDrawings.lastOrNull()?.let { replayDrawings.remove(it) } },
                     modifier = Modifier.testTag("replay_drawing_undo")
                 ) { Text("تراجع عن الرسم") }
                 TextButton(
@@ -292,7 +293,7 @@ fun ReplayScreen(
                     isVolumeVisible = volumeVisible,
                     resetViewTrigger = chartResetTrigger,
                     activeDrawingTool = activeDrawingTool,
-                    drawings = replayDrawings,
+                    drawings = revealedDrawings,
                     onAddDrawing = { drawing ->
                         if (drawing.startPrice.isFinite() && drawing.startPrice > 0.0 &&
                             (drawing.endPrice == null || (drawing.endPrice.isFinite() && drawing.endPrice > 0.0)) &&
