@@ -390,10 +390,13 @@ class BacktestEngine(
                         }
 
                         if (!lotSize.isFinite() || lotSize <= 0.0) continue
-                        val requiredMargin = (lotSize * symInfo.contractSize * currentCandle.close) / config.leverage
+                        // Margin is based on the executable side of the quote,
+                        // not the mid-price of the historical candle.
+                        val entryQuote = if (isBuy) tick.ask else tick.bid
+                        val requiredMargin = (lotSize * symInfo.contractSize * entryQuote) / config.leverage
 
                         // Check margin availability before execution
-                        if (requiredMargin <= freeMargin) {
+                        if (requiredMargin.isFinite() && requiredMargin > 0.0 && requiredMargin <= freeMargin) {
                             val execResult = runExecutionEngine.executeMarketOrder(
                                 account = virtualAccountState,
                                 symbol = config.symbol,
