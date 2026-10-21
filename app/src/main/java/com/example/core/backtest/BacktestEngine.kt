@@ -181,7 +181,8 @@ class BacktestEngine(
         var highWatermark = config.initialBalance
         equityPoints.add(
             EquityPoint(
-                timestamp = cleanCandles.first().openTime - 1000,
+                // Never fabricate a timestamp before the first available bar.
+                timestamp = cleanCandles.first().openTime,
                 balance = virtualBalance,
                 equity = virtualBalance,
                 drawdown = 0.0,
@@ -272,6 +273,10 @@ class BacktestEngine(
                 }
             }
 
+            // The account and equity snapshot must reflect the current bar
+            // after all intrabar exits have been processed.
+            // Strategy actions at this close are reconciled at the next bar,
+            // except for the terminal snapshot which is finalized below.
             // Step 3: Floating equity, margin, and drawdown calculation
             val floatingPl = openPositions.sumOf { it.profitLoss }
             val usedMargin = openPositions.sumOf { it.margin }
@@ -396,28 +401,23 @@ class BacktestEngine(
                         }
 
                         if (!lotSize.isFinite() || lotSize <= 0.0) continue
-                        // Margin is based on the executable side of the quote,
-                        // not the mid-price of the historical candle.
-                        val entryQuote = if (isBuy) tick.ask else tick.bid
-                        val requiredMargin = (lotSize * symInfo.contractSize * entryQuote) / config.leverage
+                        // The execution engine is the source of truth for
+                        // fill price, slippage, margin and order validation.
+                        // Do not duplicate an approximate margin check here.
+                        val execResult = runExecutionEngine.executeMarketOrder(
+                            account = virtualAccountState,
+                            symbol = config.symbol,
+                            side = side,
+                            volume = lotSize,
+                            tick = tick,
+                            stopLoss = signal.stopLoss,
+                            takeProfit = signal.takeProfit,
+                            strategyId = config.strategy.id,
+                            mode = "BACKTEST"
+                        )
 
-                        // Check margin availability before execution
-                        if (requiredMargin.isFinite() && requiredMargin > 0.0 && requiredMargin <= freeMargin) {
-                            val execResult = runExecutionEngine.executeMarketOrder(
-                                account = virtualAccountState,
-                                symbol = config.symbol,
-                                side = side,
-                                volume = lotSize,
-                                tick = tick,
-                                stopLoss = signal.stopLoss,
-                                takeProfit = signal.takeProfit,
-                                strategyId = config.strategy.id,
-                                mode = "BACKTEST"
-                            )
-
-                            if (execResult is ExecutionResult.Success) {
-                                openPositions.add(execResult.position.copy(id = nextPositionId++))
-                            }
+                        if (execResult is ExecutionResult.Success) {
+                            openPositions.add(execResult.position.copy(id = nextPositionId++))
                         }
                     }
                 }
