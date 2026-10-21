@@ -220,4 +220,31 @@ class ReplayRewindSafetyTests {
         }
     }
 
+    @Test fun replayRejectsNonFiniteStopLossAndTakeProfit() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        val valid = com.example.core.model.Position(
+            id = 1L, accountId = 1L, symbol = "BTCUSDT",
+            side = com.example.core.model.PositionSide.BUY,
+            volume = 0.01, entryPrice = 104.0, currentPrice = 104.0
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            engine.evaluatePositionConservative(valid.copy(stopLoss = Double.NaN), candle(4))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            engine.evaluatePositionConservative(valid.copy(takeProfit = Double.POSITIVE_INFINITY), candle(4))
+        }
+    }
+
+    @Test fun replayRejectsCandleWithCloseOutsideHighLow() {
+        val engine = HistoricalReplayEngine(CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        val position = com.example.core.model.Position(
+            id = 1L, accountId = 1L, symbol = "BTCUSDT",
+            side = com.example.core.model.PositionSide.BUY,
+            volume = 0.01, entryPrice = 104.0, currentPrice = 104.0
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            engine.evaluatePositionConservative(position, candle(4).copy(close = 200.0))
+        }
+    }
+
 }
