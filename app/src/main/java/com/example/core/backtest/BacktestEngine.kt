@@ -201,7 +201,9 @@ class BacktestEngine(
                 bid = currentCandle.close - halfSpread,
                 ask = currentCandle.close + halfSpread,
                 last = currentCandle.close,
-                timestamp = currentCandle.openTime,
+                // Tick prices are derived from the completed bar close.
+                // Never timestamp them at the bar open (lookahead).
+                timestamp = currentCandle.closeTime,
                 source = "BACKTEST"
             )
 
@@ -295,7 +297,7 @@ class BacktestEngine(
 
             equityPoints.add(
                 EquityPoint(
-                    timestamp = currentCandle.openTime,
+                    timestamp = currentCandle.closeTime,
                     balance = virtualBalance,
                     equity = currentEquity,
                     drawdown = currentDrawdown,
@@ -339,7 +341,7 @@ class BacktestEngine(
                             position = pos,
                             exitPrice = currentCandle.close,
                             exitReason = ExitReason.STRATEGY_CLOSE,
-                            closeTime = currentCandle.openTime
+                            closeTime = currentCandle.closeTime
                         )
                         closedTrades.add(trade.copy(mode = "BACKTEST"))
                         virtualBalance += trade.netProfitLoss
