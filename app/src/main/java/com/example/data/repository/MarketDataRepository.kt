@@ -12,6 +12,9 @@ import com.example.data.local.dao.SymbolDao
 import com.example.data.local.entity.CandleEntity
 import com.example.data.local.entity.SymbolEntity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -100,6 +103,7 @@ class MarketDataRepository(
         var cursor = from
         try {
             while (cursor <= to && fetched.size < 20_000) {
+                currentCoroutineContext().ensureActive()
                 val windowEnd = minOf(to, cursor + intervalMillis * (pageSize - 1L))
                 val page = provider.getHistoricalCandles(symbol, timeframe, cursor, windowEnd)
                 if (page.isEmpty()) break
@@ -125,6 +129,8 @@ class MarketDataRepository(
                 val next = lastOpen + intervalMillis
                 if (next <= cursor) break
                 cursor = next
+                // Give cancellation and other queued work a chance between pages.
+                yield()
             }
         } catch (error: kotlinx.coroutines.CancellationException) {
             // Cancellation must propagate; never turn a cancelled request into cached success.
