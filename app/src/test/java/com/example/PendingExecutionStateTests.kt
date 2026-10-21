@@ -34,4 +34,9 @@ class PendingExecutionStateTests {
         val waiting = order(OrderType.BUY_STOP, OrderSide.BUY).copy(requestedPrice = 120.0)
         assertNull(engine.evaluatePendingOrder(waiting, tick, account))
     }
+    @Test fun marketOrdersCannotBeEvaluatedAsPendingOrders() {
+        val invalid = order(OrderType.MARKET, OrderSide.BUY)
+        assertTrue(engine.evaluatePendingOrder(invalid, tick, account) is ExecutionResult.Error)
+    }
+
 }
