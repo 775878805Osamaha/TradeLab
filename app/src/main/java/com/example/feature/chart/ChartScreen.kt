@@ -49,6 +49,8 @@ fun ChartScreen(
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showReplayControls by remember { mutableStateOf(false) }
+    var showChartControls by remember { mutableStateOf(false) }
+    var showReplayControls by remember { mutableStateOf(false) }
     var showChartActions by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
     var showChartExtras by remember { mutableStateOf(false) }
@@ -500,6 +502,19 @@ fun ChartScreen(
                     }
                 }
 
+                // Compact overlay actions: the chart stays full-height behind the buttons.
+                Row(modifier = Modifier.align(Alignment.TopEnd).padding(6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    IconButton(onClick = { showChartControls = !showChartControls }, modifier = Modifier.size(36.dp).testTag("chart_controls_toggle")) {
+                        Icon(Icons.Default.Tune, contentDescription = "خيارات الشارت", tint = TradingAccentLight)
+                    }
+                    IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(36.dp).testTag("chart_indicators_overlay")) {
+                        Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
+                    }
+                    IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(36.dp).testTag("chart_reset_overlay")) {
+                        Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط العرض", tint = TradingAccentLight)
+                    }
+                }
+
                 // Compact TradingView-style tools on the chart itself.
                 // Buttons select the existing functional drawing tools; no image overlay.
                 Surface(
@@ -514,7 +529,7 @@ fun ChartScreen(
                 ) {
                     Column(
                         modifier = Modifier
-                            .heightIn(max = 228.dp)
+                            .heightIn(max = 188.dp)
                             .verticalScroll(rememberScrollState())
                             .padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
