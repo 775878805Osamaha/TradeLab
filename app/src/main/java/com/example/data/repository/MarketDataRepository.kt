@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import com.example.core.market.DataIntegrityValidator
 import com.example.core.market.HistoricalCandleIntegrity
+import com.example.core.market.HistoricalCandleBoundary
 import com.example.core.market.HistoricalCandleCoverage
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.core.market.DefaultSymbols
@@ -67,10 +68,11 @@ class MarketDataRepository(
         require(to <= Long.MAX_VALUE - timeframe.minutes * 60_000L) { "Candle range overflow" }
         require(pageSize in 1..1000) { "pageSize must be between 1 and 1000" }
         val intervalMillis = timeframe.minutes * 60_000L
-        // Never backtest the still-forming exchange candle.
-        require(to <= System.currentTimeMillis() - intervalMillis) {
-            "Historical range includes an unfinished candle"
-        }
+        // Exclude the currently forming candle by its exchange open time,
+        // not by subtracting an interval from now (which rejects valid history).
+        require(HistoricalCandleBoundary.isClosedRange(
+            to, System.currentTimeMillis(), intervalMillis
+        )) { "Historical range includes an unfinished candle" }
         // Bound replay memory while fetching and validating one network page at a time.
         val requestedBars = (to - from) / intervalMillis + 1L
         require(requestedBars <= 20_000L) {
