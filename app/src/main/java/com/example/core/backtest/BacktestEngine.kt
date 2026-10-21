@@ -357,7 +357,10 @@ class BacktestEngine(
                     // The signal action is authoritative; a contradictory optional
                     // direction must never silently open the opposite position.
                     val isAllowed = (isBuy && config.allowLong) || (!isBuy && config.allowShort)
-                    val canOpen = isAllowed && (config.allowMultiplePositions || openPositions.isEmpty())
+                    // Do not open a position on the final candle only to
+                    // force-liquidate it at the same close (artificial loss).
+                    val canOpen = isAllowed && i < total - 1 &&
+                        (config.allowMultiplePositions || openPositions.isEmpty())
 
                     if (canOpen) {
                         val lotSize = when (config.positionSizingMode) {
@@ -432,6 +435,19 @@ class BacktestEngine(
 
         onProgress?.invoke(BacktestProgressStage.CALCULATING_STATISTICS, 0.95f)
         ensureActive()
+
+        // A strategy close on the final candle can change the balance after
+        // the equity snapshot was recorded; make the terminal curve accurate.
+        if (equityPoints.isNotEmpty()) {
+            val last = equityPoints.last()
+            val terminalWatermark = maxOf(highWatermark, virtualBalance)
+            equityPoints[equityPoints.lastIndex] = last.copy(
+                balance = virtualBalance,
+                equity = virtualBalance,
+                drawdown = terminalWatermark - virtualBalance,
+                highWatermark = terminalWatermark
+            )
+        }
 
         val performanceMetrics = StatisticsCalculator.calculate(
             initialBalance = config.initialBalance,
