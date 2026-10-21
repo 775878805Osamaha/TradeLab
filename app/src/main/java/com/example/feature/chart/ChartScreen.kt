@@ -48,6 +48,8 @@ fun ChartScreen(
     var isEmbeddedReplay by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
+    var showReplayControls by remember { mutableStateOf(false) }
+    var showChartActions by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
     var showChartExtras by remember { mutableStateOf(false) }
     var showTimeframes by remember { mutableStateOf(false) }
@@ -172,7 +174,7 @@ fun ChartScreen(
                 )
             }
 
-            if (isEmbeddedReplay) {
+            if (isEmbeddedReplay && showReplayControls) {
                 Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard)
                         .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -376,6 +378,12 @@ fun ChartScreen(
                 }
             }
 
+            Row(modifier = Modifier.fillMaxWidth().height(32.dp), horizontalArrangement = Arrangement.End) {
+                IconButton(onClick = { showChartActions = !showChartActions }, modifier = Modifier.size(32.dp).testTag("chart_actions_toggle")) {
+                    Icon(if (showChartActions) Icons.Default.ExpandLess else Icons.Default.Tune, contentDescription = "أدوات الشارت", tint = TradingAccentLight, modifier = Modifier.size(19.dp))
+                }
+            }
+
             // Drawing tools active banner if tool active
             if (uiState.activeDrawingTool != DrawingTool.NONE) {
                 Row(
@@ -434,8 +442,9 @@ fun ChartScreen(
             // Professional Candlestick Chart
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(1f, fill = true)
                     .fillMaxWidth()
+                    .testTag("chart_full_height_container")
             ) {
                 CandlestickChart(
                     candles = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles,
