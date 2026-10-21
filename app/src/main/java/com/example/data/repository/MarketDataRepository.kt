@@ -117,7 +117,9 @@ class MarketDataRepository(
             fetched,
             requestedFrom = from,
             requestedTo = to + intervalMillis,
-            expectedSource = "BINANCE_HISTORICAL"
+            expectedSource = "BINANCE_HISTORICAL",
+            expectedSymbol = symbol,
+            expectedTimeframe = timeframe
         )
         if (sanitized.isNotEmpty()) {
             candleDao.insertCandles(sanitized.map { it.toEntity() })
