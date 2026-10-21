@@ -435,6 +435,28 @@ class BacktestEngine(
                     // No-op
                 }
             }
+
+            // Record the state AFTER strategy execution at this candle close.
+            // This captures entry commission immediately, and realizes CLOSE
+            // signals on the same bar rather than one candle late.
+            val settledEquity = BacktestEquityAccounting.equity(
+                virtualBalance,
+                openPositions.map {
+                    BacktestEquityAccounting.OpenPositionValue(
+                        grossProfitLoss = it.profitLoss,
+                        entryCommission = it.commission,
+                        accruedSwap = it.swap
+                    )
+                }
+            )
+            highWatermark = maxOf(highWatermark, settledEquity)
+            equityPoints[equityPoints.lastIndex] = EquityPoint(
+                timestamp = currentCandle.closeTime,
+                balance = virtualBalance,
+                equity = settledEquity,
+                drawdown = highWatermark - settledEquity,
+                highWatermark = highWatermark
+            )
         }
 
         onProgress?.invoke(BacktestProgressStage.CALCULATING_TRADES, 0.88f)
