@@ -33,8 +33,19 @@ class HistoricalCandleCoverageTest {
             listOf(bar(120_000), bar(180_000)), 90_000, 180_000, 60_000))
     }
 
-    @Test fun weeklyCacheMustBeRefetched() {
+    @Test fun weeklyCandlesAlignToMonday() {
+        val week = 604_800_000L
+        val monday = 345_600_000L
+        assertTrue(HistoricalCandleCoverage.isComplete(
+            listOf(bar(monday), bar(monday + week)),
+            monday, monday + week, week))
+    }
+
+    @Test fun weeklyMissingBarIsIncomplete() {
+        val week = 604_800_000L
+        val monday = 345_600_000L
         assertFalse(HistoricalCandleCoverage.isComplete(
-            listOf(bar(60_000)), 0, 604_800_000, 604_800_000))
+            listOf(bar(monday), bar(monday + 2 * week)),
+            monday, monday + 2 * week, week))
     }
 }
