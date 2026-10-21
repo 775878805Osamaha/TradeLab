@@ -8,10 +8,10 @@ import kotlin.math.abs
  */
 internal object BacktestRiskDistance {
     fun pips(isBuy: Boolean, bid: Double, ask: Double, stopLoss: Double?, pipSize: Double): Double? {
-        if (stopLoss == null) return 25.0 // Legacy default when no stop is supplied.
-        if (!bid.isFinite() || !ask.isFinite() || !stopLoss.isFinite() ||
+        if (!bid.isFinite() || !ask.isFinite() || (stopLoss != null && !stopLoss.isFinite()) ||
             !pipSize.isFinite() || bid <= 0.0 || ask < bid ||
-            stopLoss <= 0.0 || pipSize <= 0.0) return null
+            (stopLoss != null && stopLoss <= 0.0) || pipSize <= 0.0) return null
+        if (stopLoss == null) return 25.0 // Legacy default after quote validation.
         val entry = if (isBuy) ask else bid
         if (isBuy && stopLoss >= entry || !isBuy && stopLoss <= entry) return null
         val distance = abs(entry - stopLoss) / pipSize
