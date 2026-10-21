@@ -53,6 +53,8 @@ class DefaultMarketDataProvider(
     )
     val diagnosticInfo: StateFlow<MarketDataDiagnostic> = _diagnosticInfo.asStateFlow()
 
+    private val quoteEndpoints = QuoteEndpointPreference()
+
     private val latestTicks = ConcurrentHashMap<String, Tick>()
     private val tickFlows = ConcurrentHashMap<String, MutableSharedFlow<Tick>>()
     private val candleFlows = ConcurrentHashMap<String, MutableSharedFlow<Candle>>()
@@ -131,12 +133,15 @@ class DefaultMarketDataProvider(
     override suspend fun startStreaming(symbols: List<String>) {
         benchmarkJob?.cancel()
         benchmarkJob = scope.launch {
-            while (isActive) {
-                // REST polling is a fallback for real crypto quotes only.
-                // Some mobile networks connect the socket but block bookTicker frames.
-                // Keep a verified REST quote fallback running regardless of socket status.
-                fetchLiveCryptoQuotes()
-                delay(3000)
+            // Each symbol polls independently: a blocked ETH request must not
+            // delay the next BTC refresh (and vice versa).
+            for (symbol in listOf("BTCUSDT", "ETHUSDT")) {
+                launch {
+                    while (isActive) {
+                        fetchLiveCryptoQuote(symbol)
+                        delay(3000)
+                    }
+                }
             }
         }
     }
@@ -169,7 +174,7 @@ class DefaultMarketDataProvider(
     override fun observeTicks(symbol: String): Flow<Tick> {
         val sym = normalizeSymbol(symbol)
         val flow = tickFlows.getOrPut(sym) {
-            MutableSharedFlow(replay = 1)
+            latestMarketFlow()
         }
         latestTicks[sym]?.let { flow.tryEmit(it) }
         return flow.asSharedFlow()
@@ -179,7 +184,7 @@ class DefaultMarketDataProvider(
         val sym = normalizeSymbol(symbol)
         val key = "${sym}_${timeframe.code}"
         return candleFlows.getOrPut(key) {
-            MutableSharedFlow(replay = 1)
+            latestMarketFlow()
         }.asSharedFlow()
     }
 
@@ -218,57 +223,57 @@ class DefaultMarketDataProvider(
      * the primary API host even while historical candles are cached.
      * Only validated exchange bid/ask data can unlock paper trading.
      */
-    private suspend fun fetchLiveCryptoQuotes(): Boolean = withContext(Dispatchers.IO) {
+    private suspend fun fetchLiveCryptoQuote(symbol: String): Boolean = withContext(Dispatchers.IO) {
         var received = false
-        val hosts = listOf("api.binance.com", "api1.binance.com", "api2.binance.com",
-            "api3.binance.com", "data-api.binance.vision")
-        for (symbol in listOf("BTCUSDT", "ETHUSDT")) {
-            for (host in hosts) {
-                try {
-                    val url = okhttp3.HttpUrl.Builder()
-                        .scheme("https")
-                        .host(host)
-                        .addPathSegments("api/v3/ticker/bookTicker")
-                        .addQueryParameter("symbol", symbol)
-                        .build()
-                    val request = Request.Builder().url(url)
-                        .header("User-Agent", "TradeLab/2.0")
-                        .build()
-                    var valid = false
-                    httpClient.newCall(request).execute().use { response ->
-                        if (response.isSuccessful) {
-                            val body = response.body?.string()
-                            if (body != null) {
-                                val item = org.json.JSONObject(body)
-                                if (item.optString("symbol") == symbol) {
-                                    val bid = item.getDouble("bidPrice")
-                                    val ask = item.getDouble("askPrice")
-                                    val tick = Tick(
-                                        symbol = symbol,
-                                        bid = bid,
-                                        ask = ask,
-                                        last = (bid + ask) / 2.0,
-                                        timestamp = System.currentTimeMillis(),
-                                        source = "BINANCE_REST_POLL"
-                                    )
-                                    if (DataIntegrityValidator.validateTick(tick).isValid) {
-                                        emitTick(tick)
-                                        rawStreamFlow.tryEmit(body)
-                                        _dataSourceType.value = DataSourceType.LIVE_DATA
-                                        _connectionStatus.value = ProviderConnectionStatus.CONNECTED
-                                        valid = true
-                                        received = true
-                                    }
+        for (host in quoteEndpoints.orderedHosts(symbol)) {
+            ensureActive()
+            try {
+                val url = okhttp3.HttpUrl.Builder()
+                    .scheme("https")
+                    .host(host)
+                    .addPathSegments("api/v3/ticker/bookTicker")
+                    .addQueryParameter("symbol", symbol)
+                    .build()
+                val request = Request.Builder().url(url)
+                    .header("User-Agent", "TradeLab/2.0")
+                    .build()
+                var valid = false
+                httpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string()
+                        if (body != null) {
+                            val item = org.json.JSONObject(body)
+                            if (item.optString("symbol") == symbol) {
+                                val bid = item.getDouble("bidPrice")
+                                val ask = item.getDouble("askPrice")
+                                val tick = Tick(
+                                    symbol = symbol,
+                                    bid = bid,
+                                    ask = ask,
+                                    last = (bid + ask) / 2.0,
+                                    timestamp = System.currentTimeMillis(),
+                                    source = "BINANCE_REST_POLL"
+                                )
+                                if (DataIntegrityValidator.validateTick(tick).isValid) {
+                                    emitTick(tick)
+                                    rawStreamFlow.tryEmit(body)
+                                    _dataSourceType.value = DataSourceType.LIVE_DATA
+                                    _connectionStatus.value = ProviderConnectionStatus.CONNECTED
+                                    valid = true
+                                    received = true
                                 }
                             }
                         }
                     }
-                    if (valid) break
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    // Try another official Binance endpoint; never invent prices.
                 }
+                if (valid) {
+                    quoteEndpoints.recordSuccess(symbol, host)
+                    break
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Try another official Binance endpoint; never invent prices.
             }
         }
         received
