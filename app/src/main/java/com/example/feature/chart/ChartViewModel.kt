@@ -243,7 +243,10 @@ class ChartViewModel(
                 if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
                     _uiState.update {
                         it.copy(candles = emptyList(), isLoading = false,
-                            candleLoadError = "تعذر تحميل الشارت من Binance. تحقق من اتصال الإنترنت ثم أعد المحاولة.")
+                            // Report the actual failure instead of assuming that
+                            // every historical-data error is an internet outage.
+                            candleLoadError = "فشل تحميل شموع Binance: ${error.javaClass.simpleName}: " +
+                                (error.cause?.message ?: error.message ?: "سبب غير معروف").take(220))
                     }
                 }
             }
