@@ -180,9 +180,16 @@ object ChartOverlays {
         transform: ChartTransform,
         trades: List<TradeJournalEntry>
     ) {
+        val firstVisibleTime = transform.visibleCandles.firstOrNull()?.openTime ?: return
+        val lastVisibleTime = transform.visibleCandles.lastOrNull()?.openTime ?: return
         for (trade in trades) {
-            val openX = transform.timeToX(trade.openTime)
-            val closeX = transform.timeToX(trade.closeTime)
+            // ChartTransform.timeToX clamps out-of-viewport timestamps to an edge.
+            // Do not draw phantom entries/exits at the viewport boundary.
+            val openX = if (trade.openTime in firstVisibleTime..lastVisibleTime)
+                transform.timeToX(trade.openTime) else null
+            val closeX = if (trade.closeTime in firstVisibleTime..lastVisibleTime)
+                transform.timeToX(trade.closeTime) else null
+            if (openX == null && closeX == null) continue
 
             // Open Marker (Triangle)
             if (openX != null) {
