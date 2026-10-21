@@ -1,25 +1,3 @@
-            if (showQuickOrders) {
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { showExtraControls = !showExtraControls }, modifier = Modifier.testTag("chart_controls_toggle")) {
-                    Icon(Icons.Default.Tune, contentDescription = null)
-                    Text(" ${uiState.selectedTimeframe.displayName}")
-                }
-                IconButton(onClick = { showIndicatorsDialog = true }) {
-                    Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { showToolsMenu = true }) {
-                    Icon(Icons.Default.Draw, contentDescription = "الرسم", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { viewModel.triggerResetView() }) {
-                    Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط الشارت", tint = TradingAccentLight)
-                }
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = { showQuickOrders = !showQuickOrders }, modifier = Modifier.testTag("chart_orders_toggle")) {
-                    Text(if (showQuickOrders) "إخفاء" else "تداول")
-                }
-            }
-            if (showExtraControls) {
 package com.example.feature.chart
 
 import androidx.compose.foundation.background
@@ -68,23 +46,11 @@ fun ChartScreen(
     val uiState by viewModel.uiState.collectAsState()
     val replayState by replayViewModel.uiState.collectAsState()
     var isEmbeddedReplay by remember { mutableStateOf(false) }
-    var showReplayDetails by remember { mutableStateOf(false) }
-    var showTimeframePicker by remember { mutableStateOf(false) }
-    var showReplayDetails by remember { mutableStateOf(false) }
-    var showQuickTrade by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
-    var showReplayControls by remember { mutableStateOf(false) }
-    var showChartStatus by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
-    var showChartActions by remember { mutableStateOf(false) }
-    var showExtraControls by remember { mutableStateOf(false) }
-    var showQuickOrders by remember { mutableStateOf(false) }
-    var showChartControls by remember { mutableStateOf(false) }
-    var showReplayControls by remember { mutableStateOf(false) }
-    var showChartOptions by remember { mutableStateOf(false) }
-    var showReplayControls by remember { mutableStateOf(false) }
-    var showChartToolbar by remember { mutableStateOf(false) }
+    var showChartExtras by remember { mutableStateOf(false) }
+    var showTimeframes by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
 
@@ -168,11 +134,9 @@ fun ChartScreen(
                             if (isEmbeddedReplay) {
                                 replayViewModel.pause()
                                 isEmbeddedReplay = false
-                                showReplayControls = false
                             } else {
                                 replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
                                 isEmbeddedReplay = true
-                                showReplayControls = false
                             }
                         },
                         modifier = Modifier.testTag("chart_to_replay_btn")
@@ -190,7 +154,7 @@ fun ChartScreen(
                 .padding(paddingValues)
         ) {
             // Distinguish a verified live quote from delayed or unsupported data.
-            if (!headerQuoteVerified && showChartControls) {
+            if (!headerQuoteVerified && !isEmbeddedReplay) {
                 Text(
                     text = if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
                         "السعر المباشر غير مؤكد حاليًا — لا تعتمد عليه لتنفيذ صفقة"
@@ -208,28 +172,7 @@ fun ChartScreen(
                 )
             }
 
-            if (isEmbeddedReplay && showReplayControls) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(TradingCard).padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_details_toggle")) {
-                        Icon(if (showReplayDetails) Icons.Default.ExpandLess else Icons.Default.Tune, contentDescription = null)
-                        Spacer(Modifier.width(4.dp))
-                        Text(if (showReplayDetails) "إخفاء لوحة الإعادة" else "REPLAY · ${replayState.currentIndex + 1}/${replayState.totalCandles}")
-                    }
-                    IconButton(onClick = { replayViewModel.stepBackward() }, enabled = !replayState.isLoading) {
-                        Icon(Icons.Default.SkipPrevious, contentDescription = "شمعة سابقة")
-                    }
-                    IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() }, enabled = !replayState.isLoading && replayState.totalCandles > 0) {
-                        Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "تشغيل أو إيقاف الإعادة")
-                    }
-                    IconButton(onClick = { replayViewModel.stepForward() }, enabled = !replayState.isLoading) {
-                        Icon(Icons.Default.SkipNext, contentDescription = "شمعة تالية")
-                    }
-                }
-                if (showReplayDetails) {
+            if (isEmbeddedReplay) {
                 Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard)
                         .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -237,9 +180,7 @@ fun ChartScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_details_toggle")) {
-                        Text(if (showReplayDetails) "إخفاء التفاصيل" else "REPLAY ⋮", color = TradingGold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    }
+                    Text("REPLAY", color = TradingGold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     IconButton(onClick = { replayViewModel.stepBackward() }, enabled = !replayState.isLoading) {
                         Icon(Icons.Default.SkipPrevious, contentDescription = "شمعة سابقة", tint = TradingTextPrimary)
                     }
@@ -258,14 +199,12 @@ fun ChartScreen(
                         Text("إنهاء", color = TradingNegative)
                     }
                 }
-            }
-            if (isEmbeddedReplay && showReplayControls) {
-                TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_details_toggle")) {
-                    Text(if (showReplayDetails) "إخفاء أوامر الإعادة" else "أوامر الإعادة والسرعة", fontSize = 11.sp)
+                TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
+                    Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
                 }
                 if (showReplayDetails) {
                 // Historical paper orders are isolated from the live-paper account.
-                if (showReplayControls) Row(
+                Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard)
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                         .testTag("chart_replay_trading_bar"),
@@ -291,7 +230,7 @@ fun ChartScreen(
                         color = TradingTextSecondary, fontSize = 10.sp
                     )
                 }
-                if (showReplayControls) Text(
+                Text(
                     "حقوق الحساب: ${String.format(Locale.US, "%.2f", replayState.currentEquity)} · " +
                         "العائم: ${String.format(Locale.US, "%.2f", replayState.currentEquity - replayState.currentBalance)}",
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
@@ -299,7 +238,7 @@ fun ChartScreen(
                     color = TradingTextSecondary,
                     fontSize = 11.sp
                 )
-                if (showReplayControls) Row(
+                Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                         .testTag("chart_replay_speed"),
@@ -322,7 +261,7 @@ fun ChartScreen(
                         )
                     }
                 }
-                if (showReplayControls && replayState.openPositions.isNotEmpty()) {
+                if (replayState.openPositions.isNotEmpty()) {
                     Column(
                         modifier = Modifier.fillMaxWidth().background(TradingCard)
                             .padding(horizontal = 10.dp, vertical = 5.dp)
@@ -356,80 +295,30 @@ fun ChartScreen(
                         }
                     }
                 }
-                if (showReplayControls && (replayState.isLoading || replayState.totalCandles == 0)) {
+                if (replayState.isLoading || replayState.totalCandles == 0) {
                     Text(if (replayState.isLoading) "جار تحميل بيانات الإعادة..." else "لا تتوفر شموع تاريخية للإعادة",
                         color = TradingTextSecondary, fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                 }
-                }
+            }
             }
 
-            // Single compact controls row: maximize actual chart viewport.
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
+            // Timeframe selector is collapsed by default to preserve the chart viewport.
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { showTimeframes = !showTimeframes }, modifier = Modifier.testTag("chart_timeframe_toggle")) {
+                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(uiState.selectedTimeframe.displayName + if (showTimeframes) " ▲" else " ▼", fontSize = 12.sp)
+                }
+            }
+            if (showTimeframes) Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { showChartOptions = !showChartOptions }, modifier = Modifier.size(36.dp).testTag("chart_toggle_timeframes")) {
-                    Icon(Icons.Default.Schedule, contentDescription = "الأطر الزمنية", tint = TradingAccentLight)
-                }
-                Text(uiState.selectedTimeframe.displayName, color = TradingTextPrimary, fontSize = 12.sp)
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(36.dp).testTag("chart_indicators_btn")) {
-                    Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { showChartToolbar = !showChartToolbar }, modifier = Modifier.size(36.dp).testTag("drawing_tools_menu_btn")) {
-                    Icon(Icons.Default.Draw, contentDescription = "أدوات الرسم", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(36.dp).testTag("chart_reset_view_btn")) {
-                    Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط الشارت", tint = TradingAccentLight)
-                }
-                if (isEmbeddedReplay) {
-                    IconButton(onClick = { showReplayControls = !showReplayControls }, modifier = Modifier.size(36.dp).testTag("chart_toggle_replay_controls")) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "أدوات الإعادة", tint = TradingGold)
-                    }
-                }
-            }
-            if (showChartOptions) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                IconButton(onClick = { showChartControls = !showChartControls }, modifier = Modifier.size(34.dp).testTag("chart_toggle_controls")) {
-                    Icon(Icons.Default.Tune, contentDescription = "إظهار أو إخفاء أدوات الشارت", tint = TradingAccentLight)
-                }
-                if (isEmbeddedReplay) {
-                    IconButton(onClick = { showReplayControls = !showReplayControls }, modifier = Modifier.size(34.dp).testTag("chart_toggle_replay_controls")) {
-                        Icon(Icons.Default.PlayCircle, contentDescription = "إظهار أو إخفاء أدوات إعادة العرض", tint = TradingGold)
-                    }
-                }
-                Text(uiState.selectedTimeframe.displayName, color = TradingTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Default.Draw, contentDescription = "أدوات الرسم", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط عرض الشارت", tint = TradingAccentLight)
-                }
-                }
-            }
-
-            // Compact controls: preserve most screen height for the chart.
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { showTimeframePicker = !showTimeframePicker }, modifier = Modifier.testTag("chart_timeframe_picker_btn")) {
-                    Text(uiState.selectedTimeframe.displayName, fontSize = 12.sp)
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
-                }
-                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.testTag("chart_indicators_btn")) { Icon(Icons.Default.Timeline, contentDescription = "المؤشرات") }
-                IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.testTag("drawing_tools_menu_btn")) { Icon(Icons.Default.Draw, contentDescription = "أدوات الرسم") }
-                IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.testTag("chart_reset_view_btn")) { Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط العرض") }
-                IconButton(onClick = { viewModel.toggleVolume() }) { Icon(Icons.Default.BarChart, contentDescription = "الحجم", tint = if (uiState.isVolumeVisible) TradingGold else TradingTextSecondary) }
-            }
-            if (showTimeframePicker) {
-                Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Timeframe.values().forEach { tf ->
                     val isSelected = uiState.selectedTimeframe == tf
                     Box(
@@ -449,11 +338,46 @@ fun ChartScreen(
                     }
                 }
 
+            }
+
+            // Compact icon toolbar: keep the chart as the primary surface.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.testTag("chart_indicators_btn")) {
+                    Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
+                }
+                IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.testTag("drawing_tools_menu_btn")) {
+                    Icon(Icons.Default.Draw, contentDescription = "أدوات الرسم", tint = TradingAccentLight)
+                }
+                IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.testTag("chart_reset_view_btn")) {
+                    Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط الشارت", tint = TradingAccentLight)
+                }
+                IconButton(onClick = { showChartExtras = !showChartExtras }, modifier = Modifier.testTag("chart_extras_btn")) {
+                    Icon(Icons.Default.Tune, contentDescription = "إعدادات الشارت", tint = TradingTextSecondary)
+                }
+            }
+            if (showChartExtras) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ChartDisplayStyle.values().forEach { style ->
+                        TextButton(onClick = { chartDisplayStyle = style }, modifier = Modifier.testTag("chart_style_${style.name}")) {
+                            Text(style.label, color = if (chartDisplayStyle == style) TradingAccentLight else TradingTextSecondary)
+                        }
+                    }
+                    TextButton(onClick = { viewModel.toggleVolume() }) {
+                        Text("VOL", color = if (uiState.isVolumeVisible) TradingGold else TradingTextSecondary)
+                    }
                 }
             }
 
             // Drawing tools active banner if tool active
-            if (showChartControls && uiState.activeDrawingTool != DrawingTool.NONE) {
+            if (uiState.activeDrawingTool != DrawingTool.NONE) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -478,7 +402,6 @@ fun ChartScreen(
                 }
             }
 
-            }
             // Market data provenance: never present missing or stale quotes as live.
             val marketTick = uiState.latestTick
             val marketTickIsLive = marketTick != null &&
@@ -492,6 +415,22 @@ fun ChartScreen(
                 marketTick?.source == "BINANCE_WEBSOCKET" -> "Binance · بث مباشر"
                 else -> "Binance · تحديث عبر الإنترنت"
             }
+            if (!isEmbeddedReplay) Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = marketStatus,
+                    color = if (marketTickIsLive) TradingPositive else TradingGold,
+                    fontSize = 11.sp,
+                    modifier = Modifier.testTag("chart_market_source_status")
+                )
+                if (!marketTickIsLive) {
+                    Text("السعر غير متاح", color = TradingTextSecondary, fontSize = 10.sp)
+                }
+            }
+
             // Professional Candlestick Chart
             Box(
                 modifier = Modifier
@@ -554,7 +493,7 @@ fun ChartScreen(
 
                 // Compact TradingView-style tools on the chart itself.
                 // Buttons select the existing functional drawing tools; no image overlay.
-                if (showChartToolbar) Surface(
+                Surface(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .padding(horizontal = 5.dp)
@@ -566,7 +505,7 @@ fun ChartScreen(
                 ) {
                     Column(
                         modifier = Modifier
-                            .heightIn(max = 168.dp)
+                            .heightIn(max = 228.dp)
                             .verticalScroll(rememberScrollState())
                             .padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -614,8 +553,8 @@ fun ChartScreen(
                 }
             }
 
-            // Quick execution is opt-in; default is an unobstructed chart.
-            if (showQuickTrade && !isEmbeddedReplay) Surface(
+            // Quick Execution Bar
+            Surface(
                 color = TradingCard,
                 tonalElevation = 0.dp,
                 border = androidx.compose.foundation.BorderStroke(1.dp, TradingBorder)
@@ -673,8 +612,7 @@ fun ChartScreen(
                         }
                     }
                 }
-            }            }
-
+            }
         }
     }
 
