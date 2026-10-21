@@ -68,11 +68,10 @@ class MarketDataRepository(
         require(to <= System.currentTimeMillis() - intervalMillis) {
             "Historical range includes an unfinished candle"
         }
-        // Avoid silently returning partial history after the pagination safety cap.
-        // Large ranges should be requested in separate bounded chunks by the caller.
+        // Limit the returned list to keep replay memory bounded. Fetch pages lazily.
         val requestedBars = (to - from) / intervalMillis + 1L
-        require(requestedBars <= 5000L) {
-            "Historical range exceeds 5000 candles. Request a shorter range."
+        require(requestedBars <= 20_000L) {
+            "Historical range exceeds 20000 candles. Request a shorter range."
         }
         val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
         if (!isCrypto) {
@@ -100,7 +99,7 @@ class MarketDataRepository(
         val fetched = mutableListOf<Candle>()
         var cursor = from
         try {
-            while (cursor <= to && fetched.size < 5000) {
+            while (cursor <= to && fetched.size < 20_000) {
                 val windowEnd = minOf(to, cursor + intervalMillis * (pageSize - 1L))
                 val page = provider.getHistoricalCandles(symbol, timeframe, cursor, windowEnd)
                 if (page.isEmpty()) break
