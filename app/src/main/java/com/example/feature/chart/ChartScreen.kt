@@ -74,6 +74,8 @@ fun ChartScreen(
     var showQuickTrade by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
+    var showReplayDetails by remember { mutableStateOf(false) }
+    var showChartActions by remember { mutableStateOf(false) }
     var showExtraControls by remember { mutableStateOf(false) }
     var showQuickOrders by remember { mutableStateOf(false) }
     var showChartControls by remember { mutableStateOf(false) }
@@ -231,7 +233,9 @@ fun ChartScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("REPLAY", color = TradingGold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_details_toggle")) {
+                        Text(if (showReplayDetails) "إخفاء التفاصيل" else "REPLAY ⋮", color = TradingGold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
                     IconButton(onClick = { replayViewModel.stepBackward() }, enabled = !replayState.isLoading) {
                         Icon(Icons.Default.SkipPrevious, contentDescription = "شمعة سابقة", tint = TradingTextPrimary)
                     }
