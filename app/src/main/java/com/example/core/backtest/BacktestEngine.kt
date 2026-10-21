@@ -120,13 +120,14 @@ class BacktestEngine(
         onProgress?.invoke(BacktestProgressStage.PREPARING_DATA, 0.05f)
 
         // 1. Filter by date range if specified
+        // Reject mixed-symbol or mixed-timeframe input even when date filtering
+        // would otherwise hide invalid candles.
+        require(candles.all { it.symbol.equals(config.symbol, ignoreCase = true) && it.timeframe == config.timeframe }) {
+            "Historical candles must match the backtest symbol and timeframe"
+        }
         val rangeFiltered = candles.filter { c ->
             (config.startTime == null || c.openTime >= config.startTime) &&
             (config.endTime == null || c.closeTime <= config.endTime)
-        }
-
-        require(rangeFiltered.all { it.symbol.equals(config.symbol, ignoreCase = true) && it.timeframe == config.timeframe }) {
-            "Historical candles must match the backtest symbol and timeframe"
         }
 
         // 2. Validate, deduplicate, and sort chronologically (Strict Zero-Lookahead)
@@ -194,7 +195,7 @@ class BacktestEngine(
         onProgress?.invoke(BacktestProgressStage.RUNNING_STRATEGY, 0.35f)
 
         val total = cleanCandles.size
-        val warmupPeriod = 15.coerceAtMost(total - 1)
+        val warmupPeriod = 15
 
         // Bar-by-bar sequential iteration (Strict zero-lookahead protection)
         for (i in warmupPeriod until total) {
@@ -211,7 +212,7 @@ class BacktestEngine(
 
             val halfSpread = (config.spreadPips * symInfo.pipSize) / 2.0
             // The configured spread cannot produce a non-positive bid.
-            require(currentCandle.close > halfSpread && halfSpread.isFinite()) {
+            require(halfSpread.isFinite() && currentCandle.low > halfSpread) {
                 "Configured spread exceeds the available candle price"
             }
             val tick = Tick(
