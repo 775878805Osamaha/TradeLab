@@ -198,7 +198,9 @@ fun ReplayScreen(
                 CandlestickChart(
                     candles = uiState.visibleCandles,
                     latestTick = uiState.latestTick,
-                    openPositions = uiState.openPositions
+                    openPositions = uiState.openPositions,
+                    pendingOrders = uiState.pendingOrders,
+                    historicalTrades = uiState.closedTrades
                 )
             }
 
