@@ -78,9 +78,11 @@ class MarketDataRepository(
             candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
         )
         // A synthetic historical candle must never be treated as verified exchange data.
-        val trustedLocal = if (isCrypto) {
-            local.filter { it.source == "BINANCE_HISTORICAL" || it.source == "BINANCE_HISTORICAL_CACHED" }
-        } else local
+        val trustedLocal = local.filter { candle ->
+            candle.symbol.equals(symbol, ignoreCase = true) &&
+                candle.timeframe == timeframe &&
+                (candle.source == "BINANCE_HISTORICAL" || candle.source == "BINANCE_HISTORICAL_CACHED")
+        }
 
         // A candle cache is complete only when every expected bar exists.
         // Never mistake sparse history for a complete backtest window.
