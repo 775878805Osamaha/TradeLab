@@ -404,11 +404,11 @@ class BacktestEngine(
                         // fill price, slippage, margin and order validation.
                         // Do not duplicate an approximate margin check here.
                         val execResult = runExecutionEngine.executeMarketOrder(
-                                account = virtualAccountState,
-                                symbol = config.symbol,
-                                side = side,
-                                volume = lotSize,
-                                tick = tick,
+                            account = virtualAccountState,
+                            symbol = config.symbol,
+                            side = side,
+                            volume = lotSize,
+                            tick = tick,
                                 stopLoss = signal.stopLoss,
                                 takeProfit = signal.takeProfit,
                                 strategyId = config.strategy.id,
