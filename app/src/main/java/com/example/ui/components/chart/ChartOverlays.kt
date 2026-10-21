@@ -14,12 +14,20 @@ import java.util.Locale
 
 object ChartOverlays {
 
+    // ChartTransform clamps offscreen prices to the plot boundary. Skip those
+    // levels rather than drawing misleading horizontal lines at the top/bottom.
+    private fun isPriceVisible(transform: ChartTransform, price: Double): Boolean =
+        price.isFinite() && price in transform.minPrice..transform.maxPrice
+
     fun drawPriceAndSpread(
         scope: DrawScope,
         transform: ChartTransform,
         latestTick: Tick?
     ) {
         if (latestTick == null) return
+        if (!isPriceVisible(transform, latestTick.last) &&
+            !isPriceVisible(transform, latestTick.bid) &&
+            !isPriceVisible(transform, latestTick.ask)) return
 
         val bidY = transform.priceToY(latestTick.bid)
         val askY = transform.priceToY(latestTick.ask)
@@ -88,6 +96,7 @@ object ChartOverlays {
             val lineColor = if (isBuy) TradingPositive else TradingNegative
 
             // Entry line
+            if (isPriceVisible(transform, pos.entryPrice)) {
             scope.drawLine(
                 color = lineColor,
                 start = Offset(0f, entryY),
@@ -114,8 +123,9 @@ object ChartOverlays {
                 drawText(label, 12f, entryY - 6f, p)
             }
 
+            }
             // Stop Loss line
-            pos.stopLoss?.let { sl ->
+            pos.stopLoss?.takeIf { isPriceVisible(transform, it) }?.let { sl ->
                 val slY = transform.priceToY(sl)
                 scope.drawLine(
                     color = TradingNegative.copy(alpha = 0.85f),
@@ -131,7 +141,7 @@ object ChartOverlays {
             }
 
             // Take Profit line
-            pos.takeProfit?.let { tp ->
+            pos.takeProfit?.takeIf { isPriceVisible(transform, it) }?.let { tp ->
                 val tpY = transform.priceToY(tp)
                 scope.drawLine(
                     color = TradingPositive.copy(alpha = 0.85f),
@@ -155,7 +165,7 @@ object ChartOverlays {
     ) {
         for (ord in orders) {
             if (ord.status != OrderStatus.PENDING ||
-                !ord.requestedPrice.isFinite() || ord.requestedPrice <= 0.0) continue
+                !isPriceVisible(transform, ord.requestedPrice)) continue
             val orderY = transform.priceToY(ord.requestedPrice)
             val isBuy = ord.direction == OrderSide.BUY
 
@@ -192,7 +202,7 @@ object ChartOverlays {
             if (openX == null && closeX == null) continue
 
             // Open Marker (Triangle)
-            if (openX != null) {
+            if (openX != null && isPriceVisible(transform, trade.entryPrice)) {
                 val openY = transform.priceToY(trade.entryPrice)
                 val isBuy = trade.side == PositionSide.BUY
                 val markerColor = if (isBuy) TradingPositive else TradingNegative
@@ -213,7 +223,7 @@ object ChartOverlays {
             }
 
             // Close Marker & P/L Tag
-            if (closeX != null) {
+            if (closeX != null && isPriceVisible(transform, trade.exitPrice)) {
                 val closeY = transform.priceToY(trade.exitPrice)
                 val isWin = trade.netProfitLoss >= 0
 
