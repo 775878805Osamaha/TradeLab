@@ -125,6 +125,10 @@ class BacktestEngine(
             (config.endTime == null || c.closeTime <= config.endTime)
         }
 
+        require(rangeFiltered.all { it.symbol.equals(config.symbol, ignoreCase = true) && it.timeframe == config.timeframe }) {
+            "Historical candles must match the backtest symbol and timeframe"
+        }
+
         // 2. Validate, deduplicate, and sort chronologically (Strict Zero-Lookahead)
         val cleanCandles = DataIntegrityValidator.sanitizeCandles(rangeFiltered)
 
@@ -263,7 +267,7 @@ class BacktestEngine(
             // Step 2: Evaluate open positions against current bar extremes
             // DETERMINISTIC CONSERVATIVE INTRABAR RISK POLICY:
             // If both SL and TP are touched inside the same bar: Stop Loss executes first.
-            val posIterator = openPositions.iterator()
+            val posIterator = openPositions.listIterator()
             while (posIterator.hasNext()) {
                 val pos = posIterator.next()
                 // Candle OHLC represents the mid-price. A BUY exits at bid
@@ -296,10 +300,8 @@ class BacktestEngine(
                             eval.updatedPosition
                         }
 
-                        val index = openPositions.indexOf(pos)
-                        if (index != -1) {
-                            openPositions[index] = updatedPos
-                        }
+                        // Updating through the iterator preserves iteration consistency.
+                        posIterator.set(updatedPos)
                     }
                 }
             }
@@ -383,12 +385,13 @@ class BacktestEngine(
                 }
                 SignalAction.BUY, SignalAction.SELL -> {
                     val isBuy = signal.action == SignalAction.BUY
+                    val side = if (isBuy) OrderSide.BUY else OrderSide.SELL
+                    // The signal action is authoritative; a contradictory optional
+                    // direction must never silently open the opposite position.
                     val isAllowed = (isBuy && config.allowLong) || (!isBuy && config.allowShort)
                     val canOpen = isAllowed && (config.allowMultiplePositions || openPositions.isEmpty())
 
                     if (canOpen) {
-                        val side = signal.direction ?: if (isBuy) OrderSide.BUY else OrderSide.SELL
-
                         val lotSize = when (config.positionSizingMode) {
                             PositionSizingMode.FIXED_LOT -> {
                                 (signal.suggestedVolume ?: config.fixedLot).coerceIn(symInfo.minLot, symInfo.maxLot)
@@ -407,6 +410,7 @@ class BacktestEngine(
                             }
                         }
 
+                        if (!lotSize.isFinite() || lotSize <= 0.0) continue
                         val requiredMargin = (lotSize * symInfo.contractSize * currentCandle.close) / config.leverage
 
                         // Check margin availability before execution
