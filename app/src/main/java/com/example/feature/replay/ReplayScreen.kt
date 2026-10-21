@@ -43,6 +43,9 @@ fun ReplayScreen(
     val uiState by viewModel.uiState.collectAsState()
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
     var showJumpDialog by remember { mutableStateOf(false) }
+    var crosshairEnabled by remember { mutableStateOf(false) }
+    var volumeVisible by remember { mutableStateOf(true) }
+    var chartResetTrigger by remember { mutableLongStateOf(0L) }
     var showOrderTicket by remember { mutableStateOf(false) }
     var editProtectionId by remember { mutableStateOf<Long?>(null) }
     var editSl by remember { mutableStateOf("") }
@@ -189,6 +192,31 @@ fun ReplayScreen(
                 }
             }
 
+            // Replay chart tools stay on the chart screen; no separate replay chart page.
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 10.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = crosshairEnabled,
+                    onClick = { crosshairEnabled = !crosshairEnabled },
+                    label = { Text("مؤشر التقاطع", fontSize = 11.sp) },
+                    modifier = Modifier.testTag("replay_crosshair_toggle")
+                )
+                FilterChip(
+                    selected = volumeVisible,
+                    onClick = { volumeVisible = !volumeVisible },
+                    label = { Text("الحجم", fontSize = 11.sp) },
+                    modifier = Modifier.testTag("replay_volume_toggle")
+                )
+                TextButton(
+                    onClick = { chartResetTrigger++ },
+                    modifier = Modifier.testTag("replay_chart_reset")
+                ) { Text("إعادة ضبط الشارت", fontSize = 11.sp) }
+            }
+
             // 2. Large Central Candlestick Chart (Zero future candles, strictly visible subset!)
             Box(
                 modifier = Modifier
@@ -200,7 +228,10 @@ fun ReplayScreen(
                     latestTick = uiState.latestTick,
                     openPositions = uiState.openPositions,
                     pendingOrders = uiState.pendingOrders,
-                    historicalTrades = uiState.closedTrades
+                    historicalTrades = uiState.closedTrades,
+                    isCrosshairActive = crosshairEnabled,
+                    isVolumeVisible = volumeVisible,
+                    resetViewTrigger = chartResetTrigger
                 )
             }
 
