@@ -278,7 +278,7 @@ class BacktestEngine(
                             position = pos,
                             exitPrice = eval.exitPrice,
                             exitReason = eval.exitReason,
-                            closeTime = currentCandle.openTime + (config.timeframe.minutes * 60000L)
+                            closeTime = currentCandle.closeTime
                         )
                         closedTrades.add(trade.copy(mode = "BACKTEST"))
                         virtualBalance += trade.netProfitLoss
@@ -357,7 +357,8 @@ class BacktestEngine(
                         val pos = itClose.next()
                         val (trade, _) = runExecutionEngine.closePosition(
                             position = pos,
-                            exitPrice = currentCandle.close,
+                            // BUY liquidates at bid; SELL liquidates at ask.
+                            exitPrice = if (pos.side == PositionSide.BUY) tick.bid else tick.ask,
                             exitReason = ExitReason.STRATEGY_CLOSE,
                             closeTime = currentCandle.closeTime
                         )
@@ -439,7 +440,12 @@ class BacktestEngine(
             for (pos in openPositions) {
                 val (trade, _) = runExecutionEngine.closePosition(
                     position = pos,
-                    exitPrice = lastCandle.close,
+                    // Final forced liquidation must pay the spread too.
+                    exitPrice = if (pos.side == PositionSide.BUY) {
+                        lastCandle.close - (config.spreadPips * symInfo.pipSize / 2.0)
+                    } else {
+                        lastCandle.close + (config.spreadPips * symInfo.pipSize / 2.0)
+                    },
                     exitReason = ExitReason.MANUAL_CLOSE,
                     closeTime = lastCandle.closeTime
                 )
