@@ -275,8 +275,8 @@ class BacktestEngine(
 
             // The account and equity snapshot must reflect the current bar
             // after all intrabar exits have been processed.
-            // Strategy actions at this close are reconciled at the next bar,
-            // except for the terminal snapshot which is finalized below.
+            // The strategy receives the pre-signal account snapshot; the
+            // recorded equity point is settled after executing its signal.
             // Step 3: Floating equity, margin, and drawdown calculation.
             // Position.profitLoss is gross mark-to-market; entry commission and
             // accrued swap are liabilities even before a position is closed.
@@ -338,21 +338,24 @@ class BacktestEngine(
             // Step 5: Execute Strategy Logic
             val signal = config.strategy.onCandle(context, config.parameters)
 
-            // Validate only fields used by this action. A CLOSE must not be
-            // discarded because an unrelated suggestedVolume is malformed.
-            if (signal.symbol != null && !signal.symbol.equals(config.symbol, ignoreCase = true)) continue
+            // Invalid signals must still reach the end-of-bar accounting
+            // snapshot. A 'continue' here would leave equity stale.
             val opensPosition = signal.action == SignalAction.BUY || signal.action == SignalAction.SELL
             val changesStops = opensPosition || signal.action == SignalAction.MODIFY
-            if (opensPosition) {
-                if (signal.entryPrice != null && (!signal.entryPrice.isFinite() || signal.entryPrice <= 0.0)) continue
-                if (signal.suggestedVolume != null && (!signal.suggestedVolume.isFinite() || signal.suggestedVolume <= 0.0)) continue
-            }
-            if (changesStops) {
-                if (signal.stopLoss != null && (!signal.stopLoss.isFinite() || signal.stopLoss <= 0.0)) continue
-                if (signal.takeProfit != null && (!signal.takeProfit.isFinite() || signal.takeProfit <= 0.0)) continue
-            }
+            val wrongSymbol = signal.symbol != null &&
+                !signal.symbol.equals(config.symbol, ignoreCase = true)
+            val invalidEntry = opensPosition && signal.entryPrice != null &&
+                (!signal.entryPrice.isFinite() || signal.entryPrice <= 0.0)
+            val invalidVolume = opensPosition && signal.suggestedVolume != null &&
+                (!signal.suggestedVolume.isFinite() || signal.suggestedVolume <= 0.0)
+            val invalidStop = changesStops && signal.stopLoss != null &&
+                (!signal.stopLoss.isFinite() || signal.stopLoss <= 0.0)
+            val invalidTarget = changesStops && signal.takeProfit != null &&
+                (!signal.takeProfit.isFinite() || signal.takeProfit <= 0.0)
+            val effectiveAction = if (wrongSymbol || invalidEntry || invalidVolume ||
+                invalidStop || invalidTarget) SignalAction.HOLD else signal.action
 
-            when (signal.action) {
+            when (effectiveAction) {
                 SignalAction.CLOSE -> {
                     val itClose = openPositions.iterator()
                     while (itClose.hasNext()) {
@@ -410,7 +413,7 @@ class BacktestEngine(
                             }
                         }
 
-                        if (!lotSize.isFinite() || lotSize <= 0.0) continue
+                        if (lotSize.isFinite() && lotSize > 0.0) {
                         // The execution engine is the source of truth for
                         // fill price, slippage, margin and order validation.
                         // Do not duplicate an approximate margin check here.
@@ -429,12 +432,35 @@ class BacktestEngine(
                         if (execResult is ExecutionResult.Success) {
                             openPositions.add(execResult.position.copy(id = nextPositionId++))
                         }
+                        }
                     }
                 }
                 SignalAction.HOLD -> {
                     // No-op
                 }
             }
+
+            // Record the state AFTER strategy execution at this candle close.
+            // This captures entry commission immediately, and realizes CLOSE
+            // signals on the same bar rather than one candle late.
+            val settledEquity = BacktestEquityAccounting.equity(
+                virtualBalance,
+                openPositions.map {
+                    BacktestEquityAccounting.OpenPositionValue(
+                        grossProfitLoss = it.profitLoss,
+                        entryCommission = it.commission,
+                        accruedSwap = it.swap
+                    )
+                }
+            )
+            highWatermark = maxOf(highWatermark, settledEquity)
+            equityPoints[equityPoints.lastIndex] = EquityPoint(
+                timestamp = currentCandle.closeTime,
+                balance = virtualBalance,
+                equity = settledEquity,
+                drawdown = highWatermark - settledEquity,
+                highWatermark = highWatermark
+            )
         }
 
         onProgress?.invoke(BacktestProgressStage.CALCULATING_TRADES, 0.88f)
