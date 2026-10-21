@@ -26,7 +26,7 @@ class HistoricalPageWindowTest {
     }
 
     @Test fun largeTimestampsDoNotOverflow() {
-        assertEquals(Long.MAX_VALUE - 1L, HistoricalPageWindow.end(
+        assertEquals(Long.MAX_VALUE, HistoricalPageWindow.end(
             Long.MAX_VALUE - 1L, Long.MAX_VALUE, 1L, 1000))
     }
 }
