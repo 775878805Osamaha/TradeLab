@@ -181,7 +181,8 @@ class BacktestEngine(
         var highWatermark = config.initialBalance
         equityPoints.add(
             EquityPoint(
-                timestamp = cleanCandles.first().openTime - 1000,
+                // Never fabricate a timestamp before the first available bar.
+                timestamp = cleanCandles.first().openTime,
                 balance = virtualBalance,
                 equity = virtualBalance,
                 drawdown = 0.0,
@@ -409,10 +410,10 @@ class BacktestEngine(
                             side = side,
                             volume = lotSize,
                             tick = tick,
-                                stopLoss = signal.stopLoss,
-                                takeProfit = signal.takeProfit,
-                                strategyId = config.strategy.id,
-                                mode = "BACKTEST"
+                            stopLoss = signal.stopLoss,
+                            takeProfit = signal.takeProfit,
+                            strategyId = config.strategy.id,
+                            mode = "BACKTEST"
                         )
 
                         if (execResult is ExecutionResult.Success) {
