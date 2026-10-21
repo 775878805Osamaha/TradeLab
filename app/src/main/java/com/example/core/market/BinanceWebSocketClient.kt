@@ -33,6 +33,9 @@ class BinanceWebSocketClient(
     private val _latencyMs = MutableStateFlow(0L)
     val latencyMs: StateFlow<Long> = _latencyMs.asStateFlow()
 
+    private val _lastConnectionError = MutableStateFlow<String?>(null)
+    val lastConnectionError: StateFlow<String?> = _lastConnectionError.asStateFlow()
+
     private var webSocket: WebSocket? = null
     private var isExplicitlyStopped = false
     private var reconnectJob: Job? = null
@@ -72,6 +75,7 @@ class BinanceWebSocketClient(
                 if (isExplicitlyStopped) return
                 _connectionStatus.value = ProviderConnectionStatus.CONNECTED
                 _reconnectAttempts.value = 0
+                _lastConnectionError.value = null
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -128,12 +132,15 @@ class BinanceWebSocketClient(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 if (isExplicitlyStopped) return
+                _lastConnectionError.value = "WebSocket ${endpoints[endpointIndex]} • HTTP ${response?.code ?: "N/A"} • ${t.javaClass.simpleName}: ${t.message?.take(120) ?: "connection failure"}"
                 _connectionStatus.value = ProviderConnectionStatus.DEGRADED
                 scheduleReconnect()
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 if (isExplicitlyStopped) return
+                _lastConnectionError.value = "WebSocket closed • code $code • ${reason.take(120)}"
+                _connectionStatus.value = ProviderConnectionStatus.DEGRADED
                 scheduleReconnect()
             }
         })
