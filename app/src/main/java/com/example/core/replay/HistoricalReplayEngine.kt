@@ -223,6 +223,15 @@ class HistoricalReplayEngine(
         }
         val sl = position.stopLoss
         val tp = position.takeProfit
+        require((sl == null || (sl.isFinite() && sl > 0.0)) &&
+            (tp == null || (tp.isFinite() && tp > 0.0))) {
+            "Invalid replay stop-loss or take-profit level"
+        }
+        require(candle.open.isFinite() && candle.open > 0.0 &&
+            candle.open in candle.low..candle.high &&
+            candle.close in candle.low..candle.high) {
+            "Replay OHLC candle range is inconsistent"
+        }
 
         val isSlTouched = when (position.side) {
             PositionSide.BUY -> sl != null && candle.low <= sl
