@@ -277,10 +277,20 @@ class BacktestEngine(
             // after all intrabar exits have been processed.
             // Strategy actions at this close are reconciled at the next bar,
             // except for the terminal snapshot which is finalized below.
-            // Step 3: Floating equity, margin, and drawdown calculation
-            val floatingPl = openPositions.sumOf { it.profitLoss }
+            // Step 3: Floating equity, margin, and drawdown calculation.
+            // Position.profitLoss is gross mark-to-market; entry commission and
+            // accrued swap are liabilities even before a position is closed.
+            val currentEquity = BacktestEquityAccounting.equity(
+                virtualBalance,
+                openPositions.map {
+                    BacktestEquityAccounting.OpenPositionValue(
+                        grossProfitLoss = it.profitLoss,
+                        entryCommission = it.commission,
+                        accruedSwap = it.swap
+                    )
+                }
+            )
             val usedMargin = openPositions.sumOf { it.margin }
-            val currentEquity = virtualBalance + floatingPl
             val freeMargin = maxOf(0.0, currentEquity - usedMargin)
             val marginLevel = VirtualAccount.computeMarginLevel(currentEquity, usedMargin)
 
