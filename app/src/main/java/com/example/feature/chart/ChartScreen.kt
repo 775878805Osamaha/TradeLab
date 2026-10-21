@@ -50,7 +50,6 @@ fun ChartScreen(
     var showToolsMenu by remember { mutableStateOf(false) }
     var showReplayControls by remember { mutableStateOf(false) }
     var showChartControls by remember { mutableStateOf(false) }
-    var showReplayControls by remember { mutableStateOf(false) }
     var showChartActions by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
     var showChartExtras by remember { mutableStateOf(false) }
