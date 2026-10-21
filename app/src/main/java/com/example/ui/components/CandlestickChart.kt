@@ -148,7 +148,14 @@ fun CandlestickChart(
     }
 
     val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
-        candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
+        val previousWidth = candleWidthPx
+        val nextWidth = (previousWidth * zoomChange).coerceIn(6f, 80f)
+        if (nextWidth != previousWidth) {
+            // Preserve the same approximate candle offset from the right edge
+            // while changing zoom; avoid jumping to another historical region.
+            scrollOffsetPx *= nextWidth / previousWidth
+            candleWidthPx = nextWidth
+        }
         // Pinch and two-finger pan share this transformable gesture.
         scrollOffsetPx += panChange.x
     }
