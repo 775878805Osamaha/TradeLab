@@ -54,6 +54,7 @@ class DefaultMarketDataProvider(
     val diagnosticInfo: StateFlow<MarketDataDiagnostic> = _diagnosticInfo.asStateFlow()
 
     private val quoteEndpoints = QuoteEndpointPreference()
+    private val _lastHttpDiagnostic = MutableStateFlow("لم يتم اختبار REST بعد")
 
     private val latestTicks = ConcurrentHashMap<String, Tick>()
     private val tickFlows = ConcurrentHashMap<String, MutableSharedFlow<Tick>>()
@@ -239,6 +240,13 @@ class DefaultMarketDataProvider(
                     .build()
                 var valid = false
                 httpClient.newCall(request).execute().use { response ->
+                    // Record what the app actually received; no guessed network cause.
+                    // Limit error body length to keep diagnostics compact and avoid logs.
+                    if (!response.isSuccessful) {
+                        val detail = response.peekBody(220).string()
+                            .replace("\\n", " ").replace("\\r", " ")
+                        _lastHttpDiagnostic.value = "$host • HTTP ${response.code} • $detail"
+                    }
                     if (response.isSuccessful) {
                         val body = response.body?.string()
                         if (body != null) {
@@ -267,12 +275,14 @@ class DefaultMarketDataProvider(
                     }
                 }
                 if (valid) {
+                    _lastHttpDiagnostic.value = "$host • HTTP 200 • verified $symbol bid/ask"
                     quoteEndpoints.recordSuccess(symbol, host)
                     break
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
+            } catch (failure: Exception) {
+                _lastHttpDiagnostic.value = "$host • ${failure.javaClass.simpleName}: ${failure.message?.take(100) ?: "network error"}"
                 // Try another official Binance endpoint; never invent prices.
             }
         }
@@ -406,7 +416,8 @@ class DefaultMarketDataProvider(
             latestTickTimestamp = _lastSuccessfulUpdate.value,
             validationErrorsCount = _validationErrorsCount.value,
             isStale = isStale,
-            approximateLatencyMs = _latencyMs.value
+            approximateLatencyMs = _latencyMs.value,
+            lastHttpDiagnostic = _lastHttpDiagnostic.value
         )
     }
 
