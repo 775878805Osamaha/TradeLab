@@ -294,9 +294,13 @@ class ChartViewModel(
                 try {
                     val now = System.currentTimeMillis()
                     val interval = timeframe.minutes * 60_000L
-                    val from = (now / interval) * interval - interval
+                    // Poll the last completed bar only. Binance also returns
+                    // the forming bar when endTime is 'now', which is not a
+                    // verified closed candle and can repaint the chart.
+                    val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
+                        .currentOpen(now, interval) - interval
                     val fresh = marketDataRepository.provider.getHistoricalCandles(
-                        symbol, timeframe, from, now
+                        symbol, timeframe, lastClosedOpen, lastClosedOpen
                     )
                     if (fresh.isEmpty()) continue
                     if (_uiState.value.selectedSymbol != symbol ||
