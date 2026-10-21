@@ -376,11 +376,36 @@ class TradeViewModel(
         }
     }
 
+    private var candleLoadJob: Job? = null
+
     private fun loadCandles(symbol: String) {
-        viewModelScope.launch {
-            val now = System.currentTimeMillis()
-            val candles = marketDataRepository.getCandles(symbol, Timeframe.M15, now - 86400000L, now)
-            _uiState.update { it.copy(candles = candles) }
+        candleLoadJob?.cancel()
+        candleLoadJob = viewModelScope.launch {
+            // Forex and metals are listed for discovery, but currently have no
+            // verified historical provider. Never request unsupported candles:
+            // getCandles throws IOException, which used to crash the whole app.
+            if (symbol !in setOf("BTCUSDT", "ETHUSDT")) {
+                if (_uiState.value.selectedSymbol == symbol) {
+                    _uiState.update { it.copy(candles = emptyList()) }
+                }
+                return@launch
+            }
+            try {
+                val now = System.currentTimeMillis()
+                val candles = marketDataRepository.getCandles(
+                    symbol, Timeframe.M15, now - 86_400_000L, now
+                )
+                if (_uiState.value.selectedSymbol == symbol) {
+                    _uiState.update { it.copy(candles = candles) }
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Network errors should show an empty chart, never kill TradeLab.
+                if (_uiState.value.selectedSymbol == symbol) {
+                    _uiState.update { it.copy(candles = emptyList()) }
+                }
+            }
         }
     }
 
