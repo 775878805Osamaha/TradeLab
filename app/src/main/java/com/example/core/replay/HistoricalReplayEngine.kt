@@ -209,6 +209,18 @@ class HistoricalReplayEngine(
         position: Position,
         candle: Candle
     ): PositionEvaluation {
+        // A candle from another instrument must never trigger this position's
+        // stops or overwrite its mark-to-market P&L.
+        require(position.symbol.equals(candle.symbol, ignoreCase = true)) {
+            "Replay candle symbol does not match position"
+        }
+        require(position.volume.isFinite() && position.volume > 0.0 &&
+            position.entryPrice.isFinite() && position.entryPrice > 0.0 &&
+            candle.low.isFinite() && candle.high.isFinite() &&
+            candle.close.isFinite() && candle.low > 0.0 &&
+            candle.high >= candle.low && candle.close > 0.0) {
+            "Invalid replay position or candle"
+        }
         val sl = position.stopLoss
         val tp = position.takeProfit
 
@@ -259,6 +271,10 @@ class HistoricalReplayEngine(
      * Evaluates pending orders against a candle under conservative intrabar limits.
      */
     fun isPendingOrderTriggeredByCandle(order: Order, candle: Candle): Boolean {
+        if (!order.symbol.equals(candle.symbol, ignoreCase = true) ||
+            !order.requestedPrice.isFinite() || order.requestedPrice <= 0.0 ||
+            !candle.low.isFinite() || !candle.high.isFinite() ||
+            candle.low <= 0.0 || candle.high < candle.low) return false
         return when (order.type) {
             OrderType.BUY_LIMIT -> candle.low <= order.requestedPrice
             OrderType.SELL_LIMIT -> candle.high >= order.requestedPrice
