@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -203,7 +204,7 @@ fun ReplayScreen(
                 color = TradingCard,
                 border = androidx.compose.foundation.BorderStroke(1.dp, TradingBorder)
             ) {
-                Column(modifier = Modifier.padding(10.dp)) {
+                Column(modifier = Modifier.heightIn(max = 330.dp).verticalScroll(rememberScrollState()).padding(10.dp)) {
                     // Replay Speed Selector: 0.5x, 1x, 2x, 5x, 10x, 25x, 50x, 100x
                     Row(
                         modifier = Modifier
@@ -268,6 +269,58 @@ fun ReplayScreen(
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    if (uiState.openPositions.isNotEmpty()) {
+                        Text("الصفقات المفتوحة", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        uiState.openPositions.forEach { position ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .testTag("replay_position_${position.id}")
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "${position.symbol}  ${position.side.name}  ${position.volume}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        String.format(Locale.US, "%+.2f USD", position.profitLoss),
+                                        fontSize = 11.sp,
+                                        color = if (position.profitLoss >= 0.0) TradingPositive else TradingNegative
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "دخول: ${String.format(Locale.US, "%.2f", position.entryPrice)}" +
+                                            "  SL: ${position.stopLoss?.let { String.format(Locale.US, "%.2f", it) } ?: "—"}" +
+                                            "  TP: ${position.takeProfit?.let { String.format(Locale.US, "%.2f", it) } ?: "—"}",
+                                        fontSize = 10.sp,
+                                        color = TradingTextSecondary
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(
+                                        onClick = { viewModel.setBreakEven(position.id) },
+                                        modifier = Modifier.testTag("replay_breakeven_${position.id}")
+                                    ) { Text("نقطة التعادل") }
+                                    TextButton(
+                                        onClick = { viewModel.closePosition(position.id) },
+                                        modifier = Modifier.testTag("replay_close_${position.id}")
+                                    ) { Text("إغلاق الصفقة", color = TradingNegative) }
+                                }
+                            }
+                        }
+                    }
 
                     OutlinedButton(
                         onClick = { showOrderTicket = true },
