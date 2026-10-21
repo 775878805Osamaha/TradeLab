@@ -16,7 +16,8 @@ data class ChartTransform(
     val chartWidth: Float,
     val chartHeight: Float,
     val candleWidthPx: Float,
-    val rightAxisWidth: Float = 115f
+    val rightAxisWidth: Float = 115f,
+    val fractionalScrollPx: Float = 0f
 ) {
     val priceSpan: Double = (maxPrice - minPrice).coerceAtLeast(0.0001)
 
@@ -37,13 +38,13 @@ data class ChartTransform(
         if (totalVisible <= 0) return 0f
         // Right-aligned chart: index totalVisible - 1 is at chartWidth - (candleWidthPx / 2)
         val xFromRight = (totalVisible - 1 - indexInVisible) * candleWidthPx
-        return (chartWidth - xFromRight - (candleWidthPx / 2f)).coerceIn(-1000f, chartWidth + 1000f)
+        return (chartWidth - xFromRight - (candleWidthPx / 2f) - fractionalScrollPx).coerceIn(-1000f, chartWidth + 1000f)
     }
 
     fun xToCandleIndex(x: Float): Int {
         val totalVisible = visibleCandles.size
         if (totalVisible <= 0) return -1
-        val distFromRight = chartWidth - x - (candleWidthPx / 2f)
+        val distFromRight = chartWidth - x - (candleWidthPx / 2f) - fractionalScrollPx
         val offset = (distFromRight / candleWidthPx.coerceAtLeast(1f)).roundToInt()
         val index = (totalVisible - 1 - offset)
         return index.coerceIn(0, totalVisible - 1)
