@@ -122,6 +122,11 @@ class ExecutionEngine(
         tick: Tick,
         account: VirtualAccount
     ): ExecutionResult? {
+        // Pending orders belong to exactly one paper account. Never fill an
+        // order against another account's balance, margin or positions.
+        if (order.accountId != account.id) {
+            return ExecutionResult.Error("الأمر المعلق لا ينتمي إلى الحساب الحالي")
+        }
         // Never execute an order already filled, cancelled, rejected or expired.
         // Explicit BUY/SELL order types must also agree with their direction.
         if (order.status != OrderStatus.PENDING ||
