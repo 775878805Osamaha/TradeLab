@@ -108,4 +108,24 @@
     <string name="daily_pl">Daily P/L</string>
     <string name="remaining_daily_loss">Remaining Daily Loss</string>
     <string name="remaining_max_loss">Remaining Max Loss</string>
+    <string name="history_title">Backtest data — Twelve Data</string>
+    <string name="history_key_label">Twelve Data API key</string>
+    <string name="history_key_required">Add a Twelve Data key in Settings to download gold and forex history.</string>
+    <string name="history_symbol_error">This symbol is not supported by the historical provider.</string>
+    <string name="history_interval_error">Unsupported interval. Choose 1, 5, 15, 30 minutes, 1, 2, 4 hours or 1 day.</string>
+    <string name="history_range_error">Invalid range or more than 10000 bars. Choose a shorter range or larger interval.</string>
+    <string name="history_access_error">Check your Twelve Data key and subscription access for this symbol.</string>
+    <string name="history_limit_error">Twelve Data request limit reached. Wait and retry; no partial backtest was started.</string>
+    <string name="history_network_error">Could not download historical data. Check the connection and retry.</string>
+    <string name="history_invalid_error">Rejected invalid data or a symbol/interval mismatch.</string>
+    <string name="history_empty_error">No data is available for this range, or it is not included in your plan.</string>
+    <string name="history_source_note">Gold and forex: Twelve Data historical candles for backtesting, not live execution quotes.</string>
+    <string name="history_disclosure">Source: Twelve Data · completed UTC candles. Spread and slippage are assumptions. Gaps or closed sessions may exist. Unavailable volume is zero; avoid volume strategies. Other TradingView feeds may differ.</string>
+    <string name="history_help">Enter your key once; it is encrypted on this device. Downloaded ranges are reused locally, with a 32 MB storage limit. Gold access and history depth depend on your plan.</string>
+    <string name="history_save">Save key</string>
+    <string name="history_remove">Remove key</string>
+    <string name="history_saved">Key saved; subscription access has not been verified yet.</string>
+    <string name="history_removed">Key removed.</string>
+    <string name="history_save_error">Could not save the key on this device.</string>
+    <string name="history_configured">A key is saved on this device.</string>
 </resources>

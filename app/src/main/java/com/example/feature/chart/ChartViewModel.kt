@@ -207,25 +207,15 @@ class ChartViewModel(
 
         candleLoadJob?.cancel()
         candleLoadJob = viewModelScope.launch {
-            if (symbol !in setOf("BTCUSDT", "ETHUSDT")) {
-                // Do not pretend Binance provides verified Forex or gold candles.
-                if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
-                    _uiState.update {
-                        it.copy(candles = emptyList(), latestTick = null, isLoading = false,
-                            candleLoadError = "لا يتوفر مصدر بيانات تاريخية موثوق لهذا الرمز حاليًا. اختر BTCUSDT أو ETHUSDT.")
-                    }
-                }
-                return@launch
-            }
             val now = System.currentTimeMillis()
             val interval = tf.minutes * 60 * 1000L
             val from = now - (interval * 250)
 
             try {
                 // Start live subscription even if historical REST loading fails.
-                subscribeToTicks(symbol)
+                if (symbol in setOf("BTCUSDT", "ETHUSDT")) subscribeToTicks(symbol)
                 val rawCandles = marketDataRepository.getCandles(symbol, tf, from, now)
-                val aggregated = CandleAggregator.aggregate(rawCandles, tf)
+                val aggregated = if (symbol in setOf("BTCUSDT", "ETHUSDT")) CandleAggregator.aggregate(rawCandles, tf) else rawCandles
                 // Ignore responses that arrive after the user changes symbol or timeframe.
                 if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf) return@launch
                 _uiState.update { it.copy(candles = aggregated, isLoading = false, candleLoadError = if (aggregated.isEmpty()) "لا تتوفر شموع مؤكدة لهذا الرمز والفاصل الزمني. حاول مجددًا." else null, message = null) }
@@ -238,7 +228,7 @@ class ChartViewModel(
                 if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
                     _uiState.update {
                         it.copy(candles = emptyList(), isLoading = false,
-                            candleLoadError = "تعذر تحميل الشارت من Binance. تحقق من اتصال الإنترنت ثم أعد المحاولة.")
+                            candleLoadError = error.message ?: "تعذر تحميل البيانات التاريخية.")
                     }
                 }
             }
