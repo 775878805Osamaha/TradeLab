@@ -54,23 +54,26 @@ data class BacktestConfig(
     val useFixedLot: Boolean = (positionSizingMode == PositionSizingMode.FIXED_LOT)
 ) {
     fun validate(): Result<Unit> {
-        if (initialBalance <= 0) return Result.failure(IllegalArgumentException("Initial balance must be positive"))
-        if (leverage <= 0) return Result.failure(IllegalArgumentException("Leverage must be positive"))
-        if (spreadPips < 0) return Result.failure(IllegalArgumentException("Spread cannot be negative"))
-        if (slippagePips < 0) return Result.failure(IllegalArgumentException("Slippage cannot be negative"))
-        if (commissionPerLot < 0) return Result.failure(IllegalArgumentException("Commission cannot be negative"))
-        if (swapPerLotDaily < 0) return Result.failure(IllegalArgumentException("Swap cannot be negative"))
+        // NaN silently bypasses ordinary numeric comparisons and can corrupt
+        // equity, margin and statistics. Reject non-finite inputs up front.
+        if (!initialBalance.isFinite() || initialBalance <= 0.0) return Result.failure(IllegalArgumentException("Initial balance must be finite and positive"))
+        if (!leverage.isFinite() || leverage <= 0.0) return Result.failure(IllegalArgumentException("Leverage must be finite and positive"))
+        if (!spreadPips.isFinite() || spreadPips < 0.0) return Result.failure(IllegalArgumentException("Spread must be finite and non-negative"))
+        if (!slippagePips.isFinite() || slippagePips < 0.0) return Result.failure(IllegalArgumentException("Slippage must be finite and non-negative"))
+        if (!commissionPerLot.isFinite() || commissionPerLot < 0.0) return Result.failure(IllegalArgumentException("Commission must be finite and non-negative"))
+        if (!swapPerLotDaily.isFinite() || swapPerLotDaily < 0.0) return Result.failure(IllegalArgumentException("Swap must be finite and non-negative"))
+        if (startTime != null && endTime != null && startTime > endTime) return Result.failure(IllegalArgumentException("Start time must not exceed end time"))
         when (positionSizingMode) {
             PositionSizingMode.FIXED_LOT -> {
-                if (fixedLot <= 0) return Result.failure(IllegalArgumentException("Fixed lot size must be positive"))
+                if (!fixedLot.isFinite() || fixedLot <= 0.0) return Result.failure(IllegalArgumentException("Fixed lot size must be positive"))
             }
             PositionSizingMode.RISK_PERCENTAGE -> {
-                if (riskPercentage <= 0.0 || riskPercentage > 100.0) {
+                if (!riskPercentage.isFinite() || riskPercentage <= 0.0 || riskPercentage > 100.0) {
                     return Result.failure(IllegalArgumentException("Risk percentage must be between 0.1% and 100%"))
                 }
             }
             PositionSizingMode.FIXED_MONETARY_RISK -> {
-                if (fixedRiskAmount <= 0.0) {
+                if (!fixedRiskAmount.isFinite() || fixedRiskAmount <= 0.0) {
                     return Result.failure(IllegalArgumentException("Fixed monetary risk must be positive"))
                 }
             }
