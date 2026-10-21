@@ -390,23 +390,33 @@ class ExecutionEngine(
      */
     fun evaluatePositionOnCandle(
         position: Position,
-        candle: Candle
+        candle: Candle,
+        spreadPips: Double = 0.0
     ): PositionEvaluation {
         val symInfo = DefaultSymbols.getSymbol(position.symbol)
+        require(spreadPips.isFinite() && spreadPips >= 0.0) { "Invalid candle spread" }
+        val halfSpread = spreadPips * symInfo.pipSize / 2.0
+        // Candle OHLC is a mid-price series. Long positions exit at Bid,
+        // while short positions exit at Ask.
+        val exitOffset = if (position.side == PositionSide.BUY) -halfSpread else halfSpread
+        val exitOpen = candle.open + exitOffset
+        val exitHigh = candle.high + exitOffset
+        val exitLow = candle.low + exitOffset
+        val exitClose = candle.close + exitOffset
 
         // Check SL against candle extremes
         if (position.stopLoss != null) {
             val isSlTriggered = when (position.side) {
-                PositionSide.BUY -> candle.low <= position.stopLoss
-                PositionSide.SELL -> candle.high >= position.stopLoss
+                PositionSide.BUY -> exitLow <= position.stopLoss
+                PositionSide.SELL -> exitHigh >= position.stopLoss
             }
             if (isSlTriggered) {
                 return PositionEvaluation.TriggerClose(
                     // A candle opening beyond the stop indicates a gap; do not
                     // credit an impossible fill at the original stop level.
                     exitPrice = when (position.side) {
-                        PositionSide.BUY -> minOf(candle.open, position.stopLoss)
-                        PositionSide.SELL -> maxOf(candle.open, position.stopLoss)
+                        PositionSide.BUY -> minOf(exitOpen, position.stopLoss)
+                        PositionSide.SELL -> maxOf(exitOpen, position.stopLoss)
                     },
                     exitReason = if (position.isBreakEven) ExitReason.BREAK_EVEN else ExitReason.STOP_LOSS
                 )
@@ -416,8 +426,8 @@ class ExecutionEngine(
         // Check TP against candle extremes
         if (position.takeProfit != null) {
             val isTpTriggered = when (position.side) {
-                PositionSide.BUY -> candle.high >= position.takeProfit
-                PositionSide.SELL -> candle.low <= position.takeProfit
+                PositionSide.BUY -> exitHigh >= position.takeProfit
+                PositionSide.SELL -> exitLow <= position.takeProfit
             }
             if (isTpTriggered) {
                 return PositionEvaluation.TriggerClose(
@@ -429,12 +439,12 @@ class ExecutionEngine(
 
         // Position remains open at candle close
         val grossPl = when (position.side) {
-            PositionSide.BUY -> (candle.close - position.entryPrice) * position.volume * symInfo.contractSize
-            PositionSide.SELL -> (position.entryPrice - candle.close) * position.volume * symInfo.contractSize
+            PositionSide.BUY -> (exitClose - position.entryPrice) * position.volume * symInfo.contractSize
+            PositionSide.SELL -> (position.entryPrice - exitClose) * position.volume * symInfo.contractSize
         }
 
         val updatedPosition = position.copy(
-            currentPrice = candle.close,
+            currentPrice = exitClose,
             profitLoss = grossPl
         )
 
