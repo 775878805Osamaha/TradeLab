@@ -154,6 +154,8 @@ object ChartOverlays {
         orders: List<Order>
     ) {
         for (ord in orders) {
+            if (ord.status != OrderStatus.PENDING ||
+                !ord.requestedPrice.isFinite() || ord.requestedPrice <= 0.0) continue
             val orderY = transform.priceToY(ord.requestedPrice)
             val isBuy = ord.direction == OrderSide.BUY
 
