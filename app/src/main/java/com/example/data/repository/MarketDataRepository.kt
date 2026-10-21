@@ -1,6 +1,8 @@
 package com.example.data.repository
 
 import com.example.core.market.DataIntegrityValidator
+import com.example.core.market.HistoricalCandleIntegrity
+import com.example.core.market.HistoricalCandleCoverage
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.core.market.DefaultSymbols
 import com.example.core.market.MarketDataDiagnostic
@@ -58,7 +60,8 @@ class MarketDataRepository(
         to: Long,
         pageSize: Int = 500
     ): List<Candle> = withContext(Dispatchers.IO) {
-        require(from <= to) { "Invalid candle range" }
+        require(from >= 0 && from < to) { "Invalid candle range" }
+        require(to <= Long.MAX_VALUE - timeframe.minutes * 60_000L) { "Candle range overflow" }
         require(pageSize in 1..1000) { "pageSize must be between 1 and 1000" }
         val intervalMillis = timeframe.minutes * 60_000L
         val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
@@ -73,14 +76,12 @@ class MarketDataRepository(
             local.filter { it.source == "BINANCE_HISTORICAL" || it.source == "BINANCE_HISTORICAL_CACHED" }
         } else local
 
-        val expectedCount = ((to - from) / intervalMillis + 1).coerceAtLeast(1L)
-        val fullyCovered = trustedLocal.isNotEmpty() &&
-            trustedLocal.first().openTime <= from + intervalMillis &&
-            trustedLocal.last().openTime >= to - intervalMillis &&
-            trustedLocal.zipWithNext().all { (a, b) ->
-                b.openTime - a.openTime <= intervalMillis
-            }
-        if (fullyCovered && trustedLocal.size.toLong() >= expectedCount - 1L) {
+        // A candle cache is complete only when every expected bar exists.
+        // Never mistake sparse history for a complete backtest window.
+        val fullyCovered = HistoricalCandleCoverage.isComplete(
+            trustedLocal, from, to, intervalMillis
+        )
+        if (fullyCovered) {
             return@withContext trustedLocal
         }
 
@@ -101,21 +102,31 @@ class MarketDataRepository(
             // Cancellation must propagate; never turn a cancelled request into cached success.
             throw error
         } catch (error: Exception) {
-            if (trustedLocal.isNotEmpty()) {
-                return@withContext trustedLocal.map {
-                    if (isCrypto) it.copy(source = "BINANCE_HISTORICAL_CACHED") else it
-                }
-            }
             throw error
         }
 
-        val sanitized = DataIntegrityValidator.sanitizeCandles(fetched)
+        // Fail closed on malformed or unverified network history before it reaches Room.
+        // Provider pagination may include the final candle opening at 'to'.
+        val sanitized = HistoricalCandleIntegrity.validate(
+            fetched,
+            requestedFrom = from,
+            requestedTo = to + intervalMillis,
+            expectedSource = "BINANCE_HISTORICAL",
+            expectedSymbol = symbol,
+            expectedTimeframe = timeframe
+        )
         if (sanitized.isNotEmpty()) {
             candleDao.insertCandles(sanitized.map { it.toEntity() })
         }
-        val combined = DataIntegrityValidator.sanitizeCandles(trustedLocal + sanitized)
+        // Fresh network bars take precedence over older cache entries with the same timestamp.
+        val combined = DataIntegrityValidator.sanitizeCandles(
+            (trustedLocal + sanitized).associateBy { it.openTime }.values.toList()
+        )
         if (combined.isEmpty() && isCrypto) {
             throw java.io.IOException("No verified Binance historical candles available for $symbol")
+        }
+        if (!HistoricalCandleCoverage.isComplete(combined, from, to, intervalMillis)) {
+            throw java.io.IOException("Incomplete verified Binance history for $symbol")
         }
         combined
     }

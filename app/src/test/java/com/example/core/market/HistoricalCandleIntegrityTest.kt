@@ -35,6 +35,20 @@ class HistoricalCandleIntegrityTest {
         }
     }
 
+    @Test fun rejectsWrongInstrument() {
+        assertThrows(IllegalArgumentException::class.java) {
+            HistoricalCandleIntegrity.validate(listOf(candle(60_000)), 0, 180_000,
+                expectedSymbol = "EURUSD")
+        }
+    }
+
+    @Test fun rejectsWrongTimeframe() {
+        assertThrows(IllegalArgumentException::class.java) {
+            HistoricalCandleIntegrity.validate(listOf(candle(60_000)), 0, 180_000,
+                expectedTimeframe = Timeframe.M5)
+        }
+    }
+
     @Test fun rejectsIncompleteRange() {
         assertThrows(IllegalArgumentException::class.java) {
             HistoricalCandleIntegrity.validate(listOf(candle(120_000)), 0, 150_000)
