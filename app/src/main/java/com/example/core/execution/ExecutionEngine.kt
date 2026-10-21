@@ -390,55 +390,61 @@ class ExecutionEngine(
      */
     fun evaluatePositionOnCandle(
         position: Position,
-        candle: Candle
+        candle: Candle,
+        spreadPips: Double = 0.0
     ): PositionEvaluation {
+        require(spreadPips.isFinite() && spreadPips >= 0.0) {
+            "Invalid historical spread"
+        }
         val symInfo = DefaultSymbols.getSymbol(position.symbol)
+        // Historical OHLC is treated as mid-price. BUY closes at Bid and
+        // SELL at Ask; apply half the modeled spread to each side.
+        val halfSpread = spreadPips * symInfo.pipSize / 2.0
+        val exitOpen = if (position.side == PositionSide.BUY) candle.open - halfSpread else candle.open + halfSpread
+        val exitHigh = if (position.side == PositionSide.BUY) candle.high - halfSpread else candle.high + halfSpread
+        val exitLow = if (position.side == PositionSide.BUY) candle.low - halfSpread else candle.low + halfSpread
+        val exitClose = if (position.side == PositionSide.BUY) candle.close - halfSpread else candle.close + halfSpread
 
-        // Check SL against candle extremes
+        // Conservative same-bar policy: if both stop and target touch,
+        // stop loss takes precedence. A gap through the stop fills worse.
         if (position.stopLoss != null) {
-            val isSlTriggered = when (position.side) {
-                PositionSide.BUY -> candle.low <= position.stopLoss
-                PositionSide.SELL -> candle.high >= position.stopLoss
+            val triggered = if (position.side == PositionSide.BUY) {
+                exitLow <= position.stopLoss
+            } else {
+                exitHigh >= position.stopLoss
             }
-            if (isSlTriggered) {
+            if (triggered) {
                 return PositionEvaluation.TriggerClose(
-                    // A candle opening beyond the stop indicates a gap; do not
-                    // credit an impossible fill at the original stop level.
-                    exitPrice = when (position.side) {
-                        PositionSide.BUY -> minOf(candle.open, position.stopLoss)
-                        PositionSide.SELL -> maxOf(candle.open, position.stopLoss)
+                    exitPrice = if (position.side == PositionSide.BUY) {
+                        minOf(exitOpen, position.stopLoss)
+                    } else {
+                        maxOf(exitOpen, position.stopLoss)
                     },
                     exitReason = if (position.isBreakEven) ExitReason.BREAK_EVEN else ExitReason.STOP_LOSS
                 )
             }
         }
-
-        // Check TP against candle extremes
         if (position.takeProfit != null) {
-            val isTpTriggered = when (position.side) {
-                PositionSide.BUY -> candle.high >= position.takeProfit
-                PositionSide.SELL -> candle.low <= position.takeProfit
+            val triggered = if (position.side == PositionSide.BUY) {
+                exitHigh >= position.takeProfit
+            } else {
+                exitLow <= position.takeProfit
             }
-            if (isTpTriggered) {
+            if (triggered) {
                 return PositionEvaluation.TriggerClose(
                     exitPrice = position.takeProfit,
                     exitReason = ExitReason.TAKE_PROFIT
                 )
             }
         }
-
-        // Position remains open at candle close
-        val grossPl = when (position.side) {
-            PositionSide.BUY -> (candle.close - position.entryPrice) * position.volume * symInfo.contractSize
-            PositionSide.SELL -> (position.entryPrice - candle.close) * position.volume * symInfo.contractSize
+        val grossPl = if (position.side == PositionSide.BUY) {
+            (exitClose - position.entryPrice) * position.volume * symInfo.contractSize
+        } else {
+            (position.entryPrice - exitClose) * position.volume * symInfo.contractSize
         }
-
-        val updatedPosition = position.copy(
-            currentPrice = candle.close,
-            profitLoss = grossPl
+        return PositionEvaluation.KeepOpen(
+            position.copy(currentPrice = exitClose, profitLoss = grossPl)
         )
-
-        return PositionEvaluation.KeepOpen(updatedPosition)
     }
 
     /**

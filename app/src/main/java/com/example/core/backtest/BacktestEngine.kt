@@ -263,7 +263,7 @@ class BacktestEngine(
             val posIterator = openPositions.iterator()
             while (posIterator.hasNext()) {
                 val pos = posIterator.next()
-                when (val eval = runExecutionEngine.evaluatePositionOnCandle(pos, currentCandle)) {
+                when (val eval = runExecutionEngine.evaluatePositionOnCandle(pos, currentCandle, config.spreadPips)) {
                     is PositionEvaluation.TriggerClose -> {
                         val (trade, _) = runExecutionEngine.closePosition(
                             position = pos,
@@ -348,7 +348,7 @@ class BacktestEngine(
                         val pos = itClose.next()
                         val (trade, _) = runExecutionEngine.closePosition(
                             position = pos,
-                            exitPrice = currentCandle.close,
+                            exitPrice = if (pos.side == PositionSide.BUY) tick.bid else tick.ask,
                             exitReason = ExitReason.STRATEGY_CLOSE,
                             closeTime = currentCandle.closeTime
                         )
@@ -430,7 +430,11 @@ class BacktestEngine(
             for (pos in openPositions) {
                 val (trade, _) = runExecutionEngine.closePosition(
                     position = pos,
-                    exitPrice = lastCandle.close,
+                    exitPrice = if (pos.side == PositionSide.BUY) {
+                        lastCandle.close - (config.spreadPips * symInfo.pipSize / 2.0)
+                    } else {
+                        lastCandle.close + (config.spreadPips * symInfo.pipSize / 2.0)
+                    },
                     exitReason = ExitReason.MANUAL_CLOSE,
                     closeTime = lastCandle.closeTime
                 )
