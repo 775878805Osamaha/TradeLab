@@ -139,6 +139,20 @@ class ExecutionEngine(
             !order.requestedPrice.isFinite() || order.requestedPrice <= 0.0) {
             return ExecutionResult.Error("سعر السوق أو رمز الأمر المعلق غير صالح")
         }
+        // A waiting order should remain pending even when the account's
+        // available margin has changed. Validate funds only after its price
+        // condition has actually triggered.
+        val isTriggered = when (order.type) {
+            OrderType.BUY_LIMIT -> tick.ask <= order.requestedPrice
+            OrderType.SELL_LIMIT -> tick.bid >= order.requestedPrice
+            OrderType.BUY_STOP -> tick.ask >= order.requestedPrice
+            OrderType.SELL_STOP -> tick.bid <= order.requestedPrice
+            OrderType.LIMIT -> if (order.direction == OrderSide.BUY) tick.ask <= order.requestedPrice else tick.bid >= order.requestedPrice
+            OrderType.STOP -> if (order.direction == OrderSide.BUY) tick.ask >= order.requestedPrice else tick.bid <= order.requestedPrice
+            else -> false
+        }
+        if (!isTriggered) return null
+
         val validation = OrderValidator.validate(
             account = account,
             symbol = order.symbol,
@@ -155,18 +169,6 @@ class ExecutionEngine(
         }
         val symInfo = DefaultSymbols.getSymbol(order.symbol)
         val slippageOffset = config.slippagePips * symInfo.pipSize
-
-        val isTriggered = when (order.type) {
-            OrderType.BUY_LIMIT -> tick.ask <= order.requestedPrice
-            OrderType.SELL_LIMIT -> tick.bid >= order.requestedPrice
-            OrderType.BUY_STOP -> tick.ask >= order.requestedPrice
-            OrderType.SELL_STOP -> tick.bid <= order.requestedPrice
-            OrderType.LIMIT -> if (order.direction == OrderSide.BUY) tick.ask <= order.requestedPrice else tick.bid >= order.requestedPrice
-            OrderType.STOP -> if (order.direction == OrderSide.BUY) tick.ask >= order.requestedPrice else tick.bid <= order.requestedPrice
-            else -> false
-        }
-
-        if (!isTriggered) return null
 
         val executedPrice = when (order.type) {
             // Limit orders can fill at the limit or a better available market quote.

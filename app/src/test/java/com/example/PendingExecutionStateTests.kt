@@ -34,4 +34,16 @@ class PendingExecutionStateTests {
         val waiting = order(OrderType.BUY_STOP, OrderSide.BUY).copy(requestedPrice = 120.0)
         assertNull(engine.evaluatePendingOrder(waiting, tick, account))
     }
+    @Test fun untriggeredOrderRemainsPendingEvenWhenAccountHasNoFreeMargin() {
+        val accountWithoutMargin = account.copy(freeMargin = 0.0)
+        val waiting = order(OrderType.BUY_STOP, OrderSide.BUY).copy(requestedPrice = 120.0)
+        assertNull(engine.evaluatePendingOrder(waiting, tick, accountWithoutMargin))
+    }
+
+    @Test fun triggeredOrderStillValidatesAvailableMargin() {
+        val accountWithoutMargin = account.copy(freeMargin = 0.0)
+        val triggered = order(OrderType.BUY_STOP, OrderSide.BUY)
+        assertTrue(engine.evaluatePendingOrder(triggered, tick, accountWithoutMargin) is ExecutionResult.Error)
+    }
+
 }
