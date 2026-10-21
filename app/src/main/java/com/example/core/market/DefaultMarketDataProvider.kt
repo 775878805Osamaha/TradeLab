@@ -376,11 +376,20 @@ class DefaultMarketDataProvider(
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (failure: Exception) {
-                        lastFailure = failure
+                        // Preserve the exact failing host and underlying exception.
+                        // A generic network warning cannot distinguish HTTP 451,
+                        // DNS failure, timeout or malformed exchange response.
+                        lastFailure = java.io.IOException(
+                            "$host • ${failure.javaClass.simpleName}: ${failure.message?.take(180) ?: "unknown error"}",
+                            failure
+                        )
+                        _lastHttpDiagnostic.value = "Historical $sym • ${lastFailure.message}"
+                        updateDiagnostics()
                     }
                 }
                 val verifiedBatch = batch ?: throw java.io.IOException(
-                    "All Binance historical endpoints failed for $sym", lastFailure
+                    "All Binance historical endpoints failed for $sym: ${lastFailure?.message ?: "unknown error"}",
+                    lastFailure
                 )
                 if (verifiedBatch.isEmpty()) break
                 results.addAll(verifiedBatch.filter { it.isValid() })
