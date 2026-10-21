@@ -405,7 +405,6 @@ class DefaultMarketDataProvider(
 
     private fun updateDiagnostics() {
         val now = System.currentTimeMillis()
-        val elapsed = now - _lastSuccessfulUpdate.value
         val isStale = !hasFreshVerifiedQuote(now)
 
         _diagnosticInfo.value = MarketDataDiagnostic(
