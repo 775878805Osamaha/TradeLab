@@ -71,7 +71,7 @@ class MarketDataRepository(
         require(to <= System.currentTimeMillis() - intervalMillis) {
             "Historical range includes an unfinished candle"
         }
-        // Limit the returned list to keep replay memory bounded. Fetch pages lazily.
+        // Bound replay memory while fetching and validating one network page at a time.
         val requestedBars = (to - from) / intervalMillis + 1L
         require(requestedBars <= 20_000L) {
             "Historical range exceeds 20000 candles. Request a shorter range."
@@ -135,8 +135,6 @@ class MarketDataRepository(
         } catch (error: kotlinx.coroutines.CancellationException) {
             // Cancellation must propagate; never turn a cancelled request into cached success.
             throw error
-        } catch (error: Exception) {
-            throw error
         }
 
         // Fail closed on malformed or unverified network history before it reaches Room.
@@ -159,6 +157,8 @@ class MarketDataRepository(
         if (!HistoricalCandleCoverage.isComplete(combined, from, to, intervalMillis)) {
             throw java.io.IOException("Incomplete verified Binance history for $symbol")
         }
+        // Cancellation after the final page must not commit stale history.
+        currentCoroutineContext().ensureActive()
         // Persist only after the entire requested range has passed validation.
         if (sanitized.isNotEmpty()) {
             candleDao.insertCandles(sanitized.map { it.toEntity() })
