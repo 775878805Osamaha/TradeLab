@@ -100,6 +100,10 @@ class MarketDataRepository(
                 val windowEnd = minOf(to, cursor + intervalMillis * (pageSize - 1L))
                 val page = provider.getHistoricalCandles(symbol, timeframe, cursor, windowEnd)
                 if (page.isEmpty()) break
+                // A page must not silently cross its requested boundary.
+                require(page.all { it.openTime in cursor..windowEnd }) {
+                    "Historical provider returned candles outside page window"
+                }
                 fetched.addAll(page)
                 val lastOpen = page.maxOf { it.openTime }
                 val next = lastOpen + intervalMillis
@@ -123,9 +127,6 @@ class MarketDataRepository(
             expectedSymbol = symbol,
             expectedTimeframe = timeframe
         )
-        if (sanitized.isNotEmpty()) {
-            candleDao.insertCandles(sanitized.map { it.toEntity() })
-        }
         // Fresh network bars take precedence over older cache entries with the same timestamp.
         val combined = DataIntegrityValidator.sanitizeCandles(
             (trustedLocal + sanitized).associateBy { it.openTime }.values.toList()
@@ -135,6 +136,10 @@ class MarketDataRepository(
         }
         if (!HistoricalCandleCoverage.isComplete(combined, from, to, intervalMillis)) {
             throw java.io.IOException("Incomplete verified Binance history for $symbol")
+        }
+        // Persist only after the entire requested range has passed validation.
+        if (sanitized.isNotEmpty()) {
+            candleDao.insertCandles(sanitized.map { it.toEntity() })
         }
         combined
     }
