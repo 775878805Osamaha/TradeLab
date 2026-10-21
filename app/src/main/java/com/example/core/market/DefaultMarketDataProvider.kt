@@ -213,45 +213,62 @@ class DefaultMarketDataProvider(
         candleFlows[key]?.tryEmit(normalizedCandle)
     }
 
+    /**
+     * Query verified Binance Spot bookTicker endpoints. Mobile networks may block
+     * the primary API host even while historical candles are cached.
+     * Only validated exchange bid/ask data can unlock paper trading.
+     */
     private suspend fun fetchLiveCryptoQuotes(): Boolean = withContext(Dispatchers.IO) {
         var received = false
+        val hosts = listOf("api.binance.com", "api1.binance.com", "api2.binance.com",
+            "api3.binance.com", "data-api.binance.vision")
         for (symbol in listOf("BTCUSDT", "ETHUSDT")) {
-            try {
-                val url = okhttp3.HttpUrl.Builder()
-                    .scheme("https")
-                    .host("api.binance.com")
-                    .addPathSegments("api/v3/ticker/bookTicker")
-                    .addQueryParameter("symbol", symbol)
-                    .build()
-                val request = Request.Builder().url(url)
-                    .header("User-Agent", "TradeLab/2.0")
-                    .build()
-                httpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use
-                    val body = response.body?.string() ?: return@use
-                    val item = org.json.JSONObject(body)
-                    if (item.optString("symbol") != symbol) return@use
-                    val bid = item.getDouble("bidPrice")
-                    val ask = item.getDouble("askPrice")
-                    val tick = Tick(
-                        symbol = symbol,
-                        bid = bid,
-                        ask = ask,
-                        last = (bid + ask) / 2.0,
-                        timestamp = System.currentTimeMillis(),
-                        source = "BINANCE_REST_POLL"
-                    )
-                    if (DataIntegrityValidator.validateTick(tick).isValid) {
-                        emitTick(tick)
-                        rawStreamFlow.tryEmit(body)
-                        _dataSourceType.value = DataSourceType.LIVE_DATA
-                        received = true
+            for (host in hosts) {
+                try {
+                    val url = okhttp3.HttpUrl.Builder()
+                        .scheme("https")
+                        .host(host)
+                        .addPathSegments("api/v3/ticker/bookTicker")
+                        .addQueryParameter("symbol", symbol)
+                        .build()
+                    val request = Request.Builder().url(url)
+                        .header("User-Agent", "TradeLab/2.0")
+                        .build()
+                    var valid = false
+                    httpClient.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val body = response.body?.string()
+                            if (body != null) {
+                                val item = org.json.JSONObject(body)
+                                if (item.optString("symbol") == symbol) {
+                                    val bid = item.getDouble("bidPrice")
+                                    val ask = item.getDouble("askPrice")
+                                    val tick = Tick(
+                                        symbol = symbol,
+                                        bid = bid,
+                                        ask = ask,
+                                        last = (bid + ask) / 2.0,
+                                        timestamp = System.currentTimeMillis(),
+                                        source = "BINANCE_REST_POLL"
+                                    )
+                                    if (DataIntegrityValidator.validateTick(tick).isValid) {
+                                        emitTick(tick)
+                                        rawStreamFlow.tryEmit(body)
+                                        _dataSourceType.value = DataSourceType.LIVE_DATA
+                                        _connectionStatus.value = ProviderConnectionStatus.CONNECTED
+                                        valid = true
+                                        received = true
+                                    }
+                                }
+                            }
+                        }
                     }
+                    if (valid) break
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Try another official Binance endpoint; never invent prices.
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                // No fabricated quote when Binance is unreachable on this network.
             }
         }
         received
