@@ -122,6 +122,16 @@ class ExecutionEngine(
         tick: Tick,
         account: VirtualAccount
     ): ExecutionResult? {
+        // Never execute an order already filled, cancelled, rejected or expired.
+        // Explicit BUY/SELL order types must also agree with their direction.
+        if (order.status != OrderStatus.PENDING ||
+            when (order.type) {
+                OrderType.BUY_LIMIT, OrderType.BUY_STOP -> order.direction != OrderSide.BUY
+                OrderType.SELL_LIMIT, OrderType.SELL_STOP -> order.direction != OrderSide.SELL
+                else -> false
+            }) {
+            return ExecutionResult.Error("حالة الأمر المعلق أو اتجاهه غير صالح للتنفيذ")
+        }
         // Never fill a pending order using another symbol's quote or invalid market data.
         if (!order.symbol.equals(tick.symbol, ignoreCase = true) ||
             !tick.bid.isFinite() || !tick.ask.isFinite() ||
