@@ -174,7 +174,6 @@ class BacktestEngine(
 
         var virtualBalance = config.initialBalance
         val openPositions = mutableListOf<Position>()
-        val pendingOrders = mutableListOf<Order>()
         val closedTrades = mutableListOf<TradeJournalEntry>()
         val equityPoints = mutableListOf<EquityPoint>()
 
@@ -191,7 +190,6 @@ class BacktestEngine(
 
         val symInfo = DefaultSymbols.getSymbol(config.symbol)
         var nextPositionId = 1L
-        var nextOrderId = 1L
 
         onProgress?.invoke(BacktestProgressStage.RUNNING_STRATEGY, 0.35f)
 
@@ -223,46 +221,9 @@ class BacktestEngine(
                 source = "BACKTEST"
             )
 
-            // Step 1: Evaluate pending orders against current bar extremes
-            if (pendingOrders.isNotEmpty()) {
-                val pendingIterator = pendingOrders.iterator()
-                while (pendingIterator.hasNext()) {
-                    val order = pendingIterator.next()
-                    val isTriggered = when (order.type) {
-                        OrderType.BUY_LIMIT -> currentCandle.low <= order.requestedPrice
-                        OrderType.SELL_LIMIT -> currentCandle.high >= order.requestedPrice
-                        OrderType.BUY_STOP -> currentCandle.high >= order.requestedPrice
-                        OrderType.SELL_STOP -> currentCandle.low <= order.requestedPrice
-                        else -> false
-                    }
-
-                    if (isTriggered) {
-                        val fillPrice = order.requestedPrice
-                        val requiredMargin = (order.volume * symInfo.contractSize * fillPrice) / config.leverage
-                        val currentFreeMargin = maxOf(0.0, (virtualBalance + openPositions.sumOf { it.profitLoss }) - openPositions.sumOf { it.margin })
-
-                        if (requiredMargin <= currentFreeMargin) {
-                            val newPos = Position(
-                                id = nextPositionId++,
-                                accountId = 999,
-                                symbol = config.symbol,
-                                side = if (order.direction == OrderSide.BUY) PositionSide.BUY else PositionSide.SELL,
-                                volume = order.volume,
-                                entryPrice = fillPrice,
-                                currentPrice = fillPrice,
-                                stopLoss = order.stopLoss,
-                                takeProfit = order.takeProfit,
-                                openTime = currentCandle.openTime,
-                                margin = requiredMargin,
-                                strategyId = config.strategy.id,
-                                mode = "BACKTEST"
-                            )
-                            openPositions.add(newPos)
-                        }
-                        pendingIterator.remove()
-                    }
-                }
-            }
+            // Pending orders are not currently created by the strategy API.
+            // Do not simulate fills from an unreachable queue: future order
+            // placement must be integrated with the execution engine first.
 
             // Step 2: Evaluate open positions against current bar extremes
             // DETERMINISTIC CONSERVATIVE INTRABAR RISK POLICY:
