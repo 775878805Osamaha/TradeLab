@@ -74,6 +74,8 @@ fun ChartScreen(
     var showQuickTrade by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
+    var showReplayControls by remember { mutableStateOf(false) }
+    var showChartStatus by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
     var showChartActions by remember { mutableStateOf(false) }
     var showExtraControls by remember { mutableStateOf(false) }
@@ -166,9 +168,11 @@ fun ChartScreen(
                             if (isEmbeddedReplay) {
                                 replayViewModel.pause()
                                 isEmbeddedReplay = false
+                                showReplayControls = false
                             } else {
                                 replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
                                 isEmbeddedReplay = true
+                                showReplayControls = false
                             }
                         },
                         modifier = Modifier.testTag("chart_to_replay_btn")
@@ -562,7 +566,7 @@ fun ChartScreen(
                 ) {
                     Column(
                         modifier = Modifier
-                            .heightIn(max = 228.dp)
+                            .heightIn(max = 168.dp)
                             .verticalScroll(rememberScrollState())
                             .padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
