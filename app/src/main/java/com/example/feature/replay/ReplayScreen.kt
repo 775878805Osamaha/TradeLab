@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.model.DataSourceType
 import com.example.core.model.OrderSide
+import com.example.core.model.OrderType
 import com.example.core.model.PositionSide
 import com.example.core.model.Timeframe
 import com.example.ui.components.CandlestickChart
@@ -41,6 +42,13 @@ fun ReplayScreen(
     val uiState by viewModel.uiState.collectAsState()
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
     var showJumpDialog by remember { mutableStateOf(false) }
+    var showOrderTicket by remember { mutableStateOf(false) }
+    var ticketSide by remember { mutableStateOf(OrderSide.BUY) }
+    var ticketType by remember { mutableStateOf(OrderType.BUY_LIMIT) }
+    var ticketVolume by remember { mutableStateOf("0.01") }
+    var ticketPrice by remember { mutableStateOf("") }
+    var ticketSl by remember { mutableStateOf("") }
+    var ticketTp by remember { mutableStateOf("") }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(uiState.message) {
@@ -261,6 +269,28 @@ fun ReplayScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    OutlinedButton(
+                        onClick = { showOrderTicket = true },
+                        modifier = Modifier.fillMaxWidth().testTag("replay_pending_ticket_btn")
+                    ) { Text("أمر معلق LIMIT / STOP") }
+                    if (uiState.pendingOrders.isNotEmpty()) {
+                        Text("الأوامر المعلقة", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        uiState.pendingOrders.forEach { order ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("${order.type.name}  ${order.requestedPrice}", fontSize = 11.sp)
+                                TextButton(onClick = { viewModel.cancelPendingOrder(order.id) }) {
+                                    Text("إلغاء #${order.id}")
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     // 4. Quick Replay BUY / SELL Manual Controls (Evaluates at Replay Time T)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -297,6 +327,62 @@ fun ReplayScreen(
         }
     }
 
+    if (showOrderTicket) {
+        AlertDialog(
+            onDismissRequest = { showOrderTicket = false },
+            title = { Text("أمر معلق — Replay") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = ticketSide == OrderSide.BUY,
+                            onClick = { ticketSide = OrderSide.BUY; ticketType = OrderType.BUY_LIMIT },
+                            label = { Text("شراء") }
+                        )
+                        FilterChip(
+                            selected = ticketSide == OrderSide.SELL,
+                            onClick = { ticketSide = OrderSide.SELL; ticketType = OrderType.SELL_LIMIT },
+                            label = { Text("بيع") }
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = ticketType == OrderType.BUY_LIMIT || ticketType == OrderType.SELL_LIMIT,
+                            onClick = { ticketType = if (ticketSide == OrderSide.BUY) OrderType.BUY_LIMIT else OrderType.SELL_LIMIT },
+                            label = { Text("LIMIT") }
+                        )
+                        FilterChip(
+                            selected = ticketType == OrderType.BUY_STOP || ticketType == OrderType.SELL_STOP,
+                            onClick = { ticketType = if (ticketSide == OrderSide.BUY) OrderType.BUY_STOP else OrderType.SELL_STOP },
+                            label = { Text("STOP") }
+                        )
+                    }
+                    OutlinedTextField(value = ticketVolume, onValueChange = { ticketVolume = it }, label = { Text("حجم اللوت") }, singleLine = true)
+                    OutlinedTextField(value = ticketPrice, onValueChange = { ticketPrice = it }, label = { Text("سعر التفعيل") }, singleLine = true)
+                    OutlinedTextField(value = ticketSl, onValueChange = { ticketSl = it }, label = { Text("وقف الخسارة (اختياري)") }, singleLine = true)
+                    OutlinedTextField(value = ticketTp, onValueChange = { ticketTp = it }, label = { Text("جني الأرباح (اختياري)") }, singleLine = true)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = ticketVolume.toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true &&
+                        ticketPrice.toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true &&
+                        (ticketSl.isBlank() || ticketSl.toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true) &&
+                        (ticketTp.isBlank() || ticketTp.toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true),
+                    onClick = {
+                        viewModel.placePendingOrder(
+                            ticketType, ticketSide, ticketVolume.toDouble(),
+                            ticketPrice.toDouble(), ticketSl.takeIf { it.isNotBlank() }?.toDouble(),
+                            ticketTp.takeIf { it.isNotBlank() }?.toDouble()
+                        )
+                        showOrderTicket = false
+                    }
+                ) { Text("وضع الأمر") }
+            },
+            dismissButton = { TextButton(onClick = { showOrderTicket = false }) { Text("إلغاء") } }
+        )
+    }
+
     // Jump to Date Dialog
     if (showJumpDialog) {
         AlertDialog(
@@ -308,22 +394,22 @@ fun ReplayScreen(
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
-                                viewModel.replayEngine.jumpToIndex(20)
+                                uiState.visibleCandles.firstOrNull()?.let { viewModel.jumpToTimestamp(it.openTime) }
                                 showJumpDialog = false
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("البداية (20)")
+                            Text("أول شمعة ظاهرة")
                         }
                         Button(
                             onClick = {
-                                val mid = uiState.totalCandles / 2
-                                viewModel.replayEngine.jumpToIndex(mid)
+                                val mid = uiState.visibleCandles.size / 2
+                                uiState.visibleCandles.getOrNull(mid)?.let { viewModel.jumpToTimestamp(it.openTime) }
                                 showJumpDialog = false
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("المنتصف (50%)")
+                            Text("منتصف الظاهر")
                         }
                     }
                 }
