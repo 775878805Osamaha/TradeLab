@@ -120,7 +120,8 @@ class ExecutionEngine(
     fun evaluatePendingOrder(
         order: Order,
         tick: Tick,
-        account: VirtualAccount
+        account: VirtualAccount,
+        mode: String = "LIVE_PAPER"
     ): ExecutionResult? {
         // Pending orders belong to exactly one paper account. Never fill an
         // order against another account's balance, margin or positions.
@@ -216,7 +217,7 @@ class ExecutionEngine(
             swap = 0.0,
             commission = commission,
             margin = margin,
-            mode = "LIVE_PAPER"
+            mode = mode
         )
 
         return ExecutionResult.Success(position, executedPrice, commission)

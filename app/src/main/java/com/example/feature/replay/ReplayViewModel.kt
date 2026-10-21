@@ -378,17 +378,9 @@ class ReplayViewModel(
             return
         }
 
-        // Isolated Replay Account
-        val replayAcc = VirtualAccount(
-            id = 9999,
-            name = "حساب محاكاة Replay الافتراضي",
-            initialBalance = _uiState.value.initialBalance,
-            balance = _uiState.value.currentBalance,
-            equity = _uiState.value.currentEquity,
-            margin = openPositions.sumOf { it.margin },
-            freeMargin = maxOf(0.0, _uiState.value.currentEquity - openPositions.sumOf { it.margin }),
-            mode = AccountMode.REPLAY
-        )
+        // Use the same equity/margin accounting for manual and pending fills.
+        // A stale UI equity snapshot must not overstate available margin.
+        val replayAcc = replayAccount()
 
         val result = executionEngine.executeMarketOrder(
             account = replayAcc,
@@ -563,10 +555,10 @@ class ReplayViewModel(
         val pendingIterator = pendingOrders.iterator()
         while (pendingIterator.hasNext()) {
             val order = pendingIterator.next()
-            val result = executionEngine.evaluatePendingOrder(order, tick, replayAccount(curBal))
+            val result = executionEngine.evaluatePendingOrder(order, tick, replayAccount(curBal), mode = "REPLAY")
             when (result) {
                 is com.example.core.execution.ExecutionResult.Success -> {
-                    openPositions.add(result.position.copy(id = nextId++, mode = "REPLAY"))
+                    openPositions.add(result.position.copy(id = nextId++))
                     pendingIterator.remove()
                 }
                 is com.example.core.execution.ExecutionResult.Error -> {

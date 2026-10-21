@@ -30,6 +30,19 @@ class PendingExecutionStateTests {
         assertTrue(result is ExecutionResult.Error)
     }
 
+    @Test fun replayPendingFillRetainsReplayMode() {
+        val result = engine.evaluatePendingOrder(order(), tick, account, mode = "REPLAY")
+        assertTrue(result is ExecutionResult.Success)
+        assertEquals("REPLAY", (result as ExecutionResult.Success).position.mode)
+        assertEquals(account.id, result.position.accountId)
+    }
+
+    @Test fun pendingFillDefaultsToPaperMode() {
+        val result = engine.evaluatePendingOrder(order(), tick, account)
+        assertTrue(result is ExecutionResult.Success)
+        assertEquals("LIVE_PAPER", (result as ExecutionResult.Success).position.mode)
+    }
+
     @Test fun filledCancelledAndExpiredOrdersCannotExecuteAgain() {
         for (status in listOf(OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.EXPIRED, OrderStatus.REJECTED)) {
             val result = engine.evaluatePendingOrder(order().copy(status = status), tick, account)
