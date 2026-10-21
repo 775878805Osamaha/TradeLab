@@ -46,6 +46,8 @@ fun ChartScreen(
     val uiState by viewModel.uiState.collectAsState()
     val replayState by replayViewModel.uiState.collectAsState()
     var isEmbeddedReplay by remember { mutableStateOf(false) }
+    var showReplayDetails by remember { mutableStateOf(false) }
+    var showQuickTrade by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
@@ -171,6 +173,27 @@ fun ChartScreen(
 
             if (isEmbeddedReplay) {
                 Row(
+                    modifier = Modifier.fillMaxWidth().background(TradingCard).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_details_toggle")) {
+                        Icon(if (showReplayDetails) Icons.Default.ExpandLess else Icons.Default.Tune, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (showReplayDetails) "إخفاء لوحة الإعادة" else "REPLAY · ${replayState.currentIndex + 1}/${replayState.totalCandles}")
+                    }
+                    IconButton(onClick = { replayViewModel.stepBackward() }, enabled = !replayState.isLoading) {
+                        Icon(Icons.Default.SkipPrevious, contentDescription = "شمعة سابقة")
+                    }
+                    IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() }, enabled = !replayState.isLoading && replayState.totalCandles > 0) {
+                        Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "تشغيل أو إيقاف الإعادة")
+                    }
+                    IconButton(onClick = { replayViewModel.stepForward() }, enabled = !replayState.isLoading) {
+                        Icon(Icons.Default.SkipNext, contentDescription = "شمعة تالية")
+                    }
+                }
+                if (showReplayDetails) {
+                Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard)
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                         .testTag("chart_embedded_replay_controls"),
@@ -293,6 +316,7 @@ fun ChartScreen(
                         color = TradingTextSecondary, fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                 }
+                }
             }
 
             // Timeframe selection scrollable row (all 10 timeframes)
@@ -356,30 +380,23 @@ fun ChartScreen(
                 }
             }
 
-            // Secondary chart actions stay scrollable on narrow phones instead of
-            // squeezing the symbol title in the top app bar.
+            // Icon-only chart actions: no extra text toolbar consuming chart height.
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp),
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.testTag("chart_indicators_btn")) {
-                    Icon(Icons.Default.Timeline, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text("المؤشرات", fontSize = 12.sp)
+                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(34.dp).testTag("chart_indicators_btn")) {
+                    Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
                 }
-                TextButton(onClick = { showToolsMenu = true }, modifier = Modifier.testTag("drawing_tools_menu_btn")) {
-                    Icon(Icons.Default.Draw, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text("الرسم", fontSize = 12.sp)
+                IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.size(34.dp).testTag("drawing_tools_menu_btn")) {
+                    Icon(Icons.Default.Draw, contentDescription = "أدوات الرسم", tint = TradingAccentLight)
                 }
-                TextButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.testTag("chart_reset_view_btn")) {
-                    Icon(Icons.Default.CenterFocusWeak, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text("ضبط العرض", fontSize = 12.sp)
+                IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(34.dp).testTag("chart_reset_view_btn")) {
+                    Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط الشارت", tint = TradingAccentLight)
+                }
+                IconButton(onClick = { showQuickTrade = !showQuickTrade }, modifier = Modifier.size(34.dp).testTag("chart_trade_toggle")) {
+                    Icon(Icons.Default.SwapVert, contentDescription = "إظهار أو إخفاء أوامر التداول", tint = if (showQuickTrade) TradingAccent else TradingTextSecondary)
                 }
             }
 
@@ -422,22 +439,6 @@ fun ChartScreen(
                 marketTick?.source == "BINANCE_WEBSOCKET" -> "Binance · بث مباشر"
                 else -> "Binance · تحديث عبر الإنترنت"
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = marketStatus,
-                    color = if (marketTickIsLive) TradingPositive else TradingGold,
-                    fontSize = 11.sp,
-                    modifier = Modifier.testTag("chart_market_source_status")
-                )
-                if (!marketTickIsLive) {
-                    Text("السعر غير متاح", color = TradingTextSecondary, fontSize = 10.sp)
-                }
-            }
-
             // Professional Candlestick Chart
             Box(
                 modifier = Modifier
@@ -560,8 +561,8 @@ fun ChartScreen(
                 }
             }
 
-            // Quick Execution Bar
-            Surface(
+            // Quick execution is opt-in; default is an unobstructed chart.
+            if (showQuickTrade && !isEmbeddedReplay) Surface(
                 color = TradingCard,
                 tonalElevation = 0.dp,
                 border = androidx.compose.foundation.BorderStroke(1.dp, TradingBorder)
