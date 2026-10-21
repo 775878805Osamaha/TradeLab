@@ -47,6 +47,8 @@ fun ChartScreen(
     val replayState by replayViewModel.uiState.collectAsState()
     var isEmbeddedReplay by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
+    var showTimeframePicker by remember { mutableStateOf(false) }
+    var showReplayDetails by remember { mutableStateOf(false) }
     var showQuickTrade by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
@@ -226,6 +228,10 @@ fun ChartScreen(
                 }
             }
             if (isEmbeddedReplay && showReplayControls) {
+                TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_details_toggle")) {
+                    Text(if (showReplayDetails) "إخفاء أوامر الإعادة" else "أوامر الإعادة والسرعة", fontSize = 11.sp)
+                }
+                if (showReplayDetails) {
                 // Historical paper orders are isolated from the live-paper account.
                 if (showReplayControls) Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard)
@@ -376,17 +382,22 @@ fun ChartScreen(
                 IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(34.dp)) {
                     Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط عرض الشارت", tint = TradingAccentLight)
                 }
+                }
             }
 
-            // Timeframe selection scrollable row (all 10 timeframes)
-            if (showChartControls) Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            // Compact controls: preserve most screen height for the chart.
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { showTimeframePicker = !showTimeframePicker }, modifier = Modifier.testTag("chart_timeframe_picker_btn")) {
+                    Text(uiState.selectedTimeframe.displayName, fontSize = 12.sp)
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.testTag("chart_indicators_btn")) { Icon(Icons.Default.Timeline, contentDescription = "المؤشرات") }
+                IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.testTag("drawing_tools_menu_btn")) { Icon(Icons.Default.Draw, contentDescription = "أدوات الرسم") }
+                IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.testTag("chart_reset_view_btn")) { Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط العرض") }
+                IconButton(onClick = { viewModel.toggleVolume() }) { Icon(Icons.Default.BarChart, contentDescription = "الحجم", tint = if (uiState.isVolumeVisible) TradingGold else TradingTextSecondary) }
+            }
+            if (showTimeframePicker) {
+                Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Timeframe.values().forEach { tf ->
                     val isSelected = uiState.selectedTimeframe == tf
                     Box(
@@ -406,60 +417,9 @@ fun ChartScreen(
                     }
                 }
 
-                // Chart rendering style selector (visual only; no impact on market data).
-                ChartDisplayStyle.values().forEach { style ->
-                    val selected = chartDisplayStyle == style
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (selected) TradingAccent else TradingElevated)
-                            .clickable { chartDisplayStyle = style }
-                            .padding(horizontal = 8.dp, vertical = 5.dp)
-                            .testTag("chart_style_${style.name}")
-                    ) {
-                        Text(style.label, fontSize = 10.sp,
-                            color = if (selected) Color.White else TradingTextSecondary)
-                    }
-                }
-
-                // Volume toggle chip
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (uiState.isVolumeVisible) TradingGold.copy(alpha = 0.2f) else TradingElevated)
-                        .clickable { viewModel.toggleVolume() }
-                        .padding(horizontal = 7.dp, vertical = 5.dp)
-                ) {
-                    Text(
-                        text = "VOL",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (uiState.isVolumeVisible) TradingGold else TradingTextSecondary
-                    )
                 }
             }
 
-            // Icon-only chart actions: no extra text toolbar consuming chart height.
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(34.dp).testTag("chart_indicators_btn")) {
-                    Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.size(34.dp).testTag("drawing_tools_menu_btn")) {
-                    Icon(Icons.Default.Draw, contentDescription = "أدوات الرسم", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(34.dp).testTag("chart_reset_view_btn")) {
-                    Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط الشارت", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { showQuickTrade = !showQuickTrade }, modifier = Modifier.size(34.dp).testTag("chart_trade_toggle")) {
-                    Icon(Icons.Default.SwapVert, contentDescription = "إظهار أو إخفاء أوامر التداول", tint = if (showQuickTrade) TradingAccent else TradingTextSecondary)
-                }
-            }
-
-            }
             // Drawing tools active banner if tool active
             if (showChartControls && uiState.activeDrawingTool != DrawingTool.NONE) {
                 Row(
