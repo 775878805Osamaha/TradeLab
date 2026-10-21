@@ -263,7 +263,7 @@ class BacktestEngine(
             val posIterator = openPositions.iterator()
             while (posIterator.hasNext()) {
                 val pos = posIterator.next()
-                when (val eval = runExecutionEngine.evaluatePositionOnCandle(pos, currentCandle)) {
+                when (val eval = runExecutionEngine.evaluatePositionOnCandle(pos, currentCandle, config.spreadPips)) {
                     is PositionEvaluation.TriggerClose -> {
                         val (trade, _) = runExecutionEngine.closePosition(
                             position = pos,
