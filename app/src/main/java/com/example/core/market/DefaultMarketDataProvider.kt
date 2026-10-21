@@ -104,6 +104,14 @@ class DefaultMarketDataProvider(
             }
         }
         scope.launch {
+            binanceWsClient?.lastConnectionError?.collect { error ->
+                if (error != null) {
+                    _lastHttpDiagnostic.value = error
+                    updateDiagnostics()
+                }
+            }
+        }
+        scope.launch {
             binanceWsClient?.reconnectAttempts?.collect { count ->
                 _streamReconnectAttempts.value = count
                 updateDiagnostics()
