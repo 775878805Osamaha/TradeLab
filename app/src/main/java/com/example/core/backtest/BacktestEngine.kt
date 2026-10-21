@@ -201,10 +201,24 @@ class BacktestEngine(
             }
 
             val currentCandle = cleanCandles[i]
+            // Historical OHLC is a mid-price series. BUY positions exit on Bid,
+            // SELL positions exit on Ask; preserve OHLC ordering after adjustment.
+            val halfSpread = (config.spreadPips * symInfo.pipSize) / 2.0
+            val bidCandle = currentCandle.copy(
+                open = currentCandle.open - halfSpread,
+                high = currentCandle.high - halfSpread,
+                low = currentCandle.low - halfSpread,
+                close = currentCandle.close - halfSpread
+            )
+            val askCandle = currentCandle.copy(
+                open = currentCandle.open + halfSpread,
+                high = currentCandle.high + halfSpread,
+                low = currentCandle.low + halfSpread,
+                close = currentCandle.close + halfSpread
+            )
             // STRICT HISTORICAL DATA BOUNDARY: Strategy can ONLY see candles up to i (<= current replay time)
             val historicalCandlesSoFar = cleanCandles.subList(0, i + 1)
 
-            val halfSpread = (config.spreadPips * symInfo.pipSize) / 2.0
             val tick = Tick(
                 symbol = config.symbol,
                 bid = currentCandle.close - halfSpread,
@@ -263,7 +277,9 @@ class BacktestEngine(
             val posIterator = openPositions.iterator()
             while (posIterator.hasNext()) {
                 val pos = posIterator.next()
-                when (val eval = runExecutionEngine.evaluatePositionOnCandle(pos, currentCandle)) {
+                when (val eval = runExecutionEngine.evaluatePositionOnCandle(
+                    pos, if (pos.side == PositionSide.BUY) bidCandle else askCandle
+                )) {
                     is PositionEvaluation.TriggerClose -> {
                         val (trade, _) = runExecutionEngine.closePosition(
                             position = pos,
@@ -348,7 +364,7 @@ class BacktestEngine(
                         val pos = itClose.next()
                         val (trade, _) = runExecutionEngine.closePosition(
                             position = pos,
-                            exitPrice = currentCandle.close,
+                            exitPrice = if (pos.side == PositionSide.BUY) tick.bid else tick.ask,
                             exitReason = ExitReason.STRATEGY_CLOSE,
                             closeTime = currentCandle.closeTime
                         )
@@ -430,7 +446,11 @@ class BacktestEngine(
             for (pos in openPositions) {
                 val (trade, _) = runExecutionEngine.closePosition(
                     position = pos,
-                    exitPrice = lastCandle.close,
+                    exitPrice = if (pos.side == PositionSide.BUY) {
+                        lastCandle.close - (config.spreadPips * symInfo.pipSize) / 2.0
+                    } else {
+                        lastCandle.close + (config.spreadPips * symInfo.pipSize) / 2.0
+                    },
                     exitReason = ExitReason.MANUAL_CLOSE,
                     closeTime = lastCandle.closeTime
                 )
