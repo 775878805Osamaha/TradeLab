@@ -296,25 +296,29 @@ fun CandlestickChart(
                 }
             }
 
+            // Reuse a single Paint for all axis labels in this frame.
+            val axisLabelPaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.rgb(156, 163, 175)
+                textSize = 20f
+                isAntiAlias = true
+            }
+            val gridColor = TradingBorder.copy(alpha = 0.3f)
             // Draw Background Grid
             for (step in 0..4) {
                 val y = (step / 4f) * mainChartHeight
                 val priceVal = paddedMin + ((4 - step) / 4.0) * (paddedMax - paddedMin)
                 drawLine(
-                    color = TradingBorder.copy(alpha = 0.3f),
+                    color = gridColor,
                     start = Offset(0f, y),
                     end = Offset(chartWidth, y),
                     strokeWidth = 1f
                 )
-                // Price Axis Label
-                drawContext.canvas.nativeCanvas.apply {
-                    val paint = android.graphics.Paint().apply {
-                        color = android.graphics.Color.parseColor("#9CA3AF")
-                        textSize = 20f
-                        isAntiAlias = true
-                    }
-                    drawText(String.format(Locale.US, "%.2f", priceVal), chartWidth + 6f, y + 6f, paint)
-                }
+                drawContext.canvas.nativeCanvas.drawText(
+                    String.format(Locale.US, "%.2f", priceVal),
+                    chartWidth + 6f,
+                    y + 6f,
+                    axisLabelPaint
+                )
             }
 
             // Display-only Heikin-Ashi; raw market candles still drive trading.
