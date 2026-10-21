@@ -165,15 +165,15 @@ class ReplayRewindSafetyTests {
             id = 1L, accountId = 1L, symbol = "BTCUSDT",
             side = com.example.core.model.PositionSide.BUY, volume = 0.01,
             entryPrice = 104.0, currentPrice = 104.0,
-            stopLoss = 102.0, takeProfit = 106.0
+            stopLoss = 104.0, takeProfit = 106.0
         )
         val bar = candle(5)
-        assertTrue(bar.low <= 102.0 && bar.high >= 106.0)
+        assertTrue(bar.low <= 104.0 && bar.high >= 106.0)
         val outcome = engine.evaluatePositionConservative(position, bar)
         assertTrue(outcome is com.example.core.execution.PositionEvaluation.TriggerClose)
         val close = outcome as com.example.core.execution.PositionEvaluation.TriggerClose
         assertEquals(com.example.core.model.ExitReason.STOP_LOSS, close.exitReason)
-        assertEquals(102.0, close.exitPrice, 0.0001)
+        assertEquals(104.0, close.exitPrice, 0.0001)
     }
 
 }
