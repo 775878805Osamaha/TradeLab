@@ -323,6 +323,20 @@ class BacktestEngine(
             // Step 5: Execute Strategy Logic
             val signal = config.strategy.onCandle(context, config.parameters)
 
+            // Validate only fields used by this action. A CLOSE must not be
+            // discarded because an unrelated suggestedVolume is malformed.
+            if (signal.symbol != null && !signal.symbol.equals(config.symbol, ignoreCase = true)) continue
+            val opensPosition = signal.action == SignalAction.BUY || signal.action == SignalAction.SELL
+            val changesStops = opensPosition || signal.action == SignalAction.MODIFY
+            if (opensPosition) {
+                if (signal.entryPrice != null && (!signal.entryPrice.isFinite() || signal.entryPrice <= 0.0)) continue
+                if (signal.suggestedVolume != null && (!signal.suggestedVolume.isFinite() || signal.suggestedVolume <= 0.0)) continue
+            }
+            if (changesStops) {
+                if (signal.stopLoss != null && (!signal.stopLoss.isFinite() || signal.stopLoss <= 0.0)) continue
+                if (signal.takeProfit != null && (!signal.takeProfit.isFinite() || signal.takeProfit <= 0.0)) continue
+            }
+
             when (signal.action) {
                 SignalAction.CLOSE -> {
                     val itClose = openPositions.iterator()
@@ -382,10 +396,13 @@ class BacktestEngine(
                         }
 
                         if (!lotSize.isFinite() || lotSize <= 0.0) continue
-                        val requiredMargin = (lotSize * symInfo.contractSize * currentCandle.close) / config.leverage
+                        // Margin is based on the executable side of the quote,
+                        // not the mid-price of the historical candle.
+                        val entryQuote = if (isBuy) tick.ask else tick.bid
+                        val requiredMargin = (lotSize * symInfo.contractSize * entryQuote) / config.leverage
 
                         // Check margin availability before execution
-                        if (requiredMargin <= freeMargin) {
+                        if (requiredMargin.isFinite() && requiredMargin > 0.0 && requiredMargin <= freeMargin) {
                             val execResult = runExecutionEngine.executeMarketOrder(
                                 account = virtualAccountState,
                                 symbol = config.symbol,
