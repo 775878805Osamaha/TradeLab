@@ -28,6 +28,7 @@ import com.example.core.model.OrderType
 import com.example.core.model.PositionSide
 import com.example.core.model.Timeframe
 import com.example.ui.components.CandlestickChart
+import com.example.ui.components.ChartDisplayStyle
 import com.example.ui.components.DataSourceBadge
 import com.example.ui.theme.*
 import java.text.SimpleDateFormat
@@ -45,6 +46,7 @@ fun ReplayScreen(
     var showJumpDialog by remember { mutableStateOf(false) }
     var crosshairEnabled by remember { mutableStateOf(false) }
     var volumeVisible by remember { mutableStateOf(true) }
+    var replayChartStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var chartResetTrigger by remember { mutableLongStateOf(0L) }
     var showOrderTicket by remember { mutableStateOf(false) }
     var editProtectionId by remember { mutableStateOf<Long?>(null) }
@@ -211,6 +213,14 @@ fun ReplayScreen(
                     label = { Text("الحجم", fontSize = 11.sp) },
                     modifier = Modifier.testTag("replay_volume_toggle")
                 )
+                ChartDisplayStyle.entries.forEach { style ->
+                    FilterChip(
+                        selected = replayChartStyle == style,
+                        onClick = { replayChartStyle = style },
+                        label = { Text(style.label, fontSize = 11.sp) },
+                        modifier = Modifier.testTag("replay_chart_style_${style.name.lowercase(Locale.US)}")
+                    )
+                }
                 TextButton(
                     onClick = { chartResetTrigger++ },
                     modifier = Modifier.testTag("replay_chart_reset")
@@ -231,7 +241,8 @@ fun ReplayScreen(
                     historicalTrades = uiState.closedTrades,
                     isCrosshairActive = crosshairEnabled,
                     isVolumeVisible = volumeVisible,
-                    resetViewTrigger = chartResetTrigger
+                    resetViewTrigger = chartResetTrigger,
+                    displayStyle = replayChartStyle
                 )
             }
 
