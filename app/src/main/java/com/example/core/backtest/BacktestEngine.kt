@@ -323,13 +323,19 @@ class BacktestEngine(
             // Step 5: Execute Strategy Logic
             val signal = config.strategy.onCandle(context, config.parameters)
 
-            // Ignore signals for another instrument or with impossible prices.
-            // A strategy cannot trade a different symbol inside this single-symbol run.
+            // Validate only fields used by this action. A CLOSE must not be
+            // discarded because an unrelated suggestedVolume is malformed.
             if (signal.symbol != null && !signal.symbol.equals(config.symbol, ignoreCase = true)) continue
-            if (signal.entryPrice != null && (!signal.entryPrice.isFinite() || signal.entryPrice <= 0.0)) continue
-            if (signal.stopLoss != null && (!signal.stopLoss.isFinite() || signal.stopLoss <= 0.0)) continue
-            if (signal.takeProfit != null && (!signal.takeProfit.isFinite() || signal.takeProfit <= 0.0)) continue
-            if (signal.suggestedVolume != null && (!signal.suggestedVolume.isFinite() || signal.suggestedVolume <= 0.0)) continue
+            val opensPosition = signal.action == SignalAction.BUY || signal.action == SignalAction.SELL
+            val changesStops = opensPosition || signal.action == SignalAction.MODIFY
+            if (opensPosition) {
+                if (signal.entryPrice != null && (!signal.entryPrice.isFinite() || signal.entryPrice <= 0.0)) continue
+                if (signal.suggestedVolume != null && (!signal.suggestedVolume.isFinite() || signal.suggestedVolume <= 0.0)) continue
+            }
+            if (changesStops) {
+                if (signal.stopLoss != null && (!signal.stopLoss.isFinite() || signal.stopLoss <= 0.0)) continue
+                if (signal.takeProfit != null && (!signal.takeProfit.isFinite() || signal.takeProfit <= 0.0)) continue
+            }
 
             when (signal.action) {
                 SignalAction.CLOSE -> {
