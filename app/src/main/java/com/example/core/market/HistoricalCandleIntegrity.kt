@@ -43,9 +43,12 @@ object HistoricalCandleIntegrity {
             }
             require(candle.isValid()) { "Invalid historical OHLC" }
             require(candle.closeTime <= requestedTo) { "Incomplete candle outside requested range" }
-            // Weekly exchange candles may align to Monday rather than Unix epoch Thursday.
-            require(candle.timeframe.minutes >= 10_080 ||
-                candle.openTime % (candle.timeframe.minutes * 60_000L) == 0L) {
+            // Binance W1 candles begin Monday 00:00 UTC (four days after Unix epoch).
+            // Do not exempt weekly bars from timestamp validation.
+            val intervalMillis = candle.timeframe.minutes * 60_000L
+            val mondayOffset = 4L * 24 * 60 * 60 * 1000
+            val offset = if (candle.timeframe.minutes == 10_080) mondayOffset else 0L
+            require(Math.floorMod(candle.openTime - offset, intervalMillis) == 0L) {
                 "Misaligned candle timestamp"
             }
             if (expectedSource != null) {

@@ -49,6 +49,26 @@ class HistoricalCandleIntegrityTest {
         }
     }
 
+    @Test fun acceptsMondayAlignedWeeklyCandle() {
+        val monday = 345_600_000L
+        val weekly = candle(monday).copy(timeframe = Timeframe.fromCode("W1"))
+        val result = HistoricalCandleIntegrity.validate(
+            listOf(weekly), monday, monday + 604_800_000L,
+            expectedTimeframe = Timeframe.fromCode("W1")
+        )
+        assertEquals(1, result.size)
+    }
+
+    @Test fun rejectsThursdayAlignedWeeklyCandle() {
+        val weekly = candle(604_800_000L).copy(timeframe = Timeframe.fromCode("W1"))
+        assertThrows(IllegalArgumentException::class.java) {
+            HistoricalCandleIntegrity.validate(
+                listOf(weekly), 0, 1_209_600_000L,
+                expectedTimeframe = Timeframe.fromCode("W1")
+            )
+        }
+    }
+
     @Test fun rejectsIncompleteRange() {
         assertThrows(IllegalArgumentException::class.java) {
             HistoricalCandleIntegrity.validate(listOf(candle(120_000)), 0, 150_000)
