@@ -396,14 +396,10 @@ class BacktestEngine(
                         }
 
                         if (!lotSize.isFinite() || lotSize <= 0.0) continue
-                        // Margin is based on the executable side of the quote,
-                        // not the mid-price of the historical candle.
-                        val entryQuote = if (isBuy) tick.ask else tick.bid
-                        val requiredMargin = (lotSize * symInfo.contractSize * entryQuote) / config.leverage
-
-                        // Check margin availability before execution
-                        if (requiredMargin.isFinite() && requiredMargin > 0.0 && requiredMargin <= freeMargin) {
-                            val execResult = runExecutionEngine.executeMarketOrder(
+                        // The execution engine is the source of truth for
+                        // fill price, slippage, margin and order validation.
+                        // Do not duplicate an approximate margin check here.
+                        val execResult = runExecutionEngine.executeMarketOrder(
                                 account = virtualAccountState,
                                 symbol = config.symbol,
                                 side = side,
@@ -413,11 +409,10 @@ class BacktestEngine(
                                 takeProfit = signal.takeProfit,
                                 strategyId = config.strategy.id,
                                 mode = "BACKTEST"
-                            )
+                        )
 
-                            if (execResult is ExecutionResult.Success) {
-                                openPositions.add(execResult.position.copy(id = nextPositionId++))
-                            }
+                        if (execResult is ExecutionResult.Success) {
+                            openPositions.add(execResult.position.copy(id = nextPositionId++))
                         }
                     }
                 }
