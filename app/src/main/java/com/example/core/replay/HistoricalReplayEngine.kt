@@ -138,6 +138,10 @@ class HistoricalReplayEngine(
 
     fun jumpToIndex(targetIndex: Int) {
         if (allCandles.isEmpty()) return
+        // A seek skips candle execution, so no financial checkpoint from the
+        // old cursor path may be considered valid at the destination.
+        pause()
+        checkpoints.clear()
         val clamped = targetIndex.coerceIn(0, allCandles.size - 1)
         _currentIndex.value = clamped
         // A seek is navigation, not a candle execution. Executing a strategy
