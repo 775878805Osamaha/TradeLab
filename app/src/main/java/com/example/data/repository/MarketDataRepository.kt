@@ -97,6 +97,9 @@ class MarketDataRepository(
                 if (next <= cursor) break
                 cursor = next
             }
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            // Cancellation must propagate; never turn a cancelled request into cached success.
+            throw error
         } catch (error: Exception) {
             if (trustedLocal.isNotEmpty()) {
                 return@withContext trustedLocal.map {
