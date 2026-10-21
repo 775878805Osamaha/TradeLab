@@ -555,10 +555,10 @@ class ReplayViewModel(
         val pendingIterator = pendingOrders.iterator()
         while (pendingIterator.hasNext()) {
             val order = pendingIterator.next()
-            val result = executionEngine.evaluatePendingOrder(order, tick, replayAccount(curBal))
+            val result = executionEngine.evaluatePendingOrder(order, tick, replayAccount(curBal), mode = "REPLAY")
             when (result) {
                 is com.example.core.execution.ExecutionResult.Success -> {
-                    openPositions.add(result.position.copy(id = nextId++, mode = "REPLAY"))
+                    openPositions.add(result.position.copy(id = nextId++))
                     pendingIterator.remove()
                 }
                 is com.example.core.execution.ExecutionResult.Error -> {
