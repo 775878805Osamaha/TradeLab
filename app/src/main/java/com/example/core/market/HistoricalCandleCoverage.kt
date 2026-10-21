@@ -14,12 +14,14 @@ object HistoricalCandleCoverage {
         intervalMillis: Long
     ): Boolean {
         if (from < 0L || to < from || intervalMillis <= 0L || candles.isEmpty()) return false
-        // The exchange's bar opens are interval-aligned for intraday/daily candles.
-        // Weekly Binance candles are Monday-aligned; the caller should refetch
-        // rather than assume a full hit based on Unix epoch alignment.
-        if (intervalMillis >= 7L * 24 * 60 * 60 * 1000) return false
-        val first = (from / intervalMillis) * intervalMillis +
-            if (from % intervalMillis == 0L) 0L else intervalMillis
+        // Binance weekly klines open on Monday 00:00 UTC, not at the Unix
+        // epoch (Thursday). All other supported intervals are epoch-aligned.
+        val week = 7L * 24 * 60 * 60 * 1000
+        val mondayOffset = 4L * 24 * 60 * 60 * 1000
+        val offset = if (intervalMillis == week) mondayOffset else 0L
+        val shifted = from - offset
+        val remainder = Math.floorMod(shifted, intervalMillis)
+        val first = if (remainder == 0L) from else from + (intervalMillis - remainder)
         if (first > to) return false
         val expectedCount = (to - first) / intervalMillis + 1L
         if (candles.size.toLong() != expectedCount) return false
