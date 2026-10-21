@@ -22,7 +22,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.core.indicators.TechnicalIndicators
 import com.example.feature.chart.ChartIndicatorsDialog
 import com.example.feature.chart.model.IndicatorSettings
 import com.example.feature.chart.model.DrawingTool
@@ -38,6 +37,8 @@ import com.example.ui.components.DataSourceBadge
 import com.example.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,14 +52,22 @@ fun ReplayScreen(
     var showJumpDialog by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var indicatorSettings by remember { mutableStateOf(IndicatorSettings()) }
-    val indicatorCandles = uiState.visibleCandles
-    val smaValues = remember(indicatorCandles, indicatorSettings) { if (indicatorSettings.isSmaEnabled) TechnicalIndicators.calculateSma(indicatorCandles, indicatorSettings.smaPeriod) else emptyList() }
-    val emaValues = remember(indicatorCandles, indicatorSettings) { if (indicatorSettings.isEmaEnabled) TechnicalIndicators.calculateEma(indicatorCandles, indicatorSettings.emaPeriod) else emptyList() }
-    val bollingerValues = remember(indicatorCandles, indicatorSettings) { if (indicatorSettings.isBollingerEnabled) TechnicalIndicators.calculateBollingerBands(indicatorCandles, indicatorSettings.bollingerPeriod, indicatorSettings.bollingerStdDev) else emptyList() }
-    val vwapValues = remember(indicatorCandles, indicatorSettings) { if (indicatorSettings.isVwapEnabled) TechnicalIndicators.calculateVwap(indicatorCandles) else emptyList() }
-    val rsiValues = remember(indicatorCandles, indicatorSettings) { if (indicatorSettings.isRsiEnabled) TechnicalIndicators.calculateRsi(indicatorCandles, indicatorSettings.rsiPeriod) else emptyList() }
-    val macdValues = remember(indicatorCandles, indicatorSettings) { if (indicatorSettings.isMacdEnabled) TechnicalIndicators.calculateMacd(indicatorCandles, indicatorSettings.macdFast, indicatorSettings.macdSlow, indicatorSettings.macdSignal) else emptyList() }
-    val atrValues = remember(indicatorCandles, indicatorSettings) { if (indicatorSettings.isAtrEnabled) TechnicalIndicators.calculateAtr(indicatorCandles, indicatorSettings.atrPeriod) else emptyList() }
+    // Heavy calculations run off the Compose/UI thread. produceState cancels
+    // stale work when replay advances, rewinds or indicator settings change.
+    // Null results hide stale indicator lines until the matching set is ready.
+    val indicatorSnapshot by produceState<ReplayIndicatorSnapshot?>(
+        initialValue = null,
+        key1 = uiState.visibleCandles,
+        key2 = indicatorSettings
+    ) {
+        value = null
+        val revealed = uiState.visibleCandles
+        val selected = indicatorSettings
+        value = withContext(Dispatchers.Default) {
+            ReplayIndicatorSnapshot.calculate(revealed, selected)
+        }
+    }
+
     var crosshairEnabled by remember { mutableStateOf(false) }
     var activeDrawingTool by remember { mutableStateOf(DrawingTool.NONE) }
     val replayDrawings = remember(uiState.symbol, uiState.timeframe) { mutableStateListOf<ChartDrawing>() }
@@ -315,13 +324,13 @@ fun ReplayScreen(
                     },
                     displayStyle = replayChartStyle,
                     indicatorSettings = indicatorSettings,
-                    smaValues = smaValues,
-                    emaValues = emaValues,
-                    bollingerValues = bollingerValues,
-                    vwapValues = vwapValues,
-                    rsiValues = rsiValues,
-                    macdValues = macdValues,
-                    atrValues = atrValues
+                    smaValues = indicatorSnapshot?.sma ?: emptyList(),
+                    emaValues = indicatorSnapshot?.ema ?: emptyList(),
+                    bollingerValues = indicatorSnapshot?.bollinger ?: emptyList(),
+                    vwapValues = indicatorSnapshot?.vwap ?: emptyList(),
+                    rsiValues = indicatorSnapshot?.rsi ?: emptyList(),
+                    macdValues = indicatorSnapshot?.macd ?: emptyList(),
+                    atrValues = indicatorSnapshot?.atr ?: emptyList()
                 )
             }
 
