@@ -399,17 +399,17 @@ fun ReplayScreen(
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("البداية (20)")
+                            Text("أول شمعة ظاهرة")
                         }
                         Button(
                             onClick = {
-                                val mid = uiState.totalCandles / 2
-                                uiState.visibleCandles.lastOrNull()?.let { viewModel.jumpToTimestamp(it.openTime) }
+                                val mid = uiState.visibleCandles.size / 2
+                                uiState.visibleCandles.getOrNull(mid)?.let { viewModel.jumpToTimestamp(it.openTime) }
                                 showJumpDialog = false
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("المنتصف (50%)")
+                            Text("منتصف الظاهر")
                         }
                     }
                 }
