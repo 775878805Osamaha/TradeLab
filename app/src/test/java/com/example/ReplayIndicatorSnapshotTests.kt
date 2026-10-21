@@ -1,6 +1,7 @@
 package com.example
 
 import com.example.core.model.Candle
+import com.example.core.model.Timeframe
 import com.example.feature.chart.model.IndicatorSettings
 import com.example.feature.replay.ReplayIndicatorSnapshot
 import org.junit.Assert.assertEquals
@@ -9,7 +10,8 @@ import org.junit.Test
 
 class ReplayIndicatorSnapshotTests {
     private fun candle(index: Int): Candle =
-        Candle(openTime = index * 60_000L, open = 100.0 + index,
+        Candle(symbol = "BTCUSDT", timeframe = Timeframe.M1,
+            openTime = index * 60_000L, open = 100.0 + index,
             high = 101.0 + index, low = 99.0 + index,
             close = 100.5 + index, volume = 10.0)
 
