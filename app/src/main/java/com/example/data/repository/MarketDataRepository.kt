@@ -121,7 +121,10 @@ class MarketDataRepository(
         if (sanitized.isNotEmpty()) {
             candleDao.insertCandles(sanitized.map { it.toEntity() })
         }
-        val combined = DataIntegrityValidator.sanitizeCandles(trustedLocal + sanitized)
+        // Fresh network bars take precedence over older cache entries with the same timestamp.
+        val combined = DataIntegrityValidator.sanitizeCandles(
+            (trustedLocal + sanitized).associateBy { it.openTime }.values.toList()
+        )
         if (combined.isEmpty() && isCrypto) {
             throw java.io.IOException("No verified Binance historical candles available for $symbol")
         }
