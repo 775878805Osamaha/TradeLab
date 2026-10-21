@@ -456,6 +456,40 @@ class ReplayViewModel(
         saveAccountSnapshot()
     }
 
+    fun updatePositionProtection(posId: Long, sl: Double?, tp: Double?) {
+        val positionIndex = openPositions.indexOfFirst { it.id == posId }
+        if (positionIndex < 0) return
+        val position = openPositions[positionIndex]
+        val tick = replayEngine.currentTick.value
+        if (_uiState.value.isLoading || tick == null ||
+            !position.symbol.equals(tick.symbol, ignoreCase = true) ||
+            !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid) {
+            _uiState.update { it.copy(message = "لا يمكن تعديل الحماية دون سعر Replay صالح") }
+            return
+        }
+        val liquidation = if (position.side == PositionSide.BUY) tick.bid else tick.ask
+        val validSl = sl == null || (sl.isFinite() && sl > 0.0 &&
+            if (position.side == PositionSide.BUY) sl < liquidation else sl > liquidation)
+        val validTp = tp == null || (tp.isFinite() && tp > 0.0 &&
+            if (position.side == PositionSide.BUY) tp > liquidation else tp < liquidation)
+        if (!validSl || !validTp) {
+            _uiState.update { it.copy(message = "مستويات SL/TP غير صالحة بالنسبة لسعر السوق واتجاه الصفقة") }
+            return
+        }
+        openPositions[positionIndex] = position.copy(
+            stopLoss = sl,
+            takeProfit = tp,
+            isBreakEven = position.isBreakEven && sl == position.stopLoss
+        )
+        _uiState.update {
+            it.copy(
+                openPositions = openPositions.toList(),
+                message = "تم تحديث وقف الخسارة وجني الأرباح للصفقة #$posId"
+            )
+        }
+        saveAccountSnapshot()
+    }
+
     fun setBreakEven(posId: Long) {
         val pos = openPositions.firstOrNull { it.id == posId } ?: return
         val tick = replayEngine.currentTick.value ?: return
