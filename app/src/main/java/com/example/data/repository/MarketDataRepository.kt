@@ -108,8 +108,21 @@ class MarketDataRepository(
                 require(page.all { it.openTime in cursor..windowEnd }) {
                     "Historical provider returned candles outside page window"
                 }
-                fetched.addAll(page)
-                val lastOpen = page.maxOf { it.openTime }
+                // Do not advance past a missing or truncated page. A complete
+                // historical window is required for deterministic replay.
+                val verifiedPage = HistoricalCandleIntegrity.validate(
+                    page,
+                    requestedFrom = cursor,
+                    requestedTo = windowEnd + intervalMillis,
+                    expectedSource = "BINANCE_HISTORICAL",
+                    expectedSymbol = symbol,
+                    expectedTimeframe = timeframe
+                )
+                require(HistoricalCandleCoverage.isComplete(
+                    verifiedPage, cursor, windowEnd, intervalMillis
+                )) { "Incomplete Binance historical page for $symbol" }
+                fetched.addAll(verifiedPage)
+                val lastOpen = verifiedPage.maxOf { it.openTime }
                 val next = lastOpen + intervalMillis
                 if (next <= cursor) break
                 cursor = next
