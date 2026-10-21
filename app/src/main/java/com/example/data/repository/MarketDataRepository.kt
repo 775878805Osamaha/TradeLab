@@ -118,12 +118,28 @@ class MarketDataRepository(
             // Fetch fresh exchange history instead.
         }
 
+        // Validate cache once; reuse complete cached pages rather than re-downloading them.
+        val validCached = runCatching {
+            HistoricalCandleIntegrity.validate(
+                trustedLocal,
+                requestedFrom = from,
+                requestedTo = to + intervalMillis,
+                expectedSymbol = symbol,
+                expectedTimeframe = timeframe
+            )
+        }.getOrDefault(emptyList())
         val fetched = mutableListOf<Candle>()
         var cursor = from
         try {
             while (cursor <= to && fetched.size < 20_000) {
                 currentCoroutineContext().ensureActive()
                 val windowEnd = minOf(to, cursor + intervalMillis * (pageSize - 1L))
+                val cachedPage = validCached.filter { it.openTime in cursor..windowEnd }
+                if (HistoricalCandleCoverage.isComplete(cachedPage, cursor, windowEnd, intervalMillis)) {
+                    cursor = cachedPage.last().openTime + intervalMillis
+                    yield()
+                    continue
+                }
                 val page = provider.getHistoricalCandles(symbol, timeframe, cursor, windowEnd)
                 if (page.isEmpty()) break
                 // A page must not silently cross its requested boundary.
@@ -167,15 +183,6 @@ class MarketDataRepository(
             expectedTimeframe = timeframe
         )
         // Do not reintroduce malformed cache entries when combining fresh pages.
-        val validCached = runCatching {
-            HistoricalCandleIntegrity.validate(
-                trustedLocal,
-                requestedFrom = from,
-                requestedTo = to + intervalMillis,
-                expectedSymbol = symbol,
-                expectedTimeframe = timeframe
-            )
-        }.getOrDefault(emptyList())
         // Fresh network bars take precedence over older cache entries.
         val combined = DataIntegrityValidator.sanitizeCandles(
             (validCached + sanitized).associateBy { it.openTime }.values.toList()
