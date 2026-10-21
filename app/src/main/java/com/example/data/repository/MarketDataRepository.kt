@@ -164,9 +164,19 @@ class MarketDataRepository(
             expectedSymbol = symbol,
             expectedTimeframe = timeframe
         )
-        // Fresh network bars take precedence over older cache entries with the same timestamp.
+        // Do not reintroduce malformed cache entries when combining fresh pages.
+        val validCached = runCatching {
+            HistoricalCandleIntegrity.validate(
+                trustedLocal,
+                requestedFrom = from,
+                requestedTo = to + intervalMillis,
+                expectedSymbol = symbol,
+                expectedTimeframe = timeframe
+            )
+        }.getOrDefault(emptyList())
+        // Fresh network bars take precedence over older cache entries.
         val combined = DataIntegrityValidator.sanitizeCandles(
-            (trustedLocal + sanitized).associateBy { it.openTime }.values.toList()
+            (validCached + sanitized).associateBy { it.openTime }.values.toList()
         )
         if (combined.isEmpty() && isCrypto) {
             throw java.io.IOException("No verified Binance historical candles available for $symbol")
