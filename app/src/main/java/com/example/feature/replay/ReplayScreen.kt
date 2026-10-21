@@ -62,6 +62,10 @@ fun ReplayScreen(
     var crosshairEnabled by remember { mutableStateOf(false) }
     var activeDrawingTool by remember { mutableStateOf(DrawingTool.NONE) }
     val replayDrawings = remember(uiState.symbol, uiState.timeframe) { mutableStateListOf<ChartDrawing>() }
+    LaunchedEffect(uiState.symbol, uiState.timeframe) {
+        activeDrawingTool = DrawingTool.NONE
+        crosshairEnabled = false
+    }
     val revealedDrawings = visibleReplayDrawings(replayDrawings, uiState.currentCandle?.openTime)
     var volumeVisible by remember { mutableStateOf(true) }
     var replayChartStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
@@ -221,7 +225,10 @@ fun ReplayScreen(
             ) {
                 FilterChip(
                     selected = crosshairEnabled,
-                    onClick = { crosshairEnabled = !crosshairEnabled },
+                    onClick = {
+                        crosshairEnabled = !crosshairEnabled
+                        if (crosshairEnabled) activeDrawingTool = DrawingTool.NONE
+                    },
                     label = { Text("مؤشر التقاطع", fontSize = 11.sp) },
                     modifier = Modifier.testTag("replay_crosshair_toggle")
                 )
