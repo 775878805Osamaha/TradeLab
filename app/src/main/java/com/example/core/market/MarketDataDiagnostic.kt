@@ -14,5 +14,6 @@ data class MarketDataDiagnostic(
     val latestTickTimestamp: Long,
     val validationErrorsCount: Int,
     val isStale: Boolean,
-    val approximateLatencyMs: Long
+    val approximateLatencyMs: Long,
+    val lastHttpDiagnostic: String = "لم يتم اختبار REST بعد"
 )
