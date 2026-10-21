@@ -44,6 +44,9 @@ fun ReplayScreen(
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
     var showJumpDialog by remember { mutableStateOf(false) }
     var showOrderTicket by remember { mutableStateOf(false) }
+    var editProtectionId by remember { mutableStateOf<Long?>(null) }
+    var editSl by remember { mutableStateOf("") }
+    var editTp by remember { mutableStateOf("") }
     var ticketSide by remember { mutableStateOf(OrderSide.BUY) }
     var ticketType by remember { mutableStateOf(OrderType.BUY_LIMIT) }
     var ticketVolume by remember { mutableStateOf("0.01") }
@@ -310,6 +313,14 @@ fun ReplayScreen(
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     TextButton(
+                                        onClick = {
+                                            editProtectionId = position.id
+                                            editSl = position.stopLoss?.toString() ?: ""
+                                            editTp = position.takeProfit?.toString() ?: ""
+                                        },
+                                        modifier = Modifier.testTag("replay_edit_protection_${position.id}")
+                                    ) { Text("تعديل SL/TP") }
+                                    TextButton(
                                         onClick = { viewModel.setBreakEven(position.id) },
                                         modifier = Modifier.testTag("replay_breakeven_${position.id}")
                                     ) { Text("نقطة التعادل") }
@@ -378,6 +389,45 @@ fun ReplayScreen(
                 }
             }
         }
+    }
+
+    editProtectionId?.let { positionId ->
+        AlertDialog(
+            onDismissRequest = { editProtectionId = null },
+            title = { Text("تعديل حماية الصفقة #$positionId") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("اترك الحقل فارغًا لإزالة المستوى.", fontSize = 12.sp)
+                    OutlinedTextField(
+                        value = editSl,
+                        onValueChange = { editSl = it },
+                        label = { Text("وقف الخسارة SL") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = editTp,
+                        onValueChange = { editTp = it },
+                        label = { Text("جني الأرباح TP") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = (editSl.isBlank() || editSl.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true) &&
+                        (editTp.isBlank() || editTp.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true),
+                    onClick = {
+                        viewModel.updatePositionProtection(
+                            positionId,
+                            editSl.takeIf { it.isNotBlank() }?.toDouble(),
+                            editTp.takeIf { it.isNotBlank() }?.toDouble()
+                        )
+                        editProtectionId = null
+                    }
+                ) { Text("حفظ التعديل") }
+            },
+            dismissButton = { TextButton(onClick = { editProtectionId = null }) { Text("إلغاء") } }
+        )
     }
 
     if (showOrderTicket) {
