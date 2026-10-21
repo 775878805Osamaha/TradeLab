@@ -70,7 +70,7 @@ object ChartOverlays {
                 isAntiAlias = true
             }
             if (isPriceVisible(transform, latestTick.last)) {
-                val text = String.format(Locale.US, "%.2f", latestTick.last)
+                val text = QuotePriceFormatter.price(latestTick.last)
                 drawRect(transform.chartWidth, lastY - 14f, transform.chartWidth + 80f, lastY + 14f, bgPaint)
                 drawText(text, transform.chartWidth + 6f, lastY + 8f, textPaint)
             }
@@ -78,7 +78,7 @@ object ChartOverlays {
             // Spread badge
             // Spread is a raw quote-price difference; do not label an arbitrary
             // conversion as pips across forex, gold and crypto instruments.
-            val spreadText = String.format(Locale.US, "سبريد: %.5f", latestTick.spread)
+            val spreadText = "سبريد: " + QuotePriceFormatter.spread(latestTick.spread)
             val spreadPaint = android.graphics.Paint().apply {
                 color = android.graphics.Color.parseColor("#9CA3AF")
                 textSize = 18f
@@ -139,7 +139,7 @@ object ChartOverlays {
                 )
                 scope.drawContext.canvas.nativeCanvas.apply {
                     val p = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#EF4444"); textSize = 18f; isAntiAlias = true }
-                    drawText("SL: " + String.format(Locale.US, "%.2f", sl), 12f, slY - 4f, p)
+                    drawText("SL: " + QuotePriceFormatter.price(sl), 12f, slY - 4f, p)
                 }
             }
 
@@ -155,7 +155,7 @@ object ChartOverlays {
                 )
                 scope.drawContext.canvas.nativeCanvas.apply {
                     val p = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#10B981"); textSize = 18f; isAntiAlias = true }
-                    drawText("TP: " + String.format(Locale.US, "%.2f", tp), 12f, tpY - 4f, p)
+                    drawText("TP: " + QuotePriceFormatter.price(tp), 12f, tpY - 4f, p)
                 }
             }
         }
