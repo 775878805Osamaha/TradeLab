@@ -17,7 +17,11 @@ internal object QuotePriceFormatter {
     }
 
     fun price(value: Double): String =
-        if (value.isFinite()) String.format(Locale.US, "%.${decimals(value)}f", value) else "—"
+        if (value.isFinite() && value > 0.0) {
+            // Avoid showing a valid tiny positive price as 0.00000000.
+            val precision = if (value < 0.00000001) 12 else decimals(value)
+            String.format(Locale.US, "%.${precision}f", value)
+        } else if (value == 0.0) "0.00" else "—"
 
     fun spread(value: Double): String =
         if (value.isFinite() && value >= 0.0) {
@@ -25,6 +29,7 @@ internal object QuotePriceFormatter {
                 value == 0.0 -> 2
                 value >= 1.0 -> 4
                 value >= 0.01 -> 6
+                value < 0.00000001 -> 12
                 else -> 8
             }
             String.format(Locale.US, "%.${precision}f", value)
