@@ -34,7 +34,7 @@ object ChartOverlays {
         val lastY = transform.priceToY(latestTick.last)
 
         // 1. Bid line (Dashed green)
-        scope.drawLine(
+        if (isPriceVisible(transform, latestTick.bid)) scope.drawLine(
             color = TradingPositive.copy(alpha = 0.7f),
             start = Offset(0f, bidY),
             end = Offset(transform.chartWidth, bidY),
@@ -43,7 +43,7 @@ object ChartOverlays {
         )
 
         // 2. Ask line (Dashed red)
-        scope.drawLine(
+        if (isPriceVisible(transform, latestTick.ask)) scope.drawLine(
             color = TradingNegative.copy(alpha = 0.7f),
             start = Offset(0f, askY),
             end = Offset(transform.chartWidth, askY),
@@ -52,14 +52,14 @@ object ChartOverlays {
         )
 
         // 3. Current Price line (Solid accent)
-        scope.drawLine(
+        if (isPriceVisible(transform, latestTick.last)) scope.drawLine(
             color = TradingAccent,
             start = Offset(0f, lastY),
             end = Offset(transform.chartWidth, lastY),
             strokeWidth = 1.5f
         )
 
-        // Price badge on the right axis
+        // Price badge on the right axis (only when the last price is in view).
         scope.drawContext.canvas.nativeCanvas.apply {
             val bgPaint = android.graphics.Paint().apply {
                 color = android.graphics.Color.parseColor("#3B82F6")
@@ -69,13 +69,16 @@ object ChartOverlays {
                 textSize = 22f
                 isAntiAlias = true
             }
-            val text = String.format(Locale.US, "%.2f", latestTick.last)
-            drawRect(transform.chartWidth, lastY - 14f, transform.chartWidth + 80f, lastY + 14f, bgPaint)
-            drawText(text, transform.chartWidth + 6f, lastY + 8f, textPaint)
+            if (isPriceVisible(transform, latestTick.last)) {
+                val text = String.format(Locale.US, "%.2f", latestTick.last)
+                drawRect(transform.chartWidth, lastY - 14f, transform.chartWidth + 80f, lastY + 14f, bgPaint)
+                drawText(text, transform.chartWidth + 6f, lastY + 8f, textPaint)
+            }
 
             // Spread badge
-            val spreadPips = latestTick.spread * 10.0 // pip estimation
-            val spreadText = String.format(Locale.US, "سبريد: %.1f", spreadPips)
+            // Spread is a raw quote-price difference; do not label an arbitrary
+            // conversion as pips across forex, gold and crypto instruments.
+            val spreadText = String.format(Locale.US, "سبريد: %.5f", latestTick.spread)
             val spreadPaint = android.graphics.Paint().apply {
                 color = android.graphics.Color.parseColor("#9CA3AF")
                 textSize = 18f
