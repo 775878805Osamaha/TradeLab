@@ -308,22 +308,29 @@ class DefaultMarketDataProvider(
             var cursor = fromTimestamp
             val step = timeframe.minutes * 60_000L
             while (cursor <= toTimestamp) {
-                val url = okhttp3.HttpUrl.Builder()
-                    .scheme("https").host("api.binance.com")
-                    .addPathSegments("api/v3/klines")
-                    .addQueryParameter("symbol", sym)
-                    .addQueryParameter("interval", interval)
-                    .addQueryParameter("startTime", cursor.toString())
-                    .addQueryParameter("endTime", toTimestamp.toString())
-                    .addQueryParameter("limit", "1000")
-                    .build()
-                val request = Request.Builder().url(url).build()
-                val batch = httpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        throw java.io.IOException("Binance historical request failed: HTTP ${response.code}")
-                    }
-                    val body = response.body?.string()
-                        ?: throw java.io.IOException("Empty Binance historical response")
+                // Use the same official endpoint failover as live quotes.
+                // A blocked primary API host must not break historical replay.
+                var batch: List<Candle>? = null
+                var lastFailure: Exception? = null
+                for (host in quoteEndpoints.orderedHosts(sym)) {
+                    ensureActive()
+                    try {
+                        val url = okhttp3.HttpUrl.Builder()
+                            .scheme("https").host(host)
+                            .addPathSegments("api/v3/klines")
+                            .addQueryParameter("symbol", sym)
+                            .addQueryParameter("interval", interval)
+                            .addQueryParameter("startTime", cursor.toString())
+                            .addQueryParameter("endTime", toTimestamp.toString())
+                            .addQueryParameter("limit", "1000")
+                            .build()
+                        val request = Request.Builder().url(url).build()
+                        val loaded = httpClient.newCall(request).execute().use { response ->
+                            if (!response.isSuccessful) {
+                                throw java.io.IOException("Binance historical request failed: HTTP ${response.code}")
+                            }
+                            val body = response.body?.string()
+                                ?: throw java.io.IOException("Empty Binance historical response")
                     val json = JSONArray(body)
                     (0 until json.length()).map { index ->
                         val row = json.getJSONArray(index)
@@ -339,13 +346,25 @@ class DefaultMarketDataProvider(
                             source = "BINANCE_HISTORICAL"
                         )
                     }
+                        }
+                        batch = loaded
+                        quoteEndpoints.recordSuccess(sym, host)
+                        break
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (failure: Exception) {
+                        lastFailure = failure
+                    }
                 }
-                if (batch.isEmpty()) break
-                results.addAll(batch.filter { it.isValid() })
-                val next = batch.last().openTime + step
+                val verifiedBatch = batch ?: throw java.io.IOException(
+                    "All Binance historical endpoints failed for $sym", lastFailure
+                )
+                if (verifiedBatch.isEmpty()) break
+                results.addAll(verifiedBatch.filter { it.isValid() })
+                val next = verifiedBatch.last().openTime + step
                 if (next <= cursor) break
                 cursor = next
-                if (batch.size < 1000) break
+                if (verifiedBatch.size < 1000) break
             }
             return@withContext DataIntegrityValidator.sanitizeCandles(results)
         }
