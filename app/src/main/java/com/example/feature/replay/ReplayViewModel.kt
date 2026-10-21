@@ -237,6 +237,8 @@ class ReplayViewModel(
             else saveAccountSnapshot() // A no-trade timeline can safely navigate freely.
             // Future checkpoints belong to an abandoned timeline.
             accountSnapshots.keys.removeAll { it > targetIndex }
+            // Invalidate the engine's separate checkpoint cache too.
+            replayEngine.discardCheckpointsAfter(targetIndex)
             _uiState.update { it.copy(message = "تمت استعادة حالة الحساب عند الشمعة #$targetIndex") }
         }
     }
