@@ -50,6 +50,8 @@ fun ChartScreen(
     var showQuickTrade by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
+    var showChartControls by remember { mutableStateOf(false) }
+    var showReplayControls by remember { mutableStateOf(false) }
     var showChartOptions by remember { mutableStateOf(false) }
     var showReplayControls by remember { mutableStateOf(false) }
     var showChartToolbar by remember { mutableStateOf(false) }
@@ -156,7 +158,7 @@ fun ChartScreen(
                 .padding(paddingValues)
         ) {
             // Distinguish a verified live quote from delayed or unsupported data.
-            if (!headerQuoteVerified) {
+            if (!headerQuoteVerified && showChartControls) {
                 Text(
                     text = if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
                         "السعر المباشر غير مؤكد حاليًا — لا تعتمد عليه لتنفيذ صفقة"
@@ -225,7 +227,7 @@ fun ChartScreen(
             }
             if (isEmbeddedReplay && showReplayControls) {
                 // Historical paper orders are isolated from the live-paper account.
-                Row(
+                if (showReplayControls) Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard)
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                         .testTag("chart_replay_trading_bar"),
@@ -251,7 +253,7 @@ fun ChartScreen(
                         color = TradingTextSecondary, fontSize = 10.sp
                     )
                 }
-                Text(
+                if (showReplayControls) Text(
                     "حقوق الحساب: ${String.format(Locale.US, "%.2f", replayState.currentEquity)} · " +
                         "العائم: ${String.format(Locale.US, "%.2f", replayState.currentEquity - replayState.currentBalance)}",
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
@@ -259,7 +261,7 @@ fun ChartScreen(
                     color = TradingTextSecondary,
                     fontSize = 11.sp
                 )
-                Row(
+                if (showReplayControls) Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                         .testTag("chart_replay_speed"),
@@ -282,7 +284,7 @@ fun ChartScreen(
                         )
                     }
                 }
-                if (replayState.openPositions.isNotEmpty()) {
+                if (showReplayControls && replayState.openPositions.isNotEmpty()) {
                     Column(
                         modifier = Modifier.fillMaxWidth().background(TradingCard)
                             .padding(horizontal = 10.dp, vertical = 5.dp)
@@ -316,7 +318,7 @@ fun ChartScreen(
                         }
                     }
                 }
-                if (replayState.isLoading || replayState.totalCandles == 0) {
+                if (showReplayControls && (replayState.isLoading || replayState.totalCandles == 0)) {
                     Text(if (replayState.isLoading) "جار تحميل بيانات الإعادة..." else "لا تتوفر شموع تاريخية للإعادة",
                         color = TradingTextSecondary, fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
@@ -350,8 +352,34 @@ fun ChartScreen(
                 }
             }
             if (showChartOptions) {
-            // Timeframe selection scrollable row (all 10 timeframes)
             Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                IconButton(onClick = { showChartControls = !showChartControls }, modifier = Modifier.size(34.dp).testTag("chart_toggle_controls")) {
+                    Icon(Icons.Default.Tune, contentDescription = "إظهار أو إخفاء أدوات الشارت", tint = TradingAccentLight)
+                }
+                if (isEmbeddedReplay) {
+                    IconButton(onClick = { showReplayControls = !showReplayControls }, modifier = Modifier.size(34.dp).testTag("chart_toggle_replay_controls")) {
+                        Icon(Icons.Default.PlayCircle, contentDescription = "إظهار أو إخفاء أدوات إعادة العرض", tint = TradingGold)
+                    }
+                }
+                Text(uiState.selectedTimeframe.displayName, color = TradingTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
+                }
+                IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.Draw, contentDescription = "أدوات الرسم", tint = TradingAccentLight)
+                }
+                IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط عرض الشارت", tint = TradingAccentLight)
+                }
+            }
+
+            // Timeframe selection scrollable row (all 10 timeframes)
+            if (showChartControls) Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 2.dp)
@@ -433,7 +461,7 @@ fun ChartScreen(
 
             }
             // Drawing tools active banner if tool active
-            if (uiState.activeDrawingTool != DrawingTool.NONE) {
+            if (showChartControls && uiState.activeDrawingTool != DrawingTool.NONE) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
