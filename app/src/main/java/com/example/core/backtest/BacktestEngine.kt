@@ -103,6 +103,15 @@ class BacktestEngine(
         onProgress: ((BacktestProgressStage, Float) -> Unit)? = null
     ): BacktestResult = withContext(Dispatchers.Default) {
         config.validate().getOrThrow()
+        // Each backtest must honor its own execution cost settings rather than
+        // silently using the ExecutionEngine's unrelated default values.
+        val runExecutionEngine = ExecutionEngine(
+            executionEngine.config.copy(
+                slippagePips = config.slippagePips,
+                defaultCommissionPerLot = config.commissionPerLot,
+                swapPerLotDaily = config.swapPerLotDaily
+            )
+        )
         val startedAt = System.currentTimeMillis()
 
         onProgress?.invoke(BacktestProgressStage.PREPARING_DATA, 0.05f)
@@ -254,9 +263,9 @@ class BacktestEngine(
             val posIterator = openPositions.iterator()
             while (posIterator.hasNext()) {
                 val pos = posIterator.next()
-                when (val eval = executionEngine.evaluatePositionOnCandle(pos, currentCandle)) {
+                when (val eval = runExecutionEngine.evaluatePositionOnCandle(pos, currentCandle)) {
                     is PositionEvaluation.TriggerClose -> {
-                        val (trade, _) = executionEngine.closePosition(
+                        val (trade, _) = runExecutionEngine.closePosition(
                             position = pos,
                             exitPrice = eval.exitPrice,
                             exitReason = eval.exitReason,
@@ -268,7 +277,7 @@ class BacktestEngine(
                     }
                     is PositionEvaluation.KeepOpen -> {
                         // Check trailing stop update
-                        val trailingSl = executionEngine.calculateTrailingStopUpdate(pos, tick)
+                        val trailingSl = runExecutionEngine.calculateTrailingStopUpdate(pos, tick)
                         val updatedPos = if (trailingSl != null) {
                             eval.updatedPosition.copy(stopLoss = trailingSl)
                         } else {
@@ -337,7 +346,7 @@ class BacktestEngine(
                     val itClose = openPositions.iterator()
                     while (itClose.hasNext()) {
                         val pos = itClose.next()
-                        val (trade, _) = executionEngine.closePosition(
+                        val (trade, _) = runExecutionEngine.closePosition(
                             position = pos,
                             exitPrice = currentCandle.close,
                             exitReason = ExitReason.STRATEGY_CLOSE,
@@ -389,7 +398,7 @@ class BacktestEngine(
 
                         // Check margin availability before execution
                         if (requiredMargin <= freeMargin) {
-                            val execResult = executionEngine.executeMarketOrder(
+                            val execResult = runExecutionEngine.executeMarketOrder(
                                 account = virtualAccountState,
                                 symbol = config.symbol,
                                 side = side,
@@ -419,7 +428,7 @@ class BacktestEngine(
         if (openPositions.isNotEmpty() && cleanCandles.isNotEmpty()) {
             val lastCandle = cleanCandles.last()
             for (pos in openPositions) {
-                val (trade, _) = executionEngine.closePosition(
+                val (trade, _) = runExecutionEngine.closePosition(
                     position = pos,
                     exitPrice = lastCandle.close,
                     exitReason = ExitReason.MANUAL_CLOSE,
