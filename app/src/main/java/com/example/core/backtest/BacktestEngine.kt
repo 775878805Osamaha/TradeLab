@@ -275,8 +275,8 @@ class BacktestEngine(
 
             // The account and equity snapshot must reflect the current bar
             // after all intrabar exits have been processed.
-            // Strategy actions at this close are reconciled at the next bar,
-            // except for the terminal snapshot which is finalized below.
+            // The strategy receives the pre-signal account snapshot; the
+            // recorded equity point is settled after executing its signal.
             // Step 3: Floating equity, margin, and drawdown calculation.
             // Position.profitLoss is gross mark-to-market; entry commission and
             // accrued swap are liabilities even before a position is closed.
