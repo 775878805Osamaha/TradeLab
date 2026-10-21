@@ -86,7 +86,7 @@ class TradeViewModel(
 
     fun selectSymbol(symbol: String) {
         val symInfo = DefaultSymbols.getSymbol(symbol)
-        _uiState.update { it.copy(selectedSymbol = symInfo.symbol, volume = symInfo.minLot.toString()) }
+        _uiState.update { it.copy(selectedSymbol = symInfo.symbol, volume = symInfo.minLot.toString(), latestTick = null, candles = emptyList()) }
         subscribeToSymbolTicks(symInfo.symbol)
         loadCandles(symInfo.symbol)
         recalculateRisk()
@@ -413,6 +413,7 @@ class TradeViewModel(
         tickJob?.cancel()
         tickJob = viewModelScope.launch {
             marketDataRepository.observeTicks(symbol).collect { tick ->
+                if (_uiState.value.selectedSymbol != symbol) return@collect
                 _uiState.update { it.copy(latestTick = tick) }
                 tradingRepository.onTickUpdate(tick)
                 recalculateRisk()
