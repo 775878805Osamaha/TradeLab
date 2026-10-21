@@ -113,17 +113,9 @@ class MarketDataRepository(
         try {
             while (cursor <= to && fetched.size < 20_000) {
                 currentCoroutineContext().ensureActive()
-                // Align the end to the last candle opening in the requested page.
-                // Otherwise non-aligned start times can cause a one-bar page
-                // to contain no candle, or require an unnecessary extra request.
-                val weekMillis = 7L * 24 * 60 * 60 * 1000
-                val offset = if (intervalMillis == weekMillis) 4L * 24 * 60 * 60 * 1000 else 0L
-                val firstOpen = cursor + Math.floorMod(
-                    intervalMillis - Math.floorMod(cursor - offset, intervalMillis),
-                    intervalMillis
-                )
-                val windowEnd = minOf(to, firstOpen + intervalMillis * (pageSize - 1L))
-                if (firstOpen > to) break
+                val windowEnd = com.example.core.market.HistoricalPageWindow.end(
+                    cursor, to, intervalMillis, pageSize
+                ) ?: break
                 // Both the cursor and validated cache are monotonically ordered.
                 // Advance the cache index once instead of searching for each page.
                 while (cachedIndex < validCached.size &&
