@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import com.example.core.market.DataIntegrityValidator
+import com.example.core.market.HistoricalCandleIntegrity
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.core.market.DefaultSymbols
 import com.example.core.market.MarketDataDiagnostic
@@ -109,7 +110,14 @@ class MarketDataRepository(
             throw error
         }
 
-        val sanitized = DataIntegrityValidator.sanitizeCandles(fetched)
+        // Fail closed on malformed or unverified network history before it reaches Room.
+        // Provider pagination may include the final candle opening at 'to'.
+        val sanitized = HistoricalCandleIntegrity.validate(
+            fetched,
+            requestedFrom = from,
+            requestedTo = to + intervalMillis,
+            expectedSource = "BINANCE_HISTORICAL"
+        )
         if (sanitized.isNotEmpty()) {
             candleDao.insertCandles(sanitized.map { it.toEntity() })
         }
