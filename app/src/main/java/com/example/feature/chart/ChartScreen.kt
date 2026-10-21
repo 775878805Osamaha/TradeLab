@@ -50,6 +50,9 @@ fun ChartScreen(
     var showQuickTrade by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var showToolsMenu by remember { mutableStateOf(false) }
+    var showChartOptions by remember { mutableStateOf(false) }
+    var showReplayControls by remember { mutableStateOf(false) }
+    var showChartToolbar by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
 
@@ -171,7 +174,7 @@ fun ChartScreen(
                 )
             }
 
-            if (isEmbeddedReplay) {
+            if (isEmbeddedReplay && showReplayControls) {
                 Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard).padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -219,6 +222,8 @@ fun ChartScreen(
                         Text("إنهاء", color = TradingNegative)
                     }
                 }
+            }
+            if (isEmbeddedReplay && showReplayControls) {
                 // Historical paper orders are isolated from the live-paper account.
                 Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard)
@@ -319,6 +324,32 @@ fun ChartScreen(
                 }
             }
 
+            // Single compact controls row: maximize actual chart viewport.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { showChartOptions = !showChartOptions }, modifier = Modifier.size(36.dp).testTag("chart_toggle_timeframes")) {
+                    Icon(Icons.Default.Schedule, contentDescription = "الأطر الزمنية", tint = TradingAccentLight)
+                }
+                Text(uiState.selectedTimeframe.displayName, color = TradingTextPrimary, fontSize = 12.sp)
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(36.dp).testTag("chart_indicators_btn")) {
+                    Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
+                }
+                IconButton(onClick = { showChartToolbar = !showChartToolbar }, modifier = Modifier.size(36.dp).testTag("drawing_tools_menu_btn")) {
+                    Icon(Icons.Default.Draw, contentDescription = "أدوات الرسم", tint = TradingAccentLight)
+                }
+                IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(36.dp).testTag("chart_reset_view_btn")) {
+                    Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط الشارت", tint = TradingAccentLight)
+                }
+                if (isEmbeddedReplay) {
+                    IconButton(onClick = { showReplayControls = !showReplayControls }, modifier = Modifier.size(36.dp).testTag("chart_toggle_replay_controls")) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "أدوات الإعادة", tint = TradingGold)
+                    }
+                }
+            }
+            if (showChartOptions) {
             // Timeframe selection scrollable row (all 10 timeframes)
             Row(
                 modifier = Modifier
@@ -400,6 +431,7 @@ fun ChartScreen(
                 }
             }
 
+            }
             // Drawing tools active banner if tool active
             if (uiState.activeDrawingTool != DrawingTool.NONE) {
                 Row(
@@ -501,7 +533,7 @@ fun ChartScreen(
 
                 // Compact TradingView-style tools on the chart itself.
                 // Buttons select the existing functional drawing tools; no image overlay.
-                Surface(
+                if (showChartToolbar) Surface(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .padding(horizontal = 5.dp)
