@@ -96,7 +96,24 @@ class MarketDataRepository(
             trustedLocal, from, to, intervalMillis
         )
         if (fullyCovered) {
-            return@withContext trustedLocal
+            // Cache coverage alone does not guarantee authentic OHLC, source
+            // and timestamp invariants. Revalidate before any replay.
+            val verifiedCache = runCatching {
+                HistoricalCandleIntegrity.validate(
+                    trustedLocal,
+                    requestedFrom = from,
+                    requestedTo = to + intervalMillis,
+                    expectedSymbol = symbol,
+                    expectedTimeframe = timeframe
+                )
+            }.getOrNull()
+            if (verifiedCache != null && verifiedCache.all {
+                    it.source == "BINANCE_HISTORICAL" || it.source == "BINANCE_HISTORICAL_CACHED"
+                }) {
+                return@withContext verifiedCache
+            }
+            // Invalid cached history is never returned as trusted data.
+            // Fetch fresh exchange history instead.
         }
 
         val fetched = mutableListOf<Candle>()
