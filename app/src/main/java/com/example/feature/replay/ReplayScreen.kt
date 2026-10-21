@@ -269,6 +269,58 @@ fun ReplayScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    if (uiState.openPositions.isNotEmpty()) {
+                        Text("الصفقات المفتوحة", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        uiState.openPositions.forEach { position ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .testTag("replay_position_${position.id}")
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "${position.symbol}  ${position.side.name}  ${position.volume}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        String.format(Locale.US, "%+.2f USD", position.profitLoss),
+                                        fontSize = 11.sp,
+                                        color = if (position.profitLoss >= 0.0) TradingPositive else TradingNegative
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "دخول: ${String.format(Locale.US, "%.2f", position.entryPrice)}" +
+                                            "  SL: ${position.stopLoss?.let { String.format(Locale.US, "%.2f", it) } ?: "—"}" +
+                                            "  TP: ${position.takeProfit?.let { String.format(Locale.US, "%.2f", it) } ?: "—"}",
+                                        fontSize = 10.sp,
+                                        color = TradingTextSecondary
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(
+                                        onClick = { viewModel.setBreakEven(position.id) },
+                                        modifier = Modifier.testTag("replay_breakeven_${position.id}")
+                                    ) { Text("نقطة التعادل") }
+                                    TextButton(
+                                        onClick = { viewModel.closePosition(position.id) },
+                                        modifier = Modifier.testTag("replay_close_${position.id}")
+                                    ) { Text("إغلاق الصفقة", color = TradingNegative) }
+                                }
+                            }
+                        }
+                    }
+
                     OutlinedButton(
                         onClick = { showOrderTicket = true },
                         modifier = Modifier.fillMaxWidth().testTag("replay_pending_ticket_btn")
