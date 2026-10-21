@@ -35,7 +35,9 @@ object HistoricalCandleIntegrity {
             }
             require(candle.isValid()) { "Invalid historical OHLC" }
             require(candle.closeTime <= requestedTo) { "Incomplete candle outside requested range" }
-            require(candle.openTime % (candle.timeframe.minutes * 60_000L) == 0L) {
+            // Weekly exchange candles may align to Monday rather than Unix epoch Thursday.
+            require(candle.timeframe.minutes >= 10_080 ||
+                candle.openTime % (candle.timeframe.minutes * 60_000L) == 0L) {
                 "Misaligned candle timestamp"
             }
             if (expectedSource != null) {
