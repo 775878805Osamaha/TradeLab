@@ -266,13 +266,28 @@ class HistoricalReplayEngine(
         }
 
         val symInfo = DefaultSymbols.getSymbol(position.symbol)
-        val grossPl = when (position.side) {
-            PositionSide.BUY -> (candle.close - position.entryPrice) * position.volume * symInfo.contractSize
-            PositionSide.SELL -> (position.entryPrice - candle.close) * position.volume * symInfo.contractSize
+        // Mark a BUY at executable Bid and a SELL at executable Ask. Using
+        // the midpoint (candle.close) incorrectly inflates replay equity by
+        // ignoring the spread that a manual market close would actually pay.
+        val halfSpread = symInfo.defaultSpreadPips * symInfo.pipSize / 2.0
+        require(halfSpread.isFinite() && halfSpread >= 0.0) {
+            "Invalid replay symbol spread"
         }
+        val liquidationPrice = when (position.side) {
+            PositionSide.BUY -> candle.close - halfSpread
+            PositionSide.SELL -> candle.close + halfSpread
+        }
+        require(liquidationPrice.isFinite() && liquidationPrice > 0.0) {
+            "Invalid replay liquidation price"
+        }
+        val grossPl = when (position.side) {
+            PositionSide.BUY -> (liquidationPrice - position.entryPrice) * position.volume * symInfo.contractSize
+            PositionSide.SELL -> (position.entryPrice - liquidationPrice) * position.volume * symInfo.contractSize
+        }
+        require(grossPl.isFinite()) { "Invalid replay floating P&L" }
 
         return PositionEvaluation.KeepOpen(
-            position.copy(currentPrice = candle.close, profitLoss = grossPl)
+            position.copy(currentPrice = liquidationPrice, profitLoss = grossPl)
         )
     }
 
