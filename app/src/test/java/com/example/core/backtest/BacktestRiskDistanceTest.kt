@@ -23,4 +23,16 @@ class BacktestRiskDistanceTest {
     @Test fun retainsFallbackWithoutStop() {
         assertEquals(25.0, BacktestRiskDistance.pips(true, 100.0, 100.2, null, 0.1)!!, 0.0)
     }
+    @Test fun fallbackRejectsInvalidQuotes() {
+        assertNull(BacktestRiskDistance.pips(true, Double.NaN, 100.2, null, 0.1))
+        assertNull(BacktestRiskDistance.pips(false, 100.0, Double.POSITIVE_INFINITY, null, 0.1))
+        assertNull(BacktestRiskDistance.pips(true, 100.3, 100.2, null, 0.1))
+        assertNull(BacktestRiskDistance.pips(true, 100.0, 100.2, null, Double.NaN))
+        assertNull(BacktestRiskDistance.pips(true, 100.0, 100.2, null, 0.0))
+    }
+
+    @Test fun fallbackAcceptsValidSellQuote() {
+        assertEquals(25.0, BacktestRiskDistance.pips(false, 100.0, 100.2, null, 0.1)!!, 0.0)
+    }
+
 }
