@@ -86,6 +86,26 @@ fun CandlestickChart(
         return
     }
 
+    // Convert only when candle data or display style changes, not on each
+    // canvas redraw caused by zoom, pan, crosshair or other UI gestures.
+    val heikinAshiCandles = remember(candles, displayStyle) {
+        if (displayStyle != ChartDisplayStyle.HEIKIN_ASHI) emptyList()
+        else {
+            val converted = ArrayList<Candle>(candles.size)
+            candles.forEachIndexed { index, raw ->
+                val haClose = (raw.open + raw.high + raw.low + raw.close) / 4.0
+                val haOpen = if (index == 0) (raw.open + raw.close) / 2.0
+                    else (converted.last().open + converted.last().close) / 2.0
+                converted.add(raw.copy(
+                    open = haOpen, close = haClose,
+                    high = maxOf(raw.high, haOpen, haClose),
+                    low = minOf(raw.low, haOpen, haClose)
+                ))
+            }
+            converted
+        }
+    }
+
     // Viewport State
     var candleWidthPx by remember { mutableFloatStateOf(12f) }
     var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
@@ -295,21 +315,10 @@ fun CandlestickChart(
                 }
             }
 
-            // Heikin-Ashi is display-only: raw market candles remain unchanged.
-            val displayedCandles = if (displayStyle == ChartDisplayStyle.HEIKIN_ASHI) {
-                val converted = ArrayList<Candle>(candles.size)
-                candles.forEachIndexed { index, raw ->
-                    val haClose = (raw.open + raw.high + raw.low + raw.close) / 4.0
-                    val haOpen = if (index == 0) (raw.open + raw.close) / 2.0
-                        else (converted.last().open + converted.last().close) / 2.0
-                    converted.add(raw.copy(
-                        open = haOpen, close = haClose,
-                        high = maxOf(raw.high, haOpen, haClose),
-                        low = minOf(raw.low, haOpen, haClose)
-                    ))
-                }
-                converted.subList(startIndex, endIndex)
-            } else visibleCandles
+            // Display-only Heikin-Ashi; raw market candles still drive trading.
+            val displayedCandles = if (displayStyle == ChartDisplayStyle.HEIKIN_ASHI)
+                heikinAshiCandles.subList(startIndex, endIndex)
+            else visibleCandles
 
             // 1. Draw Visible OHLC Candlesticks
             val bodyWidth = (candleWidthPx * 0.72f).coerceAtLeast(1.5f)
