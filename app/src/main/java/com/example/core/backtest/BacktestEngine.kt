@@ -404,16 +404,20 @@ class BacktestEngine(
                                 )
                             }
                             PositionSizingMode.RISK_PERCENTAGE -> {
-                                val slDistancePips = if (signal.stopLoss != null) {
-                                    kotlin.math.abs(currentCandle.close - signal.stopLoss) / symInfo.pipSize
-                                } else 25.0
-                                riskEngine.calculateSuggestedLot(virtualAccountState, config.symbol, config.riskPercentage, slDistancePips)
+                                val slDistancePips = BacktestRiskDistance.pips(
+                                    isBuy, tick.bid, tick.ask, signal.stopLoss, symInfo.pipSize
+                                )
+                                slDistancePips?.let {
+                                    riskEngine.calculateSuggestedLot(virtualAccountState, config.symbol, config.riskPercentage, it)
+                                }
                             }
                             PositionSizingMode.FIXED_MONETARY_RISK -> {
-                                val slDistancePips = if (signal.stopLoss != null) {
-                                    kotlin.math.abs(currentCandle.close - signal.stopLoss) / symInfo.pipSize
-                                } else 25.0
-                                riskEngine.calculateSuggestedLotFromFixedRiskAmount(virtualAccountState, config.symbol, config.fixedRiskAmount, slDistancePips)
+                                val slDistancePips = BacktestRiskDistance.pips(
+                                    isBuy, tick.bid, tick.ask, signal.stopLoss, symInfo.pipSize
+                                )
+                                slDistancePips?.let {
+                                    riskEngine.calculateSuggestedLotFromFixedRiskAmount(virtualAccountState, config.symbol, config.fixedRiskAmount, it)
+                                }
                             }
                         }
 
