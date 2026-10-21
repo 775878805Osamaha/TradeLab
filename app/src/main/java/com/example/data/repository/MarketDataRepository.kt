@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import com.example.core.market.DataIntegrityValidator
 import com.example.core.market.HistoricalCandleIntegrity
+import com.example.core.market.HistoricalCandleCoverage
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.core.market.DefaultSymbols
 import com.example.core.market.MarketDataDiagnostic
