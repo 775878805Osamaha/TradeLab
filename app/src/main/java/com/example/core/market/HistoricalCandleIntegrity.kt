@@ -12,7 +12,9 @@ object HistoricalCandleIntegrity {
         candles: List<Candle>,
         requestedFrom: Long,
         requestedTo: Long,
-        expectedSource: String? = null
+        expectedSource: String? = null,
+        expectedSymbol: String? = null,
+        expectedTimeframe: com.example.core.model.Timeframe? = null
     ): List<Candle> {
         require(requestedFrom >= 0 && requestedTo > requestedFrom) { "Invalid historical range" }
         if (candles.isEmpty()) return emptyList()
@@ -20,6 +22,12 @@ object HistoricalCandleIntegrity {
         val ordered = candles.sortedBy { it.openTime }
         var previousOpen = Long.MIN_VALUE
         for (candle in ordered) {
+            if (expectedSymbol != null) {
+                require(candle.symbol.equals(expectedSymbol, ignoreCase = true)) { "Unexpected historical symbol" }
+            }
+            if (expectedTimeframe != null) {
+                require(candle.timeframe == expectedTimeframe) { "Unexpected historical timeframe" }
+            }
             require(candle.openTime >= requestedFrom && candle.openTime < requestedTo) {
                 "Historical candle outside requested range: ${candle.openTime}"
             }
