@@ -289,6 +289,84 @@ class ReplayViewModel(
         }
     }
 
+    private fun replayAccount(balance: Double = _uiState.value.currentBalance): VirtualAccount {
+        val equity = ReplayAccountMath.equity(balance, openPositions)
+        val usedMargin = openPositions.sumOf { it.margin }
+        return VirtualAccount(
+            id = 9999,
+            name = "حساب محاكاة Replay الافتراضي",
+            initialBalance = _uiState.value.initialBalance,
+            balance = balance,
+            equity = equity,
+            margin = usedMargin,
+            freeMargin = maxOf(0.0, equity - usedMargin),
+            mode = AccountMode.REPLAY
+        )
+    }
+
+    fun placePendingOrder(
+        type: OrderType,
+        side: OrderSide,
+        volume: Double,
+        requestedPrice: Double,
+        sl: Double? = null,
+        tp: Double? = null
+    ) {
+        val tick = replayEngine.currentTick.value
+        if (_uiState.value.isLoading || tick == null ||
+            !tick.symbol.equals(_uiState.value.symbol, ignoreCase = true) ||
+            !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
+            type == OrderType.MARKET ||
+            (type in listOf(OrderType.BUY_LIMIT, OrderType.BUY_STOP) && side != OrderSide.BUY) ||
+            (type in listOf(OrderType.SELL_LIMIT, OrderType.SELL_STOP) && side != OrderSide.SELL)) {
+            _uiState.update { it.copy(message = "نوع الأمر المعلق أو سعر Replay غير صالح") }
+            return
+        }
+        val validation = com.example.core.execution.OrderValidator.validate(
+            account = replayAccount(),
+            symbol = tick.symbol,
+            type = type,
+            side = side,
+            volume = volume,
+            tick = tick,
+            requestedPrice = requestedPrice,
+            stopLoss = sl,
+            takeProfit = tp
+        )
+        if (validation is com.example.core.execution.OrderValidationResult.Rejected) {
+            _uiState.update { it.copy(message = validation.message) }
+            return
+        }
+        pendingOrders.add(
+            Order(
+                id = nextId++,
+                accountId = 9999,
+                symbol = tick.symbol,
+                direction = side,
+                type = type,
+                volume = volume,
+                requestedPrice = requestedPrice,
+                stopLoss = sl,
+                takeProfit = tp,
+                createdAt = tick.timestamp
+            )
+        )
+        _uiState.update {
+            it.copy(pendingOrders = pendingOrders.toList(), message = "تم وضع أمر معلق في Replay")
+        }
+        saveAccountSnapshot()
+    }
+
+    fun cancelPendingOrder(orderId: Long) {
+        val order = pendingOrders.firstOrNull { it.id == orderId && it.status == OrderStatus.PENDING }
+            ?: return
+        pendingOrders.remove(order)
+        _uiState.update {
+            it.copy(pendingOrders = pendingOrders.toList(), message = "تم إلغاء الأمر المعلق #$orderId")
+        }
+        saveAccountSnapshot()
+    }
+
     fun executeOrder(side: OrderSide, volume: Double = 0.01, sl: Double? = null, tp: Double? = null) {
         val candle = replayEngine.currentCandle.value ?: return
         val tick = replayEngine.currentTick.value ?: return
@@ -442,6 +520,34 @@ class ReplayViewModel(
                 currentEquity = ReplayAccountMath.equity(curBal, openPositions),
                 openPositions = openPositions.toList(),
                 closedTrades = closedTrades.toList()
+            )
+        }
+
+        // Fill waiting orders at the revealed replay quote, not a future candle.
+        // Each fill is removed from pendingOrders before the next replay step,
+        // so a filled order cannot execute a second time.
+        val pendingIterator = pendingOrders.iterator()
+        while (pendingIterator.hasNext()) {
+            val order = pendingIterator.next()
+            val result = executionEngine.evaluatePendingOrder(order, tick, replayAccount(curBal))
+            when (result) {
+                is com.example.core.execution.ExecutionResult.Success -> {
+                    openPositions.add(result.position.copy(id = nextId++, mode = "REPLAY"))
+                    pendingIterator.remove()
+                }
+                is com.example.core.execution.ExecutionResult.Error -> {
+                    // Keep a triggered but unfundable order pending: it may become
+                    // executable after other positions close and release margin.
+                }
+                else -> {}
+            }
+        }
+        _uiState.update {
+            it.copy(
+                currentBalance = curBal,
+                currentEquity = ReplayAccountMath.equity(curBal, openPositions),
+                openPositions = openPositions.toList(),
+                pendingOrders = pendingOrders.toList()
             )
         }
 
