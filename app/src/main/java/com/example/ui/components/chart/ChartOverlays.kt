@@ -91,12 +91,12 @@ object ChartOverlays {
         positions: List<Position>
     ) {
         for (pos in positions) {
-            if (!isPriceVisible(transform, pos.entryPrice)) continue
             val entryY = transform.priceToY(pos.entryPrice)
             val isBuy = pos.side == PositionSide.BUY
             val lineColor = if (isBuy) TradingPositive else TradingNegative
 
             // Entry line
+            if (isPriceVisible(transform, pos.entryPrice)) {
             scope.drawLine(
                 color = lineColor,
                 start = Offset(0f, entryY),
@@ -123,6 +123,7 @@ object ChartOverlays {
                 drawText(label, 12f, entryY - 6f, p)
             }
 
+            }
             // Stop Loss line
             pos.stopLoss?.takeIf { isPriceVisible(transform, it) }?.let { sl ->
                 val slY = transform.priceToY(sl)
