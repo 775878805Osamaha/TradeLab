@@ -315,7 +315,9 @@ class BacktestEngine(
                 historicalCandles = historicalCandlesSoFar,
                 openPositions = openPositions.toList(),
                 account = virtualAccountState,
-                latestTick = tick
+                latestTick = tick,
+                currentTime = currentCandle.closeTime,
+                strategyParameters = config.parameters
             )
 
             // Step 5: Execute Strategy Logic
