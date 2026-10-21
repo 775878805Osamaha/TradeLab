@@ -24,10 +24,10 @@ object HistoricalCandleCoverage {
         val expectedCount = (to - first) / intervalMillis + 1L
         if (candles.size.toLong() != expectedCount) return false
         var expected = first
-        for (candle in candles) {
+        for ((index, candle) in candles.withIndex()) {
             if (candle.openTime != expected) return false
             if (candle.closeTime <= candle.openTime) return false
-            if (expected != candles.last().openTime) {
+            if (index < candles.lastIndex) {
                 if (expected > Long.MAX_VALUE - intervalMillis) return false
                 expected += intervalMillis
             }
