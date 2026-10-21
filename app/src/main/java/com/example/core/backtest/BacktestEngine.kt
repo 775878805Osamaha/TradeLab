@@ -338,21 +338,24 @@ class BacktestEngine(
             // Step 5: Execute Strategy Logic
             val signal = config.strategy.onCandle(context, config.parameters)
 
-            // Validate only fields used by this action. A CLOSE must not be
-            // discarded because an unrelated suggestedVolume is malformed.
-            if (signal.symbol != null && !signal.symbol.equals(config.symbol, ignoreCase = true)) continue
+            // Invalid signals must still reach the end-of-bar accounting
+            // snapshot. A 'continue' here would leave equity stale.
             val opensPosition = signal.action == SignalAction.BUY || signal.action == SignalAction.SELL
             val changesStops = opensPosition || signal.action == SignalAction.MODIFY
-            if (opensPosition) {
-                if (signal.entryPrice != null && (!signal.entryPrice.isFinite() || signal.entryPrice <= 0.0)) continue
-                if (signal.suggestedVolume != null && (!signal.suggestedVolume.isFinite() || signal.suggestedVolume <= 0.0)) continue
-            }
-            if (changesStops) {
-                if (signal.stopLoss != null && (!signal.stopLoss.isFinite() || signal.stopLoss <= 0.0)) continue
-                if (signal.takeProfit != null && (!signal.takeProfit.isFinite() || signal.takeProfit <= 0.0)) continue
-            }
+            val wrongSymbol = signal.symbol != null &&
+                !signal.symbol.equals(config.symbol, ignoreCase = true)
+            val invalidEntry = opensPosition && signal.entryPrice != null &&
+                (!signal.entryPrice.isFinite() || signal.entryPrice <= 0.0)
+            val invalidVolume = opensPosition && signal.suggestedVolume != null &&
+                (!signal.suggestedVolume.isFinite() || signal.suggestedVolume <= 0.0)
+            val invalidStop = changesStops && signal.stopLoss != null &&
+                (!signal.stopLoss.isFinite() || signal.stopLoss <= 0.0)
+            val invalidTarget = changesStops && signal.takeProfit != null &&
+                (!signal.takeProfit.isFinite() || signal.takeProfit <= 0.0)
+            val effectiveAction = if (wrongSymbol || invalidEntry || invalidVolume ||
+                invalidStop || invalidTarget) SignalAction.HOLD else signal.action
 
-            when (signal.action) {
+            when (effectiveAction) {
                 SignalAction.CLOSE -> {
                     val itClose = openPositions.iterator()
                     while (itClose.hasNext()) {
