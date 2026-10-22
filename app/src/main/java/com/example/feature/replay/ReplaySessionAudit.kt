@@ -1,7 +1,6 @@
 package com.example.feature.replay
 
 import com.example.core.model.Candle
-import java.util.Locale
 
 /** Validates only candles already revealed to the user. Never reads future bars. */
 data class ReplayDataAudit(
@@ -38,6 +37,7 @@ object ReplaySessionAudit {
                 candle.high < maxOf(candle.open, candle.close) ||
                 candle.low > minOf(candle.open, candle.close)) invalidRanges++
             if (!candle.volume.isFinite() || candle.volume < 0.0) volumeAnomalies++
+            if (candle.openTime < 0L || candle.openTime % interval != 0L) duplicate++
             previous?.let { prev ->
                 val delta = candle.openTime - prev.openTime
                 if (delta <= 0L || delta % interval != 0L) duplicate++
