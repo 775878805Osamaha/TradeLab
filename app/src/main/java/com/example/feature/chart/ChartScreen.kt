@@ -259,16 +259,29 @@ fun ChartScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("REPLAY", color = TradingGold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    IconButton(onClick = { replayViewModel.stepBackward() }, enabled = !replayState.isLoading) {
+                    IconButton(
+                        onClick = { replayViewModel.stepBackward() },
+                        enabled = !replayState.isLoading && !replayState.isBatchAdvancing &&
+                            replayState.currentIndex > 0,
+                        modifier = Modifier.testTag("chart_replay_step_back")
+                    ) {
                         Icon(Icons.Default.SkipPrevious, contentDescription = "شمعة سابقة", tint = TradingTextPrimary)
                     }
                     IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
-                        enabled = !replayState.isLoading && replayState.totalCandles > 0) {
+                        enabled = !replayState.isLoading && !replayState.isBatchAdvancing &&
+                            replayState.totalCandles > 0 &&
+                            (replayState.isPlaying || replayState.currentIndex < replayState.totalCandles - 1),
+                        modifier = Modifier.testTag("chart_replay_play_pause")) {
                         Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = if (replayState.isPlaying) "إيقاف مؤقت" else "تشغيل الإعادة",
                             tint = TradingAccentLight)
                     }
-                    IconButton(onClick = { replayViewModel.stepForward() }, enabled = !replayState.isLoading) {
+                    IconButton(
+                        onClick = { replayViewModel.stepForward() },
+                        enabled = !replayState.isLoading && !replayState.isBatchAdvancing &&
+                            replayState.currentIndex < replayState.totalCandles - 1,
+                        modifier = Modifier.testTag("chart_replay_step_next")
+                    ) {
                         Icon(Icons.Default.SkipNext, contentDescription = "شمعة تالية", tint = TradingTextPrimary)
                     }
                     Text("${(replayState.currentIndex + 1).coerceAtMost(replayState.totalCandles)}/${replayState.totalCandles}",
@@ -478,6 +491,16 @@ fun ChartScreen(
                             }
                         }
                     }
+                }
+                replayState.message?.takeIf { it.isNotBlank() }?.let { replayMessage ->
+                    Text(
+                        replayMessage,
+                        color = TradingGold,
+                        fontSize = 11.sp,
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .testTag("chart_replay_status_message")
+                    )
                 }
                 if (replayState.isLoading || replayState.totalCandles == 0) {
                     Text(if (replayState.isLoading) "جار تحميل بيانات الإعادة..." else "لا تتوفر شموع تاريخية للإعادة",
