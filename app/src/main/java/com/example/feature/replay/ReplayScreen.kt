@@ -622,6 +622,18 @@ fun ReplayScreen(
                     HorizontalDivider()
                     ReplayMetricRow("الرصيد الحالي", String.format(Locale.US, "%.2f USD", uiState.currentBalance))
                     ReplayMetricRow("الملكية الحالية", String.format(Locale.US, "%.2f USD", uiState.currentEquity))
+                    ReplayMetricRow("أعلى ملكية مسجلة", String.format(Locale.US, "%.2f USD", uiState.peakEquity))
+                    ReplayMetricRow("أقصى تراجع من القمة", String.format(Locale.US, "%.2f%%", uiState.maxObservedDrawdownPercent))
+                    ReplayMetricRow("نقاط منحنى الملكية", uiState.equitySamples.size.toString())
+                    if (uiState.equitySamples.size >= 2) {
+                        val first = uiState.equitySamples.first()
+                        val last = uiState.equitySamples.last()
+                        Text(
+                            "تطور الملكية: " + String.format(Locale.US, "%.2f → %.2f USD", first.equity, last.equity),
+                            fontSize = 12.sp,
+                            color = TradingTextSecondary
+                        )
+                    }
                     ReplayMetricRow("العائد على الرصيد الابتدائي", String.format(Locale.US, "%+.2f%%", returnPercent))
                     ReplayMetricRow("الصفقات المفتوحة", uiState.openPositions.size.toString())
                     ReplayMetricRow("الأوامر المعلقة", uiState.pendingOrders.size.toString())
