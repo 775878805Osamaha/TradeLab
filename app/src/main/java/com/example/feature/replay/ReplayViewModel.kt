@@ -290,6 +290,20 @@ class ReplayViewModel(
         replayEngine.stepForward()
     }
 
+    fun advanceBars(count: Int) {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
+            _uiState.update { it.copy(message = "لا توجد شموع Replay جاهزة للتقدم") }
+            return
+        }
+        if (count !in 1..500) {
+            _uiState.update { it.copy(message = "عدد الشموع يجب أن يكون بين 1 و500") }
+            return
+        }
+        replayEngine.pause()
+        val advanced = replayEngine.advanceBars(count)
+        _uiState.update { it.copy(message = "تم تنفيذ $advanced شمعة بالتسلسل دون تخطي أحداث التداول") }
+    }
+
     fun stepBackward() {
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
             _uiState.update { it.copy(message = "لا توجد جلسة Replay جاهزة للرجوع") }
