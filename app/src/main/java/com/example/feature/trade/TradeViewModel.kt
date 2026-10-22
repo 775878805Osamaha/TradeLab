@@ -270,9 +270,18 @@ class TradeViewModel(
             return
         }
 
-        val vol = state.volume.toDoubleOrNull() ?: 0.01
+        val vol = state.volume.toDoubleOrNull()
+        if (vol == null || !vol.isFinite() || vol <= 0.0) {
+            _uiState.update { it.copy(message = "يرجى إدخال حجم صفقة موجب وصالح") }
+            return
+        }
         val sl = state.stopLoss.toDoubleOrNull()
         val tp = state.takeProfit.toDoubleOrNull()
+        if ((state.stopLoss.isNotBlank() && (sl == null || !sl.isFinite() || sl <= 0.0)) ||
+            (state.takeProfit.isNotBlank() && (tp == null || !tp.isFinite() || tp <= 0.0))) {
+            _uiState.update { it.copy(message = "سعر وقف الخسارة أو جني الربح غير صالح") }
+            return
+        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmittingOrder = true, isOrderPreviewVisible = false) }
