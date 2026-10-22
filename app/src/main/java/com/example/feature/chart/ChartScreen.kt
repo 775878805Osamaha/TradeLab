@@ -261,6 +261,27 @@ fun ChartScreen(
                         Text("إنهاء", color = TradingNegative)
                     }
                 }
+                // Jump through real historical candles without leaving the chart.
+                // The replay engine evaluates each skipped bar sequentially.
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .testTag("chart_replay_batch_steps"),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("تقدم", color = TradingTextSecondary, fontSize = 11.sp)
+                    listOf(5, 10, 25, 50, 100).forEach { count ->
+                        OutlinedButton(
+                            onClick = { replayViewModel.advanceBars(count) },
+                            enabled = !replayState.isLoading && replayState.totalCandles > 0 &&
+                                replayState.currentIndex < replayState.totalCandles - 1,
+                            modifier = Modifier.height(32.dp).testTag("chart_replay_advance_$count"),
+                            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)
+                        ) { Text("+$count", fontSize = 11.sp) }
+                    }
+                }
                 TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
                     Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
                 }
