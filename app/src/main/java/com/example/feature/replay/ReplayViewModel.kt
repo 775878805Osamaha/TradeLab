@@ -428,7 +428,6 @@ class ReplayViewModel(
         if (_uiState.value.isLoading || tick.symbol != _uiState.value.symbol ||
             candle.symbol != tick.symbol ||
             candle.timeframe != _uiState.value.timeframe ||
-            tick.timestamp != candle.openTime ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
             !volume.isFinite() || volume <= 0.0 ||
             (sl != null && (!sl.isFinite() || sl <= 0.0)) ||
