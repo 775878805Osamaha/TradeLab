@@ -280,13 +280,6 @@ class ChartViewModel(
                 }
                 return@launch
             }
-            if (symbol !in setOf("BTCUSDT", "ETHUSDT") && !marketDataRepository.hasTwelveDataKey()) {
-                _uiState.update {
-                    it.copy(candles = emptyList(), latestTick = null, isLoading = false,
-                        candleLoadError = "اضغط ربط مصدر البيانات وأدخل مفتاح Twelve Data لعرض شموع تاريخية حقيقية.")
-                }
-                return@launch
-            }
             val now = System.currentTimeMillis()
             val interval = tf.minutes * 60_000L
             // The repository intentionally rejects an unfinished Binance bar.
@@ -334,7 +327,7 @@ class ChartViewModel(
                         it.copy(candles = emptyList(), isLoading = false,
                             // Report the actual failure instead of assuming that
                             // every historical-data error is an internet outage.
-                            candleLoadError = "فشل تحميل شموع ${if (symbol in setOf("BTCUSDT", "ETHUSDT")) "Binance" else "Twelve Data"}: ${error.javaClass.simpleName}: " +
+                            candleLoadError = "فشل تحميل شموع ${if (symbol in setOf("BTCUSDT", "ETHUSDT")) "Binance" else "مصدر الذهب والفوركس"}: ${error.javaClass.simpleName}: " +
                                 (error.cause?.message ?: error.message ?: "سبب غير معروف").take(220))
                     }
                 }

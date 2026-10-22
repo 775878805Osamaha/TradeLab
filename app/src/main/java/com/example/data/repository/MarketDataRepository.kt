@@ -5,6 +5,7 @@ import com.example.core.market.HistoricalCandleIntegrity
 import com.example.core.market.HistoricalCandleBoundary
 import com.example.core.market.HistoricalCandleCoverage
 import com.example.core.market.TwelveDataHistoricalProvider
+import com.example.core.market.BiquoteHistoricalProvider
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.core.market.DefaultSymbols
 import com.example.core.market.MarketDataDiagnostic
@@ -34,6 +35,7 @@ class MarketDataRepository(
     // Do not cache or print credentials.
     private var twelveDataApiKey: String = ""
     private val twelveData = TwelveDataHistoricalProvider()
+    private val keylessHistorical = BiquoteHistoricalProvider()
 
     fun configureTwelveDataKey(key: String) {
         require(key.length <= 256) { "API key is too long" }
@@ -100,12 +102,14 @@ class MarketDataRepository(
             if (!twelveData.supports(symbol)) {
                 throw java.io.IOException("No configured historical provider for $symbol")
             }
-            if (twelveDataApiKey.isBlank()) {
-                throw java.io.IOException("Twelve Data API key required for $symbol")
+            // No credentials needed for normal chart viewing. An explicitly
+            // configured Twelve Data key remains available as an alternative.
+            // Do not fabricate bars to fill forex weekend/session gaps.
+            return@withContext if (twelveDataApiKey.isNotBlank()) {
+                twelveData.fetch(symbol, timeframe, from, to, twelveDataApiKey)
+            } else {
+                keylessHistorical.fetch(symbol, timeframe, from, to)
             }
-            // Forex/metal sessions naturally contain weekend and holiday gaps.
-            // Never synthesize missing candles or pretend the feed is Binance.
-            return@withContext twelveData.fetch(symbol, timeframe, from, to, twelveDataApiKey)
         }
         val local = DataIntegrityValidator.sanitizeCandles(
             candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
