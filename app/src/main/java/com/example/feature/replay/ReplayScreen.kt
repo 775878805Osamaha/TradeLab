@@ -715,6 +715,11 @@ fun ReplayScreen(
                         fontSize = 12.sp, color = TradingTextSecondary)
                     ReplayMetricRow("حالة البيانات", if (audit.isClean) "سليمة في النطاق المفحوص" else "توجد ملاحظات")
                     ReplayMetricRow("الشموع المفحوصة", audit.candleCount.toString())
+                    ReplayMetricRow("أول شمعة مفحوصة", audit.firstOpenTime?.let { dateFormat.format(Date(it)) } ?: "—")
+                    ReplayMetricRow("آخر شمعة مفحوصة", audit.lastOpenTime?.let { dateFormat.format(Date(it)) } ?: "—")
+                    ReplayMetricRow("نسبة تقدم الجلسة",
+                        if (uiState.totalCandles > 0) String.format(Locale.US, "%.1f%%",
+                            (uiState.currentIndex + 1) * 100.0 / uiState.totalCandles) else "—")
                     ReplayMetricRow("أسعار غير صالحة", audit.invalidPrices.toString())
                     ReplayMetricRow("نطاقات OHLC غير صحيحة", audit.invalidRanges.toString())
                     ReplayMetricRow("تكرار أو اختلال الترتيب", audit.duplicateOrOutOfOrder.toString())
