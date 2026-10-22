@@ -103,6 +103,9 @@ class TwelveDataHistoricalProvider(
                 source = "TWELVE_DATA_HISTORICAL"
             ))
         }
+        // Twelve Data commonly returns newest-first. The integrity validator
+        // expects ascending timestamps; normalize before validation.
+        parsed.sortBy { it.openTime }
         HistoricalCandleIntegrity.validate(
             parsed, from, to + intervalMillis,
             expectedSource = "TWELVE_DATA_HISTORICAL",
