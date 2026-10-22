@@ -154,6 +154,20 @@ fun CandlestickChart(
     }
 
     val timeFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.US) }
+    // Paint instances are reused across redraws instead of allocated once per
+    // grid label / timestamp on every pinch, drag or replay tick.
+    val priceAxisPaint = remember {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.parseColor("#9CA3AF")
+            textSize = 20f
+        }
+    }
+    val timeAxisPaint = remember {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.parseColor("#6B7280")
+            textSize = 17f
+        }
+    }
 
     Box(modifier = modifier) {
         Canvas(
@@ -308,12 +322,7 @@ fun CandlestickChart(
                 )
                 // Price Axis Label
                 drawContext.canvas.nativeCanvas.apply {
-                    val paint = android.graphics.Paint().apply {
-                        color = android.graphics.Color.parseColor("#9CA3AF")
-                        textSize = 20f
-                        isAntiAlias = true
-                    }
-                    drawText(String.format(Locale.US, "%.2f", priceVal), chartWidth + 6f, y + 6f, paint)
+                    drawText(String.format(Locale.US, "%.2f", priceVal), chartWidth + 6f, y + 6f, priceAxisPaint)
                 }
             }
 
@@ -368,12 +377,7 @@ fun CandlestickChart(
                 if (i % labelStride == 0) {
                     val x = transform.candleIndexToX(i)
                     drawContext.canvas.nativeCanvas.apply {
-                        val labelPaint = android.graphics.Paint().apply {
-                            color = android.graphics.Color.parseColor("#6B7280")
-                            textSize = 17f
-                            isAntiAlias = true
-                        }
-                        drawText(timeFormat.format(Date(c.openTime)), x - 20f, height - 6f, labelPaint)
+                        drawText(timeFormat.format(Date(c.openTime)), x - 20f, height - 6f, timeAxisPaint)
                     }
                 }
             }
