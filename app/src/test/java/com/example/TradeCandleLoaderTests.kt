@@ -17,6 +17,14 @@ class TradeCandleLoaderTests {
         }
     }
 
+    @Test fun emptyProviderResponseShowsRetryableMessage() = runBlocking {
+        val result = loadTradeCandles("BTCUSDT") { emptyList() }
+        assertTrue(result.candles.isEmpty())
+        assertNotNull(result.message)
+        assertTrue(result.message!!.contains("BTCUSDT"))
+        assertTrue(result.message!!.contains("إعادة المحاولة"))
+    }
+
     @Test fun networkFailureIsRecoverableAndNextLoadSucceeds() = runBlocking {
         val failed = loadTradeCandles("BTCUSDT") { throw IOException("offline") }
         assertTrue(failed.candles.isEmpty())

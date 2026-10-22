@@ -23,7 +23,11 @@ internal suspend fun loadTradeCandles(
         val candles = fetch()
         // A provider/cache may return after cancellation. Never publish that result.
         currentCoroutineContext().ensureActive()
-        TradeCandleResult(candles)
+        if (candles.isEmpty()) {
+            TradeCandleResult(message = "لم يُرجع مصدر السوق أي شموع موثوقة للرمز $symbol. يمكنك إعادة المحاولة.")
+        } else {
+            TradeCandleResult(candles)
+        }
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (error: Exception) {
