@@ -29,6 +29,17 @@ class HistoricalReplayIntegrityTest {
         engine.pause()
     }
 
+    @Test fun rejectedReplacementPreservesCurrentReplayDataset() {
+        val engine = HistoricalReplayEngine()
+        engine.initialize(listOf(candle(900_000L), candle(1_800_000L)), startIndex = 0)
+        assertThrows(IllegalArgumentException::class.java) {
+            engine.initialize(listOf(candle(900_000L), candle(900_000L)))
+        }
+        assertEquals(2, engine.totalCandles.value)
+        assertEquals(900_000L, engine.currentCandle.value?.openTime)
+        engine.pause()
+    }
+
     @Test fun engineRejectsDuplicatesRatherThanSilentlyDroppingTrades() {
         val engine = HistoricalReplayEngine()
         assertThrows(IllegalArgumentException::class.java) {
