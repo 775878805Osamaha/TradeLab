@@ -388,6 +388,10 @@ class TradeViewModel(
     }
 
     fun partialClosePosition(positionId: Long, volume: Double) {
+        if (!volume.isFinite() || volume <= 0.0) {
+            _uiState.update { it.copy(message = "حجم الإغلاق الجزئي يجب أن يكون موجبًا وصالحًا") }
+            return
+        }
         val pos = _uiState.value.openPositions.firstOrNull { it.id == positionId } ?: return
         val exitPrice = executableClosePrice(pos) ?: run {
             _uiState.update { it.copy(message = "لا يوجد سعر حديث وموثوق لهذا الزوج. افتح الزوج وانتظر تحديث السعر قبل الإغلاق الجزئي.") }
@@ -415,16 +419,33 @@ class TradeViewModel(
     }
 
     fun setTrailingStop(positionId: Long, distancePips: Double) {
+        if (!distancePips.isFinite() || distancePips <= 0.0) {
+            _uiState.update { it.copy(message = "مسافة الوقف المتحرك يجب أن تكون موجبة وصالحة") }
+            return
+        }
         viewModelScope.launch {
             tradingRepository.setTrailingStop(positionId, distancePips)
-            _uiState.update { it.copy(message = "تم ضبط الوقف المتحرك بمقدار $distancePips نقطة") }
+                .onSuccess {
+                    _uiState.update { it.copy(message = "تم ضبط الوقف المتحرك بمقدار $distancePips نقطة") }
+                }.onFailure { error ->
+                    _uiState.update { it.copy(message = error.message ?: "فشل ضبط الوقف المتحرك") }
+                }
         }
     }
 
     fun modifyPosition(positionId: Long, sl: Double?, tp: Double?) {
+        if ((sl != null && (!sl.isFinite() || sl <= 0.0)) ||
+            (tp != null && (!tp.isFinite() || tp <= 0.0))) {
+            _uiState.update { it.copy(message = "مستويات الوقف والهدف يجب أن تكون أسعارًا موجبة وصالحة") }
+            return
+        }
         viewModelScope.launch {
             tradingRepository.modifyPosition(positionId, sl, tp)
-            _uiState.update { it.copy(message = "تم تعديل مستويات الصفقة بنجاح", selectedPositionForDetail = null) }
+                .onSuccess {
+                    _uiState.update { it.copy(message = "تم تعديل مستويات الصفقة بنجاح", selectedPositionForDetail = null) }
+                }.onFailure { error ->
+                    _uiState.update { it.copy(message = error.message ?: "فشل تعديل مستويات الصفقة") }
+                }
         }
     }
 
