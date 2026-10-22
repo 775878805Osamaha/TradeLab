@@ -69,7 +69,6 @@ class HistoricalReplayEngine(
      * Sanitizes dataset using DataIntegrityValidator to eliminate corrupted or duplicate bars.
      */
     fun initialize(candles: List<Candle>, startIndex: Int = 10) {
-        pause()
         // A backtest must never silently remove, reorder or deduplicate historical bars.
         // Reject a bad dataset before it can change fills, stops or performance metrics.
         val integrity = DataIntegrityValidator.validateHistoricalSeries(candles)
@@ -77,6 +76,7 @@ class HistoricalReplayEngine(
             (integrity as? com.example.core.market.ValidationResult.Invalid)?.reason
                 ?: "Invalid historical replay series"
         }
+        pause()
         checkpoints.clear()
         allCandles = candles.toList()
         _totalCandles.value = allCandles.size
