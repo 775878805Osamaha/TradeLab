@@ -165,6 +165,13 @@ fun CandlestickChart(
             textSize = 20f
         }
     }
+    // Reuse the axis paint during crosshair drags; no allocation per frame.
+    val crosshairAxisPaint = remember {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textSize = 20f
+        }
+    }
     val timeAxisPaint = remember {
         android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.parseColor("#6B7280")
@@ -265,8 +272,8 @@ fun CandlestickChart(
 
             // Calculate Visible Candle Range from Viewport
             val visibleCount = ((chartWidth / candleWidthPx) + 3).toInt().coerceIn(1, candles.size)
-            val maxScrollOffset = (candles.size * candleWidthPx) - chartWidth
-            val clampedScroll = scrollOffsetPx.coerceIn(-maxScrollOffset.coerceAtLeast(0f), 0f)
+            val maxScrollOffset = (candles.size.toDouble() * candleWidthPx - chartWidth).coerceAtLeast(0.0).toFloat()
+            val clampedScroll = scrollOffsetPx.coerceIn(-maxScrollOffset, 0f)
 
             val scrollCandleOffset = (-clampedScroll / candleWidthPx).toInt().coerceIn(0, (candles.size - visibleCount).coerceAtLeast(0))
             val fractionalScrollPx = (-clampedScroll) % candleWidthPx
@@ -477,7 +484,7 @@ fun CandlestickChart(
                     // Price tag
                     val pAtY = transform.yToPrice(off.y)
                     drawContext.canvas.nativeCanvas.apply {
-                        val p = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = 20f; isAntiAlias = true }
+                        val p = crosshairAxisPaint
                         drawText(String.format(Locale.US, "%.2f", pAtY), chartWidth + 6f, off.y + 6f, p)
                     }
                 }
