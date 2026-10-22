@@ -51,6 +51,7 @@ fun ReplayScreen(
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
     var showJumpDialog by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
+    var showMarketDialog by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var indicatorSettings by remember { mutableStateOf(IndicatorSettings()) }
     // Heavy calculations run off the Compose/UI thread. produceState cancels
@@ -121,6 +122,9 @@ fun ReplayScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showMarketDialog = true }, modifier = Modifier.testTag("replay_market_btn")) {
+                        Icon(Icons.Default.Tune, contentDescription = "الزوج والإطار الزمني", tint = TradingAccentLight)
+                    }
                     IconButton(onClick = { showHistoryDialog = true }, modifier = Modifier.testTag("replay_history_btn")) {
                         Icon(Icons.Default.History, contentDescription = "نطاق البيانات التاريخية", tint = TradingAccentLight)
                     }
@@ -627,6 +631,58 @@ fun ReplayScreen(
                 ) { Text("وضع الأمر") }
             },
             dismissButton = { TextButton(onClick = { showOrderTicket = false }) { Text("إلغاء") } }
+        )
+    }
+
+    // Change instrument/timeframe without leaving the chart. Only instruments
+    // backed by verified historical market data are offered for execution.
+    if (showMarketDialog) {
+        AlertDialog(
+            onDismissRequest = { showMarketDialog = false },
+            title = { Text("إعدادات سوق Replay") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("اختر الزوج", fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("BTCUSDT", "ETHUSDT").forEach { symbol ->
+                            FilterChip(
+                                selected = uiState.symbol == symbol,
+                                onClick = {
+                                    showMarketDialog = false
+                                    viewModel.loadReplayData(symbol, uiState.timeframe)
+                                },
+                                label = { Text(symbol) }
+                            )
+                        }
+                    }
+                    Text("الإطار الزمني", fontWeight = FontWeight.Bold)
+                    Column(
+                        modifier = Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())
+                    ) {
+                        Timeframe.entries.filter { it.minutes > 0 }.forEach { timeframe ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    showMarketDialog = false
+                                    viewModel.loadReplayData(uiState.symbol, timeframe)
+                                }.padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = uiState.timeframe == timeframe,
+                                    onClick = {
+                                        showMarketDialog = false
+                                        viewModel.loadReplayData(uiState.symbol, timeframe)
+                                    }
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(timeframe.displayName)
+                            }
+                        }
+                    }
+                    Text("تغيير الزوج أو الإطار يعيد بدء الاختبار ويمسح صفقاته.", color = TradingTextSecondary, fontSize = 12.sp)
+                }
+            },
+            confirmButton = { TextButton(onClick = { showMarketDialog = false }) { Text("إغلاق") } }
         )
     }
 
