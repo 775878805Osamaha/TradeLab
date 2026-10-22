@@ -395,8 +395,9 @@ class ReplayViewModel(
 
     private fun canAcceptReplayOrder(isPending: Boolean): Boolean {
         val state = _uiState.value
+        val currentEquity = replayAccount().equity
         val drawdown = if (state.initialBalance > 0.0) {
-            (state.initialBalance - state.currentEquity) * 100.0 / state.initialBalance
+            (state.initialBalance - currentEquity) * 100.0 / state.initialBalance
         } else 100.0
         val realizedLoss = (state.initialBalance - state.currentBalance).coerceAtLeast(0.0)
         val reason = when {
