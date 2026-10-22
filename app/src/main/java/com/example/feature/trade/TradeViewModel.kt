@@ -468,15 +468,6 @@ class TradeViewModel(
 
     private fun loadCandles(symbol: String) {
         candleLoadJob?.cancel()
-        if (symbol !in setOf("BTCUSDT", "ETHUSDT") && !marketDataRepository.hasTwelveDataKey()) {
-            _uiState.update { state ->
-                if (state.selectedSymbol == symbol) state.copy(
-                    candles = emptyList(), isLoading = false,
-                    message = "مصدر Twelve Data غير متصل. اضغط ربط بيانات الذهب والفوركس داخل الشارت."
-                ) else state
-            }
-            return
-        }
         _uiState.update { state ->
             if (state.selectedSymbol == symbol) state.copy(isLoading = true, message = null)
             else state
