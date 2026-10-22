@@ -679,7 +679,10 @@ fun ReplayScreen(
                 }
             },
             confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     TextButton(
                         onClick = {
                             clipboardManager.setText(AnnotatedString(ReplayPerformanceAnalytics.exportSummaryCsv(report)))
