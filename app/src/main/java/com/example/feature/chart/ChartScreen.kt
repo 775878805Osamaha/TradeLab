@@ -58,10 +58,14 @@ fun ChartScreen(
 
     // Refresh the freshness indicator even when the market stream stops emitting.
     var quoteClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(1_000L)
-            quoteClock = System.currentTimeMillis()
+    // Historical gold/forex must not force a full chart-screen recomposition
+    // every second when no live quote is subscribed.
+    LaunchedEffect(uiState.selectedSymbol) {
+        if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
+            while (true) {
+                kotlinx.coroutines.delay(5_000L)
+                quoteClock = System.currentTimeMillis()
+            }
         }
     }
     val headerTick = uiState.latestTick
@@ -151,7 +155,12 @@ fun ChartScreen(
                             DataSourceBadge(sourceType = uiState.dataSourceType)
                         } else {
                             Text(
-                                text = if (uiState.candles.isNotEmpty()) "HISTORY" else "OFFLINE",
+                                text = when {
+                                    uiState.isLoading -> "LOADING"
+                                    uiState.candles.isNotEmpty() -> "HISTORY"
+                                    uiState.candleLoadError != null -> "DATA ERROR"
+                                    else -> "NO DATA"
+                                },
                                 fontSize = 10.sp, color = TradingTextSecondary,
                                 modifier = Modifier.testTag("chart_source_mode")
                             )
@@ -540,6 +549,37 @@ fun ChartScreen(
                     onAddDrawing = { if (!isEmbeddedReplay) viewModel.addDrawing(it) },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) }
                 )
+
+                // Compact provenance HUD: historical candles are not live executable quotes.
+                val chartBars = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
+                if (chartBars.isNotEmpty()) {
+                    val latestBar = chartBars.last()
+                    val timestamp = remember(latestBar.openTime) {
+                        java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")
+                            .withZone(java.time.ZoneOffset.UTC)
+                            .format(java.time.Instant.ofEpochMilli(latestBar.openTime))
+                    }
+                    Surface(
+                        color = TradingBackground.copy(alpha = 0.90f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(start = 8.dp, top = 8.dp)
+                            .testTag("chart_history_provenance")
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
+                            Text(
+                                text = if (isEmbeddedReplay) "REPLAY" else "HISTORICAL · ${chartBars.size} bars",
+                                fontSize = 10.sp, color = TradingTextPrimary
+                            )
+                            Text(
+                                text = "${latestBar.source} · ${timestamp} UTC",
+                                fontSize = 9.sp, color = TradingTextSecondary,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
 
                 // Distinguish a failed Binance request from an in-progress load.
                 if (!isEmbeddedReplay && uiState.candles.isEmpty() && !uiState.isLoading && uiState.candleLoadError != null) {

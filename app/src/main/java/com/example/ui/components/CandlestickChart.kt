@@ -156,7 +156,7 @@ fun CandlestickChart(
         scrollOffsetPx += panChange.x
     }
 
-    val timeFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.US) }
+    val timeFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
     // Paint instances are reused across redraws instead of allocated once per
     // grid label / timestamp on every pinch, drag or replay tick.
     val priceAxisPaint = remember {
@@ -389,7 +389,7 @@ fun CandlestickChart(
             // 2. Draw Volume Bars
             if (isVolumeVisible) {
                 val volTop = mainChartHeight
-                val maxVol = max(1.0, visibleCandles.maxOfOrNull { it.volume } ?: 1.0)
+                val maxVol = max(1.0, priceRangeIndex.maxVolume(startIndex, endIndex))
                 visibleCandles.forEachIndexed { i, c ->
                     val x = transform.candleIndexToX(i)
                     val volHeight = (c.volume / maxVol).coerceIn(0.0, 1.0).toFloat() * volumeHeight

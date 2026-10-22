@@ -458,7 +458,9 @@ class ChartViewModel(
                 if (it.selectedSymbol != requestedSymbol ||
                     it.selectedTimeframe != requestedTimeframe ||
                     it.indicatorSettings != settings ||
-                    it.candles != candles) return@update it
+                    // Referential check avoids scanning up to 100k bars on
+                    // every asynchronous indicator completion.
+                    it.candles !== candles) return@update it
                 it.copy(
                     smaValues = sma,
                     emaValues = ema,

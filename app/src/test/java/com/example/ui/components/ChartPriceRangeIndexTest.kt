@@ -16,12 +16,13 @@ class ChartPriceRangeIndexTest {
             closeTime = (i.toLong() + 1) * 900_000L,
             open = close, high = close + (i % 7) + 0.1,
             low = close - (i % 11) - 0.1, close = close,
-            volume = 1.0, source = "BINANCE_HISTORICAL"
+            volume = (i % 97).toDouble(), source = "BINANCE_HISTORICAL"
         )
     }
 
     @Test fun emptyIndexUsesSafeRange() {
         assertEquals(0.0 to 1.0, ChartPriceRangeIndex(emptyList()).query(0, 1))
+        assertEquals(0.0, ChartPriceRangeIndex(emptyList()).maxVolume(0, 1), 0.0)
     }
 
     @Test fun largeHistoryMatchesBruteForceOnTwoThousandViewports() {
@@ -35,6 +36,7 @@ class ChartPriceRangeIndexTest {
             val range = index.query(start, end)
             assertEquals(expected.minOf { it.low }, range.first, 0.0)
             assertEquals(expected.maxOf { it.high }, range.second, 0.0)
+            assertEquals(expected.maxOf { it.volume }, index.maxVolume(start, end), 0.0)
         }
     }
 
