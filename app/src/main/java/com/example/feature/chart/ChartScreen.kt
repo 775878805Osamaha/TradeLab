@@ -423,6 +423,19 @@ fun ChartScreen(
                 }
             }
 
+            if (!isEmbeddedReplay && verifiedBinancePair && !marketTickIsLive) {
+                Text(
+                    text = "تشخيص الاتصال: ${uiState.connectionDiagnostic}",
+                    color = TradingTextSecondary,
+                    fontSize = 10.sp,
+                    maxLines = 3,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                        .testTag("chart_connection_diagnostic")
+                )
+            }
+
             // Professional Candlestick Chart
             Box(
                 modifier = Modifier
