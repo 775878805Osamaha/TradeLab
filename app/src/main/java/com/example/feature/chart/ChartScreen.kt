@@ -559,13 +559,7 @@ fun ChartScreen(
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center
                         )
-                        if (uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT") && !viewModel.hasHistoricalProviderKey()) {
-                            Button(onClick = { showHistoricalSourceDialog = true },
-                                modifier = Modifier.testTag("chart_connect_forex_provider")) {
-                                Text("ربط مصدر البيانات")
-                            }
-                        }
-                        if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT") || viewModel.hasHistoricalProviderKey()) {
+                        run {
                         Button(
                             onClick = { viewModel.retryCandleLoad() },
                             modifier = Modifier.testTag("chart_retry_load_btn"),
