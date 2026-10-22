@@ -878,8 +878,17 @@ class ReplayViewModel(
             val previousPeak = state.peakEquity.coerceAtLeast(state.initialBalance)
             val peak = maxOf(previousPeak, equity)
             val drawdown = if (peak > 0.0) (peak - equity).coerceAtLeast(0.0) * 100.0 / peak else 0.0
-            val samples = state.equitySamples.filter { it.candleIndex < index } +
-                ReplayEquitySample(index, equity, balance)
+            // The replay cursor normally moves forward one bar. Reuse the
+            // existing immutable prefix instead of filtering the entire session
+            // on every candle (quadratic work for long 5000-bar replays).
+            val history = state.equitySamples
+            val prefix = when {
+                history.isEmpty() -> history
+                history.last().candleIndex < index -> history
+                history.last().candleIndex == index -> history.dropLast(1)
+                else -> history.takeWhile { it.candleIndex < index }
+            }
+            val samples = prefix + ReplayEquitySample(index, equity, balance)
             state.copy(
                 peakEquity = peak,
                 maxObservedDrawdownPercent = maxOf(state.maxObservedDrawdownPercent, drawdown),
