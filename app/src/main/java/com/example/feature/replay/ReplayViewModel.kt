@@ -26,6 +26,9 @@ data class ReplayUiState(
     val symbol: String = "BTCUSDT",
     val timeframe: Timeframe = Timeframe.M15,
     val initialBalance: Double = 50.0,
+    val maxOpenPositions: Int = 10,
+    val maxPendingOrders: Int = 20,
+    val maxDrawdownPercent: Double = 100.0,
     val currentBalance: Double = 50.0,
     val currentEquity: Double = 50.0,
     val visibleCandles: List<Candle> = emptyList(),
@@ -328,6 +331,42 @@ class ReplayViewModel(
         replayEngine.setSpeed(sp)
     }
 
+    fun configureRiskLimits(maxPositions: Int, maxOrders: Int, maxDrawdown: Double) {
+        if (maxPositions !in 1..100 || maxOrders !in 1..200 ||
+            !maxDrawdown.isFinite() || maxDrawdown !in 1.0..100.0) {
+            _uiState.update { it.copy(message = "إعدادات المخاطر غير صالحة") }
+            return
+        }
+        replayEngine.pause()
+        _uiState.update {
+            it.copy(
+                maxOpenPositions = maxPositions,
+                maxPendingOrders = maxOrders,
+                maxDrawdownPercent = maxDrawdown,
+                message = "تم حفظ حدود المخاطر لجلسة Replay"
+            )
+        }
+    }
+
+    private fun canAcceptReplayOrder(isPending: Boolean): Boolean {
+        val state = _uiState.value
+        val drawdown = if (state.initialBalance > 0.0) {
+            (state.initialBalance - state.currentEquity) * 100.0 / state.initialBalance
+        } else 100.0
+        val reason = when {
+            state.isLoading || state.totalCandles == 0 -> "لا توجد جلسة Replay جاهزة"
+            drawdown >= state.maxDrawdownPercent -> "تم بلوغ حد التراجع المسموح في جلسة Replay"
+            isPending && pendingOrders.size >= state.maxPendingOrders -> "تم بلوغ الحد الأقصى للأوامر المعلقة"
+            !isPending && openPositions.size >= state.maxOpenPositions -> "تم بلوغ الحد الأقصى للصفقات المفتوحة"
+            else -> null
+        }
+        if (reason != null) {
+            _uiState.update { it.copy(message = reason) }
+            return false
+        }
+        return true
+    }
+
     fun setInteractionMode(mode: ReplayInteractionMode) {
         replayEngine.pause()
         _uiState.update { it.copy(interactionMode = mode) }
@@ -384,7 +423,7 @@ class ReplayViewModel(
         sl: Double? = null,
         tp: Double? = null
     ) {
-        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
+        if (!canAcceptReplayOrder(isPending = true)) return
         replayEngine.pause()
         val tick = replayEngine.currentTick.value
         if (_uiState.value.isLoading || tick == null ||
@@ -448,7 +487,7 @@ class ReplayViewModel(
     }
 
     fun executeOrder(side: OrderSide, volume: Double = 0.01, sl: Double? = null, tp: Double? = null) {
-        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
+        if (!canAcceptReplayOrder(isPending = false)) return
         replayEngine.pause()
         val candle = replayEngine.currentCandle.value ?: run {
             _uiState.update { it.copy(message = "لا توجد شمعة Replay متاحة للتداول") }
@@ -656,6 +695,15 @@ class ReplayViewModel(
         val pendingIterator = pendingOrders.iterator()
         while (pendingIterator.hasNext()) {
             val order = pendingIterator.next()
+            val state = _uiState.value
+            val equityNow = ReplayAccountMath.equity(curBal, openPositions)
+            val drawdownNow = if (state.initialBalance > 0.0) {
+                (state.initialBalance - equityNow) * 100.0 / state.initialBalance
+            } else 100.0
+            // Do not open additional positions after the risk guard is hit.
+            // Keep the orders pending so the user can inspect or cancel them.
+            if (openPositions.size >= state.maxOpenPositions ||
+                drawdownNow >= state.maxDrawdownPercent) continue
             // Recompute margin after every successful fill. Reusing the same
             // account snapshot for all orders lets multiple pending orders each
             // spend the same available free margin on a single candle.
