@@ -260,6 +260,13 @@ fun ChartScreen(
                 ) {
                     Text("REPLAY", color = TradingGold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     IconButton(
+                        onClick = { replayViewModel.resetReplay() },
+                        enabled = !replayState.isLoading && replayState.totalCandles > 0,
+                        modifier = Modifier.testTag("chart_replay_restart")
+                    ) {
+                        Icon(Icons.Default.RestartAlt, contentDescription = "بدء جلسة الإعادة من جديد", tint = TradingTextSecondary)
+                    }
+                    IconButton(
                         onClick = { replayViewModel.stepBackward() },
                         enabled = !replayState.isLoading && !replayState.isBatchAdvancing &&
                             replayState.currentIndex > 0,
