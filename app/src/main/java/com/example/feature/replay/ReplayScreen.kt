@@ -60,6 +60,7 @@ fun ReplayScreen(
     var showDrawingTools by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showMarketDialog by remember { mutableStateOf(false) }
+    var twelveDataKeyInput by remember { mutableStateOf("") }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var indicatorSettings by remember { mutableStateOf(IndicatorSettings()) }
     // Heavy calculations run off the Compose/UI thread. produceState cancels
@@ -1001,8 +1002,12 @@ fun ReplayScreen(
             onDismissRequest = { showMarketDialog = false },
             title = { Text("إعدادات سوق Replay") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier.heightIn(max = 500.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text("اختر الزوج", fontWeight = FontWeight.Bold)
+                    Text("عملات رقمية • Binance", fontSize = 12.sp, color = TradingTextSecondary)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("BTCUSDT", "ETHUSDT").forEach { symbol ->
                             FilterChip(
@@ -1015,6 +1020,40 @@ fun ReplayScreen(
                             )
                         }
                     }
+                    Text("الذهب والفوركس • Twelve Data", fontSize = 12.sp, color = TradingTextSecondary)
+                    listOf(
+                        listOf("XAUUSD", "XAGUSD", "EURUSD"),
+                        listOf("GBPUSD", "USDJPY", "USDCHF"),
+                        listOf("AUDUSD", "USDCAD", "NZDUSD"),
+                        listOf("EURJPY", "GBPJPY", "EURGBP")
+                    ).forEach { group ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            group.forEach { symbol ->
+                                FilterChip(
+                                    selected = uiState.symbol == symbol,
+                                    onClick = {
+                                        showMarketDialog = false
+                                        viewModel.loadReplayData(symbol, uiState.timeframe)
+                                    },
+                                    label = { Text(symbol, fontSize = 10.sp) }
+                                )
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = twelveDataKeyInput,
+                        onValueChange = { twelveDataKeyInput = it },
+                        label = { Text("Twelve Data API Key") },
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth().testTag("replay_twelvedata_key")
+                    )
+                    TextButton(onClick = {
+                        viewModel.configureHistoricalApiKey(twelveDataKeyInput)
+                        twelveDataKeyInput = ""
+                    }) { Text(if (viewModel.hasHistoricalApiKey()) "تحديث المفتاح" else "تفعيل مصدر الذهب والفوركس") }
+                    Text("المفتاح يُحفظ في الذاكرة فقط. توفر البيانات والفترات يعتمد على اشتراك المزود. أسعار الوسط قد تختلف عن MT5.",
+                        color = TradingTextSecondary, fontSize = 11.sp)
                     Text("الإطار الزمني", fontWeight = FontWeight.Bold)
                     Column(
                         modifier = Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())

@@ -4,6 +4,7 @@ import com.example.core.market.DataIntegrityValidator
 import com.example.core.market.HistoricalCandleIntegrity
 import com.example.core.market.HistoricalCandleBoundary
 import com.example.core.market.HistoricalCandleCoverage
+import com.example.core.market.TwelveDataHistoricalProvider
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.core.market.DefaultSymbols
 import com.example.core.market.MarketDataDiagnostic
@@ -28,6 +29,21 @@ class MarketDataRepository(
 ) {
 
     val providerDiagnostics: StateFlow<MarketDataDiagnostic> = provider.diagnosticInfo
+
+    // In-memory only. The user explicitly supplies their own provider key.
+    // Do not cache or print credentials.
+    private var twelveDataApiKey: String = ""
+    private val twelveData = TwelveDataHistoricalProvider()
+
+    fun configureTwelveDataKey(key: String) {
+        require(key.length <= 256) { "API key is too long" }
+        twelveDataApiKey = key.trim()
+    }
+
+    fun hasTwelveDataKey(): Boolean = twelveDataApiKey.isNotBlank()
+
+    fun supportsHistoricalSymbol(symbol: String): Boolean =
+        symbol == "BTCUSDT" || symbol == "ETHUSDT" || twelveData.supports(symbol)
 
     val symbols: Flow<List<SymbolInfo>> = symbolDao.getAllSymbols().map { list ->
         if (list.isEmpty()) {
@@ -81,7 +97,15 @@ class MarketDataRepository(
         }
         val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
         if (!isCrypto) {
-            throw java.io.IOException("No verified live/historical provider for $symbol. Demo candles are disabled.")
+            if (!twelveData.supports(symbol)) {
+                throw java.io.IOException("No configured historical provider for $symbol")
+            }
+            if (twelveDataApiKey.isBlank()) {
+                throw java.io.IOException("Twelve Data API key required for $symbol")
+            }
+            // Forex/metal sessions naturally contain weekend and holiday gaps.
+            // Never synthesize missing candles or pretend the feed is Binance.
+            return@withContext twelveData.fetch(symbol, timeframe, from, to, twelveDataApiKey)
         }
         val local = DataIntegrityValidator.sanitizeCandles(
             candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
