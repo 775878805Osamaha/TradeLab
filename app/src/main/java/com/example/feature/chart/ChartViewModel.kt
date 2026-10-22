@@ -180,6 +180,10 @@ class ChartViewModel(
     }
 
     fun quickOrder(side: OrderSide, volume: Double = 0.01) {
+        if (!volume.isFinite() || volume <= 0.0) {
+            _uiState.update { it.copy(message = "حجم الصفقة يجب أن يكون رقمًا موجبًا وصالحًا") }
+            return
+        }
         val state = _uiState.value
         val tick = state.latestTick
         if (tick == null || tick.symbol != state.selectedSymbol ||
