@@ -83,6 +83,15 @@ class ChartViewModel(
         }
     }
 
+    fun configureHistoricalProviderKey(key: String) {
+        marketDataRepository.configureTwelveDataKey(key)
+        if (_uiState.value.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
+            loadCandlesForCurrentSymbol()
+        }
+    }
+
+    fun hasHistoricalProviderKey(): Boolean = marketDataRepository.hasTwelveDataKey()
+
     fun selectSymbol(symbol: String) {
         if (_uiState.value.selectedSymbol == symbol) return
         // Prevent unsupported instruments from retaining a previous exchange quote.
