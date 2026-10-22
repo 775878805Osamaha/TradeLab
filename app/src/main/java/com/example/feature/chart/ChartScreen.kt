@@ -273,10 +273,21 @@ fun ChartScreen(
                     }
                     Text("${(replayState.currentIndex + 1).coerceAtMost(replayState.totalCandles)}/${replayState.totalCandles}",
                         color = TradingTextSecondary, fontSize = 11.sp)
+                    if (replayState.isBatchAdvancing) {
+                        Text(
+                            "${replayState.batchCompletedBars}/${replayState.batchRequestedBars}",
+                            color = TradingGold, fontSize = 10.sp,
+                            modifier = Modifier.testTag("chart_replay_compact_progress")
+                        )
+                    }
                     TextButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false }) {
                         Text("إنهاء", color = TradingNegative)
                     }
                 }
+                TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
+                    Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
+                }
+                if (showReplayDetails) {
                 // Jump through real historical candles without leaving the chart.
                 // The replay engine evaluates each skipped bar sequentially.
                 Row(
@@ -298,10 +309,6 @@ fun ChartScreen(
                         ) { Text("+$count", fontSize = 11.sp) }
                     }
                 }
-                TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
-                    Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
-                }
-                if (showReplayDetails) {
                 if (replayState.isBatchAdvancing && replayState.batchRequestedBars > 0) {
                     val progress = replayState.batchCompletedBars.toFloat() /
                         replayState.batchRequestedBars.toFloat()
