@@ -695,6 +695,15 @@ class ReplayViewModel(
         val pendingIterator = pendingOrders.iterator()
         while (pendingIterator.hasNext()) {
             val order = pendingIterator.next()
+            val state = _uiState.value
+            val equityNow = ReplayAccountMath.equity(curBal, openPositions)
+            val drawdownNow = if (state.initialBalance > 0.0) {
+                (state.initialBalance - equityNow) * 100.0 / state.initialBalance
+            } else 100.0
+            // Do not open additional positions after the risk guard is hit.
+            // Keep the orders pending so the user can inspect or cancel them.
+            if (openPositions.size >= state.maxOpenPositions ||
+                drawdownNow >= state.maxDrawdownPercent) continue
             // Recompute margin after every successful fill. Reusing the same
             // account snapshot for all orders lets multiple pending orders each
             // spend the same available free margin on a single candle.
