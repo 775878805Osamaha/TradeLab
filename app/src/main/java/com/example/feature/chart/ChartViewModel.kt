@@ -60,6 +60,10 @@ class ChartViewModel(
     private var klineRefreshJob: Job? = null
     private var klineStreamJob: Job? = null
     private var drawingJob: Job? = null
+    private var indicatorJob: Job? = null
+    private var allPositions: List<Position> = emptyList()
+    private var allPendingOrders: List<Order> = emptyList()
+    private var allHistoricalTrades: List<TradeJournalEntry> = emptyList()
 
     init {
         loadCandlesForCurrentSymbol()
@@ -85,7 +89,20 @@ class ChartViewModel(
         tickJob?.cancel()
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
-        _uiState.update { it.copy(selectedSymbol = symbol, isLoading = true, candleLoadError = null, latestTick = null, candles = emptyList()) }
+        indicatorJob?.cancel()
+        _uiState.update {
+            it.copy(
+                selectedSymbol = symbol, isLoading = true, candleLoadError = null,
+                latestTick = null, candles = emptyList(),
+                openPositions = allPositions.filter { position -> position.symbol == symbol },
+                pendingOrders = allPendingOrders.filter { order -> order.symbol == symbol },
+                historicalTrades = allHistoricalTrades.filter { trade -> trade.symbol == symbol },
+                smaValues = emptyList(), emaValues = emptyList(),
+                bollingerValues = emptyList(), vwapValues = emptyList(),
+                rsiValues = emptyList(), macdValues = emptyList(), atrValues = emptyList(),
+                drawings = emptyList()
+            )
+        }
         loadCandlesForCurrentSymbol()
         observeDrawings()
     }
@@ -95,7 +112,16 @@ class ChartViewModel(
         tickJob?.cancel()
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
-        _uiState.update { it.copy(selectedTimeframe = timeframe, isLoading = true, candleLoadError = null, latestTick = null, candles = emptyList()) }
+        indicatorJob?.cancel()
+        _uiState.update {
+            it.copy(
+                selectedTimeframe = timeframe, isLoading = true, candleLoadError = null,
+                candles = emptyList(), smaValues = emptyList(), emaValues = emptyList(),
+                bollingerValues = emptyList(), vwapValues = emptyList(),
+                rsiValues = emptyList(), macdValues = emptyList(), atrValues = emptyList(),
+                drawings = emptyList()
+            )
+        }
         loadCandlesForCurrentSymbol()
         observeDrawings()
     }
@@ -353,7 +379,8 @@ class ChartViewModel(
     private fun recalculateIndicators(candles: List<Candle>, settings: IndicatorSettings) {
         val requestedSymbol = _uiState.value.selectedSymbol
         val requestedTimeframe = _uiState.value.selectedTimeframe
-        viewModelScope.launch(Dispatchers.Default) {
+        indicatorJob?.cancel()
+        indicatorJob = viewModelScope.launch(Dispatchers.Default) {
             val sma = if (settings.isSmaEnabled) TechnicalIndicators.calculateSma(candles, settings.smaPeriod) else emptyList()
             val ema = if (settings.isEmaEnabled) TechnicalIndicators.calculateEma(candles, settings.emaPeriod) else emptyList()
             val bb = if (settings.isBollingerEnabled) TechnicalIndicators.calculateBollingerBands(candles, settings.bollingerPeriod, settings.bollingerStdDev) else emptyList()
@@ -407,6 +434,7 @@ class ChartViewModel(
                 tradingRepository.getPositionsForAccount(acc.id)
             }.collect { positions ->
                 val currentSym = _uiState.value.selectedSymbol
+                allPositions = positions
                 val matching = positions.filter { it.symbol == currentSym }
                 _uiState.update { it.copy(openPositions = matching) }
             }
@@ -419,6 +447,7 @@ class ChartViewModel(
                 tradingRepository.getPendingOrdersForAccount(acc.id)
             }.collect { orders ->
                 val currentSym = _uiState.value.selectedSymbol
+                allPendingOrders = orders
                 val matching = orders.filter { it.symbol == currentSym }
                 _uiState.update { it.copy(pendingOrders = matching) }
             }
@@ -431,6 +460,7 @@ class ChartViewModel(
                 tradingRepository.getTradesForAccount(acc.id)
             }.collect { trades ->
                 val currentSym = _uiState.value.selectedSymbol
+                allHistoricalTrades = trades
                 val matching = trades.filter { it.symbol == currentSym }
                 _uiState.update { it.copy(historicalTrades = matching) }
             }
@@ -445,7 +475,11 @@ class ChartViewModel(
             drawingJob = viewModelScope.launch {
                 drawingDao.getDrawings(sym, tf).collect { entities ->
                     val mapped = entities.mapNotNull { ChartDrawing.fromEntity(it) }
-                    _uiState.update { it.copy(drawings = mapped) }
+                    _uiState.update { state ->
+                        if (state.selectedSymbol == sym && state.selectedTimeframe.code == tf) {
+                            state.copy(drawings = mapped)
+                        } else state
+                    }
                 }
             }
         }
