@@ -286,6 +286,33 @@ fun ChartScreen(
                     Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
                 }
                 if (showReplayDetails) {
+                if (replayState.isBatchAdvancing && replayState.batchRequestedBars > 0) {
+                    val progress = replayState.batchCompletedBars.toFloat() /
+                        replayState.batchRequestedBars.toFloat()
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .testTag("chart_replay_batch_progress")
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("معالجة الشموع والصفقات", fontSize = 11.sp, color = TradingTextSecondary)
+                            Text(
+                                "${replayState.batchCompletedBars}/${replayState.batchRequestedBars}",
+                                fontSize = 11.sp, color = TradingGold
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = { progress.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().height(3.dp)
+                        )
+                        TextButton(onClick = { replayViewModel.pause() }) {
+                            Text("إيقاف التقدم", fontSize = 11.sp)
+                        }
+                    }
+                }
                 // Historical paper orders are isolated from the live-paper account.
                 Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard)
