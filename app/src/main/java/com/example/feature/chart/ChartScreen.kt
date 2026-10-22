@@ -178,6 +178,22 @@ fun ChartScreen(
                             tint = TradingAccentLight
                         )
                     }
+                    IconButton(
+                        onClick = { viewModel.toggleVolume() },
+                        modifier = Modifier.testTag("chart_toggle_volume_header")
+                    ) {
+                        Icon(
+                            Icons.Default.BarChart,
+                            contentDescription = if (uiState.isVolumeVisible) "إخفاء أحجام التداول" else "إظهار أحجام التداول",
+                            tint = if (uiState.isVolumeVisible) TradingAccentLight else TradingTextSecondary
+                        )
+                    }
+                    IconButton(
+                        onClick = { viewModel.triggerResetView() },
+                        modifier = Modifier.testTag("chart_reset_view_header")
+                    ) {
+                        Icon(Icons.Default.CenterFocusStrong, contentDescription = "إعادة ضبط الشارت", tint = TradingTextSecondary)
+                    }
                     if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT", "XAUUSD", "XAGUSD", "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", "EURJPY", "GBPJPY", "EURGBP")) {
                         IconButton(
                             onClick = { viewModel.retryCandleLoad() },
