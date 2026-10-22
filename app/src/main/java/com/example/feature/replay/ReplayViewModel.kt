@@ -388,6 +388,30 @@ class ReplayViewModel(
         }
     }
 
+    fun currentRiskBlockReason(): String? {
+        val state = _uiState.value
+        if (state.isLoading || state.totalCandles == 0) return "لا توجد جلسة Replay جاهزة"
+        return ReplayRiskPolicy.blockReason(
+            ReplayRiskPolicy.Limits(
+                enabled = state.riskGuardEnabled,
+                maxPositions = state.maxOpenPositions,
+                maxOrders = state.maxPendingOrders,
+                maxDrawdownPercent = state.maxDrawdownPercent,
+                maxConsecutiveLosses = state.maxConsecutiveLosses,
+                maxSessionLossUsd = state.maxSessionLossUsd
+            ),
+            ReplayRiskPolicy.Exposure(
+                initialBalance = state.initialBalance,
+                balance = state.currentBalance,
+                equity = replayAccount().equity,
+                openPositions = openPositions.size,
+                pendingOrders = pendingOrders.size,
+                consecutiveLosses = consecutiveLosses()
+            ),
+            isPending = false
+        )
+    }
+
     private fun canAcceptReplayOrder(isPending: Boolean): Boolean {
         val state = _uiState.value
         val reason = if (state.isLoading || state.totalCandles == 0) {
