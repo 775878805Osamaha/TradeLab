@@ -317,8 +317,15 @@ class ChartViewModel(
                 if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf) return@launch
                 _uiState.update { it.copy(candles = aggregated, isLoading = false, candleLoadError = if (aggregated.isEmpty()) "لا تتوفر شموع مؤكدة لهذا الرمز والفاصل الزمني. حاول مجددًا." else null, message = null) }
                 recalculateIndicators(aggregated, _uiState.value.indicatorSettings)
-                startKlineRefresh(symbol, tf)
-                startKlineStream(symbol, tf)
+                if (symbol in setOf("BTCUSDT", "ETHUSDT")) {
+                    startKlineRefresh(symbol, tf)
+                    startKlineStream(symbol, tf)
+                } else {
+                    // Twelve Data is historical-only here; do not open Binance
+                    // streaming endpoints or continuously consume API quota.
+                    klineRefreshJob?.cancel()
+                    klineStreamJob?.cancel()
+                }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -327,7 +334,7 @@ class ChartViewModel(
                         it.copy(candles = emptyList(), isLoading = false,
                             // Report the actual failure instead of assuming that
                             // every historical-data error is an internet outage.
-                            candleLoadError = "فشل تحميل شموع Binance: ${error.javaClass.simpleName}: " +
+                            candleLoadError = "فشل تحميل شموع ${if (symbol in setOf("BTCUSDT", "ETHUSDT")) "Binance" else "Twelve Data"}: ${error.javaClass.simpleName}: " +
                                 (error.cause?.message ?: error.message ?: "سبب غير معروف").take(220))
                     }
                 }
