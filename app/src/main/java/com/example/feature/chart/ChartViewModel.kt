@@ -366,6 +366,17 @@ class ChartViewModel(
                         symbol, timeframe, lastClosedOpen, lastClosedOpen
                     )
                     if (fresh.isEmpty()) continue
+                    // A refresh must not introduce an unfinished, mismatched or
+                    // malformed exchange candle into the chart.
+                    if (fresh.any { candle ->
+                        candle.symbol != symbol || candle.timeframe != timeframe ||
+                        candle.openTime != lastClosedOpen ||
+                        !candle.open.isFinite() || !candle.high.isFinite() ||
+                        !candle.low.isFinite() || !candle.close.isFinite() ||
+                        candle.low <= 0.0 || candle.high < candle.low ||
+                        candle.open !in candle.low..candle.high ||
+                        candle.close !in candle.low..candle.high
+                    }) continue
                     lastSuccessfullyRefreshedOpen = lastClosedOpen
                     if (_uiState.value.selectedSymbol != symbol ||
                         _uiState.value.selectedTimeframe != timeframe) break
@@ -382,6 +393,9 @@ class ChartViewModel(
                         } else state
                     }
                     recalculateIndicators(merged, _uiState.value.indicatorSettings)
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    // Cancellation of the screen or symbol must stop polling promptly.
+                    throw cancelled
                 } catch (error: Exception) {
                     // Preserve last verified candles during temporary network failure.
                 }
