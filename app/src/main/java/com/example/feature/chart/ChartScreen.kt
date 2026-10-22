@@ -349,6 +349,25 @@ fun ChartScreen(
                     fontSize = 11.sp
                 )
                 Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .testTag("chart_replay_risk_summary"),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text("مراكز: ${replayState.openPositions.size}",
+                        fontSize = 11.sp, color = TradingTextSecondary)
+                    Text("أوامر معلقة: ${replayState.pendingOrders.size}",
+                        fontSize = 11.sp, color = TradingTextSecondary)
+                    Text("صفقات مغلقة: ${replayState.closedTrades.size}",
+                        fontSize = 11.sp, color = TradingTextSecondary)
+                    Text(
+                        "تراجع: ${String.format(Locale.US, "%.1f", replayState.maxObservedDrawdownPercent)}%",
+                        fontSize = 11.sp,
+                        color = if (replayState.maxObservedDrawdownPercent > 10.0) TradingNegative else TradingGold
+                    )
+                }
+                Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                         .testTag("chart_replay_speed"),
