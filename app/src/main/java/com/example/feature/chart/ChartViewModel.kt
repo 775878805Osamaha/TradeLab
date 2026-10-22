@@ -286,6 +286,18 @@ class ChartViewModel(
                 subscribeToTicks(symbol)
                 val rawCandles = marketDataRepository.getCandles(symbol, tf, from, lastClosedOpen)
                 val aggregated = CandleAggregator.aggregate(rawCandles, tf)
+                if (aggregated.any { candle ->
+                    candle.symbol != symbol || candle.timeframe != tf ||
+                    candle.openTime > lastClosedOpen ||
+                    !candle.open.isFinite() || !candle.high.isFinite() ||
+                    !candle.low.isFinite() || !candle.close.isFinite() ||
+                    candle.low <= 0.0 || candle.high < candle.low ||
+                    candle.open !in candle.low..candle.high ||
+                    candle.close !in candle.low..candle.high ||
+                    !candle.volume.isFinite() || candle.volume < 0.0
+                }) {
+                    throw IllegalStateException("Invalid verified chart candle data")
+                }
                 // Ignore responses that arrive after the user changes symbol or timeframe.
                 if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf) return@launch
                 _uiState.update { it.copy(candles = aggregated, isLoading = false, candleLoadError = if (aggregated.isEmpty()) "لا تتوفر شموع مؤكدة لهذا الرمز والفاصل الزمني. حاول مجددًا." else null, message = null) }
@@ -319,6 +331,13 @@ class ChartViewModel(
             marketDataRepository.provider.observeCandles(symbol, timeframe).collect { candle ->
                 if (_uiState.value.selectedSymbol != symbol ||
                     _uiState.value.selectedTimeframe != timeframe) return@collect
+                if (candle.symbol != symbol || candle.timeframe != timeframe ||
+                    !candle.open.isFinite() || !candle.high.isFinite() ||
+                    !candle.low.isFinite() || !candle.close.isFinite() ||
+                    candle.low <= 0.0 || candle.high < candle.low ||
+                    candle.open !in candle.low..candle.high ||
+                    candle.close !in candle.low..candle.high ||
+                    !candle.volume.isFinite() || candle.volume < 0.0) return@collect
                 val existing = _uiState.value.candles
                 val merged = (existing + candle)
                     .associateBy { it.openTime }
@@ -375,7 +394,8 @@ class ChartViewModel(
                         !candle.low.isFinite() || !candle.close.isFinite() ||
                         candle.low <= 0.0 || candle.high < candle.low ||
                         candle.open !in candle.low..candle.high ||
-                        candle.close !in candle.low..candle.high
+                        candle.close !in candle.low..candle.high ||
+                        !candle.volume.isFinite() || candle.volume < 0.0
                     }) continue
                     lastSuccessfullyRefreshedOpen = lastClosedOpen
                     if (_uiState.value.selectedSymbol != symbol ||
