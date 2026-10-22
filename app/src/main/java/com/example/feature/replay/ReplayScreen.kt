@@ -83,6 +83,10 @@ fun ReplayScreen(
     var chartResetTrigger by remember { mutableLongStateOf(0L) }
     var showOrderTicket by remember { mutableStateOf(false) }
     var showPerformanceDialog by remember { mutableStateOf(false) }
+    var showRiskDialog by remember { mutableStateOf(false) }
+    var riskPositions by remember { mutableStateOf("10") }
+    var riskOrders by remember { mutableStateOf("20") }
+    var riskDrawdown by remember { mutableStateOf("100") }
     var editProtectionId by remember { mutableStateOf<Long?>(null) }
     var editSl by remember { mutableStateOf("") }
     var editTp by remember { mutableStateOf("") }
@@ -123,6 +127,14 @@ fun ReplayScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = {
+                        riskPositions = uiState.maxOpenPositions.toString()
+                        riskOrders = uiState.maxPendingOrders.toString()
+                        riskDrawdown = uiState.maxDrawdownPercent.toString()
+                        showRiskDialog = true
+                    }, modifier = Modifier.testTag("replay_risk_btn")) {
+                        Icon(Icons.Default.Security, contentDescription = "إدارة مخاطر Replay", tint = TradingAccentLight)
+                    }
                     IconButton(onClick = { showPerformanceDialog = true }, modifier = Modifier.testTag("replay_performance_btn")) {
                         Icon(Icons.Default.Assessment, contentDescription = "نتائج الباك تيست", tint = TradingAccentLight)
                     }
@@ -533,6 +545,49 @@ fun ReplayScreen(
                 }
             }
         }
+    }
+
+    if (showRiskDialog) {
+        val validPositions = riskPositions.toIntOrNull()?.takeIf { it in 1..100 }
+        val validOrders = riskOrders.toIntOrNull()?.takeIf { it in 1..200 }
+        val validDrawdown = riskDrawdown.toDoubleOrNull()?.takeIf { it.isFinite() && it in 1.0..100.0 }
+        AlertDialog(
+            onDismissRequest = { showRiskDialog = false },
+            title = { Text("إدارة مخاطر Replay") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("الحدود تمنع فتح صفقات أو أوامر جديدة عند تجاوزها؛ لا تغلق المراكز القائمة تلقائيًا.", fontSize = 12.sp, color = TradingTextSecondary)
+                    OutlinedTextField(
+                        value = riskPositions,
+                        onValueChange = { riskPositions = it },
+                        label = { Text("الحد الأقصى للصفقات المفتوحة (1–100)") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = riskOrders,
+                        onValueChange = { riskOrders = it },
+                        label = { Text("الحد الأقصى للأوامر المعلقة (1–200)") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = riskDrawdown,
+                        onValueChange = { riskDrawdown = it },
+                        label = { Text("حد التراجع من رأس المال الابتدائي % (1–100)") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = validPositions != null && validOrders != null && validDrawdown != null,
+                    onClick = {
+                        viewModel.configureRiskLimits(validPositions!!, validOrders!!, validDrawdown!!)
+                        showRiskDialog = false
+                    }
+                ) { Text("تطبيق الحدود") }
+            },
+            dismissButton = { TextButton(onClick = { showRiskDialog = false }) { Text("إلغاء") } }
+        )
     }
 
     if (showPerformanceDialog) {
