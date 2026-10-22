@@ -82,6 +82,7 @@ fun ReplayScreen(
     var replayChartStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var chartResetTrigger by remember { mutableLongStateOf(0L) }
     var showOrderTicket by remember { mutableStateOf(false) }
+    var showPerformanceDialog by remember { mutableStateOf(false) }
     var editProtectionId by remember { mutableStateOf<Long?>(null) }
     var editSl by remember { mutableStateOf("") }
     var editTp by remember { mutableStateOf("") }
@@ -122,6 +123,9 @@ fun ReplayScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showPerformanceDialog = true }, modifier = Modifier.testTag("replay_performance_btn")) {
+                        Icon(Icons.Default.Assessment, contentDescription = "نتائج الباك تيست", tint = TradingAccentLight)
+                    }
                     IconButton(onClick = { showMarketDialog = true }, modifier = Modifier.testTag("replay_market_btn")) {
                         Icon(Icons.Default.Tune, contentDescription = "الزوج والإطار الزمني", tint = TradingAccentLight)
                     }
@@ -531,6 +535,47 @@ fun ReplayScreen(
         }
     }
 
+    if (showPerformanceDialog) {
+        val trades = uiState.closedTrades
+        val net = trades.sumOf { it.netProfitLoss }
+        val winners = trades.count { it.netProfitLoss > 0.0 }
+        val losers = trades.count { it.netProfitLoss < 0.0 }
+        val grossProfit = trades.filter { it.netProfitLoss > 0.0 }.sumOf { it.netProfitLoss }
+        val grossLoss = -trades.filter { it.netProfitLoss < 0.0 }.sumOf { it.netProfitLoss }
+        val winRate = if (trades.isEmpty()) 0.0 else winners * 100.0 / trades.size
+        val profitFactor = if (grossLoss > 0.0) grossProfit / grossLoss else null
+        val returnPercent = if (uiState.initialBalance > 0.0) {
+            (uiState.currentEquity - uiState.initialBalance) * 100.0 / uiState.initialBalance
+        } else 0.0
+        AlertDialog(
+            onDismissRequest = { showPerformanceDialog = false },
+            title = { Text("نتائج جلسة Replay") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("إحصاءات الصفقات المغلقة فقط؛ العائد يشمل الملكية الحالية للصفقات المفتوحة.", fontSize = 12.sp, color = TradingTextSecondary)
+                    ReplayMetricRow("الصفقات المغلقة", trades.size.toString())
+                    ReplayMetricRow("الرابحة / الخاسرة", "$winners / $losers")
+                    ReplayMetricRow("نسبة الفوز", String.format(Locale.US, "%.1f%%", winRate))
+                    ReplayMetricRow("صافي الربح المحقق", String.format(Locale.US, "%+.2f USD", net))
+                    ReplayMetricRow("إجمالي الأرباح", String.format(Locale.US, "%.2f USD", grossProfit))
+                    ReplayMetricRow("إجمالي الخسائر", String.format(Locale.US, "%.2f USD", grossLoss))
+                    ReplayMetricRow("معامل الربح", profitFactor?.let { String.format(Locale.US, "%.2f", it) }
+                        ?: if (grossProfit > 0.0) "غير محدود (لا خسائر)" else "—")
+                    HorizontalDivider()
+                    ReplayMetricRow("الرصيد الحالي", String.format(Locale.US, "%.2f USD", uiState.currentBalance))
+                    ReplayMetricRow("الملكية الحالية", String.format(Locale.US, "%.2f USD", uiState.currentEquity))
+                    ReplayMetricRow("العائد على الرصيد الابتدائي", String.format(Locale.US, "%+.2f%%", returnPercent))
+                    ReplayMetricRow("الصفقات المفتوحة", uiState.openPositions.size.toString())
+                    ReplayMetricRow("الأوامر المعلقة", uiState.pendingOrders.size.toString())
+                }
+            },
+            confirmButton = { TextButton(onClick = { showPerformanceDialog = false }) { Text("إغلاق") } }
+        )
+    }
+
     if (showIndicatorsDialog) {
         ChartIndicatorsDialog(
             currentSettings = indicatorSettings,
@@ -783,5 +828,17 @@ fun ReplayScreen(
                 TextButton(onClick = { showJumpDialog = false }) { Text("إغلاق") }
             }
         )
+    }
+}
+
+@Composable
+private fun ReplayMetricRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 12.sp, color = TradingTextSecondary)
+        Text(value, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }
