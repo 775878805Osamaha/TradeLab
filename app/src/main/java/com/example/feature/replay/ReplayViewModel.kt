@@ -72,7 +72,12 @@ class ReplayViewModel(
     private val accountSnapshots = mutableMapOf<Int, AccountSnapshot>()
 
     private fun saveAccountSnapshot() {
-        accountSnapshots[replayEngine.currentIndex.value] = AccountSnapshot(
+        val index = replayEngine.currentIndex.value
+        // Any new execution or account edit forks the timeline at this bar.
+        // Checkpoints from a previous future must never be restored.
+        accountSnapshots.keys.removeAll { it > index }
+        replayEngine.discardCheckpointsAfter(index)
+        accountSnapshots[index] = AccountSnapshot(
             balance = _uiState.value.currentBalance,
             equity = _uiState.value.currentEquity,
             positions = openPositions.toList(),
@@ -104,6 +109,7 @@ class ReplayViewModel(
     private var activeStrategy: Strategy? = null
 
     fun setStrategy(strategy: Strategy?) {
+        replayEngine.pause()
         activeStrategy = strategy
         _uiState.update { it.copy(selectedStrategyName = strategy?.name) }
     }
@@ -303,6 +309,7 @@ class ReplayViewModel(
     }
 
     fun setInteractionMode(mode: ReplayInteractionMode) {
+        replayEngine.pause()
         _uiState.update { it.copy(interactionMode = mode) }
     }
 
@@ -357,6 +364,8 @@ class ReplayViewModel(
         sl: Double? = null,
         tp: Double? = null
     ) {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
+        replayEngine.pause()
         val tick = replayEngine.currentTick.value
         if (_uiState.value.isLoading || tick == null ||
             !tick.symbol.equals(_uiState.value.symbol, ignoreCase = true) ||
@@ -407,6 +416,8 @@ class ReplayViewModel(
     }
 
     fun cancelPendingOrder(orderId: Long) {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
+        replayEngine.pause()
         val order = pendingOrders.firstOrNull { it.id == orderId && it.status == OrderStatus.PENDING }
             ?: return
         pendingOrders.remove(order)
@@ -417,6 +428,8 @@ class ReplayViewModel(
     }
 
     fun executeOrder(side: OrderSide, volume: Double = 0.01, sl: Double? = null, tp: Double? = null) {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
+        replayEngine.pause()
         val candle = replayEngine.currentCandle.value ?: run {
             _uiState.update { it.copy(message = "لا توجد شمعة Replay متاحة للتداول") }
             return
@@ -472,6 +485,8 @@ class ReplayViewModel(
     }
 
     fun closePosition(posId: Long) {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
+        replayEngine.pause()
         val pos = openPositions.firstOrNull { it.id == posId } ?: run {
             _uiState.update { it.copy(message = "الصفقة غير موجودة في Replay") }
             return
@@ -511,6 +526,8 @@ class ReplayViewModel(
     }
 
     fun updatePositionProtection(posId: Long, sl: Double?, tp: Double?) {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
+        replayEngine.pause()
         val positionIndex = openPositions.indexOfFirst { it.id == posId }
         if (positionIndex < 0) return
         val position = openPositions[positionIndex]
@@ -545,6 +562,8 @@ class ReplayViewModel(
     }
 
     fun setBreakEven(posId: Long) {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
+        replayEngine.pause()
         val pos = openPositions.firstOrNull { it.id == posId } ?: return
         val tick = replayEngine.currentTick.value
         if (_uiState.value.isLoading || tick == null || tick.symbol != pos.symbol ||
