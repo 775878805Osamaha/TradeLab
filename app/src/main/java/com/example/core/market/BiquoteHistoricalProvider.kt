@@ -38,17 +38,26 @@ class BiquoteHistoricalProvider(
         else -> throw IOException("Biquote does not support ${tf.minutes}-minute bars")
     }
 
+    private fun bucket(t: Long, minutes: Int): Long {
+        val period = minutes * 60_000L
+        val offset = if (minutes == 10080) 4L * 86_400_000L else 0L
+        return Math.floorDiv(t - offset, period) * period + offset
+    }
+
     suspend fun fetch(symbol: String, tf: Timeframe, from: Long, to: Long): List<Candle> =
         withContext(Dispatchers.IO) {
             require(supports(symbol)) { "Unsupported keyless historical symbol" }
             val period = tf.minutes * 60_000L
-            val bars = ((to - from) / period + 1).coerceIn(1, 1000).toInt()
+            val baseMinutes = when (tf.minutes) { 3 -> 1; 120 -> 60; 10080 -> 1440; else -> tf.minutes }
+            val basePeriod = baseMinutes * 60_000L
+            val baseFrom = if (baseMinutes != tf.minutes) bucket(from, tf.minutes) else from
+            val bars = ((to - baseFrom + period) / basePeriod + 1).coerceIn(1, 1000).toInt()
             val url = okhttp3.HttpUrl.Builder()
                 .scheme("https").host("biquote.io")
                 .addPathSegment("api").addPathSegment(symbol).addPathSegment("ohlc")
-                .addQueryParameter("interval", interval(tf))
+                .addQueryParameter("interval", when (baseMinutes) { 1 -> "1m"; 60 -> "1h"; 1440 -> "1d"; else -> interval(tf) })
                 .addQueryParameter("limit", bars.toString())
-                .addQueryParameter("from", Instant.ofEpochMilli(from).toString())
+                .addQueryParameter("from", Instant.ofEpochMilli(baseFrom).toString())
                 .addQueryParameter("to", Instant.ofEpochMilli(to + period).toString())
                 .build()
             val body = client.newCall(Request.Builder().url(url).build()).execute().use { response ->
@@ -63,7 +72,7 @@ class BiquoteHistoricalProvider(
                 val row = items.getJSONObject(i)
                 if (row.optBoolean("isOpen", false)) continue
                 val openTime = Instant.parse(row.getString("openTime")).toEpochMilli()
-                if (openTime < from || openTime > to) continue
+                if (openTime < baseFrom || openTime > to || openTime + basePeriod > System.currentTimeMillis()) continue
                 val open = row.getDouble("open")
                 val high = row.getDouble("high")
                 val low = row.getDouble("low")
@@ -75,15 +84,30 @@ class BiquoteHistoricalProvider(
                 ) throw IOException("Invalid Biquote OHLC bar")
                 candles.add(Candle(
                     symbol = symbol, timeframe = tf,
-                    openTime = openTime, closeTime = openTime + period,
+                    openTime = openTime, closeTime = openTime + basePeriod,
                     open = open, high = high, low = low, close = close,
                     volume = volume, source = "BIQUOTE_HISTORICAL"
                 ))
             }
             candles.sortBy { it.openTime }
-            if (candles.size < 2) throw IOException("Insufficient historical candles from Biquote")
+            val result = if (baseMinutes == tf.minutes) candles else
+                candles.groupBy { bucket(it.openTime, tf.minutes) }.toSortedMap()
+                    .mapNotNull { (start, group) ->
+                        val sorted = group.sortedBy { it.openTime }
+                        val count = tf.minutes / baseMinutes
+                        if (start < from || start > to || sorted.size != count ||
+                            sorted.indices.any { i -> sorted[i].openTime != start + i * basePeriod }
+                        ) null else Candle(
+                            symbol = symbol, timeframe = tf, openTime = start,
+                            closeTime = start + period, open = sorted.first().open,
+                            high = sorted.maxOf { it.high }, low = sorted.minOf { it.low },
+                            close = sorted.last().close, volume = sorted.sumOf { it.volume },
+                            source = "BIQUOTE_HISTORICAL"
+                        )
+                    }
+            if (result.size < 2) throw IOException("Insufficient complete historical candles from Biquote")
             HistoricalCandleIntegrity.validate(
-                candles, from, to + period,
+                result, from, to + period,
                 expectedSource = "BIQUOTE_HISTORICAL",
                 expectedSymbol = symbol, expectedTimeframe = tf
             )
