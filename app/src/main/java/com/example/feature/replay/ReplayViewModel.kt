@@ -556,6 +556,7 @@ class ReplayViewModel(
         sl: Double? = null,
         tp: Double? = null
     ) {
+        cancelBatchAdvance()
         if (!canAcceptReplayOrder(isPending = true)) return
         replayEngine.pause()
         val tick = replayEngine.currentTick.value
