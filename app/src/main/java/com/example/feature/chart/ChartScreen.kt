@@ -268,7 +268,10 @@ fun ChartScreen(
                         Icon(Icons.Default.SkipPrevious, contentDescription = "شمعة سابقة", tint = TradingTextPrimary)
                     }
                     IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
-                        enabled = !replayState.isLoading && replayState.totalCandles > 0) {
+                        enabled = !replayState.isLoading && !replayState.isBatchAdvancing &&
+                            replayState.totalCandles > 0 &&
+                            (replayState.isPlaying || replayState.currentIndex < replayState.totalCandles - 1),
+                        modifier = Modifier.testTag("chart_replay_play_pause")) {
                         Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = if (replayState.isPlaying) "إيقاف مؤقت" else "تشغيل الإعادة",
                             tint = TradingAccentLight)
