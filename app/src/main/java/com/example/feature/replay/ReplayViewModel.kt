@@ -75,10 +75,12 @@ class ReplayViewModel(
     private var replayLoadJob: Job? = null
     private var batchAdvanceJob: Job? = null
     private var batchAdvanceGeneration: Long = 0L
+    private var batchAdvanceProgress: Int = 0
     private fun cancelBatchAdvance() {
         batchAdvanceGeneration++
         batchAdvanceJob?.cancel()
         batchAdvanceJob = null
+        batchAdvanceProgress = 0
     }
 
     private data class AccountSnapshot(
@@ -326,6 +328,7 @@ class ReplayViewModel(
                     kotlinx.coroutines.currentCoroutineContext().isActive &&
                     replayEngine.stepForward()) {
                     advanced++
+                    batchAdvanceProgress = advanced
                     if (advanced % 5 == 0) kotlinx.coroutines.yield()
                 }
                 if (generation == batchAdvanceGeneration) {
@@ -334,7 +337,10 @@ class ReplayViewModel(
                     }
                 }
             } finally {
-                if (generation == batchAdvanceGeneration) batchAdvanceJob = null
+                if (generation == batchAdvanceGeneration) {
+                    batchAdvanceJob = null
+                    batchAdvanceProgress = 0
+                }
             }
         }
     }
