@@ -61,6 +61,10 @@ fun ReplayScreen(
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showMarketDialog by remember { mutableStateOf(false) }
     var twelveDataKeyInput by remember { mutableStateOf("") }
+    var showCsvImportDialog by remember { mutableStateOf(false) }
+    var csvImportSymbol by remember { mutableStateOf("XAUUSD") }
+    var csvImportSource by remember { mutableStateOf("broker-export") }
+    var csvImportText by remember { mutableStateOf("") }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var indicatorSettings by remember { mutableStateOf(IndicatorSettings()) }
     // Heavy calculations run off the Compose/UI thread. produceState cancels
@@ -997,6 +1001,60 @@ fun ReplayScreen(
 
     // Change instrument/timeframe without leaving the chart. Only instruments
     // backed by verified historical market data are offered for execution.
+    if (showCsvImportDialog) {
+        AlertDialog(
+            onDismissRequest = { showCsvImportDialog = false },
+            title = { Text("استيراد شموع تاريخية CSV") },
+            text = {
+                Column(
+                    modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("الصق بيانات حقيقية صادرة من الوسيط. يجب أن يكون الوقت UTC بالميلي ثانية.",
+                        fontSize = 12.sp, color = TradingTextSecondary)
+                    Text("timestamp_ms,open,high,low,close,volume", fontSize = 11.sp)
+                    OutlinedTextField(
+                        value = csvImportSymbol,
+                        onValueChange = { csvImportSymbol = it.uppercase(Locale.US) },
+                        label = { Text("الرمز (مثال XAUUSD)") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = csvImportSource,
+                        onValueChange = { csvImportSource = it },
+                        label = { Text("اسم مصدر البيانات / الوسيط") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = csvImportText,
+                        onValueChange = { csvImportText = it },
+                        label = { Text("محتوى CSV") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp).testTag("replay_csv_input"),
+                        maxLines = 10
+                    )
+                    Text("الإطار المستخدم: ${uiState.timeframe.displayName}. استيراد الملف يبدأ جلسة جديدة ويمسح صفقاتها السابقة.",
+                        fontSize = 11.sp, color = TradingTextSecondary)
+                    Text("البيانات المستوردة غير موثقة من TradeLab؛ تحقق من الوسيط قبل استخدامها.",
+                        fontSize = 11.sp, color = TradingTextSecondary)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = csvImportText.isNotBlank() && csvImportSource.isNotBlank(),
+                    onClick = {
+                        viewModel.loadImportedCsv(
+                            csvImportText, csvImportSymbol, uiState.timeframe, csvImportSource
+                        )
+                        csvImportText = ""
+                        showCsvImportDialog = false
+                    },
+                    modifier = Modifier.testTag("replay_csv_import_confirm")
+                ) { Text("استيراد وبدء Replay") }
+            },
+            dismissButton = { TextButton(onClick = { showCsvImportDialog = false }) { Text("إلغاء") } }
+        )
+    }
+
     if (showMarketDialog) {
         AlertDialog(
             onDismissRequest = { showMarketDialog = false },
@@ -1054,6 +1112,10 @@ fun ReplayScreen(
                     }) { Text(if (viewModel.hasHistoricalApiKey()) "تحديث المفتاح" else "تفعيل مصدر الذهب والفوركس") }
                     Text("المفتاح يُحفظ في الذاكرة فقط. توفر البيانات والفترات يعتمد على اشتراك المزود. أسعار الوسط قد تختلف عن MT5.",
                         color = TradingTextSecondary, fontSize = 11.sp)
+                    TextButton(onClick = {
+                        showMarketDialog = false
+                        showCsvImportDialog = true
+                    }) { Text("استيراد تاريخ حقيقي من ملف CSV") }
                     Text("الإطار الزمني", fontWeight = FontWeight.Bold)
                     Column(
                         modifier = Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())

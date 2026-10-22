@@ -34,6 +34,31 @@ class HistoricalCsvImporterTest {
         }
     }
 
+    @Test fun importsTwentyThousandRealBarsWithoutDataLoss() {
+        val csv = buildString {
+            append(header)
+            repeat(20_000) { i ->
+                val timestamp = i.toLong() * 900_000L
+                appendLine("$timestamp,100,102,99,101,5")
+            }
+        }
+        val candles = HistoricalCsvImporter.parse(
+            csv, "XAUUSD", Timeframe.M15, "broker-test", maxBars = 20_000
+        )
+        assertEquals(20_000, candles.size)
+        assertEquals(19_999L * 900_000L, candles.last().openTime)
+    }
+
+    @Test fun excessiveCandleCountFailsInsteadOfSilentlyTruncating() {
+        val csv = header + "900000,100,105,98,104,10\n1800000,104,106,103,105,12"
+        try {
+            HistoricalCsvImporter.parse(csv, "XAUUSD", Timeframe.M15, "broker", maxBars = 1)
+            throw AssertionError("Expected bar limit rejection")
+        } catch (_: IllegalArgumentException) {
+            assertTrue(true)
+        }
+    }
+
     private fun assertFails(csv: String) {
         try {
             HistoricalCsvImporter.parse(csv, "XAUUSD", Timeframe.M15, "external")
