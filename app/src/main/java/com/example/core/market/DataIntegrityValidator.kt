@@ -83,6 +83,7 @@ object DataIntegrityValidator {
         if (candles.isEmpty()) return ValidationResult.Invalid("Historical series is empty")
         val symbol = candles.first().symbol
         val timeframe = candles.first().timeframe
+        val expectedDuration = timeframe.minutes.toLong() * 60_000L
         var previousOpen = Long.MIN_VALUE
         for ((index, candle) in candles.withIndex()) {
             val validity = validateCandle(candle)
@@ -91,6 +92,10 @@ object DataIntegrityValidator {
             }
             if (candle.symbol != symbol || candle.timeframe != timeframe) {
                 return ValidationResult.Invalid("Mixed symbol or timeframe at bar $index")
+            }
+            if (expectedDuration > 0L &&
+                candle.closeTime - candle.openTime > expectedDuration + 1_000L) {
+                return ValidationResult.Invalid("Bar $index extends beyond its timeframe")
             }
             if (candle.openTime <= previousOpen) {
                 return ValidationResult.Invalid("Duplicate or unordered timestamp at bar $index")
