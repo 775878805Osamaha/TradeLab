@@ -317,9 +317,16 @@ class ReplayViewModel(
                     _uiState.value.timeframe != tf ||
                     _uiState.value.requestedHistoryBars != historyBars ||
                     _uiState.value.historyEndOffsetBars != endOffsetBars) return@launch
-                if (candles.any { it.symbol != symbol || it.timeframe != tf } ||
-                    candles.zipWithNext().any { (a, b) -> b.openTime <= a.openTime }) {
-                    _uiState.update { it.copy(isLoading = false, message = "بيانات Replay غير متسقة؛ أُلغيت الجلسة لحماية نتائج الاختبار") }
+                val validation = com.example.core.market.DataIntegrityValidator
+                    .validateHistoricalSeries(candles)
+                if (!validation.isValid || candles.first().symbol != symbol ||
+                    candles.first().timeframe != tf) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            message = "بيانات Replay غير متسقة؛ أُلغيت الجلسة لحماية نتائج الاختبار"
+                        )
+                    }
                     return@launch
                 }
                 replayEngine.initialize(candles, startIndex = minOf(20, candles.lastIndex))
@@ -349,6 +356,10 @@ class ReplayViewModel(
             _uiState.update { it.copy(message = "انتظر اكتمال تحميل بيانات Replay أولًا") }
             return
         }
+        if (replayEngine.currentIndex.value >= _uiState.value.totalCandles - 1) {
+            _uiState.update { it.copy(message = "انتهت الشموع التاريخية؛ أعد الجلسة أو حمّل فترة أخرى") }
+            return
+        }
         replayEngine.play()
     }
     fun pause() {
@@ -361,7 +372,9 @@ class ReplayViewModel(
             _uiState.update { it.copy(message = "لا توجد شموع Replay جاهزة للتقدم") }
             return
         }
-        replayEngine.stepForward()
+        if (!replayEngine.stepForward()) {
+            _uiState.update { it.copy(message = "لا توجد شموع إضافية للتقدم") }
+        }
     }
 
     fun advanceBars(count: Int) {

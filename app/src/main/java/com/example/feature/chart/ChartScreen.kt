@@ -259,6 +259,23 @@ fun ChartScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("REPLAY", color = TradingGold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    if (replayState.currentCandle != null) {
+                        Text(
+                            java.text.SimpleDateFormat("MM/dd HH:mm", Locale.US).apply {
+                                timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            }.format(java.util.Date(replayState.currentCandle!!.openTime)) + " UTC",
+                            color = TradingTextSecondary,
+                            fontSize = 10.sp,
+                            modifier = Modifier.testTag("chart_replay_candle_utc")
+                        )
+                    }
+                    IconButton(
+                        onClick = { replayViewModel.resetReplay() },
+                        enabled = !replayState.isLoading && replayState.totalCandles > 0,
+                        modifier = Modifier.testTag("chart_replay_restart")
+                    ) {
+                        Icon(Icons.Default.RestartAlt, contentDescription = "بدء جلسة الإعادة من جديد", tint = TradingTextSecondary)
+                    }
                     IconButton(
                         onClick = { replayViewModel.stepBackward() },
                         enabled = !replayState.isLoading && !replayState.isBatchAdvancing &&
@@ -377,6 +394,37 @@ fun ChartScreen(
                                 "$bars",
                                 fontSize = 11.sp,
                                 color = if (selected) TradingAccentLight else TradingTextSecondary
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                        .testTag("chart_replay_history_offset"),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("قبل", color = TradingTextSecondary, fontSize = 11.sp)
+                    listOf(0, 100, 300, 600, 1200).forEach { offset ->
+                        OutlinedButton(
+                            onClick = {
+                                replayViewModel.loadReplayData(
+                                    uiState.selectedSymbol,
+                                    uiState.selectedTimeframe,
+                                    endOffsetBars = offset
+                                )
+                            },
+                            enabled = !replayState.isLoading && !replayState.isBatchAdvancing,
+                            modifier = Modifier.height(32.dp).testTag("chart_replay_offset_$offset"),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                if (offset == 0) "الأحدث" else "-$offset",
+                                fontSize = 11.sp,
+                                color = if (replayState.historyEndOffsetBars == offset)
+                                    TradingAccentLight else TradingTextSecondary
                             )
                         }
                     }
