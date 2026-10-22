@@ -180,12 +180,35 @@ fun TradeScreen(
                     colors = CardDefaults.cardColors(containerColor = TradingCard),
                     border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
                 ) {
-                    CandlestickChart(
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        CandlestickChart(
                         candles = uiState.candles,
                         latestTick = uiState.latestTick,
                         openPositions = uiState.openPositions.filter { it.symbol == uiState.selectedSymbol },
                         modifier = Modifier.fillMaxSize()
-                    )
+                        )
+                        if (uiState.isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.align(Alignment.Center).size(28.dp),
+                                color = TradingCyan
+                            )
+                        } else if (uiState.candles.isEmpty()) {
+                            Column(
+                                modifier = Modifier.align(Alignment.Center).padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "لا توجد شموع موثوقة لعرضها",
+                                    fontSize = 12.sp,
+                                    color = TradingTextSecondary
+                                )
+                                TextButton(
+                                    onClick = { viewModel.retryCandleLoad() },
+                                    modifier = Modifier.testTag("trade_chart_retry")
+                                ) { Text("إعادة المحاولة") }
+                            }
+                        }
+                    }
                 }
             }
 
