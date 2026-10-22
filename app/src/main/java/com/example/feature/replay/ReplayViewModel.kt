@@ -369,6 +369,10 @@ class ReplayViewModel(
             _uiState.update { it.copy(message = "لا توجد شموع Replay جاهزة للتقدم") }
             return
         }
+        if (_uiState.value.currentIndex >= _uiState.value.totalCandles - 1) {
+            _uiState.update { it.copy(message = "وصلت إلى آخر شمعة في جلسة الإعادة") }
+            return
+        }
         if (count !in 1..500) {
             _uiState.update { it.copy(message = "عدد الشموع يجب أن يكون بين 1 و500") }
             return
@@ -394,7 +398,10 @@ class ReplayViewModel(
                 }
                 if (generation == batchAdvanceGeneration) {
                     _uiState.update {
-                        it.copy(message = "تم تنفيذ $advanced شمعة بالتسلسل دون تخطي أحداث التداول")
+                        it.copy(
+                            batchCompletedBars = advanced,
+                            message = "تم تنفيذ $advanced شمعة بالتسلسل دون تخطي أحداث التداول"
+                        )
                     }
                 }
             } finally {
