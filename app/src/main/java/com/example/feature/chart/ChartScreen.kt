@@ -350,6 +350,27 @@ fun ChartScreen(
 
             }
 
+            // Tools remain accessible as floating buttons when chart is expanded.
+            if (immersiveChart) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(36.dp).testTag("chart_immersive_indicators")) {
+                        Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
+                    }
+                    IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.size(36.dp).testTag("chart_immersive_draw")) {
+                        Icon(Icons.Default.Draw, contentDescription = "الرسم", tint = TradingAccentLight)
+                    }
+                    IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(36.dp).testTag("chart_immersive_reset")) {
+                        Icon(Icons.Default.CenterFocusWeak, contentDescription = "إعادة ضبط الشارت", tint = TradingAccentLight)
+                    }
+                    IconButton(onClick = { showChartExtras = !showChartExtras }, modifier = Modifier.size(36.dp).testTag("chart_immersive_settings")) {
+                        Icon(Icons.Default.Tune, contentDescription = "إعدادات الرسم", tint = TradingTextSecondary)
+                    }
+                }
+            }
             // Compact icon toolbar: keep the chart as the primary surface.
             if (!immersiveChart) Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp),
@@ -369,7 +390,7 @@ fun ChartScreen(
                     Icon(Icons.Default.Tune, contentDescription = "إعدادات الشارت", tint = TradingTextSecondary)
                 }
             }
-            if (showChartExtras && !immersiveChart) {
+            if (showChartExtras) {
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(horizontal = 8.dp, vertical = 2.dp),
