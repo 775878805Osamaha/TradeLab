@@ -32,6 +32,9 @@ data class ReplayUiState(
     val peakEquity: Double = 50.0,
     val maxObservedDrawdownPercent: Double = 0.0,
     val equitySamples: List<ReplayEquitySample> = emptyList(),
+    val riskGuardEnabled: Boolean = true,
+    val maxConsecutiveLosses: Int = 0,
+    val maxSessionLossUsd: Double = 0.0,
     val currentBalance: Double = 50.0,
     val currentEquity: Double = 50.0,
     val visibleCandles: List<Candle> = emptyList(),
@@ -345,6 +348,29 @@ class ReplayViewModel(
         replayEngine.setSpeed(sp)
     }
 
+    fun configureExtendedRiskLimits(
+        enabled: Boolean,
+        maxLosses: Int,
+        maxLossUsd: Double
+    ) {
+        if (maxLosses !in 0..100 || !maxLossUsd.isFinite() || maxLossUsd < 0.0) {
+            _uiState.update { it.copy(message = "إعدادات حدود الخسائر غير صالحة") }
+            return
+        }
+        replayEngine.pause()
+        _uiState.update {
+            it.copy(
+                riskGuardEnabled = enabled,
+                maxConsecutiveLosses = maxLosses,
+                maxSessionLossUsd = maxLossUsd,
+                message = "تم تحديث حماية الخسائر لجلسة Replay"
+            )
+        }
+    }
+
+    private fun consecutiveLosses(): Int =
+        ReplayRiskPolicy.consecutiveLosses(closedTrades.map { it.netProfitLoss })
+
     fun configureRiskLimits(maxPositions: Int, maxOrders: Int, maxDrawdown: Double) {
         if (maxPositions !in 1..100 || maxOrders !in 1..200 ||
             !maxDrawdown.isFinite() || maxDrawdown !in 1.0..100.0) {
@@ -362,18 +388,53 @@ class ReplayViewModel(
         }
     }
 
+    fun currentRiskBlockReason(): String? {
+        val state = _uiState.value
+        if (state.isLoading || state.totalCandles == 0) return "لا توجد جلسة Replay جاهزة"
+        return ReplayRiskPolicy.blockReason(
+            ReplayRiskPolicy.Limits(
+                enabled = state.riskGuardEnabled,
+                maxPositions = state.maxOpenPositions,
+                maxOrders = state.maxPendingOrders,
+                maxDrawdownPercent = state.maxDrawdownPercent,
+                maxConsecutiveLosses = state.maxConsecutiveLosses,
+                maxSessionLossUsd = state.maxSessionLossUsd
+            ),
+            ReplayRiskPolicy.Exposure(
+                initialBalance = state.initialBalance,
+                balance = state.currentBalance,
+                equity = replayAccount().equity,
+                openPositions = openPositions.size,
+                pendingOrders = pendingOrders.size,
+                consecutiveLosses = consecutiveLosses()
+            ),
+            isPending = false
+        )
+    }
+
     private fun canAcceptReplayOrder(isPending: Boolean): Boolean {
         val state = _uiState.value
-        val drawdown = if (state.initialBalance > 0.0) {
-            (state.initialBalance - state.currentEquity) * 100.0 / state.initialBalance
-        } else 100.0
-        val reason = when {
-            state.isLoading || state.totalCandles == 0 -> "لا توجد جلسة Replay جاهزة"
-            drawdown >= state.maxDrawdownPercent -> "تم بلوغ حد التراجع المسموح في جلسة Replay"
-            isPending && pendingOrders.size >= state.maxPendingOrders -> "تم بلوغ الحد الأقصى للأوامر المعلقة"
-            !isPending && openPositions.size >= state.maxOpenPositions -> "تم بلوغ الحد الأقصى للصفقات المفتوحة"
-            else -> null
-        }
+        val reason = if (state.isLoading || state.totalCandles == 0) {
+            "لا توجد جلسة Replay جاهزة"
+        } else ReplayRiskPolicy.blockReason(
+            ReplayRiskPolicy.Limits(
+                enabled = state.riskGuardEnabled,
+                maxPositions = state.maxOpenPositions,
+                maxOrders = state.maxPendingOrders,
+                maxDrawdownPercent = state.maxDrawdownPercent,
+                maxConsecutiveLosses = state.maxConsecutiveLosses,
+                maxSessionLossUsd = state.maxSessionLossUsd
+            ),
+            ReplayRiskPolicy.Exposure(
+                initialBalance = state.initialBalance,
+                balance = state.currentBalance,
+                equity = replayAccount().equity,
+                openPositions = openPositions.size,
+                pendingOrders = pendingOrders.size,
+                consecutiveLosses = consecutiveLosses()
+            ),
+            isPending
+        )
         if (reason != null) {
             _uiState.update { it.copy(message = reason) }
             return false
@@ -713,14 +774,28 @@ class ReplayViewModel(
         while (pendingIterator.hasNext()) {
             val order = pendingIterator.next()
             val state = _uiState.value
-            val equityNow = ReplayAccountMath.equity(curBal, openPositions)
-            val drawdownNow = if (state.initialBalance > 0.0) {
-                (state.initialBalance - equityNow) * 100.0 / state.initialBalance
-            } else 100.0
-            // Do not open additional positions after the risk guard is hit.
-            // Keep the orders pending so the user can inspect or cancel them.
-            if (openPositions.size >= state.maxOpenPositions ||
-                drawdownNow >= state.maxDrawdownPercent) continue
+            // Re-evaluate after every fill, using the latest positions and equity.
+            // Blocked pending orders remain pending, never silently discarded.
+            val blockReason = ReplayRiskPolicy.blockReason(
+                ReplayRiskPolicy.Limits(
+                    enabled = state.riskGuardEnabled,
+                    maxPositions = state.maxOpenPositions,
+                    maxOrders = state.maxPendingOrders,
+                    maxDrawdownPercent = state.maxDrawdownPercent,
+                    maxConsecutiveLosses = state.maxConsecutiveLosses,
+                    maxSessionLossUsd = state.maxSessionLossUsd
+                ),
+                ReplayRiskPolicy.Exposure(
+                    initialBalance = state.initialBalance,
+                    balance = curBal,
+                    equity = ReplayAccountMath.equity(curBal, openPositions),
+                    openPositions = openPositions.size,
+                    pendingOrders = pendingOrders.size,
+                    consecutiveLosses = consecutiveLosses()
+                ),
+                isPending = false
+            )
+            if (blockReason != null) continue
             // Recompute margin after every successful fill. Reusing the same
             // account snapshot for all orders lets multiple pending orders each
             // spend the same available free margin on a single candle.
@@ -827,8 +902,17 @@ class ReplayViewModel(
             val previousPeak = state.peakEquity.coerceAtLeast(state.initialBalance)
             val peak = maxOf(previousPeak, equity)
             val drawdown = if (peak > 0.0) (peak - equity).coerceAtLeast(0.0) * 100.0 / peak else 0.0
-            val samples = state.equitySamples.filter { it.candleIndex < index } +
-                ReplayEquitySample(index, equity, balance)
+            // The replay cursor normally moves forward one bar. Reuse the
+            // existing immutable prefix instead of filtering the entire session
+            // on every candle (quadratic work for long 5000-bar replays).
+            val history = state.equitySamples
+            val prefix = when {
+                history.isEmpty() -> history
+                history.last().candleIndex < index -> history
+                history.last().candleIndex == index -> history.dropLast(1)
+                else -> history.takeWhile { it.candleIndex < index }
+            }
+            val samples = prefix + ReplayEquitySample(index, equity, balance)
             state.copy(
                 peakEquity = peak,
                 maxObservedDrawdownPercent = maxOf(state.maxObservedDrawdownPercent, drawdown),
