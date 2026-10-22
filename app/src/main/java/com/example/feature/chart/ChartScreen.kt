@@ -52,6 +52,7 @@ fun ChartScreen(
     var showChartExtras by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
+    var immersiveChart by remember { mutableStateOf(true) }
 
     // Refresh the freshness indicator even when the market stream stops emitting.
     var quoteClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -110,12 +111,29 @@ fun ChartScreen(
                         )
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = TradingTextSecondary)
                         Spacer(modifier = Modifier.width(4.dp))
-                        DataSourceBadge(sourceType = if (headerQuoteVerified) uiState.dataSourceType else DataSourceType.STALE_DATA)
+                        if (headerQuoteVerified) {
+                            DataSourceBadge(sourceType = uiState.dataSourceType)
+                        } else {
+                            Text(
+                                text = if (uiState.candles.isNotEmpty()) "HISTORY" else "OFFLINE",
+                                fontSize = 10.sp, color = TradingTextSecondary,
+                                modifier = Modifier.testTag("chart_source_mode")
+                            )
+                        }
                     }
                 },
                 actions = {
-                    // Refresh is only actionable for instruments backed by verified candle feeds.
-                    if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
+                    IconButton(
+                        onClick = { immersiveChart = !immersiveChart },
+                        modifier = Modifier.testTag("chart_immersive_toggle")
+                    ) {
+                        Icon(
+                            if (immersiveChart) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = if (immersiveChart) "عرض التفاصيل" else "تكبير الشارت",
+                            tint = TradingAccentLight
+                        )
+                    }
+                    if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT", "XAUUSD", "XAGUSD", "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", "EURJPY", "GBPJPY", "EURGBP")) {
                         IconButton(
                             onClick = { viewModel.retryCandleLoad() },
                             modifier = Modifier.testTag("chart_header_refresh_btn")
@@ -153,7 +171,7 @@ fun ChartScreen(
                 .padding(paddingValues)
         ) {
             // Distinguish a verified live quote from delayed or unsupported data.
-            if (!headerQuoteVerified && !isEmbeddedReplay) {
+            if (!immersiveChart && !headerQuoteVerified && !isEmbeddedReplay) {
                 Text(
                     text = if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
                         "السعر المباشر غير مؤكد حاليًا — لا تعتمد عليه لتنفيذ صفقة"
