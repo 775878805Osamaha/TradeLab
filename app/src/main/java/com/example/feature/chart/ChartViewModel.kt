@@ -463,14 +463,26 @@ class ChartViewModel(
             marketDataRepository.provider.subscribe(symbol)
             marketDataRepository.observeTicks(symbol).collect { tick ->
                 if (_uiState.value.selectedSymbol != symbol) return@collect
+                // A bad or mismatched quote must not overwrite the last trusted bid/ask,
+                // or trigger fills and stop-loss evaluation in the trading engine.
+                if (tick.symbol != symbol ||
+                    tick.source !in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") ||
+                    !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
+                    !tick.bid.isFinite() || !tick.ask.isFinite() ||
+                    tick.bid <= 0.0 || tick.ask < tick.bid ||
+                    tick.timestamp <= 0L ||
+                    tick.timestamp > System.currentTimeMillis() + 5_000L) return@collect
+                val accepted = _uiState.value.latestTick
+                if (accepted != null && tick.timestamp < accepted.timestamp) return@collect
                 _uiState.update { state ->
-                    // Binance bookTicker carries best bid/ask only, not executed trades,
-                    // OHLC or traded volume. Never turn quote events into fabricated candles.
-                    // Chart OHLCV stays sourced from Binance historical klines until a
-                    // genuine Binance kline stream is implemented.
-                    state.copy(latestTick = tick)
+                    if (state.selectedSymbol == symbol) {
+                        // Quote events are not executed trades or OHLCV candles.
+                        state.copy(latestTick = tick)
+                    } else state
                 }
-                tradingRepository.onTickUpdate(tick)
+                if (_uiState.value.selectedSymbol == symbol) {
+                    tradingRepository.onTickUpdate(tick)
+                }
             }
         }
     }
