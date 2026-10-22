@@ -138,6 +138,7 @@ class ReplayViewModel(
     private var activeStrategy: Strategy? = null
 
     fun setStrategy(strategy: Strategy?) {
+        cancelBatchAdvance()
         replayEngine.pause()
         activeStrategy = strategy
         _uiState.update { it.copy(selectedStrategyName = strategy?.name) }
@@ -391,6 +392,7 @@ class ReplayViewModel(
     }
 
     fun setSpeed(sp: Float) {
+        cancelBatchAdvance()
         if (!sp.isFinite() || sp <= 0f) {
             _uiState.update { it.copy(message = "سرعة Replay يجب أن تكون موجبة وصالحة") }
             return
@@ -403,6 +405,7 @@ class ReplayViewModel(
         maxLosses: Int,
         maxLossUsd: Double
     ) {
+        cancelBatchAdvance()
         if (maxLosses !in 0..100 || !maxLossUsd.isFinite() || maxLossUsd < 0.0) {
             _uiState.update { it.copy(message = "إعدادات حدود الخسائر غير صالحة") }
             return
@@ -422,6 +425,7 @@ class ReplayViewModel(
         ReplayRiskPolicy.consecutiveLosses(closedTrades.map { it.netProfitLoss })
 
     fun configureRiskLimits(maxPositions: Int, maxOrders: Int, maxDrawdown: Double) {
+        cancelBatchAdvance()
         if (maxPositions !in 1..100 || maxOrders !in 1..200 ||
             !maxDrawdown.isFinite() || maxDrawdown !in 1.0..100.0) {
             _uiState.update { it.copy(message = "إعدادات المخاطر غير صالحة") }
@@ -616,6 +620,7 @@ class ReplayViewModel(
     }
 
     fun executeOrder(side: OrderSide, volume: Double = 0.01, sl: Double? = null, tp: Double? = null) {
+        cancelBatchAdvance()
         if (!canAcceptReplayOrder(isPending = false)) return
         replayEngine.pause()
         val candle = replayEngine.currentCandle.value ?: run {
@@ -673,6 +678,7 @@ class ReplayViewModel(
     }
 
     fun closePosition(posId: Long) {
+        cancelBatchAdvance()
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
         replayEngine.pause()
         val pos = openPositions.firstOrNull { it.id == posId } ?: run {
