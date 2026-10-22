@@ -66,18 +66,27 @@ class TradeViewModel(
 
     private fun observeAccountAndPositions() {
         viewModelScope.launch {
-            tradingRepository.selectedAccount.collect { account ->
-                _uiState.update { it.copy(selectedAccount = account) }
+            tradingRepository.selectedAccount.collectLatest { account ->
+                _uiState.update {
+                    it.copy(
+                        selectedAccount = account,
+                        openPositions = emptyList(),
+                        pendingOrders = emptyList(),
+                        riskAnalysis = null
+                    )
+                }
                 if (account != null) {
-                    launch {
-                        tradingRepository.getPositionsForAccount(account.id).collect { positions ->
-                            _uiState.update { it.copy(openPositions = positions) }
-                            recalculateRisk()
+                    kotlinx.coroutines.coroutineScope {
+                        launch {
+                            tradingRepository.getPositionsForAccount(account.id).collect { positions ->
+                                _uiState.update { it.copy(openPositions = positions) }
+                                recalculateRisk()
+                            }
                         }
-                    }
-                    launch {
-                        tradingRepository.getPendingOrdersForAccount(account.id).collect { pending ->
-                            _uiState.update { it.copy(pendingOrders = pending) }
+                        launch {
+                            tradingRepository.getPendingOrdersForAccount(account.id).collect { pending ->
+                                _uiState.update { it.copy(pendingOrders = pending) }
+                            }
                         }
                     }
                 }
