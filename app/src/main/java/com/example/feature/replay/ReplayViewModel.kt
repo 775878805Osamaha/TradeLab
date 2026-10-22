@@ -294,13 +294,23 @@ class ReplayViewModel(
         saveAccountSnapshot()
     }
 
-    fun setSpeed(sp: Float) = replayEngine.setSpeed(sp)
+    fun setSpeed(sp: Float) {
+        if (!sp.isFinite() || sp <= 0f) {
+            _uiState.update { it.copy(message = "سرعة Replay يجب أن تكون موجبة وصالحة") }
+            return
+        }
+        replayEngine.setSpeed(sp)
+    }
 
     fun setInteractionMode(mode: ReplayInteractionMode) {
         _uiState.update { it.copy(interactionMode = mode) }
     }
 
     fun resetReplay() {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
+            _uiState.update { it.copy(message = "لا يمكن إعادة جلسة Replay قبل تحميل الشموع") }
+            return
+        }
         replayEngine.pause()
         resetReplayAccount()
         nextId = 1L
