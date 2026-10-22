@@ -53,6 +53,22 @@ class ReplayPerformanceAnalyticsTest {
     }
 
     @Test
+    fun summaryExportContainsReproducibleKeyMetrics() {
+        val report = ReplayPerformanceAnalytics.calculate(
+            emptyList(),
+            listOf(ReplayEquitySample(0, 1000.0, 1000.0), ReplayEquitySample(1, 850.0, 850.0)),
+            1000.0,
+            850.0
+        )
+        val csv = ReplayPerformanceAnalytics.exportSummaryCsv(report)
+        assertEquals("metric,value", csv.lineSequence().first())
+        org.junit.Assert.assertTrue(csv.contains("maximum_drawdown_percent,15.000000"))
+        org.junit.Assert.assertTrue(csv.contains("equity_return_percent,-15.000000"))
+        org.junit.Assert.assertTrue(csv.contains("sampled_bars,2.000000"))
+        org.junit.Assert.assertTrue(ReplayPerformanceAnalytics.exportTradesCsv(emptyList()).startsWith("closed_trade_number"))
+    }
+
+    @Test
     fun nonFiniteEquitySamplesAreExcludedFromStatisticsAndExport() {
         val samples = listOf(
             ReplayEquitySample(0, 1000.0, 1000.0),
