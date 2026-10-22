@@ -430,8 +430,8 @@ class ChartViewModel(
 
     private fun observeAccountPositions() {
         viewModelScope.launch {
-            tradingRepository.selectedAccount.filterNotNull().flatMapLatest { acc ->
-                tradingRepository.getPositionsForAccount(acc.id)
+            tradingRepository.selectedAccount.flatMapLatest { acc ->
+                if (acc == null) flowOf(emptyList()) else tradingRepository.getPositionsForAccount(acc.id)
             }.collect { positions ->
                 val currentSym = _uiState.value.selectedSymbol
                 allPositions = positions
@@ -443,8 +443,8 @@ class ChartViewModel(
 
     private fun observePendingOrders() {
         viewModelScope.launch {
-            tradingRepository.selectedAccount.filterNotNull().flatMapLatest { acc ->
-                tradingRepository.getPendingOrdersForAccount(acc.id)
+            tradingRepository.selectedAccount.flatMapLatest { acc ->
+                if (acc == null) flowOf(emptyList()) else tradingRepository.getPendingOrdersForAccount(acc.id)
             }.collect { orders ->
                 val currentSym = _uiState.value.selectedSymbol
                 allPendingOrders = orders
@@ -456,8 +456,8 @@ class ChartViewModel(
 
     private fun observeHistoricalTrades() {
         viewModelScope.launch {
-            tradingRepository.selectedAccount.filterNotNull().flatMapLatest { acc ->
-                tradingRepository.getTradesForAccount(acc.id)
+            tradingRepository.selectedAccount.flatMapLatest { acc ->
+                if (acc == null) flowOf(emptyList()) else tradingRepository.getTradesForAccount(acc.id)
             }.collect { trades ->
                 val currentSym = _uiState.value.selectedSymbol
                 allHistoricalTrades = trades
