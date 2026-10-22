@@ -115,6 +115,9 @@ fun CandlestickChart(
 
     val transformRef = remember { arrayOfNulls<ChartTransform>(1) }
     LaunchedEffect(candles) { transformRef[0] = null }
+    // Avoid creating a new visible OHLC list or scanning the entire history
+    // during pan/zoom; range queries are served by the immutable price index.
+    val priceRangeIndex = remember(candles) { ChartPriceRangeIndex(candles) }
 
     // Drawing Interaction State
     var drawingStartOffset by remember { mutableStateOf<Offset?>(null) }
@@ -274,8 +277,9 @@ fun CandlestickChart(
             if (visibleCandles.isEmpty()) return@Canvas
 
             // Calculate min & max prices for visible range
-            var minP = visibleCandles.minOfOrNull { it.low } ?: 0.0
-            var maxP = visibleCandles.maxOfOrNull { it.high } ?: 1.0
+            val priceRange = priceRangeIndex.query(startIndex, endIndex)
+            var minP = priceRange.first
+            var maxP = priceRange.second
             if (minP == maxP) {
                 minP *= 0.99
                 maxP *= 1.01
