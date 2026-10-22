@@ -188,15 +188,21 @@ class ReplayViewModel(
         replayLoadJob = viewModelScope.launch {
             try {
                 val now = System.currentTimeMillis()
-                val interval = tf.minutes * 60 * 1000L
-                val from = now - (interval * 300)
-                val candles = marketDataRepository.getCandles(symbol, tf, from, now)
+                val interval = tf.minutes * 60_000L
+                // Historical data requires aligned, fully closed candle OPEN timestamps.
+                // Requesting an unfinished bar causes the verified repository to reject replay.
+                val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
+                    .currentOpen(now, interval) - interval
+                val from = (lastClosedOpen - interval * 299L).coerceAtLeast(0L)
+                val candles = marketDataRepository.getCandles(symbol, tf, from, lastClosedOpen)
                 if (candles.isEmpty()) {
                     _uiState.update {
                         it.copy(isLoading = false, message = "لا توجد شموع تاريخية موثوقة لهذا الرمز. اختر BTCUSDT أو ETHUSDT.")
                     }
                     return@launch
                 }
+                // A superseded request must not initialize the engine with the old instrument.
+                if (_uiState.value.symbol != symbol || _uiState.value.timeframe != tf) return@launch
                 replayEngine.initialize(candles, startIndex = minOf(20, candles.lastIndex))
                 _uiState.update { it.copy(isLoading = false) }
                 saveAccountSnapshot()
@@ -316,6 +322,10 @@ class ReplayViewModel(
         if (_uiState.value.isLoading || tick == null ||
             !tick.symbol.equals(_uiState.value.symbol, ignoreCase = true) ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
+            !volume.isFinite() || volume <= 0.0 ||
+            !requestedPrice.isFinite() || requestedPrice <= 0.0 ||
+            (sl != null && (!sl.isFinite() || sl <= 0.0)) ||
+            (tp != null && (!tp.isFinite() || tp <= 0.0)) ||
             type == OrderType.MARKET ||
             (type in listOf(OrderType.BUY_LIMIT, OrderType.BUY_STOP) && side != OrderSide.BUY) ||
             (type in listOf(OrderType.SELL_LIMIT, OrderType.SELL_STOP) && side != OrderSide.SELL)) {
@@ -368,12 +378,20 @@ class ReplayViewModel(
     }
 
     fun executeOrder(side: OrderSide, volume: Double = 0.01, sl: Double? = null, tp: Double? = null) {
-        val candle = replayEngine.currentCandle.value ?: return
-        val tick = replayEngine.currentTick.value ?: return
+        val candle = replayEngine.currentCandle.value ?: run {
+            _uiState.update { it.copy(message = "لا توجد شمعة Replay متاحة للتداول") }
+            return
+        }
+        val tick = replayEngine.currentTick.value ?: run {
+            _uiState.update { it.copy(message = "لا يوجد سعر Replay متاح للتداول") }
+            return
+        }
         if (_uiState.value.isLoading || tick.symbol != _uiState.value.symbol ||
             candle.symbol != tick.symbol ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
-            !volume.isFinite() || volume <= 0.0) {
+            !volume.isFinite() || volume <= 0.0 ||
+            (sl != null && (!sl.isFinite() || sl <= 0.0)) ||
+            (tp != null && (!tp.isFinite() || tp <= 0.0))) {
             _uiState.update { it.copy(message = "تعذر تنفيذ الأمر: سعر أو حجم Replay غير صالح") }
             return
         }
@@ -414,9 +432,12 @@ class ReplayViewModel(
     }
 
     fun closePosition(posId: Long) {
-        val pos = openPositions.firstOrNull { it.id == posId } ?: return
+        val pos = openPositions.firstOrNull { it.id == posId } ?: run {
+            _uiState.update { it.copy(message = "الصفقة غير موجودة في Replay") }
+            return
+        }
         val tick = replayEngine.currentTick.value
-        if (tick == null || tick.symbol != pos.symbol ||
+        if (_uiState.value.isLoading || tick == null || tick.symbol != pos.symbol ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid) {
             _uiState.update { it.copy(message = "لا يمكن إغلاق الصفقة دون سعر Replay صالح") }
             return
@@ -484,8 +505,8 @@ class ReplayViewModel(
 
     fun setBreakEven(posId: Long) {
         val pos = openPositions.firstOrNull { it.id == posId } ?: return
-        val tick = replayEngine.currentTick.value ?: return
-        if (tick.symbol != pos.symbol ||
+        val tick = replayEngine.currentTick.value
+        if (_uiState.value.isLoading || tick == null || tick.symbol != pos.symbol ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid) {
             _uiState.update { it.copy(message = "سعر Replay غير صالح لتفعيل التعادل") }
             return
