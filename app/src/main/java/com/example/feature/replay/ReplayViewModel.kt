@@ -300,8 +300,15 @@ class ReplayViewModel(
             return
         }
         replayEngine.pause()
-        val advanced = replayEngine.advanceBars(count)
-        _uiState.update { it.copy(message = "تم تنفيذ $advanced شمعة بالتسلسل دون تخطي أحداث التداول") }
+        // A long batch must not monopolize the Compose main thread.
+        viewModelScope.launch {
+            var advanced = 0
+            while (advanced < count && replayEngine.stepForward()) {
+                advanced++
+                if (advanced % 10 == 0) kotlinx.coroutines.yield()
+            }
+            _uiState.update { it.copy(message = "تم تنفيذ $advanced شمعة بالتسلسل دون تخطي أحداث التداول") }
+        }
     }
 
     fun stepBackward() {
