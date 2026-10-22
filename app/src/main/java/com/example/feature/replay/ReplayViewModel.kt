@@ -44,6 +44,9 @@ data class ReplayUiState(
     val pendingOrders: List<Order> = emptyList(),
     val closedTrades: List<TradeJournalEntry> = emptyList(),
     val isPlaying: Boolean = false,
+    val isBatchAdvancing: Boolean = false,
+    val batchCompletedBars: Int = 0,
+    val batchRequestedBars: Int = 0,
     val speed: Float = 1.0f,
     val currentIndex: Int = 0,
     val totalCandles: Int = 0,
@@ -81,6 +84,10 @@ class ReplayViewModel(
         batchAdvanceJob?.cancel()
         batchAdvanceJob = null
         batchAdvanceProgress = 0
+        _uiState.update {
+            if (!it.isBatchAdvancing && it.batchCompletedBars == 0) it
+            else it.copy(isBatchAdvancing = false, batchCompletedBars = 0, batchRequestedBars = 0)
+        }
     }
 
     private data class AccountSnapshot(
@@ -320,6 +327,7 @@ class ReplayViewModel(
         // Execute every candle in order; cancellation invalidates this generation.
         // A bounded yield allows UI commands to interrupt a long session.
         val generation = batchAdvanceGeneration
+        _uiState.update { it.copy(isBatchAdvancing = true, batchCompletedBars = 0, batchRequestedBars = count) }
         batchAdvanceJob = viewModelScope.launch {
             var advanced = 0
             try {
@@ -329,7 +337,10 @@ class ReplayViewModel(
                     replayEngine.stepForward()) {
                     advanced++
                     batchAdvanceProgress = advanced
-                    if (advanced % 5 == 0) kotlinx.coroutines.yield()
+                    if (advanced % 5 == 0) {
+                        _uiState.update { it.copy(batchCompletedBars = advanced) }
+                        kotlinx.coroutines.yield()
+                    }
                 }
                 if (generation == batchAdvanceGeneration) {
                     _uiState.update {
@@ -340,6 +351,7 @@ class ReplayViewModel(
                 if (generation == batchAdvanceGeneration) {
                     batchAdvanceJob = null
                     batchAdvanceProgress = 0
+                    _uiState.update { it.copy(isBatchAdvancing = false, batchCompletedBars = advanced) }
                 }
             }
         }
