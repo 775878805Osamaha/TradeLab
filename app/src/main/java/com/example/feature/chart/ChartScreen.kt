@@ -671,8 +671,9 @@ fun ChartScreen(
                 }
             }
 
-            // Quick Execution Bar
-            Surface(
+            // No executable bid/ask exists for historical-only metals and forex.
+            // Keep their chart unobstructed; show execution only for crypto.
+            if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) Surface(
                 color = TradingCard,
                 tonalElevation = 0.dp,
                 border = androidx.compose.foundation.BorderStroke(1.dp, TradingBorder)
