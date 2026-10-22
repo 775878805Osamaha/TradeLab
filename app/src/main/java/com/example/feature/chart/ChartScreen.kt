@@ -351,7 +351,7 @@ fun ChartScreen(
             }
 
             // Compact icon toolbar: keep the chart as the primary surface.
-            Row(
+            if (!immersiveChart) Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
@@ -369,7 +369,7 @@ fun ChartScreen(
                     Icon(Icons.Default.Tune, contentDescription = "إعدادات الشارت", tint = TradingTextSecondary)
                 }
             }
-            if (showChartExtras) {
+            if (showChartExtras && !immersiveChart) {
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(horizontal = 8.dp, vertical = 2.dp),
@@ -425,7 +425,7 @@ fun ChartScreen(
                 marketTick?.source == "BINANCE_WEBSOCKET" -> "Binance · بث مباشر"
                 else -> "Binance · تحديث عبر الإنترنت"
             }
-            if (!isEmbeddedReplay) Row(
+            if (!immersiveChart && !isEmbeddedReplay) Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -441,7 +441,7 @@ fun ChartScreen(
                 }
             }
 
-            if (!isEmbeddedReplay && verifiedBinancePair && !marketTickIsLive) {
+            if (!immersiveChart && !isEmbeddedReplay && verifiedBinancePair && !marketTickIsLive) {
                 Text(
                     text = "تشخيص الاتصال: ${uiState.connectionDiagnostic}",
                     color = TradingTextSecondary,
