@@ -50,6 +50,7 @@ fun ReplayScreen(
     val uiState by viewModel.uiState.collectAsState()
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
     var showJumpDialog by remember { mutableStateOf(false) }
+    var showHistoryDialog by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var indicatorSettings by remember { mutableStateOf(IndicatorSettings()) }
     // Heavy calculations run off the Compose/UI thread. produceState cancels
@@ -120,6 +121,9 @@ fun ReplayScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showHistoryDialog = true }, modifier = Modifier.testTag("replay_history_btn")) {
+                        Icon(Icons.Default.History, contentDescription = "نطاق البيانات التاريخية", tint = TradingAccentLight)
+                    }
                     IconButton(onClick = { showJumpDialog = true }, modifier = Modifier.testTag("replay_jump_btn")) {
                         Icon(Icons.Default.DateRange, contentDescription = "قفز لتاريخ", tint = TradingAccentLight)
                     }
@@ -623,6 +627,40 @@ fun ReplayScreen(
                 ) { Text("وضع الأمر") }
             },
             dismissButton = { TextButton(onClick = { showOrderTicket = false }) { Text("إلغاء") } }
+        )
+    }
+
+    // Verified historical range selection. Reloading starts a clean replay
+    // account so old orders cannot contaminate a different dataset.
+    if (showHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showHistoryDialog = false },
+            title = { Text("نطاق بيانات الباك تيست") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("اختر عدد الشموع التاريخية المكتملة من المصدر الحقيقي. تغيير النطاق يعيد ضبط جلسة Replay والصفقات.")
+                    listOf(300, 1_000, 3_000, 5_000).forEach { count ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                showHistoryDialog = false
+                                viewModel.loadReplayData(uiState.symbol, uiState.timeframe, count)
+                            }.padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = uiState.requestedHistoryBars == count,
+                                onClick = {
+                                    showHistoryDialog = false
+                                    viewModel.loadReplayData(uiState.symbol, uiState.timeframe, count)
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("$count شمعة")
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showHistoryDialog = false }) { Text("إغلاق") } }
         )
     }
 

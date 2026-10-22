@@ -38,6 +38,7 @@ data class ReplayUiState(
     val speed: Float = 1.0f,
     val currentIndex: Int = 0,
     val totalCandles: Int = 0,
+    val requestedHistoryBars: Int = 300,
     val currentReplayTime: Long = 0L,
     val interactionMode: ReplayInteractionMode = ReplayInteractionMode.MANUAL,
     val selectedStrategyName: String? = null,
@@ -166,7 +167,12 @@ class ReplayViewModel(
         }
     }
 
-    fun loadReplayData(symbol: String = "BTCUSDT", tf: Timeframe = Timeframe.M15) {
+    fun loadReplayData(
+        symbol: String = "BTCUSDT",
+        tf: Timeframe = Timeframe.M15,
+        historyBars: Int = _uiState.value.requestedHistoryBars
+    ) {
+        require(historyBars in 50..5_000) { "Replay history must contain 50 to 5000 bars" }
         replayLoadJob?.cancel()
         replayEngine.pause()
         // Immediately invalidate the previous engine quote as well as UI flows:
@@ -180,7 +186,8 @@ class ReplayViewModel(
         // Do not continue displaying a previous instrument's replay while switching.
         _uiState.update {
             it.copy(
-                symbol = symbol, timeframe = tf, isLoading = true, message = null,
+                symbol = symbol, timeframe = tf, requestedHistoryBars = historyBars,
+                isLoading = true, message = null,
                 visibleCandles = emptyList(), currentCandle = null, latestTick = null,
                 currentIndex = 0, totalCandles = 0, currentReplayTime = 0L,
                 isPlaying = false
@@ -200,7 +207,7 @@ class ReplayViewModel(
                 // Requesting an unfinished bar causes the verified repository to reject replay.
                 val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
                     .currentOpen(now, interval) - interval
-                val from = (lastClosedOpen - interval * 299L).coerceAtLeast(0L)
+                val from = (lastClosedOpen - interval * (historyBars - 1L)).coerceAtLeast(0L)
                 val candles = marketDataRepository.getCandles(symbol, tf, from, lastClosedOpen)
                 if (candles.size < 2) {
                     _uiState.update {
@@ -209,7 +216,9 @@ class ReplayViewModel(
                     return@launch
                 }
                 // A superseded request must not initialize the engine with the old instrument.
-                if (_uiState.value.symbol != symbol || _uiState.value.timeframe != tf) return@launch
+                if (_uiState.value.symbol != symbol ||
+                    _uiState.value.timeframe != tf ||
+                    _uiState.value.requestedHistoryBars != historyBars) return@launch
                 if (candles.any { it.symbol != symbol || it.timeframe != tf } ||
                     candles.zipWithNext().any { (a, b) -> b.openTime <= a.openTime }) {
                     _uiState.update { it.copy(isLoading = false, message = "بيانات Replay غير متسقة؛ أُلغيت الجلسة لحماية نتائج الاختبار") }
@@ -223,7 +232,8 @@ class ReplayViewModel(
             } catch (error: Exception) {
                 // A failed, cancelled or replaced load must never overwrite another session.
                 _uiState.update { state ->
-                    if (state.symbol == symbol && state.timeframe == tf) {
+                    if (state.symbol == symbol && state.timeframe == tf &&
+                        state.requestedHistoryBars == historyBars) {
                         state.copy(
                             isLoading = false,
                             message = "تعذر تحميل بيانات إعادة العرض لهذا الرمز. تحقق من الاتصال وتوفر الشموع المكتملة."
