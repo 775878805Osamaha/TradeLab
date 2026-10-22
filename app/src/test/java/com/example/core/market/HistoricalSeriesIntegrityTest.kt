@@ -66,6 +66,12 @@ class HistoricalSeriesIntegrityTest {
         ).isValid)
     }
 
+    @Test fun overlappingHistoricalBarsAreRejected() {
+        assertFalse(DataIntegrityValidator.validateHistoricalSeries(
+            listOf(candle(900_000L), candle(1_200_000L))
+        ).isValid)
+    }
+
     @Test fun emptyHistoryIsRejected() {
         assertFalse(DataIntegrityValidator.validateHistoricalSeries(emptyList()).isValid)
     }
