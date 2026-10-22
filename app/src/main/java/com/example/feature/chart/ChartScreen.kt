@@ -259,6 +259,16 @@ fun ChartScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("REPLAY", color = TradingGold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    if (replayState.currentCandle != null) {
+                        Text(
+                            java.text.SimpleDateFormat("MM/dd HH:mm", Locale.US).apply {
+                                timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            }.format(java.util.Date(replayState.currentCandle!!.openTime)) + " UTC",
+                            color = TradingTextSecondary,
+                            fontSize = 10.sp,
+                            modifier = Modifier.testTag("chart_replay_candle_utc")
+                        )
+                    }
                     IconButton(
                         onClick = { replayViewModel.resetReplay() },
                         enabled = !replayState.isLoading && replayState.totalCandles > 0,
