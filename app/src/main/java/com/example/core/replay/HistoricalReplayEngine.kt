@@ -70,8 +70,15 @@ class HistoricalReplayEngine(
      */
     fun initialize(candles: List<Candle>, startIndex: Int = 10) {
         pause()
+        // A backtest must never silently remove, reorder or deduplicate historical bars.
+        // Reject a bad dataset before it can change fills, stops or performance metrics.
+        val integrity = DataIntegrityValidator.validateHistoricalSeries(candles)
+        require(integrity.isValid) {
+            (integrity as? com.example.core.market.ValidationResult.Invalid)?.reason
+                ?: "Invalid historical replay series"
+        }
         checkpoints.clear()
-        allCandles = DataIntegrityValidator.sanitizeCandles(candles)
+        allCandles = candles.toList()
         _totalCandles.value = allCandles.size
 
         val safeStart = startIndex.coerceIn(0, (allCandles.size - 1).coerceAtLeast(0))
