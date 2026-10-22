@@ -64,6 +64,7 @@ class TwelveDataHistoricalProvider(
             .addQueryParameter("start_date", start)
             .addQueryParameter("end_date", end)
             .addQueryParameter("timezone", "UTC")
+            .addQueryParameter("outputsize", "5000")
             .addQueryParameter("apikey", apiKey)
             .build()
         // Never place this URL (which contains a credential) in logs or error messages.
@@ -108,6 +109,13 @@ class TwelveDataHistoricalProvider(
             expectedSymbol = symbol, expectedTimeframe = timeframe
         ).also {
             if (it.size < 2) throw IOException("Insufficient Twelve Data history for $symbol")
+            // Detect provider truncation: the response must span the requested
+            // starting bar (weekend gaps are allowed, invented bars are not).
+            val tolerance = if (timeframe.minutes >= 1440) 4L * 24 * 60 * 60 * 1000
+                else 3L * 24 * 60 * 60 * 1000
+            if (it.first().openTime - from > tolerance) {
+                throw IOException("Twelve Data returned truncated history; choose fewer bars or another date")
+            }
         }
     }
 }
