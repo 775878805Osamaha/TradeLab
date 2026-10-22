@@ -492,6 +492,16 @@ fun ChartScreen(
                         }
                     }
                 }
+                replayState.message?.takeIf { it.isNotBlank() }?.let { replayMessage ->
+                    Text(
+                        replayMessage,
+                        color = TradingGold,
+                        fontSize = 11.sp,
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .testTag("chart_replay_status_message")
+                    )
+                }
                 if (replayState.isLoading || replayState.totalCandles == 0) {
                     Text(if (replayState.isLoading) "جار تحميل بيانات الإعادة..." else "لا تتوفر شموع تاريخية للإعادة",
                         color = TradingTextSecondary, fontSize = 11.sp,
