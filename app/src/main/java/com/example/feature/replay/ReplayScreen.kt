@@ -53,6 +53,9 @@ fun ReplayScreen(
     val clipboardManager = LocalClipboardManager.current
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
     var showJumpDialog by remember { mutableStateOf(false) }
+    var chartFocusMode by remember { mutableStateOf(false) }
+    var showChartTools by remember { mutableStateOf(true) }
+    var showDrawingTools by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showMarketDialog by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
@@ -131,6 +134,16 @@ fun ReplayScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { chartFocusMode = !chartFocusMode },
+                        modifier = Modifier.testTag("replay_chart_focus_btn")
+                    ) {
+                        Icon(
+                            if (chartFocusMode) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = if (chartFocusMode) "الخروج من وضع الشارت الموسع" else "تكبير الشارت",
+                            tint = TradingAccentLight
+                        )
+                    }
                     IconButton(onClick = {
                         riskPositions = uiState.maxOpenPositions.toString()
                         riskOrders = uiState.maxPendingOrders.toString()
@@ -212,6 +225,7 @@ fun ReplayScreen(
                 }
             }
 
+            if (!chartFocusMode) {
             // Mode Toggle: MANUAL vs STRATEGY
             Row(
                 modifier = Modifier
@@ -253,7 +267,21 @@ fun ReplayScreen(
                 }
             }
 
+            }
             // Replay chart tools stay on the chart screen; no separate replay chart page.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = { showChartTools = !showChartTools }, modifier = Modifier.testTag("replay_toggle_chart_tools")) {
+                    Text(if (showChartTools) "إخفاء أدوات الشارت" else "أدوات الشارت", fontSize = 11.sp)
+                }
+                TextButton(onClick = { showDrawingTools = !showDrawingTools }, modifier = Modifier.testTag("replay_toggle_drawing_tools")) {
+                    Text(if (showDrawingTools) "إخفاء الرسم" else "أدوات الرسم", fontSize = 11.sp)
+                }
+            }
+            if (showChartTools) {
             Row(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                     .padding(horizontal = 10.dp, vertical = 3.dp),
@@ -292,6 +320,8 @@ fun ReplayScreen(
                 ) { Text("إعادة ضبط الشارت", fontSize = 11.sp) }
             }
 
+            }
+            if (showDrawingTools) {
             Row(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                     .padding(horizontal = 10.dp, vertical = 2.dp),
@@ -321,6 +351,7 @@ fun ReplayScreen(
                 ) { Text("مسح الرسومات") }
             }
 
+            }
             // 2. Large Central Candlestick Chart (Zero future candles, strictly visible subset!)
             Box(
                 modifier = Modifier
@@ -362,6 +393,7 @@ fun ReplayScreen(
                 )
             }
 
+            if (!chartFocusMode) {
             // 3. Playback Controls & Speed Selector
             Surface(
                 color = TradingCard,
