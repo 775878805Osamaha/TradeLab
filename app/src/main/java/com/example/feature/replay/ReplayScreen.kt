@@ -425,6 +425,30 @@ fun ReplayScreen(
                 )
             }
 
+            if (uiState.isBatchAdvancing) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("تنفيذ الشموع: ${uiState.batchCompletedBars} / ${uiState.batchRequestedBars}",
+                            fontSize = 11.sp, color = TradingTextSecondary)
+                        TextButton(
+                            onClick = { viewModel.pause() },
+                            modifier = Modifier.testTag("replay_cancel_batch")
+                        ) { Text("إيقاف") }
+                    }
+                    LinearProgressIndicator(
+                        progress = {
+                            if (uiState.batchRequestedBars > 0)
+                                uiState.batchCompletedBars.toFloat() / uiState.batchRequestedBars
+                            else 0f
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("replay_batch_progress")
+                    )
+                }
+            }
             if (chartFocusMode) {
                 Surface(color = TradingCard, modifier = Modifier.fillMaxWidth()) {
                     Row(

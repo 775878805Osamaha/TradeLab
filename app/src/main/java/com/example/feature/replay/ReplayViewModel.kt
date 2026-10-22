@@ -44,6 +44,9 @@ data class ReplayUiState(
     val pendingOrders: List<Order> = emptyList(),
     val closedTrades: List<TradeJournalEntry> = emptyList(),
     val isPlaying: Boolean = false,
+    val isBatchAdvancing: Boolean = false,
+    val batchCompletedBars: Int = 0,
+    val batchRequestedBars: Int = 0,
     val speed: Float = 1.0f,
     val currentIndex: Int = 0,
     val totalCandles: Int = 0,
@@ -74,6 +77,16 @@ class ReplayViewModel(
     private var nextId = 1L
     private var replayLoadJob: Job? = null
     private var batchAdvanceJob: Job? = null
+    private var batchAdvanceGeneration: Long = 0L
+    private fun cancelBatchAdvance() {
+        batchAdvanceGeneration++
+        batchAdvanceJob?.cancel()
+        batchAdvanceJob = null
+        _uiState.update {
+            if (!it.isBatchAdvancing && it.batchCompletedBars == 0) it
+            else it.copy(isBatchAdvancing = false, batchCompletedBars = 0, batchRequestedBars = 0)
+        }
+    }
 
     private data class AccountSnapshot(
         val balance: Double,
@@ -132,6 +145,7 @@ class ReplayViewModel(
     private var activeStrategy: Strategy? = null
 
     fun setStrategy(strategy: Strategy?) {
+        cancelBatchAdvance()
         replayEngine.pause()
         activeStrategy = strategy
         _uiState.update { it.copy(selectedStrategyName = strategy?.name) }
@@ -197,7 +211,7 @@ class ReplayViewModel(
     ) {
         require(endOffsetBars in 0..100_000) { "Historical offset must be 0 to 100000 bars" }
         require(historyBars in 50..5_000) { "Replay history must contain 50 to 5000 bars" }
-        batchAdvanceJob?.cancel()
+        cancelBatchAdvance()
         replayLoadJob?.cancel()
         replayEngine.pause()
         // Immediately invalidate the previous engine quote as well as UI flows:
@@ -277,7 +291,7 @@ class ReplayViewModel(
     }
 
     fun play() {
-        batchAdvanceJob?.cancel()
+        cancelBatchAdvance()
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
             _uiState.update { it.copy(message = "انتظر اكتمال تحميل بيانات Replay أولًا") }
             return
@@ -285,11 +299,11 @@ class ReplayViewModel(
         replayEngine.play()
     }
     fun pause() {
-        batchAdvanceJob?.cancel()
+        cancelBatchAdvance()
         replayEngine.pause()
     }
     fun stepForward() {
-        batchAdvanceJob?.cancel()
+        cancelBatchAdvance()
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
             _uiState.update { it.copy(message = "لا توجد شموع Replay جاهزة للتقدم") }
             return
@@ -306,21 +320,41 @@ class ReplayViewModel(
             _uiState.update { it.copy(message = "عدد الشموع يجب أن يكون بين 1 و500") }
             return
         }
-        batchAdvanceJob?.cancel()
+        cancelBatchAdvance()
         replayEngine.pause()
-        // A long batch must not monopolize the Compose main thread.
+        // Execute every candle in order; cancellation invalidates this generation.
+        // A bounded yield allows UI commands to interrupt a long session.
+        val generation = batchAdvanceGeneration
+        _uiState.update { it.copy(isBatchAdvancing = true, batchCompletedBars = 0, batchRequestedBars = count) }
         batchAdvanceJob = viewModelScope.launch {
             var advanced = 0
-            while (advanced < count && replayEngine.stepForward()) {
-                advanced++
-                if (advanced % 10 == 0) kotlinx.coroutines.yield()
+            try {
+                while (advanced < count &&
+                    generation == batchAdvanceGeneration &&
+                    kotlinx.coroutines.currentCoroutineContext()[Job]?.isActive == true &&
+                    replayEngine.stepForward()) {
+                    advanced++
+                    if (advanced % 5 == 0) {
+                        _uiState.update { it.copy(batchCompletedBars = advanced) }
+                        kotlinx.coroutines.yield()
+                    }
+                }
+                if (generation == batchAdvanceGeneration) {
+                    _uiState.update {
+                        it.copy(message = "تم تنفيذ $advanced شمعة بالتسلسل دون تخطي أحداث التداول")
+                    }
+                }
+            } finally {
+                if (generation == batchAdvanceGeneration) {
+                    batchAdvanceJob = null
+                                _uiState.update { it.copy(isBatchAdvancing = false, batchCompletedBars = advanced) }
+                }
             }
-            _uiState.update { it.copy(message = "تم تنفيذ $advanced شمعة بالتسلسل دون تخطي أحداث التداول") }
         }
     }
 
     fun stepBackward() {
-        batchAdvanceJob?.cancel()
+        cancelBatchAdvance()
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
             _uiState.update { it.copy(message = "لا توجد جلسة Replay جاهزة للرجوع") }
             return
@@ -351,7 +385,7 @@ class ReplayViewModel(
     }
 
     fun jumpToTimestamp(timestamp: Long) {
-        batchAdvanceJob?.cancel()
+        cancelBatchAdvance()
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
             _uiState.update { it.copy(message = "لا يمكن الانتقال قبل تحميل بيانات Replay") }
             return
@@ -372,6 +406,7 @@ class ReplayViewModel(
     }
 
     fun setSpeed(sp: Float) {
+        cancelBatchAdvance()
         if (!sp.isFinite() || sp <= 0f) {
             _uiState.update { it.copy(message = "سرعة Replay يجب أن تكون موجبة وصالحة") }
             return
@@ -384,6 +419,7 @@ class ReplayViewModel(
         maxLosses: Int,
         maxLossUsd: Double
     ) {
+        cancelBatchAdvance()
         if (maxLosses !in 0..100 || !maxLossUsd.isFinite() || maxLossUsd < 0.0) {
             _uiState.update { it.copy(message = "إعدادات حدود الخسائر غير صالحة") }
             return
@@ -403,6 +439,7 @@ class ReplayViewModel(
         ReplayRiskPolicy.consecutiveLosses(closedTrades.map { it.netProfitLoss })
 
     fun configureRiskLimits(maxPositions: Int, maxOrders: Int, maxDrawdown: Double) {
+        cancelBatchAdvance()
         if (maxPositions !in 1..100 || maxOrders !in 1..200 ||
             !maxDrawdown.isFinite() || maxDrawdown !in 1.0..100.0) {
             _uiState.update { it.copy(message = "إعدادات المخاطر غير صالحة") }
@@ -479,7 +516,7 @@ class ReplayViewModel(
     }
 
     fun resetReplay() {
-        batchAdvanceJob?.cancel()
+        cancelBatchAdvance()
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
             _uiState.update { it.copy(message = "لا يمكن إعادة جلسة Replay قبل تحميل الشموع") }
             return
@@ -533,6 +570,7 @@ class ReplayViewModel(
         sl: Double? = null,
         tp: Double? = null
     ) {
+        cancelBatchAdvance()
         if (!canAcceptReplayOrder(isPending = true)) return
         replayEngine.pause()
         val tick = replayEngine.currentTick.value
@@ -597,6 +635,7 @@ class ReplayViewModel(
     }
 
     fun executeOrder(side: OrderSide, volume: Double = 0.01, sl: Double? = null, tp: Double? = null) {
+        cancelBatchAdvance()
         if (!canAcceptReplayOrder(isPending = false)) return
         replayEngine.pause()
         val candle = replayEngine.currentCandle.value ?: run {
@@ -654,6 +693,7 @@ class ReplayViewModel(
     }
 
     fun closePosition(posId: Long) {
+        cancelBatchAdvance()
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
         replayEngine.pause()
         val pos = openPositions.firstOrNull { it.id == posId } ?: run {
