@@ -74,6 +74,33 @@ object DataIntegrityValidator {
     }
 
     /**
+     * Strict historical validation for backtesting. Unlike sanitizeCandles,
+     * this rejects corrupt, mixed-instrument, duplicated or unordered input
+     * instead of silently repairing it and changing the tested sample.
+     * Market closures are allowed: gaps are not automatically synthetic bars.
+     */
+    fun validateHistoricalSeries(candles: List<Candle>): ValidationResult {
+        if (candles.isEmpty()) return ValidationResult.Invalid("Historical series is empty")
+        val symbol = candles.first().symbol
+        val timeframe = candles.first().timeframe
+        var previousOpen = Long.MIN_VALUE
+        for ((index, candle) in candles.withIndex()) {
+            val validity = validateCandle(candle)
+            if (validity is ValidationResult.Invalid) {
+                return ValidationResult.Invalid("Bar $index: ${validity.reason}")
+            }
+            if (candle.symbol != symbol || candle.timeframe != timeframe) {
+                return ValidationResult.Invalid("Mixed symbol or timeframe at bar $index")
+            }
+            if (candle.openTime <= previousOpen) {
+                return ValidationResult.Invalid("Duplicate or unordered timestamp at bar $index")
+            }
+            previousOpen = candle.openTime
+        }
+        return ValidationResult.Valid
+    }
+
+    /**
      * Enforces replay temporal barrier.
      * Prevents future candles during historical replay, eliminating lookahead bias.
      */
