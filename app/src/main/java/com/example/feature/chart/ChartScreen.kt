@@ -52,6 +52,9 @@ fun ChartScreen(
     var showChartExtras by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
+    var immersiveChart by remember { mutableStateOf(true) }
+    var showHistoricalSourceDialog by remember { mutableStateOf(false) }
+    var historicalApiKeyInput by remember { mutableStateOf("") }
 
     // Refresh the freshness indicator even when the market stream stops emitting.
     var quoteClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -78,6 +81,40 @@ fun ChartScreen(
     // Trade detail dialog when tapping a marker on chart
     uiState.selectedTradeForDetail?.let { trade ->
         TradeDetailDialog(trade = trade, onDismiss = { viewModel.selectTradeForDetail(null) })
+    }
+
+    if (showHistoricalSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showHistoricalSourceDialog = false },
+            title = { Text("مصدر شموع الذهب والفوركس") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Twelve Data — بيانات تاريخية حقيقية بمفتاح API خاص بك. ليست أسعارًا مباشرة للتنفيذ.",
+                        fontSize = 12.sp, color = TradingTextSecondary)
+                    OutlinedTextField(
+                        value = historicalApiKeyInput,
+                        onValueChange = { historicalApiKeyInput = it },
+                        label = { Text("Twelve Data API Key") },
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth().testTag("chart_historical_provider_key")
+                    )
+                    Text("المفتاح يبقى في الذاكرة ولا يُحفظ في ملفات التطبيق.",
+                        fontSize = 11.sp, color = TradingTextSecondary)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = historicalApiKeyInput.isNotBlank(),
+                    onClick = {
+                        viewModel.configureHistoricalProviderKey(historicalApiKeyInput)
+                        historicalApiKeyInput = ""
+                        showHistoricalSourceDialog = false
+                    }
+                ) { Text("تفعيل وتحميل") }
+            },
+            dismissButton = { TextButton(onClick = { showHistoricalSourceDialog = false }) { Text("إلغاء") } }
+        )
     }
 
     if (showIndicatorsDialog) {
@@ -110,12 +147,29 @@ fun ChartScreen(
                         )
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = TradingTextSecondary)
                         Spacer(modifier = Modifier.width(4.dp))
-                        DataSourceBadge(sourceType = if (headerQuoteVerified) uiState.dataSourceType else DataSourceType.STALE_DATA)
+                        if (headerQuoteVerified) {
+                            DataSourceBadge(sourceType = uiState.dataSourceType)
+                        } else {
+                            Text(
+                                text = if (uiState.candles.isNotEmpty()) "HISTORY" else "OFFLINE",
+                                fontSize = 10.sp, color = TradingTextSecondary,
+                                modifier = Modifier.testTag("chart_source_mode")
+                            )
+                        }
                     }
                 },
                 actions = {
-                    // Refresh is only actionable for instruments backed by verified candle feeds.
-                    if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
+                    IconButton(
+                        onClick = { immersiveChart = !immersiveChart },
+                        modifier = Modifier.testTag("chart_immersive_toggle")
+                    ) {
+                        Icon(
+                            if (immersiveChart) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = if (immersiveChart) "عرض التفاصيل" else "تكبير الشارت",
+                            tint = TradingAccentLight
+                        )
+                    }
+                    if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT", "XAUUSD", "XAGUSD", "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", "EURJPY", "GBPJPY", "EURGBP")) {
                         IconButton(
                             onClick = { viewModel.retryCandleLoad() },
                             modifier = Modifier.testTag("chart_header_refresh_btn")
@@ -153,7 +207,7 @@ fun ChartScreen(
                 .padding(paddingValues)
         ) {
             // Distinguish a verified live quote from delayed or unsupported data.
-            if (!headerQuoteVerified && !isEmbeddedReplay) {
+            if (!immersiveChart && !headerQuoteVerified && !isEmbeddedReplay) {
                 Text(
                     text = if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
                         "السعر المباشر غير مؤكد حاليًا — لا تعتمد عليه لتنفيذ صفقة"
@@ -332,8 +386,29 @@ fun ChartScreen(
 
             }
 
+            // Tools remain accessible as floating buttons when chart is expanded.
+            if (immersiveChart) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(36.dp).testTag("chart_immersive_indicators")) {
+                        Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
+                    }
+                    IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.size(36.dp).testTag("chart_immersive_draw")) {
+                        Icon(Icons.Default.Draw, contentDescription = "الرسم", tint = TradingAccentLight)
+                    }
+                    IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(36.dp).testTag("chart_immersive_reset")) {
+                        Icon(Icons.Default.CenterFocusWeak, contentDescription = "إعادة ضبط الشارت", tint = TradingAccentLight)
+                    }
+                    IconButton(onClick = { showChartExtras = !showChartExtras }, modifier = Modifier.size(36.dp).testTag("chart_immersive_settings")) {
+                        Icon(Icons.Default.Tune, contentDescription = "إعدادات الرسم", tint = TradingTextSecondary)
+                    }
+                }
+            }
             // Compact icon toolbar: keep the chart as the primary surface.
-            Row(
+            if (!immersiveChart) Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
@@ -407,7 +482,7 @@ fun ChartScreen(
                 marketTick?.source == "BINANCE_WEBSOCKET" -> "Binance · بث مباشر"
                 else -> "Binance · تحديث عبر الإنترنت"
             }
-            if (!isEmbeddedReplay) Row(
+            if (!immersiveChart && !isEmbeddedReplay) Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -423,7 +498,7 @@ fun ChartScreen(
                 }
             }
 
-            if (!isEmbeddedReplay && verifiedBinancePair && !marketTickIsLive) {
+            if (!immersiveChart && !isEmbeddedReplay && verifiedBinancePair && !marketTickIsLive) {
                 Text(
                     text = "تشخيص الاتصال: ${uiState.connectionDiagnostic}",
                     color = TradingTextSecondary,
@@ -484,6 +559,12 @@ fun ChartScreen(
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center
                         )
+                        if (uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT") && !viewModel.hasHistoricalProviderKey()) {
+                            Button(onClick = { showHistoricalSourceDialog = true },
+                                modifier = Modifier.testTag("chart_connect_forex_provider")) {
+                                Text("ربط مصدر البيانات")
+                            }
+                        }
                         if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
                         Button(
                             onClick = { viewModel.retryCandleLoad() },
