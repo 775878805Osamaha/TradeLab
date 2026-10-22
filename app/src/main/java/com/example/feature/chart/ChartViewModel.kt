@@ -557,7 +557,17 @@ class ChartViewModel(
         candleLoadJob?.cancel()
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
-        _uiState.update { it.copy(isLoading = true, candleLoadError = null) }
+        _uiState.update {
+            it.copy(
+                isLoading = true,
+                candleLoadError = null,
+                // Retain the last verified chart history during a manual retry,
+                // but clear old indicators until the new series is confirmed.
+                smaValues = emptyList(), emaValues = emptyList(),
+                bollingerValues = emptyList(), vwapValues = emptyList(),
+                rsiValues = emptyList(), macdValues = emptyList(), atrValues = emptyList()
+            )
+        }
         loadCandlesForCurrentSymbol()
     }
 
