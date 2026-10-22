@@ -232,11 +232,7 @@ fun ReplayScreen(
             }
 
             if (!chartFocusMode) {
-            val riskStatus = remember(
-                uiState.currentBalance, uiState.currentEquity, uiState.closedTrades,
-                uiState.openPositions, uiState.riskGuardEnabled, uiState.maxConsecutiveLosses,
-                uiState.maxSessionLossUsd, uiState.maxDrawdownPercent, uiState.maxOpenPositions
-            ) { viewModel.currentRiskBlockReason() }
+            val riskStatus = viewModel.currentRiskBlockReason()
             if (riskStatus != null && !uiState.isLoading) {
                 Surface(color = TradingNegative.copy(alpha = 0.12f), modifier = Modifier.fillMaxWidth()) {
                     Text(
