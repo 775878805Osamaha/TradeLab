@@ -262,13 +262,19 @@ class ChartViewModel(
 
         candleLoadJob?.cancel()
         candleLoadJob = viewModelScope.launch {
-            if (symbol !in setOf("BTCUSDT", "ETHUSDT")) {
-                // Do not pretend Binance provides verified Forex or gold candles.
+            if (!marketDataRepository.supportsHistoricalSymbol(symbol)) {
                 if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
                     _uiState.update {
                         it.copy(candles = emptyList(), latestTick = null, isLoading = false,
-                            candleLoadError = "لا يتوفر مصدر بيانات تاريخية موثوق لهذا الرمز حاليًا. اختر BTCUSDT أو ETHUSDT.")
+                            candleLoadError = "لا يوجد مصدر تاريخي مدعوم لهذا الرمز.")
                     }
+                }
+                return@launch
+            }
+            if (symbol !in setOf("BTCUSDT", "ETHUSDT") && !marketDataRepository.hasTwelveDataKey()) {
+                _uiState.update {
+                    it.copy(candles = emptyList(), latestTick = null, isLoading = false,
+                        candleLoadError = "افتح Replay وأدخل مفتاح Twelve Data لعرض شموع الذهب والفوركس الحقيقية.")
                 }
                 return@launch
             }
@@ -283,7 +289,7 @@ class ChartViewModel(
 
             try {
                 // Start live subscription even if historical REST loading fails.
-                subscribeToTicks(symbol)
+                if (symbol in setOf("BTCUSDT", "ETHUSDT")) subscribeToTicks(symbol)
                 val rawCandles = marketDataRepository.getCandles(symbol, tf, from, lastClosedOpen)
                 val aggregated = CandleAggregator.aggregate(rawCandles, tf)
                 if (aggregated.any { candle ->
