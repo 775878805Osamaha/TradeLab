@@ -39,7 +39,7 @@ class HistoricalCsvImporterTest {
             append(header)
             repeat(20_000) { i ->
                 val timestamp = i.toLong() * 900_000L
-                append("$timestamp,100,102,99,101,5\\n".replace("\\\\n", "\\n"))
+                appendLine("$timestamp,100,102,99,101,5")
             }
         }
         val candles = HistoricalCsvImporter.parse(
@@ -50,7 +50,7 @@ class HistoricalCsvImporterTest {
     }
 
     @Test fun excessiveCandleCountFailsInsteadOfSilentlyTruncating() {
-        val csv = header + "900000,100,105,98,104,10\\n1800000,104,106,103,105,12"
+        val csv = header + "900000,100,105,98,104,10\n1800000,104,106,103,105,12"
         try {
             HistoricalCsvImporter.parse(csv, "XAUUSD", Timeframe.M15, "broker", maxBars = 1)
             throw AssertionError("Expected bar limit rejection")
