@@ -94,6 +94,9 @@ fun ReplayScreen(
     var riskPositions by remember { mutableStateOf("10") }
     var riskOrders by remember { mutableStateOf("20") }
     var riskDrawdown by remember { mutableStateOf("100") }
+    var riskEnabled by remember { mutableStateOf(true) }
+    var riskConsecutiveLosses by remember { mutableStateOf("0") }
+    var riskSessionLoss by remember { mutableStateOf("0") }
     var editProtectionId by remember { mutableStateOf<Long?>(null) }
     var editSl by remember { mutableStateOf("") }
     var editTp by remember { mutableStateOf("") }
@@ -148,6 +151,9 @@ fun ReplayScreen(
                         riskPositions = uiState.maxOpenPositions.toString()
                         riskOrders = uiState.maxPendingOrders.toString()
                         riskDrawdown = uiState.maxDrawdownPercent.toString()
+                        riskEnabled = uiState.riskGuardEnabled
+                        riskConsecutiveLosses = uiState.maxConsecutiveLosses.toString()
+                        riskSessionLoss = uiState.maxSessionLossUsd.toString()
                         showRiskDialog = true
                     }, modifier = Modifier.testTag("replay_risk_btn")) {
                         Icon(Icons.Default.Security, contentDescription = "إدارة مخاطر Replay", tint = TradingAccentLight)
@@ -613,11 +619,20 @@ fun ReplayScreen(
         val validPositions = riskPositions.toIntOrNull()?.takeIf { it in 1..100 }
         val validOrders = riskOrders.toIntOrNull()?.takeIf { it in 1..200 }
         val validDrawdown = riskDrawdown.toDoubleOrNull()?.takeIf { it.isFinite() && it in 1.0..100.0 }
+        val validLossStreak = riskConsecutiveLosses.toIntOrNull()?.takeIf { it in 0..100 }
+        val validSessionLoss = riskSessionLoss.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0.0 }
         AlertDialog(
             onDismissRequest = { showRiskDialog = false },
             title = { Text("إدارة مخاطر Replay") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = riskEnabled, onCheckedChange = { riskEnabled = it })
+                        Text("تفعيل حواجز المخاطر", fontSize = 12.sp)
+                    }
                     Text("الحدود تمنع فتح صفقات أو أوامر جديدة عند تجاوزها؛ لا تغلق المراكز القائمة تلقائيًا.", fontSize = 12.sp, color = TradingTextSecondary)
                     OutlinedTextField(
                         value = riskPositions,
@@ -637,13 +652,27 @@ fun ReplayScreen(
                         label = { Text("حد التراجع من رأس المال الابتدائي % (1–100)") },
                         singleLine = true
                     )
+                    OutlinedTextField(
+                        value = riskConsecutiveLosses,
+                        onValueChange = { riskConsecutiveLosses = it },
+                        label = { Text("الخسائر المتتالية (0 = بدون حد)") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = riskSessionLoss,
+                        onValueChange = { riskSessionLoss = it },
+                        label = { Text("حد الخسارة المحققة بالدولار (0 = بدون حد)") },
+                        singleLine = true
+                    )
                 }
             },
             confirmButton = {
                 TextButton(
-                    enabled = validPositions != null && validOrders != null && validDrawdown != null,
+                    enabled = validPositions != null && validOrders != null && validDrawdown != null &&
+                        validLossStreak != null && validSessionLoss != null,
                     onClick = {
                         viewModel.configureRiskLimits(validPositions!!, validOrders!!, validDrawdown!!)
+                        viewModel.configureExtendedRiskLimits(riskEnabled, validLossStreak!!, validSessionLoss!!)
                         showRiskDialog = false
                     }
                 ) { Text("تطبيق الحدود") }
