@@ -53,6 +53,8 @@ fun ReplayScreen(
     val clipboardManager = LocalClipboardManager.current
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
     var showJumpDialog by remember { mutableStateOf(false) }
+    var showAdvanceDialog by remember { mutableStateOf(false) }
+    var advanceCount by remember { mutableStateOf("25") }
     var chartFocusMode by remember { mutableStateOf(false) }
     var showChartTools by remember { mutableStateOf(true) }
     var showDrawingTools by remember { mutableStateOf(false) }
@@ -138,6 +140,12 @@ fun ReplayScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { showAdvanceDialog = true },
+                        modifier = Modifier.testTag("replay_batch_advance_btn")
+                    ) {
+                        Icon(Icons.Default.FastForward, contentDescription = "تقدم آمن بعدة شموع", tint = TradingAccentLight)
+                    }
                     IconButton(
                         onClick = { showAuditDialog = true },
                         modifier = Modifier.testTag("replay_data_audit_btn")
@@ -1076,6 +1084,45 @@ fun ReplayScreen(
     }
 
     // Jump to Date Dialog
+    if (showAdvanceDialog) {
+        val count = advanceCount.toIntOrNull()?.takeIf { it in 1..500 }
+        AlertDialog(
+            onDismissRequest = { showAdvanceDialog = false },
+            title = { Text("تقدم آمن في Replay") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("تنفذ جميع الشموع بالتسلسل، بما فيها أوامر الوقف وجني الأرباح والاستراتيجيات؛ لا يتم القفز فوق أحداث التداول.",
+                        fontSize = 12.sp, color = TradingTextSecondary)
+                    OutlinedTextField(
+                        value = advanceCount,
+                        onValueChange = { advanceCount = it },
+                        label = { Text("عدد الشموع (1–500)") },
+                        singleLine = true,
+                        modifier = Modifier.testTag("replay_advance_count")
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(10, 25, 50, 100).forEach { bars ->
+                            TextButton(onClick = { advanceCount = bars.toString() }) {
+                                Text("$bars")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = count != null,
+                    onClick = {
+                        viewModel.advanceBars(count!!)
+                        showAdvanceDialog = false
+                    },
+                    modifier = Modifier.testTag("replay_advance_confirm")
+                ) { Text("تنفيذ") }
+            },
+            dismissButton = { TextButton(onClick = { showAdvanceDialog = false }) { Text("إلغاء") } }
+        )
+    }
+
     if (showJumpDialog) {
         AlertDialog(
             onDismissRequest = { showJumpDialog = false },

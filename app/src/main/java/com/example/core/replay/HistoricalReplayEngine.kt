@@ -123,6 +123,19 @@ class HistoricalReplayEngine(
     }
 
     /**
+     * Advance a bounded number of historical candles. Every candle is revealed
+     * individually, so stops, pending orders and strategies still execute in
+     * strict chronological order. Never jumps over intermediate market events.
+     */
+    fun advanceBars(count: Int): Int {
+        require(count in 1..500) { "Replay batch must contain 1..500 candles" }
+        pause()
+        var advanced = 0
+        while (advanced < count && stepForward()) advanced++
+        return advanced
+    }
+
+    /**
      * Reverses replay by one candle safely.
      */
     fun stepBackward(): Boolean {
