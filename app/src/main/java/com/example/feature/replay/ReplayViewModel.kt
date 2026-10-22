@@ -427,6 +427,8 @@ class ReplayViewModel(
         }
         if (_uiState.value.isLoading || tick.symbol != _uiState.value.symbol ||
             candle.symbol != tick.symbol ||
+            candle.timeframe != _uiState.value.timeframe ||
+            tick.timestamp != candle.openTime ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
             !volume.isFinite() || volume <= 0.0 ||
             (sl != null && (!sl.isFinite() || sl <= 0.0)) ||
@@ -477,6 +479,7 @@ class ReplayViewModel(
         }
         val tick = replayEngine.currentTick.value
         if (_uiState.value.isLoading || tick == null || tick.symbol != pos.symbol ||
+            replayEngine.currentCandle.value?.symbol != pos.symbol ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid) {
             _uiState.update { it.copy(message = "لا يمكن إغلاق الصفقة دون سعر Replay صالح") }
             return
