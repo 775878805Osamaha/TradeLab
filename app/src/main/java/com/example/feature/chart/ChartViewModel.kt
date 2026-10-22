@@ -283,7 +283,7 @@ class ChartViewModel(
             if (symbol !in setOf("BTCUSDT", "ETHUSDT") && !marketDataRepository.hasTwelveDataKey()) {
                 _uiState.update {
                     it.copy(candles = emptyList(), latestTick = null, isLoading = false,
-                        candleLoadError = "افتح Replay وأدخل مفتاح Twelve Data لعرض شموع الذهب والفوركس الحقيقية.")
+                        candleLoadError = "اضغط ربط مصدر البيانات وأدخل مفتاح Twelve Data لعرض شموع تاريخية حقيقية.")
                 }
                 return@launch
             }
