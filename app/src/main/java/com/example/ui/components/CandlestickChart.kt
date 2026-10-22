@@ -272,8 +272,8 @@ fun CandlestickChart(
 
             // Calculate Visible Candle Range from Viewport
             val visibleCount = ((chartWidth / candleWidthPx) + 3).toInt().coerceIn(1, candles.size)
-            val maxScrollOffset = (candles.size * candleWidthPx) - chartWidth
-            val clampedScroll = scrollOffsetPx.coerceIn(-maxScrollOffset.coerceAtLeast(0f), 0f)
+            val maxScrollOffset = (candles.size.toDouble() * candleWidthPx - chartWidth).coerceAtLeast(0.0).toFloat()
+            val clampedScroll = scrollOffsetPx.coerceIn(-maxScrollOffset, 0f)
 
             val scrollCandleOffset = (-clampedScroll / candleWidthPx).toInt().coerceIn(0, (candles.size - visibleCount).coerceAtLeast(0))
             val fractionalScrollPx = (-clampedScroll) % candleWidthPx
