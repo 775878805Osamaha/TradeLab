@@ -1,0 +1,42 @@
+name: Verify real gold historical candles
+
+on:
+  push:
+    branches:
+      - feature/verify-gold-history-endpoint
+  workflow_dispatch:
+
+jobs:
+  gold-ohlc-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check real XAUUSD 15m OHLC response
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import urllib.request
+          from datetime import datetime, timezone
+          url = "https://biquote.io/api/XAUUSD/ohlc?interval=15m&limit=100"
+          req = urllib.request.Request(url, headers={"User-Agent": "TradeLab-Historical-Smoke/1.0"})
+          with urllib.request.urlopen(req, timeout=20) as response:
+              assert response.status == 200, f"HTTP {response.status}"
+              payload = json.load(response)
+          assert payload.get("symbol") == "XAUUSD", "Symbol mismatch"
+          assert payload.get("interval") == "15m", "Timeframe mismatch"
+          bars = payload.get("bars")
+          assert isinstance(bars, list), "No bars array"
+          valid = []
+          for b in bars:
+              if b.get("isOpen"):
+                  continue
+              t = datetime.fromisoformat(b["openTime"].replace("Z", "+00:00"))
+              o, h, l, c = (float(b[k]) for k in ("open", "high", "low", "close"))
+              assert 0 < l <= o <= h and l <= c <= h, "Invalid OHLC"
+              assert t.tzinfo is not None, "Missing UTC timezone"
+              valid.append(t)
+          assert len(valid) >= 2, f"Not enough closed gold candles: {len(valid)}"
+          assert len(valid) == len(set(valid)), "Duplicate candle timestamps"
+          print(f"PASS: real XAUUSD 15m, {len(valid)} validated closed bars, newest={max(valid).isoformat()}")
+          PY
