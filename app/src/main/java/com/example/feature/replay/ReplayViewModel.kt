@@ -317,9 +317,16 @@ class ReplayViewModel(
                     _uiState.value.timeframe != tf ||
                     _uiState.value.requestedHistoryBars != historyBars ||
                     _uiState.value.historyEndOffsetBars != endOffsetBars) return@launch
-                if (candles.any { it.symbol != symbol || it.timeframe != tf } ||
-                    candles.zipWithNext().any { (a, b) -> b.openTime <= a.openTime }) {
-                    _uiState.update { it.copy(isLoading = false, message = "بيانات Replay غير متسقة؛ أُلغيت الجلسة لحماية نتائج الاختبار") }
+                val validation = com.example.core.market.DataIntegrityValidator
+                    .validateHistoricalSeries(candles)
+                if (!validation.isValid || candles.first().symbol != symbol ||
+                    candles.first().timeframe != tf) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            message = "بيانات Replay غير متسقة؛ أُلغيت الجلسة لحماية نتائج الاختبار"
+                        )
+                    }
                     return@launch
                 }
                 replayEngine.initialize(candles, startIndex = minOf(20, candles.lastIndex))
