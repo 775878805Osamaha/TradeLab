@@ -89,6 +89,7 @@ fun ReplayScreen(
     var chartResetTrigger by remember { mutableLongStateOf(0L) }
     var showOrderTicket by remember { mutableStateOf(false) }
     var showPerformanceDialog by remember { mutableStateOf(false) }
+    var showAuditDialog by remember { mutableStateOf(false) }
     var showDrawdownChart by remember { mutableStateOf(false) }
     var showRiskDialog by remember { mutableStateOf(false) }
     var riskPositions by remember { mutableStateOf("10") }
@@ -137,6 +138,12 @@ fun ReplayScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { showAuditDialog = true },
+                        modifier = Modifier.testTag("replay_data_audit_btn")
+                    ) {
+                        Icon(Icons.Default.FactCheck, contentDescription = "تدقيق بيانات Replay", tint = TradingAccentLight)
+                    }
                     IconButton(
                         onClick = { chartFocusMode = !chartFocusMode },
                         modifier = Modifier.testTag("replay_chart_focus_btn")
@@ -689,6 +696,51 @@ fun ReplayScreen(
                 ) { Text("تطبيق الحدود") }
             },
             dismissButton = { TextButton(onClick = { showRiskDialog = false }) { Text("إلغاء") } }
+        )
+    }
+
+    if (showAuditDialog) {
+        val audit = remember(uiState.visibleCandles, uiState.timeframe) {
+            ReplaySessionAudit.inspect(uiState.visibleCandles, uiState.timeframe.minutes)
+        }
+        AlertDialog(
+            onDismissRequest = { showAuditDialog = false },
+            title = { Text("تدقيق بيانات Replay") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("فحص الشموع التي كُشفت حتى الآن فقط، دون الاطلاع على شموع المستقبل.",
+                        fontSize = 12.sp, color = TradingTextSecondary)
+                    ReplayMetricRow("حالة البيانات", if (audit.isClean) "سليمة في النطاق المفحوص" else "توجد ملاحظات")
+                    ReplayMetricRow("الشموع المفحوصة", audit.candleCount.toString())
+                    ReplayMetricRow("أول شمعة مفحوصة", audit.firstOpenTime?.let { dateFormat.format(Date(it)) } ?: "—")
+                    ReplayMetricRow("آخر شمعة مفحوصة", audit.lastOpenTime?.let { dateFormat.format(Date(it)) } ?: "—")
+                    ReplayMetricRow("نسبة تقدم الجلسة",
+                        if (uiState.totalCandles > 0) String.format(Locale.US, "%.1f%%",
+                            (uiState.currentIndex + 1) * 100.0 / uiState.totalCandles) else "—")
+                    ReplayMetricRow("أسعار غير صالحة", audit.invalidPrices.toString())
+                    ReplayMetricRow("نطاقات OHLC غير صحيحة", audit.invalidRanges.toString())
+                    ReplayMetricRow("تكرار أو اختلال الترتيب", audit.duplicateOrOutOfOrder.toString())
+                    ReplayMetricRow("فجوات زمنية", audit.intervalGaps.toString())
+                    ReplayMetricRow("شموع مفقودة تقديريًا", audit.missingBars.toString())
+                    ReplayMetricRow("قيم حجم غير صالحة", audit.volumeAnomalies.toString())
+                    Text("هذا الفحص لا يثبت تطابق الأسعار مع TradingView أو MT5.",
+                        fontSize = 11.sp, color = TradingTextSecondary)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        clipboardManager.setText(AnnotatedString(
+                            ReplaySessionAudit.exportCsv(audit, uiState.symbol, uiState.timeframe.name)
+                        ))
+                    },
+                    modifier = Modifier.testTag("replay_copy_audit_csv")
+                ) { Text("نسخ تقرير CSV") }
+            },
+            dismissButton = { TextButton(onClick = { showAuditDialog = false }) { Text("إغلاق") } }
         )
     }
 
