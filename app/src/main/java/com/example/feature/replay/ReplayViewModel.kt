@@ -349,6 +349,10 @@ class ReplayViewModel(
             _uiState.update { it.copy(message = "انتظر اكتمال تحميل بيانات Replay أولًا") }
             return
         }
+        if (replayEngine.currentIndex.value >= _uiState.value.totalCandles - 1) {
+            _uiState.update { it.copy(message = "انتهت الشموع التاريخية؛ أعد الجلسة أو حمّل فترة أخرى") }
+            return
+        }
         replayEngine.play()
     }
     fun pause() {
@@ -361,7 +365,9 @@ class ReplayViewModel(
             _uiState.update { it.copy(message = "لا توجد شموع Replay جاهزة للتقدم") }
             return
         }
-        replayEngine.stepForward()
+        if (!replayEngine.stepForward()) {
+            _uiState.update { it.copy(message = "لا توجد شموع إضافية للتقدم") }
+        }
     }
 
     fun advanceBars(count: Int) {
