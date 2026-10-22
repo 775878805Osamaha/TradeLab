@@ -165,6 +165,13 @@ fun CandlestickChart(
             textSize = 20f
         }
     }
+    // Reuse the axis paint during crosshair drags; no allocation per frame.
+    val crosshairAxisPaint = remember {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textSize = 20f
+        }
+    }
     val timeAxisPaint = remember {
         android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.parseColor("#6B7280")
@@ -477,7 +484,7 @@ fun CandlestickChart(
                     // Price tag
                     val pAtY = transform.yToPrice(off.y)
                     drawContext.canvas.nativeCanvas.apply {
-                        val p = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = 20f; isAntiAlias = true }
+                        val p = crosshairAxisPaint
                         drawText(String.format(Locale.US, "%.2f", pAtY), chartWidth + 6f, off.y + 6f, p)
                     }
                 }
