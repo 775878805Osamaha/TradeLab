@@ -162,6 +162,7 @@ class ReplayViewModel(
 
     fun loadReplayData(symbol: String = "BTCUSDT", tf: Timeframe = Timeframe.M15) {
         replayLoadJob?.cancel()
+        replayEngine.pause()
         // Immediately invalidate the previous engine quote as well as UI flows:
         // executeOrder reads the engine directly and must never trade old data.
         replayEngine.clear()
@@ -195,7 +196,7 @@ class ReplayViewModel(
                     .currentOpen(now, interval) - interval
                 val from = (lastClosedOpen - interval * 299L).coerceAtLeast(0L)
                 val candles = marketDataRepository.getCandles(symbol, tf, from, lastClosedOpen)
-                if (candles.isEmpty()) {
+                if (candles.size < 2) {
                     _uiState.update {
                         it.copy(isLoading = false, message = "لا توجد شموع تاريخية موثوقة لهذا الرمز. اختر BTCUSDT أو ETHUSDT.")
                     }
@@ -203,27 +204,51 @@ class ReplayViewModel(
                 }
                 // A superseded request must not initialize the engine with the old instrument.
                 if (_uiState.value.symbol != symbol || _uiState.value.timeframe != tf) return@launch
+                if (candles.any { it.symbol != symbol || it.timeframe != tf } ||
+                    candles.zipWithNext().any { (a, b) -> b.openTime <= a.openTime }) {
+                    _uiState.update { it.copy(isLoading = false, message = "بيانات Replay غير متسقة؛ أُلغيت الجلسة لحماية نتائج الاختبار") }
+                    return@launch
+                }
                 replayEngine.initialize(candles, startIndex = minOf(20, candles.lastIndex))
                 _uiState.update { it.copy(isLoading = false) }
                 saveAccountSnapshot()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        message = "تعذر تحميل بيانات إعادة العرض لهذا الرمز. اختر BTCUSDT أو ETHUSDT وتحقق من الاتصال."
-                    )
+                // A failed, cancelled or replaced load must never overwrite another session.
+                _uiState.update { state ->
+                    if (state.symbol == symbol && state.timeframe == tf) {
+                        state.copy(
+                            isLoading = false,
+                            message = "تعذر تحميل بيانات إعادة العرض لهذا الرمز. تحقق من الاتصال وتوفر الشموع المكتملة."
+                        )
+                    } else state
                 }
             }
         }
     }
 
-    fun play() = replayEngine.play()
+    fun play() {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
+            _uiState.update { it.copy(message = "انتظر اكتمال تحميل بيانات Replay أولًا") }
+            return
+        }
+        replayEngine.play()
+    }
     fun pause() = replayEngine.pause()
-    fun stepForward() = replayEngine.stepForward()
+    fun stepForward() {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
+            _uiState.update { it.copy(message = "لا توجد شموع Replay جاهزة للتقدم") }
+            return
+        }
+        replayEngine.stepForward()
+    }
 
     fun stepBackward() {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
+            _uiState.update { it.copy(message = "لا توجد جلسة Replay جاهزة للرجوع") }
+            return
+        }
         replayEngine.pause()
         val targetIndex = replayEngine.currentIndex.value - 1
         if (targetIndex < 0) {
@@ -250,6 +275,10 @@ class ReplayViewModel(
     }
 
     fun jumpToTimestamp(timestamp: Long) {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
+            _uiState.update { it.copy(message = "لا يمكن الانتقال قبل تحميل بيانات Replay") }
+            return
+        }
         // Arbitrary jumps can skip execution of stops and strategies.
         // Keep jumps disabled after trades until timeline replay is transactional.
         if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty() ||
@@ -265,13 +294,23 @@ class ReplayViewModel(
         saveAccountSnapshot()
     }
 
-    fun setSpeed(sp: Float) = replayEngine.setSpeed(sp)
+    fun setSpeed(sp: Float) {
+        if (!sp.isFinite() || sp <= 0f) {
+            _uiState.update { it.copy(message = "سرعة Replay يجب أن تكون موجبة وصالحة") }
+            return
+        }
+        replayEngine.setSpeed(sp)
+    }
 
     fun setInteractionMode(mode: ReplayInteractionMode) {
         _uiState.update { it.copy(interactionMode = mode) }
     }
 
     fun resetReplay() {
+        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
+            _uiState.update { it.copy(message = "لا يمكن إعادة جلسة Replay قبل تحميل الشموع") }
+            return
+        }
         replayEngine.pause()
         resetReplayAccount()
         nextId = 1L
@@ -388,6 +427,7 @@ class ReplayViewModel(
         }
         if (_uiState.value.isLoading || tick.symbol != _uiState.value.symbol ||
             candle.symbol != tick.symbol ||
+            candle.timeframe != _uiState.value.timeframe ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
             !volume.isFinite() || volume <= 0.0 ||
             (sl != null && (!sl.isFinite() || sl <= 0.0)) ||
@@ -438,6 +478,7 @@ class ReplayViewModel(
         }
         val tick = replayEngine.currentTick.value
         if (_uiState.value.isLoading || tick == null || tick.symbol != pos.symbol ||
+            replayEngine.currentCandle.value?.symbol != pos.symbol ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid) {
             _uiState.update { it.copy(message = "لا يمكن إغلاق الصفقة دون سعر Replay صالح") }
             return
