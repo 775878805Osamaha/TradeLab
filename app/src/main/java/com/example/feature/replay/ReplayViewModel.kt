@@ -617,11 +617,25 @@ class ReplayViewModel(
         val pendingIterator = pendingOrders.iterator()
         while (pendingIterator.hasNext()) {
             val order = pendingIterator.next()
-            val result = executionEngine.evaluatePendingOrder(order, tick, replayAccount(curBal), mode = "REPLAY")
+            // Recompute margin after every successful fill. Reusing the same
+            // account snapshot for all orders lets multiple pending orders each
+            // spend the same available free margin on a single candle.
+            val result = executionEngine.evaluatePendingOrder(
+                order, tick, replayAccount(curBal), mode = "REPLAY"
+            )
             when (result) {
                 is com.example.core.execution.ExecutionResult.Success -> {
                     openPositions.add(result.position.copy(id = nextId++))
                     pendingIterator.remove()
+                    // Persist the changed margin/equity before checking the next
+                    // pending order, including multiple triggers on this bar.
+                    _uiState.update {
+                        it.copy(
+                            openPositions = openPositions.toList(),
+                            currentEquity = ReplayAccountMath.equity(curBal, openPositions),
+                            pendingOrders = pendingOrders.toList()
+                        )
+                    }
                 }
                 is com.example.core.execution.ExecutionResult.Error -> {
                     // Keep a triggered but unfundable order pending: it may become
