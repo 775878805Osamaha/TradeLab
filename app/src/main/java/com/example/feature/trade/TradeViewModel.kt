@@ -256,7 +256,9 @@ class TradeViewModel(
         val verifiedMarketQuote = state.latestTick?.let { quote ->
             quote.symbol == state.selectedSymbol &&
                 quote.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
-                System.currentTimeMillis() - quote.timestamp in 0..15_000L
+                System.currentTimeMillis() - quote.timestamp in 0..15_000L &&
+                quote.bid.isFinite() && quote.ask.isFinite() &&
+                quote.bid > 0.0 && quote.ask >= quote.bid
         } == true
         if (state.orderType == OrderType.MARKET && !verifiedMarketQuote) {
             _uiState.update { it.copy(message = "السعر المباشر غير متاح أو متأخر. انتظر تحديث Binance قبل تنفيذ الأمر.") }
