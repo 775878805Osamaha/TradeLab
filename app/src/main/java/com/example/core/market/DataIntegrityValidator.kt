@@ -100,6 +100,10 @@ object DataIntegrityValidator {
             if (candle.openTime <= previousOpen) {
                 return ValidationResult.Invalid("Duplicate or unordered timestamp at bar $index")
             }
+            if (index > 0 && expectedDuration > 0L &&
+                candle.openTime - previousOpen < expectedDuration) {
+                return ValidationResult.Invalid("Overlapping historical candles at bar $index")
+            }
             previousOpen = candle.openTime
         }
         return ValidationResult.Valid
