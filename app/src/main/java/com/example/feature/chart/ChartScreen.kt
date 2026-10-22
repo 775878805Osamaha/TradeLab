@@ -178,6 +178,22 @@ fun ChartScreen(
                             tint = TradingAccentLight
                         )
                     }
+                    IconButton(
+                        onClick = { viewModel.toggleVolume() },
+                        modifier = Modifier.testTag("chart_toggle_volume_header")
+                    ) {
+                        Icon(
+                            Icons.Default.BarChart,
+                            contentDescription = if (uiState.isVolumeVisible) "إخفاء أحجام التداول" else "إظهار أحجام التداول",
+                            tint = if (uiState.isVolumeVisible) TradingAccentLight else TradingTextSecondary
+                        )
+                    }
+                    IconButton(
+                        onClick = { viewModel.triggerResetView() },
+                        modifier = Modifier.testTag("chart_reset_view_header")
+                    ) {
+                        Icon(Icons.Default.CenterFocusStrong, contentDescription = "إعادة ضبط الشارت", tint = TradingTextSecondary)
+                    }
                     if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT", "XAUUSD", "XAGUSD", "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", "EURJPY", "GBPJPY", "EURGBP")) {
                         IconButton(
                             onClick = { viewModel.retryCandleLoad() },
@@ -257,6 +273,13 @@ fun ChartScreen(
                     }
                     Text("${(replayState.currentIndex + 1).coerceAtMost(replayState.totalCandles)}/${replayState.totalCandles}",
                         color = TradingTextSecondary, fontSize = 11.sp)
+                    if (replayState.isBatchAdvancing) {
+                        Text(
+                            "${replayState.batchCompletedBars}/${replayState.batchRequestedBars}",
+                            color = TradingGold, fontSize = 10.sp,
+                            modifier = Modifier.testTag("chart_replay_compact_progress")
+                        )
+                    }
                     TextButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false }) {
                         Text("إنهاء", color = TradingNegative)
                     }
@@ -265,6 +288,86 @@ fun ChartScreen(
                     Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
                 }
                 if (showReplayDetails) {
+                // Jump through real historical candles without leaving the chart.
+                // The replay engine evaluates each skipped bar sequentially.
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .testTag("chart_replay_batch_steps"),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("تقدم", color = TradingTextSecondary, fontSize = 11.sp)
+                    listOf(5, 10, 25, 50, 100).forEach { count ->
+                        OutlinedButton(
+                            onClick = { replayViewModel.advanceBars(count) },
+                            enabled = !replayState.isLoading && replayState.totalCandles > 0 &&
+                                replayState.currentIndex < replayState.totalCandles - 1,
+                            modifier = Modifier.height(32.dp).testTag("chart_replay_advance_$count"),
+                            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)
+                        ) { Text("+$count", fontSize = 11.sp) }
+                    }
+                }
+                if (replayState.isBatchAdvancing && replayState.batchRequestedBars > 0) {
+                    val progress = replayState.batchCompletedBars.toFloat() /
+                        replayState.batchRequestedBars.toFloat()
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .testTag("chart_replay_batch_progress")
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("معالجة الشموع والصفقات", fontSize = 11.sp, color = TradingTextSecondary)
+                            Text(
+                                "${replayState.batchCompletedBars}/${replayState.batchRequestedBars}",
+                                fontSize = 11.sp, color = TradingGold
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = { progress.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().height(3.dp)
+                        )
+                        TextButton(onClick = { replayViewModel.pause() }) {
+                            Text("إيقاف التقدم", fontSize = 11.sp)
+                        }
+                    }
+                }
+                // Choose historical depth in place; reloads the same real provider
+                // and resets the simulated account to prevent mixed sessions.
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                        .testTag("chart_replay_history_depth"),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("الشموع", color = TradingTextSecondary, fontSize = 11.sp)
+                    listOf(100, 300, 500, 900).forEach { bars ->
+                        val selected = replayState.requestedHistoryBars == bars
+                        OutlinedButton(
+                            onClick = {
+                                replayViewModel.loadReplayData(
+                                    uiState.selectedSymbol, uiState.selectedTimeframe,
+                                    historyBars = bars
+                                )
+                            },
+                            enabled = !replayState.isLoading && !replayState.isBatchAdvancing,
+                            modifier = Modifier.height(32.dp).testTag("chart_replay_history_$bars"),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                "$bars",
+                                fontSize = 11.sp,
+                                color = if (selected) TradingAccentLight else TradingTextSecondary
+                            )
+                        }
+                    }
+                }
                 // Historical paper orders are isolated from the live-paper account.
                 Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard)
@@ -300,6 +403,25 @@ fun ChartScreen(
                     color = TradingTextSecondary,
                     fontSize = 11.sp
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .testTag("chart_replay_risk_summary"),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text("مراكز: ${replayState.openPositions.size}",
+                        fontSize = 11.sp, color = TradingTextSecondary)
+                    Text("أوامر معلقة: ${replayState.pendingOrders.size}",
+                        fontSize = 11.sp, color = TradingTextSecondary)
+                    Text("صفقات مغلقة: ${replayState.closedTrades.size}",
+                        fontSize = 11.sp, color = TradingTextSecondary)
+                    Text(
+                        "تراجع: ${String.format(Locale.US, "%.1f", replayState.maxObservedDrawdownPercent)}%",
+                        fontSize = 11.sp,
+                        color = if (replayState.maxObservedDrawdownPercent > 10.0) TradingNegative else TradingGold
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(horizontal = 8.dp, vertical = 2.dp)
@@ -599,14 +721,12 @@ fun ChartScreen(
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center
                         )
-                        run {
                         Button(
                             onClick = { viewModel.retryCandleLoad() },
                             modifier = Modifier.testTag("chart_retry_load_btn"),
                             colors = ButtonDefaults.buttonColors(containerColor = TradingAccent)
                         ) {
                             Text("إعادة المحاولة")
-                        }
                         }
                     }
                 }
@@ -673,8 +793,9 @@ fun ChartScreen(
                 }
             }
 
-            // Quick Execution Bar
-            Surface(
+            // No executable bid/ask exists for historical-only metals and forex.
+            // Keep their chart unobstructed; show execution only for crypto.
+            if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) Surface(
                 color = TradingCard,
                 tonalElevation = 0.dp,
                 border = androidx.compose.foundation.BorderStroke(1.dp, TradingBorder)
