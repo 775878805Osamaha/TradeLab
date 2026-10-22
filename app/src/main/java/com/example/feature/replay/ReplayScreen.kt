@@ -232,6 +232,21 @@ fun ReplayScreen(
             }
 
             if (!chartFocusMode) {
+            val riskStatus = remember(
+                uiState.currentBalance, uiState.currentEquity, uiState.closedTrades,
+                uiState.openPositions, uiState.riskGuardEnabled, uiState.maxConsecutiveLosses,
+                uiState.maxSessionLossUsd, uiState.maxDrawdownPercent, uiState.maxOpenPositions
+            ) { viewModel.currentRiskBlockReason() }
+            if (riskStatus != null && !uiState.isLoading) {
+                Surface(color = TradingNegative.copy(alpha = 0.12f), modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "حماية المخاطر: $riskStatus",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                        fontSize = 11.sp,
+                        color = TradingNegative
+                    )
+                }
+            }
             // Mode Toggle: MANUAL vs STRATEGY
             Row(
                 modifier = Modifier
