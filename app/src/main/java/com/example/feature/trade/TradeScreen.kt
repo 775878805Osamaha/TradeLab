@@ -205,7 +205,7 @@ fun TradeScreen(
             // 3. Compact Integrated Trading Chart
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth().height(180.dp).testTag("trade_chart_card"),
+                    modifier = Modifier.fillMaxWidth().height(300.dp).testTag("trade_chart_card"),
                     shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = TradingCard),
                     border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
