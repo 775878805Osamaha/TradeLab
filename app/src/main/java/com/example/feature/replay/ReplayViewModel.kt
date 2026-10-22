@@ -322,6 +322,10 @@ class ReplayViewModel(
         if (_uiState.value.isLoading || tick == null ||
             !tick.symbol.equals(_uiState.value.symbol, ignoreCase = true) ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
+            !volume.isFinite() || volume <= 0.0 ||
+            !requestedPrice.isFinite() || requestedPrice <= 0.0 ||
+            (sl != null && (!sl.isFinite() || sl <= 0.0)) ||
+            (tp != null && (!tp.isFinite() || tp <= 0.0)) ||
             type == OrderType.MARKET ||
             (type in listOf(OrderType.BUY_LIMIT, OrderType.BUY_STOP) && side != OrderSide.BUY) ||
             (type in listOf(OrderType.SELL_LIMIT, OrderType.SELL_STOP) && side != OrderSide.SELL)) {
@@ -501,8 +505,8 @@ class ReplayViewModel(
 
     fun setBreakEven(posId: Long) {
         val pos = openPositions.firstOrNull { it.id == posId } ?: return
-        val tick = replayEngine.currentTick.value ?: return
-        if (tick.symbol != pos.symbol ||
+        val tick = replayEngine.currentTick.value
+        if (_uiState.value.isLoading || tick == null || tick.symbol != pos.symbol ||
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid) {
             _uiState.update { it.copy(message = "سعر Replay غير صالح لتفعيل التعادل") }
             return
