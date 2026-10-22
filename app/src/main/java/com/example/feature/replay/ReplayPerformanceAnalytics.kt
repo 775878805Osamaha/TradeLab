@@ -101,6 +101,37 @@ object ReplayPerformanceAnalytics {
         )
     }
 
+    /** Summary export can be compared across backtest sessions in a spreadsheet. */
+    fun exportSummaryCsv(report: ReplayPerformanceReport): String = buildString {
+        appendLine("metric,value")
+        fun metric(name: String, value: Number) {
+            append(name)
+            append(',')
+            appendLine(String.format(Locale.US, "%.6f", value.toDouble()))
+        }
+        metric("closed_trades", report.closedCount)
+        metric("wins", report.wins)
+        metric("losses", report.losses)
+        metric("breakeven", report.breakeven)
+        metric("win_rate_percent", report.winRatePercent)
+        metric("net_profit_usd", report.netProfit)
+        metric("gross_profit_usd", report.grossProfit)
+        metric("gross_loss_usd", report.grossLoss)
+        report.profitFactor?.let { metric("profit_factor", it) }
+        metric("average_trade_usd", report.averageTrade)
+        metric("average_win_usd", report.averageWin)
+        metric("average_loss_usd", report.averageLoss)
+        report.payoffRatio?.let { metric("payoff_ratio", it) }
+        metric("longest_win_streak", report.longestWinStreak)
+        metric("longest_loss_streak", report.longestLossStreak)
+        metric("peak_equity_usd", report.peakEquity)
+        metric("maximum_drawdown_percent", report.maxEquityDrawdownPercent)
+        metric("maximum_drawdown_usd", report.maxEquityDrawdownAmount)
+        metric("current_drawdown_percent", report.currentDrawdownPercent)
+        metric("equity_return_percent", report.equityReturnPercent)
+        metric("sampled_bars", report.sampledBars)
+    }
+
     /** Trade order is the order of closure in the revealed Replay timeline. */
     fun exportTradesCsv(trades: List<TradeJournalEntry>): String = buildString {
         appendLine("closed_trade_number,net_profit_loss_usd")
