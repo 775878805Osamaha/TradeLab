@@ -329,6 +329,38 @@ fun ChartScreen(
                         }
                     }
                 }
+                // Choose historical depth in place; reloads the same real provider
+                // and resets the simulated account to prevent mixed sessions.
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                        .testTag("chart_replay_history_depth"),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("الشموع", color = TradingTextSecondary, fontSize = 11.sp)
+                    listOf(100, 300, 500, 900).forEach { bars ->
+                        val selected = replayState.requestedHistoryBars == bars
+                        OutlinedButton(
+                            onClick = {
+                                replayViewModel.loadReplayData(
+                                    uiState.selectedSymbol, uiState.selectedTimeframe,
+                                    historyBars = bars
+                                )
+                            },
+                            enabled = !replayState.isLoading && !replayState.isBatchAdvancing,
+                            modifier = Modifier.height(32.dp).testTag("chart_replay_history_$bars"),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                "$bars",
+                                fontSize = 11.sp,
+                                color = if (selected) TradingAccentLight else TradingTextSecondary
+                            )
+                        }
+                    }
+                }
                 // Historical paper orders are isolated from the live-paper account.
                 Row(
                     modifier = Modifier.fillMaxWidth().background(TradingCard)
