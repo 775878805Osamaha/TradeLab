@@ -343,7 +343,11 @@ class TradeViewModel(
     fun cancelPendingOrder(orderId: Long) {
         viewModelScope.launch {
             tradingRepository.cancelPendingOrder(orderId)
-            _uiState.update { it.copy(message = "تم إلغاء الأمر المعلق بنجاح") }
+                .onSuccess {
+                    _uiState.update { it.copy(message = "تم إلغاء الأمر المعلق بنجاح") }
+                }.onFailure { error ->
+                    _uiState.update { it.copy(message = error.message ?: "فشل إلغاء الأمر المعلق") }
+                }
         }
     }
 
