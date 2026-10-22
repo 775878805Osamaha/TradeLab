@@ -95,8 +95,17 @@ class BiquoteHistoricalProvider(
                     .mapNotNull { (start, group) ->
                         val sorted = group.sortedBy { it.openTime }
                         val count = tf.minutes / baseMinutes
-                        if (start < from || start > to || sorted.size != count ||
-                            sorted.indices.any { i -> sorted[i].openTime != start + i * basePeriod }
+                        // Forex has no Saturday/Sunday daily bars. Weekly OHLC
+                        // must accept session gaps without inventing weekend candles.
+                        val complete = if (tf.minutes == 10080) {
+                            sorted.size >= 3 &&
+                                sorted.zipWithNext().all { (a, b) ->
+                                    b.openTime > a.openTime && b.openTime - a.openTime <= 3 * basePeriod
+                                }
+                        } else sorted.size == count &&
+                            sorted.indices.all { i -> sorted[i].openTime == start + i * basePeriod }
+                        if (start < from || start > to || !complete ||
+                            start + period > System.currentTimeMillis()
                         ) null else Candle(
                             symbol = symbol, timeframe = tf, openTime = start,
                             closeTime = start + period, open = sorted.first().open,
