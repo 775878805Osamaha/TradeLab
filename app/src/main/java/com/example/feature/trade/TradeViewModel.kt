@@ -407,6 +407,10 @@ class TradeViewModel(
     private fun subscribeToSymbolTicks(symbol: String) {
         tickJob?.cancel()
         tickJob = viewModelScope.launch {
+            // Observing the local tick flow alone does not connect Binance.
+            // Explicitly subscribe so the trade screen can receive verified
+            // quotes even when the chart screen has never been opened.
+            marketDataRepository.provider.subscribe(symbol)
             marketDataRepository.observeTicks(symbol).collect { tick ->
                 if (_uiState.value.selectedSymbol != symbol || tick.symbol != symbol) return@collect
                 _uiState.update { it.copy(latestTick = tick) }
