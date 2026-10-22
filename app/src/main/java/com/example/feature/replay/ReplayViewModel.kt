@@ -291,12 +291,8 @@ class ReplayViewModel(
             }
             return
         }
-        if (symbol !in setOf("BTCUSDT", "ETHUSDT") && !marketDataRepository.hasTwelveDataKey()) {
-            _uiState.update {
-                it.copy(isLoading = false, message = "أدخل مفتاح Twelve Data من إعدادات مصدر البيانات لتحميل الذهب والفوركس.")
-            }
-            return
-        }
+        // Replay uses the same verified, keyless historical source as the chart.
+        // Do not require Twelve Data credentials for gold and forex.
         replayLoadJob = viewModelScope.launch {
             try {
                 val now = System.currentTimeMillis()
