@@ -86,6 +86,7 @@ fun ReplayScreen(
     var chartResetTrigger by remember { mutableLongStateOf(0L) }
     var showOrderTicket by remember { mutableStateOf(false) }
     var showPerformanceDialog by remember { mutableStateOf(false) }
+    var showDrawdownChart by remember { mutableStateOf(false) }
     var showRiskDialog by remember { mutableStateOf(false) }
     var riskPositions by remember { mutableStateOf("10") }
     var riskOrders by remember { mutableStateOf("20") }
@@ -617,10 +618,25 @@ fun ReplayScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text("إحصاءات الصفقات المغلقة فقط؛ العائد يشمل الملكية الحالية للصفقات المفتوحة.", fontSize = 12.sp, color = TradingTextSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !showDrawdownChart,
+                            onClick = { showDrawdownChart = false },
+                            label = { Text("الملكية") },
+                            modifier = Modifier.testTag("replay_equity_chart_mode")
+                        )
+                        FilterChip(
+                            selected = showDrawdownChart,
+                            onClick = { showDrawdownChart = true },
+                            label = { Text("التراجع") },
+                            modifier = Modifier.testTag("replay_drawdown_chart_mode")
+                        )
+                    }
                     ReplayEquityCurve(
                         samples = uiState.equitySamples,
                         initialBalance = uiState.initialBalance,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        showDrawdown = showDrawdownChart
                     )
                     HorizontalDivider()
                     ReplayMetricRow("الصفقات المغلقة", trades.size.toString())
