@@ -663,13 +663,22 @@ fun ReplayScreen(
                 }
             },
             confirmButton = {
-                TextButton(
-                    enabled = uiState.equitySamples.isNotEmpty(),
-                    onClick = {
-                        clipboardManager.setText(AnnotatedString(ReplayPerformanceAnalytics.exportEquityCsv(uiState.equitySamples)))
-                    },
-                    modifier = Modifier.testTag("replay_export_equity_csv")
-                ) { Text("نسخ CSV") }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        enabled = uiState.closedTrades.isNotEmpty(),
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(ReplayPerformanceAnalytics.exportTradesCsv(uiState.closedTrades)))
+                        },
+                        modifier = Modifier.testTag("replay_export_trades_csv")
+                    ) { Text("نسخ الصفقات") }
+                    TextButton(
+                        enabled = uiState.equitySamples.isNotEmpty(),
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(ReplayPerformanceAnalytics.exportEquityCsv(uiState.equitySamples)))
+                        },
+                        modifier = Modifier.testTag("replay_export_equity_csv")
+                    ) { Text("نسخ المنحنى") }
+                }
             },
             dismissButton = { TextButton(onClick = { showPerformanceDialog = false }) { Text("إغلاق") } }
         )
