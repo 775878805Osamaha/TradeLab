@@ -599,14 +599,12 @@ fun ChartScreen(
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center
                         )
-                        run {
                         Button(
                             onClick = { viewModel.retryCandleLoad() },
                             modifier = Modifier.testTag("chart_retry_load_btn"),
                             colors = ButtonDefaults.buttonColors(containerColor = TradingAccent)
                         ) {
                             Text("إعادة المحاولة")
-                        }
                         }
                     }
                 }
