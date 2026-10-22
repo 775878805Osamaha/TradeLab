@@ -3,7 +3,6 @@ package com.example.feature.replay
 import com.example.core.model.TradeJournalEntry
 import java.util.Locale
 import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Pure deterministic analytics: no wall-clock reads, network requests or future candles.
@@ -100,6 +99,18 @@ object ReplayPerformanceAnalytics {
                 (equity - initialBalance) * 100.0 / initialBalance else 0.0,
             sampledBars = ordered.size
         )
+    }
+
+    /** Trade order is the order of closure in the revealed Replay timeline. */
+    fun exportTradesCsv(trades: List<TradeJournalEntry>): String = buildString {
+        appendLine("closed_trade_number,net_profit_loss_usd")
+        trades.forEachIndexed { index, trade ->
+            if (trade.netProfitLoss.isFinite()) {
+                append(index + 1)
+                append(',')
+                appendLine(String.format(Locale.US, "%.6f", trade.netProfitLoss))
+            }
+        }
     }
 
     /** Stable spreadsheet-ready output with fixed US decimal separator. */
