@@ -232,10 +232,18 @@ fun TradeScreen(
                                     fontSize = 12.sp,
                                     color = TradingTextSecondary
                                 )
-                                TextButton(
-                                    onClick = { viewModel.retryCandleLoad() },
-                                    modifier = Modifier.testTag("trade_chart_retry")
-                                ) { Text("إعادة المحاولة") }
+                                if (uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT") &&
+                                    !viewModel.hasHistoricalProviderKey()) {
+                                    TextButton(
+                                        onClick = { showHistoricalKeyDialog = true },
+                                        modifier = Modifier.testTag("trade_connect_historical_source")
+                                    ) { Text("ربط بيانات الذهب والفوركس") }
+                                } else {
+                                    TextButton(
+                                        onClick = { viewModel.retryCandleLoad() },
+                                        modifier = Modifier.testTag("trade_chart_retry")
+                                    ) { Text("إعادة المحاولة") }
+                                }
                             }
                         }
                     }
