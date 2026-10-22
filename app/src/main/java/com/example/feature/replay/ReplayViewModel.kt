@@ -291,12 +291,7 @@ class ReplayViewModel(
             }
             return
         }
-        if (symbol !in setOf("BTCUSDT", "ETHUSDT") && !marketDataRepository.hasTwelveDataKey()) {
-            _uiState.update {
-                it.copy(isLoading = false, message = "أدخل مفتاح Twelve Data من إعدادات مصدر البيانات لتحميل الذهب والفوركس.")
-            }
-            return
-        }
+        // Gold and forex use the verified keyless historical provider.
         replayLoadJob = viewModelScope.launch {
             try {
                 val now = System.currentTimeMillis()
