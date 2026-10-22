@@ -638,7 +638,34 @@ fun ReplayScreen(
             title = { Text("نطاق بيانات الباك تيست") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("اختر عدد الشموع التاريخية المكتملة من المصدر الحقيقي. تغيير النطاق يعيد ضبط جلسة Replay والصفقات.")
+                    Text("اختر فترة تاريخية مكتملة من المصدر الحقيقي. تغيير الفترة أو النطاق يعيد ضبط جلسة Replay والصفقات.")
+                    Text("نهاية الفترة التاريخية", fontWeight = FontWeight.Bold)
+                    listOf(
+                        0 to "أحدث البيانات",
+                        300 to "قبل 300 شمعة",
+                        1_000 to "قبل 1,000 شمعة",
+                        3_000 to "قبل 3,000 شمعة"
+                    ).forEach { (offset, label) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                showHistoryDialog = false
+                                viewModel.loadReplayData(uiState.symbol, uiState.timeframe, uiState.requestedHistoryBars, offset)
+                            }.padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = uiState.historyEndOffsetBars == offset,
+                                onClick = {
+                                    showHistoryDialog = false
+                                    viewModel.loadReplayData(uiState.symbol, uiState.timeframe, uiState.requestedHistoryBars, offset)
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(label)
+                        }
+                    }
+                    HorizontalDivider()
+                    Text("عدد الشموع", fontWeight = FontWeight.Bold)
                     listOf(300, 1_000, 3_000, 5_000).forEach { count ->
                         Row(
                             modifier = Modifier.fillMaxWidth().clickable {
