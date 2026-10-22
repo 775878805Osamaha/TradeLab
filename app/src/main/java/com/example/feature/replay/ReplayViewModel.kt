@@ -203,6 +203,51 @@ class ReplayViewModel(
         }
     }
 
+    /**
+     * Load externally exported broker OHLCV history without inventing prices.
+     * User-provided data is labeled USER_IMPORTED and never passed off as
+     * authenticated provider history. A new dataset clears the old account.
+     */
+    fun loadImportedCsv(csv: String, symbol: String, timeframe: Timeframe, provenance: String) {
+        if (csv.length > 12_000_000) {
+            _uiState.update { it.copy(message = "ملف CSV كبير جدًا؛ الحد الأقصى 12 ميجابايت") }
+            return
+        }
+        cancelBatchAdvance()
+        replayLoadJob?.cancel()
+        replayEngine.pause()
+        replayEngine.clear()
+        resetReplayAccount()
+        nextId = 1L
+        accountSnapshots.clear()
+        _uiState.update {
+            it.copy(symbol = symbol, timeframe = timeframe, isLoading = true,
+                message = null, visibleCandles = emptyList(), currentCandle = null,
+                latestTick = null, currentIndex = 0, totalCandles = 0,
+                currentReplayTime = 0L, isPlaying = false)
+        }
+        replayLoadJob = viewModelScope.launch {
+            try {
+                val candles = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    com.example.core.market.HistoricalCsvImporter.parse(
+                        csv, symbol, timeframe, provenance, maxBars = 20_000
+                    )
+                }
+                if (candles.size < 50) {
+                    _uiState.update { it.copy(isLoading = false, message = "يلزم 50 شمعة على الأقل لاختبار Replay") }
+                    return@launch
+                }
+                replayEngine.initialize(candles, startIndex = minOf(20, candles.lastIndex))
+                _uiState.update { it.copy(isLoading = false, message = "تم استيراد ${candles.size} شمعة من $provenance (بيانات خارجية)") }
+                saveAccountSnapshot()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _uiState.update { it.copy(isLoading = false, message = "فشل استيراد CSV: تحقق من الأعمدة والشموع وترتيب الوقت والمصدر") }
+            }
+        }
+    }
+
     fun configureHistoricalApiKey(key: String) {
         marketDataRepository.configureTwelveDataKey(key)
         _uiState.update { it.copy(message = if (key.isBlank()) "تم إلغاء مفتاح Twelve Data" else "تم ضبط مفتاح Twelve Data في الذاكرة لهذه الجلسة") }
