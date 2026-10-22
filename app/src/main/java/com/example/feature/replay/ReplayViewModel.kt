@@ -29,6 +29,9 @@ data class ReplayUiState(
     val maxOpenPositions: Int = 10,
     val maxPendingOrders: Int = 20,
     val maxDrawdownPercent: Double = 100.0,
+    val peakEquity: Double = 50.0,
+    val maxObservedDrawdownPercent: Double = 0.0,
+    val equitySamples: List<ReplayEquitySample> = emptyList(),
     val currentBalance: Double = 50.0,
     val currentEquity: Double = 50.0,
     val visibleCandles: List<Candle> = emptyList(),
@@ -51,6 +54,8 @@ data class ReplayUiState(
     val message: String? = null
 )
 
+data class ReplayEquitySample(val candleIndex: Int, val equity: Double, val balance: Double)
+
 class ReplayViewModel(
     private val marketDataRepository: MarketDataRepository,
     private val executionEngine: ExecutionEngine = ExecutionEngine(),
@@ -72,7 +77,10 @@ class ReplayViewModel(
         val positions: List<Position>,
         val orders: List<Order>,
         val trades: List<TradeJournalEntry>,
-        val nextOrderId: Long
+        val nextOrderId: Long,
+        val peakEquity: Double,
+        val maxObservedDrawdownPercent: Double,
+        val equitySamples: List<ReplayEquitySample>
     )
     private val accountSnapshots = mutableMapOf<Int, AccountSnapshot>()
 
@@ -88,7 +96,10 @@ class ReplayViewModel(
             positions = openPositions.toList(),
             orders = pendingOrders.toList(),
             trades = closedTrades.toList(),
-            nextOrderId = nextId
+            nextOrderId = nextId,
+            peakEquity = _uiState.value.peakEquity,
+            maxObservedDrawdownPercent = _uiState.value.maxObservedDrawdownPercent,
+            equitySamples = _uiState.value.equitySamples
         )
     }
 
@@ -106,7 +117,10 @@ class ReplayViewModel(
                 currentEquity = snapshot.equity,
                 openPositions = openPositions.toList(),
                 pendingOrders = pendingOrders.toList(),
-                closedTrades = closedTrades.toList()
+                closedTrades = closedTrades.toList(),
+                peakEquity = snapshot.peakEquity,
+                maxObservedDrawdownPercent = snapshot.maxObservedDrawdownPercent,
+                equitySamples = snapshot.equitySamples
             )
         }
     }
@@ -395,7 +409,10 @@ class ReplayViewModel(
                 currentEquity = it.initialBalance,
                 openPositions = emptyList(),
                 pendingOrders = emptyList(),
-                closedTrades = emptyList()
+                closedTrades = emptyList(),
+                peakEquity = it.initialBalance,
+                maxObservedDrawdownPercent = 0.0,
+                equitySamples = emptyList()
             )
         }
     }
@@ -799,7 +816,25 @@ class ReplayViewModel(
                 lastSignalMessage = lastSignalText ?: it.lastSignalMessage
             )
         }
+        recordEquitySample(curBal, curEq)
         saveAccountSnapshot()
+    }
+
+    private fun recordEquitySample(balance: Double, equity: Double) {
+        if (!balance.isFinite() || !equity.isFinite()) return
+        val index = replayEngine.currentIndex.value
+        _uiState.update { state ->
+            val previousPeak = state.peakEquity.coerceAtLeast(state.initialBalance)
+            val peak = maxOf(previousPeak, equity)
+            val drawdown = if (peak > 0.0) (peak - equity).coerceAtLeast(0.0) * 100.0 / peak else 0.0
+            val samples = state.equitySamples.filter { it.candleIndex < index } +
+                ReplayEquitySample(index, equity, balance)
+            state.copy(
+                peakEquity = peak,
+                maxObservedDrawdownPercent = maxOf(state.maxObservedDrawdownPercent, drawdown),
+                equitySamples = samples
+            )
+        }
     }
 
     fun clearMessage() {

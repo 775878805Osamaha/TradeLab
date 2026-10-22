@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,6 +50,7 @@ fun ReplayScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val clipboardManager = LocalClipboardManager.current
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
     var showJumpDialog by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
@@ -83,6 +86,7 @@ fun ReplayScreen(
     var chartResetTrigger by remember { mutableLongStateOf(0L) }
     var showOrderTicket by remember { mutableStateOf(false) }
     var showPerformanceDialog by remember { mutableStateOf(false) }
+    var showDrawdownChart by remember { mutableStateOf(false) }
     var showRiskDialog by remember { mutableStateOf(false) }
     var riskPositions by remember { mutableStateOf("10") }
     var riskOrders by remember { mutableStateOf("20") }
@@ -592,6 +596,9 @@ fun ReplayScreen(
 
     if (showPerformanceDialog) {
         val trades = uiState.closedTrades
+        val report = remember(trades, uiState.equitySamples, uiState.currentEquity, uiState.initialBalance) {
+            ReplayPerformanceAnalytics.calculate(trades, uiState.equitySamples, uiState.initialBalance, uiState.currentEquity)
+        }
         val net = trades.sumOf { it.netProfitLoss }
         val winners = trades.count { it.netProfitLoss > 0.0 }
         val losers = trades.count { it.netProfitLoss < 0.0 }
@@ -611,7 +618,39 @@ fun ReplayScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text("إحصاءات الصفقات المغلقة فقط؛ العائد يشمل الملكية الحالية للصفقات المفتوحة.", fontSize = 12.sp, color = TradingTextSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !showDrawdownChart,
+                            onClick = { showDrawdownChart = false },
+                            label = { Text("الملكية") },
+                            modifier = Modifier.testTag("replay_equity_chart_mode")
+                        )
+                        FilterChip(
+                            selected = showDrawdownChart,
+                            onClick = { showDrawdownChart = true },
+                            label = { Text("التراجع") },
+                            modifier = Modifier.testTag("replay_drawdown_chart_mode")
+                        )
+                    }
+                    ReplayEquityCurve(
+                        samples = uiState.equitySamples,
+                        initialBalance = uiState.initialBalance,
+                        modifier = Modifier.fillMaxWidth(),
+                        showDrawdown = showDrawdownChart
+                    )
+                    HorizontalDivider()
                     ReplayMetricRow("الصفقات المغلقة", trades.size.toString())
+                    ReplayMetricRow("التعادل", report.breakeven.toString())
+                    ReplayMetricRow("متوسط الصفقة", String.format(Locale.US, "%+.2f USD", report.averageTrade))
+                    ReplayMetricRow("متوسط الربح", String.format(Locale.US, "%.2f USD", report.averageWin))
+                    ReplayMetricRow("متوسط الخسارة", String.format(Locale.US, "%.2f USD", report.averageLoss))
+                    ReplayMetricRow("العائد إلى المخاطرة المحققة", report.payoffRatio?.let {
+                        String.format(Locale.US, "%.2f", it)
+                    } ?: "—")
+                    ReplayMetricRow("أطول سلسلة أرباح", report.longestWinStreak.toString())
+                    ReplayMetricRow("أطول سلسلة خسائر", report.longestLossStreak.toString())
+                    ReplayMetricRow("التراجع الحالي من القمة", String.format(Locale.US, "%.2f%%", report.currentDrawdownPercent))
+                    ReplayMetricRow("أقصى تراجع بالقيمة", String.format(Locale.US, "%.2f USD", report.maxEquityDrawdownAmount))
                     ReplayMetricRow("الرابحة / الخاسرة", "$winners / $losers")
                     ReplayMetricRow("نسبة الفوز", String.format(Locale.US, "%.1f%%", winRate))
                     ReplayMetricRow("صافي الربح المحقق", String.format(Locale.US, "%+.2f USD", net))
@@ -622,12 +661,51 @@ fun ReplayScreen(
                     HorizontalDivider()
                     ReplayMetricRow("الرصيد الحالي", String.format(Locale.US, "%.2f USD", uiState.currentBalance))
                     ReplayMetricRow("الملكية الحالية", String.format(Locale.US, "%.2f USD", uiState.currentEquity))
+                    ReplayMetricRow("أعلى ملكية مسجلة", String.format(Locale.US, "%.2f USD", uiState.peakEquity))
+                    ReplayMetricRow("أقصى تراجع من القمة", String.format(Locale.US, "%.2f%%", uiState.maxObservedDrawdownPercent))
+                    ReplayMetricRow("نقاط منحنى الملكية", uiState.equitySamples.size.toString())
+                    if (uiState.equitySamples.size >= 2) {
+                        val first = uiState.equitySamples.first()
+                        val last = uiState.equitySamples.last()
+                        Text(
+                            "تطور الملكية: " + String.format(Locale.US, "%.2f → %.2f USD", first.equity, last.equity),
+                            fontSize = 12.sp,
+                            color = TradingTextSecondary
+                        )
+                    }
                     ReplayMetricRow("العائد على الرصيد الابتدائي", String.format(Locale.US, "%+.2f%%", returnPercent))
                     ReplayMetricRow("الصفقات المفتوحة", uiState.openPositions.size.toString())
                     ReplayMetricRow("الأوامر المعلقة", uiState.pendingOrders.size.toString())
                 }
             },
-            confirmButton = { TextButton(onClick = { showPerformanceDialog = false }) { Text("إغلاق") } }
+            confirmButton = {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TextButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(ReplayPerformanceAnalytics.exportSummaryCsv(report)))
+                        },
+                        modifier = Modifier.testTag("replay_export_summary_csv")
+                    ) { Text("نسخ التقرير") }
+                    TextButton(
+                        enabled = uiState.closedTrades.isNotEmpty(),
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(ReplayPerformanceAnalytics.exportTradesCsv(uiState.closedTrades)))
+                        },
+                        modifier = Modifier.testTag("replay_export_trades_csv")
+                    ) { Text("نسخ الصفقات") }
+                    TextButton(
+                        enabled = uiState.equitySamples.isNotEmpty(),
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(ReplayPerformanceAnalytics.exportEquityCsv(uiState.equitySamples)))
+                        },
+                        modifier = Modifier.testTag("replay_export_equity_csv")
+                    ) { Text("نسخ المنحنى") }
+                }
+            },
+            dismissButton = { TextButton(onClick = { showPerformanceDialog = false }) { Text("إغلاق") } }
         )
     }
 
