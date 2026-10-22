@@ -42,6 +42,7 @@ data class ChartUiState(
     val resetViewTrigger: Long = 0L,
     val isLoading: Boolean = false,
     val candleLoadError: String? = null,
+    val connectionDiagnostic: String = "لم يتم اختبار الاتصال بعد",
     val message: String? = null
 )
 
@@ -66,7 +67,16 @@ class ChartViewModel(
         observePendingOrders()
         observeHistoricalTrades()
         observeDataSourceType()
+        observeConnectionDiagnostics()
         observeDrawings()
+    }
+
+    private fun observeConnectionDiagnostics() {
+        viewModelScope.launch {
+            marketDataRepository.providerDiagnostics.collect { diagnostic ->
+                _uiState.update { it.copy(connectionDiagnostic = diagnostic.lastHttpDiagnostic) }
+            }
+        }
     }
 
     fun selectSymbol(symbol: String) {
