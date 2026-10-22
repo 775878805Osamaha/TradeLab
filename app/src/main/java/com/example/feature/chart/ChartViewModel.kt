@@ -85,6 +85,8 @@ class ChartViewModel(
 
     fun selectSymbol(symbol: String) {
         if (_uiState.value.selectedSymbol == symbol) return
+        // Prevent unsupported instruments from retaining a previous exchange quote.
+        // The history loader will show an explicit unavailable-source message.
         candleLoadJob?.cancel()
         tickJob?.cancel()
         klineRefreshJob?.cancel()
@@ -109,7 +111,8 @@ class ChartViewModel(
 
     fun selectTimeframe(timeframe: Timeframe) {
         if (_uiState.value.selectedTimeframe == timeframe) return
-        tickJob?.cancel()
+        // Keep the existing bid/ask subscription: a timeframe change does not
+        // change the instrument and should not disconnect its live quote.
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
         indicatorJob?.cancel()
@@ -158,7 +161,11 @@ class ChartViewModel(
                     drawingDao.insertDrawing(drawingWithMeta.toEntity())
                 }
             } else {
-                _uiState.update { it.copy(drawings = it.drawings + drawingWithMeta) }
+                _uiState.update { state ->
+                    if (state.selectedSymbol == sym && state.selectedTimeframe.code == tf) {
+                        state.copy(drawings = state.drawings + drawingWithMeta)
+                    } else state
+                }
             }
         }
         _uiState.update { it.copy(activeDrawingTool = DrawingTool.NONE) }
@@ -171,7 +178,9 @@ class ChartViewModel(
                     drawingDao.deleteDrawing(id)
                 }
             } else {
-                _uiState.update { it.copy(drawings = it.drawings.filter { d -> d.id != id }) }
+                _uiState.update { state ->
+                    state.copy(drawings = state.drawings.filter { d -> d.id != id })
+                }
             }
         }
     }
@@ -185,7 +194,11 @@ class ChartViewModel(
                     drawingDao.clearDrawings(sym, tf)
                 }
             } else {
-                _uiState.update { it.copy(drawings = emptyList()) }
+                _uiState.update { state ->
+                    if (state.selectedSymbol == sym && state.selectedTimeframe.code == tf) {
+                        state.copy(drawings = emptyList())
+                    } else state
+                }
             }
         }
     }
@@ -494,6 +507,7 @@ class ChartViewModel(
     }
 
     fun retryCandleLoad() {
+        indicatorJob?.cancel()
         candleLoadJob?.cancel()
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
