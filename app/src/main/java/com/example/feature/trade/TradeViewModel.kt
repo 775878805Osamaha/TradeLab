@@ -459,6 +459,13 @@ class TradeViewModel(
         loadCandles(_uiState.value.selectedSymbol)
     }
 
+    fun configureHistoricalProviderKey(key: String) {
+        marketDataRepository.configureTwelveDataKey(key)
+        loadCandles(_uiState.value.selectedSymbol)
+    }
+
+    fun hasHistoricalProviderKey(): Boolean = marketDataRepository.hasTwelveDataKey()
+
     private fun loadCandles(symbol: String) {
         candleLoadJob?.cancel()
         _uiState.update { state ->
