@@ -26,8 +26,9 @@ internal suspend fun loadTradeCandles(
         TradeCandleResult(candles)
     } catch (cancelled: CancellationException) {
         throw cancelled
-    } catch (_: Exception) {
+    } catch (error: Exception) {
         currentCoroutineContext().ensureActive()
-        TradeCandleResult(message = "تعذر تحميل بيانات $symbol. تحقق من الاتصال وأعد اختيار الرمز للمحاولة.")
+        val detail = (error.cause?.message ?: error.message ?: "سبب غير معروف").take(180)
+        TradeCandleResult(message = "تعذر تحميل بيانات $symbol: ${error.javaClass.simpleName}: $detail")
     }
 }
