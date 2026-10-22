@@ -681,6 +681,12 @@ fun ReplayScreen(
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(ReplayPerformanceAnalytics.exportSummaryCsv(report)))
+                        },
+                        modifier = Modifier.testTag("replay_export_summary_csv")
+                    ) { Text("نسخ التقرير") }
+                    TextButton(
                         enabled = uiState.closedTrades.isNotEmpty(),
                         onClick = {
                             clipboardManager.setText(AnnotatedString(ReplayPerformanceAnalytics.exportTradesCsv(uiState.closedTrades)))
