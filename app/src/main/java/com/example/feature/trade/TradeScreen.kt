@@ -39,10 +39,19 @@ fun TradeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val account = uiState.selectedAccount
     val tick = uiState.latestTick
+    // A quiet/disconnected stream must expire on screen without requiring
+    // another market tick or user interaction to trigger recomposition.
+    var quoteClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(1_000L)
+            quoteClock = System.currentTimeMillis()
+        }
+    }
     val quoteIsVerified = tick != null &&
         tick.symbol == uiState.selectedSymbol &&
         tick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
-        System.currentTimeMillis() - tick.timestamp in 0..15_000L
+        quoteClock - tick.timestamp in 0..15_000L
     val verifiedTick = tick?.takeIf { quoteIsVerified }
     val symInfo = remember(uiState.selectedSymbol) { DefaultSymbols.getSymbol(uiState.selectedSymbol) }
 
