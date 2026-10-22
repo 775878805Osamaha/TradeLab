@@ -189,6 +189,13 @@ class ReplayViewModel(
         }
     }
 
+    fun configureHistoricalApiKey(key: String) {
+        marketDataRepository.configureTwelveDataKey(key)
+        _uiState.update { it.copy(message = if (key.isBlank()) "تم إلغاء مفتاح Twelve Data" else "تم ضبط مفتاح Twelve Data في الذاكرة لهذه الجلسة") }
+    }
+
+    fun hasHistoricalApiKey(): Boolean = marketDataRepository.hasTwelveDataKey()
+
     fun loadReplayData(
         symbol: String = "BTCUSDT",
         tf: Timeframe = Timeframe.M15,
@@ -219,9 +226,15 @@ class ReplayViewModel(
                 isPlaying = false
             )
         }
-        if (symbol !in setOf("BTCUSDT", "ETHUSDT")) {
+        if (!marketDataRepository.supportsHistoricalSymbol(symbol)) {
             _uiState.update {
-                it.copy(isLoading = false, message = "لا تتوفر بيانات تاريخية معتمدة لهذا الرمز. اختر BTCUSDT أو ETHUSDT.")
+                it.copy(isLoading = false, message = "لا يوجد مزود بيانات تاريخية معتمد لهذا الرمز.")
+            }
+            return
+        }
+        if (symbol !in setOf("BTCUSDT", "ETHUSDT") && !marketDataRepository.hasTwelveDataKey()) {
+            _uiState.update {
+                it.copy(isLoading = false, message = "أدخل مفتاح Twelve Data من إعدادات مصدر البيانات لتحميل الذهب والفوركس.")
             }
             return
         }
@@ -241,7 +254,7 @@ class ReplayViewModel(
                 val candles = marketDataRepository.getCandles(symbol, tf, from, lastClosedOpen)
                 if (candles.size < 2) {
                     _uiState.update {
-                        it.copy(isLoading = false, message = "لا توجد شموع تاريخية موثوقة لهذا الرمز. اختر BTCUSDT أو ETHUSDT.")
+                        it.copy(isLoading = false, message = "لا توجد شموع تاريخية موثوقة لهذا الرمز في النطاق المطلوب.")
                     }
                     return@launch
                 }
