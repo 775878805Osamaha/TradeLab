@@ -58,10 +58,14 @@ fun ChartScreen(
 
     // Refresh the freshness indicator even when the market stream stops emitting.
     var quoteClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(1_000L)
-            quoteClock = System.currentTimeMillis()
+    // Historical gold/forex must not force a full chart-screen recomposition
+    // every second when no live quote is subscribed.
+    LaunchedEffect(uiState.selectedSymbol) {
+        if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
+            while (true) {
+                kotlinx.coroutines.delay(5_000L)
+                quoteClock = System.currentTimeMillis()
+            }
         }
     }
     val headerTick = uiState.latestTick
@@ -151,7 +155,12 @@ fun ChartScreen(
                             DataSourceBadge(sourceType = uiState.dataSourceType)
                         } else {
                             Text(
-                                text = if (uiState.candles.isNotEmpty()) "HISTORY" else "OFFLINE",
+                                text = when {
+                                    uiState.isLoading -> "LOADING"
+                                    uiState.candles.isNotEmpty() -> "HISTORY"
+                                    uiState.candleLoadError != null -> "DATA ERROR"
+                                    else -> "NO DATA"
+                                },
                                 fontSize = 10.sp, color = TradingTextSecondary,
                                 modifier = Modifier.testTag("chart_source_mode")
                             )
