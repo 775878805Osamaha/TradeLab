@@ -115,6 +115,9 @@ fun CandlestickChart(
 
     val transformRef = remember { arrayOfNulls<ChartTransform>(1) }
     LaunchedEffect(candles) { transformRef[0] = null }
+    // Avoid creating a new visible OHLC list or scanning the entire history
+    // during pan/zoom; range queries are served by the immutable price index.
+    val priceRangeIndex = remember(candles) { ChartPriceRangeIndex(candles) }
 
     // Drawing Interaction State
     var drawingStartOffset by remember { mutableStateOf<Offset?>(null) }
@@ -154,6 +157,20 @@ fun CandlestickChart(
     }
 
     val timeFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.US) }
+    // Paint instances are reused across redraws instead of allocated once per
+    // grid label / timestamp on every pinch, drag or replay tick.
+    val priceAxisPaint = remember {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.parseColor("#9CA3AF")
+            textSize = 20f
+        }
+    }
+    val timeAxisPaint = remember {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.parseColor("#6B7280")
+            textSize = 17f
+        }
+    }
 
     Box(modifier = modifier) {
         Canvas(
@@ -260,8 +277,9 @@ fun CandlestickChart(
             if (visibleCandles.isEmpty()) return@Canvas
 
             // Calculate min & max prices for visible range
-            var minP = visibleCandles.minOfOrNull { it.low } ?: 0.0
-            var maxP = visibleCandles.maxOfOrNull { it.high } ?: 1.0
+            val priceRange = priceRangeIndex.query(startIndex, endIndex)
+            var minP = priceRange.first
+            var maxP = priceRange.second
             if (minP == maxP) {
                 minP *= 0.99
                 maxP *= 1.01
@@ -308,12 +326,7 @@ fun CandlestickChart(
                 )
                 // Price Axis Label
                 drawContext.canvas.nativeCanvas.apply {
-                    val paint = android.graphics.Paint().apply {
-                        color = android.graphics.Color.parseColor("#9CA3AF")
-                        textSize = 20f
-                        isAntiAlias = true
-                    }
-                    drawText(String.format(Locale.US, "%.2f", priceVal), chartWidth + 6f, y + 6f, paint)
+                    drawText(String.format(Locale.US, "%.2f", priceVal), chartWidth + 6f, y + 6f, priceAxisPaint)
                 }
             }
 
@@ -368,12 +381,7 @@ fun CandlestickChart(
                 if (i % labelStride == 0) {
                     val x = transform.candleIndexToX(i)
                     drawContext.canvas.nativeCanvas.apply {
-                        val labelPaint = android.graphics.Paint().apply {
-                            color = android.graphics.Color.parseColor("#6B7280")
-                            textSize = 17f
-                            isAntiAlias = true
-                        }
-                        drawText(timeFormat.format(Date(c.openTime)), x - 20f, height - 6f, labelPaint)
+                        drawText(timeFormat.format(Date(c.openTime)), x - 20f, height - 6f, timeAxisPaint)
                     }
                 }
             }
