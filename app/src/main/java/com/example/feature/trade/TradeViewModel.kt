@@ -345,25 +345,45 @@ class TradeViewModel(
         }
     }
 
+    private fun executableClosePrice(position: Position): Double? {
+        val tick = _uiState.value.latestTick
+        // A quote for the chart's selected symbol must never close a different instrument.
+        if (tick == null || tick.symbol != position.symbol ||
+            System.currentTimeMillis() - tick.timestamp !in 0..15_000L ||
+            !tick.bid.isFinite() || !tick.ask.isFinite() ||
+            tick.bid <= 0.0 || tick.ask < tick.bid) return null
+        return if (position.side == PositionSide.BUY) tick.bid else tick.ask
+    }
+
     fun closePosition(positionId: Long) {
         val pos = _uiState.value.openPositions.firstOrNull { it.id == positionId } ?: return
-        val tick = _uiState.value.latestTick
-        val exitPrice = if (pos.side == PositionSide.BUY) (tick?.bid ?: pos.currentPrice) else (tick?.ask ?: pos.currentPrice)
-
+        val exitPrice = executableClosePrice(pos) ?: run {
+            _uiState.update { it.copy(message = "لا يوجد سعر حديث وموثوق لهذا الزوج. افتح الزوج وانتظر تحديث السعر قبل الإغلاق.") }
+            return
+        }
         viewModelScope.launch {
             tradingRepository.closePosition(pos.id, exitPrice, ExitReason.MANUAL_CLOSE)
-            _uiState.update { it.copy(message = "تم إغلاق الصفقة بنجاح", selectedPositionForDetail = null) }
+                .onSuccess {
+                    _uiState.update { it.copy(message = "تم إغلاق الصفقة بنجاح", selectedPositionForDetail = null) }
+                }.onFailure { error ->
+                    _uiState.update { it.copy(message = error.message ?: "فشل إغلاق الصفقة") }
+                }
         }
     }
 
     fun partialClosePosition(positionId: Long, volume: Double) {
         val pos = _uiState.value.openPositions.firstOrNull { it.id == positionId } ?: return
-        val tick = _uiState.value.latestTick
-        val exitPrice = if (pos.side == PositionSide.BUY) (tick?.bid ?: pos.currentPrice) else (tick?.ask ?: pos.currentPrice)
-
+        val exitPrice = executableClosePrice(pos) ?: run {
+            _uiState.update { it.copy(message = "لا يوجد سعر حديث وموثوق لهذا الزوج. افتح الزوج وانتظر تحديث السعر قبل الإغلاق الجزئي.") }
+            return
+        }
         viewModelScope.launch {
             tradingRepository.closePosition(pos.id, exitPrice, ExitReason.MANUAL_CLOSE, partialVolume = volume)
-            _uiState.update { it.copy(message = "تم الإغلاق الجزئي لـ $volume لوت بنجاح", selectedPositionForDetail = null) }
+                .onSuccess {
+                    _uiState.update { it.copy(message = "تم الإغلاق الجزئي لـ $volume لوت بنجاح", selectedPositionForDetail = null) }
+                }.onFailure { error ->
+                    _uiState.update { it.copy(message = error.message ?: "فشل الإغلاق الجزئي") }
+                }
         }
     }
 
