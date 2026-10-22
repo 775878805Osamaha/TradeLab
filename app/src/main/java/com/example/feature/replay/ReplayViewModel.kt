@@ -331,7 +331,7 @@ class ReplayViewModel(
             try {
                 while (advanced < count &&
                     generation == batchAdvanceGeneration &&
-                    kotlinx.coroutines.currentCoroutineContext().isActive &&
+                    kotlinx.coroutines.currentCoroutineContext()[Job]?.isActive == true &&
                     replayEngine.stepForward()) {
                     advanced++
                     if (advanced % 5 == 0) {
