@@ -293,7 +293,8 @@ class ChartViewModel(
                     !candle.low.isFinite() || !candle.close.isFinite() ||
                     candle.low <= 0.0 || candle.high < candle.low ||
                     candle.open !in candle.low..candle.high ||
-                    candle.close !in candle.low..candle.high
+                    candle.close !in candle.low..candle.high ||
+                    !candle.volume.isFinite() || candle.volume < 0.0
                 }) {
                     throw IllegalStateException("Invalid verified chart candle data")
                 }
@@ -335,7 +336,8 @@ class ChartViewModel(
                     !candle.low.isFinite() || !candle.close.isFinite() ||
                     candle.low <= 0.0 || candle.high < candle.low ||
                     candle.open !in candle.low..candle.high ||
-                    candle.close !in candle.low..candle.high) return@collect
+                    candle.close !in candle.low..candle.high ||
+                    !candle.volume.isFinite() || candle.volume < 0.0) return@collect
                 val existing = _uiState.value.candles
                 val merged = (existing + candle)
                     .associateBy { it.openTime }
