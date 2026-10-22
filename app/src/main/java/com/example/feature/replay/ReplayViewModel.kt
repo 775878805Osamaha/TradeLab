@@ -277,6 +277,7 @@ class ReplayViewModel(
     }
 
     fun play() {
+        batchAdvanceJob?.cancel()
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
             _uiState.update { it.copy(message = "انتظر اكتمال تحميل بيانات Replay أولًا") }
             return
@@ -288,6 +289,7 @@ class ReplayViewModel(
         replayEngine.pause()
     }
     fun stepForward() {
+        batchAdvanceJob?.cancel()
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
             _uiState.update { it.copy(message = "لا توجد شموع Replay جاهزة للتقدم") }
             return
