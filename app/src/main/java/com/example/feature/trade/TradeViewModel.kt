@@ -313,8 +313,9 @@ class TradeViewModel(
                 }
             } else {
                 // Pending Order
-                val reqPrice = state.requestedPrice.toDoubleOrNull() ?: run {
-                    _uiState.update { it.copy(message = "يرجى تحديد السعر المستهدف للأمر المعلق", isSubmittingOrder = false) }
+                val reqPrice = state.requestedPrice.toDoubleOrNull()
+                if (reqPrice == null || !reqPrice.isFinite() || reqPrice <= 0.0) {
+                    _uiState.update { it.copy(message = "يرجى إدخال سعر مستهدف موجب وصالح للأمر المعلق", isSubmittingOrder = false) }
                     return@launch
                 }
 
