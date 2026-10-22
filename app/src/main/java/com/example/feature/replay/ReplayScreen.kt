@@ -393,6 +393,31 @@ fun ReplayScreen(
                 )
             }
 
+            if (chartFocusMode) {
+                Surface(color = TradingCard, modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { viewModel.stepBackward() }, modifier = Modifier.testTag("replay_focus_previous")) {
+                            Icon(Icons.Default.SkipPrevious, contentDescription = "الشمعة السابقة")
+                        }
+                        IconButton(onClick = { if (uiState.isPlaying) viewModel.pause() else viewModel.play() },
+                            modifier = Modifier.testTag("replay_focus_play_pause")) {
+                            Icon(if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "تشغيل أو إيقاف")
+                        }
+                        IconButton(onClick = { viewModel.stepForward() }, modifier = Modifier.testTag("replay_focus_next")) {
+                            Icon(Icons.Default.SkipNext, contentDescription = "الشمعة التالية")
+                        }
+                        Text(
+                            "${uiState.currentIndex + 1}/${uiState.totalCandles}",
+                            fontSize = 11.sp, color = TradingTextSecondary
+                        )
+                        TextButton(onClick = { chartFocusMode = false }) { Text("تداول") }
+                    }
+                }
+            }
             if (!chartFocusMode) {
             // 3. Playback Controls & Speed Selector
             Surface(
