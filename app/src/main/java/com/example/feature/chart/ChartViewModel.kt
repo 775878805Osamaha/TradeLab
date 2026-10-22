@@ -287,7 +287,11 @@ class ChartViewModel(
             // (including Monday UTC alignment for weekly bars).
             val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
                 .currentOpen(now, interval) - interval
-            val from = (lastClosedOpen - interval * 249L).coerceAtLeast(0L)
+            // Keyless weekly aggregation needs up to five daily bars per week.
+            // Bound requests to 100 weeks so the source's 1000-bar limit
+            // cannot silently truncate the requested history window.
+            val historyBars = if (symbol !in setOf("BTCUSDT", "ETHUSDT") && tf.minutes == 10080) 99L else 249L
+            val from = (lastClosedOpen - interval * historyBars).coerceAtLeast(0L)
 
             try {
                 // Start live subscription even if historical REST loading fails.
