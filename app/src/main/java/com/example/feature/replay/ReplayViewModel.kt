@@ -87,11 +87,6 @@ class ReplayViewModel(
     )
     private val accountSnapshots = mutableMapOf<Int, AccountSnapshot>()
 
-    // Each checkpoint retains the full financial state for safe rewinds. Avoid
-    // unbounded checkpoint growth during long sessions; the equity samples
-    // remain separately available for full-session analytics.
-    private val maxFinancialCheckpoints = 600
-
     private fun saveAccountSnapshot() {
         val index = replayEngine.currentIndex.value
         // Any new execution or account edit forks the timeline at this bar.
@@ -109,10 +104,6 @@ class ReplayViewModel(
             maxObservedDrawdownPercent = _uiState.value.maxObservedDrawdownPercent,
             equitySamples = _uiState.value.equitySamples
         )
-        if (accountSnapshots.size > maxFinancialCheckpoints) {
-            val oldest = accountSnapshots.keys.minOrNull()
-            if (oldest != null && oldest != index) accountSnapshots.remove(oldest)
-        }
     }
 
     private fun restoreAccountSnapshot(snapshot: AccountSnapshot) {
