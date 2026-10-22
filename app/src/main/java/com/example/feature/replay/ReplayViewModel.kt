@@ -39,6 +39,7 @@ data class ReplayUiState(
     val currentIndex: Int = 0,
     val totalCandles: Int = 0,
     val requestedHistoryBars: Int = 300,
+    val historyEndOffsetBars: Int = 0,
     val currentReplayTime: Long = 0L,
     val interactionMode: ReplayInteractionMode = ReplayInteractionMode.MANUAL,
     val selectedStrategyName: String? = null,
@@ -170,8 +171,10 @@ class ReplayViewModel(
     fun loadReplayData(
         symbol: String = "BTCUSDT",
         tf: Timeframe = Timeframe.M15,
-        historyBars: Int = _uiState.value.requestedHistoryBars
+        historyBars: Int = _uiState.value.requestedHistoryBars,
+        endOffsetBars: Int = _uiState.value.historyEndOffsetBars
     ) {
+        require(endOffsetBars in 0..100_000) { "Historical offset must be 0 to 100000 bars" }
         require(historyBars in 50..5_000) { "Replay history must contain 50 to 5000 bars" }
         replayLoadJob?.cancel()
         replayEngine.pause()
@@ -187,6 +190,7 @@ class ReplayViewModel(
         _uiState.update {
             it.copy(
                 symbol = symbol, timeframe = tf, requestedHistoryBars = historyBars,
+                historyEndOffsetBars = endOffsetBars,
                 isLoading = true, message = null,
                 visibleCandles = emptyList(), currentCandle = null, latestTick = null,
                 currentIndex = 0, totalCandles = 0, currentReplayTime = 0L,
@@ -205,9 +209,13 @@ class ReplayViewModel(
                 val interval = tf.minutes * 60_000L
                 // Historical data requires aligned, fully closed candle OPEN timestamps.
                 // Requesting an unfinished bar causes the verified repository to reject replay.
-                val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
+                val latestClosedOpen = com.example.core.market.HistoricalCandleBoundary
                     .currentOpen(now, interval) - interval
-                val from = (lastClosedOpen - interval * (historyBars - 1L)).coerceAtLeast(0L)
+                val lastClosedOpen = latestClosedOpen - interval * endOffsetBars.toLong()
+                require(lastClosedOpen >= interval * (historyBars - 1L)) {
+                    "Historical range predates available exchange timestamps"
+                }
+                val from = lastClosedOpen - interval * (historyBars - 1L)
                 val candles = marketDataRepository.getCandles(symbol, tf, from, lastClosedOpen)
                 if (candles.size < 2) {
                     _uiState.update {
@@ -218,7 +226,8 @@ class ReplayViewModel(
                 // A superseded request must not initialize the engine with the old instrument.
                 if (_uiState.value.symbol != symbol ||
                     _uiState.value.timeframe != tf ||
-                    _uiState.value.requestedHistoryBars != historyBars) return@launch
+                    _uiState.value.requestedHistoryBars != historyBars ||
+                    _uiState.value.historyEndOffsetBars != endOffsetBars) return@launch
                 if (candles.any { it.symbol != symbol || it.timeframe != tf } ||
                     candles.zipWithNext().any { (a, b) -> b.openTime <= a.openTime }) {
                     _uiState.update { it.copy(isLoading = false, message = "بيانات Replay غير متسقة؛ أُلغيت الجلسة لحماية نتائج الاختبار") }
@@ -233,7 +242,8 @@ class ReplayViewModel(
                 // A failed, cancelled or replaced load must never overwrite another session.
                 _uiState.update { state ->
                     if (state.symbol == symbol && state.timeframe == tf &&
-                        state.requestedHistoryBars == historyBars) {
+                        state.requestedHistoryBars == historyBars &&
+                        state.historyEndOffsetBars == endOffsetBars) {
                         state.copy(
                             isLoading = false,
                             message = "تعذر تحميل بيانات إعادة العرض لهذا الرمز. تحقق من الاتصال وتوفر الشموع المكتملة."
