@@ -56,6 +56,8 @@ fun TradeScreen(
     val symInfo = remember(uiState.selectedSymbol) { DefaultSymbols.getSymbol(uiState.selectedSymbol) }
 
     var showSymbolSheet by remember { mutableStateOf(false) }
+    var showHistoricalKeyDialog by remember { mutableStateOf(false) }
+    var historicalKeyInput by remember { mutableStateOf("") }
     var showPartialCloseDialog by remember { mutableStateOf<Position?>(null) }
     var partialCloseVolumeText by remember { mutableStateOf("0.01") }
     var showModifyDialog by remember { mutableStateOf<Position?>(null) }
@@ -70,6 +72,34 @@ fun TradeScreen(
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessage()
         }
+    }
+
+    if (showHistoricalKeyDialog) {
+        AlertDialog(
+            onDismissRequest = { showHistoricalKeyDialog = false },
+            title = { Text("مصدر تاريخ الذهب والفوركس") },
+            text = {
+                OutlinedTextField(
+                    value = historicalKeyInput,
+                    onValueChange = { historicalKeyInput = it },
+                    label = { Text("Twelve Data API Key") },
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth().testTag("trade_twelvedata_key")
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = historicalKeyInput.isNotBlank(),
+                    onClick = {
+                        viewModel.configureHistoricalProviderKey(historicalKeyInput)
+                        historicalKeyInput = ""
+                        showHistoricalKeyDialog = false
+                    }
+                ) { Text("تحميل شموع حقيقية") }
+            },
+            dismissButton = { TextButton(onClick = { showHistoricalKeyDialog = false }) { Text("إلغاء") } }
+        )
     }
 
     Scaffold(
@@ -175,7 +205,7 @@ fun TradeScreen(
             // 3. Compact Integrated Trading Chart
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth().height(180.dp).testTag("trade_chart_card"),
+                    modifier = Modifier.fillMaxWidth().height(300.dp).testTag("trade_chart_card"),
                     shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = TradingCard),
                     border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
@@ -202,10 +232,18 @@ fun TradeScreen(
                                     fontSize = 12.sp,
                                     color = TradingTextSecondary
                                 )
-                                TextButton(
-                                    onClick = { viewModel.retryCandleLoad() },
-                                    modifier = Modifier.testTag("trade_chart_retry")
-                                ) { Text("إعادة المحاولة") }
+                                if (uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT") &&
+                                    !viewModel.hasHistoricalProviderKey()) {
+                                    TextButton(
+                                        onClick = { showHistoricalKeyDialog = true },
+                                        modifier = Modifier.testTag("trade_connect_historical_source")
+                                    ) { Text("ربط بيانات الذهب والفوركس") }
+                                } else {
+                                    TextButton(
+                                        onClick = { viewModel.retryCandleLoad() },
+                                        modifier = Modifier.testTag("trade_chart_retry")
+                                    ) { Text("إعادة المحاولة") }
+                                }
                             }
                         }
                     }

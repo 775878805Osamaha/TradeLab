@@ -103,7 +103,13 @@ class TradeViewModel(
                 message = null, isOrderPreviewVisible = false
             )
         }
-        subscribeToSymbolTicks(symInfo.symbol)
+        if (symInfo.symbol in setOf("BTCUSDT", "ETHUSDT")) {
+            subscribeToSymbolTicks(symInfo.symbol)
+        } else {
+            // Historical-only forex/metal sources cannot supply a verified
+            // executable bid/ask; never subscribe to Binance for these symbols.
+            tickJob?.cancel()
+        }
         loadCandles(symInfo.symbol)
         recalculateRisk()
     }
@@ -453,6 +459,13 @@ class TradeViewModel(
         loadCandles(_uiState.value.selectedSymbol)
     }
 
+    fun configureHistoricalProviderKey(key: String) {
+        marketDataRepository.configureTwelveDataKey(key)
+        loadCandles(_uiState.value.selectedSymbol)
+    }
+
+    fun hasHistoricalProviderKey(): Boolean = marketDataRepository.hasTwelveDataKey()
+
     private fun loadCandles(symbol: String) {
         candleLoadJob?.cancel()
         _uiState.update { state ->
@@ -479,6 +492,7 @@ class TradeViewModel(
     }
 
     private fun subscribeToSymbolTicks(symbol: String) {
+        if (symbol !in setOf("BTCUSDT", "ETHUSDT")) return
         tickJob?.cancel()
         tickJob = viewModelScope.launch {
             // Observing the local tick flow alone does not connect Binance.

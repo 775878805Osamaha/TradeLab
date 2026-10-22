@@ -565,7 +565,7 @@ fun ChartScreen(
                                 Text("ربط مصدر البيانات")
                             }
                         }
-                        if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
+                        if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT") || viewModel.hasHistoricalProviderKey()) {
                         Button(
                             onClick = { viewModel.retryCandleLoad() },
                             modifier = Modifier.testTag("chart_retry_load_btn"),
