@@ -383,8 +383,16 @@ class TradeViewModel(
         }
     }
 
+    fun retryCandleLoad() {
+        loadCandles(_uiState.value.selectedSymbol)
+    }
+
     private fun loadCandles(symbol: String) {
         candleLoadJob?.cancel()
+        _uiState.update { state ->
+            if (state.selectedSymbol == symbol) state.copy(isLoading = true, message = null)
+            else state
+        }
         candleLoadJob = viewModelScope.launch {
             val result = loadTradeCandles(symbol) {
                 val now = System.currentTimeMillis()
@@ -398,7 +406,7 @@ class TradeViewModel(
             }
             _uiState.update { state ->
                 if (state.selectedSymbol == symbol) {
-                    state.copy(candles = result.candles, message = result.message)
+                    state.copy(candles = result.candles, message = result.message, isLoading = false)
                 } else state
             }
         }
