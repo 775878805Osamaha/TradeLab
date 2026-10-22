@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/verify-gold-history-endpoint
+      - main
   workflow_dispatch:
 
 jobs:
