@@ -59,6 +59,13 @@ class HistoricalSeriesIntegrityTest {
         ).isValid)
     }
 
+    @Test fun oversizedCandleDurationIsRejected() {
+        val malformed = candle(900_000L).copy(closeTime = 900_000L + 3_600_000L)
+        assertFalse(DataIntegrityValidator.validateHistoricalSeries(
+            listOf(malformed)
+        ).isValid)
+    }
+
     @Test fun emptyHistoryIsRejected() {
         assertFalse(DataIntegrityValidator.validateHistoricalSeries(emptyList()).isValid)
     }
