@@ -21,6 +21,8 @@ class TradeCandleLoaderTests {
         val failed = loadTradeCandles("BTCUSDT") { throw IOException("offline") }
         assertTrue(failed.candles.isEmpty())
         assertNotNull(failed.message)
+        assertTrue(failed.message!!.contains("IOException"))
+        assertTrue(failed.message!!.contains("offline"))
         val candles = listOf(Candle(symbol = "BTCUSDT", timeframe = Timeframe.M15,
             openTime = 0L, open = 100.0, high = 102.0, low = 99.0, close = 101.0, volume = 1.0))
         val recovered = loadTradeCandles("BTCUSDT") { candles }
