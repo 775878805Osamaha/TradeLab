@@ -320,7 +320,9 @@ class ReplayViewModel(
                 val validation = com.example.core.market.DataIntegrityValidator
                     .validateHistoricalSeries(candles)
                 if (!validation.isValid || candles.first().symbol != symbol ||
-                    candles.first().timeframe != tf) {
+                    candles.first().timeframe != tf ||
+                    candles.first().openTime < from ||
+                    candles.last().openTime > lastClosedOpen) {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
