@@ -46,9 +46,11 @@ object HistoricalCandleIntegrity {
             // Binance W1 candles begin Monday 00:00 UTC (four days after Unix epoch).
             // Do not exempt weekly bars from timestamp validation.
             val intervalMillis = candle.timeframe.minutes * 60_000L
+            require(intervalMillis > 0L) { "Invalid historical timeframe" }
             val mondayOffset = 4L * 24 * 60 * 60 * 1000
             val offset = if (candle.timeframe.minutes == 10_080) mondayOffset else 0L
-            require(Math.floorMod(candle.openTime - offset, intervalMillis) == 0L) {
+            require(Math.floorMod(candle.openTime, intervalMillis) ==
+                Math.floorMod(offset, intervalMillis)) {
                 "Misaligned candle timestamp"
             }
             if (expectedSource != null) {
