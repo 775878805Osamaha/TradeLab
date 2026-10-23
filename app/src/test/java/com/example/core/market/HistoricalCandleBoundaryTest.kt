@@ -46,4 +46,30 @@ class HistoricalCandleBoundaryTest {
         assertTrue(HistoricalCandleBoundary.isClosedRange(lastClosedOpen, now, week))
     }
 
+    @Test fun weeklyBoundaryBeforeFirstMondayDoesNotReturnNegativeTime() {
+        val week = 604_800_000L
+        assertEquals(-259_200_000L, HistoricalCandleBoundary.currentOpen(0L, week))
+        assertEquals(-259_200_000L, HistoricalCandleBoundary.currentOpen(345_599_999L, week))
+        assertEquals(345_600_000L, HistoricalCandleBoundary.currentOpen(345_600_000L, week))
+    }
+
+    @Test fun largeTimestampBoundaryRemainsAlignedAndNeverInFuture() {
+        val week = 604_800_000L
+        val now = Long.MAX_VALUE
+        val open = HistoricalCandleBoundary.currentOpen(now, week)
+        assertTrue(open <= now)
+        assertTrue(now - open < week)
+        assertEquals(345_600_000L % week, Math.floorMod(open, week))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun zeroIntervalIsRejected() {
+        HistoricalCandleBoundary.currentOpen(60_000L, 0L)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun negativeTimeIsRejected() {
+        HistoricalCandleBoundary.currentOpen(-1L, 60_000L)
+    }
+
 }
