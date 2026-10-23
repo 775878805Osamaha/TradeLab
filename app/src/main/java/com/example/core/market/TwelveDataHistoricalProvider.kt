@@ -98,8 +98,10 @@ class TwelveDataHistoricalProvider(
                 LocalDateTime.parse(timestamp.replace('T', ' '), formatter)
                     .toEpochSecond(ZoneOffset.UTC) * 1000L
             }
-            // Ignore out-of-range rows, never fabricate missing candles.
-            if (openTime < from || openTime > to) continue
+            // Reject wrong-range provider rows instead of silently discarding data.
+            if (openTime < from || openTime > to) {
+                throw IOException("Twelve Data returned a candle outside the requested range")
+            }
             val open = row.getString("open").toDouble()
             val high = row.getString("high").toDouble()
             val low = row.getString("low").toDouble()
