@@ -48,4 +48,26 @@ class HistoricalCandleCoverageTest {
             listOf(bar(monday), bar(monday + 2 * week)),
             monday, monday + 2 * week, week))
     }
+    @Test fun weeklyWindowStartingBeforeMondayFindsFirstMonday() {
+        val week = 604_800_000L
+        val monday = 345_600_000L
+        assertTrue(HistoricalCandleCoverage.isComplete(
+            listOf(bar(monday), bar(monday + week)), 0L, monday + week, week))
+    }
+
+    @Test fun windowNearLongMaxValueDoesNotOverflowWhenAligning() {
+        val interval = 60_000L
+        val aligned = Long.MAX_VALUE - Math.floorMod(Long.MAX_VALUE, interval)
+        assertTrue(HistoricalCandleCoverage.isComplete(
+            listOf(bar(aligned)), aligned - 1L, aligned, interval))
+        assertFalse(HistoricalCandleCoverage.isComplete(
+            listOf(bar(aligned)), aligned + 1L, Long.MAX_VALUE, interval))
+    }
+
+    @Test fun emptyOrInvalidWindowsAreNeverComplete() {
+        assertFalse(HistoricalCandleCoverage.isComplete(emptyList(), 0L, 60_000L, 60_000L))
+        assertFalse(HistoricalCandleCoverage.isComplete(listOf(bar(0L)), 60_000L, 0L, 60_000L))
+        assertFalse(HistoricalCandleCoverage.isComplete(listOf(bar(0L)), 0L, 60_000L, 0L))
+    }
+
 }
