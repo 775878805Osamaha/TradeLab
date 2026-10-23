@@ -276,8 +276,8 @@ fun CandlestickChart(
             // Calculate Visible Candle Range from Viewport
             val visibleCount = ((chartWidth / candleWidthPx) + 3).toInt().coerceIn(1, candles.size)
             val maxScrollOffset = (candles.size.toDouble() * candleWidthPx - chartWidth).coerceAtLeast(0.0).toFloat()
-            // Permit dragging the latest candle away from the right axis,
-            // leaving future space (up to 70% of the viewport) like TradingView.
+            // A LEFT swipe makes scrollOffsetPx negative and exposes future space
+            // on the RIGHT; a RIGHT swipe moves back toward earlier candles.
             val futureSpacePx = chartWidth * 0.70f
             // Negative offsets are future-space: a leftward finger drag must shift candles LEFT.
             // Positive offsets scroll into history: a rightward drag moves candles RIGHT.
