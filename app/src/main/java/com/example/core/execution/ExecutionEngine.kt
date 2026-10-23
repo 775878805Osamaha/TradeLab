@@ -549,6 +549,10 @@ class ExecutionEngine(
             } else 0.0
         } else 0.0
 
+        require(rMultiple.isFinite()) { "Position close R-multiple overflow" }
+        val netProfitLoss = grossPl - closingCommission - closingSwap
+        require(netProfitLoss.isFinite()) { "Position close net PnL overflow" }
+
         val journalEntry = TradeJournalEntry(
             accountId = position.accountId,
             symbol = position.symbol,
