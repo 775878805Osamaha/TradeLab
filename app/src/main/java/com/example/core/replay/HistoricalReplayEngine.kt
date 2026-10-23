@@ -201,6 +201,7 @@ class HistoricalReplayEngine(
         _visibleCandles.value = emptyList()
         _currentCandle.value = null
         _currentTick.value = null
+        replayClock.initialize(0L)
         _status.value = ReplayStatus.READY
     }
 
@@ -208,6 +209,7 @@ class HistoricalReplayEngine(
         pause()
         checkpoints.clear()
         _currentIndex.value = if (allCandles.isNotEmpty()) minOf(10, allCandles.size - 1) else 0
+        replayClock.initialize(allCandles.getOrNull(_currentIndex.value)?.closeTime ?: 0L)
         _status.value = ReplayStatus.READY
         // Reset is navigation, not a new strategy signal or SL/TP event.
         updateVisibleState(evaluateTrades = false)
