@@ -97,6 +97,6 @@ sealed class Screen(
     )
 
     companion object {
-        val bottomNavItems = listOf(Market, Chart, Trade, Results, Account)
+        val bottomNavItems = listOf(Market, Chart, Results, Account)
     }
 }
