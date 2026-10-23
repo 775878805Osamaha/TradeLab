@@ -56,12 +56,12 @@ fun ChartScreen(
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var immersiveChart by remember { mutableStateOf(true) }
+    var drawingToolbarExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(immersiveChart) { onImmersiveChanged(immersiveChart) }
     // Keep the floating palette compact when the displayed market context changes.
     LaunchedEffect(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay) {
         drawingToolbarExpanded = false
     }
-    var drawingToolbarExpanded by remember { mutableStateOf(false) }
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
     var orderVolumeInput by remember { mutableStateOf("0.01") }
