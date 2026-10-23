@@ -1059,12 +1059,9 @@ class ReplayViewModel(
         if (!balance.isFinite() || !equity.isFinite()) return
         val index = replayEngine.currentIndex.value
         _uiState.update { state ->
-            val previousPeak = state.peakEquity.coerceAtLeast(state.initialBalance)
-            val peak = maxOf(previousPeak, equity)
-            val drawdown = if (peak > 0.0) (peak - equity).coerceAtLeast(0.0) * 100.0 / peak else 0.0
-            // The replay cursor normally moves forward one bar. Reuse the
-            // existing immutable prefix instead of filtering the entire session
-            // on every candle (quadratic work for long 5000-bar replays).
+            // A manual trade can replace an existing candle checkpoint, or a
+            // rewind can fork the timeline. Derive the high-water mark from the
+            // retained prefix instead of carrying a peak from an abandoned future.
             val history = state.equitySamples
             val prefix = when {
                 history.isEmpty() -> history
@@ -1072,10 +1069,16 @@ class ReplayViewModel(
                 history.last().candleIndex == index -> history.dropLast(1)
                 else -> history.takeWhile { it.candleIndex < index }
             }
+            val previousPeak = maxOf(state.initialBalance, prefix.maxOfOrNull { it.equity } ?: state.initialBalance)
+            val peak = maxOf(previousPeak, equity)
+            val drawdown = if (peak > 0.0) (peak - equity).coerceAtLeast(0.0) * 100.0 / peak else 0.0
+            // The replay cursor normally moves forward one bar. Reuse the
+            // existing immutable prefix instead of filtering the entire session
+            // on every candle (quadratic work for long 5000-bar replays).
             val samples = prefix + ReplayEquitySample(index, equity, balance)
             state.copy(
                 peakEquity = peak,
-                maxObservedDrawdownPercent = maxOf(state.maxObservedDrawdownPercent, drawdown),
+                maxObservedDrawdownPercent = maxOf(drawdown, prefix.fold(0.0) { worst, sample -> maxOf(worst, if (previousPeak > 0.0) (previousPeak - sample.equity).coerceAtLeast(0.0) * 100.0 / previousPeak else 0.0) }),
                 equitySamples = samples
             )
         }
