@@ -105,7 +105,12 @@ class ReplayViewModel(
         val index = replayEngine.currentIndex.value
         // Any new execution or account edit forks the timeline at this bar.
         // Checkpoints from a previous future must never be restored.
-        accountSnapshots.keys.removeAll { it > index }
+        // Snapshot keys can be numerous during long replay sessions. Avoid
+        // allocating a filtered set when the current cursor is already the
+        // latest saved checkpoint (the common sequential playback path).
+        if (accountSnapshots.keys.any { it > index }) {
+            accountSnapshots.keys.removeAll { it > index }
+        }
         replayEngine.discardCheckpointsAfter(index)
         accountSnapshots[index] = AccountSnapshot(
             balance = _uiState.value.currentBalance,
