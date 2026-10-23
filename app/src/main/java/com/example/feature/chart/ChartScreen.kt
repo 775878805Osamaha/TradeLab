@@ -871,7 +871,10 @@ fun ChartScreen(
                         tools.forEach { (tool, icon, description) ->
                             val selected = uiState.activeDrawingTool == tool
                             IconButton(
-                                onClick = { viewModel.setDrawingTool(tool) },
+                                onClick = {
+                                    viewModel.setDrawingTool(tool)
+                                    drawingToolbarExpanded = false
+                                },
                                 modifier = Modifier.size(44.dp).testTag("chart_toolbar_${tool.name}")
                             ) {
                                 Icon(
