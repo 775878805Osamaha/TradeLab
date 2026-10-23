@@ -45,6 +45,25 @@ class ReplayRiskPolicyIntegrityTest {
         assertNull(ReplayRiskPolicy.blockReason(limits, valid.copy(pendingOrders = 3), false))
     }
 
+    @Test fun drawdownRiskHandlesVeryLargeFiniteBalances() {
+        val huge = valid.copy(
+            initialBalance = 1.0e307, balance = 1.0e307, equity = 5.0e306
+        )
+        assertNotNull(ReplayRiskPolicy.blockReason(
+            ReplayRiskPolicy.Limits(maxDrawdownPercent = 40.0), huge, false
+        ))
+        assertNull(ReplayRiskPolicy.blockReason(
+            ReplayRiskPolicy.Limits(maxDrawdownPercent = 60.0), huge, false
+        ))
+    }
+
+    @Test fun negativeEquityBlocksFurtherTradingAtDrawdownLimit() {
+        assertNotNull(ReplayRiskPolicy.blockReason(
+            ReplayRiskPolicy.Limits(maxDrawdownPercent = 100.0),
+            valid.copy(equity = -10.0), false
+        ))
+    }
+
     @Test fun consecutiveLossCounterStopsAtNonLoss() {
         assertEquals(2, ReplayRiskPolicy.consecutiveLosses(listOf(-5.0, 0.0, -2.0, -1.0)))
         assertEquals(0, ReplayRiskPolicy.consecutiveLosses(listOf(-1.0, 1.0)))
