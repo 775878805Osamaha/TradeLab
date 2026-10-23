@@ -147,6 +147,13 @@ class ExecutionEngine(
             !order.requestedPrice.isFinite() || order.requestedPrice <= 0.0) {
             return ExecutionResult.Error("سعر السوق أو رمز الأمر المعلق غير صالح")
         }
+        // Historical fill overrides must never be accepted by the live-paper
+        // path, including when the value is NaN or infinite. Reject before
+        // constructing synthetic quotes or running account validation.
+        if (historicalFillPrice != null &&
+            (mode != "REPLAY" || !historicalFillPrice.isFinite() || historicalFillPrice <= 0.0)) {
+            return ExecutionResult.Error("سعر التنفيذ التاريخي غير صالح")
+        }
         // For OHLC replay, validation must use the modeled historical entry
         // quote, not the candle-close tick. Otherwise a wick-triggered pending
         // order can be rejected because its SL/TP is compared to the wrong price.
@@ -179,9 +186,6 @@ class ExecutionEngine(
         )
         if (validation is OrderValidationResult.Rejected) {
             return ExecutionResult.Error(validation.message)
-        }
-        if (historicalFillPrice != null && (!historicalFillPrice.isFinite() || historicalFillPrice <= 0.0 || mode != "REPLAY")) {
-            return ExecutionResult.Error("سعر التنفيذ التاريخي غير صالح")
         }
         // Historical overrides are only legal at an executable price consistent
         // with the order type. Reject accidental favorable stop fills and
