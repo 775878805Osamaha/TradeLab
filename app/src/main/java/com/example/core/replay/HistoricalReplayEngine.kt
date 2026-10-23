@@ -286,6 +286,21 @@ class HistoricalReplayEngine(
             }
         }
 
+        // A favorable gap through a take-profit level is also filled at the
+        // opening quote, not at the less favorable stale target price.
+        if (isTpTouched && tp != null && !isSlTouched) {
+            val gappedPastTarget = when (position.side) {
+                PositionSide.BUY -> candle.open > tp
+                PositionSide.SELL -> candle.open < tp
+            }
+            if (gappedPastTarget) {
+                return PositionEvaluation.TriggerClose(
+                    exitPrice = candle.open,
+                    exitReason = ExitReason.TAKE_PROFIT
+                )
+            }
+        }
+
         // Intrabar collision resolution: conservative risk policy (Stop Loss triggers first)
         if (isSlTouched && isTpTouched) {
             return PositionEvaluation.TriggerClose(
