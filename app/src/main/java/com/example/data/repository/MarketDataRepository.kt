@@ -126,10 +126,21 @@ class MarketDataRepository(
                 require(maxPageBars > 0) { "Unsupported historical page size" }
                 val barsInPage = minOf(remainingBars, maxPageBars.toLong())
                 val end = cursor + (barsInPage - 1L) * intervalMillis
-                val chunk = if (requestedKey.isNotBlank()) {
-                    twelveData.fetch(symbol, timeframe, cursor, end, requestedKey)
-                } else {
-                    keylessHistorical.fetch(symbol, timeframe, cursor, end)
+                val chunk = try {
+                    if (requestedKey.isNotBlank()) {
+                        twelveData.fetch(symbol, timeframe, cursor, end, requestedKey)
+                    } else {
+                        keylessHistorical.fetch(symbol, timeframe, cursor, end)
+                    }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: java.io.IOException) {
+                    // Some providers signal a fully closed market as an empty
+                    // result rather than an empty candle array. Do not hide
+                    // transport failures, authorization errors or rate limits.
+                    throw java.io.IOException(
+                        "Historical page $cursor..$end failed for $symbol: ${error.message}", error
+                    )
                 }
                 currentCoroutineContext().ensureActive()
                 if (chunk.isEmpty()) {
