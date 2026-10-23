@@ -80,12 +80,15 @@ class MainActivity : ComponentActivity() {
                         bottomBar = {
                             if (showBottomNav) {
                                 NavigationBar(
-                                    containerColor = TradingCard,
+                                    containerColor = TradingBackground,
                                     modifier = Modifier
                                         .testTag("bottom_nav_bar"),
                                     windowInsets = NavigationBarDefaults.windowInsets,
                                     tonalElevation = 0.dp
                                 ) {
+                                    // Force the visual order of the reference (left to right)
+                                    // even while screen content remains Arabic RTL.
+                                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                                     Screen.bottomNavItems.forEach { screen ->
                                         val isSelected = currentRoute == screen.route
                                         NavigationBarItem(
@@ -120,6 +123,7 @@ class MainActivity : ComponentActivity() {
                                             ),
                                             modifier = Modifier.testTag("nav_item_${screen.route}")
                                         )
+                                    }
                                     }
                                 }
                             }
