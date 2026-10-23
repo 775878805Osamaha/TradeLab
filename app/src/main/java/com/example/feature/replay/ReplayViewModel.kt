@@ -892,7 +892,7 @@ class ReplayViewModel(
         var curBal = _uiState.value.currentBalance
 
         // 1. Evaluate open positions with conservative intrabar risk policy
-        val iterator = openPositions.iterator()
+        val iterator = openPositions.listIterator()
         while (iterator.hasNext()) {
             val pos = iterator.next()
             when (val eval = replayEngine.evaluatePositionConservative(pos, candle)) {
@@ -908,10 +908,10 @@ class ReplayViewModel(
                     iterator.remove()
                 }
                 is PositionEvaluation.KeepOpen -> {
-                    val idx = openPositions.indexOf(pos)
-                    if (idx != -1) {
-                        openPositions[idx] = eval.updatedPosition
-                    }
+                    // Replace the exact position under iteration. indexOf()
+                    // scans the list and can target the wrong equal-valued
+                    // position; ListIterator.set is O(1) and stable.
+                    iterator.set(eval.updatedPosition)
                 }
             }
         }
