@@ -870,7 +870,7 @@ fun ChartScreen(
                                     tint = TradingTextSecondary, modifier = Modifier.size(18.dp))
                             }
                         }
-                        if (drawingToolbarExpanded) {
+                        if (drawingToolbarExpanded && !isEmbeddedReplay) {
                         val tools = listOf(
                             Triple(DrawingTool.NONE, Icons.Default.PanTool, "تحريك الشارت"),
                             Triple(DrawingTool.TRENDLINE, Icons.Default.ShowChart, "خط اتجاه"),
