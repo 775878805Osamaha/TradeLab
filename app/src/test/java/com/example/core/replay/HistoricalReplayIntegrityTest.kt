@@ -20,6 +20,164 @@ class HistoricalReplayIntegrityTest {
         source = "HISTORICAL"
     )
 
+    @Test fun buyStopGapFillsAtAdverseOpenNotRequestedStop() {
+        val engine = HistoricalReplayEngine()
+        val pos = com.example.core.model.Position(
+            accountId = 1, symbol = "XAUUSD",
+            side = com.example.core.model.PositionSide.BUY,
+            volume = 0.01, entryPrice = 2010.0, currentPrice = 2010.0,
+            stopLoss = 2005.0, takeProfit = 2020.0,
+            openTime = 0L, profitLoss = 0.0, swap = 0.0,
+            commission = 0.0, margin = 100.0
+        )
+        val gap = candle(900_000L).copy(open = 2000.0, low = 1995.0, high = 2025.0)
+        val result = engine.evaluatePositionConservative(pos, gap)
+        org.junit.Assert.assertTrue(result is com.example.core.execution.PositionEvaluation.TriggerClose)
+        assertEquals(2000.0, (result as com.example.core.execution.PositionEvaluation.TriggerClose).exitPrice, 0.0)
+    }
+
+    @Test fun buyTakeProfitGapFillsAtFavorableOpen() {
+        val engine = HistoricalReplayEngine()
+        val pos = com.example.core.model.Position(
+            accountId = 1, symbol = "XAUUSD",
+            side = com.example.core.model.PositionSide.BUY,
+            volume = 0.01, entryPrice = 2010.0, currentPrice = 2010.0,
+            stopLoss = 2005.0, takeProfit = 2020.0,
+            openTime = 0L, profitLoss = 0.0, swap = 0.0,
+            commission = 0.0, margin = 100.0
+        )
+        val gap = candle(900_000L).copy(open = 2025.0, low = 2015.0, high = 2030.0)
+        val result = engine.evaluatePositionConservative(pos, gap)
+        org.junit.Assert.assertTrue(result is com.example.core.execution.PositionEvaluation.TriggerClose)
+        assertEquals(2025.0, (result as com.example.core.execution.PositionEvaluation.TriggerClose).exitPrice, 0.0)
+    }
+
+    private fun position(
+        side: com.example.core.model.PositionSide,
+        sl: Double? = null,
+        tp: Double? = null
+    ) = com.example.core.model.Position(
+        accountId = 1, symbol = "XAUUSD", side = side,
+        volume = 0.01, entryPrice = 2010.0, currentPrice = 2010.0,
+        stopLoss = sl, takeProfit = tp, openTime = 0L,
+        profitLoss = 0.0, swap = 0.0, commission = 0.0, margin = 100.0
+    )
+
+    private fun assertClose(
+        result: com.example.core.execution.PositionEvaluation,
+        price: Double,
+        reason: com.example.core.model.ExitReason
+    ) {
+        org.junit.Assert.assertTrue(result is com.example.core.execution.PositionEvaluation.TriggerClose)
+        val close = result as com.example.core.execution.PositionEvaluation.TriggerClose
+        assertEquals(price, close.exitPrice, 0.0)
+        assertEquals(reason, close.exitReason)
+    }
+
+    @Test fun sellStopLossGapUsesAdverseOpeningPrice() {
+        val bar = candle(900_000L).copy(open = 2025.0, high = 2030.0, low = 2010.0)
+        assertClose(
+            HistoricalReplayEngine().evaluatePositionConservative(
+                position(com.example.core.model.PositionSide.SELL, sl = 2020.0), bar
+            ), 2025.0, com.example.core.model.ExitReason.STOP_LOSS
+        )
+    }
+
+    @Test fun sellTakeProfitGapUsesFavorableOpeningPrice() {
+        val bar = candle(900_000L).copy(open = 1995.0, high = 2010.0, low = 1990.0, close = 2000.0)
+        assertClose(
+            HistoricalReplayEngine().evaluatePositionConservative(
+                position(com.example.core.model.PositionSide.SELL, tp = 2000.0), bar
+            ), 1995.0, com.example.core.model.ExitReason.TAKE_PROFIT
+        )
+    }
+
+    @Test fun bothStopsTouchedWithoutOpeningGapChooseStopLoss() {
+        val bar = candle(900_000L).copy(open = 2010.0, low = 2000.0, high = 2025.0)
+        assertClose(
+            HistoricalReplayEngine().evaluatePositionConservative(
+                position(com.example.core.model.PositionSide.BUY, sl = 2005.0, tp = 2020.0), bar
+            ), 2005.0, com.example.core.model.ExitReason.STOP_LOSS
+        )
+    }
+
+    @Test fun exactStopTouchFillsAtStopPrice() {
+        val bar = candle(900_000L).copy(open = 2010.0, low = 2005.0, high = 2018.0)
+        assertClose(
+            HistoricalReplayEngine().evaluatePositionConservative(
+                position(com.example.core.model.PositionSide.BUY, sl = 2005.0, tp = 2020.0), bar
+            ), 2005.0, com.example.core.model.ExitReason.STOP_LOSS
+        )
+    }
+
+    @Test fun favorableGapDoesNotOverrideStopCollision() {
+        val bar = candle(900_000L).copy(open = 2025.0, high = 2030.0, low = 2000.0)
+        assertClose(
+            HistoricalReplayEngine().evaluatePositionConservative(
+                position(com.example.core.model.PositionSide.BUY, sl = 2005.0, tp = 2020.0), bar
+            ), 2005.0, com.example.core.model.ExitReason.STOP_LOSS
+        )
+    }
+
+    @Test fun playAtFinalCandleCannotStartPlayback() {
+        val engine = HistoricalReplayEngine()
+        engine.initialize(listOf(candle(900_000L), candle(1_800_000L)), startIndex = 1)
+        engine.play()
+        org.junit.Assert.assertFalse(engine.isPlaying.value)
+        assertEquals("COMPLETED", engine.status.value.name)
+        assertEquals(1, engine.currentIndex.value)
+    }
+
+    @Test fun advanceBarsProcessesEachCandleWithoutSkipping() {
+        val engine = HistoricalReplayEngine()
+        val bars = (0..10).map { candle(900_000L + it * 900_000L) }
+        engine.initialize(bars, startIndex = 0)
+        val seen = mutableListOf<Long>()
+        engine.onCandleRevealed = { bar, _, _ -> seen.add(bar.openTime) }
+        assertEquals(5, engine.advanceBars(5))
+        assertEquals(bars.subList(1, 6).map { it.openTime }, seen)
+        assertEquals(5, engine.currentIndex.value)
+        engine.pause()
+    }
+
+    @Test fun clearResetsHistoricalClockAndMarketQuote() {
+        val engine = HistoricalReplayEngine()
+        engine.initialize(listOf(candle(900_000L), candle(1_800_000L)), startIndex = 0)
+        engine.stepForward()
+        engine.clear()
+        assertEquals(0L, engine.currentReplayTime.value)
+        assertEquals(0L, engine.replayClock.elapsedReplayTime.value)
+        assertEquals(null, engine.currentTick.value)
+        assertEquals(0, engine.totalCandles.value)
+    }
+
+    @Test fun restartResetsElapsedHistoricalTime() {
+        val engine = HistoricalReplayEngine()
+        val bars = (0..15).map { candle(900_000L + it * 900_000L) }
+        engine.initialize(bars, startIndex = 0)
+        engine.advanceBars(12)
+        org.junit.Assert.assertTrue(engine.replayClock.elapsedReplayTime.value > 0L)
+        engine.reset()
+        assertEquals(bars[10].closeTime, engine.currentReplayTime.value)
+        assertEquals(0L, engine.replayClock.elapsedReplayTime.value)
+    }
+
+    @Test fun seekResetsElapsedClockAndNeverExecutesSkippedBars() {
+        val engine = HistoricalReplayEngine()
+        val bars = (0..20).map { candle(900_000L + it * 900_000L) }
+        engine.initialize(bars, startIndex = 0)
+        engine.advanceBars(8)
+        val events = mutableListOf<Long>()
+        engine.onCandleRevealed = { bar, _, _ -> events.add(bar.openTime) }
+        engine.jumpToIndex(15)
+        assertEquals(15, engine.currentIndex.value)
+        assertEquals(bars[15].closeTime, engine.currentReplayTime.value)
+        assertEquals(0L, engine.replayClock.elapsedReplayTime.value)
+        assertEquals(0, events.size)
+        engine.stepForward()
+        assertEquals(listOf(bars[16].openTime), events)
+    }
+
     @Test fun enginePreservesValidHistoricalBarCountAndOrdering() {
         val engine = HistoricalReplayEngine()
         val candles = listOf(candle(900_000L), candle(1_800_000L), candle(3_600_000L))

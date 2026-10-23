@@ -107,6 +107,11 @@ class HistoricalReplayEngine(
 
     fun play() {
         if (allCandles.isEmpty()) return
+        if (_currentIndex.value >= allCandles.lastIndex) {
+            pause()
+            _status.value = ReplayStatus.COMPLETED
+            return
+        }
         _status.value = ReplayStatus.RUNNING
         replayClock.play()
     }
@@ -164,6 +169,7 @@ class HistoricalReplayEngine(
         checkpoints.clear()
         val clamped = targetIndex.coerceIn(0, allCandles.size - 1)
         _currentIndex.value = clamped
+        replayClock.initialize(allCandles[clamped].closeTime)
         // A seek is navigation, not a candle execution. Executing a strategy
         // only on the destination candle would silently skip intermediate bars.
         updateVisibleState(evaluateTrades = false)
@@ -196,6 +202,7 @@ class HistoricalReplayEngine(
         _visibleCandles.value = emptyList()
         _currentCandle.value = null
         _currentTick.value = null
+        replayClock.initialize(0L)
         _status.value = ReplayStatus.READY
     }
 
@@ -203,6 +210,7 @@ class HistoricalReplayEngine(
         pause()
         checkpoints.clear()
         _currentIndex.value = if (allCandles.isNotEmpty()) minOf(10, allCandles.size - 1) else 0
+        replayClock.initialize(allCandles.getOrNull(_currentIndex.value)?.closeTime ?: 0L)
         _status.value = ReplayStatus.READY
         // Reset is navigation, not a new strategy signal or SL/TP event.
         updateVisibleState(evaluateTrades = false)
@@ -268,6 +276,37 @@ class HistoricalReplayEngine(
         val isTpTouched = when (position.side) {
             PositionSide.BUY -> tp != null && candle.high >= tp
             PositionSide.SELL -> tp != null && candle.low <= tp
+        }
+
+        // If the bar opens beyond a protective level, the requested stop cannot
+        // be filled at its original price. Model the gap at the opening quote,
+        // while retaining the conservative stop-first rule on collisions.
+        if (isSlTouched && sl != null) {
+            val gappedPastStop = when (position.side) {
+                PositionSide.BUY -> candle.open < sl
+                PositionSide.SELL -> candle.open > sl
+            }
+            if (gappedPastStop) {
+                return PositionEvaluation.TriggerClose(
+                    exitPrice = candle.open,
+                    exitReason = if (position.isBreakEven) ExitReason.BREAK_EVEN else ExitReason.STOP_LOSS
+                )
+            }
+        }
+
+        // A favorable gap through a take-profit level is also filled at the
+        // opening quote, not at the less favorable stale target price.
+        if (isTpTouched && tp != null && !isSlTouched) {
+            val gappedPastTarget = when (position.side) {
+                PositionSide.BUY -> candle.open > tp
+                PositionSide.SELL -> candle.open < tp
+            }
+            if (gappedPastTarget) {
+                return PositionEvaluation.TriggerClose(
+                    exitPrice = candle.open,
+                    exitReason = ExitReason.TAKE_PROFIT
+                )
+            }
         }
 
         // Intrabar collision resolution: conservative risk policy (Stop Loss triggers first)
