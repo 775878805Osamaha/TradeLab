@@ -84,6 +84,7 @@ object DataIntegrityValidator {
         val symbol = candles.first().symbol
         val timeframe = candles.first().timeframe
         val expectedDuration = timeframe.minutes.toLong() * 60_000L
+        if (expectedDuration <= 0L) return ValidationResult.Invalid("Invalid historical timeframe duration")
         var previousOpen = Long.MIN_VALUE
         for ((index, candle) in candles.withIndex()) {
             val validity = validateCandle(candle)
