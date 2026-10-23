@@ -51,6 +51,8 @@ fun ChartScreen(
     val replayState by replayViewModel.uiState.collectAsState()
     var isEmbeddedReplay by remember { mutableStateOf(false) }
     var showSymbolSheet by remember { mutableStateOf(false) }
+    var symbolSearchQuery by remember { mutableStateOf("") }
+    var symbolCategoryFilter by remember { mutableStateOf("الكل") }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
     var showChartExtras by remember { mutableStateOf(false) }
@@ -1117,9 +1119,39 @@ fun ChartScreen(
                     fontSize = 15.sp,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
+                OutlinedTextField(
+                    value = symbolSearchQuery,
+                    onValueChange = { symbolSearchQuery = it },
+                    label = { Text("بحث عن زوج أو اسم") },
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("chart_symbol_search")
+                )
+                val categories = remember { listOf("الكل") + DefaultSymbols.SYMBOLS.map { it.category }.distinct() }
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    categories.forEach { category ->
+                        FilterChip(
+                            selected = symbolCategoryFilter == category,
+                            onClick = { symbolCategoryFilter = category },
+                            label = { Text(category, maxLines = 1, fontSize = 11.sp) }
+                        )
+                    }
+                }
                 HorizontalDivider(color = TradingBorder)
+                val filteredSymbols = DefaultSymbols.SYMBOLS.filter { sym ->
+                    (symbolCategoryFilter == "الكل" || sym.category == symbolCategoryFilter) &&
+                        (symbolSearchQuery.isBlank() || sym.symbol.contains(symbolSearchQuery.trim(), ignoreCase = true) ||
+                            sym.name.contains(symbolSearchQuery.trim(), ignoreCase = true))
+                }
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    DefaultSymbols.SYMBOLS.forEach { sym ->
+                    if (filteredSymbols.isEmpty()) {
+                        Text("لا توجد أزواج مطابقة", color = TradingTextSecondary,
+                            modifier = Modifier.padding(16.dp).testTag("chart_symbol_empty"))
+                    }
+                    filteredSymbols.forEach { sym ->
                         val selected = sym.symbol == uiState.selectedSymbol
                         Row(
                             modifier = Modifier
