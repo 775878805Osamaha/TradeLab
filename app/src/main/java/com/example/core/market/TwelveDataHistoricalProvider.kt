@@ -56,6 +56,8 @@ class TwelveDataHistoricalProvider(
         val intervalMillis = timeframe.minutes.toLong() * 60_000L
         require(intervalMillis > 0L) { "Invalid historical timeframe" }
         require((to - from) / intervalMillis + 1 <= 5000) { "Maximum 5000 candles per request" }
+        val now = System.currentTimeMillis()
+        require(to <= now - intervalMillis) { "Historical range includes an unfinished candle" }
         val providerSymbol = symbol.substring(0, 3) + "/" + symbol.substring(3)
         val start = LocalDateTime.ofEpochSecond(from / 1000L, 0, ZoneOffset.UTC).format(queryFormatter)
         val end = LocalDateTime.ofEpochSecond(to / 1000L, 0, ZoneOffset.UTC).format(queryFormatter)
