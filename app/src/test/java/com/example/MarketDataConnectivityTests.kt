@@ -174,6 +174,21 @@ class MarketDataConnectivityTests {
     }
 
     @Test
+    fun `test strict historical series rejects impossible candle duration`() {
+        val first = createCandle(openTime = 60000L, open = 100.0, high = 105.0, low = 95.0, close = 102.0)
+        val tooLong = first.copy(closeTime = first.closeTime + 2000L)
+        assertFalse(DataIntegrityValidator.validateHistoricalSeries(listOf(tooLong)).isValid)
+    }
+
+    @Test
+    fun `test strict historical series rejects nonfinite volume and mixed timeframe`() {
+        val first = createCandle(openTime = 60000L, open = 100.0, high = 105.0, low = 95.0, close = 102.0)
+        val second = createCandle(openTime = 120000L, open = 102.0, high = 106.0, low = 100.0, close = 104.0)
+        assertFalse(DataIntegrityValidator.validateHistoricalSeries(listOf(first.copy(volume = Double.NaN))).isValid)
+        assertFalse(DataIntegrityValidator.validateHistoricalSeries(listOf(first, second.copy(timeframe = Timeframe.M15))).isValid)
+    }
+
+    @Test
     fun `test MarketSymbolRegistry metadata and data source distinction`() {
         val btc = MarketSymbolRegistry.getSymbol("BTCUSDT")
         assertEquals("BTCUSDT", btc.symbol)
