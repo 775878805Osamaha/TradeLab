@@ -56,6 +56,8 @@ fun ChartScreen(
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
     var orderVolumeInput by remember { mutableStateOf("0.01") }
+    var stopLossInput by remember { mutableStateOf("") }
+    var takeProfitInput by remember { mutableStateOf("") }
     var showReplayDatePicker by remember { mutableStateOf(false) }
     var showHistoricalSourceDialog by remember { mutableStateOf(false) }
     var historicalApiKeyInput by remember { mutableStateOf("") }
@@ -81,35 +83,58 @@ fun ChartScreen(
     if (pendingOrderSide != null) {
         val side = pendingOrderSide!!
         val volume = orderVolumeInput.toDoubleOrNull()
-        val validVolume = volume != null && volume.isFinite() && volume > 0.0
+        val sl = stopLossInput.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+        val tp = takeProfitInput.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+        val tick = if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick
+        val entry = tick?.let { if (side == OrderSide.BUY) it.ask else it.bid }
+        val validOrder = volume != null && entry != null &&
+            (stopLossInput.isBlank() || sl != null) &&
+            (takeProfitInput.isBlank() || tp != null) &&
+            ChartOrderValidation.isValid(side, volume, entry, sl, tp)
+        val contractSize = DefaultSymbols.getSymbol(uiState.selectedSymbol).contractSize
+        val estimatedRisk = if (validOrder) ChartOrderValidation.estimatedLoss(volume!!, entry!!, sl, contractSize) else null
         AlertDialog(
             onDismissRequest = { pendingOrderSide = null },
             title = { Text(if (side == OrderSide.BUY) "تأكيد أمر شراء" else "تأكيد أمر بيع") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("حساب تجريبي: راجع الحجم قبل التنفيذ.")
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("حساب تجريبي · السعر: " + (entry?.toString() ?: "غير متوفر"))
                     OutlinedTextField(
-                        value = orderVolumeInput,
-                        onValueChange = { orderVolumeInput = it },
-                        label = { Text("حجم الصفقة (لوت)") },
-                        singleLine = true,
+                        value = orderVolumeInput, onValueChange = { orderVolumeInput = it },
+                        label = { Text("الحجم (لوت)") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth().testTag("chart_order_volume")
                     )
-                    Text("وقف الخسارة وجني الربح غير محددين؛ يمكن تعديلهما بعد فتح الصفقة.",
-                        fontSize = 11.sp, color = TradingTextSecondary)
+                    OutlinedTextField(
+                        value = stopLossInput, onValueChange = { stopLossInput = it },
+                        label = { Text("وقف الخسارة SL (اختياري)") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("chart_order_sl")
+                    )
+                    OutlinedTextField(
+                        value = takeProfitInput, onValueChange = { takeProfitInput = it },
+                        label = { Text("جني الربح TP (اختياري)") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("chart_order_tp")
+                    )
+                    Text("المخاطرة المقدرة عند SL: " +
+                        (estimatedRisk?.let { String.format(Locale.US, "%.2f", it) } ?: "غير محددة"),
+                        fontSize = 12.sp, color = TradingTextSecondary)
+                    if (!validOrder) Text("تحقق من الحجم والسعر واتجاه SL/TP",
+                        fontSize = 11.sp, color = TradingNegative)
                 }
             },
             confirmButton = {
                 TextButton(
-                    enabled = validVolume &&
+                    enabled = validOrder &&
                         (if (isEmbeddedReplay) !replayState.isLoading &&
                             replayState.currentCandle != null && replayState.latestTick != null
                         else headerQuoteVerified),
                     onClick = {
                         val confirmedVolume = orderVolumeInput.toDoubleOrNull()
-                        if (confirmedVolume != null && confirmedVolume.isFinite() && confirmedVolume > 0.0) {
-                            if (isEmbeddedReplay) replayViewModel.executeOrder(side, confirmedVolume)
-                            else viewModel.quickOrder(side, confirmedVolume)
+                        val latest = if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick
+                        val latestEntry = latest?.let { if (side == OrderSide.BUY) it.ask else it.bid }
+                        if (confirmedVolume != null && latestEntry != null &&
+                            ChartOrderValidation.isValid(side, confirmedVolume, latestEntry, sl, tp)) {
+                            if (isEmbeddedReplay) replayViewModel.executeOrder(side, confirmedVolume, sl, tp)
+                            else viewModel.quickOrder(side, confirmedVolume, sl, tp)
                             pendingOrderSide = null
                         }
                     },
