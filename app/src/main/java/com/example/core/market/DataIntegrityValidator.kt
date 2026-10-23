@@ -94,8 +94,7 @@ object DataIntegrityValidator {
             if (candle.symbol != symbol || candle.timeframe != timeframe) {
                 return ValidationResult.Invalid("Mixed symbol or timeframe at bar $index")
             }
-            if (expectedDuration > 0L &&
-                candle.closeTime - candle.openTime > expectedDuration + 1_000L) {
+            if (candle.closeTime - candle.openTime > expectedDuration + 1_000L) {
                 return ValidationResult.Invalid("Bar $index extends beyond its timeframe")
             }
             if (candle.openTime <= previousOpen) {
