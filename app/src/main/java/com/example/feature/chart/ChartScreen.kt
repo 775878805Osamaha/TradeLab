@@ -700,6 +700,17 @@ fun ChartScreen(
                     }
                 }
 
+                // Never render a fabricated placeholder candle when history is unavailable.
+                if ((if (isEmbeddedReplay) replayState.visibleCandles.isEmpty() && !replayState.isLoading
+                    else uiState.candles.isEmpty() && !uiState.isLoading)) {
+                    Text(
+                        "لا توجد بيانات",
+                        modifier = Modifier.align(Alignment.Center).testTag("chart_no_data"),
+                        color = TradingTextSecondary,
+                        fontSize = 15.sp
+                    )
+                }
+
                 // Distinguish a failed Binance request from an in-progress load.
                 if (!isEmbeddedReplay && uiState.candles.isEmpty() && !uiState.isLoading && uiState.candleLoadError != null) {
                     Column(
