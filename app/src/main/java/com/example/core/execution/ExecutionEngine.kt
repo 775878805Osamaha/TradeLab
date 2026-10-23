@@ -121,7 +121,8 @@ class ExecutionEngine(
         order: Order,
         tick: Tick,
         account: VirtualAccount,
-        mode: String = "LIVE_PAPER"
+        mode: String = "LIVE_PAPER",
+        historicalFillPrice: Double? = null
     ): ExecutionResult? {
         // Pending orders belong to exactly one paper account. Never fill an
         // order against another account's balance, margin or positions.
@@ -146,19 +147,56 @@ class ExecutionEngine(
             !order.requestedPrice.isFinite() || order.requestedPrice <= 0.0) {
             return ExecutionResult.Error("سعر السوق أو رمز الأمر المعلق غير صالح")
         }
+        // For OHLC replay, validation must use the modeled historical entry
+        // quote, not the candle-close tick. Otherwise a wick-triggered pending
+        // order can be rejected because its SL/TP is compared to the wrong price.
+        val sym = DefaultSymbols.getSymbol(order.symbol)
+        val spread = sym.defaultSpreadPips * sym.pipSize
+        val validationTick = if (historicalFillPrice != null &&
+            historicalFillPrice.isFinite() && historicalFillPrice > 0.0 &&
+            spread.isFinite() && spread >= 0.0) {
+            if (order.direction == OrderSide.BUY) {
+                tick.copy(ask = historicalFillPrice, bid = historicalFillPrice - spread)
+            } else {
+                tick.copy(bid = historicalFillPrice, ask = historicalFillPrice + spread)
+            }
+        } else tick
+        if (historicalFillPrice != null &&
+            (!validationTick.bid.isFinite() || validationTick.bid <= 0.0 ||
+                !validationTick.ask.isFinite() || validationTick.ask < validationTick.bid)) {
+            return ExecutionResult.Error("سعر تنفيذ Replay بعد احتساب السبريد غير صالح")
+        }
         val validation = OrderValidator.validate(
             account = account,
             symbol = order.symbol,
-            // Validate execution-time constraints, not placement-time trigger geometry.
+            // Validate execution-time constraints at the historical fill quote.
             type = OrderType.MARKET,
             side = order.direction,
             volume = order.volume,
-            tick = tick,
+            tick = validationTick,
             stopLoss = order.stopLoss,
             takeProfit = order.takeProfit
         )
         if (validation is OrderValidationResult.Rejected) {
             return ExecutionResult.Error(validation.message)
+        }
+        if (historicalFillPrice != null && (!historicalFillPrice.isFinite() || historicalFillPrice <= 0.0 || mode != "REPLAY")) {
+            return ExecutionResult.Error("سعر التنفيذ التاريخي غير صالح")
+        }
+        // Historical overrides are only legal at an executable price consistent
+        // with the order type. Reject accidental favorable stop fills and
+        // unfavorable limit fills instead of silently corrupting backtests.
+        if (historicalFillPrice != null) {
+            val consistent = when (order.type) {
+                OrderType.BUY_LIMIT -> order.direction == OrderSide.BUY && historicalFillPrice <= order.requestedPrice
+                OrderType.SELL_LIMIT -> order.direction == OrderSide.SELL && historicalFillPrice >= order.requestedPrice
+                OrderType.BUY_STOP -> order.direction == OrderSide.BUY && historicalFillPrice >= order.requestedPrice
+                OrderType.SELL_STOP -> order.direction == OrderSide.SELL && historicalFillPrice <= order.requestedPrice
+                OrderType.LIMIT -> if (order.direction == OrderSide.BUY) historicalFillPrice <= order.requestedPrice else historicalFillPrice >= order.requestedPrice
+                OrderType.STOP -> if (order.direction == OrderSide.BUY) historicalFillPrice >= order.requestedPrice else historicalFillPrice <= order.requestedPrice
+                else -> false
+            }
+            if (!consistent) return ExecutionResult.Error("سعر التنفيذ التاريخي لا يتوافق مع نوع الأمر")
         }
         val symInfo = DefaultSymbols.getSymbol(order.symbol)
         val slippageOffset = config.slippagePips * symInfo.pipSize
@@ -173,9 +211,9 @@ class ExecutionEngine(
             else -> false
         }
 
-        if (!isTriggered) return null
+        if (!isTriggered && historicalFillPrice == null) return null
 
-        val executedPrice = when (order.type) {
+        val executedPrice = historicalFillPrice ?: when (order.type) {
             // Limit orders can fill at the limit or a better available market quote.
             OrderType.BUY_LIMIT -> minOf(order.requestedPrice, tick.ask)
             OrderType.SELL_LIMIT -> maxOf(order.requestedPrice, tick.bid)
