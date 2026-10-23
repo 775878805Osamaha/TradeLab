@@ -354,8 +354,10 @@ fun ChartScreen(
             if (isEmbeddedReplay) {
                 // Replay detail controls remain available without occupying
                 // vertical chart space in the default reference layout.
-                TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
-                    Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
+                if (!immersiveChart || showReplayDetails) {
+                    TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
+                        Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
+                    }
                 }
                 if (showReplayDetails) {
                 // Jump through real historical candles without leaving the chart.
