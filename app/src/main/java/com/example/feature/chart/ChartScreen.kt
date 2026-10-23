@@ -247,6 +247,7 @@ fun ChartScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
+                modifier = Modifier.height(if (immersiveChart) 44.dp else 64.dp),
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -321,7 +322,7 @@ fun ChartScreen(
                         }
                     }
                     }
-                    // Replay shortcut
+                    // Replay shortcut remains available from the chart header.
                     IconButton(
                         onClick = {
                             if (isEmbeddedReplay) {
