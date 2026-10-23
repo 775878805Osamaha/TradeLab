@@ -46,6 +46,31 @@ class ChartViewportTest {
         assertEquals(0f, after.clampedOffsetPx, 0.001f)
     }
 
+    @Test fun subCandleSwipeRemainsSmooth() {
+        val before = window(-3f)
+        val after = window(-4f)
+        assertEquals(before.startIndex, after.startIndex)
+        assertEquals(1f, after.fractionalScrollPx - before.fractionalScrollPx, 0.001f)
+    }
+
+    @Test fun zoomRecalculatesVisibleWindowWithoutInvalidIndices() {
+        for (candleWidth in listOf(6f, 12f, 24f, 80f)) {
+            for (offset in listOf(-500f, 0f, 18f, 250f, 10000f)) {
+                val result = ChartViewport.window(300, 600f, candleWidth, offset)
+                assertTrue(result.startIndex >= 0)
+                assertTrue(result.endIndex <= 300)
+                assertTrue(result.endIndex > result.startIndex)
+            }
+        }
+    }
+
+    @Test fun singleCandleIsStable() {
+        val result = ChartViewport.window(1, 600f, 12f, 100f)
+        assertEquals(0, result.startIndex)
+        assertEquals(1, result.endIndex)
+        assertEquals(0f, result.clampedOffsetPx, 0.001f)
+    }
+
     @Test fun leftThenRightReturnsToOrigin() {
         val origin = window(0f)
         val returned = window(-150f + 150f)
