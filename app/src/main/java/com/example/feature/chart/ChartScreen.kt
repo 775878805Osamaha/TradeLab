@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,7 +54,9 @@ fun ChartScreen(
     var showSymbolSheet by remember { mutableStateOf(false) }
     var symbolSearchQuery by remember { mutableStateOf("") }
     var symbolCategoryFilter by remember { mutableStateOf("الكل") }
-    var favoriteSymbols by remember { mutableStateOf(setOf<String>()) }
+    // Save a list rather than a Set so Compose's default Bundle saver can restore it.
+    var favoriteSymbolsList by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
+    val favoriteSymbols = favoriteSymbolsList.toSet()
     var favoritesOnly by remember { mutableStateOf(false) }
     var symbolSortFavoritesFirst by remember { mutableStateOf(true) }
     LaunchedEffect(showSymbolSheet) {
@@ -1216,8 +1219,10 @@ fun ChartScreen(
                             }
                             IconButton(
                                 onClick = {
-                                    favoriteSymbols = if (sym.symbol in favoriteSymbols) favoriteSymbols - sym.symbol
+                                    favoriteSymbolsList = ArrayList(
+                                        if (sym.symbol in favoriteSymbols) favoriteSymbols - sym.symbol
                                         else favoriteSymbols + sym.symbol
+                                    )
                                 },
                                 modifier = Modifier.size(36.dp).testTag("chart_symbol_favorite_" + sym.symbol)
                             ) {
