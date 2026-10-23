@@ -354,8 +354,10 @@ fun ChartScreen(
             if (isEmbeddedReplay) {
                 // Replay detail controls remain available without occupying
                 // vertical chart space in the default reference layout.
-                TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
-                    Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
+                if (!immersiveChart || showReplayDetails) {
+                    TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
+                        Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
+                    }
                 }
                 if (showReplayDetails) {
                 // Jump through real historical candles without leaving the chart.
@@ -821,8 +823,8 @@ fun ChartScreen(
                 // Buttons select the existing functional drawing tools; no image overlay.
                 Surface(
                     modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(horizontal = 5.dp)
+                        .align(if (immersiveChart) Alignment.TopStart else Alignment.CenterStart)
+                        .padding(horizontal = 5.dp, vertical = if (immersiveChart) 12.dp else 0.dp)
                         .testTag("chart_floating_drawing_toolbar"),
                     shape = RoundedCornerShape(8.dp),
                     color = TradingCard.copy(alpha = if (drawingToolbarExpanded) 0.96f else 0.72f),
