@@ -1069,22 +1069,31 @@ class ReplayViewModel(
                 history.last().candleIndex == index -> history.dropLast(1)
                 else -> history.takeWhile { it.candleIndex < index }
             }
-            val previousPeak = maxOf(state.initialBalance, prefix.maxOfOrNull { it.equity } ?: state.initialBalance)
+            // Append-only replay advances are the hot path. Existing high-water
+            // marks and worst drawdown are already exact for that prefix.
+            // Recompute only when replacing a bar or forking a rewound timeline.
+            val appendOnly = prefix === history
+            var previousPeak = state.initialBalance
+            var previousWorst = 0.0
+            if (appendOnly) {
+                previousPeak = state.peakEquity
+                previousWorst = state.maxObservedDrawdownPercent
+            } else {
+                for (sample in prefix) {
+                    previousPeak = maxOf(previousPeak, sample.equity)
+                    if (previousPeak > 0.0) {
+                        previousWorst = maxOf(previousWorst,
+                            (previousPeak - sample.equity).coerceAtLeast(0.0) * 100.0 / previousPeak)
+                    }
+                }
+            }
             val peak = maxOf(previousPeak, equity)
             val drawdown = if (peak > 0.0) (peak - equity).coerceAtLeast(0.0) * 100.0 / peak else 0.0
             // The replay cursor normally moves forward one bar. Reuse the
             // existing immutable prefix instead of filtering the entire session
             // on every candle (quadratic work for long 5000-bar replays).
             val samples = prefix + ReplayEquitySample(index, equity, balance)
-            var runningPeak = state.initialBalance
-            var worstDrawdown = 0.0
-            for (sample in samples) {
-                runningPeak = maxOf(runningPeak, sample.equity)
-                if (runningPeak > 0.0) {
-                    worstDrawdown = maxOf(worstDrawdown,
-                        (runningPeak - sample.equity).coerceAtLeast(0.0) * 100.0 / runningPeak)
-                }
-            }
+            val worstDrawdown = maxOf(previousWorst, drawdown)
             state.copy(
                 peakEquity = peak,
                 maxObservedDrawdownPercent = worstDrawdown,
