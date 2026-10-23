@@ -47,8 +47,11 @@ object ReplayRiskPolicy {
             limits.maxPositions < 1 || limits.maxOrders < 1 || limits.maxConsecutiveLosses < 0) {
             return "إعدادات حدود المخاطر في Replay غير صالحة"
         }
-        val drawdown = (exposure.initialBalance - exposure.equity).coerceAtLeast(0.0) *
-            100.0 / exposure.initialBalance
+        // Avoid overflow from multiplying large monetary balances before
+        // dividing. Ratio-based drawdown stays finite for finite positive
+        // initial balances and is consistent with equity-based loss limits.
+        val drawdown = if (exposure.equity >= exposure.initialBalance) 0.0
+            else (1.0 - exposure.equity / exposure.initialBalance) * 100.0
         val realizedLoss = (exposure.initialBalance - exposure.balance).coerceAtLeast(0.0)
         return when {
             limits.maxConsecutiveLosses > 0 && exposure.consecutiveLosses >= limits.maxConsecutiveLosses ->
