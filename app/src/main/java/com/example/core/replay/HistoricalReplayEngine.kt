@@ -169,6 +169,7 @@ class HistoricalReplayEngine(
         checkpoints.clear()
         val clamped = targetIndex.coerceIn(0, allCandles.size - 1)
         _currentIndex.value = clamped
+        replayClock.initialize(allCandles[clamped].closeTime)
         // A seek is navigation, not a candle execution. Executing a strategy
         // only on the destination candle would silently skip intermediate bars.
         updateVisibleState(evaluateTrades = false)
