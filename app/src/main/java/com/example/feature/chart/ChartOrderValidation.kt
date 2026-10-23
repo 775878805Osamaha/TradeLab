@@ -1,0 +1,28 @@
+package com.example.feature.chart
+
+import com.example.core.model.OrderSide
+
+/**
+ * Fail-closed validation for chart paper orders. SL/TP are optional but must
+ * be on the correct side of the executable bid/ask when supplied.
+ */
+object ChartOrderValidation {
+    fun isValid(side: OrderSide, volume: Double, entry: Double, sl: Double?, tp: Double?): Boolean {
+        if (!volume.isFinite() || volume <= 0.0 || !entry.isFinite() || entry <= 0.0) return false
+        if (sl != null && (!sl.isFinite() || sl <= 0.0)) return false
+        if (tp != null && (!tp.isFinite() || tp <= 0.0)) return false
+        return when (side) {
+            OrderSide.BUY -> (sl == null || sl < entry) && (tp == null || tp > entry)
+            OrderSide.SELL -> (sl == null || sl > entry) && (tp == null || tp < entry)
+        }
+    }
+
+    /** Estimated stop loss in quote-currency units; excludes spread, slippage and fees. */
+    fun estimatedLoss(volume: Double, entry: Double, sl: Double?, contractSize: Double): Double? {
+        if (sl == null || !volume.isFinite() || volume <= 0.0 ||
+            !entry.isFinite() || !sl.isFinite() ||
+            !contractSize.isFinite() || contractSize <= 0.0) return null
+        val result = kotlin.math.abs(entry - sl) * volume * contractSize
+        return result.takeIf { it.isFinite() }
+    }
+}
