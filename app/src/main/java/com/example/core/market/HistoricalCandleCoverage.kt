@@ -19,9 +19,12 @@ object HistoricalCandleCoverage {
         val week = 7L * 24 * 60 * 60 * 1000
         val mondayOffset = 4L * 24 * 60 * 60 * 1000
         val offset = if (intervalMillis == week) mondayOffset else 0L
-        val shifted = from - offset
-        val remainder = Math.floorMod(shifted, intervalMillis)
-        val first = if (remainder == 0L) from else from + (intervalMillis - remainder)
+        // Avoid overflow when aligning ranges close to Long.MAX_VALUE.
+        val remainder = Math.floorMod(from, intervalMillis)
+        val targetRemainder = Math.floorMod(offset, intervalMillis)
+        val advance = Math.floorMod(targetRemainder - remainder, intervalMillis)
+        if (from > Long.MAX_VALUE - advance) return false
+        val first = from + advance
         if (first > to) return false
         val expectedCount = (to - first) / intervalMillis + 1L
         if (candles.size.toLong() != expectedCount) return false
