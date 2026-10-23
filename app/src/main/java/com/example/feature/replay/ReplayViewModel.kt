@@ -1067,7 +1067,18 @@ class ReplayViewModel(
                 history.isEmpty() -> history
                 history.last().candleIndex < index -> history
                 history.last().candleIndex == index -> history.dropLast(1)
-                else -> history.takeWhile { it.candleIndex < index }
+                else -> {
+                    // Rewind and fork: binary search avoids scanning the whole
+                    // historical equity curve just to locate the retained prefix.
+                    var low = 0
+                    var high = history.size
+                    while (low < high) {
+                        val mid = (low + high) ushr 1
+                        if (history[mid].candleIndex < index) low = mid + 1
+                        else high = mid
+                    }
+                    history.subList(0, low)
+                }
             }
             // Append-only replay advances are the hot path. Existing high-water
             // marks and worst drawdown are already exact for that prefix.
