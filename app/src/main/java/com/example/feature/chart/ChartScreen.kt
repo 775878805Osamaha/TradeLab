@@ -152,12 +152,12 @@ fun ChartScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        datePickerState.selectedDateMillis?.let { selected ->
+                        ChartDisplayRules.selectedReplayTimestamp(datePickerState.selectedDateMillis, replayState.isLoading, replayState.totalCandles)?.let { selected ->
                             replayViewModel.jumpToTimestamp(selected)
                         }
                         showReplayDatePicker = false
                     },
-                    enabled = datePickerState.selectedDateMillis != null
+                    enabled = ChartDisplayRules.selectedReplayTimestamp(datePickerState.selectedDateMillis, replayState.isLoading, replayState.totalCandles) != null
                 ) { Text("انتقال") }
             },
             dismissButton = {
@@ -726,8 +726,8 @@ fun ChartScreen(
                 }
 
                 // Never render a fabricated placeholder candle when history is unavailable.
-                if ((if (isEmbeddedReplay) replayState.visibleCandles.isEmpty() && !replayState.isLoading
-                    else uiState.candles.isEmpty() && !uiState.isLoading)) {
+                if ((if (isEmbeddedReplay) ChartDisplayRules.showNoData(replayState.isLoading, replayState.visibleCandles.size)
+                    else ChartDisplayRules.showNoData(uiState.isLoading, uiState.candles.size))) {
                     Text(
                         "لا توجد بيانات",
                         modifier = Modifier.align(Alignment.Center).testTag("chart_no_data"),
