@@ -712,8 +712,7 @@ class ReplayViewModel(
     fun executeOrder(side: OrderSide, volume: Double = 0.01, sl: Double? = null, tp: Double? = null) {
         // Strategy signals are emitted inside the candle-step callback.
         // Do not cancel the active batch or playback from inside that callback.
-        val strategyFill = _uiState.value.interactionMode == ReplayInteractionMode.STRATEGY &&
-            _uiState.value.isBatchAdvancing
+        val strategyFill = executingStrategySignal
         if (!strategyFill) cancelBatchAdvance()
         if (!canAcceptReplayOrder(isPending = false)) return
         if (!strategyFill) replayEngine.pause()
@@ -878,6 +877,8 @@ class ReplayViewModel(
         }
     }
 
+    private var executingStrategySignal = false
+
     private fun evaluateOnReplayCandle(candle: Candle, tick: Tick, dataView: ReplayDataView) {
         var curBal = _uiState.value.currentBalance
 
@@ -1010,9 +1011,13 @@ class ReplayViewModel(
                 if (signal.action != SignalAction.HOLD) {
                     lastSignalText = "إشارة ${signal.action}: ${signal.reason}"
                     if (signal.action == SignalAction.BUY && openPositions.none { it.side == PositionSide.BUY }) {
-                        executeOrder(OrderSide.BUY, 0.01)
+                        executingStrategySignal = true
+                        try { executeOrder(OrderSide.BUY, 0.01) }
+                        finally { executingStrategySignal = false }
                     } else if (signal.action == SignalAction.SELL && openPositions.none { it.side == PositionSide.SELL }) {
-                        executeOrder(OrderSide.SELL, 0.01)
+                        executingStrategySignal = true
+                        try { executeOrder(OrderSide.SELL, 0.01) }
+                        finally { executingStrategySignal = false }
                     }
                 }
             }
