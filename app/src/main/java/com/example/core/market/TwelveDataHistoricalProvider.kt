@@ -81,6 +81,11 @@ class TwelveDataHistoricalProvider(
         if (root.optString("status") == "error" || root.has("code")) {
             throw IOException("Twelve Data rejected the request (check API key, quota and plan)")
         }
+        val meta = root.optJSONObject("meta")
+            ?: throw IOException("Twelve Data response is missing metadata")
+        if (meta.optString("symbol") != providerSymbol || meta.optString("interval") != interval(timeframe)) {
+            throw IOException("Twelve Data returned a different symbol or timeframe")
+        }
         val values = root.optJSONArray("values")
             ?: throw IOException("No historical candles returned for $symbol")
         val parsed = ArrayList<Candle>(values.length())
