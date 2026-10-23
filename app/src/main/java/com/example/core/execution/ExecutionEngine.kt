@@ -121,7 +121,8 @@ class ExecutionEngine(
         order: Order,
         tick: Tick,
         account: VirtualAccount,
-        mode: String = "LIVE_PAPER"
+        mode: String = "LIVE_PAPER",
+        historicalFillPrice: Double? = null
     ): ExecutionResult? {
         // Pending orders belong to exactly one paper account. Never fill an
         // order against another account's balance, margin or positions.
@@ -160,6 +161,9 @@ class ExecutionEngine(
         if (validation is OrderValidationResult.Rejected) {
             return ExecutionResult.Error(validation.message)
         }
+        if (historicalFillPrice != null && (!historicalFillPrice.isFinite() || historicalFillPrice <= 0.0 || mode != "REPLAY")) {
+            return ExecutionResult.Error("سعر التنفيذ التاريخي غير صالح")
+        }
         val symInfo = DefaultSymbols.getSymbol(order.symbol)
         val slippageOffset = config.slippagePips * symInfo.pipSize
 
@@ -173,9 +177,9 @@ class ExecutionEngine(
             else -> false
         }
 
-        if (!isTriggered) return null
+        if (!isTriggered && historicalFillPrice == null) return null
 
-        val executedPrice = when (order.type) {
+        val executedPrice = historicalFillPrice ?: when (order.type) {
             // Limit orders can fill at the limit or a better available market quote.
             OrderType.BUY_LIMIT -> minOf(order.requestedPrice, tick.ask)
             OrderType.SELL_LIMIT -> maxOf(order.requestedPrice, tick.bid)
