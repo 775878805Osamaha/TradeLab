@@ -83,4 +83,16 @@ class BiquoteHistoricalProviderTests {
             assertTrue(expected.message!!.contains("unfinished"))
         }
     }
+    @Test fun rejectsProviderHistoryMissingBeginningOfRequestedWindow() = runBlocking {
+        val data = response(bars = bar("2026-01-05T00:00:00Z") + "," + bar("2026-01-05T00:01:00Z"))
+        val fiveDaysEarlier = from - 5L * 86_400_000L
+        try {
+            provider(data).fetch("XAUUSD", Timeframe.M1, fiveDaysEarlier, from + step)
+            fail("A missing history window must not pass")
+        } catch (expected: IOException) {
+            assertTrue(expected.message!!.contains("outside", ignoreCase = true) ||
+                expected.message!!.contains("incomplete", ignoreCase = true))
+        }
+    }
+
 }
