@@ -57,7 +57,8 @@ class HistoricalCandleCoverageTest {
 
     @Test fun windowNearLongMaxValueDoesNotOverflowWhenAligning() {
         val interval = 60_000L
-        val aligned = Long.MAX_VALUE - Math.floorMod(Long.MAX_VALUE, interval)
+        // Leave space for the candle's close timestamp; a bar cannot close beyond Long.MAX_VALUE.
+        val aligned = Long.MAX_VALUE - Math.floorMod(Long.MAX_VALUE, interval) - 2L * interval
         assertTrue(HistoricalCandleCoverage.isComplete(
             listOf(bar(aligned)), aligned - 1L, aligned, interval))
         assertFalse(HistoricalCandleCoverage.isComplete(
