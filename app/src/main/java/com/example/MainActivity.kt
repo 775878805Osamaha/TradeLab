@@ -70,7 +70,9 @@ class MainActivity : ComponentActivity() {
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
 
-                    val showBottomNav = currentRoute in Screen.bottomNavItems.map { it.route }
+                    var chartImmersive by remember { mutableStateOf(true) }
+                    val showBottomNav = currentRoute in Screen.bottomNavItems.map { it.route } &&
+                        !(currentRoute == Screen.Chart.route && chartImmersive)
 
                     Scaffold(
                         modifier = Modifier
@@ -161,7 +163,8 @@ class MainActivity : ComponentActivity() {
                                 ChartScreen(
                                     viewModel = chartViewModel,
                                     replayViewModel = replayViewModel,
-                                    onNavigateToReplay = { navController.navigate(Screen.Replay.route) }
+                                    onNavigateToReplay = { navController.navigate(Screen.Replay.route) },
+                                    onImmersiveChanged = { chartImmersive = it }
                                 )
                             }
 
