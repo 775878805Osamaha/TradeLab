@@ -101,7 +101,9 @@ fun ChartScreen(
             entryPrice != null && (if (side == OrderSide.BUY) sl < entryPrice else sl > entryPrice))
         val validTp = orderTpInput.isBlank() || (tp != null && tp.isFinite() && tp > 0.0 &&
             entryPrice != null && (if (side == OrderSide.BUY) tp > entryPrice else tp < entryPrice))
-        val validOrder = validVolume && validSl && validTp && entryPrice != null &&
+        val validOrder = validVolume && validSl && validTp &&
+            entryTick?.symbol == (if (isEmbeddedReplay) replayState.symbol else uiState.selectedSymbol) &&
+            entryPrice != null &&
             entryPrice.isFinite() && entryPrice > 0.0 && entryTick != null &&
             entryTick.bid.isFinite() && entryTick.ask.isFinite() &&
             entryTick.bid > 0.0 && entryTick.ask >= entryTick.bid
