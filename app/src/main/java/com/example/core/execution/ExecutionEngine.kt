@@ -164,6 +164,21 @@ class ExecutionEngine(
         if (historicalFillPrice != null && (!historicalFillPrice.isFinite() || historicalFillPrice <= 0.0 || mode != "REPLAY")) {
             return ExecutionResult.Error("سعر التنفيذ التاريخي غير صالح")
         }
+        // Historical overrides are only legal at an executable price consistent
+        // with the order type. Reject accidental favorable stop fills and
+        // unfavorable limit fills instead of silently corrupting backtests.
+        if (historicalFillPrice != null) {
+            val consistent = when (order.type) {
+                OrderType.BUY_LIMIT -> order.direction == OrderSide.BUY && historicalFillPrice <= order.requestedPrice
+                OrderType.SELL_LIMIT -> order.direction == OrderSide.SELL && historicalFillPrice >= order.requestedPrice
+                OrderType.BUY_STOP -> order.direction == OrderSide.BUY && historicalFillPrice >= order.requestedPrice
+                OrderType.SELL_STOP -> order.direction == OrderSide.SELL && historicalFillPrice <= order.requestedPrice
+                OrderType.LIMIT -> if (order.direction == OrderSide.BUY) historicalFillPrice <= order.requestedPrice else historicalFillPrice >= order.requestedPrice
+                OrderType.STOP -> if (order.direction == OrderSide.BUY) historicalFillPrice >= order.requestedPrice else historicalFillPrice <= order.requestedPrice
+                else -> false
+            }
+            if (!consistent) return ExecutionResult.Error("سعر التنفيذ التاريخي لا يتوافق مع نوع الأمر")
+        }
         val symInfo = DefaultSymbols.getSymbol(order.symbol)
         val slippageOffset = config.slippagePips * symInfo.pipSize
 
