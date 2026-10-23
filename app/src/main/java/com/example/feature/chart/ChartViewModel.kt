@@ -41,6 +41,7 @@ data class ChartUiState(
     val selectedTradeForDetail: TradeJournalEntry? = null,
     val resetViewTrigger: Long = 0L,
     val isLoading: Boolean = false,
+    val chartHistoryBars: Int = 250,
     val candleLoadError: String? = null,
     val connectionDiagnostic: String = "لم يتم اختبار الاتصال بعد",
     val message: String? = null
@@ -91,6 +92,20 @@ class ChartViewModel(
     }
 
     fun hasHistoricalProviderKey(): Boolean = marketDataRepository.hasTwelveDataKey()
+
+    /** Adjust the real OHLC history depth without changing the current instrument. */
+    fun setChartHistoryBars(bars: Int) {
+        require(bars in setOf(100, 250, 500, 750)) { "Unsupported chart history depth" }
+        if (_uiState.value.chartHistoryBars == bars) return
+        _uiState.update { it.copy(chartHistoryBars = bars, isLoading = true, candleLoadError = null) }
+        loadCandlesForCurrentSymbol()
+    }
+
+    fun retryChartHistory() {
+        _uiState.update { it.copy(isLoading = true, candleLoadError = null) }
+        loadCandlesForCurrentSymbol()
+    }
+
 
     fun selectSymbol(symbol: String) {
         if (_uiState.value.selectedSymbol == symbol) return
@@ -276,6 +291,7 @@ class ChartViewModel(
     private fun loadCandlesForCurrentSymbol() {
         val symbol = _uiState.value.selectedSymbol
         val tf = _uiState.value.selectedTimeframe
+        val requestedBars = _uiState.value.chartHistoryBars
 
         candleLoadJob?.cancel()
         candleLoadJob = viewModelScope.launch {
@@ -295,7 +311,7 @@ class ChartViewModel(
             // (including Monday UTC alignment for weekly bars).
             val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
                 .currentOpen(now, interval) - interval
-            val from = (lastClosedOpen - interval * 249L).coerceAtLeast(0L)
+            val from = (lastClosedOpen - interval * (requestedBars - 1L)).coerceAtLeast(0L)
 
             try {
                 // Start live subscription even if historical REST loading fails.
@@ -315,7 +331,8 @@ class ChartViewModel(
                     throw IllegalStateException("Invalid verified chart candle data")
                 }
                 // Ignore responses that arrive after the user changes symbol or timeframe.
-                if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf) return@launch
+                if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf ||
+                    _uiState.value.chartHistoryBars != requestedBars) return@launch
                 _uiState.update { it.copy(candles = aggregated, isLoading = false, candleLoadError = if (aggregated.isEmpty()) "لا تتوفر شموع مؤكدة لهذا الرمز والفاصل الزمني. حاول مجددًا." else null, message = null) }
                 recalculateIndicators(aggregated, _uiState.value.indicatorSettings)
                 if (symbol in setOf("BTCUSDT", "ETHUSDT")) {

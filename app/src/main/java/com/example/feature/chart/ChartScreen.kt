@@ -684,6 +684,42 @@ fun ChartScreen(
                 )
             }
 
+            // Verified historical OHLC depth: bounded presets avoid oversized requests.
+            if (!immersiveChart && !isEmbeddedReplay) {
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                        .testTag("chart_history_controls"),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("الشموع", fontSize = 10.sp, color = TradingTextSecondary)
+                    listOf(100, 250, 500, 750).forEach { bars ->
+                        val selected = uiState.chartHistoryBars == bars
+                        OutlinedButton(
+                            onClick = { viewModel.setChartHistoryBars(bars) },
+                            enabled = !uiState.isLoading,
+                            modifier = Modifier.height(30.dp).testTag("chart_history_depth_$bars"),
+                            contentPadding = PaddingValues(horizontal = 7.dp, vertical = 0.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (selected) TradingAccentLight else TradingTextSecondary
+                            )
+                        ) {
+                            Text("$bars", fontSize = 10.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    IconButton(
+                        onClick = { viewModel.retryChartHistory() },
+                        enabled = !uiState.isLoading,
+                        modifier = Modifier.size(30.dp).testTag("chart_history_retry")
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "إعادة تحميل الشموع",
+                            tint = TradingAccentLight, modifier = Modifier.size(17.dp))
+                    }
+                }
+            }
+
             // Professional Candlestick Chart
             Box(
                 modifier = Modifier
@@ -741,6 +777,34 @@ fun ChartScreen(
                                 fontSize = 9.sp, color = TradingTextSecondary,
                                 maxLines = 1
                             )
+                            if (!isEmbeddedReplay) {
+                                val oldest = chartBars.first()
+                                val firstTime = remember(oldest.openTime) {
+                                    java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")
+                                        .withZone(java.time.ZoneOffset.UTC)
+                                        .format(java.time.Instant.ofEpochMilli(oldest.openTime))
+                                }
+                                Text(
+                                    text = "$firstTime → $timestamp UTC · ${chartBars.size}/${uiState.chartHistoryBars}",
+                                    fontSize = 9.sp,
+                                    color = TradingTextSecondary,
+                                    modifier = Modifier.testTag("chart_history_range"),
+                                    maxLines = 1
+                                )
+                                val firstPrice = oldest.open
+                                val lastPrice = latestBar.close
+                                if (firstPrice > 0.0 && firstPrice.isFinite() && lastPrice.isFinite()) {
+                                    val changePercent = (lastPrice - firstPrice) / firstPrice * 100.0
+                                    val sign = if (changePercent >= 0.0) "+" else ""
+                                    Text(
+                                        text = "Δ $sign${"%.2f".format(java.util.Locale.US, changePercent)}% · H ${"%.5f".format(java.util.Locale.US, chartBars.maxOf { it.high })} · L ${"%.5f".format(java.util.Locale.US, chartBars.minOf { it.low })}",
+                                        fontSize = 9.sp,
+                                        color = if (changePercent >= 0.0) TradingPositive else TradingGold,
+                                        maxLines = 1,
+                                        modifier = Modifier.testTag("chart_history_summary")
+                                    )
+                                }
+                            }
                         }
                     }
                 }
