@@ -56,6 +56,8 @@ fun ChartScreen(
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
     var orderVolumeInput by remember { mutableStateOf("0.01") }
+    var orderSlInput by remember { mutableStateOf("") }
+    var orderTpInput by remember { mutableStateOf("") }
     var showReplayDatePicker by remember { mutableStateOf(false) }
     var showHistoricalSourceDialog by remember { mutableStateOf(false) }
     var historicalApiKeyInput by remember { mutableStateOf("") }
@@ -82,6 +84,16 @@ fun ChartScreen(
         val side = pendingOrderSide!!
         val volume = orderVolumeInput.toDoubleOrNull()
         val validVolume = volume != null && volume.isFinite() && volume > 0.0
+        val entryTick = if (isEmbeddedReplay) replayState.latestTick else headerTick
+        val entryPrice = entryTick?.let { if (side == OrderSide.BUY) it.ask else it.bid }
+        val sl = orderSlInput.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
+        val tp = orderTpInput.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
+        val validSl = orderSlInput.isBlank() || (sl != null && sl.isFinite() && sl > 0.0 &&
+            entryPrice != null && (if (side == OrderSide.BUY) sl < entryPrice else sl > entryPrice))
+        val validTp = orderTpInput.isBlank() || (tp != null && tp.isFinite() && tp > 0.0 &&
+            entryPrice != null && (if (side == OrderSide.BUY) tp > entryPrice else tp < entryPrice))
+        val validOrder = validVolume && validSl && validTp && entryPrice != null &&
+            entryPrice.isFinite() && entryPrice > 0.0
         AlertDialog(
             onDismissRequest = { pendingOrderSide = null },
             title = { Text(if (side == OrderSide.BUY) "تأكيد أمر شراء" else "تأكيد أمر بيع") },
@@ -95,21 +107,34 @@ fun ChartScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().testTag("chart_order_volume")
                     )
-                    Text("وقف الخسارة وجني الربح غير محددين؛ يمكن تعديلهما بعد فتح الصفقة.",
-                        fontSize = 11.sp, color = TradingTextSecondary)
+                    Text("سعر الدخول: ${entryPrice?.let { String.format(Locale.US, "%.5f", it) } ?: "--"}")
+                    OutlinedTextField(
+                        value = orderSlInput, onValueChange = { orderSlInput = it },
+                        label = { Text("وقف الخسارة (اختياري)") }, singleLine = true,
+                        isError = !validSl, modifier = Modifier.fillMaxWidth().testTag("chart_order_sl")
+                    )
+                    OutlinedTextField(
+                        value = orderTpInput, onValueChange = { orderTpInput = it },
+                        label = { Text("جني الربح (اختياري)") }, singleLine = true,
+                        isError = !validTp, modifier = Modifier.fillMaxWidth().testTag("chart_order_tp")
+                    )
+                    if (sl != null && entryPrice != null && validSl && validVolume) {
+                        Text("مسافة وقف الخسارة: ${String.format(Locale.US, "%.5f", kotlin.math.abs(entryPrice - sl))} لكل وحدة")
+                    }
+                    if (!validSl || !validTp) Text("تحقق من اتجاه ومستوى وقف الخسارة وجني الربح", color = TradingNegative)
                 }
             },
             confirmButton = {
                 TextButton(
-                    enabled = validVolume &&
+                    enabled = validOrder &&
                         (if (isEmbeddedReplay) !replayState.isLoading &&
                             replayState.currentCandle != null && replayState.latestTick != null
                         else headerQuoteVerified),
                     onClick = {
                         val confirmedVolume = orderVolumeInput.toDoubleOrNull()
-                        if (confirmedVolume != null && confirmedVolume.isFinite() && confirmedVolume > 0.0) {
-                            if (isEmbeddedReplay) replayViewModel.executeOrder(side, confirmedVolume)
-                            else viewModel.quickOrder(side, confirmedVolume)
+                        if (confirmedVolume != null && confirmedVolume.isFinite() && confirmedVolume > 0.0 && validOrder) {
+                            if (isEmbeddedReplay) replayViewModel.executeOrder(side, confirmedVolume, sl, tp)
+                            else viewModel.quickOrder(side, confirmedVolume, sl, tp)
                             pendingOrderSide = null
                         }
                     },
