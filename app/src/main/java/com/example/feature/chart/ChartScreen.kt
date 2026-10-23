@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
@@ -80,6 +82,13 @@ fun ChartScreen(
         headerTick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
         quoteClock - headerTick.timestamp in 0..15_000L
 
+    LaunchedEffect(pendingOrderSide) {
+        if (pendingOrderSide != null) {
+            orderSlInput = ""
+            orderTpInput = ""
+        }
+    }
+
     if (pendingOrderSide != null) {
         val side = pendingOrderSide!!
         val volume = orderVolumeInput.toDoubleOrNull()
@@ -100,12 +109,14 @@ fun ChartScreen(
             onDismissRequest = { pendingOrderSide = null },
             title = { Text(if (side == OrderSide.BUY) "تأكيد أمر شراء" else "تأكيد أمر بيع") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("حساب تجريبي: راجع الحجم قبل التنفيذ.")
                     OutlinedTextField(
                         value = orderVolumeInput,
                         onValueChange = { orderVolumeInput = it },
                         label = { Text("حجم الصفقة (لوت)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().testTag("chart_order_volume")
                     )
@@ -113,11 +124,13 @@ fun ChartScreen(
                     OutlinedTextField(
                         value = orderSlInput, onValueChange = { orderSlInput = it },
                         label = { Text("وقف الخسارة (اختياري)") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         isError = !validSl, modifier = Modifier.fillMaxWidth().testTag("chart_order_sl")
                     )
                     OutlinedTextField(
                         value = orderTpInput, onValueChange = { orderTpInput = it },
                         label = { Text("جني الربح (اختياري)") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         isError = !validTp, modifier = Modifier.fillMaxWidth().testTag("chart_order_tp")
                     )
                     if (sl != null && entryPrice != null && validSl && validVolume) {

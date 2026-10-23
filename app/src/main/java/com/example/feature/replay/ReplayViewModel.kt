@@ -663,8 +663,10 @@ class ReplayViewModel(
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
             !volume.isFinite() || volume <= 0.0 ||
             !requestedPrice.isFinite() || requestedPrice <= 0.0 ||
-            (sl != null && (!sl.isFinite() || sl <= 0.0)) ||
-            (tp != null && (!tp.isFinite() || tp <= 0.0)) ||
+            (sl != null && (!sl.isFinite() || sl <= 0.0 ||
+                (if (side == OrderSide.BUY) sl >= tick.ask else sl <= tick.bid))) ||
+            (tp != null && (!tp.isFinite() || tp <= 0.0 ||
+                (if (side == OrderSide.BUY) tp <= tick.ask else tp >= tick.bid))) ||
             type == OrderType.MARKET ||
             (type in listOf(OrderType.BUY_LIMIT, OrderType.BUY_STOP) && side != OrderSide.BUY) ||
             (type in listOf(OrderType.SELL_LIMIT, OrderType.SELL_STOP) && side != OrderSide.SELL)) {
@@ -724,7 +726,6 @@ class ReplayViewModel(
         val strategyFill = executingStrategySignal
         if (!strategyFill) cancelBatchAdvance()
         if (!canAcceptReplayOrder(isPending = false)) return
-        if (!strategyFill) replayEngine.pause()
         val candle = replayEngine.currentCandle.value ?: run {
             _uiState.update { it.copy(message = "لا توجد شمعة Replay متاحة للتداول") }
             return
@@ -743,6 +744,9 @@ class ReplayViewModel(
             _uiState.update { it.copy(message = "تعذر تنفيذ الأمر: سعر أو حجم Replay غير صالح") }
             return
         }
+
+        // Do not pause playback for rejected manual orders.
+        if (!strategyFill) replayEngine.pause()
 
         // Use the same equity/margin accounting for manual and pending fills.
         // A stale UI equity snapshot must not overstate available margin.
