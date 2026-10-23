@@ -29,6 +29,14 @@ class HistoricalReplayIntegrityTest {
         engine.pause()
     }
 
+    @Test fun replayQuoteIsTimestampedAtBarCloseNotAtBarOpen() {
+        val engine = HistoricalReplayEngine()
+        engine.initialize(listOf(candle(900_000L), candle(1_800_000L)), startIndex = 0)
+        assertEquals(1_800_000L, engine.currentTick.value?.timestamp)
+        assertEquals(1_800_000L, engine.currentReplayTime.value)
+        engine.pause()
+    }
+
     @Test fun rejectedReplacementPreservesCurrentReplayDataset() {
         val engine = HistoricalReplayEngine()
         engine.initialize(listOf(candle(900_000L), candle(1_800_000L)), startIndex = 0)
