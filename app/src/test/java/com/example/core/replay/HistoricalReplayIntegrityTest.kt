@@ -223,16 +223,6 @@ class HistoricalReplayIntegrityTest {
         ))
     }
 
-    private fun pending(
-        type: com.example.core.model.OrderType,
-        side: com.example.core.model.OrderSide,
-        requested: Double
-    ) = com.example.core.model.Order(
-        id = 1L, accountId = 9999, symbol = "XAUUSD",
-        direction = side, type = type, volume = 0.01,
-        requestedPrice = requested, createdAt = 0L
-    )
-
     @Test fun pendingOrdersTriggerOnWicksEvenWhenCloseIsAway() {
         val engine = HistoricalReplayEngine()
         val bar = candle(900_000L)
