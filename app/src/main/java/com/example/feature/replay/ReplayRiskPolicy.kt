@@ -33,13 +33,29 @@ object ReplayRiskPolicy {
     }
 
     fun blockReason(limits: Limits, exposure: Exposure, isPending: Boolean): String? {
-        if (!limits.enabled) return null
+        // Invalid account data is never a user-configurable risk preference.
+        // Disabling trading limits must not permit trades on corrupt balances.
         if (!exposure.initialBalance.isFinite() || exposure.initialBalance <= 0.0 ||
-            !exposure.balance.isFinite() || !exposure.equity.isFinite()) {
+            !exposure.balance.isFinite() || !exposure.equity.isFinite() ||
+            exposure.openPositions < 0 || exposure.pendingOrders < 0 ||
+            exposure.consecutiveLosses < 0) {
             return "تعذر التحقق من رصيد Replay أو ملكيته"
         }
-        val drawdown = (exposure.initialBalance - exposure.equity).coerceAtLeast(0.0) *
-            100.0 / exposure.initialBalance
+        if (!limits.enabled) return null
+        if (!limits.maxDrawdownPercent.isFinite() || limits.maxDrawdownPercent <= 0.0 ||
+            !limits.maxSessionLossUsd.isFinite() || limits.maxSessionLossUsd < 0.0 ||
+            limits.maxPositions < 1 || limits.maxOrders < 1 || limits.maxConsecutiveLosses < 0) {
+            return "إعدادات حدود المخاطر في Replay غير صالحة"
+        }
+        // Avoid overflow from multiplying large monetary balances before
+        // dividing. Ratio-based drawdown stays finite for finite positive
+        // initial balances and is consistent with equity-based loss limits.
+        val drawdown = when {
+            exposure.equity >= exposure.initialBalance -> 0.0
+            exposure.equity >= 0.0 ->
+                ((exposure.initialBalance - exposure.equity) / exposure.initialBalance) * 100.0
+            else -> 100.0 + (-exposure.equity / exposure.initialBalance) * 100.0
+        }
         val realizedLoss = (exposure.initialBalance - exposure.balance).coerceAtLeast(0.0)
         return when {
             limits.maxConsecutiveLosses > 0 && exposure.consecutiveLosses >= limits.maxConsecutiveLosses ->
