@@ -117,7 +117,7 @@ object DataIntegrityValidator {
      * Prevents future candles during historical replay, eliminating lookahead bias.
      */
     fun enforceReplayBarrier(candles: List<Candle>, currentReplayTime: Long): List<Candle> {
-        return candles.filter { validateCandle(it).isValid && it.closeTime <= currentReplayTime }
+        return candles.filter { it.closeTime <= currentReplayTime && validateCandle(it).isValid }
     }
 
     /**
