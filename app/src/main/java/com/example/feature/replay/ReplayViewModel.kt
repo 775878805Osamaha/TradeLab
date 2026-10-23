@@ -510,8 +510,17 @@ class ReplayViewModel(
         }
     }
 
-    private fun consecutiveLosses(): Int =
-        ReplayRiskPolicy.consecutiveLosses(closedTrades.map { it.netProfitLoss })
+    private fun consecutiveLosses(): Int {
+        // Avoid allocating a complete P&L list on every pending fill and
+        // market order. Only the trailing run of losses is relevant.
+        var losses = 0
+        for (index in closedTrades.lastIndex downTo 0) {
+            val pnl = closedTrades[index].netProfitLoss
+            if (!pnl.isFinite() || pnl >= 0.0) break
+            losses++
+        }
+        return losses
+    }
 
     fun configureRiskLimits(maxPositions: Int, maxOrders: Int, maxDrawdown: Double) {
         cancelBatchAdvance()
