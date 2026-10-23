@@ -99,7 +99,7 @@ class ReplayViewModel(
         val maxObservedDrawdownPercent: Double,
         val equitySamples: List<ReplayEquitySample>
     )
-    private val accountSnapshots = mutableMapOf<Int, AccountSnapshot>()
+    private val accountSnapshots = java.util.TreeMap<Int, AccountSnapshot>()
 
     private fun saveAccountSnapshot() {
         val index = replayEngine.currentIndex.value
@@ -108,9 +108,7 @@ class ReplayViewModel(
         // Snapshot keys can be numerous during long replay sessions. Avoid
         // allocating a filtered set when the current cursor is already the
         // latest saved checkpoint (the common sequential playback path).
-        if (accountSnapshots.keys.any { it > index }) {
-            accountSnapshots.keys.removeAll { it > index }
-        }
+        accountSnapshots.tailMap(index, false).clear()
         replayEngine.discardCheckpointsAfter(index)
         accountSnapshots[index] = AccountSnapshot(
             balance = _uiState.value.currentBalance,
@@ -457,7 +455,7 @@ class ReplayViewModel(
             if (snapshot != null) restoreAccountSnapshot(snapshot)
             else saveAccountSnapshot() // A no-trade timeline can safely navigate freely.
             // Future checkpoints belong to an abandoned timeline.
-            accountSnapshots.keys.removeAll { it > targetIndex }
+            accountSnapshots.tailMap(targetIndex, false).clear()
             // Invalidate the engine's separate checkpoint cache too.
             replayEngine.discardCheckpointsAfter(targetIndex)
             _uiState.update { it.copy(message = "تمت استعادة حالة الحساب عند الشمعة #$targetIndex") }
