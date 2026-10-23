@@ -139,6 +139,16 @@ class BacktestEngine(
 
         // 2. Validate, deduplicate, and sort chronologically (Strict Zero-Lookahead)
         val cleanCandles = DataIntegrityValidator.sanitizeCandles(rangeFiltered)
+        // Historical replay must not consume a candle that closes before it
+        // opens or a price that cannot be represented safely.
+        require(cleanCandles.all { candle ->
+            candle.openTime >= 0L &&
+                candle.closeTime > candle.openTime &&
+                candle.open.isFinite() && candle.high.isFinite() &&
+                candle.low.isFinite() && candle.close.isFinite() &&
+                candle.open > 0.0 && candle.high > 0.0 &&
+                candle.low > 0.0 && candle.close > 0.0
+        }) { "Backtest contains invalid historical candles" }
 
         if (cleanCandles.size <= 15) {
             val emptyMetrics = StatisticsCalculator.calculate(config.initialBalance, emptyList())
