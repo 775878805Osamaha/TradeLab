@@ -362,9 +362,10 @@ class BacktestEngine(
             // Strategies execute at the completed candle's executable bid/ask.
             // A requested entry price cannot be honored by a market order;
             // never silently ignore it and fill at a different price.
-            val unsupportedEntry = opensPosition && signal.entryPrice != null
+            // Market strategies may include an indicative entry price.
+            // ExecutionEngine still fills at executable bid/ask, not this hint.
             val effectiveAction = if (wrongSymbol || invalidEntry || invalidVolume ||
-                invalidStop || invalidTarget || unsupportedEntry) SignalAction.HOLD else signal.action
+                invalidStop || invalidTarget) SignalAction.HOLD else signal.action
 
             when (effectiveAction) {
                 SignalAction.CLOSE -> {
