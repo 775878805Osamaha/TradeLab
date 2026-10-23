@@ -87,11 +87,13 @@ fun ChartScreen(
         val tp = takeProfitInput.takeIf { it.isNotBlank() }?.toDoubleOrNull()
         val tick = if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick
         val entry = tick?.let { if (side == OrderSide.BUY) it.ask else it.bid }
+        val symbolRules = DefaultSymbols.getSymbol(uiState.selectedSymbol)
         val validOrder = volume != null && entry != null &&
+            ChartOrderValidation.isValidLot(volume, symbolRules.minLot, symbolRules.maxLot, symbolRules.lotStep) &&
             (stopLossInput.isBlank() || sl != null) &&
             (takeProfitInput.isBlank() || tp != null) &&
             ChartOrderValidation.isValid(side, volume, entry, sl, tp)
-        val contractSize = DefaultSymbols.getSymbol(uiState.selectedSymbol).contractSize
+        val contractSize = symbolRules.contractSize
         val estimatedRisk = if (validOrder) ChartOrderValidation.estimatedLoss(volume!!, entry!!, sl, contractSize) else null
         AlertDialog(
             onDismissRequest = { pendingOrderSide = null },
