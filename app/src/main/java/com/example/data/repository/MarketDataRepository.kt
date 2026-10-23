@@ -93,6 +93,11 @@ class MarketDataRepository(
         )) { "Historical range includes an unfinished candle" }
         // Bound replay memory while fetching and validating one network page at a time.
         // A non-aligned start/end can span an extra partial interval.
+        // Reject unaligned ranges rather than requesting fractional candle windows.
+        // Both providers and the replay engine operate on candle-open timestamps.
+        require(from % intervalMillis == 0L && to % intervalMillis == 0L) {
+            "Historical candle range must align to timeframe boundaries"
+        }
         val requestedBars = (to - from) / intervalMillis + 1L
         require(requestedBars <= 20_000L) {
             "Historical range exceeds 20000 candles. Request a shorter range."
