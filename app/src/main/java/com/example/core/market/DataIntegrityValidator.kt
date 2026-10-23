@@ -132,6 +132,9 @@ object DataIntegrityValidator {
         if (tick.bid <= 0.0) {
             return ValidationResult.Invalid("Tick bid must be positive: ${tick.bid}")
         }
+        if (tick.ask <= 0.0) {
+            return ValidationResult.Invalid("Tick ask must be positive: ${tick.ask}")
+        }
         if (tick.ask < tick.bid) {
             return ValidationResult.Invalid("Tick ask (${tick.ask}) cannot be lower than bid (${tick.bid})")
         }
