@@ -343,25 +343,6 @@ fun ChartScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Distinguish a verified live quote from delayed or unsupported data.
-            if (!immersiveChart && !headerQuoteVerified && !isEmbeddedReplay) {
-                Text(
-                    text = if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
-                        "السعر المباشر غير مؤكد حاليًا — لا تعتمد عليه لتنفيذ صفقة"
-                    } else {
-                        "لا يوجد مصدر أسعار مباشر موثوق لهذا الرمز"
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(TradingElevated)
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                        .testTag("chart_quote_freshness_warning"),
-                    color = TradingTextSecondary,
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-
             if (isEmbeddedReplay) {
                 // Replay detail controls remain available without occupying
                 // vertical chart space in the default reference layout.
@@ -649,28 +630,6 @@ fun ChartScreen(
                 marketTick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
                 quoteClock - marketTick.timestamp in 0..15_000L
             val verifiedBinancePair = uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")
-            val marketStatus = when {
-                !verifiedBinancePair -> "لا يوجد مصدر أسعار مباشر معتمد لهذا الرمز"
-                !marketTickIsLive -> "بانتظار سعر حديث من Binance"
-                marketTick?.source == "BINANCE_WEBSOCKET" -> "Binance · بث مباشر"
-                else -> "Binance · تحديث عبر الإنترنت"
-            }
-            if (!immersiveChart && !isEmbeddedReplay) Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = marketStatus,
-                    color = if (marketTickIsLive) TradingPositive else TradingGold,
-                    fontSize = 11.sp,
-                    modifier = Modifier.testTag("chart_market_source_status")
-                )
-                if (!marketTickIsLive) {
-                    Text("السعر غير متاح", color = TradingTextSecondary, fontSize = 10.sp)
-                }
-            }
-
             if (!immersiveChart && !isEmbeddedReplay && verifiedBinancePair && !marketTickIsLive) {
                 Text(
                     text = "تشخيص الاتصال: ${uiState.connectionDiagnostic}",
