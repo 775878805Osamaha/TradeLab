@@ -86,13 +86,17 @@ class MarketDataRepository(
         require(to <= Long.MAX_VALUE - timeframe.minutes * 60_000L) { "Candle range overflow" }
         require(pageSize in 1..1000) { "pageSize must be between 1 and 1000" }
         val intervalMillis = timeframe.minutes * 60_000L
+        require(intervalMillis > 0L) { "Invalid timeframe interval" }
         // Exclude the currently forming candle by its exchange open time,
         // not by subtracting an interval from now (which rejects valid history).
         require(HistoricalCandleBoundary.isClosedRange(
             to, System.currentTimeMillis(), intervalMillis
         )) { "Historical range includes an unfinished candle" }
         // Bound replay memory while fetching and validating one network page at a time.
-        // A non-aligned start/end can span an extra partial interval.
+        // Both boundaries are candle-open timestamps; reject partial windows.
+        require(from % intervalMillis == 0L && to % intervalMillis == 0L) {
+            "Historical candle range must align to timeframe boundaries"
+        }
         val requestedBars = (to - from) / intervalMillis + 1L
         require(requestedBars <= 20_000L) {
             "Historical range exceeds 20000 candles. Request a shorter range."
@@ -110,7 +114,7 @@ class MarketDataRepository(
             // never fabricate bars and never return a partially successful range.
             val providerLimit = if (requestedKey.isNotBlank()) 1000 else 750
             val safePageSize = minOf(pageSize, providerLimit)
-            val pages = ArrayList<Candle>()
+            val pages = ArrayList<Candle>(minOf(requestedBars.toInt(), 20_000))
             var cursor = from
             while (cursor <= to) {
                 currentCoroutineContext().ensureActive()
@@ -158,6 +162,9 @@ class MarketDataRepository(
                     expectedSymbol = symbol,
                     expectedTimeframe = timeframe
                 )
+                require(verified.all { it.openTime in cursor..end }) {
+                    "Historical provider returned candles outside requested page"
+                }
                 pages.addAll(verified)
                 if (end == to) break
                 cursor = end + intervalMillis
@@ -173,7 +180,11 @@ class MarketDataRepository(
             if (verified.isEmpty()) {
                 throw java.io.IOException("No verified historical candles for $symbol")
             }
-            verified
+            // Never hand replay duplicate or out-of-order timestamps across pages.
+            require(verified.zipWithNext().all { (a, b) -> a.openTime < b.openTime }) {
+                "Historical pages contain duplicate or unordered candle timestamps"
+            }
+            return@withContext verified
         }
         val local = DataIntegrityValidator.sanitizeCandles(
             candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
