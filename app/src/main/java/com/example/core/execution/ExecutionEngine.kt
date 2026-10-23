@@ -161,6 +161,11 @@ class ExecutionEngine(
                 tick.copy(bid = historicalFillPrice, ask = historicalFillPrice + spread)
             }
         } else tick
+        if (historicalFillPrice != null &&
+            (!validationTick.bid.isFinite() || validationTick.bid <= 0.0 ||
+                !validationTick.ask.isFinite() || validationTick.ask < validationTick.bid)) {
+            return ExecutionResult.Error("سعر تنفيذ Replay بعد احتساب السبريد غير صالح")
+        }
         val validation = OrderValidator.validate(
             account = account,
             symbol = order.symbol,
