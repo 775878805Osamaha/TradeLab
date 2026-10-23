@@ -61,6 +61,9 @@ object ReplayRiskPolicy {
         // infinite value downstream.
         if (!drawdown.isFinite()) return "تم تجاوز حد التراجع المسموح في جلسة Replay"
         val realizedLoss = (exposure.initialBalance - exposure.balance).coerceAtLeast(0.0)
+        // Two individually finite balances can still overflow when subtracted.
+        // In that case the realized loss is beyond any finite positive limit.
+        if (!realizedLoss.isFinite()) return "تم تجاوز حد الخسارة المحققة لجلسة Replay"
         return when {
             limits.maxConsecutiveLosses > 0 && exposure.consecutiveLosses >= limits.maxConsecutiveLosses ->
                 "تم بلوغ حد الخسائر المتتالية لجلسة Replay"
