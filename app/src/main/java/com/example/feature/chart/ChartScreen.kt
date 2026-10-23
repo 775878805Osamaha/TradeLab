@@ -821,7 +821,7 @@ fun ChartScreen(
 
                 // Compact TradingView-style tools on the chart itself.
                 // Buttons select the existing functional drawing tools; no image overlay.
-                Surface(
+                if (!isEmbeddedReplay) Surface(
                     modifier = Modifier
                         .align(if (immersiveChart) Alignment.TopStart else Alignment.CenterStart)
                         .padding(horizontal = 5.dp, vertical = if (immersiveChart) 12.dp else 0.dp)
