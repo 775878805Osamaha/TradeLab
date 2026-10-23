@@ -265,19 +265,21 @@ fun ChartScreen(
                         )
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = TradingTextSecondary)
                         Spacer(modifier = Modifier.width(4.dp))
-                        if (headerQuoteVerified) {
-                            DataSourceBadge(sourceType = uiState.dataSourceType)
-                        } else {
-                            Text(
-                                text = when {
-                                    uiState.isLoading -> "LOADING"
-                                    uiState.candles.isNotEmpty() -> "HISTORY"
-                                    uiState.candleLoadError != null -> "DATA ERROR"
-                                    else -> "NO DATA"
-                                },
-                                fontSize = 10.sp, color = TradingTextSecondary,
-                                modifier = Modifier.testTag("chart_source_mode")
-                            )
+                        if (!immersiveChart) {
+                            if (headerQuoteVerified) {
+                                DataSourceBadge(sourceType = uiState.dataSourceType)
+                            } else {
+                                Text(
+                                    text = when {
+                                        uiState.isLoading -> "LOADING"
+                                        uiState.candles.isNotEmpty() -> "HISTORY"
+                                        uiState.candleLoadError != null -> "DATA ERROR"
+                                        else -> "NO DATA"
+                                    },
+                                    fontSize = 10.sp, color = TradingTextSecondary,
+                                    modifier = Modifier.testTag("chart_source_mode")
+                                )
+                            }
                         }
                     }
                 },
