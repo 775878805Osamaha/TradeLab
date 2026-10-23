@@ -276,17 +276,19 @@ fun CandlestickChart(
             // Calculate Visible Candle Range from Viewport
             val visibleCount = ((chartWidth / candleWidthPx) + 3).toInt().coerceIn(1, candles.size)
             val maxScrollOffset = (candles.size.toDouble() * candleWidthPx - chartWidth).coerceAtLeast(0.0).toFloat()
-            // Permit dragging the latest candle away from the right axis,
-            // leaving future space (up to 70% of the viewport) like TradingView.
+            // A LEFT swipe makes scrollOffsetPx negative and exposes future space
+            // on the RIGHT; a RIGHT swipe moves back toward earlier candles.
             val futureSpacePx = chartWidth * 0.70f
-            val clampedScroll = scrollOffsetPx.coerceIn(-maxScrollOffset, futureSpacePx)
+            // Negative offsets are future-space: a leftward finger drag must shift candles LEFT.
+            // Positive offsets scroll into history: a rightward drag moves candles RIGHT.
+            val clampedScroll = scrollOffsetPx.coerceIn(-futureSpacePx, maxScrollOffset)
             // Persist the clamped offset so repeated drags cannot accumulate
             // invisible overscroll and make the chart feel stuck on reversal.
             if (scrollOffsetPx != clampedScroll) scrollOffsetPx = clampedScroll
 
-            val historicalScrollPx = (-clampedScroll).coerceAtLeast(0f)
+            val historicalScrollPx = clampedScroll.coerceAtLeast(0f)
             val scrollCandleOffset = (historicalScrollPx / candleWidthPx).toInt().coerceIn(0, (candles.size - visibleCount).coerceAtLeast(0))
-            val fractionalScrollPx = if (clampedScroll > 0f) -clampedScroll else historicalScrollPx % candleWidthPx
+            val fractionalScrollPx = if (clampedScroll < 0f) -clampedScroll else -(historicalScrollPx % candleWidthPx)
             val startIndex = (candles.size - visibleCount - scrollCandleOffset).coerceIn(0, candles.size - 1)
             val endIndex = (startIndex + visibleCount).coerceIn(startIndex, candles.size)
             val visibleCandles = candles.subList(startIndex, endIndex)
