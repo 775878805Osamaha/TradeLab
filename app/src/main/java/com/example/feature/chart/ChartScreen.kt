@@ -55,6 +55,7 @@ fun ChartScreen(
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var immersiveChart by remember { mutableStateOf(true) }
+    var drawingToolbarExpanded by remember { mutableStateOf(false) }
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
     var orderVolumeInput by remember { mutableStateOf("0.01") }
@@ -290,6 +291,7 @@ fun ChartScreen(
                             tint = TradingAccentLight
                         )
                     }
+                    if (!immersiveChart) {
                     IconButton(
                         onClick = { viewModel.toggleVolume() },
                         modifier = Modifier.testTag("chart_toggle_volume_header")
@@ -317,6 +319,7 @@ fun ChartScreen(
                                 tint = TradingTextSecondary
                             )
                         }
+                    }
                     }
                     // Replay shortcut
                     IconButton(
@@ -711,7 +714,7 @@ fun ChartScreen(
 
                 // Compact provenance HUD: historical candles are not live executable quotes.
                 val chartBars = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
-                if (chartBars.isNotEmpty()) {
+                if (!immersiveChart && chartBars.isNotEmpty()) {
                     val latestBar = chartBars.last()
                     val timestamp = remember(latestBar.openTime) {
                         java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")
@@ -826,6 +829,14 @@ fun ChartScreen(
                             .padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        IconButton(
+                            onClick = { drawingToolbarExpanded = !drawingToolbarExpanded },
+                            modifier = Modifier.size(40.dp).testTag("chart_toolbar_collapse")
+                        ) {
+                            Icon(Icons.Default.MoreHoriz, contentDescription = if (drawingToolbarExpanded) "إخفاء أدوات الرسم" else "إظهار أدوات الرسم",
+                                tint = TradingTextPrimary)
+                        }
+                        if (drawingToolbarExpanded) {
                         val tools = listOf(
                             Triple(DrawingTool.NONE, Icons.Default.PanTool, "تحريك الشارت"),
                             Triple(DrawingTool.TRENDLINE, Icons.Default.ShowChart, "خط اتجاه"),
@@ -872,6 +883,7 @@ fun ChartScreen(
                             modifier = Modifier.size(44.dp).testTag("chart_toolbar_more")
                         ) {
                             Icon(Icons.Default.MoreHoriz, contentDescription = "المزيد من أدوات الرسم", tint = TradingTextSecondary)
+                        }
                         }
                     }
                 }
