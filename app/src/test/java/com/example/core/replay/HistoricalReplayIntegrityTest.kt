@@ -36,6 +36,22 @@ class HistoricalReplayIntegrityTest {
         assertEquals(2000.0, (result as com.example.core.execution.PositionEvaluation.TriggerClose).exitPrice, 0.0)
     }
 
+    @Test fun buyTakeProfitGapFillsAtFavorableOpen() {
+        val engine = HistoricalReplayEngine()
+        val pos = com.example.core.model.Position(
+            accountId = 1, symbol = "XAUUSD",
+            side = com.example.core.model.PositionSide.BUY,
+            volume = 0.01, entryPrice = 2010.0, currentPrice = 2010.0,
+            stopLoss = 2005.0, takeProfit = 2020.0,
+            openTime = 0L, profitLoss = 0.0, swap = 0.0,
+            commission = 0.0, margin = 100.0
+        )
+        val gap = candle(900_000L).copy(open = 2025.0, low = 2015.0, high = 2030.0)
+        val result = engine.evaluatePositionConservative(pos, gap)
+        org.junit.Assert.assertTrue(result is com.example.core.execution.PositionEvaluation.TriggerClose)
+        assertEquals(2025.0, (result as com.example.core.execution.PositionEvaluation.TriggerClose).exitPrice, 0.0)
+    }
+
     @Test fun enginePreservesValidHistoricalBarCountAndOrdering() {
         val engine = HistoricalReplayEngine()
         val candles = listOf(candle(900_000L), candle(1_800_000L), candle(3_600_000L))
