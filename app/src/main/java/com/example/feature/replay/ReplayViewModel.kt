@@ -887,7 +887,7 @@ class ReplayViewModel(
                         position = pos,
                         exitPrice = eval.exitPrice,
                         exitReason = eval.exitReason,
-                        closeTime = candle.openTime
+                        closeTime = candle.closeTime
                     )
                     closedTrades.add(trade)
                     curBal = ReplayAccountMath.realizedBalance(curBal, trade.netProfitLoss)
