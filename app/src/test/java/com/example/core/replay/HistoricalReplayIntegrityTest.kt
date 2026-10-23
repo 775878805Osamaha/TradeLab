@@ -178,6 +178,51 @@ class HistoricalReplayIntegrityTest {
         assertEquals(listOf(bars[16].openTime), events)
     }
 
+    private fun pending(
+        type: com.example.core.model.OrderType,
+        side: com.example.core.model.OrderSide,
+        price: Double
+    ) = com.example.core.model.Order(
+        id = 1L, accountId = 9999, symbol = "XAUUSD",
+        direction = side, type = type, volume = 0.01,
+        requestedPrice = price, createdAt = 0L
+    )
+
+    @Test fun historicalBuyLimitTouchedIntrabarFillsAtLimit() {
+        val bar = candle(900_000L).copy(open = 2010.0, low = 2000.0, high = 2020.0)
+        assertEquals(2005.0, HistoricalReplayEngine().pendingOrderFillPrice(
+            pending(com.example.core.model.OrderType.BUY_LIMIT, com.example.core.model.OrderSide.BUY, 2005.0), bar
+        )!!, 0.0)
+    }
+
+    @Test fun historicalBuyStopOpeningGapFillsAtWorseOpen() {
+        val bar = candle(900_000L).copy(open = 2015.0, low = 2005.0, high = 2020.0)
+        assertEquals(2015.0, HistoricalReplayEngine().pendingOrderFillPrice(
+            pending(com.example.core.model.OrderType.BUY_STOP, com.example.core.model.OrderSide.BUY, 2012.0), bar
+        )!!, 0.0)
+    }
+
+    @Test fun historicalSellStopOpeningGapFillsAtWorseOpen() {
+        val bar = candle(900_000L).copy(open = 2000.0, low = 1995.0, high = 2020.0)
+        assertEquals(2000.0, HistoricalReplayEngine().pendingOrderFillPrice(
+            pending(com.example.core.model.OrderType.SELL_STOP, com.example.core.model.OrderSide.SELL, 2005.0), bar
+        )!!, 0.0)
+    }
+
+    @Test fun historicalLimitGapUsesBetterOpeningPrice() {
+        val bar = candle(900_000L).copy(open = 2000.0, low = 1995.0, high = 2020.0)
+        assertEquals(2000.0, HistoricalReplayEngine().pendingOrderFillPrice(
+            pending(com.example.core.model.OrderType.BUY_LIMIT, com.example.core.model.OrderSide.BUY, 2005.0), bar
+        )!!, 0.0)
+    }
+
+    @Test fun historicalUntouchedOrderIsNotFilled() {
+        val bar = candle(900_000L)
+        assertEquals(null, HistoricalReplayEngine().pendingOrderFillPrice(
+            pending(com.example.core.model.OrderType.BUY_LIMIT, com.example.core.model.OrderSide.BUY, 1990.0), bar
+        ))
+    }
+
     @Test fun enginePreservesValidHistoricalBarCountAndOrdering() {
         val engine = HistoricalReplayEngine()
         val candles = listOf(candle(900_000L), candle(1_800_000L), candle(3_600_000L))
