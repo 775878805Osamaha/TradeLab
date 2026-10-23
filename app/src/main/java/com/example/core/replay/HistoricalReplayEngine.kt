@@ -86,7 +86,7 @@ class HistoricalReplayEngine(
         _status.value = ReplayStatus.READY
 
         if (allCandles.isNotEmpty()) {
-            replayClock.initialize(allCandles[safeStart].openTime)
+            replayClock.initialize(allCandles[safeStart].closeTime)
         }
 
         // Loading a dataset positions the cursor; it must not trade on the
