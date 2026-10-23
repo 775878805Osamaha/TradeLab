@@ -25,7 +25,10 @@ class TradeLabApplication : Application() {
             provider = marketDataProvider,
             candleDao = database.candleDao(),
             symbolDao = database.symbolDao()
-        )
+        ).also { repository ->
+            // Restore the user-provided key after process recreation.
+            repository.configureTwelveDataKey(historyKeyStore.read())
+        }
     }
 
     val tradingRepository: TradingRepository by lazy {
