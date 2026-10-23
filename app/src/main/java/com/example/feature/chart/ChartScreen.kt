@@ -59,6 +59,24 @@ fun ChartScreen(
     var showHistoricalSourceDialog by remember { mutableStateOf(false) }
     var historicalApiKeyInput by remember { mutableStateOf("") }
 
+    // Refresh the freshness indicator even when the market stream stops emitting.
+    var quoteClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    // Historical gold/forex must not force a full chart-screen recomposition
+    // every second when no live quote is subscribed.
+    LaunchedEffect(uiState.selectedSymbol) {
+        if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
+            while (true) {
+                kotlinx.coroutines.delay(5_000L)
+                quoteClock = System.currentTimeMillis()
+            }
+        }
+    }
+    val headerTick = uiState.latestTick
+    val headerQuoteVerified = headerTick != null &&
+        headerTick.symbol == uiState.selectedSymbol &&
+        headerTick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
+        quoteClock - headerTick.timestamp in 0..15_000L
+
     if (pendingOrderSide != null) {
         val side = pendingOrderSide!!
         val volume = orderVolumeInput.toDoubleOrNull()
@@ -100,24 +118,6 @@ fun ChartScreen(
             dismissButton = { TextButton(onClick = { pendingOrderSide = null }) { Text("إلغاء") } }
         )
     }
-
-    // Refresh the freshness indicator even when the market stream stops emitting.
-    var quoteClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    // Historical gold/forex must not force a full chart-screen recomposition
-    // every second when no live quote is subscribed.
-    LaunchedEffect(uiState.selectedSymbol) {
-        if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
-            while (true) {
-                kotlinx.coroutines.delay(5_000L)
-                quoteClock = System.currentTimeMillis()
-            }
-        }
-    }
-    val headerTick = uiState.latestTick
-    val headerQuoteVerified = headerTick != null &&
-        headerTick.symbol == uiState.selectedSymbol &&
-        headerTick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
-        quoteClock - headerTick.timestamp in 0..15_000L
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(uiState.message) {
