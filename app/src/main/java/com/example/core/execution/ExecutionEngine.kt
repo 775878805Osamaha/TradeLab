@@ -147,14 +147,28 @@ class ExecutionEngine(
             !order.requestedPrice.isFinite() || order.requestedPrice <= 0.0) {
             return ExecutionResult.Error("سعر السوق أو رمز الأمر المعلق غير صالح")
         }
+        // For OHLC replay, validation must use the modeled historical entry
+        // quote, not the candle-close tick. Otherwise a wick-triggered pending
+        // order can be rejected because its SL/TP is compared to the wrong price.
+        val sym = DefaultSymbols.getSymbol(order.symbol)
+        val spread = sym.defaultSpreadPips * sym.pipSize
+        val validationTick = if (historicalFillPrice != null &&
+            historicalFillPrice.isFinite() && historicalFillPrice > 0.0 &&
+            spread.isFinite() && spread >= 0.0) {
+            if (order.direction == OrderSide.BUY) {
+                tick.copy(ask = historicalFillPrice, bid = historicalFillPrice - spread)
+            } else {
+                tick.copy(bid = historicalFillPrice, ask = historicalFillPrice + spread)
+            }
+        } else tick
         val validation = OrderValidator.validate(
             account = account,
             symbol = order.symbol,
-            // Validate execution-time constraints, not placement-time trigger geometry.
+            // Validate execution-time constraints at the historical fill quote.
             type = OrderType.MARKET,
             side = order.direction,
             volume = order.volume,
-            tick = tick,
+            tick = validationTick,
             stopLoss = order.stopLoss,
             takeProfit = order.takeProfit
         )
