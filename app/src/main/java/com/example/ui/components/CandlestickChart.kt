@@ -343,6 +343,7 @@ fun CandlestickChart(
                 else -> 10.0
             }
             val priceTickStep = tickMultiplier * magnitude
+            val tickDecimals = (-kotlin.math.floor(kotlin.math.log10(priceTickStep))).toInt().coerceIn(0, 6)
             val firstPriceTick = kotlin.math.ceil(paddedMin / priceTickStep) * priceTickStep
             val priceTickCount = ((paddedMax - firstPriceTick) / priceTickStep)
                 .toInt().coerceIn(0, 40)
@@ -359,7 +360,7 @@ fun CandlestickChart(
                 drawContext.canvas.nativeCanvas.apply {
                     val labelY = (y + priceAxisPaint.textSize * 0.35f)
                         .coerceIn(priceAxisPaint.textSize, height - 8f)
-                    drawText(String.format(Locale.US, "%.2f", priceVal), chartWidth + 7f, labelY, priceAxisPaint)
+                    drawText(String.format(Locale.US, "%,." + tickDecimals + "f", priceVal), chartWidth + 7f, labelY, priceAxisPaint)
                 }
             }
 
