@@ -846,7 +846,7 @@ fun ChartScreen(
                                 tint = TradingTextPrimary)
                         }
                         // Keep pan/reset accessible without expanding the full tools palette.
-                        if (!drawingToolbarExpanded) {
+                        if (!drawingToolbarExpanded && uiState.activeDrawingTool != DrawingTool.NONE) {
                             IconButton(
                                 onClick = { viewModel.setDrawingTool(DrawingTool.NONE) },
                                 modifier = Modifier.size(40.dp).testTag("chart_toolbar_quick_pan")
