@@ -56,6 +56,7 @@ fun ChartScreen(
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
     var orderVolumeInput by remember { mutableStateOf("0.01") }
+    var showReplayDatePicker by remember { mutableStateOf(false) }
     var showHistoricalSourceDialog by remember { mutableStateOf(false) }
     var historicalApiKeyInput by remember { mutableStateOf("") }
 
@@ -117,6 +118,27 @@ fun ChartScreen(
             },
             dismissButton = { TextButton(onClick = { pendingOrderSide = null }) { Text("إلغاء") } }
         )
+    }
+
+    if (showReplayDatePicker) {
+        val datePickerState = rememberDatePickerState()
+        DatePickerDialog(
+            onDismissRequest = { showReplayDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { selected ->
+                            replayViewModel.jumpToTimestamp(selected)
+                        }
+                        showReplayDatePicker = false
+                    },
+                    enabled = datePickerState.selectedDateMillis != null
+                ) { Text("انتقال") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReplayDatePicker = false }) { Text("إلغاء") }
+            }
+        ) { DatePicker(state = datePickerState) }
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -784,7 +806,7 @@ fun ChartScreen(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { showReplayDetails = !showReplayDetails }) {
+                    TextButton(onClick = { showReplayDatePicker = true }, modifier = Modifier.testTag("chart_replay_date_picker")) {
                         Icon(Icons.Default.DateRange, contentDescription = "تاريخ الإعادة", tint = TradingTextPrimary)
                         Text(" ${replayState.currentIndex + 1}", fontSize = 11.sp, color = TradingTextPrimary)
                     }
