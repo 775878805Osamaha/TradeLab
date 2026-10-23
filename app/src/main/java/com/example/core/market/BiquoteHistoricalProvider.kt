@@ -2,12 +2,19 @@ package com.example.core.market
 
 import com.example.core.model.Candle
 import com.example.core.model.Timeframe
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.IOException
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
@@ -69,10 +76,7 @@ class BiquoteHistoricalProvider(
                 .addQueryParameter("from", Instant.ofEpochMilli(baseFrom).toString())
                 .addQueryParameter("to", Instant.ofEpochMilli(to + period).toString())
                 .build()
-            val body = client.newCall(Request.Builder().url(url).build()).execute().use { response ->
-                if (!response.isSuccessful) throw IOException("Biquote HTTP ${response.code}")
-                response.body?.string() ?: throw IOException("Empty Biquote response")
-            }
+            val body = fetchBody(client, Request.Builder().url(url).build(), "Biquote")
             val root = JSONObject(body)
             if (root.optString("symbol") != symbol) throw IOException("Biquote symbol mismatch")
             val items = root.optJSONArray("bars") ?: throw IOException("Biquote bars missing")
@@ -136,4 +140,30 @@ class BiquoteHistoricalProvider(
                 expectedSymbol = symbol, expectedTimeframe = tf
             )
         }
+    private suspend fun fetchBody(client: OkHttpClient, request: Request, providerName: String): String =
+        suspendCancellableCoroutine { continuation ->
+            val call = client.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (continuation.isActive) {
+                        continuation.resumeWithException(
+                            IOException("$providerName historical request failed", e)
+                        )
+                    }
+                }
+                override fun onResponse(call: Call, response: Response) {
+                    try {
+                        val body = response.use {
+                            if (!it.isSuccessful) throw IOException("$providerName HTTP ${it.code}")
+                            it.body?.string() ?: throw IOException("Empty $providerName response")
+                        }
+                        if (continuation.isActive) continuation.resume(body)
+                    } catch (e: Exception) {
+                        if (continuation.isActive) continuation.resumeWithException(e)
+                    }
+                }
+            })
+        }
+
 }
