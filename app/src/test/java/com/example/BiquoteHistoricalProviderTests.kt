@@ -3,6 +3,14 @@ package com.example
 import com.example.core.market.BiquoteHistoricalProvider
 import com.example.core.model.Timeframe
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
@@ -95,6 +103,34 @@ class BiquoteHistoricalProviderTests {
             assertTrue(expected.message!!.contains("outside", ignoreCase = true) ||
                 expected.message!!.contains("incomplete", ignoreCase = true))
         }
+    }
+
+    @Test fun cancellingHistoryCoroutineCancelsInFlightHttpCall() = runBlocking {
+        val started = CountDownLatch(1)
+        val cancelled = CountDownLatch(1)
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            started.countDown()
+            try {
+                // Keep the HTTP call in-flight until coroutine cancellation.
+                while (!chain.call().isCanceled()) {
+                    Thread.sleep(10)
+                }
+                cancelled.countDown()
+                throw IOException("cancelled")
+            } catch (e: InterruptedException) {
+                throw IOException("interrupted", e)
+            }
+        }.build()
+        val job = async(Dispatchers.IO) {
+            BiquoteHistoricalProvider(client).fetch("XAUUSD", Timeframe.M1, from, from + step)
+        }
+        assertTrue("HTTP request did not start", withContext(Dispatchers.IO) {
+            started.await(5, TimeUnit.SECONDS)
+        })
+        job.cancelAndJoin()
+        assertTrue("HTTP request was not cancelled", withContext(Dispatchers.IO) {
+            cancelled.await(5, TimeUnit.SECONDS)
+        })
     }
 
 }
