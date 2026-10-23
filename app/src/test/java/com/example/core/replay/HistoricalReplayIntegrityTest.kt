@@ -140,6 +140,28 @@ class HistoricalReplayIntegrityTest {
         engine.pause()
     }
 
+    @Test fun clearResetsHistoricalClockAndMarketQuote() {
+        val engine = HistoricalReplayEngine()
+        engine.initialize(listOf(candle(900_000L), candle(1_800_000L)), startIndex = 0)
+        engine.stepForward()
+        engine.clear()
+        assertEquals(0L, engine.currentReplayTime.value)
+        assertEquals(0L, engine.replayClock.elapsedReplayTime.value)
+        assertEquals(null, engine.currentTick.value)
+        assertEquals(0, engine.totalCandles.value)
+    }
+
+    @Test fun restartResetsElapsedHistoricalTime() {
+        val engine = HistoricalReplayEngine()
+        val bars = (0..15).map { candle(900_000L + it * 900_000L) }
+        engine.initialize(bars, startIndex = 0)
+        engine.advanceBars(12)
+        org.junit.Assert.assertTrue(engine.replayClock.elapsedReplayTime.value > 0L)
+        engine.reset()
+        assertEquals(bars[10].closeTime, engine.currentReplayTime.value)
+        assertEquals(0L, engine.replayClock.elapsedReplayTime.value)
+    }
+
     @Test fun enginePreservesValidHistoricalBarCountAndOrdering() {
         val engine = HistoricalReplayEngine()
         val candles = listOf(candle(900_000L), candle(1_800_000L), candle(3_600_000L))
