@@ -320,7 +320,9 @@ class ReplayViewModel(
                 val validation = com.example.core.market.DataIntegrityValidator
                     .validateHistoricalSeries(candles)
                 if (!validation.isValid || candles.first().symbol != symbol ||
-                    candles.first().timeframe != tf) {
+                    candles.first().timeframe != tf ||
+                    candles.first().openTime < from ||
+                    candles.last().openTime > lastClosedOpen) {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
@@ -708,9 +710,12 @@ class ReplayViewModel(
     }
 
     fun executeOrder(side: OrderSide, volume: Double = 0.01, sl: Double? = null, tp: Double? = null) {
-        cancelBatchAdvance()
+        // Strategy signals are emitted inside the candle-step callback.
+        // Do not cancel the active batch or playback from inside that callback.
+        val strategyFill = executingStrategySignal
+        if (!strategyFill) cancelBatchAdvance()
         if (!canAcceptReplayOrder(isPending = false)) return
-        replayEngine.pause()
+        if (!strategyFill) replayEngine.pause()
         val candle = replayEngine.currentCandle.value ?: run {
             _uiState.update { it.copy(message = "لا توجد شمعة Replay متاحة للتداول") }
             return
@@ -787,7 +792,7 @@ class ReplayViewModel(
             position = pos,
             exitPrice = exitPrice,
             exitReason = ExitReason.MANUAL_CLOSE,
-            closeTime = candle?.openTime ?: System.currentTimeMillis()
+            closeTime = candle?.closeTime ?: tick.timestamp
         )
         openPositions.remove(pos)
         closedTrades.add(trade)
@@ -872,6 +877,8 @@ class ReplayViewModel(
         }
     }
 
+    private var executingStrategySignal = false
+
     private fun evaluateOnReplayCandle(candle: Candle, tick: Tick, dataView: ReplayDataView) {
         var curBal = _uiState.value.currentBalance
 
@@ -885,7 +892,7 @@ class ReplayViewModel(
                         position = pos,
                         exitPrice = eval.exitPrice,
                         exitReason = eval.exitReason,
-                        closeTime = candle.openTime
+                        closeTime = candle.closeTime
                     )
                     closedTrades.add(trade)
                     curBal = ReplayAccountMath.realizedBalance(curBal, trade.netProfitLoss)
@@ -1004,9 +1011,13 @@ class ReplayViewModel(
                 if (signal.action != SignalAction.HOLD) {
                     lastSignalText = "إشارة ${signal.action}: ${signal.reason}"
                     if (signal.action == SignalAction.BUY && openPositions.none { it.side == PositionSide.BUY }) {
-                        executeOrder(OrderSide.BUY, 0.01)
+                        executingStrategySignal = true
+                        try { executeOrder(OrderSide.BUY, 0.01) }
+                        finally { executingStrategySignal = false }
                     } else if (signal.action == SignalAction.SELL && openPositions.none { it.side == PositionSide.SELL }) {
-                        executeOrder(OrderSide.SELL, 0.01)
+                        executingStrategySignal = true
+                        try { executeOrder(OrderSide.SELL, 0.01) }
+                        finally { executingStrategySignal = false }
                     }
                 }
             }
@@ -1019,7 +1030,7 @@ class ReplayViewModel(
             ReplayCheckpoint(
                 sessionId = 1,
                 candleIndex = replayEngine.currentIndex.value,
-                timestamp = candle.openTime,
+                timestamp = candle.closeTime,
                 balance = curBal,
                 equity = curEq,
                 openPositions = openPositions.toList(),

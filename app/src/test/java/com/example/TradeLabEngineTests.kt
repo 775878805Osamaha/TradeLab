@@ -200,7 +200,7 @@ class TradeLabEngineTests {
             Candle(
                 symbol = "XAUUSD",
                 timeframe = Timeframe.M15,
-                openTime = 1000L + (i * 60000L),
+                openTime = 1000L + (i * 15L * 60000L),
                 open = 2650.0 + i,
                 high = 2652.0 + i,
                 low = 2649.0 + i,
