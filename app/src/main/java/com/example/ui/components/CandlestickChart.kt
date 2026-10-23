@@ -153,7 +153,7 @@ fun CandlestickChart(
     val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
         candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
         // Pinch and two-finger pan share this transformable gesture.
-        scrollOffsetPx -= panChange.x
+        scrollOffsetPx += panChange.x
     }
 
     val timeFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
@@ -204,7 +204,7 @@ fun CandlestickChart(
                             } else if (isCrosshairActive) {
                                 crosshairOffset = change.position
                             } else {
-                                scrollOffsetPx -= dragAmount.x
+                                scrollOffsetPx += dragAmount.x
                             }
                         },
                         onDragEnd = {
