@@ -825,13 +825,13 @@ fun ChartScreen(
                         .padding(horizontal = 5.dp)
                         .testTag("chart_floating_drawing_toolbar"),
                     shape = RoundedCornerShape(8.dp),
-                    color = TradingCard.copy(alpha = 0.96f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, TradingBorder),
+                    color = TradingCard.copy(alpha = if (drawingToolbarExpanded) 0.96f else 0.72f),
+                    border = if (drawingToolbarExpanded) androidx.compose.foundation.BorderStroke(1.dp, TradingBorder) else null,
                     tonalElevation = 0.dp
                 ) {
                     Column(
                         modifier = Modifier
-                            .heightIn(max = 228.dp)
+                            .heightIn(max = if (drawingToolbarExpanded) 228.dp else 132.dp)
                             .verticalScroll(rememberScrollState())
                             .padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
