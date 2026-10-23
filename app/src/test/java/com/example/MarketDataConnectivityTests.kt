@@ -81,6 +81,15 @@ class MarketDataConnectivityTests {
     }
 
     @Test
+    fun `test market tick rejects nonpositive ask and crossed spread`() {
+        val tick = Tick(symbol = "XAUUSD", bid = 2650.0, ask = 2650.5, last = 2650.25, timestamp = 1000L)
+        assertFalse(DataIntegrityValidator.validateTick(tick.copy(ask = 0.0)).isValid)
+        assertFalse(DataIntegrityValidator.validateTick(tick.copy(ask = -1.0)).isValid)
+        assertFalse(DataIntegrityValidator.validateTick(tick.copy(ask = 2649.0)).isValid)
+        assertTrue(DataIntegrityValidator.validateTick(tick.copy(ask = tick.bid)).isValid)
+    }
+
+    @Test
     fun `test market validator rejects nonfinite ticks`() {
         val valid = Tick(symbol = "BTCUSDT", bid = 100.0, ask = 100.5, last = 100.25, timestamp = 1000L)
         assertFalse(DataIntegrityValidator.validateTick(valid.copy(bid = Double.NaN)).isValid)
