@@ -80,10 +80,20 @@ class ExecutionEngine(
         // Commission
         val commission = config.defaultCommissionPerLot * volume
 
+        // Opening commission is a real cost, unlike margin collateral.
+        // Reserve both at entry to avoid approving a trade that cannot afford
+        // its own execution fee. The subtraction form avoids addition overflow.
+        if (!commission.isFinite() || commission < 0.0 ||
+            !account.freeMargin.isFinite() || account.freeMargin < 0.0 ||
+            !account.leverage.isFinite() || account.leverage <= 0.0) {
+            return ExecutionResult.Error("العمولة أو الهامش الحر أو الرافعة المالية غير صالح")
+        }
         // Required margin
         val margin = (volume * symInfo.contractSize * executedPrice) / account.leverage
 
-        if (!margin.isFinite() || margin <= 0.0 || margin > account.freeMargin) {
+        if (!margin.isFinite() || margin <= 0.0 ||
+            commission > account.freeMargin ||
+            margin > account.freeMargin - commission) {
             return ExecutionResult.Error("الهامش الافتراضي غير كافٍ لتنفيذ هذا العقد")
         }
 
