@@ -227,7 +227,7 @@ class ChartViewModel(
         }
     }
 
-    fun quickOrder(side: OrderSide, volume: Double = 0.01) {
+    fun quickOrder(side: OrderSide, volume: Double = 0.01, stopLoss: Double? = null, takeProfit: Double? = null) {
         if (!volume.isFinite() || volume <= 0.0) {
             _uiState.update { it.copy(message = "حجم الصفقة يجب أن يكون رقمًا موجبًا وصالحًا") }
             return
@@ -242,6 +242,14 @@ class ChartViewModel(
             _uiState.update { it.copy(message = "لا يمكن تنفيذ أمر بسعر غير متصل أو قديم") }
             return
         }
+        val entry = if (side == OrderSide.BUY) tick.ask else tick.bid
+        if ((stopLoss != null && (!stopLoss.isFinite() || stopLoss <= 0.0 ||
+                (if (side == OrderSide.BUY) stopLoss >= entry else stopLoss <= entry))) ||
+            (takeProfit != null && (!takeProfit.isFinite() || takeProfit <= 0.0 ||
+                (if (side == OrderSide.BUY) takeProfit <= entry else takeProfit >= entry)))) {
+            _uiState.update { it.copy(message = "وقف الخسارة أو جني الربح غير صالح بالنسبة لسعر الدخول") }
+            return
+        }
         viewModelScope.launch {
             val account = tradingRepository.selectedAccount.first()
             if (account == null) {
@@ -254,8 +262,8 @@ class ChartViewModel(
                 side = side,
                 volume = volume,
                 tick = tick,
-                stopLoss = null,
-                takeProfit = null
+                stopLoss = stopLoss,
+                takeProfit = takeProfit
             )
             result.onSuccess {
                 _uiState.update { it.copy(message = "تم فتح أمر ${if (side == OrderSide.BUY) "شراء" else "بيع"} $volume لوت بنجاح") }
