@@ -1133,7 +1133,7 @@ fun ChartScreen(
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("chart_symbol_search")
                 )
-                val categories = remember { listOf("الكل") + DefaultSymbols.SYMBOLS.map { it.category }.distinct() }
+                val categories = listOf("الكل") + DefaultSymbols.SYMBOLS.map { it.category }.distinct()
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
