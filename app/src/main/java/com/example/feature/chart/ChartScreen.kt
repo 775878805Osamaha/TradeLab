@@ -1177,6 +1177,13 @@ fun ChartScreen(
                 }.let { matches ->
                     if (symbolSortFavoritesFirst) matches.sortedByDescending { it.symbol in favoriteSymbols } else matches
                 }
+                Text(
+                    text = "النتائج: " + filteredSymbols.size + " / " + DefaultSymbols.SYMBOLS.size,
+                    color = TradingTextSecondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                        .testTag("chart_symbol_result_count")
+                )
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     if (filteredSymbols.isEmpty()) {
                         Text("لا توجد أزواج مطابقة", color = TradingTextSecondary,
