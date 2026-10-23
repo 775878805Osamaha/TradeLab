@@ -515,6 +515,10 @@ class ExecutionEngine(
     ): Pair<TradeJournalEntry, Position?> {
         val symInfo = DefaultSymbols.getSymbol(position.symbol)
         require(position.volume.isFinite() && position.volume > 0.0) { "Invalid position volume" }
+        require(position.entryPrice.isFinite() && position.entryPrice > 0.0) { "Invalid entry price" }
+        require(position.commission.isFinite() && position.commission >= 0.0) { "Invalid commission" }
+        require(position.swap.isFinite()) { "Invalid swap" }
+        require(position.margin.isFinite() && position.margin >= 0.0) { "Invalid margin" }
         require(exitPrice.isFinite() && exitPrice > 0.0) { "Invalid exit price" }
         require(partialVolume == null || (partialVolume.isFinite() &&
             partialVolume > 0.0 && partialVolume <= position.volume)) { "Invalid partial close volume" }
@@ -525,9 +529,13 @@ class ExecutionEngine(
             PositionSide.SELL -> (position.entryPrice - exitPrice) * closingVolume * symInfo.contractSize
         }
 
+        require(grossPl.isFinite()) { "Position close profit/loss overflow" }
         val ratio = closingVolume / position.volume
         val closingCommission = position.commission * ratio
         val closingSwap = position.swap * ratio
+        require(closingCommission.isFinite() && closingSwap.isFinite()) {
+            "Position close costs overflow"
+        }
 
         // Calculate R-Multiple if SL was defined
         val rMultiple = if (position.stopLoss != null) {
