@@ -95,7 +95,12 @@ class TwelveDataHistoricalProvider(
             val high = row.getString("high").toDouble()
             val low = row.getString("low").toDouble()
             val close = row.getString("close").toDouble()
-            val volume = row.optString("volume").toDoubleOrNull() ?: 0.0
+            val volume = if (!row.has("volume") || row.isNull("volume") || row.optString("volume").isBlank()) {
+                0.0 // Some spot FX feeds do not provide volume.
+            } else {
+                row.getString("volume").toDoubleOrNull()
+                    ?: throw IOException("Invalid Twelve Data volume for $symbol")
+            }
             parsed.add(Candle(
                 symbol = symbol, timeframe = timeframe,
                 openTime = openTime, closeTime = openTime + intervalMillis,
