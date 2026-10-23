@@ -95,6 +95,7 @@ class MarketDataRepository(
         // A non-aligned start/end can span an extra partial interval.
         // Reject unaligned ranges rather than requesting fractional candle windows.
         // Both providers and the replay engine operate on candle-open timestamps.
+        // The start and end are candle-open timestamps. Reject partial bars.
         require(from % intervalMillis == 0L && to % intervalMillis == 0L) {
             "Historical candle range must align to timeframe boundaries"
         }
