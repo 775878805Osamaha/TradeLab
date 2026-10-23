@@ -663,8 +663,10 @@ class ReplayViewModel(
             !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
             !volume.isFinite() || volume <= 0.0 ||
             !requestedPrice.isFinite() || requestedPrice <= 0.0 ||
-            (sl != null && (!sl.isFinite() || sl <= 0.0)) ||
-            (tp != null && (!tp.isFinite() || tp <= 0.0)) ||
+            (sl != null && (!sl.isFinite() || sl <= 0.0 ||
+                (if (side == OrderSide.BUY) sl >= tick.ask else sl <= tick.bid))) ||
+            (tp != null && (!tp.isFinite() || tp <= 0.0 ||
+                (if (side == OrderSide.BUY) tp <= tick.ask else tp >= tick.bid))) ||
             type == OrderType.MARKET ||
             (type in listOf(OrderType.BUY_LIMIT, OrderType.BUY_STOP) && side != OrderSide.BUY) ||
             (type in listOf(OrderType.SELL_LIMIT, OrderType.SELL_STOP) && side != OrderSide.SELL)) {
