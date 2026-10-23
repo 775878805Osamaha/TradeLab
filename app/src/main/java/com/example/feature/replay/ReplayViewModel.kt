@@ -1021,7 +1021,7 @@ class ReplayViewModel(
             ReplayCheckpoint(
                 sessionId = 1,
                 candleIndex = replayEngine.currentIndex.value,
-                timestamp = candle.openTime,
+                timestamp = candle.closeTime,
                 balance = curBal,
                 equity = curEq,
                 openPositions = openPositions.toList(),
