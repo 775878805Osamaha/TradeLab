@@ -777,6 +777,21 @@ fun ChartScreen(
                                 fontSize = 9.sp, color = TradingTextSecondary,
                                 maxLines = 1
                             )
+                            if (!isEmbeddedReplay) {
+                                val oldest = chartBars.first()
+                                val firstTime = remember(oldest.openTime) {
+                                    java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")
+                                        .withZone(java.time.ZoneOffset.UTC)
+                                        .format(java.time.Instant.ofEpochMilli(oldest.openTime))
+                                }
+                                Text(
+                                    text = "$firstTime → $timestamp UTC · ${chartBars.size}/${uiState.chartHistoryBars}",
+                                    fontSize = 9.sp,
+                                    color = TradingTextSecondary,
+                                    modifier = Modifier.testTag("chart_history_range"),
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }
