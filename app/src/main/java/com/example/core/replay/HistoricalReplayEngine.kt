@@ -107,6 +107,11 @@ class HistoricalReplayEngine(
 
     fun play() {
         if (allCandles.isEmpty()) return
+        if (_currentIndex.value >= allCandles.lastIndex) {
+            pause()
+            _status.value = ReplayStatus.COMPLETED
+            return
+        }
         _status.value = ReplayStatus.RUNNING
         replayClock.play()
     }
