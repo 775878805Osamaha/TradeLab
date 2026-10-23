@@ -162,6 +162,22 @@ class HistoricalReplayIntegrityTest {
         assertEquals(0L, engine.replayClock.elapsedReplayTime.value)
     }
 
+    @Test fun seekResetsElapsedClockAndNeverExecutesSkippedBars() {
+        val engine = HistoricalReplayEngine()
+        val bars = (0..20).map { candle(900_000L + it * 900_000L) }
+        engine.initialize(bars, startIndex = 0)
+        engine.advanceBars(8)
+        val events = mutableListOf<Long>()
+        engine.onCandleRevealed = { bar, _, _ -> events.add(bar.openTime) }
+        engine.jumpToIndex(15)
+        assertEquals(15, engine.currentIndex.value)
+        assertEquals(bars[15].closeTime, engine.currentReplayTime.value)
+        assertEquals(0L, engine.replayClock.elapsedReplayTime.value)
+        assertEquals(0, events.size)
+        engine.stepForward()
+        assertEquals(listOf(bars[16].openTime), events)
+    }
+
     @Test fun enginePreservesValidHistoricalBarCountAndOrdering() {
         val engine = HistoricalReplayEngine()
         val candles = listOf(candle(900_000L), candle(1_800_000L), candle(3_600_000L))
