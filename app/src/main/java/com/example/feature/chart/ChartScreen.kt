@@ -55,6 +55,7 @@ fun ChartScreen(
     var symbolCategoryFilter by remember { mutableStateOf("الكل") }
     var favoriteSymbols by remember { mutableStateOf(setOf<String>()) }
     var favoritesOnly by remember { mutableStateOf(false) }
+    var symbolSortFavoritesFirst by remember { mutableStateOf(true) }
     LaunchedEffect(showSymbolSheet) {
         if (showSymbolSheet) {
             symbolSearchQuery = ""
@@ -1155,13 +1156,34 @@ fun ChartScreen(
                         )
                     }
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("المفضلة أولاً", fontSize = 12.sp, color = TradingTextSecondary)
+                    Switch(
+                        checked = symbolSortFavoritesFirst,
+                        onCheckedChange = { symbolSortFavoritesFirst = it },
+                        modifier = Modifier.testTag("chart_symbol_sort_favorites")
+                    )
+                }
                 HorizontalDivider(color = TradingBorder)
                 val filteredSymbols = DefaultSymbols.SYMBOLS.filter { sym ->
                     (!favoritesOnly || sym.symbol in favoriteSymbols) &&
                     (symbolCategoryFilter == "الكل" || sym.category == symbolCategoryFilter) &&
                         (symbolSearchQuery.isBlank() || sym.symbol.contains(symbolSearchQuery.trim(), ignoreCase = true) ||
                             sym.name.contains(symbolSearchQuery.trim(), ignoreCase = true))
+                }.let { matches ->
+                    if (symbolSortFavoritesFirst) matches.sortedByDescending { it.symbol in favoriteSymbols } else matches
                 }
+                Text(
+                    text = "النتائج: " + filteredSymbols.size + " / " + DefaultSymbols.SYMBOLS.size,
+                    color = TradingTextSecondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                        .testTag("chart_symbol_result_count")
+                )
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     if (filteredSymbols.isEmpty()) {
                         Text("لا توجد أزواج مطابقة", color = TradingTextSecondary,
