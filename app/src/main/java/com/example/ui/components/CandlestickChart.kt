@@ -273,10 +273,14 @@ fun CandlestickChart(
             // Calculate Visible Candle Range from Viewport
             val visibleCount = ((chartWidth / candleWidthPx) + 3).toInt().coerceIn(1, candles.size)
             val maxScrollOffset = (candles.size.toDouble() * candleWidthPx - chartWidth).coerceAtLeast(0.0).toFloat()
-            val clampedScroll = scrollOffsetPx.coerceIn(-maxScrollOffset, 0f)
+            // Permit dragging the latest candle away from the right axis,
+            // leaving future space (up to 70% of the viewport) like TradingView.
+            val futureSpacePx = chartWidth * 0.70f
+            val clampedScroll = scrollOffsetPx.coerceIn(-maxScrollOffset, futureSpacePx)
 
-            val scrollCandleOffset = (-clampedScroll / candleWidthPx).toInt().coerceIn(0, (candles.size - visibleCount).coerceAtLeast(0))
-            val fractionalScrollPx = (-clampedScroll) % candleWidthPx
+            val historicalScrollPx = (-clampedScroll).coerceAtLeast(0f)
+            val scrollCandleOffset = (historicalScrollPx / candleWidthPx).toInt().coerceIn(0, (candles.size - visibleCount).coerceAtLeast(0))
+            val fractionalScrollPx = if (clampedScroll > 0f) -clampedScroll else historicalScrollPx % candleWidthPx
             val startIndex = (candles.size - visibleCount - scrollCandleOffset).coerceIn(0, candles.size - 1)
             val endIndex = (startIndex + visibleCount).coerceIn(startIndex, candles.size)
             val visibleCandles = candles.subList(startIndex, endIndex)

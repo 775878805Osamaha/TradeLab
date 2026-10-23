@@ -44,6 +44,7 @@ data class ChartTransform(
     fun xToCandleIndex(x: Float): Int {
         val totalVisible = visibleCandles.size
         if (totalVisible <= 0) return -1
+        // Inverse of candleIndexToX: account for right-side future space.
         val distFromRight = chartWidth - x - (candleWidthPx / 2f) - fractionalScrollPx
         val offset = (distFromRight / candleWidthPx.coerceAtLeast(1f)).roundToInt()
         val index = (totalVisible - 1 - offset)
