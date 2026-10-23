@@ -162,7 +162,8 @@ fun CandlestickChart(
     val priceAxisPaint = remember {
         android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.parseColor("#9CA3AF")
-            textSize = 20f
+            textSize = 29f
+            isFakeBoldText = true
         }
     }
     // Reuse the axis paint during crosshair drags; no allocation per frame.
@@ -175,7 +176,8 @@ fun CandlestickChart(
     val timeAxisPaint = remember {
         android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.parseColor("#6B7280")
-            textSize = 17f
+            textSize = 25f
+            textAlign = android.graphics.Paint.Align.CENTER
         }
     }
 
@@ -328,10 +330,11 @@ fun CandlestickChart(
                 }
             }
 
-            // Draw Background Grid
-            for (step in 0..4) {
-                val y = (step / 4f) * mainChartHeight
-                val priceVal = paddedMin + ((4 - step) / 4.0) * (paddedMax - paddedMin)
+            // Price ticks follow a readable pixel interval instead of five widely spaced levels.
+            val priceTickCount = (mainChartHeight / 80f).toInt().coerceIn(4, 18)
+            for (step in 0..priceTickCount) {
+                val y = (step.toFloat() / priceTickCount) * mainChartHeight
+                val priceVal = paddedMin + ((priceTickCount - step).toDouble() / priceTickCount) * (paddedMax - paddedMin)
                 drawLine(
                     color = TradingBorder.copy(alpha = 0.3f),
                     start = Offset(0f, y),
@@ -340,7 +343,9 @@ fun CandlestickChart(
                 )
                 // Price Axis Label
                 drawContext.canvas.nativeCanvas.apply {
-                    drawText(String.format(Locale.US, "%.2f", priceVal), chartWidth + 6f, y + 6f, priceAxisPaint)
+                    val labelY = (y + priceAxisPaint.textSize * 0.35f)
+                        .coerceIn(priceAxisPaint.textSize, height - 8f)
+                    drawText(String.format(Locale.US, "%.2f", priceVal), chartWidth + 7f, labelY, priceAxisPaint)
                 }
             }
 
@@ -390,13 +395,15 @@ fun CandlestickChart(
             }
 
             // Render time labels for all display modes, including the line chart.
-            val labelStride = (110f / candleWidthPx).toInt().coerceAtLeast(1)
+            val minimumTimeLabelGap = 135f
+            var lastTimeLabelX = -minimumTimeLabelGap
             visibleCandles.forEachIndexed { i, c ->
-                if (i % labelStride == 0) {
-                    val x = transform.candleIndexToX(i)
+                val x = transform.candleIndexToX(i)
+                if (x >= 60f && x <= chartWidth - 60f && x - lastTimeLabelX >= minimumTimeLabelGap) {
                     drawContext.canvas.nativeCanvas.apply {
-                        drawText(timeFormat.format(Date(c.openTime)), x - 20f, height - 6f, timeAxisPaint)
+                        drawText(timeFormat.format(Date(c.openTime)), x, height - 8f, timeAxisPaint)
                     }
+                    lastTimeLabelX = x
                 }
             }
 
