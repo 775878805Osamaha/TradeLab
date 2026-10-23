@@ -842,8 +842,12 @@ fun ChartScreen(
                             onClick = { drawingToolbarExpanded = !drawingToolbarExpanded },
                             modifier = Modifier.size(40.dp).testTag("chart_toolbar_collapse")
                         ) {
-                            Icon(Icons.Default.MoreHoriz, contentDescription = if (drawingToolbarExpanded) "إخفاء أدوات الرسم" else "إظهار أدوات الرسم",
-                                tint = TradingTextPrimary)
+                            Icon(
+                                if (!drawingToolbarExpanded && uiState.activeDrawingTool != DrawingTool.NONE)
+                                    Icons.Default.Edit else Icons.Default.MoreHoriz,
+                                contentDescription = if (drawingToolbarExpanded) "إخفاء أدوات الرسم" else "إظهار أدوات الرسم",
+                                tint = if (uiState.activeDrawingTool != DrawingTool.NONE) TradingAccent else TradingTextPrimary
+                            )
                         }
                         // Keep pan/reset accessible without expanding the full tools palette.
                         if (!drawingToolbarExpanded && uiState.activeDrawingTool != DrawingTool.NONE) {
