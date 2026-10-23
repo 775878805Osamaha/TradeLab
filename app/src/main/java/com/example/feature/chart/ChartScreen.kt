@@ -843,7 +843,7 @@ fun ChartScreen(
                             modifier = Modifier.size(40.dp).testTag("chart_toolbar_collapse")
                         ) {
                             Icon(
-                                if (!drawingToolbarExpanded && uiState.activeDrawingTool != DrawingTool.NONE)
+                                if (!drawingToolbarExpanded && uiState.activeDrawingTool != DrawingTool.NONE && !isEmbeddedReplay)
                                     Icons.Default.Edit else Icons.Default.MoreHoriz,
                                 contentDescription = if (drawingToolbarExpanded) "إخفاء أدوات الرسم" else "إظهار أدوات الرسم",
                                 tint = if (uiState.activeDrawingTool != DrawingTool.NONE) TradingAccent else TradingTextPrimary
