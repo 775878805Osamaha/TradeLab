@@ -77,6 +77,15 @@ class ExecutionEngine(
             return ExecutionResult.Error("سعر التنفيذ بعد الانزلاق السعري غير صالح")
         }
 
+        // Recheck protective levels against the actual slippage-adjusted fill.
+        // A valid pre-trade target can become invalid after adverse slippage.
+        if (stopLoss != null && (if (side == OrderSide.BUY) stopLoss >= executedPrice else stopLoss <= executedPrice)) {
+            return ExecutionResult.Error("وقف الخسارة غير صالح بالنسبة لسعر التنفيذ الفعلي")
+        }
+        if (takeProfit != null && (if (side == OrderSide.BUY) takeProfit <= executedPrice else takeProfit >= executedPrice)) {
+            return ExecutionResult.Error("جني الربح غير صالح بالنسبة لسعر التنفيذ الفعلي")
+        }
+
         // Commission
         val commission = config.defaultCommissionPerLot * volume
 
