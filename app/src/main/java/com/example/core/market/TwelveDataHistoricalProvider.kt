@@ -51,8 +51,10 @@ class TwelveDataHistoricalProvider(
     ): List<Candle> = withContext(Dispatchers.IO) {
         require(supports(symbol)) { "Unsupported Twelve Data instrument" }
         require(apiKey.isNotBlank()) { "Twelve Data API key is required" }
+        require(apiKey.length <= 256) { "Twelve Data API key is too long" }
         require(from >= 0L && to > from) { "Invalid historical range" }
-        val intervalMillis = timeframe.minutes * 60_000L
+        val intervalMillis = timeframe.minutes.toLong() * 60_000L
+        require(intervalMillis > 0L) { "Invalid historical timeframe" }
         require((to - from) / intervalMillis + 1 <= 5000) { "Maximum 5000 candles per request" }
         val providerSymbol = symbol.substring(0, 3) + "/" + symbol.substring(3)
         val start = LocalDateTime.ofEpochSecond(from / 1000L, 0, ZoneOffset.UTC).format(queryFormatter)
@@ -95,7 +97,12 @@ class TwelveDataHistoricalProvider(
             val high = row.getString("high").toDouble()
             val low = row.getString("low").toDouble()
             val close = row.getString("close").toDouble()
-            val volume = row.optString("volume").toDoubleOrNull() ?: 0.0
+            val volume = if (!row.has("volume") || row.isNull("volume") || row.optString("volume").isBlank()) {
+                0.0 // Some spot FX feeds do not provide volume.
+            } else {
+                row.getString("volume").toDoubleOrNull()
+                    ?: throw IOException("Invalid Twelve Data volume for $symbol")
+            }
             parsed.add(Candle(
                 symbol = symbol, timeframe = timeframe,
                 openTime = openTime, closeTime = openTime + intervalMillis,
