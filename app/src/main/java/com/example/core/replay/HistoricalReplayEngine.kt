@@ -381,6 +381,29 @@ class HistoricalReplayEngine(
         }
     }
 
+    /**
+     * Deterministic historical fill price for a pending order.
+     *
+     * A stop order crossed by an opening gap is filled at the worse opening
+     * price, not at an unreachable requested stop. A limit order crossed by
+     * a favorable opening gap may fill at the better opening price.
+     * OHLC cannot establish actual tick order or broker-specific slippage.
+     */
+    fun pendingOrderFillPrice(order: Order, candle: Candle): Double? {
+        if (!isPendingOrderTriggeredByCandle(order, candle)) return null
+        val requested = order.requestedPrice
+        val open = candle.open
+        return when (order.type) {
+            OrderType.BUY_LIMIT -> minOf(open, requested)
+            OrderType.SELL_LIMIT -> maxOf(open, requested)
+            OrderType.BUY_STOP -> maxOf(open, requested)
+            OrderType.SELL_STOP -> minOf(open, requested)
+            OrderType.LIMIT -> if (order.direction == OrderSide.BUY) minOf(open, requested) else maxOf(open, requested)
+            OrderType.STOP -> if (order.direction == OrderSide.BUY) maxOf(open, requested) else minOf(open, requested)
+            else -> null
+        }
+    }
+
     private fun updateVisibleState(evaluateTrades: Boolean = true) {
         val idx = _currentIndex.value
         if (idx in allCandles.indices) {
