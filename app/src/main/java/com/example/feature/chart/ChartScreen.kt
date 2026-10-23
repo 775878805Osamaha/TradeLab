@@ -739,7 +739,8 @@ fun ChartScreen(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(top = 4.dp, end = 4.dp)
-                            .background(TradingCard.copy(alpha = 0.82f), RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(TradingCard.copy(alpha = 0.82f))
                             .testTag("chart_immersive_floating_header"),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
