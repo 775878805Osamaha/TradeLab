@@ -88,6 +88,9 @@ data class BacktestConfig(
         if (!fixedLotSize.isFinite() || fixedLotSize <= 0.0) {
             return Result.failure(IllegalArgumentException("Legacy fixed lot size must be finite and positive"))
         }
+        if (parameters.keys.any { it.isBlank() }) {
+            return Result.failure(IllegalArgumentException("Strategy parameter names must not be blank"))
+        }
         return Result.success(Unit)
     }
 }
