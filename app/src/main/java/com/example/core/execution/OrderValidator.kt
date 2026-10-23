@@ -44,6 +44,15 @@ object OrderValidator {
             (symbol.equals("ETHUSD", ignoreCase = true) && it.symbol == "ETHUSDT")
         } ?: return OrderValidationResult.Rejected(OrderRejectionReason.INVALID_SYMBOL)
 
+        // Never use a quote for another instrument, even for pending-order checks.
+        if (tick != null && !symbol.equals(tick.symbol, ignoreCase = true) &&
+            !(symbol.equals("BTCUSD", ignoreCase = true) && tick.symbol.equals("BTCUSDT", ignoreCase = true)) &&
+            !(symbol.equals("ETHUSD", ignoreCase = true) && tick.symbol.equals("ETHUSDT", ignoreCase = true))) {
+            return OrderValidationResult.Rejected(
+                OrderRejectionReason.INVALID_PRICE, "رمز سعر السوق لا يطابق رمز الأمر"
+            )
+        }
+
         // Reject NaN/Infinity before any margin or step calculations.
         if (!volume.isFinite() || volume <= 0.0) {
             return OrderValidationResult.Rejected(OrderRejectionReason.INVALID_VOLUME)
