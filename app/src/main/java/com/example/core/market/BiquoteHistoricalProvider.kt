@@ -20,6 +20,7 @@ class BiquoteHistoricalProvider(
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
+        .callTimeout(25, TimeUnit.SECONDS)
         .build()
 ) {
     fun supports(symbol: String) = symbol in setOf(
