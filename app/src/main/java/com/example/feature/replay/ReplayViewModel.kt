@@ -624,7 +624,7 @@ class ReplayViewModel(
 
     private fun replayAccount(balance: Double = _uiState.value.currentBalance): VirtualAccount {
         val equity = ReplayAccountMath.equity(balance, openPositions)
-        val usedMargin = openPositions.sumOf { it.margin }
+        val usedMargin = ReplayAccountMath.usedMargin(openPositions)
         return VirtualAccount(
             id = 9999,
             name = "حساب محاكاة Replay الافتراضي",
@@ -632,7 +632,7 @@ class ReplayViewModel(
             balance = balance,
             equity = equity,
             margin = usedMargin,
-            freeMargin = maxOf(0.0, equity - usedMargin),
+            freeMargin = ReplayAccountMath.freeMargin(balance, openPositions),
             mode = AccountMode.REPLAY
         )
     }
@@ -999,8 +999,8 @@ class ReplayViewModel(
                     name = "Strategy Replay Account",
                     balance = curBal,
                     equity = ReplayAccountMath.equity(curBal, openPositions),
-                    margin = openPositions.sumOf { it.margin },
-                    freeMargin = maxOf(0.0, ReplayAccountMath.equity(curBal, openPositions) - openPositions.sumOf { it.margin })
+                    margin = ReplayAccountMath.usedMargin(openPositions),
+                    freeMargin = ReplayAccountMath.freeMargin(curBal, openPositions)
                 )
                 val context = StrategyContext(
                     symbol = candle.symbol,
