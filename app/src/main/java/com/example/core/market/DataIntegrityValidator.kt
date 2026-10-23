@@ -69,8 +69,8 @@ object DataIntegrityValidator {
 
         return candles
             .filter { validateCandle(it).isValid }
-            .distinctBy { it.openTime }
-            .sortedBy { it.openTime }
+            .distinctBy { Triple(it.symbol, it.timeframe, it.openTime) }
+            .sortedWith(compareBy<Candle> { it.openTime }.thenBy { it.symbol }.thenBy { it.timeframe.minutes })
     }
 
     /**
@@ -84,6 +84,7 @@ object DataIntegrityValidator {
         val symbol = candles.first().symbol
         val timeframe = candles.first().timeframe
         val expectedDuration = timeframe.minutes.toLong() * 60_000L
+        if (expectedDuration <= 0L) return ValidationResult.Invalid("Invalid historical timeframe duration")
         var previousOpen = Long.MIN_VALUE
         for ((index, candle) in candles.withIndex()) {
             val validity = validateCandle(candle)
@@ -117,7 +118,7 @@ object DataIntegrityValidator {
      * Prevents future candles during historical replay, eliminating lookahead bias.
      */
     fun enforceReplayBarrier(candles: List<Candle>, currentReplayTime: Long): List<Candle> {
-        return candles.filter { it.openTime < it.closeTime && it.closeTime <= currentReplayTime }
+        return candles.filter { it.closeTime <= currentReplayTime && validateCandle(it).isValid }
     }
 
     /**

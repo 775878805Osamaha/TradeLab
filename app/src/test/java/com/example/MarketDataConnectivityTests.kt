@@ -112,9 +112,9 @@ class MarketDataConnectivityTests {
         val barrierTime = 5 * 60000L
         val visibleInReplay = DataIntegrityValidator.enforceReplayBarrier(candles, barrierTime)
 
-        assertEquals(5, visibleInReplay.size)
-        assertTrue(visibleInReplay.all { it.openTime <= barrierTime })
-        assertEquals(5 * 60000L, visibleInReplay.last().openTime)
+        assertEquals(4, visibleInReplay.size)
+        assertTrue(visibleInReplay.all { it.closeTime <= barrierTime })
+        assertEquals(4 * 60000L, visibleInReplay.last().openTime)
     }
 
     @Test
