@@ -94,7 +94,11 @@ class MarketDataRepository(
         )) { "Historical range includes an unfinished candle" }
         // Bound replay memory while fetching and validating one network page at a time.
         // Both boundaries are candle-open timestamps; reject partial windows.
-        require(from % intervalMillis == 0L && to % intervalMillis == 0L) {
+        val weeklyInterval = 7L * 24 * 60 * 60 * 1000
+        val weeklyOffset = 4L * 24 * 60 * 60 * 1000
+        val offset = if (intervalMillis == weeklyInterval) weeklyOffset else 0L
+        require(Math.floorMod(from - offset, intervalMillis) == 0L &&
+            Math.floorMod(to - offset, intervalMillis) == 0L) {
             "Historical candle range must align to timeframe boundaries"
         }
         val requestedBars = (to - from) / intervalMillis + 1L
