@@ -461,6 +461,10 @@ class ReplayViewModel(
 
     fun jumpToTimestamp(timestamp: Long) {
         cancelBatchAdvance()
+        if (!ReplayDateSelectionPolicy.isValid(timestamp, System.currentTimeMillis())) {
+            _uiState.update { it.copy(message = "تاريخ الإعادة غير صالح أو في المستقبل") }
+            return
+        }
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
             _uiState.update { it.copy(message = "لا يمكن الانتقال قبل تحميل بيانات Replay") }
             return
