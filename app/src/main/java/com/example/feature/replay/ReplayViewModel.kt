@@ -951,8 +951,12 @@ class ReplayViewModel(
             // Recompute margin after every successful fill. Reusing the same
             // account snapshot for all orders lets multiple pending orders each
             // spend the same available free margin on a single candle.
+            // Historical OHLC may touch a pending level even when the bar closes
+            // away from it. Never use the closing quote as the trigger.
+            val historicalFill = replayEngine.pendingOrderFillPrice(order, candle) ?: continue
             val result = executionEngine.evaluatePendingOrder(
-                order, tick, replayAccount(curBal), mode = "REPLAY"
+                order, tick, replayAccount(curBal), mode = "REPLAY",
+                historicalFillPrice = historicalFill
             )
             when (result) {
                 is com.example.core.execution.ExecutionResult.Success -> {
