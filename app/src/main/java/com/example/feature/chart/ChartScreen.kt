@@ -57,7 +57,7 @@ fun ChartScreen(
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var immersiveChart by remember { mutableStateOf(true) }
     LaunchedEffect(immersiveChart) { onImmersiveChanged(immersiveChart) }
-    // A new market context must not inherit a previously selected drawing tool.
+    // Keep the floating palette compact when the displayed market context changes.
     LaunchedEffect(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay) {
         drawingToolbarExpanded = false
     }
