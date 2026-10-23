@@ -50,8 +50,12 @@ object ReplayRiskPolicy {
         // Avoid overflow from multiplying large monetary balances before
         // dividing. Ratio-based drawdown stays finite for finite positive
         // initial balances and is consistent with equity-based loss limits.
-        val drawdown = if (exposure.equity >= exposure.initialBalance) 0.0
-            else (1.0 - exposure.equity / exposure.initialBalance) * 100.0
+        val drawdown = when {
+            exposure.equity >= exposure.initialBalance -> 0.0
+            exposure.equity >= 0.0 ->
+                ((exposure.initialBalance - exposure.equity) / exposure.initialBalance) * 100.0
+            else -> 100.0 + (-exposure.equity / exposure.initialBalance) * 100.0
+        }
         val realizedLoss = (exposure.initialBalance - exposure.balance).coerceAtLeast(0.0)
         return when {
             limits.maxConsecutiveLosses > 0 && exposure.consecutiveLosses >= limits.maxConsecutiveLosses ->
