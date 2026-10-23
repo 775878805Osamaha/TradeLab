@@ -595,7 +595,7 @@ fun ChartScreen(
 
             // Timeframe selection scrollable row (all 10 timeframes)
             Row(
-                modifier = Modifier.fillMaxWidth().height(48.dp)
+                modifier = Modifier.fillMaxWidth().height(if (immersiveChart) 36.dp else 48.dp)
                     .background(TradingBackground)
                     .testTag("chart_timeframe_strip"),
                 verticalAlignment = Alignment.CenterVertically,
@@ -622,8 +622,10 @@ fun ChartScreen(
                 IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(38.dp)) {
                     Icon(Icons.Default.Functions, contentDescription = "المؤشرات", tint = TradingTextPrimary)
                 }
-                IconButton(onClick = { showChartExtras = !showChartExtras }, modifier = Modifier.size(38.dp)) {
-                    Icon(Icons.Default.MoreHoriz, contentDescription = "المزيد", tint = TradingTextPrimary)
+                if (!immersiveChart) {
+                    IconButton(onClick = { showChartExtras = !showChartExtras }, modifier = Modifier.size(38.dp)) {
+                        Icon(Icons.Default.MoreHoriz, contentDescription = "المزيد", tint = TradingTextPrimary)
+                    }
                 }
             }
 
