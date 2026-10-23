@@ -54,8 +54,52 @@ fun ChartScreen(
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var immersiveChart by remember { mutableStateOf(true) }
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
+    var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
+    var orderVolumeInput by remember { mutableStateOf("0.01") }
     var showHistoricalSourceDialog by remember { mutableStateOf(false) }
     var historicalApiKeyInput by remember { mutableStateOf("") }
+
+    if (pendingOrderSide != null) {
+        val side = pendingOrderSide!!
+        val volume = orderVolumeInput.toDoubleOrNull()
+        val validVolume = volume != null && volume.isFinite() && volume > 0.0
+        AlertDialog(
+            onDismissRequest = { pendingOrderSide = null },
+            title = { Text(if (side == OrderSide.BUY) "تأكيد أمر شراء" else "تأكيد أمر بيع") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("حساب تجريبي: راجع الحجم قبل التنفيذ.")
+                    OutlinedTextField(
+                        value = orderVolumeInput,
+                        onValueChange = { orderVolumeInput = it },
+                        label = { Text("حجم الصفقة (لوت)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("chart_order_volume")
+                    )
+                    Text("وقف الخسارة وجني الربح غير محددين؛ يمكن تعديلهما بعد فتح الصفقة.",
+                        fontSize = 11.sp, color = TradingTextSecondary)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = validVolume &&
+                        (if (isEmbeddedReplay) !replayState.isLoading &&
+                            replayState.currentCandle != null && replayState.latestTick != null
+                        else headerQuoteVerified),
+                    onClick = {
+                        val confirmedVolume = orderVolumeInput.toDoubleOrNull()
+                        if (confirmedVolume != null && confirmedVolume.isFinite() && confirmedVolume > 0.0) {
+                            if (isEmbeddedReplay) replayViewModel.executeOrder(side, confirmedVolume)
+                            else viewModel.quickOrder(side, confirmedVolume)
+                            pendingOrderSide = null
+                        }
+                    },
+                    modifier = Modifier.testTag("chart_order_confirm")
+                ) { Text("تأكيد التنفيذ") }
+            },
+            dismissButton = { TextButton(onClick = { pendingOrderSide = null }) { Text("إلغاء") } }
+        )
+    }
 
     // Refresh the freshness indicator even when the market stream stops emitting.
     var quoteClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -380,13 +424,13 @@ fun ChartScreen(
                     val canTradeReplay = !replayState.isLoading &&
                         replayState.currentCandle != null && replayState.latestTick != null
                     Button(
-                        onClick = { replayViewModel.executeOrder(OrderSide.SELL, 0.01) },
+                        onClick = { pendingOrderSide = OrderSide.SELL },
                         enabled = canTradeReplay,
                         colors = ButtonDefaults.buttonColors(containerColor = TradingNegative),
                         modifier = Modifier.weight(1f).testTag("chart_replay_sell")
                     ) { Text("بيع 0.01", fontSize = 12.sp) }
                     Button(
-                        onClick = { replayViewModel.executeOrder(OrderSide.BUY, 0.01) },
+                        onClick = { pendingOrderSide = OrderSide.BUY },
                         enabled = canTradeReplay,
                         colors = ButtonDefaults.buttonColors(containerColor = TradingPositive),
                         modifier = Modifier.weight(1f).testTag("chart_replay_buy")
@@ -431,7 +475,7 @@ fun ChartScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("السرعة", color = TradingTextSecondary, fontSize = 11.sp)
-                    listOf(0.5f, 1f, 2f, 5f, 10f, 25f, 50f, 100f).forEach { speed ->
+                    listOf(1f, 2f, 5f).forEach { speed ->
                         val selected = replayState.speed == speed
                         Text(
                             text = "${speed}x",
@@ -693,7 +737,7 @@ fun ChartScreen(
                             val selected = uiState.activeDrawingTool == tool
                             IconButton(
                                 onClick = { viewModel.setDrawingTool(tool) },
-                                modifier = Modifier.size(34.dp).testTag("chart_toolbar_${tool.name}")
+                                modifier = Modifier.size(44.dp).testTag("chart_toolbar_${tool.name}")
                             ) {
                                 Icon(
                                     imageVector = icon,
@@ -706,7 +750,7 @@ fun ChartScreen(
                         HorizontalDivider(modifier = Modifier.width(30.dp), color = TradingBorder)
                         IconButton(
                             onClick = { viewModel.toggleCrosshair() },
-                            modifier = Modifier.size(34.dp).testTag("chart_toolbar_crosshair")
+                            modifier = Modifier.size(44.dp).testTag("chart_toolbar_crosshair")
                         ) {
                             Icon(
                                 Icons.Default.FilterCenterFocus,
@@ -716,7 +760,7 @@ fun ChartScreen(
                         }
                         IconButton(
                             onClick = { showToolsMenu = true },
-                            modifier = Modifier.size(34.dp).testTag("chart_toolbar_more")
+                            modifier = Modifier.size(44.dp).testTag("chart_toolbar_more")
                         ) {
                             Icon(Icons.Default.MoreHoriz, contentDescription = "المزيد من أدوات الرسم", tint = TradingTextSecondary)
                         }
@@ -789,7 +833,7 @@ fun ChartScreen(
                     // SELL Button (Red)
                     val bidText = if (marketTickIsLive) marketTick?.let { String.format(Locale.US, "%.2f", it.bid) } ?: "--" else "--"
                     Button(
-                        onClick = { viewModel.quickOrder(OrderSide.SELL, 0.01) },
+                        onClick = { pendingOrderSide = OrderSide.SELL },
                         enabled = marketTickIsLive,
                         modifier = Modifier
                             .weight(1f)
@@ -817,7 +861,7 @@ fun ChartScreen(
                     // BUY Button (Green)
                     val askText = if (marketTickIsLive) marketTick?.let { String.format(Locale.US, "%.2f", it.ask) } ?: "--" else "--"
                     Button(
-                        onClick = { viewModel.quickOrder(OrderSide.BUY, 0.01) },
+                        onClick = { pendingOrderSide = OrderSide.BUY },
                         enabled = marketTickIsLive,
                         modifier = Modifier
                             .weight(1f)
