@@ -841,6 +841,24 @@ fun ChartScreen(
                             Icon(Icons.Default.MoreHoriz, contentDescription = if (drawingToolbarExpanded) "إخفاء أدوات الرسم" else "إظهار أدوات الرسم",
                                 tint = TradingTextPrimary)
                         }
+                        // Keep pan/reset accessible without expanding the full tools palette.
+                        if (!drawingToolbarExpanded) {
+                            IconButton(
+                                onClick = { viewModel.setDrawingTool(DrawingTool.NONE) },
+                                modifier = Modifier.size(40.dp).testTag("chart_toolbar_quick_pan")
+                            ) {
+                                Icon(Icons.Default.PanTool, contentDescription = "تحريك الشارت",
+                                    tint = if (uiState.activeDrawingTool == DrawingTool.NONE) TradingAccent else TradingTextSecondary,
+                                    modifier = Modifier.size(18.dp))
+                            }
+                            IconButton(
+                                onClick = { viewModel.triggerResetView() },
+                                modifier = Modifier.size(40.dp).testTag("chart_toolbar_quick_reset")
+                            ) {
+                                Icon(Icons.Default.CenterFocusStrong, contentDescription = "إعادة الشارت إلى آخر شمعة",
+                                    tint = TradingTextSecondary, modifier = Modifier.size(18.dp))
+                            }
+                        }
                         if (drawingToolbarExpanded) {
                         val tools = listOf(
                             Triple(DrawingTool.NONE, Icons.Default.PanTool, "تحريك الشارت"),
@@ -853,7 +871,10 @@ fun ChartScreen(
                         tools.forEach { (tool, icon, description) ->
                             val selected = uiState.activeDrawingTool == tool
                             IconButton(
-                                onClick = { viewModel.setDrawingTool(tool) },
+                                onClick = {
+                                    viewModel.setDrawingTool(tool)
+                                    drawingToolbarExpanded = false
+                                },
                                 modifier = Modifier.size(44.dp).testTag("chart_toolbar_${tool.name}")
                             ) {
                                 Icon(
