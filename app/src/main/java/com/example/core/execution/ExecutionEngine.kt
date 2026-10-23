@@ -246,7 +246,11 @@ class ExecutionEngine(
         }
         val margin = (order.volume * symInfo.contractSize * executedPrice) / account.leverage
 
-        if (!margin.isFinite() || margin <= 0.0 || margin + commission > account.freeMargin) {
+        // Compare without adding large doubles: reserve the commission first,
+        // then require enough remaining collateral for the margin.
+        if (!margin.isFinite() || margin <= 0.0 ||
+            commission > account.freeMargin ||
+            margin > account.freeMargin - commission) {
             return ExecutionResult.Error("الهامش الافتراضي غير كافٍ لتنفيذ الأمر المعلق")
         }
 
