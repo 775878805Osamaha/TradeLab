@@ -25,7 +25,8 @@ class ReplayDataView(
 
     val currentReplayTime: Long
         get() = if (allCandles.isNotEmpty() && currentIndex in allCandles.indices) {
-            allCandles[currentIndex].openTime
+            // Full OHLC is available only after the candle has closed.
+            allCandles[currentIndex].closeTime
         } else {
             0L
         }
