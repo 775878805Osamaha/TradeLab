@@ -263,7 +263,8 @@ fun CandlestickChart(
         ) {
             val width = size.width
             val height = size.height
-            val rightAxisWidth = 110f
+            // Reserve sufficient width for large formatted prices (e.g. 81,500.00).
+            val rightAxisWidth = 146f
             val chartWidth = (width - rightAxisWidth).coerceAtLeast(1f)
 
             // Subpanel height split
@@ -345,8 +346,9 @@ fun CandlestickChart(
             val priceTickStep = tickMultiplier * magnitude
             val tickDecimals = (-kotlin.math.floor(kotlin.math.log10(priceTickStep))).toInt().coerceIn(0, 6)
             val firstPriceTick = kotlin.math.ceil(paddedMin / priceTickStep) * priceTickStep
-            val priceTickCount = ((paddedMax - firstPriceTick) / priceTickStep)
-                .toInt().coerceIn(0, 40)
+            val priceTickCount = kotlin.math.floor(
+                ((paddedMax - firstPriceTick) / priceTickStep).coerceAtLeast(0.0) + 1e-8
+            ).toInt().coerceIn(0, 40)
             for (step in 0..priceTickCount) {
                 val priceVal = firstPriceTick + step * priceTickStep
                 val y = ((paddedMax - priceVal) / (paddedMax - paddedMin) * mainChartHeight).toFloat()
@@ -410,11 +412,12 @@ fun CandlestickChart(
             }
 
             // Render time labels for all display modes, including the line chart.
-            val minimumTimeLabelGap = 135f
+            // Timestamps are roughly 100px wide at the chosen font size.
+            val minimumTimeLabelGap = 170f
             var lastTimeLabelX = -minimumTimeLabelGap
             visibleCandles.forEachIndexed { i, c ->
                 val x = transform.candleIndexToX(i)
-                if (x >= 60f && x <= chartWidth - 60f && x - lastTimeLabelX >= minimumTimeLabelGap) {
+                if (x >= 75f && x <= chartWidth - 75f && x - lastTimeLabelX >= minimumTimeLabelGap) {
                     drawContext.canvas.nativeCanvas.apply {
                         drawText(timeFormat.format(Date(c.openTime)), x, height - 8f, timeAxisPaint)
                     }
