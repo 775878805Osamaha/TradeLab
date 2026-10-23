@@ -91,6 +91,12 @@ data class BacktestConfig(
         if (parameters.keys.any { it.isBlank() }) {
             return Result.failure(IllegalArgumentException("Strategy parameter names must not be blank"))
         }
+        if (parameters.values.any { value ->
+                (value is Double && !value.isFinite()) ||
+                    (value is Float && !value.isFinite())
+            }) {
+            return Result.failure(IllegalArgumentException("Strategy parameters must be finite"))
+        }
         return Result.success(Unit)
     }
 }
