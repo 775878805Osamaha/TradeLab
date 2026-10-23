@@ -239,9 +239,14 @@ class ExecutionEngine(
         }
 
         val commission = config.defaultCommissionPerLot * order.volume
+        if (!commission.isFinite() || commission < 0.0 ||
+            !account.freeMargin.isFinite() || account.freeMargin < 0.0 ||
+            !account.leverage.isFinite() || account.leverage <= 0.0) {
+            return ExecutionResult.Error("العمولة أو رصيد الهامش أو الرافعة المالية غير صالح")
+        }
         val margin = (order.volume * symInfo.contractSize * executedPrice) / account.leverage
 
-        if (!margin.isFinite() || margin <= 0.0 || margin > account.freeMargin) {
+        if (!margin.isFinite() || margin <= 0.0 || margin + commission > account.freeMargin) {
             return ExecutionResult.Error("الهامش الافتراضي غير كافٍ لتنفيذ الأمر المعلق")
         }
 
