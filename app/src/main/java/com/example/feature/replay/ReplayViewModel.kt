@@ -1076,9 +1076,18 @@ class ReplayViewModel(
             // existing immutable prefix instead of filtering the entire session
             // on every candle (quadratic work for long 5000-bar replays).
             val samples = prefix + ReplayEquitySample(index, equity, balance)
+            var runningPeak = state.initialBalance
+            var worstDrawdown = 0.0
+            for (sample in samples) {
+                runningPeak = maxOf(runningPeak, sample.equity)
+                if (runningPeak > 0.0) {
+                    worstDrawdown = maxOf(worstDrawdown,
+                        (runningPeak - sample.equity).coerceAtLeast(0.0) * 100.0 / runningPeak)
+                }
+            }
             state.copy(
                 peakEquity = peak,
-                maxObservedDrawdownPercent = maxOf(drawdown, prefix.fold(0.0) { worst, sample -> maxOf(worst, if (previousPeak > 0.0) (previousPeak - sample.equity).coerceAtLeast(0.0) * 100.0 / previousPeak else 0.0) }),
+                maxObservedDrawdownPercent = worstDrawdown,
                 equitySamples = samples
             )
         }
