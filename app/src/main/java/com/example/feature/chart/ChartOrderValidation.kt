@@ -14,7 +14,16 @@ object ChartOrderValidation {
         return when (side) {
             OrderSide.BUY -> (sl == null || sl < entry) && (tp == null || tp > entry)
             OrderSide.SELL -> (sl == null || sl > entry) && (tp == null || tp < entry)
+            else -> false
         }
+    }
+
+    fun isValidLot(volume: Double, minLot: Double, maxLot: Double, lotStep: Double): Boolean {
+        if (!volume.isFinite() || !minLot.isFinite() || !maxLot.isFinite() ||
+            !lotStep.isFinite() || minLot <= 0.0 || maxLot < minLot || lotStep <= 0.0 ||
+            volume < minLot - 1e-9 || volume > maxLot + 1e-9) return false
+        val steps = (volume - minLot) / lotStep
+        return steps.isFinite() && kotlin.math.abs(steps - kotlin.math.round(steps)) < 1e-6
     }
 
     /** Estimated stop loss in quote-currency units; excludes spread, slippage and fees. */
