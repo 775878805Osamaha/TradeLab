@@ -759,6 +759,14 @@ fun ChartScreen(
                             )
                         }
                         IconButton(
+                            onClick = { uiState.drawings.lastOrNull()?.let { viewModel.deleteDrawing(it.id) } },
+                            enabled = uiState.drawings.isNotEmpty(),
+                            modifier = Modifier.size(44.dp).testTag("chart_toolbar_undo")
+                        ) {
+                            Icon(Icons.Default.Undo, contentDescription = "التراجع عن آخر رسم",
+                                tint = TradingTextSecondary)
+                        }
+                        IconButton(
                             onClick = { showToolsMenu = true },
                             modifier = Modifier.size(44.dp).testTag("chart_toolbar_more")
                         ) {
