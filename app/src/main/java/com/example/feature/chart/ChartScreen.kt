@@ -738,7 +738,7 @@ fun ChartScreen(
                     Row(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(top = 4.dp, end = 4.dp)
+                            .padding(top = 4.dp, end = 4.dp, start = 48.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(TradingCard.copy(alpha = 0.82f))
                             .testTag("chart_immersive_floating_header"),
@@ -883,7 +883,7 @@ fun ChartScreen(
                 if (!isEmbeddedReplay) Surface(
                     modifier = Modifier
                         .align(if (immersiveChart) Alignment.TopStart else Alignment.CenterStart)
-                        .padding(horizontal = 5.dp, vertical = if (immersiveChart) 12.dp else 0.dp)
+                        .padding(horizontal = 5.dp, vertical = if (immersiveChart) 54.dp else 0.dp)
                         .testTag("chart_floating_drawing_toolbar"),
                     shape = RoundedCornerShape(8.dp),
                     color = TradingCard.copy(alpha = if (drawingToolbarExpanded) 0.96f else 0.72f),
