@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.example.core.market.DefaultSymbols
 import com.example.core.model.DataSourceType
 import com.example.core.model.OrderSide
@@ -1097,42 +1098,59 @@ fun ChartScreen(
         }
     }
 
-    // Symbol Picker Bottom Sheet
+    // Centered symbol selector keeps the chart visible behind the popup.
     if (showSymbolSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showSymbolSheet = false },
-            containerColor = TradingCard
-        ) {
+        Dialog(onDismissRequest = { showSymbolSheet = false }) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+                    .widthIn(max = 290.dp)
+                    .heightIn(max = 430.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(TradingCard.copy(alpha = 0.97f))
+                    .testTag("chart_symbol_popup")
+                    .padding(vertical = 10.dp)
             ) {
                 Text(
-                    text = "اختر أداة التداول",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    text = "تبديل الزوج",
+                    color = TradingTextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                DefaultSymbols.SYMBOLS.forEach { sym ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                viewModel.selectSymbol(sym.symbol)
-                                showSymbolSheet = false
+                HorizontalDivider(color = TradingBorder)
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    DefaultSymbols.SYMBOLS.forEach { sym ->
+                        val selected = sym.symbol == uiState.selectedSymbol
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(if (selected) TradingAccentLight.copy(alpha = 0.14f) else Color.Transparent)
+                                .clickable {
+                                    viewModel.selectSymbol(sym.symbol)
+                                    showSymbolSheet = false
+                                }
+                                .testTag("chart_symbol_option_" + sym.symbol)
+                                .padding(horizontal = 16.dp, vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = sym.symbol,
+                                    style = TextStyle(textDirection = TextDirection.Ltr),
+                                    fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium,
+                                    fontSize = 16.sp,
+                                    color = if (selected) TradingAccentLight else TradingTextPrimary
+                                )
+                                Text(text = sym.name, fontSize = 11.sp, color = TradingTextSecondary, maxLines = 1)
                             }
-                            .padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(text = sym.symbol, style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            Text(text = sym.name, fontSize = 12.sp, color = TradingTextSecondary)
+                            if (selected) {
+                                Icon(Icons.Default.Check, contentDescription = "الزوج المحدد", tint = TradingAccentLight, modifier = Modifier.size(20.dp))
+                            } else {
+                                Text(text = sym.category, fontSize = 10.sp, color = TradingTextSecondary)
+                            }
                         }
-                        Text(text = sym.category, fontSize = 11.sp, color = TradingAccentLight)
                     }
-                    HorizontalDivider(color = TradingBorder)
                 }
             }
         }
