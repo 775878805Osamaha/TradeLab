@@ -823,8 +823,8 @@ fun ChartScreen(
                 // Buttons select the existing functional drawing tools; no image overlay.
                 Surface(
                     modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(horizontal = 5.dp)
+                        .align(if (immersiveChart) Alignment.TopStart else Alignment.CenterStart)
+                        .padding(horizontal = 5.dp, vertical = if (immersiveChart) 12.dp else 0.dp)
                         .testTag("chart_floating_drawing_toolbar"),
                     shape = RoundedCornerShape(8.dp),
                     color = TradingCard.copy(alpha = if (drawingToolbarExpanded) 0.96f else 0.72f),
