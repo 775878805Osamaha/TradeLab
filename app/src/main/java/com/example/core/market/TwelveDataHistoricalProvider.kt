@@ -81,6 +81,11 @@ class TwelveDataHistoricalProvider(
         if (root.optString("status") == "error" || root.has("code")) {
             throw IOException("Twelve Data rejected the request (check API key, quota and plan)")
         }
+        val meta = root.optJSONObject("meta")
+            ?: throw IOException("Twelve Data response is missing metadata")
+        if (meta.optString("symbol") != providerSymbol || meta.optString("interval") != interval(timeframe)) {
+            throw IOException("Twelve Data returned a different symbol or timeframe")
+        }
         val values = root.optJSONArray("values")
             ?: throw IOException("No historical candles returned for $symbol")
         val parsed = ArrayList<Candle>(values.length())
@@ -93,8 +98,10 @@ class TwelveDataHistoricalProvider(
                 LocalDateTime.parse(timestamp.replace('T', ' '), formatter)
                     .toEpochSecond(ZoneOffset.UTC) * 1000L
             }
-            // Ignore out-of-range rows, never fabricate missing candles.
-            if (openTime < from || openTime > to) continue
+            // Reject wrong-range provider rows instead of silently discarding data.
+            if (openTime < from || openTime > to) {
+                throw IOException("Twelve Data returned a candle outside the requested range")
+            }
             val open = row.getString("open").toDouble()
             val high = row.getString("high").toDouble()
             val low = row.getString("low").toDouble()
