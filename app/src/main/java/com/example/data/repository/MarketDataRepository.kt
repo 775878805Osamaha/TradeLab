@@ -173,7 +173,7 @@ class MarketDataRepository(
             if (verified.isEmpty()) {
                 throw java.io.IOException("No verified historical candles for $symbol")
             }
-            verified
+            return@withContext verified
         }
         val local = DataIntegrityValidator.sanitizeCandles(
             candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
