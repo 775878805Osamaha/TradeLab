@@ -149,6 +149,22 @@ class MarketDataConnectivityTests {
     }
 
     @Test
+    fun `test historical validator accepts market session gaps but rejects timeframe overlap`() {
+        val first = createCandle(openTime = 60000L, open = 100.0, high = 105.0, low = 95.0, close = 102.0)
+        val afterWeekend = createCandle(openTime = 3 * 24 * 60 * 60000L, open = 103.0, high = 106.0, low = 101.0, close = 104.0)
+        assertTrue(DataIntegrityValidator.validateHistoricalSeries(listOf(first, afterWeekend)).isValid)
+        val overlapping = first.copy(openTime = 60001L, closeTime = 120001L)
+        assertFalse(DataIntegrityValidator.validateHistoricalSeries(listOf(first, overlapping)).isValid)
+    }
+
+    @Test
+    fun `test replay barrier excludes current forming candle and accepts exact close boundary`() {
+        val candle = createCandle(openTime = 60000L, open = 100.0, high = 105.0, low = 95.0, close = 102.0)
+        assertTrue(DataIntegrityValidator.enforceReplayBarrier(listOf(candle), candle.closeTime - 1L).isEmpty())
+        assertEquals(listOf(candle), DataIntegrityValidator.enforceReplayBarrier(listOf(candle), candle.closeTime))
+    }
+
+    @Test
     fun `test MarketSymbolRegistry metadata and data source distinction`() {
         val btc = MarketSymbolRegistry.getSymbol("BTCUSDT")
         assertEquals("BTCUSDT", btc.symbol)
