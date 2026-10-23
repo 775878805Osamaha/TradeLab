@@ -93,7 +93,9 @@ fun ChartScreen(
         val validTp = orderTpInput.isBlank() || (tp != null && tp.isFinite() && tp > 0.0 &&
             entryPrice != null && (if (side == OrderSide.BUY) tp > entryPrice else tp < entryPrice))
         val validOrder = validVolume && validSl && validTp && entryPrice != null &&
-            entryPrice.isFinite() && entryPrice > 0.0
+            entryPrice.isFinite() && entryPrice > 0.0 && entryTick != null &&
+            entryTick.bid.isFinite() && entryTick.ask.isFinite() &&
+            entryTick.bid > 0.0 && entryTick.ask >= entryTick.bid
         AlertDialog(
             onDismissRequest = { pendingOrderSide = null },
             title = { Text(if (side == OrderSide.BUY) "تأكيد أمر شراء" else "تأكيد أمر بيع") },
@@ -119,7 +121,10 @@ fun ChartScreen(
                         isError = !validTp, modifier = Modifier.fillMaxWidth().testTag("chart_order_tp")
                     )
                     if (sl != null && entryPrice != null && validSl && validVolume) {
-                        Text("مسافة وقف الخسارة: ${String.format(Locale.US, "%.5f", kotlin.math.abs(entryPrice - sl))} لكل وحدة")
+                        Text("المخاطرة السعرية: ${String.format(Locale.US, "%.5f", kotlin.math.abs(entryPrice - sl))} لكل وحدة")
+                        val ratio = if (tp != null && validTp) kotlin.math.abs(tp - entryPrice) / kotlin.math.abs(entryPrice - sl) else null
+                        if (ratio != null && ratio.isFinite()) Text("العائد إلى المخاطرة: 1:${String.format(Locale.US, "%.2f", ratio)}")
+                        Text("المخاطرة النقدية تتطلب قيمة العقد الفعلية", fontSize = 11.sp, color = TradingTextSecondary)
                     }
                     if (!validSl || !validTp) Text("تحقق من اتجاه ومستوى وقف الخسارة وجني الربح", color = TradingNegative)
                 }
