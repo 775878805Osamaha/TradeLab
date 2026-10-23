@@ -748,6 +748,13 @@ class ReplayViewModel(
             return
         }
 
+        val symbolRules = com.example.core.market.DefaultSymbols.getSymbol(_uiState.value.symbol)
+        if (!com.example.feature.chart.ChartOrderValidation.isValidLot(
+                volume, symbolRules.minLot, symbolRules.maxLot, symbolRules.lotStep
+            )) {
+            _uiState.update { it.copy(message = "حجم الصفقة لا يطابق حدود اللوت لهذا الرمز") }
+            return
+        }
         val executionPrice = if (side == OrderSide.BUY) tick.ask else tick.bid
         if (!com.example.feature.chart.ChartOrderValidation.isValid(side, volume, executionPrice, sl, tp)) {
             _uiState.update { it.copy(message = "مستويات وقف الخسارة أو جني الربح غير صالحة لاتجاه الصفقة") }
