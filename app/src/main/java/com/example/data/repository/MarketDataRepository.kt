@@ -105,11 +105,75 @@ class MarketDataRepository(
             // No credentials needed for normal chart viewing. An explicitly
             // configured Twelve Data key remains available as an alternative.
             // Do not fabricate bars to fill forex weekend/session gaps.
-            return@withContext if (twelveDataApiKey.isNotBlank()) {
-                twelveData.fetch(symbol, timeframe, from, to, twelveDataApiKey)
-            } else {
-                keylessHistorical.fetch(symbol, timeframe, from, to)
+            val requestedKey = twelveDataApiKey
+            // Forex/metals have market-session gaps. Fetch in bounded pages;
+            // never fabricate bars and never return a partially successful range.
+            val providerLimit = if (requestedKey.isNotBlank()) 1000 else 750
+            val safePageSize = minOf(pageSize, providerLimit)
+            val pages = ArrayList<Candle>()
+            var cursor = from
+            while (cursor <= to) {
+                currentCoroutineContext().ensureActive()
+                val remainingBars = (to - cursor) / intervalMillis + 1L
+                // Keyless Biquote reserves two source bars for boundary handling.
+                val maxPageBars = if (requestedKey.isNotBlank()) safePageSize else
+                    minOf(safePageSize, 750 / when (timeframe.minutes) {
+                        3 -> 3
+                        120 -> 2
+                        10080 -> 7
+                        else -> 1
+                    })
+                require(maxPageBars > 0) { "Unsupported historical page size" }
+                val barsInPage = minOf(remainingBars, maxPageBars.toLong())
+                val end = cursor + (barsInPage - 1L) * intervalMillis
+                val chunk = try {
+                    if (requestedKey.isNotBlank()) {
+                        twelveData.fetch(symbol, timeframe, cursor, end, requestedKey)
+                    } else {
+                        keylessHistorical.fetch(symbol, timeframe, cursor, end)
+                    }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: java.io.IOException) {
+                    // Some providers signal a fully closed market as an empty
+                    // result rather than an empty candle array. Do not hide
+                    // transport failures, authorization errors or rate limits.
+                    throw java.io.IOException(
+                        "Historical page $cursor..$end failed for $symbol: ${error.message}", error
+                    )
+                }
+                currentCoroutineContext().ensureActive()
+                if (chunk.isEmpty()) {
+                    // Market holidays/weekends may produce an empty window.
+                    // Do not synthesize missing bars or abort a longer valid range.
+                    if (end == to) break
+                    cursor = end + intervalMillis
+                    yield()
+                    continue
+                }
+                val verified = HistoricalCandleIntegrity.validate(
+                    chunk,
+                    requestedFrom = cursor,
+                    requestedTo = end + intervalMillis,
+                    expectedSymbol = symbol,
+                    expectedTimeframe = timeframe
+                )
+                pages.addAll(verified)
+                if (end == to) break
+                cursor = end + intervalMillis
+                yield()
             }
+            val verified = HistoricalCandleIntegrity.validate(
+                pages,
+                requestedFrom = from,
+                requestedTo = to + intervalMillis,
+                expectedSymbol = symbol,
+                expectedTimeframe = timeframe
+            )
+            if (verified.isEmpty()) {
+                throw java.io.IOException("No verified historical candles for $symbol")
+            }
+            verified
         }
         val local = DataIntegrityValidator.sanitizeCandles(
             candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
