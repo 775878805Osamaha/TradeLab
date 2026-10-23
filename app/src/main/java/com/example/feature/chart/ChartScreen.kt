@@ -684,6 +684,42 @@ fun ChartScreen(
                 )
             }
 
+            // Verified historical OHLC depth: bounded presets avoid oversized requests.
+            if (!immersiveChart && !isEmbeddedReplay) {
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                        .testTag("chart_history_controls"),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("الشموع", fontSize = 10.sp, color = TradingTextSecondary)
+                    listOf(100, 250, 500, 750).forEach { bars ->
+                        val selected = uiState.chartHistoryBars == bars
+                        OutlinedButton(
+                            onClick = { viewModel.setChartHistoryBars(bars) },
+                            enabled = !uiState.isLoading,
+                            modifier = Modifier.height(30.dp).testTag("chart_history_depth_$bars"),
+                            contentPadding = PaddingValues(horizontal = 7.dp, vertical = 0.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (selected) TradingAccentLight else TradingTextSecondary
+                            )
+                        ) {
+                            Text("$bars", fontSize = 10.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    IconButton(
+                        onClick = { viewModel.retryChartHistory() },
+                        enabled = !uiState.isLoading,
+                        modifier = Modifier.size(30.dp).testTag("chart_history_retry")
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "إعادة تحميل الشموع",
+                            tint = TradingAccentLight, modifier = Modifier.size(17.dp))
+                    }
+                }
+            }
+
             // Professional Candlestick Chart
             Box(
                 modifier = Modifier
