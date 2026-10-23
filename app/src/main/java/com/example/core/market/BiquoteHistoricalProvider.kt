@@ -47,11 +47,19 @@ class BiquoteHistoricalProvider(
     suspend fun fetch(symbol: String, tf: Timeframe, from: Long, to: Long): List<Candle> =
         withContext(Dispatchers.IO) {
             require(supports(symbol)) { "Unsupported keyless historical symbol" }
-            val period = tf.minutes * 60_000L
+            require(from >= 0L && to > from) { "Invalid historical range" }
+            val period = tf.minutes.toLong() * 60_000L
+            require(period > 0 && to <= System.currentTimeMillis() - period) {
+                "Historical range includes unfinished candles"
+            }
             val baseMinutes = when (tf.minutes) { 3 -> 1; 120 -> 60; 10080 -> 1440; else -> tf.minutes }
             val basePeriod = baseMinutes * 60_000L
             val baseFrom = if (baseMinutes != tf.minutes) bucket(from, tf.minutes) else from
-            val bars = ((to - baseFrom + period) / basePeriod + 1).coerceIn(1, 1000).toInt()
+            val requestedBars = (to - baseFrom) / basePeriod + 2L
+            require(requestedBars in 1L..1000L) {
+                "Biquote supports at most 1000 source bars per request; shorten the history range"
+            }
+            val bars = requestedBars.toInt()
             val url = okhttp3.HttpUrl.Builder()
                 .scheme("https").host("biquote.io")
                 .addPathSegment("api").addPathSegment(symbol).addPathSegment("ohlc")
@@ -72,7 +80,10 @@ class BiquoteHistoricalProvider(
                 val row = items.getJSONObject(i)
                 if (row.optBoolean("isOpen", false)) continue
                 val openTime = Instant.parse(row.getString("openTime")).toEpochMilli()
-                if (openTime < baseFrom || openTime > to || openTime + basePeriod > System.currentTimeMillis()) continue
+                if (openTime < baseFrom || openTime > to) {
+                    throw IOException("Biquote returned a bar outside the requested range")
+                }
+                if (openTime + basePeriod > System.currentTimeMillis()) continue
                 val open = row.getDouble("open")
                 val high = row.getDouble("high")
                 val low = row.getDouble("low")
@@ -88,6 +99,9 @@ class BiquoteHistoricalProvider(
                     open = open, high = high, low = low, close = close,
                     volume = volume, source = "BIQUOTE_HISTORICAL"
                 ))
+            }
+            if (candles.map { it.openTime }.toSet().size != candles.size) {
+                throw IOException("Biquote returned duplicate historical bars")
             }
             candles.sortBy { it.openTime }
             val result = if (baseMinutes == tf.minutes) candles else
