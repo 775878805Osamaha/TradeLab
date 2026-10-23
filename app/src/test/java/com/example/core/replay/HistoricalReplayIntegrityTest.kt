@@ -124,7 +124,7 @@ class HistoricalReplayIntegrityTest {
         engine.initialize(listOf(candle(900_000L), candle(1_800_000L)), startIndex = 1)
         engine.play()
         org.junit.Assert.assertFalse(engine.isPlaying.value)
-        assertEquals(ReplayStatus.COMPLETED, engine.status.value)
+        assertEquals("COMPLETED", engine.status.value.name)
         assertEquals(1, engine.currentIndex.value)
     }
 
