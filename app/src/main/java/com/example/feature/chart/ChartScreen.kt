@@ -697,6 +697,9 @@ fun ChartScreen(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
+                // Reset pan/zoom when the instrument, timeframe, or replay context changes.
+                // Do not key on candle data: incoming prices must not jump the viewport.
+                key(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay) {
                 CandlestickChart(
                     candles = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles,
                     latestTick = if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick,
@@ -720,6 +723,7 @@ fun ChartScreen(
                     onAddDrawing = { if (!isEmbeddedReplay) viewModel.addDrawing(it) },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) }
                 )
+                }
 
                 // Compact provenance HUD: historical candles are not live executable quotes.
                 val chartBars = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
