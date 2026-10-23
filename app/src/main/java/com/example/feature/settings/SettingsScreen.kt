@@ -109,6 +109,8 @@ fun SettingsScreen(
                 }
             }
 
+            item { HistorySettingsCard() }
+
             // Architecture & Compliance Card
             item {
                 Card(
