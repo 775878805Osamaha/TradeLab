@@ -62,6 +62,10 @@ data class BacktestConfig(
         if (!slippagePips.isFinite() || slippagePips < 0.0) return Result.failure(IllegalArgumentException("Slippage must be finite and non-negative"))
         if (!commissionPerLot.isFinite() || commissionPerLot < 0.0) return Result.failure(IllegalArgumentException("Commission must be finite and non-negative"))
         if (!swapPerLotDaily.isFinite() || swapPerLotDaily < 0.0) return Result.failure(IllegalArgumentException("Swap must be finite and non-negative"))
+        if (symbol.isBlank()) return Result.failure(IllegalArgumentException("Backtest symbol must not be blank"))
+        if (symbol != symbol.trim()) return Result.failure(IllegalArgumentException("Backtest symbol must not contain surrounding whitespace"))
+        if (startTime != null && startTime < 0L) return Result.failure(IllegalArgumentException("Start time must not be negative"))
+        if (endTime != null && endTime < 0L) return Result.failure(IllegalArgumentException("End time must not be negative"))
         if (startTime != null && endTime != null && startTime > endTime) return Result.failure(IllegalArgumentException("Start time must not exceed end time"))
         when (positionSizingMode) {
             PositionSizingMode.FIXED_LOT -> {
@@ -376,10 +380,22 @@ class BacktestEngine(
                     if (signal.stopLoss != null || signal.takeProfit != null) {
                         for (idx in openPositions.indices) {
                             val pos = openPositions[idx]
-                            openPositions[idx] = pos.copy(
-                                stopLoss = signal.stopLoss ?: pos.stopLoss,
-                                takeProfit = signal.takeProfit ?: pos.takeProfit
-                            )
+                            // A stop modification must remain on the protective
+                            // side of the executable market price. Reject invalid
+                            // changes per position rather than corrupting all trades.
+                            val candidateSl = signal.stopLoss ?: pos.stopLoss
+                            val candidateTp = signal.takeProfit ?: pos.takeProfit
+                            val reference = if (pos.side == PositionSide.BUY) tick.bid else tick.ask
+                            val validSl = candidateSl == null || (candidateSl.isFinite() &&
+                                candidateSl > 0.0 && if (pos.side == PositionSide.BUY) candidateSl < reference else candidateSl > reference)
+                            val validTp = candidateTp == null || (candidateTp.isFinite() &&
+                                candidateTp > 0.0 && if (pos.side == PositionSide.BUY) candidateTp > reference else candidateTp < reference)
+                            if (validSl && validTp) {
+                                openPositions[idx] = pos.copy(
+                                    stopLoss = candidateSl,
+                                    takeProfit = candidateTp
+                                )
+                            }
                         }
                     }
                 }
