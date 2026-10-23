@@ -119,6 +119,27 @@ class HistoricalReplayIntegrityTest {
         )
     }
 
+    @Test fun playAtFinalCandleCannotStartPlayback() {
+        val engine = HistoricalReplayEngine()
+        engine.initialize(listOf(candle(900_000L), candle(1_800_000L)), startIndex = 1)
+        engine.play()
+        org.junit.Assert.assertFalse(engine.isPlaying.value)
+        assertEquals(ReplayStatus.COMPLETED, engine.status.value)
+        assertEquals(1, engine.currentIndex.value)
+    }
+
+    @Test fun advanceBarsProcessesEachCandleWithoutSkipping() {
+        val engine = HistoricalReplayEngine()
+        val bars = (0..10).map { candle(900_000L + it * 900_000L) }
+        engine.initialize(bars, startIndex = 0)
+        val seen = mutableListOf<Long>()
+        engine.onCandleRevealed = { bar, _, _ -> seen.add(bar.openTime) }
+        assertEquals(5, engine.advanceBars(5))
+        assertEquals(bars.subList(1, 6).map { it.openTime }, seen)
+        assertEquals(5, engine.currentIndex.value)
+        engine.pause()
+    }
+
     @Test fun enginePreservesValidHistoricalBarCountAndOrdering() {
         val engine = HistoricalReplayEngine()
         val candles = listOf(candle(900_000L), candle(1_800_000L), candle(3_600_000L))
