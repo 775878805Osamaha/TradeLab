@@ -710,9 +710,13 @@ class ReplayViewModel(
     }
 
     fun executeOrder(side: OrderSide, volume: Double = 0.01, sl: Double? = null, tp: Double? = null) {
-        cancelBatchAdvance()
+        // Strategy signals are emitted inside the candle-step callback.
+        // Do not cancel the active batch or playback from inside that callback.
+        val strategyFill = _uiState.value.interactionMode == ReplayInteractionMode.STRATEGY &&
+            _uiState.value.isBatchAdvancing
+        if (!strategyFill) cancelBatchAdvance()
         if (!canAcceptReplayOrder(isPending = false)) return
-        replayEngine.pause()
+        if (!strategyFill) replayEngine.pause()
         val candle = replayEngine.currentCandle.value ?: run {
             _uiState.update { it.copy(message = "لا توجد شمعة Replay متاحة للتداول") }
             return
