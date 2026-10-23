@@ -424,6 +424,14 @@ class HistoricalReplayEngine(
             val spread = symInfo.defaultSpreadPips * symInfo.pipSize
             val halfSpread = spread / 2.0
 
+            // Fail closed when an extreme but finite candle price cannot
+            // support a positive executable Bid under the modeled spread.
+            // No synthetic negative quote may enter replay order execution.
+            require(spread.isFinite() && spread >= 0.0 &&
+                active.close.isFinite() && active.close > halfSpread &&
+                (active.close + halfSpread).isFinite()) {
+                "Replay candle cannot produce a valid bid/ask quote"
+            }
             val tick = Tick(
                 symbol = active.symbol,
                 bid = active.close - halfSpread,
