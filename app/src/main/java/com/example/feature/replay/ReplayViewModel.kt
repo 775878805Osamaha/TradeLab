@@ -726,7 +726,6 @@ class ReplayViewModel(
         val strategyFill = executingStrategySignal
         if (!strategyFill) cancelBatchAdvance()
         if (!canAcceptReplayOrder(isPending = false)) return
-        if (!strategyFill) replayEngine.pause()
         val candle = replayEngine.currentCandle.value ?: run {
             _uiState.update { it.copy(message = "لا توجد شمعة Replay متاحة للتداول") }
             return
@@ -745,6 +744,9 @@ class ReplayViewModel(
             _uiState.update { it.copy(message = "تعذر تنفيذ الأمر: سعر أو حجم Replay غير صالح") }
             return
         }
+
+        // Do not pause playback for rejected manual orders.
+        if (!strategyFill) replayEngine.pause()
 
         // Use the same equity/margin accounting for manual and pending fills.
         // A stale UI equity snapshot must not overstate available margin.
