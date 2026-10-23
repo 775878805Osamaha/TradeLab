@@ -256,7 +256,7 @@ fun ChartScreen(
         modifier = modifier.testTag("chart_screen"),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
+            if (!immersiveChart) TopAppBar(
                 modifier = Modifier.height(if (immersiveChart) 44.dp else 64.dp),
                 title = {
                     Row(
@@ -731,6 +731,52 @@ fun ChartScreen(
                     onAddDrawing = { if (!isEmbeddedReplay) viewModel.addDrawing(it) },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) }
                 )
+                }
+
+                // Immersive controls float over the chart rather than reserving a fixed top bar.
+                if (immersiveChart) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 4.dp, end = 4.dp)
+                            .background(TradingCard.copy(alpha = 0.82f), RoundedCornerShape(8.dp))
+                            .testTag("chart_immersive_floating_header"),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = uiState.selectedSymbol,
+                            color = TradingTextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .clickable { showSymbolSheet = true }
+                                .padding(horizontal = 6.dp, vertical = 8.dp)
+                                .testTag("chart_floating_symbol_selector")
+                        )
+                        IconButton(
+                            onClick = {
+                                if (isEmbeddedReplay) {
+                                    replayViewModel.pause()
+                                    isEmbeddedReplay = false
+                                } else {
+                                    replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
+                                    isEmbeddedReplay = true
+                                }
+                            },
+                            modifier = Modifier.size(36.dp).testTag("chart_floating_replay")
+                        ) {
+                            Icon(Icons.Default.PlayCircle, contentDescription = if (isEmbeddedReplay) "إنهاء الإعادة" else "إعادة العرض داخل الشارت",
+                                tint = TradingAccentLight, modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(
+                            onClick = { immersiveChart = false },
+                            modifier = Modifier.size(36.dp).testTag("chart_floating_exit_immersive")
+                        ) {
+                            Icon(Icons.Default.FullscreenExit, contentDescription = "إظهار شريط التنقل",
+                                tint = TradingTextPrimary, modifier = Modifier.size(20.dp))
+                        }
+                    }
                 }
 
                 // Compact provenance HUD: historical candles are not live executable quotes.
