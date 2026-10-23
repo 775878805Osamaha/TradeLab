@@ -330,11 +330,26 @@ fun CandlestickChart(
                 }
             }
 
-            // Price ticks follow a readable pixel interval instead of five widely spaced levels.
-            val priceTickCount = (mainChartHeight / 80f).toInt().coerceIn(4, 18)
+            // Use rounded market-price intervals (1/2/5 x power of ten) like trading terminals.
+            // Grid labels remain stable and meaningful as the visible price range changes.
+            val desiredTickCount = (mainChartHeight / 86f).toInt().coerceIn(4, 16)
+            val rawTickStep = ((paddedMax - paddedMin) / desiredTickCount).coerceAtLeast(1e-9)
+            val magnitude = Math.pow(10.0, kotlin.math.floor(kotlin.math.log10(rawTickStep)))
+            val normalizedStep = rawTickStep / magnitude
+            val tickMultiplier = when {
+                normalizedStep <= 1.0 -> 1.0
+                normalizedStep <= 2.0 -> 2.0
+                normalizedStep <= 5.0 -> 5.0
+                else -> 10.0
+            }
+            val priceTickStep = tickMultiplier * magnitude
+            val tickDecimals = (-kotlin.math.floor(kotlin.math.log10(priceTickStep))).toInt().coerceIn(0, 6)
+            val firstPriceTick = kotlin.math.ceil(paddedMin / priceTickStep) * priceTickStep
+            val priceTickCount = ((paddedMax - firstPriceTick) / priceTickStep)
+                .toInt().coerceIn(0, 40)
             for (step in 0..priceTickCount) {
-                val y = (step.toFloat() / priceTickCount) * mainChartHeight
-                val priceVal = paddedMin + ((priceTickCount - step).toDouble() / priceTickCount) * (paddedMax - paddedMin)
+                val priceVal = firstPriceTick + step * priceTickStep
+                val y = ((paddedMax - priceVal) / (paddedMax - paddedMin) * mainChartHeight).toFloat()
                 drawLine(
                     color = TradingBorder.copy(alpha = 0.3f),
                     start = Offset(0f, y),
@@ -345,7 +360,7 @@ fun CandlestickChart(
                 drawContext.canvas.nativeCanvas.apply {
                     val labelY = (y + priceAxisPaint.textSize * 0.35f)
                         .coerceIn(priceAxisPaint.textSize, height - 8f)
-                    drawText(String.format(Locale.US, "%.2f", priceVal), chartWidth + 7f, labelY, priceAxisPaint)
+                    drawText(String.format(Locale.US, "%,." + tickDecimals + "f", priceVal), chartWidth + 7f, labelY, priceAxisPaint)
                 }
             }
 
