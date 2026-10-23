@@ -53,6 +53,7 @@ fun ChartScreen(
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var immersiveChart by remember { mutableStateOf(true) }
+    var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
     var showHistoricalSourceDialog by remember { mutableStateOf(false) }
     var historicalApiKeyInput by remember { mutableStateOf("") }
 
@@ -251,69 +252,8 @@ fun ChartScreen(
             }
 
             if (isEmbeddedReplay) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(TradingCard)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                        .testTag("chart_embedded_replay_controls"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("REPLAY", color = TradingGold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    if (replayState.currentCandle != null) {
-                        Text(
-                            java.text.SimpleDateFormat("MM/dd HH:mm", Locale.US).apply {
-                                timeZone = java.util.TimeZone.getTimeZone("UTC")
-                            }.format(java.util.Date(replayState.currentCandle!!.openTime)) + " UTC",
-                            color = TradingTextSecondary,
-                            fontSize = 10.sp,
-                            modifier = Modifier.testTag("chart_replay_candle_utc")
-                        )
-                    }
-                    IconButton(
-                        onClick = { replayViewModel.resetReplay() },
-                        enabled = !replayState.isLoading && replayState.totalCandles > 0,
-                        modifier = Modifier.testTag("chart_replay_restart")
-                    ) {
-                        Icon(Icons.Default.RestartAlt, contentDescription = "بدء جلسة الإعادة من جديد", tint = TradingTextSecondary)
-                    }
-                    IconButton(
-                        onClick = { replayViewModel.stepBackward() },
-                        enabled = !replayState.isLoading && !replayState.isBatchAdvancing &&
-                            replayState.currentIndex > 0,
-                        modifier = Modifier.testTag("chart_replay_step_back")
-                    ) {
-                        Icon(Icons.Default.SkipPrevious, contentDescription = "شمعة سابقة", tint = TradingTextPrimary)
-                    }
-                    IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
-                        enabled = !replayState.isLoading && !replayState.isBatchAdvancing &&
-                            replayState.totalCandles > 0 &&
-                            (replayState.isPlaying || replayState.currentIndex < replayState.totalCandles - 1),
-                        modifier = Modifier.testTag("chart_replay_play_pause")) {
-                        Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (replayState.isPlaying) "إيقاف مؤقت" else "تشغيل الإعادة",
-                            tint = TradingAccentLight)
-                    }
-                    IconButton(
-                        onClick = { replayViewModel.stepForward() },
-                        enabled = !replayState.isLoading && !replayState.isBatchAdvancing &&
-                            replayState.currentIndex < replayState.totalCandles - 1,
-                        modifier = Modifier.testTag("chart_replay_step_next")
-                    ) {
-                        Icon(Icons.Default.SkipNext, contentDescription = "شمعة تالية", tint = TradingTextPrimary)
-                    }
-                    Text("${(replayState.currentIndex + 1).coerceAtMost(replayState.totalCandles)}/${replayState.totalCandles}",
-                        color = TradingTextSecondary, fontSize = 11.sp)
-                    if (replayState.isBatchAdvancing) {
-                        Text(
-                            "${replayState.batchCompletedBars}/${replayState.batchRequestedBars}",
-                            color = TradingGold, fontSize = 10.sp,
-                            modifier = Modifier.testTag("chart_replay_compact_progress")
-                        )
-                    }
-                    TextButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false }) {
-                        Text("إنهاء", color = TradingNegative)
-                    }
-                }
+                // Replay detail controls remain available without occupying
+                // vertical chart space in the default reference layout.
                 TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
                     Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
                 }
@@ -560,118 +500,38 @@ fun ChartScreen(
 
             // Timeframe selection scrollable row (all 10 timeframes)
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Timeframe.values().forEach { tf ->
-                    val isSelected = uiState.selectedTimeframe == tf
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSelected) TradingAccent else TradingElevated)
-                            .clickable { viewModel.selectTimeframe(tf) }
-                            .padding(horizontal = 9.dp, vertical = 7.dp)
-                            .testTag("tf_chip_${tf.code}")
-                    ) {
-                        Text(
-                            text = tf.displayName,
-                            fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) Color.White else TradingTextSecondary
-                        )
-                    }
-                }
-
-            }
-
-            // Tools remain accessible as floating buttons when chart is expanded.
-            if (immersiveChart) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(36.dp).testTag("chart_immersive_indicators")) {
-                        Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
-                    }
-                    IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.size(36.dp).testTag("chart_immersive_draw")) {
-                        Icon(Icons.Default.Draw, contentDescription = "الرسم", tint = TradingAccentLight)
-                    }
-                    IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(36.dp).testTag("chart_immersive_reset")) {
-                        Icon(Icons.Default.CenterFocusWeak, contentDescription = "إعادة ضبط الشارت", tint = TradingAccentLight)
-                    }
-                    IconButton(onClick = { showChartExtras = !showChartExtras }, modifier = Modifier.size(36.dp).testTag("chart_immersive_settings")) {
-                        Icon(Icons.Default.Tune, contentDescription = "إعدادات الرسم", tint = TradingTextSecondary)
-                    }
-                }
-            }
-            // Compact icon toolbar: keep the chart as the primary surface.
-            if (!immersiveChart) Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+                    .background(TradingBackground)
+                    .testTag("chart_timeframe_strip"),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.testTag("chart_indicators_btn")) {
-                    Icon(Icons.Default.Timeline, contentDescription = "المؤشرات", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.testTag("drawing_tools_menu_btn")) {
-                    Icon(Icons.Default.Draw, contentDescription = "أدوات الرسم", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.testTag("chart_reset_view_btn")) {
-                    Icon(Icons.Default.CenterFocusWeak, contentDescription = "ضبط الشارت", tint = TradingAccentLight)
-                }
-                IconButton(onClick = { showChartExtras = !showChartExtras }, modifier = Modifier.testTag("chart_extras_btn")) {
-                    Icon(Icons.Default.Tune, contentDescription = "إعدادات الشارت", tint = TradingTextSecondary)
-                }
-            }
-            if (showChartExtras) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    ChartDisplayStyle.values().forEach { style ->
-                        TextButton(onClick = { chartDisplayStyle = style }, modifier = Modifier.testTag("chart_style_${style.name}")) {
-                            Text(style.label, color = if (chartDisplayStyle == style) TradingAccentLight else TradingTextSecondary)
+                listOf(Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
+                    val selected = uiState.selectedTimeframe == tf
+                    Column(
+                        modifier = Modifier.weight(1f).fillMaxHeight()
+                            .clickable { viewModel.selectTimeframe(tf) }
+                            .testTag("tf_chip_${tf.code}"),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Bottom
+                    ) {
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            Text(tf.displayName, fontSize = 13.sp,
+                                color = if (selected) TradingAccentLight else TradingTextSecondary,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                         }
+                        Box(Modifier.width(29.dp).height(3.dp)
+                            .background(if (selected) TradingAccent else Color.Transparent))
                     }
-                    TextButton(onClick = { viewModel.toggleVolume() }) {
-                        Text("VOL", color = if (uiState.isVolumeVisible) TradingGold else TradingTextSecondary)
-                    }
+                }
+                IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(38.dp)) {
+                    Icon(Icons.Default.Functions, contentDescription = "المؤشرات", tint = TradingTextPrimary)
+                }
+                IconButton(onClick = { showChartExtras = !showChartExtras }, modifier = Modifier.size(38.dp)) {
+                    Icon(Icons.Default.MoreHoriz, contentDescription = "المزيد", tint = TradingTextPrimary)
                 }
             }
 
-            // Drawing tools active banner if tool active
-            if (uiState.activeDrawingTool != DrawingTool.NONE) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(TradingAccent.copy(alpha = 0.12f))
-                        .padding(horizontal = 14.dp, vertical = 5.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "أداة نشطة: ${uiState.activeDrawingTool.displayNameAr} (اسحب على الشارت)",
-                        fontSize = 11.sp,
-                        color = TradingAccentLight,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = "إلغاء",
-                        fontSize = 12.sp,
-                        color = TradingNegative,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { viewModel.setDrawingTool(DrawingTool.NONE) }
-                    )
-                }
-            }
-
-            // Market data provenance: never present missing or stale quotes as live.
             val marketTick = uiState.latestTick
             val marketTickIsLive = marketTick != null &&
                 marketTick.symbol == uiState.selectedSymbol &&
