@@ -85,6 +85,9 @@ data class BacktestConfig(
         if (!allowLong && !allowShort) {
             return Result.failure(IllegalArgumentException("At least one trading direction (Long or Short) must be enabled"))
         }
+        if (!fixedLotSize.isFinite() || fixedLotSize <= 0.0) {
+            return Result.failure(IllegalArgumentException("Legacy fixed lot size must be finite and positive"))
+        }
         return Result.success(Unit)
     }
 }
@@ -356,6 +359,11 @@ class BacktestEngine(
                 (!signal.stopLoss.isFinite() || signal.stopLoss <= 0.0)
             val invalidTarget = changesStops && signal.takeProfit != null &&
                 (!signal.takeProfit.isFinite() || signal.takeProfit <= 0.0)
+            // Strategies execute at the completed candle's executable bid/ask.
+            // A requested entry price cannot be honored by a market order;
+            // never silently ignore it and fill at a different price.
+            // Market strategies may include an indicative entry price.
+            // ExecutionEngine still fills at executable bid/ask, not this hint.
             val effectiveAction = if (wrongSymbol || invalidEntry || invalidVolume ||
                 invalidStop || invalidTarget) SignalAction.HOLD else signal.action
 
