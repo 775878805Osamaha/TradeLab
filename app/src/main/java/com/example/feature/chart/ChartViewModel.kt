@@ -334,7 +334,10 @@ class ChartViewModel(
             } catch (error: Exception) {
                 if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
                     _uiState.update {
-                        it.copy(candles = emptyList(), isLoading = false,
+                        it.copy(candles = emptyList(), latestTick = if (symbol in setOf("BTCUSDT", "ETHUSDT")) it.latestTick else null,
+                            smaValues = emptyList(), emaValues = emptyList(), bollingerValues = emptyList(),
+                            vwapValues = emptyList(), rsiValues = emptyList(), macdValues = emptyList(),
+                            atrValues = emptyList(), isLoading = false,
                             // Report the actual failure instead of assuming that
                             // every historical-data error is an internet outage.
                             candleLoadError = "فشل تحميل شموع ${if (symbol in setOf("BTCUSDT", "ETHUSDT")) "Binance" else "مصدر الذهب والفوركس"}: ${error.javaClass.simpleName}: " +
