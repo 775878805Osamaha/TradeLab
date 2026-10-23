@@ -62,6 +62,9 @@ data class BacktestConfig(
         if (!slippagePips.isFinite() || slippagePips < 0.0) return Result.failure(IllegalArgumentException("Slippage must be finite and non-negative"))
         if (!commissionPerLot.isFinite() || commissionPerLot < 0.0) return Result.failure(IllegalArgumentException("Commission must be finite and non-negative"))
         if (!swapPerLotDaily.isFinite() || swapPerLotDaily < 0.0) return Result.failure(IllegalArgumentException("Swap must be finite and non-negative"))
+        if (symbol.isBlank()) return Result.failure(IllegalArgumentException("Backtest symbol must not be blank"))
+        if (startTime != null && startTime < 0L) return Result.failure(IllegalArgumentException("Start time must not be negative"))
+        if (endTime != null && endTime < 0L) return Result.failure(IllegalArgumentException("End time must not be negative"))
         if (startTime != null && endTime != null && startTime > endTime) return Result.failure(IllegalArgumentException("Start time must not exceed end time"))
         when (positionSizingMode) {
             PositionSizingMode.FIXED_LOT -> {
