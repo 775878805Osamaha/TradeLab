@@ -360,8 +360,8 @@ class TradeLabEngineTests {
         val barrierTime = 5000L
         val allowedCandles = com.example.core.market.DataIntegrityValidator.enforceReplayBarrier(candles, barrierTime)
 
-        assertEquals(5, allowedCandles.size)
-        assertTrue(allowedCandles.all { it.openTime <= barrierTime })
+        assertEquals(4, allowedCandles.size)
+        assertTrue(allowedCandles.all { it.closeTime <= barrierTime })
     }
 
     @Test
