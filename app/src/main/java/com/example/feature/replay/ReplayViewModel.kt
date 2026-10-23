@@ -789,7 +789,7 @@ class ReplayViewModel(
             position = pos,
             exitPrice = exitPrice,
             exitReason = ExitReason.MANUAL_CLOSE,
-            closeTime = candle?.openTime ?: System.currentTimeMillis()
+            closeTime = candle?.closeTime ?: tick.timestamp
         )
         openPositions.remove(pos)
         closedTrades.add(trade)
