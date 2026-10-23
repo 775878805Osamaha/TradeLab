@@ -1,12 +1,16 @@
 package com.example
 
 import android.app.Application
+import com.example.core.history.HistoryKeyStore
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.data.local.AppDatabase
 import com.example.data.repository.MarketDataRepository
 import com.example.data.repository.TradingRepository
 
 class TradeLabApplication : Application() {
+
+    val historyKeyStore: HistoryKeyStore by lazy { HistoryKeyStore(this) }
+
 
     val database: AppDatabase by lazy {
         AppDatabase.getInstance(this)
