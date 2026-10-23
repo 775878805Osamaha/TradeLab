@@ -99,13 +99,13 @@ class ReplayViewModel(
         val maxObservedDrawdownPercent: Double,
         val equitySamples: List<ReplayEquitySample>
     )
-    private val accountSnapshots = mutableMapOf<Int, AccountSnapshot>()
+    private val accountSnapshots = java.util.TreeMap<Int, AccountSnapshot>()
 
     private fun saveAccountSnapshot() {
         val index = replayEngine.currentIndex.value
         // Any new execution or account edit forks the timeline at this bar.
         // Checkpoints from a previous future must never be restored.
-        accountSnapshots.keys.removeAll { it > index }
+        accountSnapshots.tailMap(index, false).clear()
         replayEngine.discardCheckpointsAfter(index)
         accountSnapshots[index] = AccountSnapshot(
             balance = _uiState.value.currentBalance,
@@ -452,7 +452,7 @@ class ReplayViewModel(
             if (snapshot != null) restoreAccountSnapshot(snapshot)
             else saveAccountSnapshot() // A no-trade timeline can safely navigate freely.
             // Future checkpoints belong to an abandoned timeline.
-            accountSnapshots.keys.removeAll { it > targetIndex }
+            accountSnapshots.tailMap(targetIndex, false).clear()
             // Invalidate the engine's separate checkpoint cache too.
             replayEngine.discardCheckpointsAfter(targetIndex)
             _uiState.update { it.copy(message = "تمت استعادة حالة الحساب عند الشمعة #$targetIndex") }
@@ -1067,7 +1067,18 @@ class ReplayViewModel(
                 history.isEmpty() -> history
                 history.last().candleIndex < index -> history
                 history.last().candleIndex == index -> history.dropLast(1)
-                else -> history.takeWhile { it.candleIndex < index }
+                else -> {
+                    // Binary-search the sorted timeline rather than scanning all
+                    // historical samples after a rewind or a timeline fork.
+                    var low = 0
+                    var high = history.size
+                    while (low < high) {
+                        val middle = (low + high) ushr 1
+                        if (history[middle].candleIndex < index) low = middle + 1
+                        else high = middle
+                    }
+                    history.subList(0, low)
+                }
             }
             // Append-only replay advances are the hot path. Existing high-water
             // marks and worst drawdown are already exact for that prefix.
