@@ -9,9 +9,14 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.IOException
 import java.time.Instant
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], application = android.app.Application::class)
 class BiquoteHistoricalProviderTests {
     private val from = Instant.parse("2026-01-05T00:00:00Z").toEpochMilli()
     private val step = 60_000L
