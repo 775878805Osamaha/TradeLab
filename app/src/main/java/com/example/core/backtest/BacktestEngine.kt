@@ -372,11 +372,8 @@ class BacktestEngine(
                 (!signal.stopLoss.isFinite() || signal.stopLoss <= 0.0)
             val invalidTarget = changesStops && signal.takeProfit != null &&
                 (!signal.takeProfit.isFinite() || signal.takeProfit <= 0.0)
-            // Strategies execute at the completed candle's executable bid/ask.
-            // A requested entry price cannot be honored by a market order;
-            // never silently ignore it and fill at a different price.
             // Market strategies may include an indicative entry price.
-            // ExecutionEngine still fills at executable bid/ask, not this hint.
+            // ExecutionEngine fills at executable bid/ask, not the hint.
             val effectiveAction = if (wrongSymbol || invalidEntry || invalidVolume ||
                 invalidStop || invalidTarget) SignalAction.HOLD else signal.action
 
