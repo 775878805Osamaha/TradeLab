@@ -61,6 +61,8 @@ fun ChartScreen(
     // Keep the floating palette compact when the displayed market context changes.
     LaunchedEffect(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay) {
         drawingToolbarExpanded = false
+        showToolsMenu = false
+        showChartExtras = false
     }
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
