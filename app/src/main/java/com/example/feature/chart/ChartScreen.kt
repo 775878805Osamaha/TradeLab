@@ -53,6 +53,12 @@ fun ChartScreen(
     var showSymbolSheet by remember { mutableStateOf(false) }
     var symbolSearchQuery by remember { mutableStateOf("") }
     var symbolCategoryFilter by remember { mutableStateOf("الكل") }
+    LaunchedEffect(showSymbolSheet) {
+        if (showSymbolSheet) {
+            symbolSearchQuery = ""
+            symbolCategoryFilter = "الكل"
+        }
+    }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
     var showChartExtras by remember { mutableStateOf(false) }
