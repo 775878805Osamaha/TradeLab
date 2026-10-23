@@ -56,8 +56,12 @@ fun ChartScreen(
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var immersiveChart by remember { mutableStateOf(true) }
-    LaunchedEffect(immersiveChart) { onImmersiveChanged(immersiveChart) }
     var drawingToolbarExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(immersiveChart) { onImmersiveChanged(immersiveChart) }
+    // Keep the floating palette compact when the displayed market context changes.
+    LaunchedEffect(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay) {
+        drawingToolbarExpanded = false
+    }
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
     var orderVolumeInput by remember { mutableStateOf("0.01") }
@@ -697,6 +701,9 @@ fun ChartScreen(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
+                // Reset pan/zoom when the instrument, timeframe, or replay context changes.
+                // Do not key on candle data: incoming prices must not jump the viewport.
+                key(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay) {
                 CandlestickChart(
                     candles = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles,
                     latestTick = if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick,
@@ -720,6 +727,7 @@ fun ChartScreen(
                     onAddDrawing = { if (!isEmbeddedReplay) viewModel.addDrawing(it) },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) }
                 )
+                }
 
                 // Compact provenance HUD: historical candles are not live executable quotes.
                 val chartBars = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
