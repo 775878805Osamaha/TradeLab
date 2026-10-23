@@ -85,6 +85,9 @@ data class BacktestConfig(
         if (!allowLong && !allowShort) {
             return Result.failure(IllegalArgumentException("At least one trading direction (Long or Short) must be enabled"))
         }
+        if (!fixedLotSize.isFinite() || fixedLotSize <= 0.0) {
+            return Result.failure(IllegalArgumentException("Legacy fixed lot size must be finite and positive"))
+        }
         return Result.success(Unit)
     }
 }
