@@ -136,79 +136,30 @@ fun ChartScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clickable { showSymbolSheet = true }
-                            .testTag("symbol_selector_btn")
-                    ) {
-                        Text(
-                            text = if (uiState.selectedSymbol.endsWith("USDT")) "${uiState.selectedSymbol.removeSuffix("USDT")} / USDT" else uiState.selectedSymbol,
-                            style = TextStyle(textDirection = TextDirection.Ltr),
-                            maxLines = 1,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 16.sp,
-                            color = TradingTextPrimary
-                        )
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = TradingTextSecondary)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        if (headerQuoteVerified) {
-                            DataSourceBadge(sourceType = uiState.dataSourceType)
-                        } else {
-                            Text(
-                                text = when {
-                                    uiState.isLoading -> "LOADING"
-                                    uiState.candles.isNotEmpty() -> "HISTORY"
-                                    uiState.candleLoadError != null -> "DATA ERROR"
-                                    else -> "NO DATA"
-                                },
-                                fontSize = 10.sp, color = TradingTextSecondary,
-                                modifier = Modifier.testTag("chart_source_mode")
-                            )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("▲", color = TradingAccent, fontSize = 23.sp, fontWeight = FontWeight.Black)
+                        Spacer(Modifier.width(4.dp))
+                        Text("TradeLab", fontWeight = FontWeight.Bold, fontSize = 17.sp,
+                            color = TradingTextPrimary)
+                        Spacer(Modifier.width(10.dp))
+                        Text("│", color = TradingBorder, fontSize = 19.sp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { showSymbolSheet = true }
+                                .testTag("symbol_selector_btn")
+                        ) {
+                            Text(uiState.selectedSymbol,
+                                style = TextStyle(textDirection = TextDirection.Ltr),
+                                fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                                color = TradingTextPrimary, maxLines = 1)
+                            Icon(Icons.Default.KeyboardArrowDown,
+                                contentDescription = "اختيار الرمز", tint = TradingTextSecondary,
+                                modifier = Modifier.size(19.dp))
                         }
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = { immersiveChart = !immersiveChart },
-                        modifier = Modifier.testTag("chart_immersive_toggle")
-                    ) {
-                        Icon(
-                            if (immersiveChart) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                            contentDescription = if (immersiveChart) "عرض التفاصيل" else "تكبير الشارت",
-                            tint = TradingAccentLight
-                        )
-                    }
-                    IconButton(
-                        onClick = { viewModel.toggleVolume() },
-                        modifier = Modifier.testTag("chart_toggle_volume_header")
-                    ) {
-                        Icon(
-                            Icons.Default.BarChart,
-                            contentDescription = if (uiState.isVolumeVisible) "إخفاء أحجام التداول" else "إظهار أحجام التداول",
-                            tint = if (uiState.isVolumeVisible) TradingAccentLight else TradingTextSecondary
-                        )
-                    }
-                    IconButton(
-                        onClick = { viewModel.triggerResetView() },
-                        modifier = Modifier.testTag("chart_reset_view_header")
-                    ) {
-                        Icon(Icons.Default.CenterFocusStrong, contentDescription = "إعادة ضبط الشارت", tint = TradingTextSecondary)
-                    }
-                    if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT", "XAUUSD", "XAGUSD", "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", "EURJPY", "GBPJPY", "EURGBP")) {
-                        IconButton(
-                            onClick = { viewModel.retryCandleLoad() },
-                            modifier = Modifier.testTag("chart_header_refresh_btn")
-                        ) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "تحديث بيانات الشارت",
-                                tint = TradingTextSecondary
-                            )
-                        }
-                    }
-                    // Replay shortcut
-                    IconButton(
+                    TextButton(
                         onClick = {
                             if (isEmbeddedReplay) {
                                 replayViewModel.pause()
@@ -218,9 +169,23 @@ fun ChartScreen(
                                 isEmbeddedReplay = true
                             }
                         },
-                        modifier = Modifier.testTag("chart_to_replay_btn")
+                        modifier = Modifier.testTag("chart_to_replay_btn"),
+                        contentPadding = PaddingValues(horizontal = 2.dp)
                     ) {
-                        Icon(Icons.Default.PlayCircle, contentDescription = if (isEmbeddedReplay) "إنهاء الإعادة" else "إعادة العرض داخل الشارت", tint = TradingAccentLight)
+                        Text("إعادة تاريخية", fontSize = 11.sp, color = TradingTextSecondary)
+                        Icon(Icons.Default.History, contentDescription = "إعادة تاريخية",
+                            tint = TradingTextSecondary, modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = { showChartExtras = !showChartExtras },
+                        modifier = Modifier.size(36.dp).testTag("chart_header_alerts")) {
+                        Icon(Icons.Default.NotificationsNone, contentDescription = "خيارات الشارت",
+                            tint = TradingTextSecondary, modifier = Modifier.size(21.dp))
+                    }
+                    IconButton(onClick = { immersiveChart = !immersiveChart },
+                        modifier = Modifier.size(36.dp).testTag("chart_immersive_toggle")) {
+                        Icon(if (immersiveChart) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = "ملء الشاشة", tint = TradingTextPrimary,
+                            modifier = Modifier.size(21.dp))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = TradingBackground)
