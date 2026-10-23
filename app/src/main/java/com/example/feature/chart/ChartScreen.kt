@@ -63,6 +63,8 @@ fun ChartScreen(
         drawingToolbarExpanded = false
         showToolsMenu = false
         showChartExtras = false
+        showIndicatorsDialog = false
+        showReplayDetails = false
     }
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
