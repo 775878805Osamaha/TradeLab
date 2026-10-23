@@ -18,6 +18,27 @@ object ReplayAccountMath {
         return result
     }
 
+    /**
+     * Margin is collateral, not an expense. Validate every position so
+     * corrupt or negative margin cannot create fictitious free funds.
+     */
+    fun usedMargin(openPositions: List<Position>): Double {
+        val result = openPositions.sumOf { position ->
+            require(position.margin.isFinite() && position.margin >= 0.0) {
+                "Replay position margin must be finite and nonnegative"
+            }
+            position.margin
+        }
+        require(result.isFinite()) { "Replay margin overflow" }
+        return result
+    }
+
+    fun freeMargin(balance: Double, openPositions: List<Position>): Double {
+        val result = equity(balance, openPositions) - usedMargin(openPositions)
+        require(result.isFinite()) { "Replay free margin overflow" }
+        return maxOf(0.0, result)
+    }
+
     fun realizedBalance(balance: Double, realizedNetProfitLoss: Double): Double {
         require(balance.isFinite() && realizedNetProfitLoss.isFinite()) {
             "Replay realized P&L must be finite"
