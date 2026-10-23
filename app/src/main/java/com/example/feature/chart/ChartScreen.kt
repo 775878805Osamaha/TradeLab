@@ -724,6 +724,54 @@ fun ChartScreen(
                 }
             }
 
+            if (isEmbeddedReplay) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(52.dp)
+                        .background(TradingBackground)
+                        .testTag("chart_embedded_replay_controls"),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { showReplayDetails = !showReplayDetails }) {
+                        Icon(Icons.Default.DateRange, contentDescription = "تاريخ الإعادة", tint = TradingTextPrimary)
+                        Text(" ${replayState.currentIndex + 1}", fontSize = 11.sp, color = TradingTextPrimary)
+                    }
+                    IconButton(onClick = { replayViewModel.stepBackward() },
+                        enabled = !replayState.isLoading && replayState.currentIndex > 0,
+                        modifier = Modifier.testTag("chart_replay_step_back")) {
+                        Icon(Icons.Default.SkipPrevious, contentDescription = "رجوع شمعة", tint = TradingTextPrimary)
+                    }
+                    IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
+                        enabled = !replayState.isLoading && replayState.totalCandles > 0,
+                        modifier = Modifier.testTag("chart_replay_play_pause")) {
+                        Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = "تشغيل أو إيقاف", tint = TradingAccent)
+                    }
+                    IconButton(onClick = { replayViewModel.stepForward() },
+                        enabled = !replayState.isLoading && replayState.currentIndex < replayState.totalCandles - 1,
+                        modifier = Modifier.testTag("chart_replay_step_next")) {
+                        Icon(Icons.Default.SkipNext, contentDescription = "تقدم شمعة", tint = TradingTextPrimary)
+                    }
+                    Box {
+                        TextButton(onClick = { replaySpeedMenuExpanded = true }) {
+                            Text("${replayState.speed}x", color = TradingTextPrimary)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = "سرعة الإعادة", tint = TradingTextPrimary)
+                        }
+                        DropdownMenu(expanded = replaySpeedMenuExpanded,
+                            onDismissRequest = { replaySpeedMenuExpanded = false }) {
+                            listOf(0.5f, 1f, 2f, 5f, 10f, 25f, 50f, 100f).forEach { speed ->
+                                DropdownMenuItem(text = { Text("${speed}x") },
+                                    onClick = { replayViewModel.setSpeed(speed); replaySpeedMenuExpanded = false })
+                            }
+                        }
+                    }
+                    IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false },
+                        modifier = Modifier.testTag("chart_replay_close")) {
+                        Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextPrimary)
+                    }
+                }
+            }
+
             // No executable bid/ask exists for historical-only metals and forex.
             // Keep their chart unobstructed; show execution only for crypto.
             if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) Surface(
