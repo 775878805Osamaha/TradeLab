@@ -893,7 +893,7 @@ fun ChartScreen(
 
             if (isEmbeddedReplay) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
+                    modifier = Modifier.fillMaxWidth().height(if (immersiveChart) 44.dp else 52.dp)
                         .background(TradingBackground)
                         .testTag("chart_embedded_replay_controls"),
                     horizontalArrangement = Arrangement.SpaceEvenly,
