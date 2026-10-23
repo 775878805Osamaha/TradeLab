@@ -270,6 +270,22 @@ class HistoricalReplayEngine(
             PositionSide.SELL -> tp != null && candle.low <= tp
         }
 
+        // If the bar opens beyond a protective level, the requested stop cannot
+        // be filled at its original price. Model the gap at the opening quote,
+        // while retaining the conservative stop-first rule on collisions.
+        if (isSlTouched && sl != null) {
+            val gappedPastStop = when (position.side) {
+                PositionSide.BUY -> candle.open < sl
+                PositionSide.SELL -> candle.open > sl
+            }
+            if (gappedPastStop) {
+                return PositionEvaluation.TriggerClose(
+                    exitPrice = candle.open,
+                    exitReason = if (position.isBreakEven) ExitReason.BREAK_EVEN else ExitReason.STOP_LOSS
+                )
+            }
+        }
+
         // Intrabar collision resolution: conservative risk policy (Stop Loss triggers first)
         if (isSlTouched && isTpTouched) {
             return PositionEvaluation.TriggerClose(
