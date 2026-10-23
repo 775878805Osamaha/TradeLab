@@ -831,7 +831,7 @@ fun ChartScreen(
                 ) {
                     Column(
                         modifier = Modifier
-                            .heightIn(max = 228.dp)
+                            .heightIn(max = if (drawingToolbarExpanded) 228.dp else 132.dp)
                             .verticalScroll(rememberScrollState())
                             .padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
