@@ -33,10 +33,19 @@ object ReplayRiskPolicy {
     }
 
     fun blockReason(limits: Limits, exposure: Exposure, isPending: Boolean): String? {
-        if (!limits.enabled) return null
+        // Invalid account data is never a user-configurable risk preference.
+        // Disabling trading limits must not permit trades on corrupt balances.
         if (!exposure.initialBalance.isFinite() || exposure.initialBalance <= 0.0 ||
-            !exposure.balance.isFinite() || !exposure.equity.isFinite()) {
+            !exposure.balance.isFinite() || !exposure.equity.isFinite() ||
+            exposure.openPositions < 0 || exposure.pendingOrders < 0 ||
+            exposure.consecutiveLosses < 0) {
             return "تعذر التحقق من رصيد Replay أو ملكيته"
+        }
+        if (!limits.enabled) return null
+        if (!limits.maxDrawdownPercent.isFinite() || limits.maxDrawdownPercent <= 0.0 ||
+            !limits.maxSessionLossUsd.isFinite() || limits.maxSessionLossUsd < 0.0 ||
+            limits.maxPositions < 1 || limits.maxOrders < 1 || limits.maxConsecutiveLosses < 0) {
+            return "إعدادات حدود المخاطر في Replay غير صالحة"
         }
         val drawdown = (exposure.initialBalance - exposure.equity).coerceAtLeast(0.0) *
             100.0 / exposure.initialBalance
