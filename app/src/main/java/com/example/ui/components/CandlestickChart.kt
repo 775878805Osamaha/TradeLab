@@ -275,7 +275,10 @@ fun CandlestickChart(
 
             // Calculate Visible Candle Range from Viewport
             val visibleCount = ((chartWidth / candleWidthPx) + 3).toInt().coerceIn(1, candles.size)
-            val maxScrollOffset = (candles.size.toDouble() * candleWidthPx - chartWidth).coerceAtLeast(0.0).toFloat()
+            // Cap historical scroll at the first available candle; keep fractional
+            // movement continuous when the viewport contains fewer candles than it can fit.
+            val maxScrollOffset = ((candles.size - 1).coerceAtLeast(0).toDouble() * candleWidthPx)
+                .coerceAtLeast(0.0).toFloat()
             // A LEFT swipe makes scrollOffsetPx negative and exposes future space
             // on the RIGHT; a RIGHT swipe moves back toward earlier candles.
             val futureSpacePx = chartWidth * 0.70f
@@ -287,7 +290,8 @@ fun CandlestickChart(
             if (scrollOffsetPx != clampedScroll) scrollOffsetPx = clampedScroll
 
             val historicalScrollPx = clampedScroll.coerceAtLeast(0f)
-            val scrollCandleOffset = (historicalScrollPx / candleWidthPx).toInt().coerceIn(0, (candles.size - visibleCount).coerceAtLeast(0))
+            val scrollCandleOffset = (historicalScrollPx / candleWidthPx).toInt()
+                .coerceIn(0, (candles.size - visibleCount).coerceAtLeast(0))
             val fractionalScrollPx = if (clampedScroll < 0f) -clampedScroll else -(historicalScrollPx % candleWidthPx)
             val startIndex = (candles.size - visibleCount - scrollCandleOffset).coerceIn(0, candles.size - 1)
             val endIndex = (startIndex + visibleCount).coerceIn(startIndex, candles.size)
