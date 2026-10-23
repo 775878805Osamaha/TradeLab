@@ -59,11 +59,14 @@ fun ChartScreen(
     val favoriteSymbols = favoriteSymbolsList.toSet()
     var favoritesOnly by remember { mutableStateOf(false) }
     var symbolSortFavoritesFirst by remember { mutableStateOf(true) }
+    var recentSymbols by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
+    var recentOnly by remember { mutableStateOf(false) }
     LaunchedEffect(showSymbolSheet) {
         if (showSymbolSheet) {
             symbolSearchQuery = ""
             symbolCategoryFilter = "الكل"
             favoritesOnly = false
+            recentOnly = false
         }
     }
     var showToolsMenu by remember { mutableStateOf(false) }
@@ -1146,6 +1149,12 @@ fun ChartScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     FilterChip(
+                        selected = recentOnly,
+                        onClick = { recentOnly = !recentOnly },
+                        label = { Text("الأخيرة", fontSize = 11.sp) },
+                        modifier = Modifier.testTag("chart_symbol_recent_filter")
+                    )
+                    FilterChip(
                         selected = favoritesOnly,
                         onClick = { favoritesOnly = !favoritesOnly },
                         label = { Text("★ المفضلة", fontSize = 11.sp) },
@@ -1173,6 +1182,7 @@ fun ChartScreen(
                 }
                 HorizontalDivider(color = TradingBorder)
                 val filteredSymbols = DefaultSymbols.SYMBOLS.filter { sym ->
+                    (!recentOnly || sym.symbol in recentSymbols) &&
                     (!favoritesOnly || sym.symbol in favoriteSymbols) &&
                     (symbolCategoryFilter == "الكل" || sym.category == symbolCategoryFilter) &&
                         (symbolSearchQuery.isBlank() || sym.symbol.contains(symbolSearchQuery.trim(), ignoreCase = true) ||
@@ -1199,6 +1209,9 @@ fun ChartScreen(
                                 .fillMaxWidth()
                                 .background(if (selected) TradingAccentLight.copy(alpha = 0.14f) else Color.Transparent)
                                 .clickable {
+                                    recentSymbols = ArrayList(
+                                        (listOf(sym.symbol) + recentSymbols.filter { it != sym.symbol }).take(8)
+                                    )
                                     viewModel.selectSymbol(sym.symbol)
                                     showSymbolSheet = false
                                 }
