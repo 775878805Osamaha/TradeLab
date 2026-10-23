@@ -346,8 +346,9 @@ fun CandlestickChart(
             val priceTickStep = tickMultiplier * magnitude
             val tickDecimals = (-kotlin.math.floor(kotlin.math.log10(priceTickStep))).toInt().coerceIn(0, 6)
             val firstPriceTick = kotlin.math.ceil(paddedMin / priceTickStep) * priceTickStep
-            val priceTickCount = ((paddedMax - firstPriceTick) / priceTickStep)
-                .toInt().coerceIn(0, 40)
+            val priceTickCount = kotlin.math.floor(
+                ((paddedMax - firstPriceTick) / priceTickStep).coerceAtLeast(0.0) + 1e-8
+            ).toInt().coerceIn(0, 40)
             for (step in 0..priceTickCount) {
                 val priceVal = firstPriceTick + step * priceTickStep
                 val y = ((paddedMax - priceVal) / (paddedMax - paddedMin) * mainChartHeight).toFloat()
