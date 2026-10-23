@@ -69,8 +69,8 @@ object DataIntegrityValidator {
 
         return candles
             .filter { validateCandle(it).isValid }
-            .distinctBy { it.openTime }
-            .sortedBy { it.openTime }
+            .distinctBy { Triple(it.symbol, it.timeframe, it.openTime) }
+            .sortedWith(compareBy<Candle> { it.openTime }.thenBy { it.symbol }.thenBy { it.timeframe.minutes })
     }
 
     /**
