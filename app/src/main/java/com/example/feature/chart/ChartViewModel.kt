@@ -242,6 +242,11 @@ class ChartViewModel(
             _uiState.update { it.copy(message = "لا يمكن تنفيذ أمر بسعر غير متصل أو قديم") }
             return
         }
+        val symbolRules = com.example.core.market.DefaultSymbols.getSymbol(state.selectedSymbol)
+        if (!ChartOrderValidation.isValidLot(volume, symbolRules.minLot, symbolRules.maxLot, symbolRules.lotStep)) {
+            _uiState.update { it.copy(message = "حجم الصفقة خارج حدود الرمز أو لا يطابق خطوة اللوت") }
+            return
+        }
         val entry = if (side == OrderSide.BUY) tick.ask else tick.bid
         if (!ChartOrderValidation.isValid(side, volume, entry, stopLoss, takeProfit)) {
             _uiState.update { it.copy(message = "حجم الصفقة أو وقف الخسارة أو جني الربح غير صالح") }
