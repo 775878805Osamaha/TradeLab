@@ -27,7 +27,10 @@ internal fun HistorySettingsCard() {
         saving = true
         scope.launch {
             message = try {
-                withContext(Dispatchers.IO) { app.historyKeyStore.save(value) }
+                withContext(Dispatchers.IO) {
+                    app.historyKeyStore.save(value)
+                    app.marketDataRepository.configureTwelveDataKey(value)
+                }
                 configured = value.isNotBlank()
                 input = ""
                 if (configured) R.string.history_saved else R.string.history_removed
