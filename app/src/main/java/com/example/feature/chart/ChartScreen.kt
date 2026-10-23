@@ -57,6 +57,10 @@ fun ChartScreen(
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var immersiveChart by remember { mutableStateOf(true) }
     LaunchedEffect(immersiveChart) { onImmersiveChanged(immersiveChart) }
+    // A new market context must not inherit a previously selected drawing tool.
+    LaunchedEffect(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay) {
+        drawingToolbarExpanded = false
+    }
     var drawingToolbarExpanded by remember { mutableStateOf(false) }
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
