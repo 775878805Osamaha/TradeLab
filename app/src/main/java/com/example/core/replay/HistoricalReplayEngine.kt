@@ -411,10 +411,10 @@ class HistoricalReplayEngine(
 
             // Replay operates at the CLOSE of each revealed bar: OHLC and close price
             // cannot be known at bar OPEN. Never expose the next bar's information.
-            val visible = DataIntegrityValidator.enforceReplayBarrier(
-                allCandles.subList(0, idx + 1),
-                active.openTime
-            )
+            // The dataset is validated as chronological at initialization.
+            // Its prefix is already the strict no-future-candles boundary;
+            // filtering the prefix again on every bar costs O(n²) per session.
+            val visible = allCandles.subList(0, idx + 1)
             _visibleCandles.value = visible
             _currentCandle.value = active
             replayClock.updateCurrentTime(active.closeTime)
