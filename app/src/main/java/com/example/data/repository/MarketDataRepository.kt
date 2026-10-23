@@ -133,7 +133,12 @@ class MarketDataRepository(
                 }
                 currentCoroutineContext().ensureActive()
                 if (chunk.isEmpty()) {
-                    throw java.io.IOException("No verified historical candles in page for $symbol")
+                    // Market holidays/weekends may produce an empty window.
+                    // Do not synthesize missing bars or abort a longer valid range.
+                    if (end == to) break
+                    cursor = end + intervalMillis
+                    yield()
+                    continue
                 }
                 val verified = HistoricalCandleIntegrity.validate(
                     chunk,
