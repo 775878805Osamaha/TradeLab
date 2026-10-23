@@ -411,10 +411,10 @@ class HistoricalReplayEngine(
 
             // Replay operates at the CLOSE of each revealed bar: OHLC and close price
             // cannot be known at bar OPEN. Never expose the next bar's information.
-            val visible = DataIntegrityValidator.enforceReplayBarrier(
-                allCandles.subList(0, idx + 1),
-                active.openTime
-            )
+            // The dataset is validated as chronological at initialization.
+            // Its prefix is already the strict no-future-candles boundary;
+            // filtering the prefix again on every bar costs O(n²) per session.
+            val visible = allCandles.subList(0, idx + 1)
             _visibleCandles.value = visible
             _currentCandle.value = active
             replayClock.updateCurrentTime(active.closeTime)
@@ -424,6 +424,14 @@ class HistoricalReplayEngine(
             val spread = symInfo.defaultSpreadPips * symInfo.pipSize
             val halfSpread = spread / 2.0
 
+            // Fail closed when an extreme but finite candle price cannot
+            // support a positive executable Bid under the modeled spread.
+            // No synthetic negative quote may enter replay order execution.
+            require(spread.isFinite() && spread >= 0.0 &&
+                active.close.isFinite() && active.close > halfSpread &&
+                (active.close + halfSpread).isFinite()) {
+                "Replay candle cannot produce a valid bid/ask quote"
+            }
             val tick = Tick(
                 symbol = active.symbol,
                 bid = active.close - halfSpread,

@@ -64,6 +64,29 @@ class ReplayRiskPolicyIntegrityTest {
         ))
     }
 
+    @Test fun extremeNegativeEquityCannotBypassRiskLimit() {
+        val exposure = valid.copy(initialBalance = 1.0e-300, equity = -1.0e308)
+        assertNotNull(ReplayRiskPolicy.blockReason(
+            ReplayRiskPolicy.Limits(maxDrawdownPercent = 100.0), exposure, false
+        ))
+    }
+
+    @Test fun realizedLossOverflowCannotBypassLimit() {
+        val exposure = valid.copy(
+            initialBalance = 1.0e308, balance = -1.0e308, equity = 1.0e308
+        )
+        assertNotNull(ReplayRiskPolicy.blockReason(
+            ReplayRiskPolicy.Limits(maxSessionLossUsd = 100.0), exposure, false
+        ))
+    }
+
+    @Test fun finiteLossBelowConfiguredLimitStillAllowed() {
+        val exposure = valid.copy(balance = 950.0, equity = 950.0)
+        assertNull(ReplayRiskPolicy.blockReason(
+            ReplayRiskPolicy.Limits(maxSessionLossUsd = 100.0), exposure, false
+        ))
+    }
+
     @Test fun consecutiveLossCounterStopsAtNonLoss() {
         assertEquals(2, ReplayRiskPolicy.consecutiveLosses(listOf(-5.0, 0.0, -2.0, -1.0)))
         assertEquals(0, ReplayRiskPolicy.consecutiveLosses(listOf(-1.0, 1.0)))

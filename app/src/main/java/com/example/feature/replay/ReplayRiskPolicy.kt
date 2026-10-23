@@ -56,7 +56,14 @@ object ReplayRiskPolicy {
                 ((exposure.initialBalance - exposure.equity) / exposure.initialBalance) * 100.0
             else -> 100.0 + (-exposure.equity / exposure.initialBalance) * 100.0
         }
+        // Ratios can overflow to infinity for extreme but finite negative
+        // equity. Treat that as a breached risk limit rather than passing an
+        // infinite value downstream.
+        if (!drawdown.isFinite()) return "تم تجاوز حد التراجع المسموح في جلسة Replay"
         val realizedLoss = (exposure.initialBalance - exposure.balance).coerceAtLeast(0.0)
+        // Two individually finite balances can still overflow when subtracted.
+        // In that case the realized loss is beyond any finite positive limit.
+        if (!realizedLoss.isFinite()) return "تم تجاوز حد الخسارة المحققة لجلسة Replay"
         return when {
             limits.maxConsecutiveLosses > 0 && exposure.consecutiveLosses >= limits.maxConsecutiveLosses ->
                 "تم بلوغ حد الخسائر المتتالية لجلسة Replay"

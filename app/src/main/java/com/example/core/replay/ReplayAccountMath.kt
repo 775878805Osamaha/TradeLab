@@ -34,9 +34,15 @@ object ReplayAccountMath {
     }
 
     fun freeMargin(balance: Double, openPositions: List<Position>): Double {
-        val result = equity(balance, openPositions) - usedMargin(openPositions)
+        val currentEquity = equity(balance, openPositions)
+        val collateral = usedMargin(openPositions)
+        // For a negative-equity account, subtraction may overflow to -Infinity.
+        // Free margin is still exactly zero in that case. Never let a positive
+        // overflow silently inflate available trading funds.
+        if (currentEquity <= collateral) return 0.0
+        val result = currentEquity - collateral
         require(result.isFinite()) { "Replay free margin overflow" }
-        return maxOf(0.0, result)
+        return result
     }
 
     fun realizedBalance(balance: Double, realizedNetProfitLoss: Double): Double {

@@ -80,10 +80,20 @@ class ExecutionEngine(
         // Commission
         val commission = config.defaultCommissionPerLot * volume
 
+        // Opening commission is a real cost, unlike margin collateral.
+        // Reserve both at entry to avoid approving a trade that cannot afford
+        // its own execution fee. The subtraction form avoids addition overflow.
+        if (!commission.isFinite() || commission < 0.0 ||
+            !account.freeMargin.isFinite() || account.freeMargin < 0.0 ||
+            !account.leverage.isFinite() || account.leverage <= 0.0) {
+            return ExecutionResult.Error("العمولة أو الهامش الحر أو الرافعة المالية غير صالح")
+        }
         // Required margin
         val margin = (volume * symInfo.contractSize * executedPrice) / account.leverage
 
-        if (!margin.isFinite() || margin <= 0.0 || margin > account.freeMargin) {
+        if (!margin.isFinite() || margin <= 0.0 ||
+            commission > account.freeMargin ||
+            margin > account.freeMargin - commission) {
             return ExecutionResult.Error("الهامش الافتراضي غير كافٍ لتنفيذ هذا العقد")
         }
 
@@ -147,6 +157,13 @@ class ExecutionEngine(
             !order.requestedPrice.isFinite() || order.requestedPrice <= 0.0) {
             return ExecutionResult.Error("سعر السوق أو رمز الأمر المعلق غير صالح")
         }
+        // Historical fill overrides must never be accepted by the live-paper
+        // path, including when the value is NaN or infinite. Reject before
+        // constructing synthetic quotes or running account validation.
+        if (historicalFillPrice != null &&
+            (mode != "REPLAY" || !historicalFillPrice.isFinite() || historicalFillPrice <= 0.0)) {
+            return ExecutionResult.Error("سعر التنفيذ التاريخي غير صالح")
+        }
         // For OHLC replay, validation must use the modeled historical entry
         // quote, not the candle-close tick. Otherwise a wick-triggered pending
         // order can be rejected because its SL/TP is compared to the wrong price.
@@ -179,9 +196,6 @@ class ExecutionEngine(
         )
         if (validation is OrderValidationResult.Rejected) {
             return ExecutionResult.Error(validation.message)
-        }
-        if (historicalFillPrice != null && (!historicalFillPrice.isFinite() || historicalFillPrice <= 0.0 || mode != "REPLAY")) {
-            return ExecutionResult.Error("سعر التنفيذ التاريخي غير صالح")
         }
         // Historical overrides are only legal at an executable price consistent
         // with the order type. Reject accidental favorable stop fills and
@@ -235,9 +249,18 @@ class ExecutionEngine(
         }
 
         val commission = config.defaultCommissionPerLot * order.volume
+        if (!commission.isFinite() || commission < 0.0 ||
+            !account.freeMargin.isFinite() || account.freeMargin < 0.0 ||
+            !account.leverage.isFinite() || account.leverage <= 0.0) {
+            return ExecutionResult.Error("العمولة أو رصيد الهامش أو الرافعة المالية غير صالح")
+        }
         val margin = (order.volume * symInfo.contractSize * executedPrice) / account.leverage
 
-        if (!margin.isFinite() || margin <= 0.0 || margin > account.freeMargin) {
+        // Compare without adding large doubles: reserve the commission first,
+        // then require enough remaining collateral for the margin.
+        if (!margin.isFinite() || margin <= 0.0 ||
+            commission > account.freeMargin ||
+            margin > account.freeMargin - commission) {
             return ExecutionResult.Error("الهامش الافتراضي غير كافٍ لتنفيذ الأمر المعلق")
         }
 
@@ -492,6 +515,10 @@ class ExecutionEngine(
     ): Pair<TradeJournalEntry, Position?> {
         val symInfo = DefaultSymbols.getSymbol(position.symbol)
         require(position.volume.isFinite() && position.volume > 0.0) { "Invalid position volume" }
+        require(position.entryPrice.isFinite() && position.entryPrice > 0.0) { "Invalid entry price" }
+        require(position.commission.isFinite() && position.commission >= 0.0) { "Invalid commission" }
+        require(position.swap.isFinite()) { "Invalid swap" }
+        require(position.margin.isFinite() && position.margin >= 0.0) { "Invalid margin" }
         require(exitPrice.isFinite() && exitPrice > 0.0) { "Invalid exit price" }
         require(partialVolume == null || (partialVolume.isFinite() &&
             partialVolume > 0.0 && partialVolume <= position.volume)) { "Invalid partial close volume" }
@@ -502,9 +529,13 @@ class ExecutionEngine(
             PositionSide.SELL -> (position.entryPrice - exitPrice) * closingVolume * symInfo.contractSize
         }
 
+        require(grossPl.isFinite()) { "Position close profit/loss overflow" }
         val ratio = closingVolume / position.volume
         val closingCommission = position.commission * ratio
         val closingSwap = position.swap * ratio
+        require(closingCommission.isFinite() && closingSwap.isFinite()) {
+            "Position close costs overflow"
+        }
 
         // Calculate R-Multiple if SL was defined
         val rMultiple = if (position.stopLoss != null) {
@@ -517,6 +548,10 @@ class ExecutionEngine(
                 priceGain / riskPerUnit
             } else 0.0
         } else 0.0
+
+        require(rMultiple.isFinite()) { "Position close R-multiple overflow" }
+        val netProfitLoss = grossPl - closingCommission - closingSwap
+        require(netProfitLoss.isFinite()) { "Position close net PnL overflow" }
 
         val journalEntry = TradeJournalEntry(
             accountId = position.accountId,

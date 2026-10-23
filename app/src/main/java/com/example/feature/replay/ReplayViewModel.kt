@@ -99,13 +99,13 @@ class ReplayViewModel(
         val maxObservedDrawdownPercent: Double,
         val equitySamples: List<ReplayEquitySample>
     )
-    private val accountSnapshots = mutableMapOf<Int, AccountSnapshot>()
+    private val accountSnapshots = java.util.TreeMap<Int, AccountSnapshot>()
 
     private fun saveAccountSnapshot() {
         val index = replayEngine.currentIndex.value
         // Any new execution or account edit forks the timeline at this bar.
         // Checkpoints from a previous future must never be restored.
-        accountSnapshots.keys.removeAll { it > index }
+        accountSnapshots.tailMap(index, false).clear()
         replayEngine.discardCheckpointsAfter(index)
         accountSnapshots[index] = AccountSnapshot(
             balance = _uiState.value.currentBalance,
@@ -452,7 +452,7 @@ class ReplayViewModel(
             if (snapshot != null) restoreAccountSnapshot(snapshot)
             else saveAccountSnapshot() // A no-trade timeline can safely navigate freely.
             // Future checkpoints belong to an abandoned timeline.
-            accountSnapshots.keys.removeAll { it > targetIndex }
+            accountSnapshots.tailMap(targetIndex, false).clear()
             // Invalidate the engine's separate checkpoint cache too.
             replayEngine.discardCheckpointsAfter(targetIndex)
             _uiState.update { it.copy(message = "تمت استعادة حالة الحساب عند الشمعة #$targetIndex") }
@@ -510,8 +510,17 @@ class ReplayViewModel(
         }
     }
 
-    private fun consecutiveLosses(): Int =
-        ReplayRiskPolicy.consecutiveLosses(closedTrades.map { it.netProfitLoss })
+    private fun consecutiveLosses(): Int {
+        // Avoid allocating a complete P&L list on every pending fill and
+        // market order. Only the trailing run of losses is relevant.
+        var losses = 0
+        for (index in closedTrades.lastIndex downTo 0) {
+            val pnl = closedTrades[index].netProfitLoss
+            if (!pnl.isFinite() || pnl >= 0.0) break
+            losses++
+        }
+        return losses
+    }
 
     fun configureRiskLimits(maxPositions: Int, maxOrders: Int, maxDrawdown: Double) {
         cancelBatchAdvance()
@@ -883,7 +892,7 @@ class ReplayViewModel(
         var curBal = _uiState.value.currentBalance
 
         // 1. Evaluate open positions with conservative intrabar risk policy
-        val iterator = openPositions.iterator()
+        val iterator = openPositions.listIterator()
         while (iterator.hasNext()) {
             val pos = iterator.next()
             when (val eval = replayEngine.evaluatePositionConservative(pos, candle)) {
@@ -899,10 +908,10 @@ class ReplayViewModel(
                     iterator.remove()
                 }
                 is PositionEvaluation.KeepOpen -> {
-                    val idx = openPositions.indexOf(pos)
-                    if (idx != -1) {
-                        openPositions[idx] = eval.updatedPosition
-                    }
+                    // Replace the exact position under iteration. indexOf()
+                    // scans the list and can target the wrong equal-valued
+                    // position; ListIterator.set is O(1) and stable.
+                    iterator.set(eval.updatedPosition)
                 }
             }
         }
@@ -925,6 +934,7 @@ class ReplayViewModel(
         val pendingIterator = pendingOrders.iterator()
         while (pendingIterator.hasNext()) {
             val order = pendingIterator.next()
+            val historicalFill = replayEngine.pendingOrderFillPrice(order, candle) ?: continue
             val state = _uiState.value
             // Re-evaluate after every fill, using the latest positions and equity.
             // Blocked pending orders remain pending, never silently discarded.
@@ -953,7 +963,6 @@ class ReplayViewModel(
             // spend the same available free margin on a single candle.
             // Historical OHLC may touch a pending level even when the bar closes
             // away from it. Never use the closing quote as the trigger.
-            val historicalFill = replayEngine.pendingOrderFillPrice(order, candle) ?: continue
             val result = executionEngine.evaluatePendingOrder(
                 order, tick, replayAccount(curBal), mode = "REPLAY",
                 historicalFillPrice = historicalFill
@@ -1067,7 +1076,18 @@ class ReplayViewModel(
                 history.isEmpty() -> history
                 history.last().candleIndex < index -> history
                 history.last().candleIndex == index -> history.dropLast(1)
-                else -> history.takeWhile { it.candleIndex < index }
+                else -> {
+                    // Binary-search the sorted timeline rather than scanning all
+                    // historical samples after a rewind or a timeline fork.
+                    var low = 0
+                    var high = history.size
+                    while (low < high) {
+                        val middle = (low + high) ushr 1
+                        if (history[middle].candleIndex < index) low = middle + 1
+                        else high = middle
+                    }
+                    history.subList(0, low)
+                }
             }
             // Append-only replay advances are the hot path. Existing high-water
             // marks and worst drawdown are already exact for that prefix.

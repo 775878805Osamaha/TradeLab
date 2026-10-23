@@ -49,6 +49,18 @@ class ReplayAccountMathTest {
         }
     }
 
+    @Test fun underwaterAccountWithExtremeFiniteNumbersHasZeroFreeMargin() {
+        // Equity itself must remain finite; the accounting layer correctly
+        // rejects overflowing equity rather than manufacturing zero funds.
+        val positions = listOf(position(1.0e308, -1.0e307))
+        assertEquals(0.0, ReplayAccountMath.freeMargin(-1.0e307, positions), 0.0)
+    }
+
+    @Test fun exactCollateralBoundaryHasZeroFreeMargin() {
+        val positions = listOf(position(1000.0))
+        assertEquals(0.0, ReplayAccountMath.freeMargin(1000.0, positions), 0.0)
+    }
+
     @Test fun emptyAccountPreservesInitialFunds() {
         assertEquals(1000.0, ReplayAccountMath.equity(1000.0, emptyList()), 0.0)
         assertEquals(0.0, ReplayAccountMath.usedMargin(emptyList()), 0.0)
