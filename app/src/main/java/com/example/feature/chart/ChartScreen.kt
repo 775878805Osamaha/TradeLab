@@ -53,10 +53,13 @@ fun ChartScreen(
     var showSymbolSheet by remember { mutableStateOf(false) }
     var symbolSearchQuery by remember { mutableStateOf("") }
     var symbolCategoryFilter by remember { mutableStateOf("الكل") }
+    var favoriteSymbols by remember { mutableStateOf(setOf<String>()) }
+    var favoritesOnly by remember { mutableStateOf(false) }
     LaunchedEffect(showSymbolSheet) {
         if (showSymbolSheet) {
             symbolSearchQuery = ""
             symbolCategoryFilter = "الكل"
+            favoritesOnly = false
         }
     }
     var showToolsMenu by remember { mutableStateOf(false) }
@@ -1138,6 +1141,12 @@ fun ChartScreen(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    FilterChip(
+                        selected = favoritesOnly,
+                        onClick = { favoritesOnly = !favoritesOnly },
+                        label = { Text("★ المفضلة", fontSize = 11.sp) },
+                        modifier = Modifier.testTag("chart_symbol_favorites_filter")
+                    )
                     categories.forEach { category ->
                         FilterChip(
                             selected = symbolCategoryFilter == category,
@@ -1148,6 +1157,7 @@ fun ChartScreen(
                 }
                 HorizontalDivider(color = TradingBorder)
                 val filteredSymbols = DefaultSymbols.SYMBOLS.filter { sym ->
+                    (!favoritesOnly || sym.symbol in favoriteSymbols) &&
                     (symbolCategoryFilter == "الكل" || sym.category == symbolCategoryFilter) &&
                         (symbolSearchQuery.isBlank() || sym.symbol.contains(symbolSearchQuery.trim(), ignoreCase = true) ||
                             sym.name.contains(symbolSearchQuery.trim(), ignoreCase = true))
@@ -1182,10 +1192,22 @@ fun ChartScreen(
                                 )
                                 Text(text = sym.name, fontSize = 11.sp, color = TradingTextSecondary, maxLines = 1)
                             }
+                            IconButton(
+                                onClick = {
+                                    favoriteSymbols = if (sym.symbol in favoriteSymbols) favoriteSymbols - sym.symbol
+                                        else favoriteSymbols + sym.symbol
+                                },
+                                modifier = Modifier.size(36.dp).testTag("chart_symbol_favorite_" + sym.symbol)
+                            ) {
+                                Icon(
+                                    if (sym.symbol in favoriteSymbols) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = if (sym.symbol in favoriteSymbols) "إزالة من المفضلة" else "إضافة للمفضلة",
+                                    tint = if (sym.symbol in favoriteSymbols) TradingAccentLight else TradingTextSecondary,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
                             if (selected) {
                                 Icon(Icons.Default.Check, contentDescription = "الزوج المحدد", tint = TradingAccentLight, modifier = Modifier.size(20.dp))
-                            } else {
-                                Text(text = sym.category, fontSize = 10.sp, color = TradingTextSecondary)
                             }
                         }
                     }
