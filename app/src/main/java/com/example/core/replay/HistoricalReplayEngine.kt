@@ -347,14 +347,15 @@ class HistoricalReplayEngine(
         if (idx in allCandles.indices) {
             val active = allCandles[idx]
 
-            // Strictly guard against lookahead bias: reveal ONLY up to active.openTime
+            // Replay operates at the CLOSE of each revealed bar: OHLC and close price
+            // cannot be known at bar OPEN. Never expose the next bar's information.
             val visible = DataIntegrityValidator.enforceReplayBarrier(
                 allCandles.subList(0, idx + 1),
                 active.openTime
             )
             _visibleCandles.value = visible
             _currentCandle.value = active
-            replayClock.updateCurrentTime(active.openTime)
+            replayClock.updateCurrentTime(active.closeTime)
 
             // Authentic symbol spread calculation labeled REPLAY_DATA
             val symInfo = DefaultSymbols.getSymbol(active.symbol)
@@ -366,7 +367,7 @@ class HistoricalReplayEngine(
                 bid = active.close - halfSpread,
                 ask = active.close + halfSpread,
                 last = active.close,
-                timestamp = active.openTime + (active.timeframe.minutes * 60000L),
+                timestamp = active.closeTime,
                 source = "REPLAY_DATA",
                 volume = active.volume
             )
