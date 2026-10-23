@@ -120,6 +120,15 @@ class BiquoteHistoricalProvider(
                         )
                     }
             if (result.size < 2) throw IOException("Insufficient complete historical candles from Biquote")
+            // Session gaps (weekends/holidays) are legitimate, but a provider
+            // response missing the entire beginning or end of a requested
+            // window must not masquerade as a complete replay dataset.
+            val sessionGapTolerance = if (tf.minutes >= 1440) 4L * 86_400_000L
+                else 3L * 86_400_000L
+            if (result.first().openTime - from > sessionGapTolerance ||
+                to - result.last().openTime > sessionGapTolerance) {
+                throw IOException("Biquote returned incomplete historical window; choose fewer bars or another date")
+            }
             HistoricalCandleIntegrity.validate(
                 result, from, to + period,
                 expectedSource = "BIQUOTE_HISTORICAL",
