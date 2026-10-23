@@ -934,6 +934,7 @@ class ReplayViewModel(
         val pendingIterator = pendingOrders.iterator()
         while (pendingIterator.hasNext()) {
             val order = pendingIterator.next()
+            val historicalFill = replayEngine.pendingOrderFillPrice(order, candle) ?: continue
             val state = _uiState.value
             // Re-evaluate after every fill, using the latest positions and equity.
             // Blocked pending orders remain pending, never silently discarded.
@@ -962,7 +963,6 @@ class ReplayViewModel(
             // spend the same available free margin on a single candle.
             // Historical OHLC may touch a pending level even when the bar closes
             // away from it. Never use the closing quote as the trigger.
-            val historicalFill = replayEngine.pendingOrderFillPrice(order, candle) ?: continue
             val result = executionEngine.evaluatePendingOrder(
                 order, tick, replayAccount(curBal), mode = "REPLAY",
                 historicalFillPrice = historicalFill
