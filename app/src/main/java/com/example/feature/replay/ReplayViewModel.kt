@@ -744,6 +744,12 @@ class ReplayViewModel(
             return
         }
 
+        val executionPrice = if (side == OrderSide.BUY) tick.ask else tick.bid
+        if (!com.example.feature.chart.ChartOrderValidation.isValid(side, volume, executionPrice, sl, tp)) {
+            _uiState.update { it.copy(message = "مستويات وقف الخسارة أو جني الربح غير صالحة لاتجاه الصفقة") }
+            return
+        }
+
         // Use the same equity/margin accounting for manual and pending fills.
         // A stale UI equity snapshot must not overstate available margin.
         val replayAcc = replayAccount()
