@@ -2,12 +2,19 @@ package com.example.core.market
 
 import com.example.core.model.Candle
 import com.example.core.model.Timeframe
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.IOException
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -74,10 +81,7 @@ class TwelveDataHistoricalProvider(
             .build()
         // Never place this URL (which contains a credential) in logs or error messages.
         val request = Request.Builder().url(url).header("User-Agent", "TradeLab/2.0").build()
-        val payload = httpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("Twelve Data HTTP ${response.code}")
-            response.body?.string() ?: throw IOException("Empty Twelve Data response")
-        }
+        val payload = fetchBody(httpClient, request, "Twelve Data")
         val root = JSONObject(payload)
         if (root.optString("status") == "error" || root.has("code")) {
             throw IOException("Twelve Data rejected the request (check API key, quota and plan)")
@@ -138,4 +142,30 @@ class TwelveDataHistoricalProvider(
             }
         }
     }
+    private suspend fun fetchBody(client: OkHttpClient, request: Request, providerName: String): String =
+        suspendCancellableCoroutine { continuation ->
+            val call = client.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (continuation.isActive) {
+                        continuation.resumeWithException(
+                            IOException("$providerName historical request failed", e)
+                        )
+                    }
+                }
+                override fun onResponse(call: Call, response: Response) {
+                    try {
+                        val body = response.use {
+                            if (!it.isSuccessful) throw IOException("$providerName HTTP ${it.code}")
+                            it.body?.string() ?: throw IOException("Empty $providerName response")
+                        }
+                        if (continuation.isActive) continuation.resume(body)
+                    } catch (e: Exception) {
+                        if (continuation.isActive) continuation.resumeWithException(e)
+                    }
+                }
+            })
+        }
+
 }
