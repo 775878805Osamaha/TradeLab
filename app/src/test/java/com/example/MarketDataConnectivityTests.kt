@@ -118,6 +118,53 @@ class MarketDataConnectivityTests {
     }
 
     @Test
+    fun `test sanitizer retains independent symbols and timeframes at same timestamp`() {
+        val btcM1 = createCandle(symbol = "BTCUSDT", timeframe = Timeframe.M1, openTime = 60000L, open = 100.0, high = 105.0, low = 95.0, close = 102.0)
+        val goldM1 = btcM1.copy(symbol = "XAUUSD")
+        val btcM15 = btcM1.copy(timeframe = Timeframe.M15, closeTime = 60000L + 15 * 60000L)
+        val duplicate = btcM1.copy(close = 101.0)
+        val result = DataIntegrityValidator.sanitizeCandles(listOf(btcM1, goldM1, btcM15, duplicate))
+        assertEquals(3, result.size)
+        assertEquals(3, result.map { Triple(it.symbol, it.timeframe, it.openTime) }.distinct().size)
+    }
+
+    @Test
+    fun `test replay barrier excludes malformed completed candles`() {
+        val valid = createCandle(openTime = 60000L, open = 100.0, high = 105.0, low = 95.0, close = 102.0)
+        val malformed = valid.copy(openTime = 120000L, closeTime = 180000L, high = 99.0)
+        val future = valid.copy(openTime = 180000L, closeTime = 240000L)
+        val result = DataIntegrityValidator.enforceReplayBarrier(listOf(valid, malformed, future), 180000L)
+        assertEquals(1, result.size)
+        assertEquals(valid, result.single())
+    }
+
+    @Test
+    fun `test historical validation rejects mixed symbol and overlapping bars`() {
+        val first = createCandle(openTime = 60000L, open = 100.0, high = 105.0, low = 95.0, close = 102.0)
+        val second = createCandle(openTime = 120000L, open = 102.0, high = 106.0, low = 99.0, close = 104.0)
+        assertTrue(DataIntegrityValidator.validateHistoricalSeries(listOf(first, second)).isValid)
+        assertFalse(DataIntegrityValidator.validateHistoricalSeries(listOf(first, second.copy(symbol = "XAUUSD"))).isValid)
+        assertFalse(DataIntegrityValidator.validateHistoricalSeries(listOf(first, first)).isValid)
+        assertFalse(DataIntegrityValidator.validateHistoricalSeries(listOf(second, first)).isValid)
+    }
+
+    @Test
+    fun `test historical validator accepts market session gaps but rejects timeframe overlap`() {
+        val first = createCandle(openTime = 60000L, open = 100.0, high = 105.0, low = 95.0, close = 102.0)
+        val afterWeekend = createCandle(openTime = 3 * 24 * 60 * 60000L, open = 103.0, high = 106.0, low = 101.0, close = 104.0)
+        assertTrue(DataIntegrityValidator.validateHistoricalSeries(listOf(first, afterWeekend)).isValid)
+        val overlapping = first.copy(openTime = 60001L, closeTime = 120001L)
+        assertFalse(DataIntegrityValidator.validateHistoricalSeries(listOf(first, overlapping)).isValid)
+    }
+
+    @Test
+    fun `test replay barrier excludes current forming candle and accepts exact close boundary`() {
+        val candle = createCandle(openTime = 60000L, open = 100.0, high = 105.0, low = 95.0, close = 102.0)
+        assertTrue(DataIntegrityValidator.enforceReplayBarrier(listOf(candle), candle.closeTime - 1L).isEmpty())
+        assertEquals(listOf(candle), DataIntegrityValidator.enforceReplayBarrier(listOf(candle), candle.closeTime))
+    }
+
+    @Test
     fun `test MarketSymbolRegistry metadata and data source distinction`() {
         val btc = MarketSymbolRegistry.getSymbol("BTCUSDT")
         assertEquals("BTCUSDT", btc.symbol)

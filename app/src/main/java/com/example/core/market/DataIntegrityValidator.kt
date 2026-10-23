@@ -61,8 +61,8 @@ object DataIntegrityValidator {
     /**
      * Sanitizes a list of candles:
      * 1. Filters out invalid candles violating OHLC or timestamp invariants
-     * 2. Eliminates duplicates based on openTime
-     * 3. Sorts strictly by openTime in ascending order
+     * 2. Eliminates duplicates per symbol, timeframe and openTime
+     * 3. Sorts deterministically by openTime, symbol and timeframe
      */
     fun sanitizeCandles(candles: List<Candle>): List<Candle> {
         if (candles.isEmpty()) return emptyList()
