@@ -277,6 +277,9 @@ fun CandlestickChart(
             // leaving future space (up to 70% of the viewport) like TradingView.
             val futureSpacePx = chartWidth * 0.70f
             val clampedScroll = scrollOffsetPx.coerceIn(-maxScrollOffset, futureSpacePx)
+            // Persist the clamped offset so repeated drags cannot accumulate
+            // invisible overscroll and make the chart feel stuck on reversal.
+            if (scrollOffsetPx != clampedScroll) scrollOffsetPx = clampedScroll
 
             val historicalScrollPx = (-clampedScroll).coerceAtLeast(0f)
             val scrollCandleOffset = (historicalScrollPx / candleWidthPx).toInt().coerceIn(0, (candles.size - visibleCount).coerceAtLeast(0))
