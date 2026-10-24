@@ -1,9 +1,6 @@
 package com.example.feature.chart.model
 
 import com.example.core.model.Candle
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.roundToInt
 
 /**
  * Handles two-way conversion between Market Coordinates (Timestamp, Price)
@@ -35,7 +32,6 @@ data class ChartTransform(
         val totalVisible = visibleCandles.size
         if (totalVisible <= 0) return 0f
         // Right-aligned chart: index totalVisible - 1 is at chartWidth - (candleWidthPx / 2)
-        val xFromRight = (totalVisible - 1 - indexInVisible) * candleWidthPx
         return ChartCoordinates.candleX(indexInVisible, totalVisible, chartWidth,
             candleWidthPx, fractionalScrollPx)
     }
