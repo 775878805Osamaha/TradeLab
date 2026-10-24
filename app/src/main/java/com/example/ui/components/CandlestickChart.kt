@@ -212,7 +212,13 @@ fun CandlestickChart(
                             if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingCurrentOffset = change.position
                             } else if (isCrosshairActive) {
-                                crosshairOffset = change.position
+                                val transform = transformRef[0]
+                                if (transform != null) {
+                                    crosshairOffset = Offset(
+                                        change.position.x.coerceIn(0f, transform.chartWidth),
+                                        change.position.y.coerceIn(0f, transform.chartHeight)
+                                    )
+                                }
                             } else {
                                 scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, dragAmount.x)
                             }
@@ -269,7 +275,7 @@ fun CandlestickChart(
                                         startPrice = transform.yToPrice(offset.y)
                                     )
                                 )
-                            } else if (isCrosshairActive) {
+                            } else if (isCrosshairActive && insidePlot) {
                                 crosshairOffset = offset
                             }
                         }

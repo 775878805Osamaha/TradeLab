@@ -64,10 +64,11 @@ object ChartOverlays {
             val measured = textPaint.measureText(label)
             textPaint.textSize = originalSize * ((availableWidth - 10f) / measured).coerceIn(0.5f, 1f)
             val badgeWidth = (textPaint.measureText(label) + 10f).coerceAtMost(availableWidth)
+            val badgeFits = textPaint.measureText(label) + 10f <= availableWidth
             val top = (y - 15f).coerceAtLeast(0f)
             val bottom = (y + 15f).coerceAtMost(scope.size.height)
             val background = badgeBackgroundPaint
-            if (bottom > top) {
+            if (bottom > top && badgeFits) {
                 drawRoundRect(
                     transform.chartWidth,
                     top,
