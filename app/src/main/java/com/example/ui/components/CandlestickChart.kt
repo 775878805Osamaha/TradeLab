@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -153,7 +154,7 @@ fun CandlestickChart(
     val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
         candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
         // Pinch and two-finger pan share this transformable gesture.
-        scrollOffsetPx += panChange.x
+        scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, panChange.x)
     }
 
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
@@ -182,7 +183,8 @@ fun CandlestickChart(
         }
     }
 
-    Box(modifier = modifier) {
+    var chartViewportWidthPx by remember { mutableFloatStateOf(600f) }
+    Box(modifier = modifier.onSizeChanged { chartViewportWidthPx = (it.width - 146f).coerceAtLeast(1f) }) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -205,7 +207,7 @@ fun CandlestickChart(
                             } else if (isCrosshairActive) {
                                 crosshairOffset = change.position
                             } else {
-                                scrollOffsetPx += dragAmount.x
+                                scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, dragAmount.x)
                             }
                         },
                         onDragEnd = {
@@ -518,6 +520,43 @@ fun CandlestickChart(
                     }
                 }
             }
+        }
+
+        // One-tap chart navigation: no menus, no gesture ambiguity.
+        // Center latest candle with ~50% future space; reset restores automatic fit.
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 52.dp, bottom = 40.dp)
+                .background(TradingElevated.copy(alpha = 0.92f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    scrollOffsetPx = ChartNavigation.centerLatestOffset(chartViewportWidthPx, candleWidthPx)
+                },
+                modifier = Modifier.testTag("chart_center_latest")
+            ) { Text("وسط", color = TradingTextSecondary, fontSize = 12.sp) }
+            androidx.compose.material3.TextButton(
+                onClick = { candleWidthPx = ChartNavigation.zoomIn(candleWidthPx) },
+                modifier = Modifier.testTag("chart_zoom_in")
+            ) { Text("+", color = TradingTextSecondary, fontSize = 17.sp) }
+            androidx.compose.material3.TextButton(
+                onClick = { candleWidthPx = ChartNavigation.zoomOut(candleWidthPx) },
+                modifier = Modifier.testTag("chart_zoom_out")
+            ) { Text("−", color = TradingTextSecondary, fontSize = 17.sp) }
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    scrollOffsetPx = 0f
+                    candleWidthPx = 12f
+                    manualPriceScale = 1f
+                    crosshairOffset = null
+                    inspectedCandle = null
+                },
+                modifier = Modifier.testTag("chart_reset_view")
+            ) { Text("إعادة", color = TradingTextSecondary, fontSize = 12.sp) }
         }
 
         // Vertical price-axis scaling; reset-view restores automatic fitting.
