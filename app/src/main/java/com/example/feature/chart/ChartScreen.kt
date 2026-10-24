@@ -834,9 +834,10 @@ fun ChartScreen(
                 if (immersiveChart) {
                     Row(
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 4.dp, end = 4.dp, start = 48.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, end = 10.dp, start = 10.dp)
+                            .clip(RoundedCornerShape(26.dp))
                             .background(TradingCard.copy(alpha = 0.82f))
                             .testTag("chart_immersive_floating_header"),
                         verticalAlignment = Alignment.CenterVertically
@@ -845,20 +846,22 @@ fun ChartScreen(
                             text = uiState.selectedSymbol,
                             color = TradingTextPrimary,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
+                            fontSize = 15.sp,
                             maxLines = 1,
                             modifier = Modifier
+                                .weight(1f, fill = false)
                                 .clickable { showSymbolSheet = true }
                                 .padding(horizontal = 6.dp, vertical = 8.dp)
                                 .testTag("chart_floating_symbol_selector")
                         )
+                        Spacer(Modifier.weight(1f))
                         Box {
                             TextButton(
                                 onClick = { floatingTimeframeMenuExpanded = true },
                                 modifier = Modifier.testTag("chart_floating_timeframe")
                             ) {
                                 Text(uiState.selectedTimeframe.displayName, color = TradingAccentLight,
-                                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                 Icon(Icons.Default.ArrowDropDown, contentDescription = "الفاصل الزمني",
                                     tint = TradingTextSecondary, modifier = Modifier.size(16.dp))
                             }
