@@ -38,7 +38,7 @@ object HistoricalCsvImporter {
             val low = fields[3].trim().toDoubleOrNull() ?: error("Invalid low")
             val close = fields[4].trim().toDoubleOrNull() ?: error("Invalid close")
             val volume = fields[5].trim().toDoubleOrNull() ?: error("Invalid volume")
-            require(time > previous && time > 0L) { "Out-of-order, duplicate or invalid timestamp" }
+            require(time > previous && time >= 0L) { "Out-of-order or duplicate timestamp" }
             val weeklyOffset = if (timeframe.minutes == 10_080) 4L * 24 * 60 * 60 * 1000 else 0L
             require(Math.floorMod(time - weeklyOffset, interval) == 0L) { "Misaligned timestamp" }
             require(listOf(open, high, low, close, volume).all { it.isFinite() }) { "Non-finite OHLCV" }
