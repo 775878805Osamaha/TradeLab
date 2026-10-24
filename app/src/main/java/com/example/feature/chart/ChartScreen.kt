@@ -133,6 +133,16 @@ fun ChartScreen(
             entryPrice != null && (if (side == OrderSide.BUY) sl < entryPrice else sl > entryPrice))
         val validTp = orderTpInput.isBlank() || (tp != null && tp.isFinite() && tp > 0.0 &&
             entryPrice != null && (if (side == OrderSide.BUY) tp > entryPrice else tp < entryPrice))
+        val riskSymbol = if (isEmbeddedReplay) replayState.symbol else uiState.selectedSymbol
+        val symbolSpec = com.example.core.market.DefaultSymbols.SYMBOLS.firstOrNull {
+            it.symbol.equals(riskSymbol, ignoreCase = true) ||
+                (riskSymbol.equals("BTCUSD", ignoreCase = true) && it.symbol == "BTCUSDT") ||
+                (riskSymbol.equals("ETHUSD", ignoreCase = true) && it.symbol == "ETHUSDT")
+        }
+        val validLotStep = volume != null && symbolSpec != null &&
+            volume >= symbolSpec.minLot && volume <= symbolSpec.maxLot &&
+            kotlin.math.abs(volume / symbolSpec.lotStep -
+                kotlin.math.round(volume / symbolSpec.lotStep)) <= 1e-6
         val riskEquity = riskEquityInput.trim().toDoubleOrNull()
         val riskPercent = riskPercentInput.trim().toDoubleOrNull()
         val riskBudgetValid = riskEquityInput.isBlank() ||
@@ -155,7 +165,7 @@ fun ChartScreen(
             (riskEstimate != null && riskPercent != null &&
                 riskEstimate.riskPercentOfEquity != null &&
                 riskEstimate.riskPercentOfEquity <= riskPercent + 1e-8)
-        val validOrder = validVolume && validSl && validTp && riskBudgetValid &&
+        val validOrder = validVolume && validLotStep && validSl && validTp && riskBudgetValid &&
             (riskEquityInput.isBlank() || (sl != null && riskEstimate != null)) &&
             withinRiskBudget &&
             entryTick?.symbol == (if (isEmbeddedReplay) replayState.symbol else uiState.selectedSymbol) &&
@@ -178,6 +188,11 @@ fun ChartScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().testTag("chart_order_volume")
                     )
+                    if (validVolume && !validLotStep) {
+                        Text("حجم العقد خارج حدود الرمز أو لا يطابق خطوة اللوت",
+                            color = TradingNegative,
+                            modifier = Modifier.testTag("chart_order_invalid_lot_step"))
+                    }
                     Text("سعر الدخول: ${entryPrice?.let { String.format(Locale.US, "%.5f", it) } ?: "--"}")
                     OutlinedTextField(
                         value = orderSlInput, onValueChange = { orderSlInput = it },
@@ -240,6 +255,17 @@ fun ChartScreen(
                                     Text("الحجم المقترح للمخاطرة المحددة: ${String.format(Locale.US, "%.2f", lots)} لوت",
                                         color = TradingPositive,
                                         modifier = Modifier.testTag("chart_risk_suggested_lots"))
+                                    TextButton(
+                                        onClick = { orderVolumeInput = String.format(Locale.US, "%.2f", lots) },
+                                        modifier = Modifier.testTag("chart_apply_suggested_lots")
+                                    ) {
+                                        Text("استخدام الحجم المقترح")
+                                    }
+                                }
+                                if (riskEstimate.maximumLotsForRisk == null) {
+                                    Text("ميزانية المخاطرة أقل من الحد الأدنى لحجم العقد",
+                                        color = TradingNegative,
+                                        modifier = Modifier.testTag("chart_risk_below_minimum"))
                                 }
                             }
                             Text("تقدير قبل التنفيذ، لا يشمل الانزلاق والعمولات",
