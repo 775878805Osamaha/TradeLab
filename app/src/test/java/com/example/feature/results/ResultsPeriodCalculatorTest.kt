@@ -97,4 +97,51 @@ class ResultsPeriodCalculatorTest {
         assertTrue(all.curve.size > month.curve.size)
     }
 
+    @Test fun futureDatedTradesCannotInflateOpeningBalance() {
+        val now = date(2026, Calendar.OCTOBER, 24)
+        val result = ResultsPeriodCalculator.calculate(
+            100.0,
+            listOf(
+                trade(date(2026, Calendar.SEPTEMBER, 2), 15.0),
+                trade(now + 86_400_000L, 900.0)
+            ),
+            ResultsPeriod.MONTH,
+            now
+        )
+        assertEquals(115.0, result.openingBalance, 0.00001)
+        assertEquals(115.0, result.closingBalance, 0.00001)
+        assertEquals(0, result.metrics.totalTrades)
+    }
+
+    @Test fun invalidTradeProfitIsRejectedBeforeRendering() {
+        val now = date(2026, Calendar.OCTOBER, 24)
+        try {
+            ResultsPeriodCalculator.calculate(100.0,
+                listOf(trade(now - 1000, Double.NaN)), ResultsPeriod.ALL, now)
+            fail("Expected rejection")
+        } catch (_: IllegalArgumentException) {}
+    }
+
+    @Test fun invalidTradeDurationIsRejected() {
+        val now = date(2026, Calendar.OCTOBER, 24)
+        val invalid = trade(now - 1000, 10.0).copy(openTime = now)
+        try {
+            ResultsPeriodCalculator.calculate(100.0, listOf(invalid), ResultsPeriod.ALL, now)
+            fail("Expected rejection")
+        } catch (_: IllegalArgumentException) {}
+    }
+
+    @Test fun shuffledTradesProduceChronologicalMetrics() {
+        val now = date(2026, Calendar.OCTOBER, 24)
+        val older = trade(now - 100_000, 30.0)
+        val newer = trade(now - 10_000, -20.0)
+        val a = ResultsPeriodCalculator.calculate(100.0,
+            listOf(newer, older), ResultsPeriod.ALL, now)
+        val b = ResultsPeriodCalculator.calculate(100.0,
+            listOf(older, newer), ResultsPeriod.ALL, now)
+        assertEquals(b.metrics.maxDrawdown, a.metrics.maxDrawdown, 0.00001)
+        assertEquals(b.closingBalance, a.closingBalance, 0.00001)
+        assertEquals(older.closeTime, a.trades.first().closeTime)
+    }
+
 }
