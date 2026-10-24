@@ -194,9 +194,18 @@ class BacktestViewModel(
                     }
                 }
 
-                // Save backtest run to database if repository available
-                result.run?.let { run ->
-                    tradingRepository?.saveBacktestRun(run)
+                // Persistence must not turn a correctly completed backtest
+                // into a failed simulation. The result is still inspectable
+                // when local history storage is unavailable.
+                val historySaved = try {
+                    result.run?.let { run ->
+                        tradingRepository?.saveBacktestRun(run)
+                    }
+                    true
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    false
                 }
 
                 _uiState.update {
@@ -206,7 +215,11 @@ class BacktestViewModel(
                         progressFraction = 1.0f,
                         lastResult = result,
                         selectedTab = BacktestTab.RESULTS,
-                        message = "اكتمل الاختبار التاريخي: ${result.trades.size} صفقة منفذة بنجاح"
+                        message = if (historySaved) {
+                            "اكتمل الاختبار التاريخي: ${result.trades.size} صفقة منفذة بنجاح"
+                        } else {
+                            "اكتمل الاختبار، لكن تعذر حفظه في السجل المحلي"
+                        }
                     )
                 }
             } catch (e: CancellationException) {
