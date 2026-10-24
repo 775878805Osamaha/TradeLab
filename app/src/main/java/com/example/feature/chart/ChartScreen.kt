@@ -1161,7 +1161,7 @@ fun ChartScreen(
                         }
                         .testTag("chart_reference_floating_tools"),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     val referenceTools = listOf(
                         Triple("تقاطع", Icons.Default.FilterCenterFocus, 0),
@@ -1206,7 +1206,7 @@ fun ChartScreen(
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Surface(
-                                modifier = Modifier.size(46.dp)
+                                modifier = Modifier.size(38.dp)
                                     .clickable {
                                         when (index) {
                                             0 -> viewModel.toggleCrosshair()
@@ -1227,10 +1227,10 @@ fun ChartScreen(
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(image, contentDescription = label,
                                         tint = if (selected) TradingAccent else TradingTextPrimary,
-                                        modifier = Modifier.size(22.dp))
+                                        modifier = Modifier.size(19.dp))
                                 }
                             }
-                            Text(label, color = TradingTextSecondary, fontSize = 10.sp)
+                            // Tool names remain accessible via icon content descriptions.
                         }
                     }
                     IconButton(
