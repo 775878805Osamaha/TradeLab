@@ -811,8 +811,8 @@ fun ChartScreen(
                     openPositions = if (isEmbeddedReplay) replayState.openPositions else uiState.openPositions,
                     pendingOrders = if (isEmbeddedReplay) replayState.pendingOrders else uiState.pendingOrders,
                     historicalTrades = if (isEmbeddedReplay) replayState.closedTrades else uiState.historicalTrades,
-                    activeDrawingTool = if (isEmbeddedReplay) DrawingTool.NONE else uiState.activeDrawingTool,
-                    drawings = if (isEmbeddedReplay) emptyList() else uiState.drawings,
+                    activeDrawingTool = uiState.activeDrawingTool,
+                    drawings = uiState.drawings,
                     indicatorSettings = uiState.indicatorSettings,
                     smaValues = if (isEmbeddedReplay) emptyList() else uiState.smaValues,
                     emaValues = if (isEmbeddedReplay) emptyList() else uiState.emaValues,
@@ -825,7 +825,7 @@ fun ChartScreen(
                     isVolumeVisible = uiState.isVolumeVisible,
                     resetViewTrigger = uiState.resetViewTrigger,
                     displayStyle = chartDisplayStyle,
-                    onAddDrawing = { if (!isEmbeddedReplay) viewModel.addDrawing(it) },
+                    onAddDrawing = { viewModel.addDrawing(it) },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) }
                 )
                 }
@@ -1031,106 +1031,57 @@ fun ChartScreen(
 
                 // Compact TradingView-style tools on the chart itself.
                 // Buttons select the existing functional drawing tools; no image overlay.
-                if (!isEmbeddedReplay) Surface(
-                    modifier = Modifier
-                        .align(if (immersiveChart) Alignment.TopStart else Alignment.CenterStart)
-                        .padding(horizontal = 5.dp, vertical = if (immersiveChart) 54.dp else 0.dp)
-                        .testTag("chart_floating_drawing_toolbar"),
-                    shape = RoundedCornerShape(8.dp),
-                    color = TradingCard.copy(alpha = if (drawingToolbarExpanded) 0.96f else 0.72f),
-                    border = if (drawingToolbarExpanded) androidx.compose.foundation.BorderStroke(1.dp, TradingBorder) else null,
-                    tonalElevation = 0.dp
+                // Reference-style drawing controls remain visible over Replay candles.
+                Column(
+                    modifier = Modifier.align(Alignment.TopStart)
+                        .padding(start = 8.dp, top = if (isEmbeddedReplay) 114.dp else 74.dp)
+                        .testTag("chart_reference_floating_tools"),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .heightIn(max = if (drawingToolbarExpanded) 228.dp else 92.dp)
-                            .verticalScroll(rememberScrollState())
-                            .padding(vertical = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        IconButton(
-                            onClick = { drawingToolbarExpanded = !drawingToolbarExpanded },
-                            modifier = Modifier.size(40.dp).testTag("chart_toolbar_collapse")
-                        ) {
-                            Icon(
-                                if (!drawingToolbarExpanded && uiState.activeDrawingTool != DrawingTool.NONE && !isEmbeddedReplay)
-                                    Icons.Default.Edit else Icons.Default.MoreHoriz,
-                                contentDescription = if (drawingToolbarExpanded) "إخفاء أدوات الرسم" else "إظهار أدوات الرسم",
-                                tint = if (uiState.activeDrawingTool != DrawingTool.NONE) TradingAccent else TradingTextPrimary
-                            )
+                    val referenceTools = listOf(
+                        Triple("تقاطع", Icons.Default.FilterCenterFocus, 0),
+                        Triple("اتجاه", Icons.Default.ShowChart, 1),
+                        Triple("أفقي", Icons.Default.HorizontalRule, 2),
+                        Triple("فيبوناتشي", Icons.Default.AutoGraph, 3),
+                        Triple("تراجع", Icons.Default.Undo, 4),
+                        Triple("المزيد", Icons.Default.MoreHoriz, 5)
+                    )
+                    referenceTools.forEach { (label, image, index) ->
+                        val selected = when (index) {
+                            0 -> uiState.isCrosshairActive
+                            1 -> uiState.activeDrawingTool == DrawingTool.TRENDLINE
+                            2 -> uiState.activeDrawingTool == DrawingTool.HORIZONTAL_LINE
+                            3 -> uiState.activeDrawingTool == DrawingTool.FIBONACCI
+                            else -> false
                         }
-                        // Keep pan/reset accessible without expanding the full tools palette.
-                        if (!drawingToolbarExpanded && uiState.activeDrawingTool != DrawingTool.NONE && !isEmbeddedReplay) {
-                            IconButton(
-                                onClick = {
-                                    viewModel.setDrawingTool(DrawingTool.NONE)
-                                    drawingToolbarExpanded = false
-                                },
-                                modifier = Modifier.size(40.dp).testTag("chart_toolbar_quick_pan")
-                            ) {
-                                Icon(Icons.Default.PanTool, contentDescription = "تحريك الشارت",
-                                    tint = if (uiState.activeDrawingTool == DrawingTool.NONE) TradingAccent else TradingTextSecondary,
-                                    modifier = Modifier.size(18.dp))
-                            }
-                            IconButton(
-                                onClick = { viewModel.triggerResetView() },
-                                modifier = Modifier.size(40.dp).testTag("chart_toolbar_quick_reset")
-                            ) {
-                                Icon(Icons.Default.CenterFocusStrong, contentDescription = "إعادة الشارت إلى آخر شمعة",
-                                    tint = TradingTextSecondary, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                        if (drawingToolbarExpanded && !isEmbeddedReplay) {
-                        val tools = listOf(
-                            Triple(DrawingTool.NONE, Icons.Default.PanTool, "تحريك الشارت"),
-                            Triple(DrawingTool.TRENDLINE, Icons.Default.ShowChart, "خط اتجاه"),
-                            Triple(DrawingTool.HORIZONTAL_LINE, Icons.Default.HorizontalRule, "خط أفقي"),
-                            Triple(DrawingTool.VERTICAL_LINE, Icons.Default.MoreVert, "خط رأسي"),
-                            Triple(DrawingTool.RECTANGLE, Icons.Default.CropSquare, "مستطيل"),
-                            Triple(DrawingTool.FIBONACCI, Icons.Default.AutoGraph, "فيبوناتشي")
-                        )
-                        tools.forEach { (tool, icon, description) ->
-                            val selected = uiState.activeDrawingTool == tool
-                            IconButton(
-                                onClick = {
-                                    viewModel.setDrawingTool(tool)
-                                    drawingToolbarExpanded = false
-                                },
-                                modifier = Modifier.size(44.dp).testTag("chart_toolbar_${tool.name}")
-                            ) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = description,
-                                    tint = if (selected) TradingAccent else TradingTextSecondary,
-                                    modifier = Modifier.size(18.dp)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Surface(
+                                modifier = Modifier.size(42.dp)
+                                    .clickable {
+                                        when (index) {
+                                            0 -> viewModel.toggleCrosshair()
+                                            1 -> viewModel.setDrawingTool(DrawingTool.TRENDLINE)
+                                            2 -> viewModel.setDrawingTool(DrawingTool.HORIZONTAL_LINE)
+                                            3 -> viewModel.setDrawingTool(DrawingTool.FIBONACCI)
+                                            4 -> uiState.drawings.lastOrNull()?.let { viewModel.deleteDrawing(it.id) }
+                                            5 -> showToolsMenu = true
+                                        }
+                                    }.testTag("chart_reference_tool_${index}"),
+                                shape = RoundedCornerShape(50),
+                                color = TradingCard.copy(alpha = 0.86f),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    if (selected) 1.5.dp else 0.8.dp,
+                                    if (selected) TradingAccent else TradingBorder
                                 )
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(image, contentDescription = label,
+                                        tint = if (selected) TradingAccent else TradingTextPrimary,
+                                        modifier = Modifier.size(21.dp))
+                                }
                             }
-                        }
-                        HorizontalDivider(modifier = Modifier.width(30.dp), color = TradingBorder)
-                        IconButton(
-                            onClick = { viewModel.toggleCrosshair() },
-                            modifier = Modifier.size(44.dp).testTag("chart_toolbar_crosshair")
-                        ) {
-                            Icon(
-                                Icons.Default.FilterCenterFocus,
-                                contentDescription = "مؤشر التقاطع",
-                                tint = if (uiState.isCrosshairActive) TradingAccent else TradingTextSecondary
-                            )
-                        }
-                        IconButton(
-                            onClick = { uiState.drawings.lastOrNull()?.let { viewModel.deleteDrawing(it.id) } },
-                            enabled = uiState.drawings.isNotEmpty(),
-                            modifier = Modifier.size(44.dp).testTag("chart_toolbar_undo")
-                        ) {
-                            Icon(Icons.Default.Undo, contentDescription = "التراجع عن آخر رسم",
-                                tint = TradingTextSecondary)
-                        }
-                        IconButton(
-                            onClick = { showToolsMenu = true },
-                            modifier = Modifier.size(44.dp).testTag("chart_toolbar_more")
-                        ) {
-                            Icon(Icons.Default.MoreHoriz, contentDescription = "المزيد من أدوات الرسم", tint = TradingTextSecondary)
-                        }
+                            Text(label, color = TradingTextSecondary, fontSize = 9.sp)
                         }
                     }
                 }
