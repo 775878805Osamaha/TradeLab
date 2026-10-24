@@ -548,7 +548,19 @@ fun CandlestickChart(
                     val pAtY = transform.yToPrice(off.y)
                     drawContext.canvas.nativeCanvas.apply {
                         val p = crosshairAxisPaint
-                        drawText(String.format(Locale.US, "%.2f", pAtY), chartWidth + 6f, off.y + 6f, p)
+                        val priceLabel = com.example.ui.components.chart.QuotePriceFormatter.price(pAtY)
+                        val originalTextSize = p.textSize
+                        val availableWidth = (width - chartWidth - 10f).coerceAtLeast(1f)
+                        val naturalWidth = p.measureText(priceLabel)
+                        if (naturalWidth > 0f) {
+                            p.textSize = originalTextSize *
+                                (availableWidth / naturalWidth).coerceIn(0.5f, 1f)
+                        }
+                        if (p.measureText(priceLabel) <= availableWidth) {
+                            drawText(priceLabel, chartWidth + 5f,
+                                off.y.coerceIn(p.textSize, height - 8f), p)
+                        }
+                        p.textSize = originalTextSize
                     }
                 }
             }
