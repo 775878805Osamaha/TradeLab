@@ -23,13 +23,15 @@ object ChartOverlays {
     fun drawPriceAndSpread(
         scope: DrawScope,
         transform: ChartTransform,
-        latestTick: Tick?
+        latestTick: Tick?,
+        showHistoricalLastPrice: Boolean = true
     ) {
         // Only verified ticks provide executable bid/ask; historical candles
         // are displayed as a chart price, never masquerading as live quotes.
-        val lastCandleClose = transform.visibleCandles.lastOrNull()?.close
         val chartPrice = latestTick?.last?.takeIf { it.isFinite() && it > 0.0 }
-            ?: lastCandleClose?.takeIf { it.isFinite() && it > 0.0 }
+            ?: (if (showHistoricalLastPrice)
+                transform.visibleCandles.lastOrNull()?.close?.takeIf { it.isFinite() && it > 0.0 }
+            else null)
             ?: return
         if (!isPriceVisible(transform, chartPrice)) return
         val y = transform.priceToY(chartPrice)
