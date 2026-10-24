@@ -560,6 +560,7 @@ private fun BacktestResultsContent(
     val shareContext = LocalContext.current
     val exportScope = rememberCoroutineScope()
     var isExporting by remember { mutableStateOf(false) }
+    var exportError by remember { mutableStateOf<String?>(null) }
     val equityInsights = remember(result.equityCurve) {
         runCatching {
             EquityAnalytics.summarize(
@@ -699,6 +700,7 @@ private fun BacktestResultsContent(
                 onClick = {
                     if (!isExporting) {
                         isExporting = true
+                        exportError = null
                         exportScope.launch {
                             try {
                                 val uri = withContext(Dispatchers.IO) {
@@ -731,6 +733,8 @@ private fun BacktestResultsContent(
                                     )
                                 }
                                 shareContext.startActivity(Intent.createChooser(intent, "مشاركة نتائج الباك تيست"))
+                            } catch (failure: Exception) {
+                                exportError = "تعذر تجهيز ملف النتائج أو مشاركته. تحقق من المساحة المتاحة وحاول مجددًا."
                             } finally {
                                 isExporting = false
                             }
@@ -745,6 +749,17 @@ private fun BacktestResultsContent(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 Text(if (isExporting) "جاري تجهيز ملف النتائج..." else "مشاركة بيانات منحنى رأس المال CSV")
+            }
+        }
+
+        exportError?.let { error ->
+            item {
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp,
+                    modifier = Modifier.testTag("backtest_export_error")
+                )
             }
         }
 
