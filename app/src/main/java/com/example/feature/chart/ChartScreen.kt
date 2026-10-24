@@ -181,10 +181,10 @@ fun ChartScreen(
                         val ratio = if (tp != null && validTp) kotlin.math.abs(tp - entryPrice) / kotlin.math.abs(entryPrice - sl) else null
                         if (ratio != null && ratio.isFinite()) Text("العائد إلى المخاطرة: 1:${String.format(Locale.US, "%.2f", ratio)}")
                         if (riskEstimate != null) {
-                            Text("الخسارة المتوقعة: $\{String.format(Locale.US, "%.2f", riskEstimate.riskUsd)} USD",
+                            Text("الخسارة المتوقعة: ${String.format(Locale.US, "%.2f", riskEstimate.riskUsd)} USD",
                                 color = TradingNegative, modifier = Modifier.testTag("chart_order_risk_usd"))
                             riskEstimate.rewardUsd?.let { reward ->
-                                Text("الربح المحتمل: $\{String.format(Locale.US, "%.2f", reward)} USD",
+                                Text("الربح المحتمل: ${String.format(Locale.US, "%.2f", reward)} USD",
                                     color = TradingPositive, modifier = Modifier.testTag("chart_order_reward_usd"))
                             }
                             Text("تقدير قبل التنفيذ، لا يشمل الانزلاق والعمولات",
