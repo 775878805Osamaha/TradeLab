@@ -2,6 +2,7 @@ package com.example.core.backtest
 
 import com.example.core.execution.*
 import com.example.core.market.DataIntegrityValidator
+import com.example.core.market.ValidationResult
 import com.example.core.market.DefaultSymbols
 import com.example.core.model.*
 import com.example.core.risk.RiskEngine
@@ -146,8 +147,17 @@ class BacktestEngine(
             (config.endTime == null || c.closeTime <= config.endTime)
         }
 
-        // 2. Validate, deduplicate, and sort chronologically (Strict Zero-Lookahead)
-        val cleanCandles = DataIntegrityValidator.sanitizeCandles(rangeFiltered)
+        // 2. Never silently drop or reorder corrupt source candles: doing so
+        // changes the historical sample and can fabricate a misleading result.
+        if (rangeFiltered.isNotEmpty()) {
+            when (val validation = DataIntegrityValidator.validateHistoricalSeries(rangeFiltered)) {
+                is ValidationResult.Invalid -> throw IllegalArgumentException(
+                    "Historical source integrity failed: ${validation.reason}"
+                )
+                ValidationResult.Valid -> Unit
+            }
+        }
+        val cleanCandles = rangeFiltered
         // Historical replay must not consume a candle that closes before it
         // opens or a price that cannot be represented safely.
         require(cleanCandles.all { candle ->

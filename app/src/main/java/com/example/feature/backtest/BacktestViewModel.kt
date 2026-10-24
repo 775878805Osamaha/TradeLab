@@ -176,7 +176,13 @@ class BacktestViewModel(
                 val interval = state.timeframe.minutes * 60 * 1000L
                 val from = now - (interval * 350)
 
-                val candles = marketDataRepository.getCandles(state.symbol, state.timeframe, from, now)
+                val sourceCandles = marketDataRepository.getCandles(state.symbol, state.timeframe, from, now)
+                // The currently forming bar has unknown final OHLC. Never
+                // allow it to enter historical strategy or execution logic.
+                val candles = sourceCandles.filter { it.closeTime <= now }
+                require(candles.isNotEmpty()) {
+                    "لا توجد شموع تاريخية مكتملة للفترة المحددة"
+                }
 
                 val result = backtestEngine.runBacktest(candles, config) { stage, fraction ->
                     _uiState.update {
