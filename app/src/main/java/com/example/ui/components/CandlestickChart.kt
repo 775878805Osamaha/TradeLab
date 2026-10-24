@@ -360,7 +360,16 @@ fun CandlestickChart(
                 drawContext.canvas.nativeCanvas.apply {
                     val labelY = (y + priceAxisPaint.textSize * 0.35f)
                         .coerceIn(priceAxisPaint.textSize, height - 8f)
-                    drawText(String.format(Locale.US, "%,." + tickDecimals + "f", priceVal), chartWidth + 7f, labelY, priceAxisPaint)
+                    val priceLabel = String.format(Locale.US, "%,." + tickDecimals + "f", priceVal)
+                    val availableLabelWidth = (rightAxisWidth - 14f).coerceAtLeast(20f)
+                    val measuredWidth = priceAxisPaint.measureText(priceLabel)
+                    val originalSize = priceAxisPaint.textSize
+                    if (measuredWidth > availableLabelWidth) {
+                        priceAxisPaint.textSize = (originalSize * availableLabelWidth / measuredWidth)
+                            .coerceAtLeast(14f)
+                    }
+                    drawText(priceLabel, chartWidth + 7f, labelY, priceAxisPaint)
+                    priceAxisPaint.textSize = originalSize
                 }
             }
 
