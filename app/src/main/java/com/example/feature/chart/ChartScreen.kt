@@ -85,7 +85,6 @@ fun ChartScreen(
     var drawingPaletteOffsetPx by rememberSaveable { mutableFloatStateOf(0f) }
     var drawingPaletteXOffsetPx by rememberSaveable { mutableFloatStateOf(0f) }
     var drawingPaletteCollapsed by rememberSaveable { mutableStateOf(false) }
-    var drawingPalettePositionInitialized by remember { mutableStateOf(false) }
     var chartPaletteContainerWidthPx by remember { mutableIntStateOf(0) }
     var drawingPaletteWidthPx by remember { mutableIntStateOf(0) }
     var chartPaletteContainerHeightPx by remember { mutableIntStateOf(0) }
@@ -98,7 +97,6 @@ fun ChartScreen(
         if (chartPaletteContainerHeightPx > 0 && drawingPaletteHeightPx > 0) {
             drawingPaletteOffsetPx = drawingPaletteOffsetPx.coerceIn(0f, chartPaletteMaxYOffsetPx)
             drawingPaletteXOffsetPx = drawingPaletteXOffsetPx.coerceIn(0f, chartPaletteMaxXOffsetPx)
-            drawingPalettePositionInitialized = true
         }
     }
     LaunchedEffect(immersiveChart) { onImmersiveChanged(immersiveChart) }
@@ -1186,12 +1184,9 @@ fun ChartScreen(
                                         drawingPaletteHeightPx - topInsetPx).coerceAtLeast(0f)
                                     drawingPaletteOffsetPx =
                                         (drawingPaletteOffsetPx + dragAmount.y).coerceIn(0f, maxOffset)
-                                    val leftInsetPx = with(paletteDensity) { 8.dp.toPx() }
-                                    val rightAxisReservePx = with(paletteDensity) { 72.dp.toPx() }
-                                    val maxX = (chartPaletteContainerWidthPx - drawingPaletteWidthPx -
-                                        leftInsetPx - rightAxisReservePx).coerceAtLeast(0f)
+                                    // Same axis reserve used by resize clamping: 8dp left + 72dp price rail.
                                     drawingPaletteXOffsetPx =
-                                        (drawingPaletteXOffsetPx + dragAmount.x).coerceIn(0f, maxX)
+                                        (drawingPaletteXOffsetPx + dragAmount.x).coerceIn(0f, chartPaletteMaxXOffsetPx)
                                 }
                             }
                             .testTag("chart_tools_drag_handle"),
