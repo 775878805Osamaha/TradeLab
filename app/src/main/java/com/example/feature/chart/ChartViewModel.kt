@@ -159,7 +159,13 @@ class ChartViewModel(
     }
 
     fun toggleCrosshair() {
-        _uiState.update { it.copy(isCrosshairActive = !it.isCrosshairActive) }
+        _uiState.update { state ->
+            val enabled = !state.isCrosshairActive
+            state.copy(
+                isCrosshairActive = enabled,
+                activeDrawingTool = if (enabled) DrawingTool.NONE else state.activeDrawingTool
+            )
+        }
     }
 
     fun toggleVolume() {
@@ -171,7 +177,10 @@ class ChartViewModel(
     }
 
     fun setDrawingTool(tool: DrawingTool) {
-        _uiState.update { it.copy(activeDrawingTool = tool) }
+        _uiState.update { state ->
+            val next = if (state.activeDrawingTool == tool) DrawingTool.NONE else tool
+            state.copy(activeDrawingTool = next, isCrosshairActive = false)
+        }
     }
 
     fun addDrawing(drawing: ChartDrawing) {
