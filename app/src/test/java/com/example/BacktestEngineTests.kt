@@ -367,10 +367,12 @@ class BacktestEngineTests {
             timeframe = Timeframe.M15
         )
 
-        val res = backtestEngine.runBacktest(emptyList, config)
-        assertNotNull(res)
-        assertEquals(0, res.trades.size)
-        assertEquals(0.0, res.metrics.netProfit, 0.001)
+        try {
+            backtestEngine.runBacktest(emptyList, config)
+            fail("An empty historical dataset must not produce a successful backtest")
+        } catch (error: IllegalArgumentException) {
+            assertTrue(error.message.orEmpty().contains("No historical candles"))
+        }
     }
 
     @Test
