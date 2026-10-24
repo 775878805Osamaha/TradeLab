@@ -90,7 +90,7 @@ fun ChartScreen(
     var chartPaletteContainerHeightPx by remember { mutableIntStateOf(0) }
     var drawingPaletteHeightPx by remember { mutableIntStateOf(0) }
     val paletteDensity = LocalDensity.current
-    val chartPaletteTopInsetPx = with(paletteDensity) { (if (isEmbeddedReplay) 124.dp else 66.dp).toPx() }
+    val chartPaletteTopInsetPx = with(paletteDensity) { (if (isEmbeddedReplay) 148.dp else 82.dp).toPx() }
     val chartPaletteMaxYOffsetPx = (chartPaletteContainerHeightPx - drawingPaletteHeightPx - chartPaletteTopInsetPx).coerceAtLeast(0f)
     val chartPaletteMaxXOffsetPx = (chartPaletteContainerWidthPx - drawingPaletteWidthPx - with(paletteDensity) { 80.dp.toPx() }).coerceAtLeast(0f)
     LaunchedEffect(chartPaletteContainerHeightPx, drawingPaletteHeightPx, chartPaletteContainerWidthPx, drawingPaletteWidthPx, isEmbeddedReplay) {
@@ -901,9 +901,10 @@ fun ChartScreen(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
-                            .padding(top = 5.dp, end = 8.dp, start = 8.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .padding(top = 5.dp, end = 12.dp, start = 12.dp)
+                            .clip(RoundedCornerShape(24.dp))
                             .background(TradingCard.copy(alpha = 0.94f))
+                            .heightIn(min = 58.dp)
                             .testTag("chart_immersive_floating_header"),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -960,8 +961,8 @@ fun ChartScreen(
                                 expanded = floatingTimeframeMenuExpanded,
                                 onDismissRequest = { floatingTimeframeMenuExpanded = false }
                             ) {
-                                listOf(Timeframe.M1, Timeframe.M5, Timeframe.M15,
-                                    Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
+                                listOf(Timeframe.M1, Timeframe.M3, Timeframe.M5, Timeframe.M15,
+                                    Timeframe.H1, Timeframe.H2, Timeframe.H4, Timeframe.D1, Timeframe.W1).forEach { tf ->
                                     DropdownMenuItem(
                                         text = { Text(tf.displayName) },
                                         onClick = {
@@ -1015,7 +1016,7 @@ fun ChartScreen(
                     Column(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 61.dp, start = 76.dp, end = 76.dp)
+                            .padding(top = 68.dp, start = 76.dp, end = 76.dp)
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(22.dp))
                             .background(TradingCard.copy(alpha = 0.94f))
@@ -1152,7 +1153,7 @@ fun ChartScreen(
                         .absoluteOffset(
                             x = 8.dp + with(paletteDensity) { drawingPaletteXOffsetPx.toDp() },
                             y = with(paletteDensity) { drawingPaletteOffsetPx.toDp() } +
-                                if (isEmbeddedReplay) 124.dp else 66.dp
+                                if (isEmbeddedReplay) 148.dp else 82.dp
                         )
                         .onSizeChanged {
                             drawingPaletteHeightPx = it.height
@@ -1160,7 +1161,7 @@ fun ChartScreen(
                         }
                         .testTag("chart_reference_floating_tools"),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     val referenceTools = listOf(
                         Triple("تقاطع", Icons.Default.FilterCenterFocus, 0),
@@ -1205,7 +1206,7 @@ fun ChartScreen(
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Surface(
-                                modifier = Modifier.size(38.dp)
+                                modifier = Modifier.size(46.dp)
                                     .clickable {
                                         when (index) {
                                             0 -> viewModel.toggleCrosshair()
@@ -1226,15 +1227,15 @@ fun ChartScreen(
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(image, contentDescription = label,
                                         tint = if (selected) TradingAccent else TradingTextPrimary,
-                                        modifier = Modifier.size(19.dp))
+                                        modifier = Modifier.size(22.dp))
                                 }
                             }
-                            Text(label, color = TradingTextSecondary, fontSize = 9.sp)
+                            Text(label, color = TradingTextSecondary, fontSize = 10.sp)
                         }
                     }
                     IconButton(
                         onClick = { drawingPaletteCollapsed = !drawingPaletteCollapsed },
-                        modifier = Modifier.size(38.dp).testTag("chart_tools_collapse_toggle")
+                        modifier = Modifier.size(46.dp).testTag("chart_tools_collapse_toggle")
                     ) {
                         Icon(
                             if (drawingPaletteCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
