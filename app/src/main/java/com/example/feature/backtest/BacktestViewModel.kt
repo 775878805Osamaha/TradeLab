@@ -129,6 +129,37 @@ class BacktestViewModel(
             return
         }
 
+        if (state.isRunning) return
+        val config = try {
+            BacktestConfig(
+                strategy = strategy,
+                symbol = state.symbol,
+                timeframe = state.timeframe,
+                initialBalance = parseBacktestNumber("رأس المال", state.initialBalance),
+                leverage = parseBacktestNumber("الرافعة المالية", state.leverage),
+                positionSizingMode = state.positionSizingMode,
+                riskPercentage = parseBacktestNumber("نسبة المخاطرة", state.riskPercentage),
+                fixedLot = parseBacktestNumber("حجم العقد", state.fixedLotSize),
+                fixedRiskAmount = parseBacktestNumber("مبلغ المخاطرة", state.fixedRiskAmount),
+                spreadPips = parseBacktestNumber("السبريد", state.spreadPips),
+                slippagePips = parseBacktestNumber("الانزلاق", state.slippage),
+                commissionPerLot = parseBacktestNumber("العمولة", state.commission),
+                swapPerLotDaily = parseBacktestNumber("السواب", state.swap),
+                allowMultiplePositions = state.allowMultiplePositions,
+                allowLong = state.allowLong,
+                allowShort = state.allowShort
+            ).also { it.validate().getOrThrow() }
+        } catch (error: IllegalArgumentException) {
+            _uiState.update {
+                it.copy(
+                    isRunning = false,
+                    currentStage = BacktestProgressStage.FAILED,
+                    message = "إعدادات الاختبار غير صالحة: ${error.message}"
+                )
+            }
+            return
+        }
+
         _uiState.update {
             it.copy(
                 isRunning = true,
@@ -146,25 +177,6 @@ class BacktestViewModel(
                 val from = now - (interval * 350)
 
                 val candles = marketDataRepository.getCandles(state.symbol, state.timeframe, from, now)
-
-                val config = BacktestConfig(
-                    strategy = strategy,
-                    symbol = state.symbol,
-                    timeframe = state.timeframe,
-                    initialBalance = state.initialBalance.toDoubleOrNull() ?: 50.0,
-                    leverage = state.leverage.toDoubleOrNull() ?: 100.0,
-                    positionSizingMode = state.positionSizingMode,
-                    riskPercentage = state.riskPercentage.toDoubleOrNull() ?: 1.0,
-                    fixedLot = state.fixedLotSize.toDoubleOrNull() ?: 0.01,
-                    fixedRiskAmount = state.fixedRiskAmount.toDoubleOrNull() ?: 5.0,
-                    spreadPips = state.spreadPips.toDoubleOrNull() ?: 1.5,
-                    slippagePips = state.slippage.toDoubleOrNull() ?: 0.2,
-                    commissionPerLot = state.commission.toDoubleOrNull() ?: 5.0,
-                    swapPerLotDaily = state.swap.toDoubleOrNull() ?: 1.0,
-                    allowMultiplePositions = state.allowMultiplePositions,
-                    allowLong = state.allowLong,
-                    allowShort = state.allowShort
-                )
 
                 val result = backtestEngine.runBacktest(candles, config) { stage, fraction ->
                     _uiState.update {
