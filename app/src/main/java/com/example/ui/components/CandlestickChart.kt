@@ -405,14 +405,15 @@ fun CandlestickChart(
             var lastDisplayedDay = -1L
             visibleCandles.forEachIndexed { i, c ->
                 val x = transform.candleIndexToX(i)
-                val day = Math.floorDiv(c.openTime, 86_400_000L)
-                val label = if (day != lastDisplayedDay) dateTimeFormat.format(Date(c.openTime))
-                    else timeFormat.format(Date(c.openTime))
+                val day = ChartTimeAxis.dayKey(c.openTime)
+                val label = ChartTimeAxis.label(
+                    c.openTime,
+                    if (lastDisplayedDay == day) c.openTime else null
+                )
                 val textWidth = timeAxisPaint.measureText(label)
                 val left = x - textWidth / 2f
                 val right = x + textWidth / 2f
-                if (left >= 4f && right <= chartWidth - 4f &&
-                    left >= lastTimeLabelRight + 16f) {
+                if (ChartTimeAxis.shouldDisplay(left, right, chartWidth, lastTimeLabelRight)) {
                     drawContext.canvas.nativeCanvas.drawText(
                         label, x, height - 8f, timeAxisPaint
                     )
