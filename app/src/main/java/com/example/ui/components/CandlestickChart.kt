@@ -562,8 +562,8 @@ fun CandlestickChart(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 52.dp, bottom = 40.dp)
-                .background(TradingElevated.copy(alpha = 0.92f), RoundedCornerShape(12.dp))
+                .padding(end = 44.dp, bottom = 24.dp)
+                .background(TradingElevated.copy(alpha = 0.82f), RoundedCornerShape(8.dp))
                 .padding(horizontal = 3.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -585,7 +585,7 @@ fun CandlestickChart(
             androidx.compose.material3.TextButton(
                 onClick = {
                     scrollOffsetPx = 0f
-                    candleWidthPx = 12f
+                    candleWidthPx = ChartNavigation.DEFAULT_CANDLE_WIDTH
                     manualPriceScale = 1f
                     crosshairOffset = null
                     inspectedCandle = null
