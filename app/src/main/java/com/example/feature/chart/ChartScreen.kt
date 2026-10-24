@@ -131,6 +131,17 @@ fun ChartScreen(
             entryPrice != null && (if (side == OrderSide.BUY) sl < entryPrice else sl > entryPrice))
         val validTp = orderTpInput.isBlank() || (tp != null && tp.isFinite() && tp > 0.0 &&
             entryPrice != null && (if (side == OrderSide.BUY) tp > entryPrice else tp < entryPrice))
+        val riskEstimate = if (sl != null && validSl && validTp &&
+            entryPrice != null && volume != null && validVolume) {
+            com.example.core.execution.TradeRiskCalculator.estimate(
+                symbol = if (isEmbeddedReplay) replayState.symbol else uiState.selectedSymbol,
+                side = side,
+                entryPrice = entryPrice,
+                stopLoss = sl,
+                takeProfit = tp,
+                volumeLots = volume
+            )
+        } else null
         val validOrder = validVolume && validSl && validTp &&
             entryTick?.symbol == (if (isEmbeddedReplay) replayState.symbol else uiState.selectedSymbol) &&
             entryPrice != null &&
@@ -169,7 +180,19 @@ fun ChartScreen(
                         Text("المخاطرة السعرية: ${String.format(Locale.US, "%.5f", kotlin.math.abs(entryPrice - sl))} لكل وحدة")
                         val ratio = if (tp != null && validTp) kotlin.math.abs(tp - entryPrice) / kotlin.math.abs(entryPrice - sl) else null
                         if (ratio != null && ratio.isFinite()) Text("العائد إلى المخاطرة: 1:${String.format(Locale.US, "%.2f", ratio)}")
-                        Text("المخاطرة النقدية تتطلب قيمة العقد الفعلية", fontSize = 11.sp, color = TradingTextSecondary)
+                        if (riskEstimate != null) {
+                            Text("الخسارة المتوقعة: $\{String.format(Locale.US, "%.2f", riskEstimate.riskUsd)} USD",
+                                color = TradingNegative, modifier = Modifier.testTag("chart_order_risk_usd"))
+                            riskEstimate.rewardUsd?.let { reward ->
+                                Text("الربح المحتمل: $\{String.format(Locale.US, "%.2f", reward)} USD",
+                                    color = TradingPositive, modifier = Modifier.testTag("chart_order_reward_usd"))
+                            }
+                            Text("تقدير قبل التنفيذ، لا يشمل الانزلاق والعمولات",
+                                fontSize = 11.sp, color = TradingTextSecondary)
+                        } else {
+                            Text("تعذر حساب المخاطرة بالدولار لهذا الحجم أو الرمز",
+                                fontSize = 11.sp, color = TradingNegative)
+                        }
                     }
                     if (!validSl || !validTp) Text("تحقق من اتجاه ومستوى وقف الخسارة وجني الربح", color = TradingNegative)
                 }
