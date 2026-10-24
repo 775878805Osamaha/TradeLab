@@ -45,10 +45,16 @@ jobs:
             adb shell settings put system accelerometer_rotation 0
             adb shell settings put system user_rotation 0
             adb shell am start -n com.aistudio.tradelab.vzqrpk/com.example.MainActivity
-            sleep 35
             mkdir -p screenshots
-            adb shell screencap -p /sdcard/tradelab-screen.png
-            adb pull /sdcard/tradelab-screen.png screenshots/tradelab-emulator.png
+            sleep 35
+            adb shell screencap -p /sdcard/tradelab-35s.png
+            adb pull /sdcard/tradelab-35s.png screenshots/tradelab-35s.png
+            sleep 65
+            adb shell screencap -p /sdcard/tradelab-100s.png
+            adb pull /sdcard/tradelab-100s.png screenshots/tradelab-100s.png
+            sleep 50
+            adb shell screencap -p /sdcard/tradelab-150s.png
+            adb pull /sdcard/tradelab-150s.png screenshots/tradelab-150s.png
             adb shell dumpsys activity activities > screenshots/activity-state.txt
             adb logcat -d -t 500 > screenshots/logcat-tail.txt
       - name: Upload real emulator capture and logs
