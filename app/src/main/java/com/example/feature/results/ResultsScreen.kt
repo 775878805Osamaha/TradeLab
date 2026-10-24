@@ -28,6 +28,8 @@ import com.example.ui.components.EquityCurveChart
 import com.example.ui.components.StatTile
 import com.example.ui.theme.*
 import java.util.Locale
+import java.text.SimpleDateFormat
+import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,8 +91,9 @@ fun ResultsScreen(
                 .padding(paddingValues)
         ) {
             // Main Results Tabs
-            TabRow(
+            ScrollableTabRow(
                 selectedTabIndex = uiState.selectedTab.ordinal,
+                edgePadding = 8.dp,
                 containerColor = TradingCard,
                 contentColor = TradingAccent,
                 modifier = Modifier.fillMaxWidth()
@@ -102,7 +105,9 @@ fun ResultsScreen(
                         text = {
                             Text(
                                 text = tab.displayNameAr,
-                                fontSize = 11.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                fontSize = 12.sp,
                                 fontWeight = if (uiState.selectedTab == tab) FontWeight.Bold else FontWeight.Normal
                             )
                         }
@@ -121,180 +126,270 @@ fun ResultsScreen(
     }
 }
 
+
+private val ResultsCardBackground = Color(0xFF131A24)
+private val ResultsCardBorder = Color(0xFF232C3A)
+private val ResultsPrimary = Color(0xFF2962FF)
+private val ResultsProfit = Color(0xFF26D9B0)
+private val ResultsLoss = Color(0xFFEF5350)
+private val ResultsText = Color(0xFFE8ECF4)
+private val ResultsMuted = Color(0xFF8F98A8)
+
+private fun money(value: Double, signed: Boolean = false): String {
+    if (!value.isFinite()) return "—"
+    return String.format(Locale.US, "%s$%,.2f", if (signed && value > 0) "+" else "", value)
+}
+
+private fun percent(value: Double, signed: Boolean = false): String {
+    if (!value.isFinite()) return "—"
+    return String.format(Locale.US, "%s%.2f%%", if (signed && value > 0) "+" else "", value)
+}
+
+@Composable
+private fun ResultsMetricCard(
+    title: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconColor: Color,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    valueColor: Color = ResultsText,
+    progress: Float? = null
+) {
+    Card(
+        modifier = modifier.heightIn(min = 104.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = ResultsCardBackground),
+        border = androidx.compose.foundation.BorderStroke(1.dp, ResultsCardBorder)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(title, fontSize = 11.sp, color = ResultsMuted, maxLines = 1)
+                Box(Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(iconColor.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                    Icon(icon, null, tint = iconColor, modifier = Modifier.size(19.dp))
+                }
+            }
+            Text(value, fontSize = 21.sp, fontWeight = FontWeight.Bold, color = valueColor, maxLines = 1,
+                style = TextStyle(textDirection = TextDirection.Ltr))
+            if (progress != null) {
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
+                    color = ResultsProfit, trackColor = ResultsCardBorder
+                )
+            }
+            if (subtitle != null) Text(subtitle, fontSize = 10.sp, color = ResultsMuted, maxLines = 2)
+        }
+    }
+}
+
 @Composable
 private fun ResultsOverviewContent(
     viewModel: ResultsViewModel,
     uiState: ResultsUiState
 ) {
-    val metrics = uiState.metrics
+    var period by remember { mutableStateOf(ResultsPeriod.MONTH) }
+    val now = remember { System.currentTimeMillis() }
+    val snapshot = remember(uiState.trades, uiState.initialBalance, period, now) {
+        ResultsPeriodCalculator.calculate(uiState.initialBalance, uiState.trades, period, now)
+    }
+    val metrics = snapshot.metrics
+    val trades = snapshot.trades
+    val net = metrics.netProfit
+    val pnlColor = when {
+        net > 0.0 -> ResultsProfit
+        net < 0.0 -> ResultsLoss
+        else -> ResultsMuted
+    }
+    val recent = remember(trades) { trades.sortedByDescending { it.closeTime }.take(3) }
+    val dateFormat = remember { SimpleDateFormat("dd/MM HH:mm", Locale.US) }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(bottom = 28.dp)
+        modifier = Modifier.fillMaxSize().background(Color(0xFF0B0E14)),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 28.dp)
     ) {
-        // Hero Return Card
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("results_hero_card"),
-                shape = RoundedCornerShape(8.dp),
-                colors = CardDefaults.cardColors(containerColor = TradingCard),
-                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "صافي الربح التراكمي", fontSize = 12.sp, color = TradingTextSecondary)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Surface(color = ResultsCardBackground, shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ResultsCardBorder)) {
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CalendarMonth, null, tint = ResultsMuted, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(when(period) { ResultsPeriod.MONTH -> "هذا الشهر"; ResultsPeriod.WEEK -> "هذا الأسبوع"; ResultsPeriod.ALL -> "كل الفترات" },
+                            color = ResultsText, fontSize = 12.sp)
+                    }
+                }
+                Row(Modifier.clip(RoundedCornerShape(10.dp)).background(ResultsCardBackground).padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf(ResultsPeriod.ALL, ResultsPeriod.MONTH, ResultsPeriod.WEEK).forEach { item ->
                         Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(TradingElevated)
-                                .clickable { viewModel.togglePercentageMode() }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                            Modifier.clip(RoundedCornerShape(8.dp))
+                                .background(if (period == item) ResultsPrimary else Color.Transparent)
+                                .clickable { period = item }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .testTag("results_period_${item.name}"),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = if (uiState.isPercentageMode) "عرض القيمة ($)" else "عرض النسبة (%)",
-                                fontSize = 11.sp,
-                                color = TradingCyan,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Text(item.titleAr, fontSize = 12.sp, color = if (period == item) Color.White else ResultsMuted)
                         }
                     }
+                }
+            }
+        }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    val netProfit = metrics?.netProfit ?: 0.0
-                    val returnPct = metrics?.returnPct ?: 0.0
-                    val isPos = netProfit >= 0.0
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("results_hero_card"),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = ResultsCardBackground),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ResultsCardBorder)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("صافي الربح التراكمي", color = ResultsText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.width(6.dp))
+                            Icon(Icons.Default.Info, null, tint = ResultsMuted, modifier = Modifier.size(16.dp))
+                        }
+                        Surface(color = pnlColor.copy(alpha = 0.16f), shape = RoundedCornerShape(8.dp)) {
+                            Text(percent(metrics.returnPct, true), modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                color = pnlColor, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                                style = TextStyle(textDirection = TextDirection.Ltr))
+                        }
+                    }
+                    Text(
+                        if (uiState.isPercentageMode) percent(metrics.returnPct, true) else money(net, true),
+                        fontSize = 33.sp, fontWeight = FontWeight.Bold, color = pnlColor, maxLines = 1,
+                        style = TextStyle(textDirection = TextDirection.Ltr),
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                    Text("الرصيد: ${money(snapshot.closingBalance)}", color = ResultsMuted, fontSize = 13.sp,
+                        modifier = Modifier.align(Alignment.CenterHorizontally))
+                    Surface(
+                        modifier = Modifier.clickable { viewModel.togglePercentageMode() }.testTag("results_percentage_toggle"),
+                        color = Color(0xFF101D2D), shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ResultsCardBorder)
                     ) {
-                        Text(
-                            text = if (uiState.isPercentageMode) {
-                                String.format(Locale.US, "%s%.2f%%", if (returnPct >= 0) "+" else "", returnPct)
-                            } else {
-                                String.format(Locale.US, "%s$%.2f", if (isPos) "+" else "", netProfit)
-                            },
-                            fontSize = 22.sp,
-                            style = TextStyle(textDirection = TextDirection.Ltr),
-                            maxLines = 1,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isPos) TradingPositive else TradingNegative
-                        )
-                        Text(
-                            text = String.format(Locale.US, "الرصيد: $%.2f", uiState.currentBalance),
-                            fontSize = 13.sp,
-                            color = TradingTextSecondary
+                        Text(if (uiState.isPercentageMode) "عرض القيمة ($)" else "عرض النسبة (%)",
+                            Modifier.padding(horizontal = 12.dp, vertical = 7.dp), fontSize = 11.sp, color = ResultsText)
+                    }
+                    if (trades.isEmpty()) {
+                        Box(Modifier.fillMaxWidth().height(170.dp), contentAlignment = Alignment.Center) {
+                            Text("ابدأ أول اختبار لعرض نتائجك", color = ResultsMuted, fontSize = 13.sp)
+                        }
+                    } else {
+                        EquityCurveChart(
+                            points = snapshot.curve,
+                            initialBalance = snapshot.openingBalance,
+                            isPercentageMode = uiState.isPercentageMode,
+                            curveType = ChartCurveType.EQUITY_AND_BALANCE
                         )
                     }
                 }
             }
         }
 
-        // Primary Metrics Grid
         item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatTile(
-                    label = "عامل الربح (PF)",
-                    value = metrics?.profitFactor?.let { String.format(Locale.US, "%.2f", it) } ?: "N/A",
-                    modifier = Modifier.weight(1f)
-                )
-                StatTile(
-                    label = "معدل الفوز (Win Rate)",
-                    value = if (metrics != null && metrics.totalTrades > 0) String.format(Locale.US, "%.1f%%", metrics.winRatePct) else "N/A",
-                    isPositive = (metrics?.winRatePct ?: 0.0) >= 50.0,
-                    modifier = Modifier.weight(1f)
-                )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ResultsMetricCard("عامل الربح", metrics.profitFactor?.let { String.format(Locale.US, "%.2f", it) } ?: "—",
+                    Icons.Default.Layers, ResultsPrimary, Modifier.weight(1f))
+                ResultsMetricCard("معدل الفوز", if (metrics.totalTrades > 0) percent(metrics.winRatePct) else "—",
+                    Icons.Default.TrackChanges, ResultsProfit, Modifier.weight(1f),
+                    subtitle = "${metrics.winningTrades} رابحة / ${metrics.losingTrades} خاسرة",
+                    progress = if (metrics.totalTrades > 0) (metrics.winRatePct / 100.0).toFloat() else 0f)
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ResultsMetricCard("إجمالي الصفقات", "${metrics.totalTrades}", Icons.Default.BarChart, ResultsPrimary,
+                    Modifier.weight(1f), subtitle = "${metrics.winningTrades} رابحة / ${metrics.losingTrades} خاسرة")
+                ResultsMetricCard("أقصى تراجع", percent(metrics.maxDrawdownPct),
+                    Icons.Default.TrendingDown, ResultsLoss, Modifier.weight(1f),
+                    subtitle = money(metrics.maxDrawdown), valueColor = ResultsLoss)
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ResultsMetricCard("التوقع الرياضي", metrics.expectancy?.let { money(it, true) } ?: "—",
+                    Icons.Default.Functions, ResultsProfit, Modifier.weight(1f), subtitle = "لكل صفقة",
+                    valueColor = if ((metrics.expectancy ?: 0.0) >= 0) ResultsProfit else ResultsLoss)
+                ResultsMetricCard("نسبة شارب", metrics.sharpeRatio?.let { String.format(Locale.US, "%.2f", it) } ?: "—",
+                    Icons.Default.ShowChart, ResultsPrimary, Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ResultsMetricCard("متوسط الخسارة", metrics.avgLoss?.let { money(-kotlin.math.abs(it)) } ?: "—",
+                    Icons.Default.South, ResultsLoss, Modifier.weight(1f), valueColor = ResultsLoss)
+                ResultsMetricCard("متوسط الربح", metrics.avgWin?.let { money(it, true) } ?: "—",
+                    Icons.Default.North, ResultsProfit, Modifier.weight(1f), valueColor = ResultsProfit)
             }
         }
 
         item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatTile(
-                    label = "أقصى تراجع (Drawdown)",
-                    value = metrics?.let { String.format(Locale.US, "%.1f%% ($%.2f)", it.maxDrawdownPct, it.maxDrawdown) } ?: "N/A",
-                    isPositive = false,
-                    modifier = Modifier.weight(1f)
-                )
-                StatTile(
-                    label = "التوقع الرياضي (Expectancy)",
-                    value = metrics?.expectancy?.let { String.format(Locale.US, "$%.2f", it) } ?: "N/A",
-                    isPositive = (metrics?.expectancy ?: 0.0) >= 0.0,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatTile(
-                    label = "نسبة شارب (Sharpe)",
-                    value = metrics?.sharpeRatio?.let { String.format(Locale.US, "%.2f", it) } ?: "N/A",
-                    modifier = Modifier.weight(1f)
-                )
-                StatTile(
-                    label = "نسبة سورتينو (Sortino)",
-                    value = metrics?.sortinoRatio?.let { String.format(Locale.US, "%.2f", it) } ?: "N/A",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatTile(
-                    label = "عامل التعافي (Recovery)",
-                    value = metrics?.recoveryFactor?.let { String.format(Locale.US, "%.2f", it) } ?: "N/A",
-                    modifier = Modifier.weight(1f)
-                )
-                StatTile(
-                    label = "إجمالي الصفقات",
-                    value = "${metrics?.totalTrades ?: 0}",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        // Secondary In-Depth Details Card
-        metrics?.let { m ->
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = CardDefaults.cardColors(containerColor = TradingCard),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(text = "إحصاءات التداول والمخاطر التفصيلية", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        HorizontalDivider(color = TradingBorder)
-
-                        MetricRow("الصفقات الرابحة / الخاسرة", "${m.winningTrades} رابحة • ${m.losingTrades} خاسرة")
-                        MetricRow(
-                            "متوسط الربح / متوسط الخسارة",
-                            "${m.avgWin?.let { String.format(Locale.US, "$%.2f", it) } ?: "N/A"} / ${m.avgLoss?.let { String.format(Locale.US, "$%.2f", it) } ?: "N/A"}"
-                        )
-                        MetricRow("أقصى تتابع صفقات رابحة", "${m.maxConsecutiveWins}")
-                        MetricRow("أقصى تتابع صفقات خاسرة", "${m.maxConsecutiveLosses}")
-                        MetricRow("أفضل صفقة", m.bestTrade?.let { String.format(Locale.US, "+$%.2f", it) } ?: "N/A")
-                        MetricRow("أسوأ صفقة", m.worstTrade?.let { String.format(Locale.US, "$%.2f", it) } ?: "N/A")
-                        MetricRow("متوسط مدة الصفقة", "${m.avgDurationMillis / 1000} ثانية (${m.avgDurationMillis / 60000} دقيقة)")
-                        MetricRow("أقصر مدة صفقة", "${m.shortestDurationMillis / 1000} ثانية")
-                        MetricRow("أطول مدة صفقة", "${m.longestDurationMillis / 60000} دقيقة")
-                        MetricRow("إجمالي العقود (Volume)", String.format(Locale.US, "%.2f Lot", m.totalVolume))
-                        MetricRow("متوسط العقد / أكبر عقد", "${String.format(Locale.US, "%.2f", m.avgVolume)} Lot / ${String.format(Locale.US, "%.2f", m.largestVolume)} Lot")
-                        MetricRow("متوسط المخاطرة المحسوبة", m.avgRiskAmount?.let { String.format(Locale.US, "$%.2f", it) } ?: "N/A")
-                        MetricRow("متوسط المضاعف R (R-Multiple)", m.avgRMultiple?.let { String.format(Locale.US, "%.2f R", it) } ?: "N/A")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = ResultsCardBackground),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ResultsCardBorder)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("أحدث الصفقات", fontSize = 14.sp, color = ResultsText, fontWeight = FontWeight.Bold)
+                        Text("عرض الكل", fontSize = 12.sp, color = ResultsPrimary,
+                            modifier = Modifier.clickable { viewModel.setSelectedTab(ResultsTab.JOURNAL) })
                     }
+                    Spacer(Modifier.height(7.dp))
+                    if (recent.isEmpty()) {
+                        Text("لا توجد صفقات خلال هذه الفترة", color = ResultsMuted, fontSize = 12.sp,
+                            modifier = Modifier.padding(vertical = 16.dp))
+                    }
+                    recent.forEach { trade ->
+                        HorizontalDivider(color = ResultsCardBorder)
+                        Row(Modifier.fillMaxWidth().clickable { viewModel.selectTradeForDetail(trade) }
+                            .padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Surface(color = (if (trade.side == PositionSide.BUY) ResultsProfit else ResultsLoss).copy(alpha = 0.16f),
+                                shape = RoundedCornerShape(6.dp)) {
+                                Text(if (trade.side == PositionSide.BUY) "شراء" else "بيع",
+                                    Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                    color = if (trade.side == PositionSide.BUY) ResultsProfit else ResultsLoss, fontSize = 11.sp)
+                            }
+                            Text(trade.symbol, color = ResultsText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f), maxLines = 1)
+                            Text(dateFormat.format(Date(trade.closeTime)), color = ResultsMuted, fontSize = 10.sp, maxLines = 1)
+                            Text(money(trade.netProfitLoss, true),
+                                color = if (trade.netProfitLoss >= 0) ResultsProfit else ResultsLoss,
+                                fontWeight = FontWeight.Bold, fontSize = 12.sp,
+                                style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1)
+                            Icon(Icons.Default.ChevronLeft, null, tint = ResultsMuted, modifier = Modifier.size(17.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = ResultsCardBackground),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ResultsCardBorder)
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("إحصاءات التداول والمخاطر التفصيلية", color = ResultsText, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    HorizontalDivider(color = ResultsCardBorder)
+                    MetricRow("أقصى تتابع رابح", "${metrics.maxConsecutiveWins}")
+                    MetricRow("أقصى تتابع خاسر", "${metrics.maxConsecutiveLosses}")
+                    MetricRow("أفضل صفقة", metrics.bestTrade?.let { money(it, true) } ?: "—")
+                    MetricRow("أسوأ صفقة", metrics.worstTrade?.let { money(it) } ?: "—")
+                    MetricRow("متوسط مدة الصفقة", "${metrics.avgDurationMillis / 60_000} دقيقة")
+                    MetricRow("إجمالي حجم العقود", String.format(Locale.US, "%.2f Lot", metrics.totalVolume))
+                    MetricRow("متوسط المضاعف R", metrics.avgRMultiple?.let { String.format(Locale.US, "%.2f R", it) } ?: "—")
+                    MetricRow("نسبة سورتينو", metrics.sortinoRatio?.let { String.format(Locale.US, "%.2f", it) } ?: "—")
+                    MetricRow("عامل التعافي", metrics.recoveryFactor?.let { String.format(Locale.US, "%.2f", it) } ?: "—")
                 }
             }
         }
