@@ -876,6 +876,56 @@ fun ChartScreen(
                     }
                 }
 
+                // Reference-style floating Replay transport; chart keeps its vertical space.
+                if (isEmbeddedReplay && immersiveChart) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(if (immersiveChart) 44.dp else 52.dp)
+                        .background(TradingBackground)
+                        .testTag("chart_embedded_replay_controls"),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { showReplayDatePicker = true }, modifier = Modifier.testTag("chart_replay_date_picker")) {
+                        Icon(Icons.Default.DateRange, contentDescription = "تاريخ الإعادة", tint = TradingTextPrimary)
+                        Text(" ${replayState.currentIndex + 1}", fontSize = 11.sp, color = TradingTextPrimary)
+                    }
+                    IconButton(onClick = { replayViewModel.stepBackward() },
+                        enabled = !replayState.isLoading && replayState.currentIndex > 0,
+                        modifier = Modifier.testTag("chart_replay_step_back")) {
+                        Icon(Icons.Default.SkipPrevious, contentDescription = "رجوع شمعة", tint = TradingTextPrimary)
+                    }
+                    IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
+                        enabled = !replayState.isLoading && replayState.totalCandles > 0,
+                        modifier = Modifier.testTag("chart_replay_play_pause")) {
+                        Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = "تشغيل أو إيقاف", tint = TradingAccent)
+                    }
+                    IconButton(onClick = { replayViewModel.stepForward() },
+                        enabled = !replayState.isLoading && replayState.currentIndex < replayState.totalCandles - 1,
+                        modifier = Modifier.testTag("chart_replay_step_next")) {
+                        Icon(Icons.Default.SkipNext, contentDescription = "تقدم شمعة", tint = TradingTextPrimary)
+                    }
+                    Box {
+                        TextButton(onClick = { replaySpeedMenuExpanded = true }) {
+                            Text("${replayState.speed}x", color = TradingTextPrimary)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = "سرعة الإعادة", tint = TradingTextPrimary)
+                        }
+                        DropdownMenu(expanded = replaySpeedMenuExpanded,
+                            onDismissRequest = { replaySpeedMenuExpanded = false }) {
+                            listOf(0.5f, 1f, 2f, 5f, 10f, 25f, 50f, 100f).forEach { speed ->
+                                DropdownMenuItem(text = { Text("${speed}x") },
+                                    onClick = { replayViewModel.setSpeed(speed); replaySpeedMenuExpanded = false })
+                            }
+                        }
+                    }
+                    IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false },
+                        modifier = Modifier.testTag("chart_replay_close")) {
+                        Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextPrimary)
+                    }
+                }
+            }
+
+
                 // Compact provenance HUD: historical candles are not live executable quotes.
                 val chartBars = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
                 if (!immersiveChart && chartBars.isNotEmpty()) {
@@ -1081,7 +1131,7 @@ fun ChartScreen(
                 }
             }
 
-            if (isEmbeddedReplay) {
+            if (isEmbeddedReplay && !immersiveChart) {
                 Row(
                     modifier = Modifier.fillMaxWidth().height(if (immersiveChart) 44.dp else 52.dp)
                         .background(TradingBackground)
@@ -1177,7 +1227,8 @@ fun ChartScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("شراء", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text(replayTick?.ask?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 11.sp)
+                            Text(replayTick?.ask?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                                style = TextStyle(textDirection = TextDirection.Ltr))
                         }
                     }
 
