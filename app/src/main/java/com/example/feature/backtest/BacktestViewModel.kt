@@ -174,13 +174,21 @@ class BacktestViewModel(
         backtestJob = viewModelScope.launch {
             try {
                 val now = System.currentTimeMillis()
-                val interval = state.timeframe.minutes * 60 * 1000L
-                val from = now - (interval * 350)
-
-                val sourceCandles = marketDataRepository.getCandles(state.symbol, state.timeframe, from, now)
-                // The currently forming bar has unknown final OHLC. Never
-                // allow it to enter historical strategy or execution logic.
-                val candles = sourceCandles.filter { it.closeTime <= now }
+                val interval = state.timeframe.minutes.toLong() * 60_000L
+                val window = BacktestHistoricalWindow.lastClosed(now, interval, 350)
+                // Repository requires candle-open aligned endpoints and rejects
+                // the currently forming bar. Never pass raw wall-clock millis.
+                val sourceCandles = marketDataRepository.getCandles(
+                    state.symbol, state.timeframe, window.first, window.last
+                )
+                // Reject a provider contract violation rather than silently
+                // dropping unexpected candles and testing a different sample.
+                require(sourceCandles.all {
+                    it.openTime >= window.first &&
+                        it.openTime <= window.last &&
+                        it.closeTime <= now
+                }) { "مصدر البيانات أعاد شموعًا خارج الفترة المكتملة المطلوبة" }
+                val candles = sourceCandles
                 require(candles.isNotEmpty()) {
                     "لا توجد شموع تاريخية مكتملة للفترة المحددة"
                 }
