@@ -218,6 +218,7 @@ fun CandlestickChart(
                         },
                         onDrag = { change, dragAmount ->
                             if (!dragStartedInPlot) return@detectDragGestures
+                            // Only consume drags after the gesture has started inside the plot.
                             change.consume()
                             if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingCurrentOffset = change.position
