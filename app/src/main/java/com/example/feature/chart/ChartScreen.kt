@@ -844,7 +844,8 @@ fun ChartScreen(
                 key(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay) {
                 CandlestickChart(
                     candles = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles,
-                    latestTick = if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick,
+                    latestTick = (if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick)
+                        ?.takeIf { it.symbol == uiState.selectedSymbol },
                     openPositions = if (isEmbeddedReplay) replayState.openPositions else uiState.openPositions,
                     pendingOrders = if (isEmbeddedReplay) replayState.pendingOrders else uiState.pendingOrders,
                     historicalTrades = if (isEmbeddedReplay) replayState.closedTrades else uiState.historicalTrades,
