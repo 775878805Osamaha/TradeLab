@@ -796,6 +796,18 @@ fun ChartScreen(
                 }
             }
 
+            // Replay indicators must use only revealed candles, never future bars.
+            // remember avoids recomputing the EMA on unrelated chart gestures.
+            val replayEma = remember(
+                isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings
+            ) {
+                if (isEmbeddedReplay && uiState.indicatorSettings.isEmaEnabled)
+                    com.example.core.indicators.TechnicalIndicators.calculateEma(
+                        replayState.visibleCandles, uiState.indicatorSettings.emaPeriod
+                    )
+                else emptyList()
+            }
+
             // Professional Candlestick Chart
             Box(
                 modifier = Modifier
@@ -815,7 +827,7 @@ fun ChartScreen(
                     drawings = uiState.drawings,
                     indicatorSettings = uiState.indicatorSettings,
                     smaValues = if (isEmbeddedReplay) emptyList() else uiState.smaValues,
-                    emaValues = if (isEmbeddedReplay) emptyList() else uiState.emaValues,
+                    emaValues = if (isEmbeddedReplay) replayEma else uiState.emaValues,
                     bollingerValues = if (isEmbeddedReplay) emptyList() else uiState.bollingerValues,
                     vwapValues = if (isEmbeddedReplay) emptyList() else uiState.vwapValues,
                     rsiValues = if (isEmbeddedReplay) emptyList() else uiState.rsiValues,
