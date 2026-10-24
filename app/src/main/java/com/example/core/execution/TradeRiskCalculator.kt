@@ -43,6 +43,8 @@ object TradeRiskCalculator {
             !stopLoss.isFinite() || stopLoss <= 0.0 ||
             !volumeLots.isFinite() || volumeLots <= 0.0 ||
             volumeLots < info.minLot || volumeLots > info.maxLot ||
+            kotlin.math.abs(volumeLots / info.lotStep -
+                kotlin.math.round(volumeLots / info.lotStep)) > 1e-6 ||
             (takeProfit != null && (!takeProfit.isFinite() || takeProfit <= 0.0)) ||
             (equityUsd != null && (!equityUsd.isFinite() || equityUsd <= 0.0)) ||
             (targetRiskPercent != null && (!targetRiskPercent.isFinite() ||
