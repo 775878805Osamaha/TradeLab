@@ -625,8 +625,10 @@ fun CandlestickChart(
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
-                        manualPriceScale = (manualPriceScale * (1f + dragAmount.y / 400f))
-                            .coerceIn(0.25f, 8f)
+                        val scaleChange = 1f + dragAmount.y / 400f
+                        if (scaleChange.isFinite() && scaleChange > 0f) {
+                            manualPriceScale = (manualPriceScale * scaleChange).coerceIn(0.25f, 8f)
+                        }
                     }
                 }
         )
@@ -635,19 +637,20 @@ fun CandlestickChart(
         inspectedCandle?.let { c ->
             Card(
                 modifier = Modifier
-                    .padding(8.dp)
-                    .align(Alignment.TopStart),
+                    .padding(bottom = 76.dp, start = 8.dp, end = 8.dp)
+                    .align(Alignment.BottomCenter)
+                    .testTag("chart_crosshair_ohlcv_hud"),
                 shape = RoundedCornerShape(6.dp),
                 colors = CardDefaults.cardColors(containerColor = TradingElevated.copy(alpha = 0.9f))
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    Text("O: " + String.format(Locale.US, "%.2f", c.open), fontSize = 10.sp, color = TradingTextSecondary)
-                    Text("H: " + String.format(Locale.US, "%.2f", c.high), fontSize = 10.sp, color = TradingPositive)
-                    Text("L: " + String.format(Locale.US, "%.2f", c.low), fontSize = 10.sp, color = TradingNegative)
-                    Text("C: " + String.format(Locale.US, "%.2f", c.close), fontSize = 10.sp, color = if (c.close >= c.open) TradingPositive else TradingNegative)
+                    Text("O: " + com.example.ui.components.chart.QuotePriceFormatter.price(c.open), fontSize = 10.sp, color = TradingTextSecondary)
+                    Text("H: " + com.example.ui.components.chart.QuotePriceFormatter.price(c.high), fontSize = 10.sp, color = TradingPositive)
+                    Text("L: " + com.example.ui.components.chart.QuotePriceFormatter.price(c.low), fontSize = 10.sp, color = TradingNegative)
+                    Text("C: " + com.example.ui.components.chart.QuotePriceFormatter.price(c.close), fontSize = 10.sp, color = if (c.close >= c.open) TradingPositive else TradingNegative)
                     Text("V: " + String.format(Locale.US, "%.1f", c.volume), fontSize = 10.sp, color = TradingGold)
                 }
             }
