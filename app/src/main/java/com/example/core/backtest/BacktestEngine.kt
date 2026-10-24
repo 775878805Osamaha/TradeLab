@@ -550,6 +550,10 @@ class BacktestEngine(
             )
         }
 
+        // Equity observations are consumed by the results chart, analytics and
+        // CSV export. Reject corrupt/non-chronological snapshots at the source.
+        BacktestEquityIntegrity.validate(equityPoints, config.initialBalance, virtualBalance)
+
         val performanceMetrics = StatisticsCalculator.calculate(
             initialBalance = config.initialBalance,
             trades = closedTrades,
