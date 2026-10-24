@@ -704,58 +704,6 @@ fun ChartScreen(
             }
             }
 
-            // Always show Replay BUY/SELL in both immersive and standard chart modes.
-            // Previously this row was hidden inside showReplayDetails, which is false
-            // by default and whose expand control was itself hidden in immersive mode.
-            if (isEmbeddedReplay) {
-                // Historical orders use the isolated Replay account, never the live-paper account.
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(TradingCard)
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                        .testTag("chart_replay_trading_bar"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val replayTick = replayState.latestTick
-                    val canTradeReplay = !replayState.isLoading &&
-                        replayState.currentCandle != null && replayTick != null &&
-                        replayTick.symbol == replayState.symbol &&
-                        com.example.core.market.DataIntegrityValidator.validateTick(replayTick).isValid
-                    Button(
-                        onClick = { pendingOrderSide = OrderSide.SELL },
-                        enabled = canTradeReplay,
-                        colors = ButtonDefaults.buttonColors(containerColor = TradingNegative),
-                        modifier = Modifier.weight(1f).testTag("chart_replay_sell")
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("بيع", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text(replayTick?.bid?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 11.sp)
-                        }
-                    }
-                    Button(
-                        onClick = { pendingOrderSide = OrderSide.BUY },
-                        enabled = canTradeReplay,
-                        colors = ButtonDefaults.buttonColors(containerColor = TradingPositive),
-                        modifier = Modifier.weight(1f).testTag("chart_replay_buy")
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("شراء", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text(replayTick?.ask?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 11.sp)
-                        }
-                    }
-
-                }
-                if (replayState.openPositions.isNotEmpty()) {
-                    Text(
-                        "مراكز مفتوحة: ${replayState.openPositions.size} · رصيد: ${String.format(Locale.US, "%.2f", replayState.currentBalance)}",
-                        color = TradingTextSecondary,
-                        fontSize = 11.sp,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
-                            .testTag("chart_replay_open_positions_summary")
-                    )
-                }
-            }
-
             // Timeframe selection scrollable row (all 10 timeframes)
             Row(
                 modifier = Modifier.fillMaxWidth().height(if (immersiveChart) 36.dp else 48.dp)
@@ -927,6 +875,56 @@ fun ChartScreen(
                         }
                     }
                 }
+
+                // Reference-style floating Replay transport; chart keeps its vertical space.
+                if (isEmbeddedReplay && immersiveChart) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(if (immersiveChart) 44.dp else 52.dp)
+                        .background(TradingBackground)
+                        .testTag("chart_embedded_replay_controls"),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { showReplayDatePicker = true }, modifier = Modifier.testTag("chart_replay_date_picker")) {
+                        Icon(Icons.Default.DateRange, contentDescription = "تاريخ الإعادة", tint = TradingTextPrimary)
+                        Text(" ${replayState.currentIndex + 1}", fontSize = 11.sp, color = TradingTextPrimary)
+                    }
+                    IconButton(onClick = { replayViewModel.stepBackward() },
+                        enabled = !replayState.isLoading && replayState.currentIndex > 0,
+                        modifier = Modifier.testTag("chart_replay_step_back")) {
+                        Icon(Icons.Default.SkipPrevious, contentDescription = "رجوع شمعة", tint = TradingTextPrimary)
+                    }
+                    IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
+                        enabled = !replayState.isLoading && replayState.totalCandles > 0,
+                        modifier = Modifier.testTag("chart_replay_play_pause")) {
+                        Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = "تشغيل أو إيقاف", tint = TradingAccent)
+                    }
+                    IconButton(onClick = { replayViewModel.stepForward() },
+                        enabled = !replayState.isLoading && replayState.currentIndex < replayState.totalCandles - 1,
+                        modifier = Modifier.testTag("chart_replay_step_next")) {
+                        Icon(Icons.Default.SkipNext, contentDescription = "تقدم شمعة", tint = TradingTextPrimary)
+                    }
+                    Box {
+                        TextButton(onClick = { replaySpeedMenuExpanded = true }) {
+                            Text("${replayState.speed}x", color = TradingTextPrimary)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = "سرعة الإعادة", tint = TradingTextPrimary)
+                        }
+                        DropdownMenu(expanded = replaySpeedMenuExpanded,
+                            onDismissRequest = { replaySpeedMenuExpanded = false }) {
+                            listOf(0.5f, 1f, 2f, 5f, 10f, 25f, 50f, 100f).forEach { speed ->
+                                DropdownMenuItem(text = { Text("${speed}x") },
+                                    onClick = { replayViewModel.setSpeed(speed); replaySpeedMenuExpanded = false })
+                            }
+                        }
+                    }
+                    IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false },
+                        modifier = Modifier.testTag("chart_replay_close")) {
+                        Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextPrimary)
+                    }
+                }
+            }
+
 
                 // Compact provenance HUD: historical candles are not live executable quotes.
                 val chartBars = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
@@ -1133,7 +1131,7 @@ fun ChartScreen(
                 }
             }
 
-            if (isEmbeddedReplay) {
+            if (isEmbeddedReplay && !immersiveChart) {
                 Row(
                     modifier = Modifier.fillMaxWidth().height(if (immersiveChart) 44.dp else 52.dp)
                         .background(TradingBackground)
@@ -1178,6 +1176,71 @@ fun ChartScreen(
                         modifier = Modifier.testTag("chart_replay_close")) {
                         Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextPrimary)
                     }
+                }
+            }
+
+            // Always show Replay BUY/SELL in both immersive and standard chart modes.
+            // Previously this row was hidden inside showReplayDetails, which is false
+            // by default and whose expand control was itself hidden in immersive mode.
+            if (isEmbeddedReplay) {
+                // Historical orders use the isolated Replay account, never the live-paper account.
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(TradingBackground)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .testTag("chart_replay_trading_bar"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val replayTick = replayState.latestTick
+                    val canTradeReplay = !replayState.isLoading &&
+                        replayState.currentCandle != null && replayTick != null &&
+                        replayTick.symbol == replayState.symbol &&
+                        com.example.core.market.DataIntegrityValidator.validateTick(replayTick).isValid
+                    Button(
+                        onClick = { pendingOrderSide = OrderSide.SELL },
+                        enabled = canTradeReplay,
+                        colors = ButtonDefaults.buttonColors(containerColor = TradingNegative),
+                        modifier = Modifier.weight(1f).height(60.dp).testTag("chart_replay_sell"),
+                        shape = RoundedCornerShape(28.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("بيع", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(replayTick?.bid?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                                style = TextStyle(textDirection = TextDirection.Ltr))
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        val spreadPips = replayTick?.let { tick ->
+                            val pipSize = DefaultSymbols.getSymbol(replayState.symbol).pipSize
+                            if (pipSize > 0.0) (tick.ask - tick.bid) / pipSize else null
+                        }
+                        Text(spreadPips?.let { String.format(Locale.US, "%.1f", it) } ?: "—",
+                            color = TradingTextPrimary, fontSize = 12.sp)
+                        Text("سبريد", color = TradingTextSecondary, fontSize = 10.sp)
+                    }
+                    Button(
+                        onClick = { pendingOrderSide = OrderSide.BUY },
+                        enabled = canTradeReplay,
+                        colors = ButtonDefaults.buttonColors(containerColor = TradingPositive),
+                        modifier = Modifier.weight(1f).height(60.dp).testTag("chart_replay_buy"),
+                        shape = RoundedCornerShape(28.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("شراء", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(replayTick?.ask?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                                style = TextStyle(textDirection = TextDirection.Ltr))
+                        }
+                    }
+
+                }
+                if (replayState.openPositions.isNotEmpty()) {
+                    Text(
+                        "مراكز مفتوحة: ${replayState.openPositions.size} · رصيد: ${String.format(Locale.US, "%.2f", replayState.currentBalance)}",
+                        color = TradingTextSecondary,
+                        fontSize = 11.sp,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+                            .testTag("chart_replay_open_positions_summary")
+                    )
                 }
             }
 
