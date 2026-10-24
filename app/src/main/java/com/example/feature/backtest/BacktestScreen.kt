@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.core.analytics.EquityAnalytics
 import com.example.core.market.DefaultSymbols
 import com.example.core.model.PositionSide
 import com.example.core.model.PositionSizingMode
@@ -548,6 +549,15 @@ private fun BacktestResultsContent(
     }
 
     val m = result.metrics
+    val equityInsights = remember(result.equityCurve) {
+        runCatching {
+            EquityAnalytics.summarize(
+                result.equityCurve.map { point ->
+                    EquityAnalytics.Point(point.timestamp, point.equity)
+                }
+            )
+        }.getOrNull()
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -631,6 +641,44 @@ private fun BacktestResultsContent(
                         points = result.equityCurve,
                         initialBalance = result.config.initialBalance
                     )
+                }
+            }
+        }
+
+        // Independently validated equity analytics: do not display misleading
+        // drawdown or streaks if the underlying equity series is invalid.
+        equityInsights?.let { insights ->
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("تحليل منحنى رأس المال", fontWeight = FontWeight.Bold, color = TradingTextPrimary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StatTile(
+                            label = "أقصى تراجع",
+                            value = String.format(Locale.US, "%.2f%%", insights.maxDrawdown.percent),
+                            isPositive = insights.maxDrawdown.percent == 0.0,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatTile(
+                            label = "الفترات الرابحة",
+                            value = String.format(Locale.US, "%.1f%%", insights.periodWinRatePercent),
+                            isPositive = insights.periodWinRatePercent >= 50.0,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StatTile(
+                            label = "أطول سلسلة ربح",
+                            value = insights.longestWinningStreak.toString(),
+                            isPositive = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatTile(
+                            label = "أطول سلسلة خسارة",
+                            value = insights.longestLosingStreak.toString(),
+                            isPositive = false,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }
