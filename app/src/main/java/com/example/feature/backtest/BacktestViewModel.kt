@@ -194,9 +194,18 @@ class BacktestViewModel(
                     }
                 }
 
-                // Save backtest run to database if repository available
-                result.run?.let { run ->
-                    tradingRepository?.saveBacktestRun(run)
+                // Persistence must not turn a correctly completed backtest
+                // into a failed simulation. The result is still inspectable
+                // when local history storage is unavailable.
+                val historySaved = try {
+                    result.run?.let { run ->
+                        tradingRepository?.saveBacktestRun(run)
+                    }
+                    true
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    false
                 }
 
                 _uiState.update {
@@ -206,7 +215,11 @@ class BacktestViewModel(
                         progressFraction = 1.0f,
                         lastResult = result,
                         selectedTab = BacktestTab.RESULTS,
-                        message = "اكتمل الاختبار التاريخي: ${result.trades.size} صفقة منفذة بنجاح"
+                        message = if (historySaved) {
+                            "اكتمل الاختبار التاريخي: ${result.trades.size} صفقة منفذة بنجاح"
+                        } else {
+                            "اكتمل الاختبار، لكن تعذر حفظه في السجل المحلي"
+                        }
                     )
                 }
             } catch (e: CancellationException) {
@@ -236,6 +249,17 @@ class BacktestViewModel(
         if (_uiState.value.isRunning) {
             backtestJob?.cancel()
             backtestJob = null
+            // Update synchronously: a cancelled run must not remain in a
+            // running state if cancellation arrives before its first suspend.
+            _uiState.update {
+                it.copy(
+                    isRunning = false,
+                    currentStage = BacktestProgressStage.CANCELLED,
+                    progressFraction = 0f,
+                    lastResult = null,
+                    message = "تم إلغاء الاختبار التاريخي"
+                )
+            }
         }
     }
 
@@ -243,6 +267,7 @@ class BacktestViewModel(
         cancelBacktest()
         _uiState.update {
             it.copy(
+                isRunning = false,
                 lastResult = null,
                 message = null,
                 currentStage = null,
