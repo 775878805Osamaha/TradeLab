@@ -151,6 +151,17 @@ class BacktestEngine(
             )
             ValidationResult.Valid -> Unit
         }
+        // Historical execution must never be based on bars that have not
+        // closed by the requested replay cutoff. Validate before filtering so
+        // a future-dated corrupt candle cannot disappear unnoticed.
+        if (config.endTime != null) {
+            require(config.endTime > 0L) { "Backtest end time must be positive" }
+        }
+        // An inclusive range cannot contain a candle that opened before
+        // startTime or closed after endTime. Never clip OHLC to fit the range.
+        require(config.startTime == null || config.startTime >= 0L) {
+            "Backtest start time must not be negative"
+        }
         val cleanCandles = candles.filter { candle ->
             (config.startTime == null || candle.openTime >= config.startTime) &&
                 (config.endTime == null || candle.closeTime <= config.endTime)
@@ -514,6 +525,13 @@ class BacktestEngine(
                 highWatermark = terminalWatermark
             )
         }
+
+        BacktestTradeTimeline.validate(
+            closedTrades,
+            config.symbol,
+            cleanCandles.first().openTime,
+            cleanCandles.last().closeTime
+        )
 
         // Every realized trade must reconcile with the account's actual
         // terminal cash balance. Never publish inconsistent profit figures.
