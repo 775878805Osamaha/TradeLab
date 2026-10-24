@@ -551,9 +551,9 @@ fun CandlestickChart(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 52.dp, bottom = 40.dp)
-                .background(TradingElevated.copy(alpha = 0.92f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 3.dp),
+                .padding(end = 44.dp, bottom = 30.dp)
+                .background(TradingElevated.copy(alpha = 0.88f), RoundedCornerShape(9.dp))
+                .padding(horizontal = 1.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -562,7 +562,7 @@ fun CandlestickChart(
                     scrollOffsetPx = ChartNavigation.centerLatestOffset(chartViewportWidthPx, candleWidthPx)
                 },
                 modifier = Modifier.testTag("chart_center_latest")
-            ) { Text("وسط", color = TradingTextSecondary, fontSize = 12.sp) }
+            ) { Text("◎", color = TradingTextPrimary, fontSize = 16.sp) }
             androidx.compose.material3.TextButton(
                 onClick = { candleWidthPx = ChartNavigation.zoomIn(candleWidthPx) },
                 modifier = Modifier.testTag("chart_zoom_in")
@@ -580,7 +580,7 @@ fun CandlestickChart(
                     inspectedCandle = null
                 },
                 modifier = Modifier.testTag("chart_reset_view")
-            ) { Text("إعادة", color = TradingTextSecondary, fontSize = 12.sp) }
+            ) { Text("↺", color = TradingTextPrimary, fontSize = 17.sp) }
         }
 
         // Vertical price-axis scaling; reset-view restores automatic fitting.
