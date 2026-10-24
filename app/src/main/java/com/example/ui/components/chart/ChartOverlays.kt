@@ -14,6 +14,17 @@ import com.example.ui.theme.*
 import java.util.Locale
 
 object ChartOverlays {
+    private val badgeTextPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.WHITE
+        textSize = 19f
+        typeface = android.graphics.Typeface.create(
+            android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD
+        )
+    }
+    private val badgeBackgroundPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor("#26A69A")
+    }
+
 
     // ChartTransform clamps offscreen prices to the plot boundary. Skip those
     // levels rather than drawing misleading horizontal lines at the top/bottom.
@@ -45,21 +56,11 @@ object ChartOverlays {
         // Reference-style green price label anchored to the actual price axis.
         scope.drawContext.canvas.nativeCanvas.apply {
             val label = QuotePriceFormatter.price(chartPrice)
-            val textPaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = 19f
-                isAntiAlias = true
-                typeface = android.graphics.Typeface.create(
-                    android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD
-                )
-            }
+            val textPaint = badgeTextPaint
             val badgeWidth = textPaint.measureText(label) + 16f
             val top = (y - 15f).coerceAtLeast(0f)
             val bottom = (y + 15f).coerceAtMost(scope.size.height)
-            val background = android.graphics.Paint().apply {
-                color = android.graphics.Color.parseColor("#26A69A")
-                isAntiAlias = true
-            }
+            val background = badgeBackgroundPaint
             if (bottom > top) {
                 drawRoundRect(
                     transform.chartWidth,
