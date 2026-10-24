@@ -85,11 +85,22 @@ fun ChartScreen(
     var drawingPaletteOffsetPx by rememberSaveable { mutableFloatStateOf(0f) }
     var drawingPaletteXOffsetPx by rememberSaveable { mutableFloatStateOf(0f) }
     var drawingPaletteCollapsed by rememberSaveable { mutableStateOf(false) }
+    var drawingPalettePositionInitialized by remember { mutableStateOf(false) }
     var chartPaletteContainerWidthPx by remember { mutableIntStateOf(0) }
     var drawingPaletteWidthPx by remember { mutableIntStateOf(0) }
     var chartPaletteContainerHeightPx by remember { mutableIntStateOf(0) }
     var drawingPaletteHeightPx by remember { mutableIntStateOf(0) }
     val paletteDensity = LocalDensity.current
+    val chartPaletteTopInsetPx = with(paletteDensity) { (if (isEmbeddedReplay) 124.dp else 66.dp).toPx() }
+    val chartPaletteMaxYOffsetPx = (chartPaletteContainerHeightPx - drawingPaletteHeightPx - chartPaletteTopInsetPx).coerceAtLeast(0f)
+    val chartPaletteMaxXOffsetPx = (chartPaletteContainerWidthPx - drawingPaletteWidthPx - with(paletteDensity) { 80.dp.toPx() }).coerceAtLeast(0f)
+    LaunchedEffect(chartPaletteContainerHeightPx, drawingPaletteHeightPx, chartPaletteContainerWidthPx, drawingPaletteWidthPx, isEmbeddedReplay) {
+        if (chartPaletteContainerHeightPx > 0 && drawingPaletteHeightPx > 0) {
+            drawingPaletteOffsetPx = drawingPaletteOffsetPx.coerceIn(0f, chartPaletteMaxYOffsetPx)
+            drawingPaletteXOffsetPx = drawingPaletteXOffsetPx.coerceIn(0f, chartPaletteMaxXOffsetPx)
+            drawingPalettePositionInitialized = true
+        }
+    }
     LaunchedEffect(immersiveChart) { onImmersiveChanged(immersiveChart) }
     // Keep the floating palette compact when the displayed market context changes.
     LaunchedEffect(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay) {
