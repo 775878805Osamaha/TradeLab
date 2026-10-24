@@ -1,6 +1,5 @@
 package com.example.core.analytics
 
-import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
@@ -46,7 +45,9 @@ object EquityAnalytics {
         var losingStreak = 0
         var longestWin = 0
         var longestLoss = 0
-        val returns = ArrayList<Double>(points.size - 1)
+        var returnCount = 0
+        var returnMean = 0.0
+        var returnM2 = 0.0
         points.forEachIndexed { index, point ->
             if (point.equity > peak) {
                 peak = point.equity
@@ -61,7 +62,10 @@ object EquityAnalytics {
                 val previous = points[index - 1].equity
                 val change = (point.equity / previous - 1.0) * 100.0
                 require(change.isFinite()) { "Period return overflow" }
-                returns.add(change)
+                returnCount++
+                val delta = change - returnMean
+                returnMean += delta / returnCount
+                returnM2 += delta * (change - returnMean)
                 when {
                     change > 0.0 -> {
                         positive++
@@ -83,8 +87,10 @@ object EquityAnalytics {
                 }
             }
         }
-        val mean = if (returns.isEmpty()) 0.0 else returns.average()
-        val variance = if (returns.isEmpty()) 0.0 else returns.sumOf { (it - mean) * (it - mean) } / returns.size
+        // Welford's online algorithm avoids allocating an entire returns array
+        // and reduces catastrophic cancellation on long backtests.
+        val mean = returnMean
+        val variance = if (returnCount == 0) 0.0 else returnM2 / returnCount
         val net = points.last().equity - points.first().equity
         val totalReturn = (points.last().equity / points.first().equity - 1.0) * 100.0
         require(net.isFinite() && totalReturn.isFinite() && variance.isFinite()) { "Analytics overflow" }
