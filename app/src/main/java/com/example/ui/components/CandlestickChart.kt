@@ -2,6 +2,8 @@ package com.example.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -637,6 +639,7 @@ fun CandlestickChart(
         inspectedCandle?.let { c ->
             Card(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .padding(bottom = 76.dp, start = 8.dp, end = 8.dp)
                     .align(Alignment.BottomCenter)
                     .testTag("chart_crosshair_ohlcv_hud"),
@@ -644,7 +647,10 @@ fun CandlestickChart(
                 colors = CardDefaults.cardColors(containerColor = TradingElevated.copy(alpha = 0.9f))
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Text("O: " + com.example.ui.components.chart.QuotePriceFormatter.price(c.open), fontSize = 10.sp, color = TradingTextSecondary)
