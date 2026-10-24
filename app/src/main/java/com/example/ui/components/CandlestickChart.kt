@@ -115,6 +115,7 @@ fun CandlestickChart(
     var inspectedCandle by remember { mutableStateOf<Candle?>(null) }
 
     val transformRef = remember { arrayOfNulls<ChartTransform>(1) }
+    var dragStartedInPlot by remember { mutableStateOf(false) }
     LaunchedEffect(candles) { transformRef[0] = null }
     // Avoid creating a new visible OHLC list or scanning the entire history
     // during pan/zoom; range queries are served by the immutable price index.
@@ -193,6 +194,11 @@ fun CandlestickChart(
                 .pointerInput(candles, activeDrawingTool, isCrosshairActive) {
                     detectDragGestures(
                         onDragStart = { offset ->
+                            val transform = transformRef[0]
+                            dragStartedInPlot = transform != null &&
+                                offset.x in 0f..transform.chartWidth &&
+                                offset.y in 0f..transform.chartHeight
+                            if (!dragStartedInPlot) return@detectDragGestures
                             if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingStartOffset = offset
                                 drawingCurrentOffset = offset
@@ -201,6 +207,7 @@ fun CandlestickChart(
                             }
                         },
                         onDrag = { change, dragAmount ->
+                            if (!dragStartedInPlot) return@detectDragGestures
                             change.consume()
                             if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingCurrentOffset = change.position
@@ -211,7 +218,7 @@ fun CandlestickChart(
                             }
                         },
                         onDragEnd = {
-                            if (activeDrawingTool != DrawingTool.NONE && drawingStartOffset != null && drawingCurrentOffset != null) {
+                            if (dragStartedInPlot && activeDrawingTool != DrawingTool.NONE && drawingStartOffset != null && drawingCurrentOffset != null) {
                                 val start = drawingStartOffset!!
                                 val end = drawingCurrentOffset!!
                                 val transform = transformRef[0]
@@ -234,10 +241,12 @@ fun CandlestickChart(
                                 drawingStartOffset = null
                                 drawingCurrentOffset = null
                             }
+                            dragStartedInPlot = false
                         },
                         onDragCancel = {
                             drawingStartOffset = null
                             drawingCurrentOffset = null
+                            dragStartedInPlot = false
                         }
                     )
                 }
@@ -245,7 +254,10 @@ fun CandlestickChart(
                     detectTapGestures(
                         onTap = { offset ->
                             val transform = transformRef[0]
-                            if (transform != null && onAddDrawing != null &&
+                            val insidePlot = transform != null &&
+                                offset.x in 0f..transform.chartWidth &&
+                                offset.y in 0f..transform.chartHeight
+                            if (insidePlot && transform != null && onAddDrawing != null &&
                                 (activeDrawingTool == DrawingTool.HORIZONTAL_LINE ||
                                  activeDrawingTool == DrawingTool.VERTICAL_LINE)) {
                                 onAddDrawing(
