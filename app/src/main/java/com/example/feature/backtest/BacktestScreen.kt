@@ -23,6 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.analytics.EquityAnalytics
+import com.example.core.analytics.EquityCsvExporter
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
 import com.example.core.market.DefaultSymbols
 import com.example.core.model.PositionSide
 import com.example.core.model.PositionSizingMode
@@ -549,6 +552,7 @@ private fun BacktestResultsContent(
     }
 
     val m = result.metrics
+    val shareContext = LocalContext.current
     val equityInsights = remember(result.equityCurve) {
         runCatching {
             EquityAnalytics.summarize(
@@ -680,6 +684,29 @@ private fun BacktestResultsContent(
                         )
                     }
                 }
+            }
+        }
+
+        item {
+            OutlinedButton(
+                onClick = {
+                    runCatching {
+                        val csv = EquityCsvExporter.export(
+                            result.equityCurve.map { point ->
+                                EquityAnalytics.Point(point.timestamp, point.equity)
+                            }
+                        )
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/csv"
+                            putExtra(Intent.EXTRA_SUBJECT, "TradeLab backtest equity curve")
+                            putExtra(Intent.EXTRA_TEXT, csv)
+                        }
+                        shareContext.startActivity(Intent.createChooser(intent, "مشاركة نتائج الباك تيست"))
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().testTag("backtest_share_equity_csv")
+            ) {
+                Text("مشاركة بيانات منحنى رأس المال CSV")
             }
         }
 
