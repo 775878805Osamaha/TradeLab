@@ -40,6 +40,32 @@ object EquityCsvExporter {
         }
     }
 
+    /**
+     * Write directly to an Appendable (file writer, buffer, or network stream)
+     * without allocating a second CSV-sized string. Validates all input first.
+     */
+    fun write(points: List<EquityAnalytics.Point>, destination: Appendable) {
+        if (points.isNotEmpty()) requireNotNull(EquityAnalytics.summarize(points))
+        destination.append("timestamp_ms,equity,change_usd,return_percent,drawdown_usd,drawdown_percent\n")
+        var peak = points.firstOrNull()?.equity ?: 0.0
+        points.forEachIndexed { index, point ->
+            peak = maxOf(peak, point.equity)
+            val previous = if (index == 0) point.equity else points[index - 1].equity
+            val change = point.equity - previous
+            val periodReturn = if (index == 0) 0.0 else (point.equity / previous - 1.0) * 100.0
+            val drawdown = peak - point.equity
+            val drawdownPct = drawdown / peak * 100.0
+            require(change.isFinite() && periodReturn.isFinite() &&
+                drawdown.isFinite() && drawdownPct.isFinite()) { "Equity export overflow" }
+            destination.append(point.timestampMillis.toString())
+            for (value in doubleArrayOf(point.equity, change, periodReturn, drawdown, drawdownPct)) {
+                destination.append(',')
+                destination.append(String.format(Locale.US, "%.8f", value))
+            }
+            destination.append('\n')
+        }
+    }
+
     fun exportSummary(summary: EquityAnalytics.Summary): String = buildString {
         append("metric,value\n")
         fun line(name: String, value: Number) {
