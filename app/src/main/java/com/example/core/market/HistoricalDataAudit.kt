@@ -52,10 +52,10 @@ object HistoricalDataAudit {
             if (prev != null) {
                 if (bar.openTime <= prev) outOfOrder++
                 else if (period > 0L) {
-                    val distance = bar.openTime - prev
+                    val distance = if (bar.openTime > 0L && prev < 0L && bar.openTime > Long.MAX_VALUE + prev) Long.MAX_VALUE else bar.openTime - prev
                     if (distance > period) {
                         val gap = (distance - 1L) / period
-                        missing += gap
+                        missing = if (Long.MAX_VALUE - missing < gap) Long.MAX_VALUE else missing + gap
                         largestGap = maxOf(largestGap, gap)
                     }
                 }
