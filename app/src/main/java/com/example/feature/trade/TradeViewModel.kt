@@ -130,11 +130,19 @@ class TradeViewModel(
     }
 
     fun adjustVolume(delta: Double) {
-        val current = _uiState.value.volume.toDoubleOrNull() ?: 0.01
         val symInfo = DefaultSymbols.getSymbol(_uiState.value.selectedSymbol)
-        val newVol = ((current + delta) / symInfo.lotStep).toInt() * symInfo.lotStep
-        val clamped = newVol.coerceIn(symInfo.minLot, symInfo.maxLot)
-        _uiState.update { it.copy(volume = String.format("%.2f", clamped), riskMode = RiskCalculationMode.FIXED_LOT) }
+        if (!delta.isFinite() || !symInfo.lotStep.isFinite() || symInfo.lotStep <= 0.0) return
+        val current = _uiState.value.volume.toDoubleOrNull()
+            ?.takeIf { it.isFinite() && it > 0.0 } ?: symInfo.minLot
+        val desired = (current + delta).coerceIn(symInfo.minLot, symInfo.maxLot)
+        val steps = kotlin.math.round(desired / symInfo.lotStep)
+        val clamped = (steps * symInfo.lotStep).coerceIn(symInfo.minLot, symInfo.maxLot)
+        val precision = symInfo.lotStep.toString().substringAfter('.', "").trimEnd('0').length
+            .coerceIn(0, 8)
+        _uiState.update {
+            it.copy(volume = String.format(java.util.Locale.US, "%.${precision}f", clamped),
+                riskMode = RiskCalculationMode.FIXED_LOT)
+        }
         recalculateRisk()
     }
 
