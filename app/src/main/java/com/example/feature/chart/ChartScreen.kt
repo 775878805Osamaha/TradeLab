@@ -84,6 +84,7 @@ fun ChartScreen(
     var drawingToolbarExpanded by remember { mutableStateOf(false) }
     var drawingPaletteOffsetPx by remember { mutableFloatStateOf(0f) }
     var chartPaletteContainerHeightPx by remember { mutableIntStateOf(0) }
+    var drawingPaletteHeightPx by remember { mutableIntStateOf(0) }
     val paletteDensity = LocalDensity.current
     LaunchedEffect(immersiveChart) { onImmersiveChanged(immersiveChart) }
     // Keep the floating palette compact when the displayed market context changes.
@@ -1117,19 +1118,7 @@ fun ChartScreen(
                             y = with(paletteDensity) { drawingPaletteOffsetPx.toDp() } +
                                 if (isEmbeddedReplay) 124.dp else 66.dp
                         )
-                        .pointerInput(chartPaletteContainerHeightPx, isEmbeddedReplay) {
-                            detectDragGestures { change, dragAmount ->
-                                change.consume()
-                                val toolbarHeightPx = with(paletteDensity) { 400.dp.toPx() }
-                                val topInsetPx = with(paletteDensity) {
-                                    (if (isEmbeddedReplay) 124.dp else 66.dp).toPx()
-                                }
-                                val maxOffset = (chartPaletteContainerHeightPx - toolbarHeightPx - topInsetPx)
-                                    .coerceAtLeast(0f)
-                                drawingPaletteOffsetPx =
-                                    (drawingPaletteOffsetPx + dragAmount.y).coerceIn(0f, maxOffset)
-                            }
-                        }
+                        .onSizeChanged { drawingPaletteHeightPx = it.height }
                         .testTag("chart_reference_floating_tools"),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(7.dp)
@@ -1142,6 +1131,28 @@ fun ChartScreen(
                         Triple("تراجع", Icons.Default.Undo, 4),
                         Triple("المزيد", Icons.Default.MoreHoriz, 5)
                     )
+                    // Dedicated drag handle: tool buttons remain tappable without gesture conflicts.
+                    Box(
+                        modifier = Modifier
+                            .size(width = 46.dp, height = 22.dp)
+                            .pointerInput(chartPaletteContainerHeightPx, drawingPaletteHeightPx, isEmbeddedReplay) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    val topInsetPx = with(paletteDensity) {
+                                        (if (isEmbeddedReplay) 124.dp else 66.dp).toPx()
+                                    }
+                                    val maxOffset = (chartPaletteContainerHeightPx -
+                                        drawingPaletteHeightPx - topInsetPx).coerceAtLeast(0f)
+                                    drawingPaletteOffsetPx =
+                                        (drawingPaletteOffsetPx + dragAmount.y).coerceIn(0f, maxOffset)
+                                }
+                            }
+                            .testTag("chart_tools_drag_handle"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.DragHandle, contentDescription = "اسحب لتحريك الأدوات",
+                            tint = TradingTextSecondary, modifier = Modifier.size(22.dp))
+                    }
                     referenceTools.forEach { (label, image, index) ->
                         val selected = when (index) {
                             0 -> uiState.isCrosshairActive
