@@ -317,9 +317,10 @@ class ReplayViewModel(
                     _uiState.value.timeframe != tf ||
                     _uiState.value.requestedHistoryBars != historyBars ||
                     _uiState.value.historyEndOffsetBars != endOffsetBars) return@launch
+                val audit = com.example.core.market.HistoricalDataAudit.inspect(candles)
                 val validation = com.example.core.market.DataIntegrityValidator
                     .validateHistoricalSeries(candles)
-                if (!validation.isValid || candles.first().symbol != symbol ||
+                if (!audit.safeForBacktest || !validation.isValid || candles.first().symbol != symbol ||
                     candles.first().timeframe != tf ||
                     candles.first().openTime < from ||
                     candles.last().openTime > lastClosedOpen) {
