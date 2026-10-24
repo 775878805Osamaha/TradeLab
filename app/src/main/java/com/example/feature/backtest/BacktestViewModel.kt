@@ -181,12 +181,14 @@ class BacktestViewModel(
                 val sourceCandles = marketDataRepository.getCandles(
                     state.symbol, state.timeframe, window.first, window.last
                 )
-                // Defend against a provider returning unfinished/future candles.
-                val candles = sourceCandles.filter {
+                // Reject a provider contract violation rather than silently
+                // dropping unexpected candles and testing a different sample.
+                require(sourceCandles.all {
                     it.openTime >= window.first &&
                         it.openTime <= window.last &&
                         it.closeTime <= now
-                }
+                }) { "مصدر البيانات أعاد شموعًا خارج الفترة المكتملة المطلوبة" }
+                val candles = sourceCandles
                 require(candles.isNotEmpty()) {
                     "لا توجد شموع تاريخية مكتملة للفترة المحددة"
                 }
