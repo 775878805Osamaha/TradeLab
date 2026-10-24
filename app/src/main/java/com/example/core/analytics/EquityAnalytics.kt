@@ -29,11 +29,15 @@ object EquityAnalytics {
 
     fun summarize(points: List<Point>): Summary? {
         if (points.isEmpty()) return null
-        require(points.all { it.equity.isFinite() && it.equity > 0.0 && it.timestampMillis >= 0L }) {
-            "Equity observations must be finite, positive, and timestamped"
-        }
-        require(points.zipWithNext().all { (a, b) -> b.timestampMillis > a.timestampMillis }) {
-            "Equity observations must be strictly chronological"
+        var previousTimestamp = -1L
+        for (point in points) {
+            require(point.equity.isFinite() && point.equity > 0.0 && point.timestampMillis >= 0L) {
+                "Equity observations must be finite, positive, and timestamped"
+            }
+            require(point.timestampMillis > previousTimestamp) {
+                "Equity observations must be strictly chronological"
+            }
+            previousTimestamp = point.timestampMillis
         }
         var peak = points[0].equity
         var peakIndex = 0
