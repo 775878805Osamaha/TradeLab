@@ -1,6 +1,11 @@
 package com.example.feature.chart
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -13,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -76,6 +82,9 @@ fun ChartScreen(
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var immersiveChart by remember { mutableStateOf(true) }
     var drawingToolbarExpanded by remember { mutableStateOf(false) }
+    var drawingPaletteOffsetPx by remember { mutableFloatStateOf(0f) }
+    var chartPaletteContainerHeightPx by remember { mutableIntStateOf(0) }
+    val paletteDensity = LocalDensity.current
     LaunchedEffect(immersiveChart) { onImmersiveChanged(immersiveChart) }
     // Keep the floating palette compact when the displayed market context changes.
     LaunchedEffect(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay) {
@@ -838,6 +847,7 @@ fun ChartScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .onSizeChanged { chartPaletteContainerHeightPx = it.height }
             ) {
                 // Reset pan/zoom when the instrument, timeframe, or replay context changes.
                 // Do not key on candle data: incoming prices must not jump the viewport.
@@ -1100,8 +1110,26 @@ fun ChartScreen(
                 // Buttons select the existing functional drawing tools; no image overlay.
                 // Reference-style drawing controls remain visible over Replay candles.
                 Column(
-                    modifier = Modifier.align(Alignment.TopStart)
-                        .padding(start = 8.dp, top = if (isEmbeddedReplay) 124.dp else 66.dp)
+                    modifier = Modifier.align(AbsoluteAlignment.TopLeft)
+                        // Physical left, not RTL logical start: keep the price axis clear.
+                        .absoluteOffset(
+                            x = 8.dp,
+                            y = with(paletteDensity) { drawingPaletteOffsetPx.toDp() } +
+                                if (isEmbeddedReplay) 124.dp else 66.dp
+                        )
+                        .pointerInput(chartPaletteContainerHeightPx, isEmbeddedReplay) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                val toolbarHeightPx = with(paletteDensity) { 400.dp.toPx() }
+                                val topInsetPx = with(paletteDensity) {
+                                    (if (isEmbeddedReplay) 124.dp else 66.dp).toPx()
+                                }
+                                val maxOffset = (chartPaletteContainerHeightPx - toolbarHeightPx - topInsetPx)
+                                    .coerceAtLeast(0f)
+                                drawingPaletteOffsetPx =
+                                    (drawingPaletteOffsetPx + dragAmount.y).coerceIn(0f, maxOffset)
+                            }
+                        }
                         .testTag("chart_reference_floating_tools"),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(7.dp)
