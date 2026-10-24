@@ -602,33 +602,6 @@ fun ChartScreen(
                         }
                     }
                 }
-                // Historical paper orders are isolated from the live-paper account.
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(TradingCard)
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                        .testTag("chart_replay_trading_bar"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val canTradeReplay = !replayState.isLoading &&
-                        replayState.currentCandle != null && replayState.latestTick != null
-                    Button(
-                        onClick = { pendingOrderSide = OrderSide.SELL },
-                        enabled = canTradeReplay,
-                        colors = ButtonDefaults.buttonColors(containerColor = TradingNegative),
-                        modifier = Modifier.weight(1f).testTag("chart_replay_sell")
-                    ) { Text("بيع 0.01", fontSize = 12.sp) }
-                    Button(
-                        onClick = { pendingOrderSide = OrderSide.BUY },
-                        enabled = canTradeReplay,
-                        colors = ButtonDefaults.buttonColors(containerColor = TradingPositive),
-                        modifier = Modifier.weight(1f).testTag("chart_replay_buy")
-                    ) { Text("شراء 0.01", fontSize = 12.sp) }
-                    Text(
-                        "رصيد: ${String.format(Locale.US, "%.2f", replayState.currentBalance)}",
-                        color = TradingTextSecondary, fontSize = 10.sp
-                    )
-                }
                 Text(
                     "حقوق الحساب: ${String.format(Locale.US, "%.2f", replayState.currentEquity)} · " +
                         "العائم: ${String.format(Locale.US, "%.2f", replayState.currentEquity - replayState.currentBalance)}",
@@ -729,6 +702,58 @@ fun ChartScreen(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                 }
             }
+            }
+
+            // Always show Replay BUY/SELL in both immersive and standard chart modes.
+            // Previously this row was hidden inside showReplayDetails, which is false
+            // by default and whose expand control was itself hidden in immersive mode.
+            if (isEmbeddedReplay) {
+                // Historical orders use the isolated Replay account, never the live-paper account.
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(TradingCard)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .testTag("chart_replay_trading_bar"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val replayTick = replayState.latestTick
+                    val canTradeReplay = !replayState.isLoading &&
+                        replayState.currentCandle != null && replayTick != null &&
+                        replayTick.symbol == replayState.symbol &&
+                        com.example.core.market.DataIntegrityValidator.validateTick(replayTick).isValid
+                    Button(
+                        onClick = { pendingOrderSide = OrderSide.SELL },
+                        enabled = canTradeReplay,
+                        colors = ButtonDefaults.buttonColors(containerColor = TradingNegative),
+                        modifier = Modifier.weight(1f).testTag("chart_replay_sell")
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("بيع", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(replayTick?.bid?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 11.sp)
+                        }
+                    }
+                    Button(
+                        onClick = { pendingOrderSide = OrderSide.BUY },
+                        enabled = canTradeReplay,
+                        colors = ButtonDefaults.buttonColors(containerColor = TradingPositive),
+                        modifier = Modifier.weight(1f).testTag("chart_replay_buy")
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("شراء", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(replayTick?.ask?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 11.sp)
+                        }
+                    }
+
+                }
+                if (replayState.openPositions.isNotEmpty()) {
+                    Text(
+                        "مراكز مفتوحة: ${replayState.openPositions.size} · رصيد: ${String.format(Locale.US, "%.2f", replayState.currentBalance)}",
+                        color = TradingTextSecondary,
+                        fontSize = 11.sp,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+                            .testTag("chart_replay_open_positions_summary")
+                    )
+                }
             }
 
             // Timeframe selection scrollable row (all 10 timeframes)
@@ -1158,7 +1183,7 @@ fun ChartScreen(
 
             // No executable bid/ask exists for historical-only metals and forex.
             // Keep their chart unobstructed; show execution only for crypto.
-            if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) Surface(
+            if (!isEmbeddedReplay && uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) Surface(
                 color = TradingCard,
                 tonalElevation = 0.dp,
                 border = androidx.compose.foundation.BorderStroke(1.dp, TradingBorder)
