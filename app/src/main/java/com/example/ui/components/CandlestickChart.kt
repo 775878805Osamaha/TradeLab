@@ -625,8 +625,10 @@ fun CandlestickChart(
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
-                        manualPriceScale = (manualPriceScale * (1f + dragAmount.y / 400f))
-                            .coerceIn(0.25f, 8f)
+                        val scaleChange = 1f + dragAmount.y / 400f
+                        if (scaleChange.isFinite() && scaleChange > 0f) {
+                            manualPriceScale = (manualPriceScale * scaleChange).coerceIn(0.25f, 8f)
+                        }
                     }
                 }
         )
@@ -635,8 +637,8 @@ fun CandlestickChart(
         inspectedCandle?.let { c ->
             Card(
                 modifier = Modifier
-                    .padding(top = 54.dp, start = 8.dp, end = 8.dp)
-                    .align(Alignment.TopCenter)
+                    .padding(bottom = 76.dp, start = 8.dp, end = 8.dp)
+                    .align(Alignment.BottomCenter)
                     .testTag("chart_crosshair_ohlcv_hud"),
                 shape = RoundedCornerShape(6.dp),
                 colors = CardDefaults.cardColors(containerColor = TradingElevated.copy(alpha = 0.9f))
