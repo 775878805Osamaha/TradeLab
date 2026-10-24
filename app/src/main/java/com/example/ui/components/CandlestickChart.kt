@@ -581,43 +581,9 @@ fun CandlestickChart(
             }
         }
 
-        // One-tap chart navigation: no menus, no gesture ambiguity.
-        // Center latest candle with ~50% future space; reset restores automatic fit.
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 44.dp, bottom = 30.dp)
-                .background(TradingElevated.copy(alpha = 0.88f), RoundedCornerShape(9.dp))
-                .padding(horizontal = 1.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            androidx.compose.material3.TextButton(
-                onClick = {
-                    scrollOffsetPx = ChartNavigation.centerLatestOffset(chartViewportWidthPx, candleWidthPx)
-                },
-                modifier = Modifier.testTag("chart_center_latest")
-            ) { Text("◎", color = TradingTextPrimary, fontSize = 16.sp) }
-            androidx.compose.material3.TextButton(
-                onClick = { candleWidthPx = ChartNavigation.zoomIn(candleWidthPx) },
-                modifier = Modifier.testTag("chart_zoom_in")
-            ) { Text("+", color = TradingTextSecondary, fontSize = 17.sp) }
-            androidx.compose.material3.TextButton(
-                onClick = { candleWidthPx = ChartNavigation.zoomOut(candleWidthPx) },
-                modifier = Modifier.testTag("chart_zoom_out")
-            ) { Text("−", color = TradingTextSecondary, fontSize = 17.sp) }
-            androidx.compose.material3.TextButton(
-                onClick = {
-                    scrollOffsetPx = 0f
-                    candleWidthPx = 12f
-                    manualPriceScale = 1f
-                    crosshairOffset = null
-                    inspectedCandle = null
-                },
-                modifier = Modifier.testTag("chart_reset_view")
-            ) { Text("↺", color = TradingTextPrimary, fontSize = 17.sp) }
-        }
-
+        // Chart navigation is gesture-first in the approved full-screen reference.
+        // Preserve zoom, centering and reset through existing gesture and header controls;
+        // do not overlay the wide legacy button bar on the candle/volume area.
         // Vertical price-axis scaling; reset-view restores automatic fitting.
         Box(
             modifier = Modifier
