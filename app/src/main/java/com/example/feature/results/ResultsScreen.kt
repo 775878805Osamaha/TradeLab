@@ -36,6 +36,7 @@ import java.util.Date
 fun ResultsScreen(
     viewModel: ResultsViewModel,
     onNavigateToHistory: () -> Unit,
+    onNavigateToBacktest: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -116,7 +117,7 @@ fun ResultsScreen(
             }
 
             when (uiState.selectedTab) {
-                ResultsTab.OVERVIEW -> ResultsOverviewContent(viewModel, uiState)
+                ResultsTab.OVERVIEW -> ResultsOverviewContent(viewModel, uiState, onNavigateToBacktest)
                 ResultsTab.CURVES -> ResultsCurvesContent(viewModel, uiState)
                 ResultsTab.JOURNAL -> ResultsJournalContent(viewModel, uiState)
                 ResultsTab.DAILY -> ResultsDailyContent(viewModel, uiState)
@@ -186,7 +187,8 @@ private fun ResultsMetricCard(
 @Composable
 private fun ResultsOverviewContent(
     viewModel: ResultsViewModel,
-    uiState: ResultsUiState
+    uiState: ResultsUiState,
+    onNavigateToBacktest: () -> Unit
 ) {
     var period by remember { mutableStateOf(ResultsPeriod.MONTH) }
     val now = remember { System.currentTimeMillis() }
@@ -275,8 +277,16 @@ private fun ResultsOverviewContent(
                             Modifier.padding(horizontal = 12.dp, vertical = 7.dp), fontSize = 11.sp, color = ResultsText)
                     }
                     if (trades.isEmpty()) {
-                        Box(Modifier.fillMaxWidth().height(170.dp), contentAlignment = Alignment.Center) {
+                        Column(Modifier.fillMaxWidth().height(170.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center) {
                             Text("ابدأ أول اختبار لعرض نتائجك", color = ResultsMuted, fontSize = 13.sp)
+                            Spacer(Modifier.height(12.dp))
+                            Button(
+                                onClick = onNavigateToBacktest,
+                                colors = ButtonDefaults.buttonColors(containerColor = ResultsPrimary),
+                                modifier = Modifier.testTag("results_start_backtest")
+                            ) { Text("ابدأ اختبارًا", color = Color.White) }
                         }
                     } else {
                         EquityCurveChart(
