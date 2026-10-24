@@ -1222,6 +1222,25 @@ fun ChartScreen(
                 }
             }
 
+            // Historical XAU/FX bars are not executable live quotes. Give the
+            // trader a prominent path into the actual replay trading engine.
+            if (!isEmbeddedReplay && uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
+                Button(
+                    onClick = {
+                        replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
+                        isEmbeddedReplay = true
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp)
+                        .height(54.dp).testTag("chart_start_replay_trading"),
+                    shape = RoundedCornerShape(26.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = TradingAccent)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("بدء إعادة الشارت والتداول", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+
             // Always show Replay BUY/SELL in both immersive and standard chart modes.
             // Previously this row was hidden inside showReplayDetails, which is false
             // by default and whose expand control was itself hidden in immersive mode.
