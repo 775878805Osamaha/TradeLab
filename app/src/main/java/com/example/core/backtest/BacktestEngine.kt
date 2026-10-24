@@ -526,6 +526,13 @@ class BacktestEngine(
             )
         }
 
+        BacktestTradeTimeline.validate(
+            closedTrades,
+            config.symbol,
+            cleanCandles.first().openTime,
+            cleanCandles.last().closeTime
+        )
+
         // Every realized trade must reconcile with the account's actual
         // terminal cash balance. Never publish inconsistent profit figures.
         BacktestTradeReconciliation.validate(
