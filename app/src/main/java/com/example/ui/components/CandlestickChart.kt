@@ -154,7 +154,7 @@ fun CandlestickChart(
     val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
         candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
         // Pinch and two-finger pan share this transformable gesture.
-        scrollOffsetPx += panChange.x
+        scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, panChange.x)
     }
 
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
@@ -207,7 +207,7 @@ fun CandlestickChart(
                             } else if (isCrosshairActive) {
                                 crosshairOffset = change.position
                             } else {
-                                scrollOffsetPx += dragAmount.x
+                                scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, dragAmount.x)
                             }
                         },
                         onDragEnd = {
@@ -535,17 +535,16 @@ fun CandlestickChart(
         ) {
             androidx.compose.material3.TextButton(
                 onClick = {
-                    scrollOffsetPx = -(chartViewportWidthPx / 2f - candleWidthPx / 2f)
-                        .coerceAtLeast(0f)
+                    scrollOffsetPx = ChartNavigation.centerLatestOffset(chartViewportWidthPx, candleWidthPx)
                 },
                 modifier = Modifier.testTag("chart_center_latest")
             ) { Text("وسط", color = TradingTextSecondary, fontSize = 12.sp) }
             androidx.compose.material3.TextButton(
-                onClick = { candleWidthPx = (candleWidthPx * 1.25f).coerceIn(6f, 80f) },
+                onClick = { candleWidthPx = ChartNavigation.zoomIn(candleWidthPx) },
                 modifier = Modifier.testTag("chart_zoom_in")
             ) { Text("+", color = TradingTextSecondary, fontSize = 17.sp) }
             androidx.compose.material3.TextButton(
-                onClick = { candleWidthPx = (candleWidthPx / 1.25f).coerceIn(6f, 80f) },
+                onClick = { candleWidthPx = ChartNavigation.zoomOut(candleWidthPx) },
                 modifier = Modifier.testTag("chart_zoom_out")
             ) { Text("−", color = TradingTextSecondary, fontSize = 17.sp) }
             androidx.compose.material3.TextButton(
