@@ -198,13 +198,23 @@ class TradeViewModel(
 
         when (state.riskMode) {
             RiskCalculationMode.RISK_PERCENTAGE -> {
-                val pct = state.riskPercentageInput.toDoubleOrNull() ?: 1.0
+                val pct = state.riskPercentageInput.toDoubleOrNull()
+                if (pct == null || !pct.isFinite() || pct <= 0.0 || pct > 100.0) {
+                    _uiState.update { it.copy(message = "نسبة المخاطرة يجب أن تكون أكبر من صفر وحتى 100%") }
+                    return
+                }
                 val lot = riskEngine.calculateSuggestedLot(account, state.selectedSymbol, pct, pips)
                 _uiState.update { it.copy(volume = String.format("%.2f", lot)) }
             }
             RiskCalculationMode.MONETARY_RISK -> {
-                val cash = state.monetaryRiskInput.toDoubleOrNull() ?: 2.0
-                val pct = if (account.balance > 0) (cash / account.balance) * 100.0 else 1.0
+                val cash = state.monetaryRiskInput.toDoubleOrNull()
+                if (cash == null || !cash.isFinite() || cash <= 0.0 ||
+                    !account.balance.isFinite() || account.balance <= 0.0 ||
+                    cash > account.balance) {
+                    _uiState.update { it.copy(message = "المخاطرة النقدية يجب أن تكون موجبة ولا تتجاوز رصيد الحساب") }
+                    return
+                }
+                val pct = cash / account.balance * 100.0
                 val lot = riskEngine.calculateSuggestedLot(account, state.selectedSymbol, pct, pips)
                 _uiState.update { it.copy(volume = String.format("%.2f", lot)) }
             }
