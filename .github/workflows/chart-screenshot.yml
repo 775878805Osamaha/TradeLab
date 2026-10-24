@@ -57,6 +57,32 @@ jobs:
             adb pull /sdcard/tradelab-150s.png screenshots/tradelab-150s.png
             adb shell dumpsys activity activities > screenshots/activity-state.txt
             adb logcat -d -t 500 > screenshots/logcat-tail.txt
+      - name: Validate captured screen has real candlesticks
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          images = [Path("screenshots/tradelab-35s.png"), Path("screenshots/tradelab-100s.png"), Path("screenshots/tradelab-150s.png")]
+          for path in images:
+              if not path.exists():
+                  raise SystemExit(f"Missing screenshot: {path}")
+              im = Image.open(path).convert("RGB")
+              w, h = im.size
+              pixels = im.load()
+              teal = red = 0
+              # Ignore the header, order buttons and volume bars. Count colored
+              # candle bodies/wicks in the middle chart region only.
+              for y in range(int(h * 0.18), int(h * 0.70), 3):
+                  for x in range(int(w * 0.14), int(w * 0.86), 3):
+                      r, g, b = pixels[x, y]
+                      if g > r * 1.28 and b > r * 1.12 and g > 75:
+                          teal += 1
+                      if r > g * 1.55 and r > b * 1.45 and r > 110:
+                          red += 1
+              print(f"{path.name}: {w}x{h}, candle-color samples teal={teal}, red={red}")
+              if path.name.endswith("150s.png") and teal + red < 40:
+                  raise SystemExit("No visible candlestick evidence after 150 seconds")
+          PY
       - name: Upload real emulator capture and logs
         if: always()
         uses: actions/upload-artifact@v4
