@@ -811,8 +811,8 @@ fun ChartScreen(
                     openPositions = if (isEmbeddedReplay) replayState.openPositions else uiState.openPositions,
                     pendingOrders = if (isEmbeddedReplay) replayState.pendingOrders else uiState.pendingOrders,
                     historicalTrades = if (isEmbeddedReplay) replayState.closedTrades else uiState.historicalTrades,
-                    activeDrawingTool = if (isEmbeddedReplay) DrawingTool.NONE else uiState.activeDrawingTool,
-                    drawings = if (isEmbeddedReplay) emptyList() else uiState.drawings,
+                    activeDrawingTool = uiState.activeDrawingTool,
+                    drawings = uiState.drawings,
                     indicatorSettings = uiState.indicatorSettings,
                     smaValues = if (isEmbeddedReplay) emptyList() else uiState.smaValues,
                     emaValues = if (isEmbeddedReplay) emptyList() else uiState.emaValues,
@@ -825,7 +825,7 @@ fun ChartScreen(
                     isVolumeVisible = uiState.isVolumeVisible,
                     resetViewTrigger = uiState.resetViewTrigger,
                     displayStyle = chartDisplayStyle,
-                    onAddDrawing = { if (!isEmbeddedReplay) viewModel.addDrawing(it) },
+                    onAddDrawing = { viewModel.addDrawing(it) },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) }
                 )
                 }
