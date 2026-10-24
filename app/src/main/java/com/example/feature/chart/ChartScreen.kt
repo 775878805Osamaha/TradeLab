@@ -1059,15 +1059,12 @@ fun ChartScreen(
                         val progress = if (replayState.totalCandles > 1)
                             replayState.currentIndex.toFloat().coerceAtLeast(0f) / (replayState.totalCandles - 1)
                         else 0f
-                        Slider(
-                            value = progress.coerceIn(0f, 1f),
-                            onValueChange = { fraction ->
-                                if (replayState.totalCandles > 1) {
-                                    replayViewModel.seekTo(((replayState.totalCandles - 1) * fraction).toInt())
-                                }
-                            },
-                            enabled = !replayState.isLoading && replayState.totalCandles > 1,
-                            modifier = Modifier.fillMaxWidth().height(20.dp).testTag("chart_replay_timeline")
+                        LinearProgressIndicator(
+                            progress = { progress.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().height(4.dp)
+                                .testTag("chart_replay_timeline"),
+                            color = TradingAccent,
+                            trackColor = TradingBorder
                         )
                         Text(
                             "${replayState.currentIndex.coerceAtLeast(0) + 1} / ${replayState.totalCandles}",
