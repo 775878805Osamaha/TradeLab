@@ -116,7 +116,12 @@ fun CandlestickChart(
 
     val transformRef = remember { arrayOfNulls<ChartTransform>(1) }
     var dragStartedInPlot by remember { mutableStateOf(false) }
-    LaunchedEffect(candles) { transformRef[0] = null }
+    var chartPlotHeightPx by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(candles) {
+        transformRef[0] = null
+        crosshairOffset = null
+        inspectedCandle = null
+    }
     // Avoid creating a new visible OHLC list or scanning the entire history
     // during pan/zoom; range queries are served by the immutable price index.
     val priceRangeIndex = remember(candles) { ChartPriceRangeIndex(candles) }
@@ -129,7 +134,7 @@ fun CandlestickChart(
     LaunchedEffect(resetViewTrigger) {
         if (resetViewTrigger > 0L) {
             scrollOffsetPx = 0f
-            candleWidthPx = 12f
+            candleWidthPx = ChartNavigation.DEFAULT_CANDLE_WIDTH
             manualPriceScale = 1f
             crosshairOffset = null
             inspectedCandle = null
@@ -153,7 +158,9 @@ fun CandlestickChart(
     }
 
     val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
-        candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
+        candleWidthPx = (candleWidthPx * zoomChange).coerceIn(
+            ChartNavigation.MIN_CANDLE_WIDTH, ChartNavigation.MAX_CANDLE_WIDTH
+        )
         // Pinch and two-finger pan share this transformable gesture.
         scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, panChange.x)
     }
@@ -197,7 +204,7 @@ fun CandlestickChart(
                             val transform = transformRef[0]
                             dragStartedInPlot = transform != null &&
                                 offset.x in 0f..transform.chartWidth &&
-                                offset.y in 0f..transform.chartHeight
+                                offset.y in 0f..chartPlotHeightPx
                             if (!dragStartedInPlot) return@detectDragGestures
                             if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingStartOffset = offset
@@ -210,9 +217,15 @@ fun CandlestickChart(
                             if (!dragStartedInPlot) return@detectDragGestures
                             change.consume()
                             if (activeDrawingTool != DrawingTool.NONE) {
-                                drawingCurrentOffset = change.position
+                                drawingCurrentOffset = Offset(
+                                    change.position.x.coerceIn(0f, transformRef[0]?.chartWidth ?: change.position.x),
+                                    change.position.y.coerceIn(0f, chartPlotHeightPx.coerceAtLeast(1f))
+                                )
                             } else if (isCrosshairActive) {
-                                crosshairOffset = change.position
+                                crosshairOffset = Offset(
+                                    change.position.x.coerceIn(0f, transformRef[0]?.chartWidth ?: change.position.x),
+                                    change.position.y.coerceIn(0f, chartPlotHeightPx.coerceAtLeast(1f))
+                                )
                             } else {
                                 scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, dragAmount.x)
                             }
@@ -256,7 +269,7 @@ fun CandlestickChart(
                             val transform = transformRef[0]
                             val insidePlot = transform != null &&
                                 offset.x in 0f..transform.chartWidth &&
-                                offset.y in 0f..transform.chartHeight
+                                offset.y in 0f..chartPlotHeightPx
                             if (insidePlot && transform != null && onAddDrawing != null &&
                                 (activeDrawingTool == DrawingTool.HORIZONTAL_LINE ||
                                  activeDrawingTool == DrawingTool.VERTICAL_LINE)) {
@@ -287,6 +300,7 @@ fun CandlestickChart(
             val subpanelHeight = if (hasSubpanel) height * 0.22f else 0f
             val volumeHeight = if (isVolumeVisible) height * 0.14f else 0f
             val mainChartHeight = (height - subpanelHeight - volumeHeight).coerceAtLeast(10f)
+            chartPlotHeightPx = mainChartHeight
 
             // Shared, independently testable viewport calculation.
             val viewport = ChartViewport.window(
@@ -548,8 +562,8 @@ fun CandlestickChart(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 52.dp, bottom = 40.dp)
-                .background(TradingElevated.copy(alpha = 0.92f), RoundedCornerShape(12.dp))
+                .padding(end = 44.dp, bottom = 24.dp)
+                .background(TradingElevated.copy(alpha = 0.82f), RoundedCornerShape(8.dp))
                 .padding(horizontal = 3.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -571,7 +585,7 @@ fun CandlestickChart(
             androidx.compose.material3.TextButton(
                 onClick = {
                     scrollOffsetPx = 0f
-                    candleWidthPx = 12f
+                    candleWidthPx = ChartNavigation.DEFAULT_CANDLE_WIDTH
                     manualPriceScale = 1f
                     crosshairOffset = null
                     inspectedCandle = null
