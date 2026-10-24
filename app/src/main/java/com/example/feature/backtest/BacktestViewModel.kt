@@ -236,6 +236,17 @@ class BacktestViewModel(
         if (_uiState.value.isRunning) {
             backtestJob?.cancel()
             backtestJob = null
+            // Update synchronously: a cancelled run must not remain in a
+            // running state if cancellation arrives before its first suspend.
+            _uiState.update {
+                it.copy(
+                    isRunning = false,
+                    currentStage = BacktestProgressStage.CANCELLED,
+                    progressFraction = 0f,
+                    lastResult = null,
+                    message = "تم إلغاء الاختبار التاريخي"
+                )
+            }
         }
     }
 
@@ -243,6 +254,7 @@ class BacktestViewModel(
         cancelBacktest()
         _uiState.update {
             it.copy(
+                isRunning = false,
                 lastResult = null,
                 message = null,
                 currentStage = null,
