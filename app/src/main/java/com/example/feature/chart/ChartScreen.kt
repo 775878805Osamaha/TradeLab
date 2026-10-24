@@ -152,6 +152,7 @@ fun ChartScreen(
             )
         } else null
         val validOrder = validVolume && validSl && validTp && riskBudgetValid &&
+            (riskEquityInput.isBlank() || (sl != null && riskEstimate != null)) &&
             entryTick?.symbol == (if (isEmbeddedReplay) replayState.symbol else uiState.selectedSymbol) &&
             entryPrice != null &&
             entryPrice.isFinite() && entryPrice > 0.0 && entryTick != null &&
