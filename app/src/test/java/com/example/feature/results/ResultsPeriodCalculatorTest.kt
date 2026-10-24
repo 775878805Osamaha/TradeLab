@@ -73,4 +73,28 @@ class ResultsPeriodCalculatorTest {
             fail("Expected invalid balance rejection")
         } catch (_: IllegalArgumentException) {}
     }
+    @Test fun losingPeriodUsesNegativeProfitAndRealBalance() {
+        val now = date(2026, Calendar.OCTOBER, 24)
+        val result = ResultsPeriodCalculator.calculate(500.0,
+            listOf(trade(date(2026, Calendar.OCTOBER, 20), -45.0)), ResultsPeriod.MONTH, now)
+        assertEquals(-45.0, result.metrics.netProfit, 0.00001)
+        assertEquals(455.0, result.closingBalance, 0.00001)
+        assertEquals(1, result.metrics.losingTrades)
+    }
+
+    @Test fun sameTradesProduceDifferentMonthAndAllResults() {
+        val now = date(2026, Calendar.OCTOBER, 24)
+        val trades = listOf(
+            trade(date(2026, Calendar.SEPTEMBER, 10), 100.0),
+            trade(date(2026, Calendar.OCTOBER, 20), 5.0)
+        )
+        val month = ResultsPeriodCalculator.calculate(1000.0, trades, ResultsPeriod.MONTH, now)
+        val all = ResultsPeriodCalculator.calculate(1000.0, trades, ResultsPeriod.ALL, now)
+        assertEquals(5.0, month.metrics.netProfit, 0.00001)
+        assertEquals(105.0, all.metrics.netProfit, 0.00001)
+        assertEquals(1105.0, month.closingBalance, 0.00001)
+        assertEquals(all.closingBalance, month.closingBalance, 0.00001)
+        assertTrue(all.curve.size > month.curve.size)
+    }
+
 }
