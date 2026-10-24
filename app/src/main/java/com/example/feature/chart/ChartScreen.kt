@@ -969,62 +969,24 @@ fun ChartScreen(
             }
 
 
-                // Compact provenance HUD: historical candles are not live executable quotes.
+                // Minimal source label: historical bars must remain distinguishable
+                // from live quotes without covering price candles or indicators.
                 val chartBars = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
                 if (!immersiveChart && chartBars.isNotEmpty()) {
-                    val latestBar = chartBars.last()
-                    val timestamp = remember(latestBar.openTime) {
-                        java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")
-                            .withZone(java.time.ZoneOffset.UTC)
-                            .format(java.time.Instant.ofEpochMilli(latestBar.openTime))
-                    }
                     Surface(
-                        color = TradingBackground.copy(alpha = 0.90f),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(start = 8.dp, top = 8.dp)
+                        color = TradingBackground.copy(alpha = 0.80f),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.align(Alignment.TopEnd)
+                            .padding(end = 52.dp, top = 6.dp)
                             .testTag("chart_history_provenance")
                     ) {
-                        Column(modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
-                            Text(
-                                text = if (isEmbeddedReplay) "REPLAY" else "HISTORICAL · ${chartBars.size} bars",
-                                fontSize = 10.sp, color = TradingTextPrimary
-                            )
-                            Text(
-                                text = "${latestBar.source} · ${timestamp} UTC",
-                                fontSize = 9.sp, color = TradingTextSecondary,
-                                maxLines = 1
-                            )
-                            if (!isEmbeddedReplay) {
-                                val oldest = chartBars.first()
-                                val firstTime = remember(oldest.openTime) {
-                                    java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")
-                                        .withZone(java.time.ZoneOffset.UTC)
-                                        .format(java.time.Instant.ofEpochMilli(oldest.openTime))
-                                }
-                                Text(
-                                    text = "$firstTime → $timestamp UTC · ${chartBars.size}/${uiState.chartHistoryBars}",
-                                    fontSize = 9.sp,
-                                    color = TradingTextSecondary,
-                                    modifier = Modifier.testTag("chart_history_range"),
-                                    maxLines = 1
-                                )
-                                val firstPrice = oldest.open
-                                val lastPrice = latestBar.close
-                                if (firstPrice > 0.0 && firstPrice.isFinite() && lastPrice.isFinite()) {
-                                    val changePercent = (lastPrice - firstPrice) / firstPrice * 100.0
-                                    val sign = if (changePercent >= 0.0) "+" else ""
-                                    Text(
-                                        text = "Δ $sign${"%.2f".format(java.util.Locale.US, changePercent)}% · H ${"%.5f".format(java.util.Locale.US, chartBars.maxOf { it.high })} · L ${"%.5f".format(java.util.Locale.US, chartBars.minOf { it.low })}",
-                                        fontSize = 9.sp,
-                                        color = if (changePercent >= 0.0) TradingPositive else TradingGold,
-                                        maxLines = 1,
-                                        modifier = Modifier.testTag("chart_history_summary")
-                                    )
-                                }
-                            }
-                        }
+                        Text(
+                            text = if (isEmbeddedReplay) "REPLAY · ${chartBars.size}"
+                                else "HISTORICAL · ${chartBars.size}",
+                            fontSize = 9.sp,
+                            color = TradingTextSecondary,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
                     }
                 }
 
