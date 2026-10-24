@@ -68,7 +68,8 @@ object HistoricalDataAudit {
         if (future > 0) issues += "$future unfinished/future bars"
         if (missing > 0) issues += "$missing absent intervals (including market closures)"
         val strict = DataIntegrityValidator.validateHistoricalSeries(candles).isValid
-        val safe = strict && future == 0
+        val safe = strict && future == 0 && duplicates == 0 && outOfOrder == 0 &&
+            mixed == 0 && invalid == 0
         if (!strict && issues.size < 15) issues += "Strict historical validation failed"
         return Report(candles.size, valid, invalid, duplicates, outOfOrder,
             missing, largestGap, mixed, future, safe, issues)
