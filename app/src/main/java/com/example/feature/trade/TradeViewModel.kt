@@ -210,7 +210,13 @@ class TradeViewModel(
                     return
                 }
                 val lot = riskEngine.calculateSuggestedLot(account, state.selectedSymbol, pct, pips)
-                _uiState.update { it.copy(volume = String.format("%.2f", lot)) }
+                if (!lot.isFinite() || lot < symInfo.minLot || lot > symInfo.maxLot ||
+                    kotlin.math.abs(lot / symInfo.lotStep -
+                        kotlin.math.round(lot / symInfo.lotStep)) > 1e-6) {
+                    _uiState.update { it.copy(message = "حجم العقد المحسوب خارج الحدود المسموحة؛ لم يتم تغيير الحجم") }
+                    return
+                }
+                _uiState.update { it.copy(volume = String.format(java.util.Locale.US, "%.2f", lot)) }
             }
             RiskCalculationMode.MONETARY_RISK -> {
                 val cash = state.monetaryRiskInput.toDoubleOrNull()
@@ -222,7 +228,13 @@ class TradeViewModel(
                 }
                 val pct = cash / account.balance * 100.0
                 val lot = riskEngine.calculateSuggestedLot(account, state.selectedSymbol, pct, pips)
-                _uiState.update { it.copy(volume = String.format("%.2f", lot)) }
+                if (!lot.isFinite() || lot < symInfo.minLot || lot > symInfo.maxLot ||
+                    kotlin.math.abs(lot / symInfo.lotStep -
+                        kotlin.math.round(lot / symInfo.lotStep)) > 1e-6) {
+                    _uiState.update { it.copy(message = "حجم العقد المحسوب خارج الحدود المسموحة؛ لم يتم تغيير الحجم") }
+                    return
+                }
+                _uiState.update { it.copy(volume = String.format(java.util.Locale.US, "%.2f", lot)) }
             }
             RiskCalculationMode.FIXED_LOT -> {}
         }
