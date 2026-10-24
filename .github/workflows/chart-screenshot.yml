@@ -1,0 +1,58 @@
+name: Capture TradeLab Chart Screenshot
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  screenshot:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4
+      - name: Android SDK
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Debug signing key
+        run: |
+          if [ -f debug.keystore.base64 ]; then base64 -d debug.keystore.base64 > debug.keystore || true; fi
+          if [ ! -s debug.keystore ]; then
+            keytool -genkeypair -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+      - name: Assemble
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+      - name: Boot emulator and capture actual app
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell settings put system accelerometer_rotation 0
+            adb shell settings put system user_rotation 0
+            adb shell am start -n com.aistudio.tradelab.vzqrpk/com.example.MainActivity
+            sleep 35
+            mkdir -p screenshots
+            adb shell screencap -p /sdcard/tradelab-screen.png
+            adb pull /sdcard/tradelab-screen.png screenshots/tradelab-emulator.png
+            adb shell dumpsys activity activities > screenshots/activity-state.txt
+            adb logcat -d -t 500 > screenshots/logcat-tail.txt
+      - name: Upload real emulator capture and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tradelab-chart-emulator-screenshot
+          path: screenshots/
+          if-no-files-found: warn
