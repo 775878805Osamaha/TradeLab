@@ -443,6 +443,15 @@ fun CandlestickChart(
                 }
             }
 
+            // Indicator series are indexed by the FULL candle history. Slice them
+            // to the visible viewport before plotting, otherwise the first EMA/RSI
+            // values are incorrectly drawn over the latest candles after panning.
+            // Reject incomplete series rather than silently shifting their origin.
+            fun <T> visibleIndicator(series: List<T>): List<T> =
+                if (series.size == candles.size && endIndex <= series.size)
+                    series.subList(startIndex, endIndex)
+                else emptyList()
+
             // 3. Draw Subpanel (RSI / MACD / ATR)
             if (hasSubpanel) {
                 val subpanelTop = mainChartHeight + volumeHeight
@@ -453,8 +462,8 @@ fun CandlestickChart(
                     chartWidth = chartWidth,
                     transform = transform,
                     settings = indicatorSettings,
-                    rsiValues = rsiValues,
-                    macdValues = macdValues,
+                    rsiValues = visibleIndicator(rsiValues),
+                    macdValues = visibleIndicator(macdValues),
                     atrValues = atrValues
                 )
             }
