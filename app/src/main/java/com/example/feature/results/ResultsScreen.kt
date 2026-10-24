@@ -48,11 +48,24 @@ fun ResultsScreen(
     }
 
     if (uiState.isExportDialogOpen && metrics != null) {
+        // Export exactly the period shown on the overview; other tabs retain
+        // their existing full-account export behavior.
+        val periodReport = remember(uiState.trades, uiState.initialBalance, uiState.selectedPeriod, uiState.selectedTab) {
+            if (uiState.selectedTab == ResultsTab.OVERVIEW) {
+                ResultsPeriodCalculator.calculate(
+                    uiState.initialBalance, uiState.trades,
+                    uiState.selectedPeriod, System.currentTimeMillis()
+                )
+            } else null
+        }
+        val exportedTrades = periodReport?.trades ?: uiState.trades
         ExportDialog(
-            metrics = metrics,
-            trades = uiState.trades,
-            dailySummaries = uiState.dailySummaries,
-            points = uiState.equityPoints,
+            metrics = periodReport?.metrics ?: metrics,
+            trades = exportedTrades,
+            dailySummaries = if (periodReport != null) {
+                com.example.core.statistics.StatisticsCalculator.calculateDailySummaries(exportedTrades)
+            } else uiState.dailySummaries,
+            points = periodReport?.curve ?: uiState.equityPoints,
             onDismiss = { viewModel.setExportDialogOpen(false) }
         )
     }
