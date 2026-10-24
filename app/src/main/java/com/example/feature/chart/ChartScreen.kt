@@ -240,6 +240,17 @@ fun ChartScreen(
                                     Text("الحجم المقترح للمخاطرة المحددة: ${String.format(Locale.US, "%.2f", lots)} لوت",
                                         color = TradingPositive,
                                         modifier = Modifier.testTag("chart_risk_suggested_lots"))
+                                    TextButton(
+                                        onClick = { orderVolumeInput = String.format(Locale.US, "%.2f", lots) },
+                                        modifier = Modifier.testTag("chart_apply_suggested_lots")
+                                    ) {
+                                        Text("استخدام الحجم المقترح")
+                                    }
+                                }
+                                if (riskEstimate.maximumLotsForRisk == null) {
+                                    Text("ميزانية المخاطرة أقل من الحد الأدنى لحجم العقد",
+                                        color = TradingNegative,
+                                        modifier = Modifier.testTag("chart_risk_below_minimum"))
                                 }
                             }
                             Text("تقدير قبل التنفيذ، لا يشمل الانزلاق والعمولات",
