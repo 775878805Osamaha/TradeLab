@@ -1,5 +1,6 @@
 package com.example.ui.components.chart
 
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -97,6 +98,29 @@ object ChartOverlays {
             val entryY = transform.priceToY(pos.entryPrice)
             val isBuy = pos.side == PositionSide.BUY
             val lineColor = if (isBuy) TradingPositive else TradingNegative
+
+            // Reference TP/SL risk zones are drawn only for an actual open position.
+            // Clip levels to the visible price range; do not fabricate stops or targets.
+            val zoneLeft = transform.chartWidth * 0.60f
+            val zoneWidth = (transform.chartWidth - zoneLeft).coerceAtLeast(0f)
+            fun drawRiskZone(level: Double?, color: Color) {
+                if (level == null || !level.isFinite() || !pos.entryPrice.isFinite()) return
+                val clippedEntry = pos.entryPrice.coerceIn(transform.minPrice, transform.maxPrice)
+                val clippedLevel = level.coerceIn(transform.minPrice, transform.maxPrice)
+                val top = minOf(transform.priceToY(clippedEntry), transform.priceToY(clippedLevel))
+                val bottom = maxOf(transform.priceToY(clippedEntry), transform.priceToY(clippedLevel))
+                if (bottom > top && zoneWidth > 0f) {
+                    scope.drawRect(
+                        color = color.copy(alpha = 0.16f),
+                        topLeft = Offset(zoneLeft, top),
+                        size = Size(zoneWidth, bottom - top)
+                    )
+                }
+            }
+            val targetColor = if (isBuy) TradingPositive else TradingNegative
+            val stopColor = if (isBuy) TradingNegative else TradingPositive
+            drawRiskZone(pos.takeProfit, targetColor)
+            drawRiskZone(pos.stopLoss, stopColor)
 
             // Entry line
             if (isPriceVisible(transform, pos.entryPrice)) {
