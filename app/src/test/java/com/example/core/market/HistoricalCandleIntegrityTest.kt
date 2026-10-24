@@ -74,4 +74,28 @@ class HistoricalCandleIntegrityTest {
             HistoricalCandleIntegrity.validate(listOf(candle(120_000)), 0, 150_000)
         }
     }
+    @Test fun rejectsBarClosingBeforeOpening() {
+        assertThrows(IllegalArgumentException::class.java) {
+            HistoricalCandleIntegrity.validate(
+                listOf(candle(60_000).copy(closeTime = 59_999)), 0, 180_000
+            )
+        }
+    }
+
+    @Test fun rejectsBarExtendingBeyondTimeframe() {
+        assertThrows(IllegalArgumentException::class.java) {
+            HistoricalCandleIntegrity.validate(
+                listOf(candle(60_000).copy(closeTime = 150_000)), 0, 180_000
+            )
+        }
+    }
+
+    @Test fun rejectsMissingHistoricalSource() {
+        assertThrows(IllegalArgumentException::class.java) {
+            HistoricalCandleIntegrity.validate(
+                listOf(candle(60_000).copy(source = "")), 0, 180_000
+            )
+        }
+    }
+
 }
