@@ -330,6 +330,17 @@ class ChartViewModel(
                 }) {
                     throw IllegalStateException("Invalid verified chart candle data")
                 }
+                // Reject malformed, mixed or future OHLC history rather than showing
+                // potentially misleading prices in the chart.
+                if (aggregated.isNotEmpty()) {
+                    val audit = com.example.core.market.HistoricalDataAudit.inspect(aggregated, now)
+                    if (!audit.safeForBacktest) {
+                        throw IllegalStateException(
+                            "Historical OHLC integrity check failed: " +
+                                audit.issues.take(2).joinToString("; ")
+                        )
+                    }
+                }
                 // Ignore responses that arrive after the user changes symbol or timeframe.
                 if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf ||
                     _uiState.value.chartHistoryBars != requestedBars) return@launch
