@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -643,6 +645,7 @@ fun CandlestickChart(
                     .fillMaxWidth()
                     .padding(bottom = 76.dp, start = 8.dp, end = 8.dp)
                     .align(Alignment.BottomCenter)
+                    .fillMaxWidth(0.96f)
                     .testTag("chart_crosshair_ohlcv_hud"),
                 shape = RoundedCornerShape(6.dp),
                 colors = CardDefaults.cardColors(containerColor = TradingElevated.copy(alpha = 0.9f))
