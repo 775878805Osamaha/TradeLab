@@ -1001,58 +1001,81 @@ fun ChartScreen(
                     }
                 }
 
-                // Reference-style floating Replay transport; chart keeps its vertical space.
+                // Reference replay transport: compact floating panel with a real timeline.
                 if (isEmbeddedReplay && immersiveChart) {
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 61.dp, start = 8.dp, end = 8.dp)
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(23.dp))
-                        .background(TradingCard.copy(alpha = 0.94f))
-                        .testTag("chart_embedded_replay_controls"),
-                    horizontalArrangement = Arrangement.spacedBy(0.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { showReplayDatePicker = true }, modifier = Modifier.size(42.dp).testTag("chart_replay_date_picker")) {
-                        Icon(Icons.Default.DateRange, contentDescription = "تاريخ الإعادة", tint = TradingTextPrimary)
-                    }
-                    IconButton(onClick = { replayViewModel.stepBackward() },
-                        enabled = !replayState.isLoading && replayState.currentIndex > 0,
-                        modifier = Modifier.size(42.dp).testTag("chart_replay_step_back")) {
-                        Icon(Icons.Default.SkipPrevious, contentDescription = "رجوع شمعة", tint = TradingTextPrimary)
-                    }
-                    IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
-                        enabled = !replayState.isLoading && replayState.totalCandles > 0,
-                        modifier = Modifier.size(42.dp).testTag("chart_replay_play_pause")) {
-                        Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = "تشغيل أو إيقاف", tint = TradingAccent)
-                    }
-                    IconButton(onClick = { replayViewModel.stepForward() },
-                        enabled = !replayState.isLoading && replayState.currentIndex < replayState.totalCandles - 1,
-                        modifier = Modifier.size(42.dp).testTag("chart_replay_step_next")) {
-                        Icon(Icons.Default.SkipNext, contentDescription = "تقدم شمعة", tint = TradingTextPrimary)
-                    }
-                    Box {
-                        TextButton(onClick = { replaySpeedMenuExpanded = true }, contentPadding = PaddingValues(horizontal = 2.dp)) {
-                            Text("${replayState.speed}x", color = TradingTextPrimary, fontSize = 12.sp)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = "سرعة الإعادة", tint = TradingTextPrimary)
-                        }
-                        DropdownMenu(expanded = replaySpeedMenuExpanded,
-                            onDismissRequest = { replaySpeedMenuExpanded = false }) {
-                            listOf(0.5f, 1f, 2f, 5f, 10f, 25f, 50f, 100f).forEach { speed ->
-                                DropdownMenuItem(text = { Text("${speed}x") },
-                                    onClick = { replayViewModel.setSpeed(speed); replaySpeedMenuExpanded = false })
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 61.dp, start = 76.dp, end = 76.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(TradingCard.copy(alpha = 0.94f))
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                            .testTag("chart_embedded_replay_controls"),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { showReplayDatePicker = true }, modifier = Modifier.size(34.dp).testTag("chart_replay_date_picker")) {
+                                Icon(Icons.Default.History, contentDescription = "تاريخ الإعادة", tint = TradingAccent)
+                            }
+                            IconButton(onClick = { replayViewModel.stepBackward() },
+                                enabled = !replayState.isLoading && replayState.currentIndex > 0,
+                                modifier = Modifier.size(34.dp).testTag("chart_replay_step_back")) {
+                                Icon(Icons.Default.SkipPrevious, contentDescription = "رجوع شمعة", tint = TradingTextPrimary)
+                            }
+                            IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
+                                enabled = !replayState.isLoading && replayState.totalCandles > 0,
+                                modifier = Modifier.size(34.dp).testTag("chart_replay_play_pause")) {
+                                Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = "تشغيل أو إيقاف", tint = TradingAccent)
+                            }
+                            IconButton(onClick = { replayViewModel.stepForward() },
+                                enabled = !replayState.isLoading && replayState.currentIndex < replayState.totalCandles - 1,
+                                modifier = Modifier.size(34.dp).testTag("chart_replay_step_next")) {
+                                Icon(Icons.Default.SkipNext, contentDescription = "تقدم شمعة", tint = TradingTextPrimary)
+                            }
+                            Box {
+                                TextButton(onClick = { replaySpeedMenuExpanded = true }, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                                    Text("${replayState.speed}x", color = TradingTextPrimary, fontSize = 12.sp)
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "سرعة الإعادة", tint = TradingTextPrimary)
+                                }
+                                DropdownMenu(expanded = replaySpeedMenuExpanded,
+                                    onDismissRequest = { replaySpeedMenuExpanded = false }) {
+                                    listOf(0.5f, 1f, 2f, 5f, 10f, 25f, 50f, 100f).forEach { speed ->
+                                        DropdownMenuItem(text = { Text("${speed}x") },
+                                            onClick = { replayViewModel.setSpeed(speed); replaySpeedMenuExpanded = false })
+                                    }
+                                }
+                            }
+                            IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false },
+                                modifier = Modifier.size(32.dp).testTag("chart_replay_close")) {
+                                Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextSecondary)
                             }
                         }
-                    }
-                    IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false },
-                        modifier = Modifier.size(38.dp).testTag("chart_replay_close")) {
-                        Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextPrimary)
+                        val progress = if (replayState.totalCandles > 1)
+                            replayState.currentIndex.toFloat().coerceAtLeast(0f) / (replayState.totalCandles - 1)
+                        else 0f
+                        Slider(
+                            value = progress.coerceIn(0f, 1f),
+                            onValueChange = { fraction ->
+                                if (replayState.totalCandles > 1) {
+                                    replayViewModel.seekTo(((replayState.totalCandles - 1) * fraction).toInt())
+                                }
+                            },
+                            enabled = !replayState.isLoading && replayState.totalCandles > 1,
+                            modifier = Modifier.fillMaxWidth().height(20.dp).testTag("chart_replay_timeline")
+                        )
+                        Text(
+                            "${replayState.currentIndex.coerceAtLeast(0) + 1} / ${replayState.totalCandles}",
+                            fontSize = 10.sp, color = TradingTextSecondary,
+                            modifier = Modifier.testTag("chart_replay_position")
+                        )
                     }
                 }
-            }
-
 
                 // Minimal source label: historical bars must remain distinguishable
                 // from live quotes without covering price candles or indicators.
