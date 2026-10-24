@@ -87,7 +87,7 @@ object ChartOverlays {
 
             // Reference TP/SL risk zones are drawn only for an actual open position.
             // Clip levels to the visible price range; do not fabricate stops or targets.
-            val zoneLeft = transform.chartWidth * 0.60f
+            val zoneLeft = transform.chartWidth * 0.54f
             val zoneWidth = (transform.chartWidth - zoneLeft).coerceAtLeast(0f)
             fun drawRiskZone(level: Double?, color: Color) {
                 if (level == null || !level.isFinite() || !pos.entryPrice.isFinite()) return
@@ -97,7 +97,7 @@ object ChartOverlays {
                 val bottom = maxOf(transform.priceToY(clippedEntry), transform.priceToY(clippedLevel))
                 if (bottom > top && zoneWidth > 0f) {
                     scope.drawRect(
-                        color = color.copy(alpha = 0.16f),
+                        color = color.copy(alpha = 0.13f),
                         topLeft = Offset(zoneLeft, top),
                         size = Size(zoneWidth, bottom - top)
                     )
@@ -114,7 +114,7 @@ object ChartOverlays {
                 color = lineColor,
                 start = Offset(0f, entryY),
                 end = Offset(transform.chartWidth, entryY),
-                strokeWidth = 1.5f,
+                strokeWidth = 1.2f,
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 4f), 0f)
             )
 

@@ -873,9 +873,9 @@ fun ChartScreen(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
-                            .padding(top = 4.dp, end = 10.dp, start = 10.dp)
-                            .clip(RoundedCornerShape(26.dp))
-                            .background(TradingCard.copy(alpha = 0.82f))
+                            .padding(top = 5.dp, end = 8.dp, start = 8.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(TradingCard.copy(alpha = 0.94f))
                             .testTag("chart_immersive_floating_header"),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -894,14 +894,18 @@ fun ChartScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(uiState.selectedSymbol, color = TradingTextPrimary,
-                                    fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
+                                    fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
                                 Icon(Icons.Default.ArrowDropDown, contentDescription = "تبديل الزوج",
                                     tint = TradingTextSecondary, modifier = Modifier.size(16.dp))
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(headerClose?.takeIf { it.isFinite() }?.let {
                                     String.format(Locale.US, "%.2f", it)
-                                } ?: "—", color = TradingPositive, fontSize = 12.sp,
+                                } ?: "—", color = when {
+                                    changePercent == null -> TradingTextSecondary
+                                    changePercent < 0.0 -> TradingNegative
+                                    else -> TradingPositive
+                                }, fontSize = 12.sp,
                                     style = TextStyle(textDirection = TextDirection.Ltr))
                                 Text(changePercent?.let {
                                     String.format(Locale.US, "%+.2f%%", it)
@@ -983,7 +987,7 @@ fun ChartScreen(
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = 48.dp, start = 8.dp, end = 8.dp)
+                        .padding(top = 61.dp, start = 8.dp, end = 8.dp)
                         .height(46.dp)
                         .clip(RoundedCornerShape(23.dp))
                         .background(TradingCard.copy(alpha = 0.94f))
@@ -1096,10 +1100,10 @@ fun ChartScreen(
                 // Reference-style drawing controls remain visible over Replay candles.
                 Column(
                     modifier = Modifier.align(Alignment.TopStart)
-                        .padding(start = 8.dp, top = if (isEmbeddedReplay) 114.dp else 74.dp)
+                        .padding(start = 8.dp, top = if (isEmbeddedReplay) 124.dp else 66.dp)
                         .testTag("chart_reference_floating_tools"),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
                     val referenceTools = listOf(
                         Triple("تقاطع", Icons.Default.FilterCenterFocus, 0),
@@ -1119,7 +1123,7 @@ fun ChartScreen(
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Surface(
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(38.dp)
                                     .clickable {
                                         when (index) {
                                             0 -> viewModel.toggleCrosshair()
@@ -1140,7 +1144,7 @@ fun ChartScreen(
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(image, contentDescription = label,
                                         tint = if (selected) TradingAccent else TradingTextPrimary,
-                                        modifier = Modifier.size(21.dp))
+                                        modifier = Modifier.size(19.dp))
                                 }
                             }
                             Text(label, color = TradingTextSecondary, fontSize = 9.sp)

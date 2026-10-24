@@ -165,8 +165,8 @@ fun CandlestickChart(
     val priceAxisPaint = remember {
         android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.parseColor("#9CA3AF")
-            textSize = 29f
-            isFakeBoldText = true
+            textSize = 23f
+            isFakeBoldText = false
         }
     }
     // Reuse the axis paint during crosshair drags; no allocation per frame.
@@ -179,13 +179,13 @@ fun CandlestickChart(
     val timeAxisPaint = remember {
         android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.parseColor("#6B7280")
-            textSize = 25f
+            textSize = 21f
             textAlign = android.graphics.Paint.Align.CENTER
         }
     }
 
     var chartViewportWidthPx by remember { mutableFloatStateOf(600f) }
-    Box(modifier = modifier.onSizeChanged { chartViewportWidthPx = (it.width - 146f).coerceAtLeast(1f) }) {
+    Box(modifier = modifier.onSizeChanged { chartViewportWidthPx = (it.width - 122f).coerceAtLeast(1f) }) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -279,7 +279,7 @@ fun CandlestickChart(
             val width = size.width
             val height = size.height
             // Reserve sufficient width for large formatted prices (e.g. 81,500.00).
-            val rightAxisWidth = 146f
+            val rightAxisWidth = 122f
             val chartWidth = (width - rightAxisWidth).coerceAtLeast(1f)
 
             // Subpanel height split
@@ -314,7 +314,7 @@ fun CandlestickChart(
                 maxP *= 1.01
             }
             // Add 3% vertical padding
-            val pPadding = (maxP - minP) * 0.03
+            val pPadding = (maxP - minP) * 0.055
             val autoMin = minP - pPadding
             val autoMax = maxP + pPadding
             val midpoint = (autoMin + autoMax) / 2.0
@@ -374,7 +374,7 @@ fun CandlestickChart(
             else visibleCandles
 
             // 1. Draw Visible OHLC Candlesticks
-            val bodyWidth = (candleWidthPx * 0.72f).coerceAtLeast(1.5f)
+            val bodyWidth = (candleWidthPx * 0.78f).coerceAtLeast(1.5f)
             if (displayStyle == ChartDisplayStyle.LINE) {
                 val linePath = Path()
                 visibleCandles.forEachIndexed { i, candle ->
@@ -551,9 +551,9 @@ fun CandlestickChart(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 52.dp, bottom = 40.dp)
-                .background(TradingElevated.copy(alpha = 0.92f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 3.dp),
+                .padding(end = 44.dp, bottom = 30.dp)
+                .background(TradingElevated.copy(alpha = 0.88f), RoundedCornerShape(9.dp))
+                .padding(horizontal = 1.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -562,7 +562,7 @@ fun CandlestickChart(
                     scrollOffsetPx = ChartNavigation.centerLatestOffset(chartViewportWidthPx, candleWidthPx)
                 },
                 modifier = Modifier.testTag("chart_center_latest")
-            ) { Text("وسط", color = TradingTextSecondary, fontSize = 12.sp) }
+            ) { Text("◎", color = TradingTextPrimary, fontSize = 16.sp) }
             androidx.compose.material3.TextButton(
                 onClick = { candleWidthPx = ChartNavigation.zoomIn(candleWidthPx) },
                 modifier = Modifier.testTag("chart_zoom_in")
@@ -580,7 +580,7 @@ fun CandlestickChart(
                     inspectedCandle = null
                 },
                 modifier = Modifier.testTag("chart_reset_view")
-            ) { Text("إعادة", color = TradingTextSecondary, fontSize = 12.sp) }
+            ) { Text("↺", color = TradingTextPrimary, fontSize = 17.sp) }
         }
 
         // Vertical price-axis scaling; reset-view restores automatic fitting.
