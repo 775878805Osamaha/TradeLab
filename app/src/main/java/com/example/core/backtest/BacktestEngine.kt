@@ -157,6 +157,11 @@ class BacktestEngine(
         if (config.endTime != null) {
             require(config.endTime > 0L) { "Backtest end time must be positive" }
         }
+        // An inclusive range cannot contain a candle that opened before
+        // startTime or closed after endTime. Never clip OHLC to fit the range.
+        require(config.startTime == null || config.startTime >= 0L) {
+            "Backtest start time must not be negative"
+        }
         val cleanCandles = candles.filter { candle ->
             (config.startTime == null || candle.openTime >= config.startTime) &&
                 (config.endTime == null || candle.closeTime <= config.endTime)
