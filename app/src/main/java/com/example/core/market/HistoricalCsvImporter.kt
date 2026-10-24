@@ -24,7 +24,8 @@ object HistoricalCsvImporter {
         require(lines.hasNext()) { "CSV is empty" }
         val header = lines.next().trim().removePrefix("\uFEFF").lowercase()
         require(header == "timestamp_ms,open,high,low,close,volume") { "Unsupported CSV columns" }
-        val interval = timeframe.minutes * 60_000L
+        val interval = timeframe.minutes.toLong() * 60_000L
+        require(interval > 0L) { "Invalid timeframe" }
         val result = ArrayList<Candle>()
         var previous = Long.MIN_VALUE
         while (lines.hasNext()) {
@@ -44,6 +45,7 @@ object HistoricalCsvImporter {
             require(open > 0 && high >= maxOf(open, close) &&
                 low > 0 && low <= minOf(open, close) && volume >= 0) { "Invalid OHLCV" }
             val end = Math.addExact(time, interval)
+            require(end <= System.currentTimeMillis()) { "Unfinished or future historical candle" }
             result.add(Candle(
                 symbol = symbol,
                 timeframe = timeframe,

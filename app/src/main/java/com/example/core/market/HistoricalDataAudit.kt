@@ -28,6 +28,7 @@ object HistoricalDataAudit {
         val symbol = first.symbol
         val timeframe = first.timeframe
         val period = timeframe.minutes.toLong() * 60_000L
+        val validPeriod = period > 0L
         val seen = HashSet<Triple<String, Int, Long>>()
         var valid = 0
         var invalid = 0
@@ -47,11 +48,11 @@ object HistoricalDataAudit {
             }
             if (bar.symbol != symbol || bar.timeframe != timeframe) mixed++
             if (!seen.add(Triple(bar.symbol, bar.timeframe.minutes, bar.openTime))) duplicates++
-            if (bar.closeTime > nowMillis) future++
+            if (bar.closeTime > nowMillis || bar.openTime > nowMillis) future++
             val prev = previousOpen
             if (prev != null) {
                 if (bar.openTime <= prev) outOfOrder++
-                else if (period > 0L) {
+                else if (validPeriod) {
                     val distance = if (bar.openTime > 0L && prev < 0L && bar.openTime > Long.MAX_VALUE + prev) Long.MAX_VALUE else bar.openTime - prev
                     if (distance > period) {
                         val gap = (distance - 1L) / period
@@ -68,7 +69,7 @@ object HistoricalDataAudit {
         if (future > 0) issues += "$future unfinished/future bars"
         if (missing > 0) issues += "$missing absent intervals (including market closures)"
         val strict = DataIntegrityValidator.validateHistoricalSeries(candles).isValid
-        val safe = strict && future == 0 && duplicates == 0 && outOfOrder == 0 &&
+        val safe = validPeriod && strict && future == 0 && duplicates == 0 && outOfOrder == 0 &&
             mixed == 0 && invalid == 0
         if (!strict && issues.size < 15) issues += "Strict historical validation failed"
         return Report(candles.size, valid, invalid, duplicates, outOfOrder,
