@@ -190,7 +190,7 @@ private fun ResultsOverviewContent(
     uiState: ResultsUiState,
     onNavigateToBacktest: () -> Unit
 ) {
-    var period by remember { mutableStateOf(ResultsPeriod.MONTH) }
+    val period = uiState.selectedPeriod
     val now = remember { System.currentTimeMillis() }
     val snapshot = remember(uiState.trades, uiState.initialBalance, period, now) {
         ResultsPeriodCalculator.calculate(uiState.initialBalance, uiState.trades, period, now)
@@ -228,7 +228,7 @@ private fun ResultsOverviewContent(
                         Box(
                             Modifier.clip(RoundedCornerShape(8.dp))
                                 .background(if (period == item) ResultsPrimary else Color.Transparent)
-                                .clickable { period = item }
+                                .clickable { viewModel.setSelectedPeriod(item) }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                                 .testTag("results_period_${item.name}"),
                             contentAlignment = Alignment.Center
