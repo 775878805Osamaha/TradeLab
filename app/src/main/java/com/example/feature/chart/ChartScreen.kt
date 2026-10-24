@@ -796,15 +796,40 @@ fun ChartScreen(
                 }
             }
 
-            // Replay indicators must use only revealed candles, never future bars.
-            // remember avoids recomputing the EMA on unrelated chart gestures.
-            val replayEma = remember(
-                isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings
-            ) {
+            // Replay indicators only see revealed candles (strict no-lookahead).
+            val replaySma = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
+                if (isEmbeddedReplay && uiState.indicatorSettings.isSmaEnabled)
+                    com.example.core.indicators.TechnicalIndicators.calculateSma(replayState.visibleCandles, uiState.indicatorSettings.smaPeriod)
+                else emptyList()
+            }
+            val replayEma = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
                 if (isEmbeddedReplay && uiState.indicatorSettings.isEmaEnabled)
-                    com.example.core.indicators.TechnicalIndicators.calculateEma(
-                        replayState.visibleCandles, uiState.indicatorSettings.emaPeriod
-                    )
+                    com.example.core.indicators.TechnicalIndicators.calculateEma(replayState.visibleCandles, uiState.indicatorSettings.emaPeriod)
+                else emptyList()
+            }
+            val replayBollinger = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
+                if (isEmbeddedReplay && uiState.indicatorSettings.isBollingerEnabled)
+                    com.example.core.indicators.TechnicalIndicators.calculateBollingerBands(replayState.visibleCandles, uiState.indicatorSettings.bollingerPeriod, uiState.indicatorSettings.bollingerStdDev)
+                else emptyList()
+            }
+            val replayVwap = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
+                if (isEmbeddedReplay && uiState.indicatorSettings.isVwapEnabled)
+                    com.example.core.indicators.TechnicalIndicators.calculateVwap(replayState.visibleCandles)
+                else emptyList()
+            }
+            val replayRsi = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
+                if (isEmbeddedReplay && uiState.indicatorSettings.isRsiEnabled)
+                    com.example.core.indicators.TechnicalIndicators.calculateRsi(replayState.visibleCandles, uiState.indicatorSettings.rsiPeriod)
+                else emptyList()
+            }
+            val replayMacd = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
+                if (isEmbeddedReplay && uiState.indicatorSettings.isMacdEnabled)
+                    com.example.core.indicators.TechnicalIndicators.calculateMacd(replayState.visibleCandles, uiState.indicatorSettings.macdFast, uiState.indicatorSettings.macdSlow, uiState.indicatorSettings.macdSignal)
+                else emptyList()
+            }
+            val replayAtr = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
+                if (isEmbeddedReplay && uiState.indicatorSettings.isAtrEnabled)
+                    com.example.core.indicators.TechnicalIndicators.calculateAtr(replayState.visibleCandles, uiState.indicatorSettings.atrPeriod)
                 else emptyList()
             }
 
@@ -826,13 +851,13 @@ fun ChartScreen(
                     activeDrawingTool = uiState.activeDrawingTool,
                     drawings = uiState.drawings,
                     indicatorSettings = uiState.indicatorSettings,
-                    smaValues = if (isEmbeddedReplay) emptyList() else uiState.smaValues,
+                    smaValues = if (isEmbeddedReplay) replaySma else uiState.smaValues,
                     emaValues = if (isEmbeddedReplay) replayEma else uiState.emaValues,
-                    bollingerValues = if (isEmbeddedReplay) emptyList() else uiState.bollingerValues,
-                    vwapValues = if (isEmbeddedReplay) emptyList() else uiState.vwapValues,
-                    rsiValues = if (isEmbeddedReplay) emptyList() else uiState.rsiValues,
-                    macdValues = if (isEmbeddedReplay) emptyList() else uiState.macdValues,
-                    atrValues = if (isEmbeddedReplay) emptyList() else uiState.atrValues,
+                    bollingerValues = if (isEmbeddedReplay) replayBollinger else uiState.bollingerValues,
+                    vwapValues = if (isEmbeddedReplay) replayVwap else uiState.vwapValues,
+                    rsiValues = if (isEmbeddedReplay) replayRsi else uiState.rsiValues,
+                    macdValues = if (isEmbeddedReplay) replayMacd else uiState.macdValues,
+                    atrValues = if (isEmbeddedReplay) replayAtr else uiState.atrValues,
                     isCrosshairActive = uiState.isCrosshairActive,
                     isVolumeVisible = uiState.isVolumeVisible,
                     resetViewTrigger = uiState.resetViewTrigger,
