@@ -45,10 +45,20 @@ object ResultsPeriodCalculator {
         now: Long
     ): ResultsPeriodSnapshot {
         require(initialBalance.isFinite()) { "Invalid opening account balance" }
-        val sorted = trades.sortedWith(compareBy<TradeJournalEntry> { it.closeTime }.thenBy { it.id })
+        require(now >= 0L) { "Invalid report timestamp" }
+        require(trades.all {
+            it.closeTime >= it.openTime &&
+                it.netProfitLoss.isFinite() &&
+                it.volume.isFinite() && it.volume > 0.0
+        }) { "Invalid trade in period report" }
+        // Future-dated trades cannot affect the selected period's opening balance.
+        val sorted = trades.asSequence()
+            .filter { it.closeTime <= now }
+            .sortedWith(compareBy<TradeJournalEntry> { it.closeTime }.thenBy { it.id })
+            .toList()
         val start = cutoff(period, now)
         val previous = if (start == null) emptyList() else sorted.filter { it.closeTime < start }
-        val included = sorted.filter { it.closeTime <= now && (start == null || it.closeTime >= start) }
+        val included = sorted.filter { start == null || it.closeTime >= start }
         val opening = initialBalance + previous.sumOf { it.netProfitLoss }
         val closing = opening + included.sumOf { it.netProfitLoss }
         require(opening.isFinite() && closing.isFinite()) { "Invalid period balance" }
