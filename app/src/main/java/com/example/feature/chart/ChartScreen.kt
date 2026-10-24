@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -1109,7 +1110,7 @@ fun ChartScreen(
                 // Buttons select the existing functional drawing tools; no image overlay.
                 // Reference-style drawing controls remain visible over Replay candles.
                 Column(
-                    modifier = Modifier.align(Alignment.TopStart)
+                    modifier = Modifier.align(AbsoluteAlignment.TopLeft)
                         // Physical left, not RTL logical start: keep the price axis clear.
                         .absoluteOffset(
                             x = 8.dp,
