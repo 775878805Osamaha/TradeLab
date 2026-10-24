@@ -151,8 +151,13 @@ fun ChartScreen(
                 targetRiskPercent = if (riskEquityInput.isBlank()) null else riskPercent
             )
         } else null
+        val withinRiskBudget = riskEquityInput.isBlank() ||
+            (riskEstimate != null && riskPercent != null &&
+                riskEstimate.riskPercentOfEquity != null &&
+                riskEstimate.riskPercentOfEquity <= riskPercent + 1e-8)
         val validOrder = validVolume && validSl && validTp && riskBudgetValid &&
             (riskEquityInput.isBlank() || (sl != null && riskEstimate != null)) &&
+            withinRiskBudget &&
             entryTick?.symbol == (if (isEmbeddedReplay) replayState.symbol else uiState.selectedSymbol) &&
             entryPrice != null &&
             entryPrice.isFinite() && entryPrice > 0.0 && entryTick != null &&
@@ -205,6 +210,10 @@ fun ChartScreen(
                             isError = !riskBudgetValid,
                             modifier = Modifier.fillMaxWidth().testTag("chart_risk_percent")
                         )
+                    }
+                    if (riskBudgetValid && !withinRiskBudget) {
+                        Text("حجم العقد يتجاوز نسبة المخاطرة المحددة؛ خفّض اللوت قبل التأكيد",
+                            color = TradingNegative, modifier = Modifier.testTag("chart_risk_budget_exceeded"))
                     }
                     if (!riskBudgetValid) {
                         Text("أدخل رأس مال موجبًا ونسبة مخاطرة بين 0 و100",
