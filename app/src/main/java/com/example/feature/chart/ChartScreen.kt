@@ -86,6 +86,7 @@ fun ChartScreen(
         showReplayDetails = false
     }
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
+    var floatingTimeframeMenuExpanded by remember { mutableStateOf(false) }
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
     var orderVolumeInput by remember { mutableStateOf("0.01") }
     var orderSlInput by remember { mutableStateOf("") }
@@ -705,8 +706,8 @@ fun ChartScreen(
             }
 
             // Timeframe selection scrollable row (all 10 timeframes)
-            Row(
-                modifier = Modifier.fillMaxWidth().height(if (immersiveChart) 36.dp else 48.dp)
+            if (!immersiveChart) Row(
+                modifier = Modifier.fillMaxWidth().height(48.dp)
                     .background(TradingBackground)
                     .testTag("chart_timeframe_strip"),
                 verticalAlignment = Alignment.CenterVertically,
@@ -851,6 +852,45 @@ fun ChartScreen(
                                 .padding(horizontal = 6.dp, vertical = 8.dp)
                                 .testTag("chart_floating_symbol_selector")
                         )
+                        Box {
+                            TextButton(
+                                onClick = { floatingTimeframeMenuExpanded = true },
+                                modifier = Modifier.testTag("chart_floating_timeframe")
+                            ) {
+                                Text(uiState.selectedTimeframe.displayName, color = TradingAccentLight,
+                                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "الفاصل الزمني",
+                                    tint = TradingTextSecondary, modifier = Modifier.size(16.dp))
+                            }
+                            DropdownMenu(
+                                expanded = floatingTimeframeMenuExpanded,
+                                onDismissRequest = { floatingTimeframeMenuExpanded = false }
+                            ) {
+                                listOf(Timeframe.M1, Timeframe.M5, Timeframe.M15,
+                                    Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
+                                    DropdownMenuItem(
+                                        text = { Text(tf.displayName) },
+                                        onClick = {
+                                            floatingTimeframeMenuExpanded = false
+                                            if (tf != uiState.selectedTimeframe) {
+                                                viewModel.selectTimeframe(tf)
+                                                if (isEmbeddedReplay) {
+                                                    replayViewModel.pause()
+                                                    replayViewModel.loadReplayData(uiState.selectedSymbol, tf)
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(
+                            onClick = { showIndicatorsDialog = true },
+                            modifier = Modifier.size(36.dp).testTag("chart_floating_indicators")
+                        ) {
+                            Icon(Icons.Default.Functions, contentDescription = "المؤشرات",
+                                tint = TradingTextPrimary, modifier = Modifier.size(20.dp))
+                        }
                         IconButton(
                             onClick = {
                                 if (isEmbeddedReplay) {
