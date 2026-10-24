@@ -192,9 +192,15 @@ class TradeViewModel(
         val sl = state.stopLoss.toDoubleOrNull() ?: return
         val symInfo = DefaultSymbols.getSymbol(state.selectedSymbol)
         val entry = if (state.orderSide == OrderSide.BUY) tick.ask else tick.bid
+        if (!entry.isFinite() || entry <= 0.0 || !sl.isFinite() || sl <= 0.0 ||
+            !symInfo.pipSize.isFinite() || symInfo.pipSize <= 0.0 ||
+            (state.orderSide == OrderSide.BUY && sl >= entry) ||
+            (state.orderSide == OrderSide.SELL && sl <= entry)) {
+            _uiState.update { it.copy(message = "وقف الخسارة يجب أن يكون في الاتجاه الصحيح بالنسبة لسعر الدخول") }
+            return
+        }
         val pips = kotlin.math.abs(entry - sl) / symInfo.pipSize
-
-        if (pips <= 0.0) return
+        if (!pips.isFinite() || pips <= 0.0) return
 
         when (state.riskMode) {
             RiskCalculationMode.RISK_PERCENTAGE -> {
