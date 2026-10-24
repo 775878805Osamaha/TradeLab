@@ -551,6 +551,13 @@ class BacktestEngine(
             currentEquity = virtualBalance
         )
 
+        BacktestResultsAudit.validate(
+            config.initialBalance,
+            virtualBalance,
+            closedTrades,
+            performanceMetrics
+        )
+
         val dailySummaries = StatisticsCalculator.calculateDailySummaries(closedTrades)
 
         val completedAt = System.currentTimeMillis()
