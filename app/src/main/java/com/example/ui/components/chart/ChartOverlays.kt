@@ -35,7 +35,8 @@ object ChartOverlays {
         scope: DrawScope,
         transform: ChartTransform,
         latestTick: Tick?,
-        showHistoricalLastPrice: Boolean = true
+        showHistoricalLastPrice: Boolean = true,
+        priceAxisWidth: Float = 122f
     ) {
         // Only verified ticks provide executable bid/ask; historical candles
         // are displayed as a chart price, never masquerading as live quotes.
@@ -57,7 +58,12 @@ object ChartOverlays {
         scope.drawContext.canvas.nativeCanvas.apply {
             val label = QuotePriceFormatter.price(chartPrice)
             val textPaint = badgeTextPaint
-            val badgeWidth = textPaint.measureText(label) + 16f
+            val originalSize = textPaint.textSize
+            val availableWidth = (scope.size.width - transform.chartWidth)
+                .coerceAtMost(priceAxisWidth).coerceAtLeast(1f)
+            val measured = textPaint.measureText(label)
+            textPaint.textSize = originalSize * ((availableWidth - 10f) / measured).coerceIn(0.5f, 1f)
+            val badgeWidth = (textPaint.measureText(label) + 10f).coerceAtMost(availableWidth)
             val top = (y - 15f).coerceAtLeast(0f)
             val bottom = (y + 15f).coerceAtMost(scope.size.height)
             val background = badgeBackgroundPaint
@@ -69,9 +75,10 @@ object ChartOverlays {
                     bottom,
                     5f, 5f, background
                 )
-                drawText(label, transform.chartWidth + 8f,
-                    (top + bottom) / 2f + 7f, textPaint)
+                drawText(label, transform.chartWidth + 5f,
+                    (top + bottom) / 2f + textPaint.textSize * 0.34f, textPaint)
             }
+            textPaint.textSize = originalSize
         }
     }
 
