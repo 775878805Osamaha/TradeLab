@@ -842,18 +842,40 @@ fun ChartScreen(
                             .testTag("chart_immersive_floating_header"),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = uiState.selectedSymbol,
-                            color = TradingTextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            maxLines = 1,
-                            modifier = Modifier
-                                .weight(1f, fill = false)
-                                .clickable { showSymbolSheet = true }
-                                .padding(horizontal = 6.dp, vertical = 8.dp)
+                        // Header values are derived from the selected historical or Replay
+                        // candle. Never substitute the static prices in the reference image.
+                        val headerCandles = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
+                        val headerClose = headerCandles.lastOrNull()?.close
+                        val previousClose = headerCandles.getOrNull(headerCandles.lastIndex - 1)?.close
+                        val changePercent = if (headerClose != null && previousClose != null &&
+                            headerClose.isFinite() && previousClose.isFinite() && previousClose > 0.0)
+                            (headerClose - previousClose) / previousClose * 100.0 else null
+                        Column(
+                            modifier = Modifier.clickable { showSymbolSheet = true }
+                                .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
                                 .testTag("chart_floating_symbol_selector")
-                        )
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(uiState.selectedSymbol, color = TradingTextPrimary,
+                                    fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "تبديل الزوج",
+                                    tint = TradingTextSecondary, modifier = Modifier.size(16.dp))
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(headerClose?.takeIf { it.isFinite() }?.let {
+                                    String.format(Locale.US, "%.2f", it)
+                                } ?: "—", color = TradingPositive, fontSize = 12.sp,
+                                    style = TextStyle(textDirection = TextDirection.Ltr))
+                                Text(changePercent?.let {
+                                    String.format(Locale.US, "%+.2f%%", it)
+                                } ?: "—", color = when {
+                                    changePercent == null -> TradingTextSecondary
+                                    changePercent < 0.0 -> TradingNegative
+                                    else -> TradingPositive
+                                }, fontSize = 12.sp,
+                                    style = TextStyle(textDirection = TextDirection.Ltr))
+                            }
+                        }
                         Spacer(Modifier.weight(1f))
                         Box {
                             TextButton(
