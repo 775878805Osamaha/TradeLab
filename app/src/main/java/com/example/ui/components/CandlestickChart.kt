@@ -254,7 +254,10 @@ fun CandlestickChart(
                     detectTapGestures(
                         onTap = { offset ->
                             val transform = transformRef[0]
-                            if (transform != null && onAddDrawing != null &&
+                            val insidePlot = transform != null &&
+                                offset.x in 0f..transform.chartWidth &&
+                                offset.y in 0f..transform.chartHeight
+                            if (insidePlot && transform != null && onAddDrawing != null &&
                                 (activeDrawingTool == DrawingTool.HORIZONTAL_LINE ||
                                  activeDrawingTool == DrawingTool.VERTICAL_LINE)) {
                                 onAddDrawing(
