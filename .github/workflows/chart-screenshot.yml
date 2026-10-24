@@ -57,6 +57,8 @@ jobs:
             adb pull /sdcard/tradelab-150s.png screenshots/tradelab-150s.png
             adb shell dumpsys activity activities > screenshots/activity-state.txt
             adb logcat -d -t 500 > screenshots/logcat-tail.txt
+      - name: Install screenshot analysis dependency
+        run: python3 -m pip install --user Pillow
       - name: Validate captured screen has real candlesticks
         run: |
           python3 - <<'PY'
