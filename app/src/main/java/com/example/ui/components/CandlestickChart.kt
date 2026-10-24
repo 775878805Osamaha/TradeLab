@@ -156,7 +156,8 @@ fun CandlestickChart(
         scrollOffsetPx += panChange.x
     }
 
-    val timeFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
+    val dateTimeFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
     // Paint instances are reused across redraws instead of allocated once per
     // grid label / timestamp on every pinch, drag or replay tick.
     val priceAxisPaint = remember {
@@ -408,17 +409,25 @@ fun CandlestickChart(
 
             }
 
-            // Render time labels for all display modes, including the line chart.
-            // Timestamps are roughly 100px wide at the chosen font size.
-            val minimumTimeLabelGap = 170f
-            var lastTimeLabelX = -minimumTimeLabelGap
+            // Adaptive, measured time labels: avoid overlapping text and clipping.
+            // Show a full date at day boundaries; otherwise keep intraday labels short.
+            var lastTimeLabelRight = -Float.MAX_VALUE
+            var lastDisplayedDay = -1L
             visibleCandles.forEachIndexed { i, c ->
                 val x = transform.candleIndexToX(i)
-                if (x >= 75f && x <= chartWidth - 75f && x - lastTimeLabelX >= minimumTimeLabelGap) {
-                    drawContext.canvas.nativeCanvas.apply {
-                        drawText(timeFormat.format(Date(c.openTime)), x, height - 8f, timeAxisPaint)
-                    }
-                    lastTimeLabelX = x
+                val day = Math.floorDiv(c.openTime, 86_400_000L)
+                val label = if (day != lastDisplayedDay) dateTimeFormat.format(Date(c.openTime))
+                    else timeFormat.format(Date(c.openTime))
+                val textWidth = timeAxisPaint.measureText(label)
+                val left = x - textWidth / 2f
+                val right = x + textWidth / 2f
+                if (left >= 4f && right <= chartWidth - 4f &&
+                    left >= lastTimeLabelRight + 16f) {
+                    drawContext.canvas.nativeCanvas.drawText(
+                        label, x, height - 8f, timeAxisPaint
+                    )
+                    lastTimeLabelRight = right
+                    lastDisplayedDay = day
                 }
             }
 
