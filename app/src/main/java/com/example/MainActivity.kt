@@ -179,7 +179,8 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Results.route) {
                                 ResultsScreen(
                                     viewModel = resultsViewModel,
-                                    onNavigateToHistory = { navController.navigate(Screen.History.route) }
+                                    onNavigateToHistory = { navController.navigate(Screen.History.route) },
+                                    onNavigateToBacktest = { navController.navigate(Screen.Backtest.route) }
                                 )
                             }
 
