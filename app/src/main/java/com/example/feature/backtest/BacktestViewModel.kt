@@ -165,6 +165,7 @@ class BacktestViewModel(
                 isRunning = true,
                 currentStage = BacktestProgressStage.PREPARING_DATA,
                 progressFraction = 0.05f,
+                lastResult = null,
                 message = "بدء الاختبار التاريخي..."
             )
         }
@@ -222,6 +223,8 @@ class BacktestViewModel(
                     it.copy(
                         isRunning = false,
                         currentStage = BacktestProgressStage.FAILED,
+                        progressFraction = 0f,
+                        lastResult = null,
                         message = "حدث خطأ أثناء الاختبار: ${e.message}"
                     )
                 }

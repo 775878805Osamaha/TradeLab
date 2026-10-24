@@ -142,68 +142,23 @@ class BacktestEngine(
         require(candles.all { it.symbol.equals(config.symbol, ignoreCase = true) && it.timeframe == config.timeframe }) {
             "Historical candles must match the backtest symbol and timeframe"
         }
-        val rangeFiltered = candles.filter { c ->
-            (config.startTime == null || c.openTime >= config.startTime) &&
-            (config.endTime == null || c.closeTime <= config.endTime)
-        }
-
-        // 2. Never silently drop or reorder corrupt source candles: doing so
-        // changes the historical sample and can fabricate a misleading result.
-        if (rangeFiltered.isNotEmpty()) {
-            when (val validation = DataIntegrityValidator.validateHistoricalSeries(rangeFiltered)) {
-                is ValidationResult.Invalid -> throw IllegalArgumentException(
-                    "Historical source integrity failed: ${validation.reason}"
-                )
-                ValidationResult.Valid -> Unit
-            }
-        }
-        val cleanCandles = rangeFiltered
-        // Historical replay must not consume a candle that closes before it
-        // opens or a price that cannot be represented safely.
-        require(cleanCandles.all { candle ->
-            candle.openTime >= 0L &&
-                candle.closeTime > candle.openTime &&
-                candle.open.isFinite() && candle.high.isFinite() &&
-                candle.low.isFinite() && candle.close.isFinite() &&
-                candle.open > 0.0 && candle.high > 0.0 &&
-                candle.low > 0.0 && candle.close > 0.0
-        }) { "Backtest contains invalid historical candles" }
-
-        if (cleanCandles.size <= 15) {
-            val emptyMetrics = StatisticsCalculator.calculate(config.initialBalance, emptyList())
-            onProgress?.invoke(BacktestProgressStage.COMPLETED, 1.0f)
-            val emptyRun = BacktestRun(
-                strategyId = config.strategy.id,
-                strategyName = config.strategy.name,
-                symbol = config.symbol,
-                timeframe = config.timeframe,
-                startTime = cleanCandles.firstOrNull()?.openTime ?: startedAt,
-                endTime = cleanCandles.lastOrNull()?.closeTime ?: startedAt,
-                initialBalance = config.initialBalance,
-                finalBalance = config.initialBalance,
-                netProfit = 0.0,
-                returnPercentage = 0.0,
-                totalTrades = 0,
-                winningTrades = 0,
-                losingTrades = 0,
-                maxDrawdown = 0.0,
-                maxDrawdownPercentage = 0.0,
-                profitFactor = null,
-                winRate = 0.0,
-                expectancy = null,
-                status = BacktestRunStatus.COMPLETED,
-                startedAt = startedAt,
-                completedAt = System.currentTimeMillis()
+        // Validate the entire provider response BEFORE applying a date range.
+        // Filtering first could conceal corrupt bars and misrepresent the sample.
+        require(candles.isNotEmpty()) { "No historical candles were returned by the data provider" }
+        when (val validation = DataIntegrityValidator.validateHistoricalSeries(candles)) {
+            is ValidationResult.Invalid -> throw IllegalArgumentException(
+                "Historical source integrity failed: ${validation.reason}"
             )
-            return@withContext BacktestResult(
-                config = config,
-                metrics = emptyMetrics,
-                equityCurve = emptyList(),
-                trades = emptyList(),
-                dailySummaries = emptyList(),
-                totalCandlesProcessed = cleanCandles.size,
-                run = emptyRun
-            )
+            ValidationResult.Valid -> Unit
+        }
+        val cleanCandles = candles.filter { candle ->
+            (config.startTime == null || candle.openTime >= config.startTime) &&
+                (config.endTime == null || candle.closeTime <= config.endTime)
+        }
+        // The strategy requires 15 completed warm-up bars. An insufficient
+        // sample is a data problem, not a successful zero-trade backtest.
+        require(cleanCandles.size > 15) {
+            "Insufficient completed historical candles: ${cleanCandles.size}; at least 16 required"
         }
 
         onProgress?.invoke(BacktestProgressStage.CALCULATING_INDICATORS, 0.20f)
