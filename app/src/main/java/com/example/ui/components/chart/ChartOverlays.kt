@@ -25,67 +25,50 @@ object ChartOverlays {
         transform: ChartTransform,
         latestTick: Tick?
     ) {
-        if (latestTick == null) return
-        if (!isPriceVisible(transform, latestTick.last) &&
-            !isPriceVisible(transform, latestTick.bid) &&
-            !isPriceVisible(transform, latestTick.ask)) return
-
-        val bidY = transform.priceToY(latestTick.bid)
-        val askY = transform.priceToY(latestTick.ask)
-        val lastY = transform.priceToY(latestTick.last)
-
-        // 1. Bid line (Dashed green)
-        if (isPriceVisible(transform, latestTick.bid)) scope.drawLine(
-            color = TradingPositive.copy(alpha = 0.7f),
-            start = Offset(0f, bidY),
-            end = Offset(transform.chartWidth, bidY),
-            strokeWidth = 1f,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
+        // Only verified ticks provide executable bid/ask; historical candles
+        // are displayed as a chart price, never masquerading as live quotes.
+        val lastCandleClose = transform.visibleCandles.lastOrNull()?.close
+        val chartPrice = latestTick?.last?.takeIf { it.isFinite() && it > 0.0 }
+            ?: lastCandleClose?.takeIf { it.isFinite() && it > 0.0 }
+            ?: return
+        if (!isPriceVisible(transform, chartPrice)) return
+        val y = transform.priceToY(chartPrice)
+        scope.drawLine(
+            color = TradingPositive.copy(alpha = 0.82f),
+            start = Offset(0f, y),
+            end = Offset(transform.chartWidth, y),
+            strokeWidth = 1.4f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(7f, 5f), 0f)
         )
-
-        // 2. Ask line (Dashed red)
-        if (isPriceVisible(transform, latestTick.ask)) scope.drawLine(
-            color = TradingNegative.copy(alpha = 0.7f),
-            start = Offset(0f, askY),
-            end = Offset(transform.chartWidth, askY),
-            strokeWidth = 1f,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
-        )
-
-        // 3. Current Price line (Solid accent)
-        if (isPriceVisible(transform, latestTick.last)) scope.drawLine(
-            color = TradingAccent,
-            start = Offset(0f, lastY),
-            end = Offset(transform.chartWidth, lastY),
-            strokeWidth = 1.5f
-        )
-
-        // Price badge on the right axis (only when the last price is in view).
+        // Reference-style green price label anchored to the actual price axis.
         scope.drawContext.canvas.nativeCanvas.apply {
-            val bgPaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.parseColor("#3B82F6")
-            }
+            val label = QuotePriceFormatter.price(chartPrice)
             val textPaint = android.graphics.Paint().apply {
                 color = android.graphics.Color.WHITE
-                textSize = 22f
+                textSize = 19f
+                isAntiAlias = true
+                typeface = android.graphics.Typeface.create(
+                    android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD
+                )
+            }
+            val badgeWidth = textPaint.measureText(label) + 16f
+            val top = (y - 15f).coerceAtLeast(0f)
+            val bottom = (y + 15f).coerceAtMost(scope.size.height)
+            val background = android.graphics.Paint().apply {
+                color = android.graphics.Color.parseColor("#26A69A")
                 isAntiAlias = true
             }
-            if (isPriceVisible(transform, latestTick.last)) {
-                val text = QuotePriceFormatter.price(latestTick.last)
-                drawRect(transform.chartWidth, lastY - 14f, transform.chartWidth + 80f, lastY + 14f, bgPaint)
-                drawText(text, transform.chartWidth + 6f, lastY + 8f, textPaint)
+            if (bottom > top) {
+                drawRoundRect(
+                    transform.chartWidth,
+                    top,
+                    transform.chartWidth + badgeWidth,
+                    bottom,
+                    5f, 5f, background
+                )
+                drawText(label, transform.chartWidth + 8f,
+                    (top + bottom) / 2f + 7f, textPaint)
             }
-
-            // Spread badge
-            // Spread is a raw quote-price difference; do not label an arbitrary
-            // conversion as pips across forex, gold and crypto instruments.
-            val spreadText = "سبريد: " + QuotePriceFormatter.spread(latestTick.spread)
-            val spreadPaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.parseColor("#9CA3AF")
-                textSize = 18f
-                isAntiAlias = true
-            }
-            drawText(spreadText, transform.chartWidth - 95f, 24f, spreadPaint)
         }
     }
 
