@@ -273,28 +273,19 @@ fun CandlestickChart(
             val volumeHeight = if (isVolumeVisible) height * 0.14f else 0f
             val mainChartHeight = (height - subpanelHeight - volumeHeight).coerceAtLeast(10f)
 
-            // Calculate Visible Candle Range from Viewport
-            val visibleCount = ((chartWidth / candleWidthPx) + 3).toInt().coerceIn(1, candles.size)
-            // Cap historical scroll at the first available candle; keep fractional
-            // movement continuous when the viewport contains fewer candles than it can fit.
-            val maxScrollOffset = ((candles.size - 1).coerceAtLeast(0).toDouble() * candleWidthPx)
-                .coerceAtLeast(0.0).toFloat()
-            // A LEFT swipe makes scrollOffsetPx negative and exposes future space
-            // on the RIGHT; a RIGHT swipe moves back toward earlier candles.
-            val futureSpacePx = chartWidth * 0.70f
-            // Negative offsets are future-space: a leftward finger drag must shift candles LEFT.
-            // Positive offsets scroll into history: a rightward drag moves candles RIGHT.
-            val clampedScroll = scrollOffsetPx.coerceIn(-futureSpacePx, maxScrollOffset)
-            // Persist the clamped offset so repeated drags cannot accumulate
-            // invisible overscroll and make the chart feel stuck on reversal.
-            if (scrollOffsetPx != clampedScroll) scrollOffsetPx = clampedScroll
-
-            val historicalScrollPx = clampedScroll.coerceAtLeast(0f)
-            val scrollCandleOffset = (historicalScrollPx / candleWidthPx).toInt()
-                .coerceIn(0, (candles.size - visibleCount).coerceAtLeast(0))
-            val fractionalScrollPx = if (clampedScroll < 0f) -clampedScroll else -(historicalScrollPx % candleWidthPx)
-            val startIndex = (candles.size - visibleCount - scrollCandleOffset).coerceIn(0, candles.size - 1)
-            val endIndex = (startIndex + visibleCount).coerceIn(startIndex, candles.size)
+            // Shared, independently testable viewport calculation.
+            val viewport = ChartViewport.window(
+                candleCount = candles.size,
+                chartWidthPx = chartWidth,
+                candleWidthPx = candleWidthPx,
+                requestedOffsetPx = scrollOffsetPx
+            )
+            if (scrollOffsetPx != viewport.clampedOffsetPx) {
+                scrollOffsetPx = viewport.clampedOffsetPx
+            }
+            val fractionalScrollPx = viewport.fractionalScrollPx
+            val startIndex = viewport.startIndex
+            val endIndex = viewport.endIndex
             val visibleCandles = candles.subList(startIndex, endIndex)
 
             if (visibleCandles.isEmpty()) return@Canvas
