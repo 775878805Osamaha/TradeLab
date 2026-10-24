@@ -151,6 +151,12 @@ class BacktestEngine(
             )
             ValidationResult.Valid -> Unit
         }
+        // Historical execution must never be based on bars that have not
+        // closed by the requested replay cutoff. Validate before filtering so
+        // a future-dated corrupt candle cannot disappear unnoticed.
+        if (config.endTime != null) {
+            require(config.endTime > 0L) { "Backtest end time must be positive" }
+        }
         val cleanCandles = candles.filter { candle ->
             (config.startTime == null || candle.openTime >= config.startTime) &&
                 (config.endTime == null || candle.closeTime <= config.endTime)
