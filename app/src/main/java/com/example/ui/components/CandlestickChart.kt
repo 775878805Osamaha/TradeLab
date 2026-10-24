@@ -559,8 +559,16 @@ fun CandlestickChart(
                                 (availableWidth / naturalWidth).coerceIn(0.5f, 1f)
                         }
                         if (p.measureText(priceLabel) <= availableWidth) {
-                            drawText(priceLabel, chartWidth + 5f,
-                                off.y.coerceIn(p.textSize, height - 8f), p)
+                            val labelY = off.y.coerceIn(p.textSize, height - 8f)
+                            val badgePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                                color = android.graphics.Color.parseColor("#334155")
+                            }
+                            drawRoundRect(
+                                chartWidth, labelY - p.textSize - 3f,
+                                width.toFloat(), labelY + 5f,
+                                4f, 4f, badgePaint
+                            )
+                            drawText(priceLabel, chartWidth + 5f, labelY, p)
                         }
                         p.textSize = originalTextSize
                     }
