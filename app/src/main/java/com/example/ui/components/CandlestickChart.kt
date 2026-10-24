@@ -494,7 +494,8 @@ fun CandlestickChart(
             // 5. Draw Trading Overlays (Positions, Orders, Historical Trades, Price & Spread)
             ChartOverlays.drawPriceAndSpread(
                 this, transform, latestTick,
-                showHistoricalLastPrice = endIndex == candles.size
+                showHistoricalLastPrice = endIndex == candles.size,
+                priceAxisWidth = rightAxisWidth
             )
             ChartOverlays.drawOpenPositions(this, transform, openPositions)
             ChartOverlays.drawPendingOrders(this, transform, pendingOrders)
