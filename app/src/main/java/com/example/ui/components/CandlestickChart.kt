@@ -153,7 +153,9 @@ fun CandlestickChart(
     }
 
     val transformableState = rememberTransformableState { zoomChange, _, _ ->
-        candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
+        if (zoomChange.isFinite() && zoomChange > 0f) {
+            candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
+        }
         // Transformable handles multi-touch zoom; single-finger panning is
         // handled exclusively by detectDragGestures below to avoid double pan.
         // Do not apply panChange here: two detectors may observe the same drag.
