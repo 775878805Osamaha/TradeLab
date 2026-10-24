@@ -25,6 +25,9 @@ import androidx.compose.ui.unit.sp
 import com.example.core.analytics.EquityAnalytics
 import com.example.core.analytics.EquityCsvExporter
 import android.content.Intent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.core.content.FileProvider
 import java.io.File
 import androidx.compose.ui.platform.LocalContext
@@ -555,6 +558,9 @@ private fun BacktestResultsContent(
 
     val m = result.metrics
     val shareContext = LocalContext.current
+    val exportScope = rememberCoroutineScope()
+    var isExporting by remember { mutableStateOf(false) }
+    var exportError by remember { mutableStateOf<String?>(null) }
     val equityInsights = remember(result.equityCurve) {
         runCatching {
             EquityAnalytics.summarize(
@@ -692,40 +698,68 @@ private fun BacktestResultsContent(
         item {
             OutlinedButton(
                 onClick = {
-                    runCatching {
-                        val points = result.equityCurve.map { point ->
-                            EquityAnalytics.Point(point.timestamp, point.equity)
-                        }
-                        val exportDir = File(shareContext.cacheDir, "backtest_exports").apply { mkdirs() }
-                        val exportFile = File.createTempFile("tradelab_equity_", ".csv", exportDir)
-                        try {
-                            exportFile.bufferedWriter(Charsets.UTF_8).use { writer ->
-                                EquityCsvExporter.write(points, writer)
+                    if (!isExporting) {
+                        isExporting = true
+                        exportError = null
+                        exportScope.launch {
+                            try {
+                                val uri = withContext(Dispatchers.IO) {
+                                    val points = result.equityCurve.map { point ->
+                                        EquityAnalytics.Point(point.timestamp, point.equity)
+                                    }
+                                    val exportDir = File(shareContext.cacheDir, "backtest_exports").apply { mkdirs() }
+                                    val exportFile = File.createTempFile("tradelab_equity_", ".csv", exportDir)
+                                    try {
+                                        exportFile.bufferedWriter(Charsets.UTF_8).use { writer ->
+                                            EquityCsvExporter.write(points, writer)
+                                        }
+                                    } catch (failure: Exception) {
+                                        exportFile.delete()
+                                        throw failure
+                                    }
+                                    FileProvider.getUriForFile(
+                                        shareContext,
+                                        "${shareContext.packageName}.fileprovider",
+                                        exportFile
+                                    )
+                                }
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/csv"
+                                    putExtra(Intent.EXTRA_SUBJECT, "TradeLab backtest equity curve")
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    clipData = android.content.ClipData.newUri(
+                                        shareContext.contentResolver, "TradeLab equity CSV", uri
+                                    )
+                                }
+                                shareContext.startActivity(Intent.createChooser(intent, "مشاركة نتائج الباك تيست"))
+                            } catch (failure: Exception) {
+                                exportError = "تعذر تجهيز ملف النتائج أو مشاركته. تحقق من المساحة المتاحة وحاول مجددًا."
+                            } finally {
+                                isExporting = false
                             }
-                        } catch (failure: Exception) {
-                            exportFile.delete()
-                            throw failure
                         }
-                        val uri = FileProvider.getUriForFile(
-                            shareContext,
-                            "${shareContext.packageName}.fileprovider",
-                            exportFile
-                        )
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/csv"
-                            putExtra(Intent.EXTRA_SUBJECT, "TradeLab backtest equity curve")
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            clipData = android.content.ClipData.newUri(
-                                shareContext.contentResolver, "TradeLab equity CSV", uri
-                            )
-                        }
-                        shareContext.startActivity(Intent.createChooser(intent, "مشاركة نتائج الباك تيست"))
                     }
                 },
+                enabled = !isExporting,
                 modifier = Modifier.fillMaxWidth().testTag("backtest_share_equity_csv")
             ) {
-                Text("مشاركة بيانات منحنى رأس المال CSV")
+                if (isExporting) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(if (isExporting) "جاري تجهيز ملف النتائج..." else "مشاركة بيانات منحنى رأس المال CSV")
+            }
+        }
+
+        exportError?.let { error ->
+            item {
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp,
+                    modifier = Modifier.testTag("backtest_export_error")
+                )
             }
         }
 
