@@ -515,6 +515,14 @@ class BacktestEngine(
             )
         }
 
+        // Every realized trade must reconcile with the account's actual
+        // terminal cash balance. Never publish inconsistent profit figures.
+        BacktestTradeReconciliation.validate(
+            config.initialBalance,
+            virtualBalance,
+            closedTrades
+        )
+
         // Equity observations are consumed by the results chart, analytics and
         // CSV export. Reject corrupt/non-chronological snapshots at the source.
         BacktestEquityIntegrity.validate(equityPoints, config.initialBalance, virtualBalance)
