@@ -82,8 +82,13 @@ fun ChartScreen(
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var immersiveChart by remember { mutableStateOf(true) }
     var drawingToolbarExpanded by remember { mutableStateOf(false) }
-    var drawingPaletteOffsetPx by remember { mutableFloatStateOf(0f) }
+    var drawingPaletteOffsetPx by rememberSaveable { mutableFloatStateOf(0f) }
+    var drawingPaletteXOffsetPx by rememberSaveable { mutableFloatStateOf(0f) }
+    var drawingPaletteCollapsed by rememberSaveable { mutableStateOf(false) }
+    var chartPaletteContainerWidthPx by remember { mutableIntStateOf(0) }
+    var drawingPaletteWidthPx by remember { mutableIntStateOf(0) }
     var chartPaletteContainerHeightPx by remember { mutableIntStateOf(0) }
+    var drawingPaletteHeightPx by remember { mutableIntStateOf(0) }
     val paletteDensity = LocalDensity.current
     LaunchedEffect(immersiveChart) { onImmersiveChanged(immersiveChart) }
     // Keep the floating palette compact when the displayed market context changes.
@@ -847,7 +852,10 @@ fun ChartScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .onSizeChanged { chartPaletteContainerHeightPx = it.height }
+                    .onSizeChanged {
+                        chartPaletteContainerHeightPx = it.height
+                        chartPaletteContainerWidthPx = it.width
+                    }
             ) {
                 // Reset pan/zoom when the instrument, timeframe, or replay context changes.
                 // Do not key on candle data: incoming prices must not jump the viewport.
@@ -1113,22 +1121,13 @@ fun ChartScreen(
                     modifier = Modifier.align(AbsoluteAlignment.TopLeft)
                         // Physical left, not RTL logical start: keep the price axis clear.
                         .absoluteOffset(
-                            x = 8.dp,
+                            x = 8.dp + with(paletteDensity) { drawingPaletteXOffsetPx.toDp() },
                             y = with(paletteDensity) { drawingPaletteOffsetPx.toDp() } +
                                 if (isEmbeddedReplay) 124.dp else 66.dp
                         )
-                        .pointerInput(chartPaletteContainerHeightPx, isEmbeddedReplay) {
-                            detectDragGestures { change, dragAmount ->
-                                change.consume()
-                                val toolbarHeightPx = with(paletteDensity) { 400.dp.toPx() }
-                                val topInsetPx = with(paletteDensity) {
-                                    (if (isEmbeddedReplay) 124.dp else 66.dp).toPx()
-                                }
-                                val maxOffset = (chartPaletteContainerHeightPx - toolbarHeightPx - topInsetPx)
-                                    .coerceAtLeast(0f)
-                                drawingPaletteOffsetPx =
-                                    (drawingPaletteOffsetPx + dragAmount.y).coerceIn(0f, maxOffset)
-                            }
+                        .onSizeChanged {
+                            drawingPaletteHeightPx = it.height
+                            drawingPaletteWidthPx = it.width
                         }
                         .testTag("chart_reference_floating_tools"),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -1142,7 +1141,35 @@ fun ChartScreen(
                         Triple("تراجع", Icons.Default.Undo, 4),
                         Triple("المزيد", Icons.Default.MoreHoriz, 5)
                     )
-                    referenceTools.forEach { (label, image, index) ->
+                    // Dedicated drag handle: tool buttons remain tappable without gesture conflicts.
+                    Box(
+                        modifier = Modifier
+                            .size(width = 46.dp, height = 22.dp)
+                            .pointerInput(chartPaletteContainerHeightPx, chartPaletteContainerWidthPx, drawingPaletteHeightPx, drawingPaletteWidthPx, isEmbeddedReplay) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    val topInsetPx = with(paletteDensity) {
+                                        (if (isEmbeddedReplay) 124.dp else 66.dp).toPx()
+                                    }
+                                    val maxOffset = (chartPaletteContainerHeightPx -
+                                        drawingPaletteHeightPx - topInsetPx).coerceAtLeast(0f)
+                                    drawingPaletteOffsetPx =
+                                        (drawingPaletteOffsetPx + dragAmount.y).coerceIn(0f, maxOffset)
+                                    val leftInsetPx = with(paletteDensity) { 8.dp.toPx() }
+                                    val rightAxisReservePx = with(paletteDensity) { 72.dp.toPx() }
+                                    val maxX = (chartPaletteContainerWidthPx - drawingPaletteWidthPx -
+                                        leftInsetPx - rightAxisReservePx).coerceAtLeast(0f)
+                                    drawingPaletteXOffsetPx =
+                                        (drawingPaletteXOffsetPx + dragAmount.x).coerceIn(0f, maxX)
+                                }
+                            }
+                            .testTag("chart_tools_drag_handle"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.DragHandle, contentDescription = "اسحب لتحريك الأدوات",
+                            tint = TradingTextSecondary, modifier = Modifier.size(22.dp))
+                    }
+                    if (!drawingPaletteCollapsed) referenceTools.forEach { (label, image, index) ->
                         val selected = when (index) {
                             0 -> uiState.isCrosshairActive
                             1 -> uiState.activeDrawingTool == DrawingTool.TRENDLINE
@@ -1178,6 +1205,16 @@ fun ChartScreen(
                             }
                             Text(label, color = TradingTextSecondary, fontSize = 9.sp)
                         }
+                    }
+                    IconButton(
+                        onClick = { drawingPaletteCollapsed = !drawingPaletteCollapsed },
+                        modifier = Modifier.size(38.dp).testTag("chart_tools_collapse_toggle")
+                    ) {
+                        Icon(
+                            if (drawingPaletteCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                            contentDescription = if (drawingPaletteCollapsed) "إظهار الأدوات" else "طي الأدوات",
+                            tint = TradingTextPrimary
+                        )
                     }
                 }
             }
