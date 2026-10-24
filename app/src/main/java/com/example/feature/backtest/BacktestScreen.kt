@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.sp
 import com.example.core.analytics.EquityAnalytics
 import com.example.core.analytics.EquityCsvExporter
 import android.content.Intent
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.ui.platform.LocalContext
 import com.example.core.market.DefaultSymbols
 import com.example.core.model.PositionSide
@@ -691,15 +693,32 @@ private fun BacktestResultsContent(
             OutlinedButton(
                 onClick = {
                     runCatching {
-                        val csv = EquityCsvExporter.export(
-                            result.equityCurve.map { point ->
-                                EquityAnalytics.Point(point.timestamp, point.equity)
+                        val points = result.equityCurve.map { point ->
+                            EquityAnalytics.Point(point.timestamp, point.equity)
+                        }
+                        val exportDir = File(shareContext.cacheDir, "backtest_exports").apply { mkdirs() }
+                        val exportFile = File.createTempFile("tradelab_equity_", ".csv", exportDir)
+                        try {
+                            exportFile.bufferedWriter(Charsets.UTF_8).use { writer ->
+                                EquityCsvExporter.write(points, writer)
                             }
+                        } catch (failure: Exception) {
+                            exportFile.delete()
+                            throw failure
+                        }
+                        val uri = FileProvider.getUriForFile(
+                            shareContext,
+                            "${shareContext.packageName}.fileprovider",
+                            exportFile
                         )
                         val intent = Intent(Intent.ACTION_SEND).apply {
                             type = "text/csv"
                             putExtra(Intent.EXTRA_SUBJECT, "TradeLab backtest equity curve")
-                            putExtra(Intent.EXTRA_TEXT, csv)
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            clipData = android.content.ClipData.newUri(
+                                shareContext.contentResolver, "TradeLab equity CSV", uri
+                            )
                         }
                         shareContext.startActivity(Intent.createChooser(intent, "مشاركة نتائج الباك تيست"))
                     }
