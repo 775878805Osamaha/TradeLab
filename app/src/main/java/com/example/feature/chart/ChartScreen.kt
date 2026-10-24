@@ -1159,7 +1159,7 @@ fun ChartScreen(
                         Triple("أفقي", Icons.Default.HorizontalRule, 2),
                         Triple("فيبوناتشي", Icons.Default.AutoGraph, 3),
                         Triple("تراجع", Icons.Default.Undo, 4),
-                        Triple("المزيد", Icons.Default.MoreHoriz, 5)
+                        Triple("تنبيه", Icons.Default.NotificationsNone, 5)
                     )
                     // Dedicated drag handle: tool buttons remain tappable without gesture conflicts.
                     Box(
@@ -1207,7 +1207,7 @@ fun ChartScreen(
                                             2 -> viewModel.setDrawingTool(DrawingTool.HORIZONTAL_LINE)
                                             3 -> viewModel.setDrawingTool(DrawingTool.FIBONACCI)
                                             4 -> uiState.drawings.lastOrNull()?.let { viewModel.deleteDrawing(it.id) }
-                                            5 -> showToolsMenu = true
+                                            5 -> showToolsMenu = true // Open existing tools menu; alert availability is handled there.
                                         }
                                     }.testTag("chart_reference_tool_${index}"),
                                 shape = RoundedCornerShape(50),
@@ -1313,7 +1313,7 @@ fun ChartScreen(
                 // Historical orders use the isolated Replay account, never the live-paper account.
                 Row(
                     modifier = Modifier.fillMaxWidth().background(TradingBackground)
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
                         .testTag("chart_replay_trading_bar"),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1327,8 +1327,8 @@ fun ChartScreen(
                         onClick = { pendingOrderSide = OrderSide.SELL },
                         enabled = canTradeReplay,
                         colors = ButtonDefaults.buttonColors(containerColor = TradingNegative),
-                        modifier = Modifier.weight(1f).height(52.dp).testTag("chart_replay_sell"),
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier.weight(1f).height(64.dp).testTag("chart_replay_sell"),
+                        shape = RoundedCornerShape(28.dp)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("SELL · بيع", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -1343,14 +1343,14 @@ fun ChartScreen(
                         }
                         Text(spreadPips?.let { String.format(Locale.US, "%.1f", it) } ?: "—",
                             color = TradingTextPrimary, fontSize = 12.sp)
-                        Text("سبريد", color = TradingTextSecondary, fontSize = 10.sp)
+                        Text("السبريد", color = TradingTextSecondary, fontSize = 10.sp)
                     }
                     Button(
                         onClick = { pendingOrderSide = OrderSide.BUY },
                         enabled = canTradeReplay,
                         colors = ButtonDefaults.buttonColors(containerColor = TradingPositive),
-                        modifier = Modifier.weight(1f).height(52.dp).testTag("chart_replay_buy"),
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier.weight(1f).height(64.dp).testTag("chart_replay_buy"),
+                        shape = RoundedCornerShape(28.dp)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("BUY · شراء", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -1381,7 +1381,7 @@ fun ChartScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1392,14 +1392,14 @@ fun ChartScreen(
                         enabled = marketTickIsLive,
                         modifier = Modifier
                             .weight(1f)
-                            .height(42.dp)
+                            .height(64.dp)
                             .testTag("chart_quick_sell_btn"),
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(28.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TradingNegative)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("بيع", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text(bidText, style = TextStyle(textDirection = TextDirection.Ltr, textAlign = TextAlign.Center), maxLines = 1, fontSize = 12.sp)
+                            Text(bidText, style = TextStyle(textDirection = TextDirection.Ltr, textAlign = TextAlign.Center), maxLines = 1, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -1420,14 +1420,14 @@ fun ChartScreen(
                         enabled = marketTickIsLive,
                         modifier = Modifier
                             .weight(1f)
-                            .height(46.dp)
+                            .height(64.dp)
                             .testTag("chart_quick_buy_btn"),
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(28.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TradingPositive)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("شراء", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text(askText, style = TextStyle(textDirection = TextDirection.Ltr, textAlign = TextAlign.Center), maxLines = 1, fontSize = 12.sp)
+                            Text(askText, style = TextStyle(textDirection = TextDirection.Ltr, textAlign = TextAlign.Center), maxLines = 1, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
