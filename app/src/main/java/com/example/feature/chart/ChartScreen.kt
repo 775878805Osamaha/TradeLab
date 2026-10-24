@@ -1159,7 +1159,7 @@ fun ChartScreen(
                         Triple("أفقي", Icons.Default.HorizontalRule, 2),
                         Triple("فيبوناتشي", Icons.Default.AutoGraph, 3),
                         Triple("تراجع", Icons.Default.Undo, 4),
-                        Triple("تنبيه", Icons.Default.NotificationsNone, 5)
+                        Triple("المزيد", Icons.Default.MoreHoriz, 5)
                     )
                     // Dedicated drag handle: tool buttons remain tappable without gesture conflicts.
                     Box(
@@ -1207,7 +1207,7 @@ fun ChartScreen(
                                             2 -> viewModel.setDrawingTool(DrawingTool.HORIZONTAL_LINE)
                                             3 -> viewModel.setDrawingTool(DrawingTool.FIBONACCI)
                                             4 -> uiState.drawings.lastOrNull()?.let { viewModel.deleteDrawing(it.id) }
-                                            5 -> showToolsMenu = true // Open existing tools menu; alert availability is handled there.
+                                            5 -> showToolsMenu = true
                                         }
                                     }.testTag("chart_reference_tool_${index}"),
                                 shape = RoundedCornerShape(50),
