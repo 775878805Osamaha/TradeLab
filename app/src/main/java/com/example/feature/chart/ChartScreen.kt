@@ -86,6 +86,7 @@ fun ChartScreen(
         showReplayDetails = false
     }
     var replaySpeedMenuExpanded by remember { mutableStateOf(false) }
+    var floatingTimeframeMenuExpanded by remember { mutableStateOf(false) }
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
     var orderVolumeInput by remember { mutableStateOf("0.01") }
     var orderSlInput by remember { mutableStateOf("") }
@@ -705,8 +706,8 @@ fun ChartScreen(
             }
 
             // Timeframe selection scrollable row (all 10 timeframes)
-            Row(
-                modifier = Modifier.fillMaxWidth().height(if (immersiveChart) 36.dp else 48.dp)
+            if (!immersiveChart) Row(
+                modifier = Modifier.fillMaxWidth().height(48.dp)
                     .background(TradingBackground)
                     .testTag("chart_timeframe_strip"),
                 verticalAlignment = Alignment.CenterVertically,
@@ -851,6 +852,45 @@ fun ChartScreen(
                                 .padding(horizontal = 6.dp, vertical = 8.dp)
                                 .testTag("chart_floating_symbol_selector")
                         )
+                        Box {
+                            TextButton(
+                                onClick = { floatingTimeframeMenuExpanded = true },
+                                modifier = Modifier.testTag("chart_floating_timeframe")
+                            ) {
+                                Text(uiState.selectedTimeframe.displayName, color = TradingAccentLight,
+                                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "الفاصل الزمني",
+                                    tint = TradingTextSecondary, modifier = Modifier.size(16.dp))
+                            }
+                            DropdownMenu(
+                                expanded = floatingTimeframeMenuExpanded,
+                                onDismissRequest = { floatingTimeframeMenuExpanded = false }
+                            ) {
+                                listOf(Timeframe.M1, Timeframe.M5, Timeframe.M15,
+                                    Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
+                                    DropdownMenuItem(
+                                        text = { Text(tf.displayName) },
+                                        onClick = {
+                                            floatingTimeframeMenuExpanded = false
+                                            if (tf != uiState.selectedTimeframe) {
+                                                viewModel.selectTimeframe(tf)
+                                                if (isEmbeddedReplay) {
+                                                    replayViewModel.pause()
+                                                    replayViewModel.loadReplayData(uiState.selectedSymbol, tf)
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(
+                            onClick = { showIndicatorsDialog = true },
+                            modifier = Modifier.size(36.dp).testTag("chart_floating_indicators")
+                        ) {
+                            Icon(Icons.Default.Functions, contentDescription = "المؤشرات",
+                                tint = TradingTextPrimary, modifier = Modifier.size(20.dp))
+                        }
                         IconButton(
                             onClick = {
                                 if (isEmbeddedReplay) {
@@ -879,35 +919,38 @@ fun ChartScreen(
                 // Reference-style floating Replay transport; chart keeps its vertical space.
                 if (isEmbeddedReplay && immersiveChart) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(if (immersiveChart) 44.dp else 52.dp)
-                        .background(TradingBackground)
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 48.dp, start = 8.dp, end = 8.dp)
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(23.dp))
+                        .background(TradingCard.copy(alpha = 0.94f))
                         .testTag("chart_embedded_replay_controls"),
-                    horizontalArrangement = Arrangement.Center,
+                    horizontalArrangement = Arrangement.spacedBy(0.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { showReplayDatePicker = true }, modifier = Modifier.testTag("chart_replay_date_picker")) {
+                    IconButton(onClick = { showReplayDatePicker = true }, modifier = Modifier.size(42.dp).testTag("chart_replay_date_picker")) {
                         Icon(Icons.Default.DateRange, contentDescription = "تاريخ الإعادة", tint = TradingTextPrimary)
-                        Text(" ${replayState.currentIndex + 1}", fontSize = 11.sp, color = TradingTextPrimary)
                     }
                     IconButton(onClick = { replayViewModel.stepBackward() },
                         enabled = !replayState.isLoading && replayState.currentIndex > 0,
-                        modifier = Modifier.testTag("chart_replay_step_back")) {
+                        modifier = Modifier.size(42.dp).testTag("chart_replay_step_back")) {
                         Icon(Icons.Default.SkipPrevious, contentDescription = "رجوع شمعة", tint = TradingTextPrimary)
                     }
                     IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
                         enabled = !replayState.isLoading && replayState.totalCandles > 0,
-                        modifier = Modifier.testTag("chart_replay_play_pause")) {
+                        modifier = Modifier.size(42.dp).testTag("chart_replay_play_pause")) {
                         Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = "تشغيل أو إيقاف", tint = TradingAccent)
                     }
                     IconButton(onClick = { replayViewModel.stepForward() },
                         enabled = !replayState.isLoading && replayState.currentIndex < replayState.totalCandles - 1,
-                        modifier = Modifier.testTag("chart_replay_step_next")) {
+                        modifier = Modifier.size(42.dp).testTag("chart_replay_step_next")) {
                         Icon(Icons.Default.SkipNext, contentDescription = "تقدم شمعة", tint = TradingTextPrimary)
                     }
                     Box {
-                        TextButton(onClick = { replaySpeedMenuExpanded = true }) {
-                            Text("${replayState.speed}x", color = TradingTextPrimary)
+                        TextButton(onClick = { replaySpeedMenuExpanded = true }, contentPadding = PaddingValues(horizontal = 2.dp)) {
+                            Text("${replayState.speed}x", color = TradingTextPrimary, fontSize = 12.sp)
                             Icon(Icons.Default.ArrowDropDown, contentDescription = "سرعة الإعادة", tint = TradingTextPrimary)
                         }
                         DropdownMenu(expanded = replaySpeedMenuExpanded,
@@ -919,7 +962,7 @@ fun ChartScreen(
                         }
                     }
                     IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false },
-                        modifier = Modifier.testTag("chart_replay_close")) {
+                        modifier = Modifier.size(38.dp).testTag("chart_replay_close")) {
                         Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextPrimary)
                     }
                 }
