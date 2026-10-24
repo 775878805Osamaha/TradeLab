@@ -27,6 +27,7 @@ data class ResultsUiState(
     val pastRuns: List<BacktestRun> = emptyList(),
     val selectedRunsForComparison: Set<Long> = emptySet(),
     val selectedTab: ResultsTab = ResultsTab.OVERVIEW,
+    val selectedPeriod: ResultsPeriod = ResultsPeriod.MONTH,
     val curveType: ChartCurveType = ChartCurveType.EQUITY_AND_BALANCE,
     val isPercentageMode: Boolean = false,
     val selectedTradeForDetail: TradeJournalEntry? = null,
@@ -77,6 +78,10 @@ class ResultsViewModel(
                 _uiState.update { it.copy(pastRuns = runs) }
             }
         }
+    }
+
+    fun setSelectedPeriod(period: ResultsPeriod) {
+        _uiState.update { it.copy(selectedPeriod = period) }
     }
 
     fun togglePercentageMode() {
