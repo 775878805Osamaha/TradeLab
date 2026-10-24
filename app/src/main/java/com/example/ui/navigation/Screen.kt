@@ -97,6 +97,7 @@ sealed class Screen(
     )
 
     companion object {
-        val bottomNavItems = listOf(Market, Chart, Trade, Results, Account)
+        // Trading remains accessible through its existing routes; only the bottom tab is removed.
+        val bottomNavItems = listOf(Market, Chart, Results, Account)
     }
 }
