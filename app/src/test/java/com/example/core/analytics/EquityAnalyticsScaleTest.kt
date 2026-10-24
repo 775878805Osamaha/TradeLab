@@ -31,7 +31,7 @@ class EquityAnalyticsScaleTest {
             EquityAnalytics.Point(i.toLong(), if (i < 25_000) 100.0 + i else 25_100.0 - (i - 25_000) * 0.5)
         }
         val summary = EquityAnalytics.summarize(points)!!
-        assertEquals(24_999, summary.maxDrawdown.peakIndex)
+        assertEquals(25_000, summary.maxDrawdown.peakIndex)
         assertEquals(49_999, summary.maxDrawdown.troughIndex)
         assertTrue(summary.maxDrawdown.amount > 0.0)
     }
