@@ -89,6 +89,8 @@ fun ChartScreen(
     var pendingOrderSide by remember { mutableStateOf<OrderSide?>(null) }
     var orderVolumeInput by remember { mutableStateOf("0.01") }
     var orderSlInput by remember { mutableStateOf("") }
+    var riskEquityInput by remember { mutableStateOf("") }
+    var riskPercentInput by remember { mutableStateOf("1") }
     var orderTpInput by remember { mutableStateOf("") }
     var showReplayDatePicker by remember { mutableStateOf(false) }
     var showHistoricalSourceDialog by remember { mutableStateOf(false) }
@@ -131,6 +133,11 @@ fun ChartScreen(
             entryPrice != null && (if (side == OrderSide.BUY) sl < entryPrice else sl > entryPrice))
         val validTp = orderTpInput.isBlank() || (tp != null && tp.isFinite() && tp > 0.0 &&
             entryPrice != null && (if (side == OrderSide.BUY) tp > entryPrice else tp < entryPrice))
+        val riskEquity = riskEquityInput.trim().toDoubleOrNull()
+        val riskPercent = riskPercentInput.trim().toDoubleOrNull()
+        val riskBudgetValid = riskEquityInput.isBlank() ||
+            (riskEquity != null && riskEquity.isFinite() && riskEquity > 0.0 &&
+                riskPercent != null && riskPercent.isFinite() && riskPercent > 0.0 && riskPercent <= 100.0)
         val riskEstimate = if (sl != null && validSl && validTp &&
             entryPrice != null && volume != null && validVolume) {
             com.example.core.execution.TradeRiskCalculator.estimate(
@@ -139,10 +146,12 @@ fun ChartScreen(
                 entryPrice = entryPrice,
                 stopLoss = sl,
                 takeProfit = tp,
-                volumeLots = volume
+                volumeLots = volume,
+                equityUsd = if (riskEquityInput.isBlank()) null else riskEquity,
+                targetRiskPercent = if (riskEquityInput.isBlank()) null else riskPercent
             )
         } else null
-        val validOrder = validVolume && validSl && validTp &&
+        val validOrder = validVolume && validSl && validTp && riskBudgetValid &&
             entryTick?.symbol == (if (isEmbeddedReplay) replayState.symbol else uiState.selectedSymbol) &&
             entryPrice != null &&
             entryPrice.isFinite() && entryPrice > 0.0 && entryTick != null &&
@@ -176,6 +185,30 @@ fun ChartScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         isError = !validTp, modifier = Modifier.fillMaxWidth().testTag("chart_order_tp")
                     )
+                    OutlinedTextField(
+                        value = riskEquityInput,
+                        onValueChange = { riskEquityInput = it },
+                        label = { Text("رأس المال بالدولار (اختياري لحساب المخاطرة)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        isError = !riskBudgetValid,
+                        modifier = Modifier.fillMaxWidth().testTag("chart_risk_equity")
+                    )
+                    if (riskEquityInput.isNotBlank()) {
+                        OutlinedTextField(
+                            value = riskPercentInput,
+                            onValueChange = { riskPercentInput = it },
+                            label = { Text("المخاطرة المستهدفة %") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            isError = !riskBudgetValid,
+                            modifier = Modifier.fillMaxWidth().testTag("chart_risk_percent")
+                        )
+                    }
+                    if (!riskBudgetValid) {
+                        Text("أدخل رأس مال موجبًا ونسبة مخاطرة بين 0 و100",
+                            color = TradingNegative)
+                    }
                     if (sl != null && entryPrice != null && validSl && validVolume) {
                         Text("المخاطرة السعرية: ${String.format(Locale.US, "%.5f", kotlin.math.abs(entryPrice - sl))} لكل وحدة")
                         val ratio = if (tp != null && validTp) kotlin.math.abs(tp - entryPrice) / kotlin.math.abs(entryPrice - sl) else null
@@ -186,6 +219,18 @@ fun ChartScreen(
                             riskEstimate.rewardUsd?.let { reward ->
                                 Text("الربح المحتمل: ${String.format(Locale.US, "%.2f", reward)} USD",
                                     color = TradingPositive, modifier = Modifier.testTag("chart_order_reward_usd"))
+                            }
+                            if (riskEquityInput.isNotBlank()) {
+                                riskEstimate.riskPercentOfEquity?.let { pct ->
+                                    Text("المخاطرة من رأس المال: ${String.format(Locale.US, "%.2f", pct)}%",
+                                        color = TradingTextSecondary,
+                                        modifier = Modifier.testTag("chart_risk_equity_percent"))
+                                }
+                                riskEstimate.maximumLotsForRisk?.let { lots ->
+                                    Text("الحجم المقترح للمخاطرة المحددة: ${String.format(Locale.US, "%.2f", lots)} لوت",
+                                        color = TradingPositive,
+                                        modifier = Modifier.testTag("chart_risk_suggested_lots"))
+                                }
                             }
                             Text("تقدير قبل التنفيذ، لا يشمل الانزلاق والعمولات",
                                 fontSize = 11.sp, color = TradingTextSecondary)
