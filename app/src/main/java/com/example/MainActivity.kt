@@ -111,7 +111,13 @@ class MainActivity : ComponentActivity() {
                                             },
                                             label = {
                                                 Text(
-                                                    text = stringResource(screen.titleResId),
+                                                    text = when (screen.route) {
+                                                        Screen.Market.route -> "السوق"
+                                                        Screen.Chart.route -> "الشارت"
+                                                        Screen.Results.route -> "النتائج"
+                                                        Screen.Account.route -> "الحساب"
+                                                        else -> stringResource(screen.titleResId)
+                                                    },
                                                     style = MaterialTheme.typography.labelSmall
                                                 )
                                             },
