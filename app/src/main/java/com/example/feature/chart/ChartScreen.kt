@@ -1203,7 +1203,7 @@ fun ChartScreen(
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Surface(
-                                modifier = Modifier.size(38.dp)
+                                modifier = Modifier.size(44.dp)
                                     .clickable {
                                         when (index) {
                                             0 -> viewModel.toggleCrosshair()
@@ -1232,7 +1232,7 @@ fun ChartScreen(
                     }
                     IconButton(
                         onClick = { drawingPaletteCollapsed = !drawingPaletteCollapsed },
-                        modifier = Modifier.size(46.dp).testTag("chart_tools_collapse_toggle")
+                        modifier = Modifier.size(44.dp).testTag("chart_tools_collapse_toggle")
                     ) {
                         Icon(
                             if (drawingPaletteCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
