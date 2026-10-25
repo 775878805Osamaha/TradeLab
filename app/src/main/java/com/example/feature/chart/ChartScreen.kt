@@ -915,18 +915,18 @@ fun ChartScreen(
                         isEmbeddedReplay = true
                     },
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        // Keep the volume histogram and time-axis labels unobstructed.
-                        // The right-edge control sits above the volume region instead.
+                        // Absolute alignment keeps the control on the physical right
+                        // in RTL Arabic layouts (BottomEnd resolves to the left).
+                        .align(AbsoluteAlignment.BottomRight)
                         .padding(end = 14.dp, bottom = 110.dp)
-                        .height(38.dp)
+                        .height(34.dp)
                         .testTag("chart_start_replay_trading"),
                     shape = RoundedCornerShape(19.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = TradingAccent)
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Replay · تداول تجريبي", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Replay", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
                 }
 
