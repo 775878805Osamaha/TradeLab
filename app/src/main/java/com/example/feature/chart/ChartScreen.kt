@@ -908,10 +908,10 @@ fun ChartScreen(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
-                            .padding(top = 5.dp, end = 12.dp, start = 12.dp)
-                            .clip(RoundedCornerShape(24.dp))
+                            .padding(top = 4.dp, end = 8.dp, start = 8.dp)
+                            .clip(RoundedCornerShape(18.dp))
                             .background(TradingCard.copy(alpha = 0.94f))
-                            .heightIn(min = 58.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("chart_immersive_floating_header"),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -925,7 +925,7 @@ fun ChartScreen(
                             (headerClose - previousClose) / previousClose * 100.0 else null
                         Column(
                             modifier = Modifier.clickable { showSymbolSheet = true }
-                                .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+                                .padding(start = 8.dp, end = 3.dp, top = 2.dp, bottom = 2.dp)
                                 .testTag("chart_floating_symbol_selector")
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
