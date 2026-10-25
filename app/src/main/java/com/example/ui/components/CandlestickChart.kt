@@ -217,7 +217,9 @@ fun CandlestickChart(
                 .fillMaxSize()
                 .testTag("candlestick_canvas")
                 .transformable(state = transformableState, enabled = activeDrawingTool == DrawingTool.NONE && !isCrosshairActive)
-                .pointerInput(candles, activeDrawingTool, isCrosshairActive) {
+                // Keep gesture recognition alive while Replay reveals each new candle.
+                // Recreating pointerInput on every candle update cancels active drags.
+                .pointerInput(activeDrawingTool, isCrosshairActive) {
                     detectDragGestures(
                         onDragStart = { offset ->
                             val transform = transformRef[0]
