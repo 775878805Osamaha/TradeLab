@@ -121,8 +121,7 @@ class ChartViewModel(
         viewModelScope.launch {
             try {
                 val pageEnd = oldest - interval
-                val pageFrom = (pageEnd - interval * 99L).coerceAtLeast(0L)
-                // A large provider window may be incomplete around holidays.
+                        // A large provider window may be incomplete around holidays.
                 // Retry smaller aligned windows before reporting unavailable history.
                 var verified = emptyList<Candle>()
                 var lastPageFailure: Exception? = null
