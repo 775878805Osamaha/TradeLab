@@ -51,12 +51,19 @@ fun ChartScreen(
     viewModel: ChartViewModel,
     replayViewModel: ReplayViewModel,
     onNavigateToReplay: () -> Unit,
+    embeddedReplayLaunchRequest: Int = 0,
     onImmersiveChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val replayState by replayViewModel.uiState.collectAsState()
     var isEmbeddedReplay by remember { mutableStateOf(false) }
+    LaunchedEffect(embeddedReplayLaunchRequest) {
+        if (embeddedReplayLaunchRequest > 0) {
+            replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
+            isEmbeddedReplay = true
+        }
+    }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var symbolSearchQuery by remember { mutableStateOf("") }
     var symbolCategoryFilter by remember { mutableStateOf("الكل") }
