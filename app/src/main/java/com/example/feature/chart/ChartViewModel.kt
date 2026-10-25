@@ -42,6 +42,8 @@ data class ChartUiState(
     val resetViewTrigger: Long = 0L,
     val isLoading: Boolean = false,
     val chartHistoryBars: Int = 250,
+    val isLoadingOlderHistory: Boolean = false,
+    val olderHistoryError: String? = null,
     val candleLoadError: String? = null,
     val connectionDiagnostic: String = "لم يتم اختبار الاتصال بعد",
     val message: String? = null
@@ -97,8 +99,58 @@ class ChartViewModel(
     fun setChartHistoryBars(bars: Int) {
         require(bars in setOf(100, 250, 500, 750)) { "Unsupported chart history depth" }
         if (_uiState.value.chartHistoryBars == bars) return
-        _uiState.update { it.copy(chartHistoryBars = bars, isLoading = true, candleLoadError = null) }
+        _uiState.update { it.copy(chartHistoryBars = bars, isLoading = true, candleLoadError = null, olderHistoryError = null) }
         loadCandlesForCurrentSymbol()
+    }
+
+    /**
+     * Append only authentic older OHLC bars; retain the current chart on a
+     * provider failure. The 20k cap is a memory safety limit, not a promise
+     * that every historical source has this much verified data.
+     */
+    fun loadOlderChartHistory() {
+        val snapshot = _uiState.value
+        if (snapshot.isLoading || snapshot.isLoadingOlderHistory ||
+            snapshot.candles.isEmpty() || snapshot.candles.size >= 20_000) return
+        val symbol = snapshot.selectedSymbol
+        val timeframe = snapshot.selectedTimeframe
+        val oldest = snapshot.candles.first().openTime
+        val interval = timeframe.minutes * 60_000L
+        if (oldest < interval) return
+        _uiState.update { it.copy(isLoadingOlderHistory = true, olderHistoryError = null) }
+        viewModelScope.launch {
+            try {
+                val pageEnd = oldest - interval
+                val pageFrom = (pageEnd - interval * 99L).coerceAtLeast(0L)
+                val older = marketDataRepository.getCandles(symbol, timeframe, pageFrom, pageEnd)
+                val verified = CandleAggregator.aggregate(older, timeframe)
+                if (verified.any { it.symbol != symbol || it.timeframe != timeframe ||
+                        it.openTime >= oldest }) {
+                    throw IllegalStateException("Historical page contains mismatched or future candles")
+                }
+                if (_uiState.value.selectedSymbol != symbol ||
+                    _uiState.value.selectedTimeframe != timeframe) return@launch
+                val existing = _uiState.value.candles
+                val merged = (verified + existing).distinctBy { it.openTime }
+                    .sortedBy { it.openTime }.takeLast(20_000)
+                _uiState.update {
+                    it.copy(candles = merged, isLoadingOlderHistory = false,
+                        olderHistoryError = if (merged.size == existing.size)
+                            "لا تتوفر شموع تاريخية أقدم مؤكدة من المصدر" else null)
+                }
+                if (merged.size != existing.size) {
+                    recalculateIndicators(merged, _uiState.value.indicatorSettings)
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (_uiState.value.selectedSymbol == symbol &&
+                    _uiState.value.selectedTimeframe == timeframe) {
+                    _uiState.update { it.copy(isLoadingOlderHistory = false,
+                        olderHistoryError = (error.message ?: "تعذر تحميل الشموع الأقدم").take(160)) }
+                }
+            }
+        }
     }
 
     fun retryChartHistory() {
