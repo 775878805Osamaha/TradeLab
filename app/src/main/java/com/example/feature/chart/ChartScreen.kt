@@ -912,7 +912,9 @@ fun ChartScreen(
                     resetViewTrigger = uiState.resetViewTrigger,
                     displayStyle = chartDisplayStyle,
                     onAddDrawing = { viewModel.addDrawing(it) },
-                    onSelectTrade = { viewModel.selectTradeForDetail(it) }
+                    onSelectTrade = { viewModel.selectTradeForDetail(it) },
+                    onRequestOlderHistory = if (isEmbeddedReplay) null else ({ viewModel.loadOlderChartHistory() }),
+                    isLoadingOlderHistory = uiState.isLoadingOlderHistory
                 )
                 }
 

@@ -71,7 +71,9 @@ fun CandlestickChart(
     resetViewTrigger: Long = 0L,
     displayStyle: ChartDisplayStyle = ChartDisplayStyle.CANDLES,
     onAddDrawing: ((ChartDrawing) -> Unit)? = null,
-    onSelectTrade: ((TradeJournalEntry) -> Unit)? = null
+    onSelectTrade: ((TradeJournalEntry) -> Unit)? = null,
+    onRequestOlderHistory: (() -> Unit)? = null,
+    isLoadingOlderHistory: Boolean = false
 ) {
     if (candles.isEmpty()) {
         Box(
@@ -209,6 +211,26 @@ fun CandlestickChart(
     // Wait for the real measured width before applying initial candle fit.
     // A guessed 600px width can mis-size early Replay candles on narrow phones.
     var chartViewportWidthPx by remember { mutableFloatStateOf(0f) }
+    // Trigger historical backfill near the oldest visible candle. Keep the
+    // gesture callback fresh without restarting the active pointer detector.
+    val requestOlderHistory by rememberUpdatedState(onRequestOlderHistory)
+    val loadingOlderHistory by rememberUpdatedState(isLoadingOlderHistory)
+    var lastBackfillOldestTime by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(candles.firstOrNull()?.openTime, scrollOffsetPx, chartViewportWidthPx,
+        candleWidthPx, isLoadingOlderHistory) {
+        val oldest = candles.firstOrNull()?.openTime ?: return@LaunchedEffect
+        if (requestOlderHistory == null || loadingOlderHistory || candles.size >= 20_000 ||
+            chartViewportWidthPx <= 1f) return@LaunchedEffect
+        val threshold = (candles.size * candleWidthPx - chartViewportWidthPx -
+            candleWidthPx * 30f).coerceAtLeast(0f)
+        if (scrollOffsetPx > 0f && scrollOffsetPx >= threshold && lastBackfillOldestTime != oldest) {
+            lastBackfillOldestTime = oldest
+            requestOlderHistory?.invoke()
+        }
+    }
+    // Scroll is measured from the newest (rightmost) candle. Prepending
+    // history on the left does not change the position of existing bars.
+    // Keep the offset unchanged; compensating here would cause a chart jump.
     // Early Replay can have only a few revealed bars. The fixed 12px default
     // leaves most of the canvas empty on phones; fit those bars on first load.
     // Never override user zoom after the initial fit.
