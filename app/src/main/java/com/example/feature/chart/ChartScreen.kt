@@ -516,9 +516,12 @@ fun ChartScreen(
             if (isEmbeddedReplay) {
                 // Replay detail controls remain available without occupying
                 // vertical chart space in the default reference layout.
-                if (!immersiveChart || showReplayDetails) {
-                    TextButton(onClick = { showReplayDetails = !showReplayDetails }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
-                        Text(if (showReplayDetails) "إخفاء تفاصيل الإعادة ▲" else "أوامر وسرعة الإعادة ▼", fontSize = 11.sp)
+                // In standard Replay mode the transport bar already exposes play,
+                // stepping and speed. Do not reserve a separate full-width row
+                // for another Replay heading unless advanced controls are open.
+                if (showReplayDetails) {
+                    TextButton(onClick = { showReplayDetails = false }, modifier = Modifier.testTag("chart_replay_expand_btn")) {
+                        Text("إخفاء تفاصيل الإعادة ▲", fontSize = 11.sp)
                     }
                 }
                 if (showReplayDetails) {
