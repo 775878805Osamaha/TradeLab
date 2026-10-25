@@ -55,7 +55,9 @@ class BiquoteHistoricalProvider(
     suspend fun fetch(symbol: String, tf: Timeframe, from: Long, to: Long): List<Candle> =
         withContext(Dispatchers.IO) {
             require(supports(symbol)) { "Unsupported keyless historical symbol" }
-            require(from >= 0L && to > from) { "Invalid historical range" }
+            // A single closed candle is a valid historical page when paging
+            // across sparse sessions or near the provider's history boundary.
+            require(from >= 0L && to >= from) { "Invalid historical range" }
             val period = tf.minutes.toLong() * 60_000L
             require(period > 0 && to <= System.currentTimeMillis() - period) {
                 "Historical range includes unfinished candles"
@@ -124,7 +126,10 @@ class BiquoteHistoricalProvider(
                             source = "BIQUOTE_HISTORICAL"
                         )
                     }
-            if (result.size < 2) throw IOException("Insufficient complete historical candles from Biquote")
+            // A one-candle verified response is still useful for incremental
+            // chart paging. Do not turn legitimate sparse market sessions into
+            // a blank chart; integrity validation below still checks every bar.
+            if (result.isEmpty()) return@withContext emptyList<Candle>()
             // Session gaps (weekends/holidays) are legitimate, but a provider
             // response missing the entire beginning or end of a requested
             // window must not masquerade as a complete replay dataset.
