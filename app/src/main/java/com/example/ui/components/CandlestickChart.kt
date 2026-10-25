@@ -71,7 +71,9 @@ fun CandlestickChart(
     resetViewTrigger: Long = 0L,
     displayStyle: ChartDisplayStyle = ChartDisplayStyle.CANDLES,
     onAddDrawing: ((ChartDrawing) -> Unit)? = null,
-    onSelectTrade: ((TradeJournalEntry) -> Unit)? = null
+    onSelectTrade: ((TradeJournalEntry) -> Unit)? = null,
+    onRequestOlderHistory: (() -> Unit)? = null,
+    isLoadingOlderHistory: Boolean = false
 ) {
     if (candles.isEmpty()) {
         Box(
@@ -127,6 +129,37 @@ fun CandlestickChart(
     // Avoid creating a new visible OHLC list or scanning the entire history
     // during pan/zoom; range queries are served by the immutable price index.
     val priceRangeIndex = remember(candles) { ChartPriceRangeIndex(candles) }
+
+    // Trigger historical backfill near the oldest visible candle. Keep the
+    // gesture callback fresh without restarting the active pointer detector.
+    val requestOlderHistory by rememberUpdatedState(onRequestOlderHistory)
+    val loadingOlderHistory by rememberUpdatedState(isLoadingOlderHistory)
+    var lastBackfillOldestTime by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(candles.firstOrNull()?.openTime, scrollOffsetPx, chartViewportWidthPx,
+        candleWidthPx, isLoadingOlderHistory) {
+        val oldest = candles.firstOrNull()?.openTime ?: return@LaunchedEffect
+        if (requestOlderHistory == null || loadingOlderHistory || candles.size >= 20_000 ||
+            chartViewportWidthPx <= 1f) return@LaunchedEffect
+        val threshold = (candles.size * candleWidthPx - chartViewportWidthPx -
+            candleWidthPx * 30f).coerceAtLeast(0f)
+        if (scrollOffsetPx >= threshold && lastBackfillOldestTime != oldest) {
+            lastBackfillOldestTime = oldest
+            requestOlderHistory?.invoke()
+        }
+    }
+    // Prepending N older candles moves the same timestamps N slots to the
+    // right. Compensate the scroll offset to keep the visible candle stable.
+    var previousOldestTime by remember { mutableStateOf<Long?>(null) }
+    var previousCandleCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(candles.firstOrNull()?.openTime, candles.size) {
+        val currentOldest = candles.firstOrNull()?.openTime
+        if (currentOldest != null && previousOldestTime != null &&
+            currentOldest < previousOldestTime!! && candles.size > previousCandleCount) {
+            scrollOffsetPx += (candles.size - previousCandleCount) * candleWidthPx
+        }
+        previousOldestTime = currentOldest
+        previousCandleCount = candles.size
+    }
 
     // Drawing Interaction State
     var drawingStartOffset by remember { mutableStateOf<Offset?>(null) }
