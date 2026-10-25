@@ -916,6 +916,35 @@ fun ChartScreen(
                 )
                 }
 
+                // Historical paging remains available even in immersive mode.
+                // It does not replace the chart or navigate away from it.
+                if (!isEmbeddedReplay && uiState.candles.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier.align(Alignment.TopStart)
+                            .padding(start = 12.dp, top = 58.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        OutlinedButton(
+                            onClick = { viewModel.loadOlderChartHistory() },
+                            enabled = !uiState.isLoading && !uiState.isLoadingOlderHistory &&
+                                uiState.candles.size < 20_000,
+                            modifier = Modifier.height(34.dp).testTag("chart_load_older_history"),
+                            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                if (uiState.isLoadingOlderHistory) "جاري تحميل الأقدم..."
+                                else "شموع أقدم · ${uiState.candles.size}",
+                                fontSize = 11.sp
+                            )
+                        }
+                        uiState.olderHistoryError?.let { historyError ->
+                            Text(historyError, fontSize = 10.sp,
+                                color = TradingTextSecondary,
+                                modifier = Modifier.widthIn(max = 220.dp))
+                        }
+                    }
+                }
+
                 // Overlay the entry control on the chart instead of reserving a
                 // separate row below the candle viewport. Historical prices
                 // remain replay-only and never execute as live orders.
