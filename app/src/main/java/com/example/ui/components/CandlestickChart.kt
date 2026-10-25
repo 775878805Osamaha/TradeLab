@@ -228,20 +228,9 @@ fun CandlestickChart(
             requestOlderHistory?.invoke()
         }
     }
-    // Prepending N older candles moves the same timestamps N slots to the
-    // right. Compensate the scroll offset to keep the visible candle stable.
-    var previousOldestTime by remember { mutableStateOf<Long?>(null) }
-    var previousCandleCount by remember { mutableIntStateOf(0) }
-    LaunchedEffect(candles.firstOrNull()?.openTime, candles.size) {
-        val currentOldest = candles.firstOrNull()?.openTime
-        if (currentOldest != null && previousOldestTime != null &&
-            currentOldest < previousOldestTime!! && candles.size > previousCandleCount) {
-            scrollOffsetPx += (candles.size - previousCandleCount) * candleWidthPx
-        }
-        previousOldestTime = currentOldest
-        previousCandleCount = candles.size
-    }
-
+    // Scroll is measured from the newest (rightmost) candle. Prepending
+    // history on the left does not change the position of existing bars.
+    // Keep the offset unchanged; compensating here would cause a chart jump.
     // Early Replay can have only a few revealed bars. The fixed 12px default
     // leaves most of the canvas empty on phones; fit those bars on first load.
     // Never override user zoom after the initial fit.
