@@ -124,7 +124,10 @@ class BiquoteHistoricalProvider(
                             source = "BIQUOTE_HISTORICAL"
                         )
                     }
-            if (result.size < 2) throw IOException("Insufficient complete historical candles from Biquote")
+            // A one-candle verified response is still useful for incremental
+            // chart paging. Do not turn legitimate sparse market sessions into
+            // a blank chart; integrity validation below still checks every bar.
+            if (result.isEmpty()) return@withContext emptyList<Candle>()
             // Session gaps (weekends/holidays) are legitimate, but a provider
             // response missing the entire beginning or end of a requested
             // window must not masquerade as a complete replay dataset.
