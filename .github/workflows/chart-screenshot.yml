@@ -70,6 +70,10 @@ jobs:
             sleep 50
             adb shell screencap -p /sdcard/tradelab-150s.png
             adb pull /sdcard/tradelab-150s.png screenshots/tradelab-150s.png
+            # Capture the accessibility hierarchy so bottom-navigation regressions
+            # are detectable even when the emulator screenshots look superficially OK.
+            adb shell uiautomator dump /sdcard/tradelab-ui.xml
+            adb pull /sdcard/tradelab-ui.xml screenshots/tradelab-ui.xml
             adb shell dumpsys activity activities > screenshots/activity-state.txt
             adb logcat -d -t 3000 > screenshots/logcat-tail.txt
             adb shell dumpsys activity processes > screenshots/process-state.txt
@@ -103,6 +107,25 @@ jobs:
               print(f"{path.name}: {w}x{h}, candle-color samples teal={teal}, red={red}")
               if path.name.endswith("150s.png") and teal + red < 40:
                   raise SystemExit("No visible candlestick evidence after 150 seconds")
+          PY
+      - name: Verify four Arabic bottom navigation destinations
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          path = Path("screenshots/tradelab-ui.xml")
+          if not path.is_file():
+              raise SystemExit("Missing emulator accessibility hierarchy")
+          root = ET.parse(path).getroot()
+          labels = set()
+          for node in root.iter("node"):
+              labels.add(node.attrib.get("text", ""))
+              labels.add(node.attrib.get("content-desc", ""))
+          expected = {"السوق", "الشارت", "النتائج", "الحساب"}
+          missing = expected - labels
+          print("Found navigation labels:", sorted(expected - missing))
+          if missing:
+              raise SystemExit("Bottom navigation missing Arabic tabs: " + ", ".join(sorted(missing)))
           PY
       - name: Reject Android system ANR overlays
         run: |
