@@ -122,28 +122,38 @@ class ChartViewModel(
         olderHistoryJob?.cancel()
         olderHistoryJob = viewModelScope.launch {
             try {
+                // Skip closed-market gaps without manufacturing candles.
+                // Retry successive bounded windows when the most recent
+                // preceding interval is empty (weekends and market holidays).
                 val pageEnd = oldest - interval
                 // Market sessions are sparse; try bounded smaller pages when
                 // the provider cannot satisfy the entire 100-bar window.
                 // Every candidate remains sourced and verified; never fill gaps.
                 var verified: List<Candle>? = null
                 var lastFailure: Exception? = null
-                for (bars in listOf(100L, 40L, 10L, 1L)) {
-                    val start = (pageEnd - interval * (bars - 1L)).coerceAtLeast(0L)
-                    try {
-                        val older = marketDataRepository.getCandles(
-                            symbol, timeframe, start, pageEnd
-                        )
-                        val candidate = CandleAggregator.aggregate(older, timeframe)
-                        if (candidate.isNotEmpty()) {
-                            verified = candidate
-                            break
+                // Search backwards across up to four windows, so a weekend
+                // does not permanently block loading older trading sessions.
+                for (window in 0L..3L) {
+                    val end = pageEnd - window * interval * 100L
+                    if (end < 0L) break
+                    for (bars in listOf(100L, 40L, 10L, 1L)) {
+                        val start = (end - interval * (bars - 1L)).coerceAtLeast(0L)
+                        try {
+                            val older = marketDataRepository.getCandles(
+                                symbol, timeframe, start, end
+                            )
+                            val candidate = CandleAggregator.aggregate(older, timeframe)
+                            if (candidate.isNotEmpty()) {
+                                verified = candidate
+                                break
+                            }
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            lastFailure = error
                         }
-                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                        throw cancelled
-                    } catch (error: Exception) {
-                        lastFailure = error
                     }
+                    if (verified != null) break
                 }
                 val confirmed = verified ?: throw (lastFailure
                     ?: java.io.IOException("No verified older candles available"))
