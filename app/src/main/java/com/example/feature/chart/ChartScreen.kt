@@ -1182,7 +1182,7 @@ fun ChartScreen(
                     Box(
                         modifier = Modifier
                             .size(width = 46.dp, height = 22.dp)
-                            .pointerInput(chartPaletteContainerHeightPx, chartPaletteContainerWidthPx, drawingPaletteHeightPx, drawingPaletteWidthPx, isEmbeddedReplay) {
+                            .pointerInput(chartPaletteMaxYOffsetPx, chartPaletteMaxXOffsetPx, isEmbeddedReplay) {
                                 detectDragGestures { change, dragAmount ->
                                     change.consume()
                                     // Use the same bounds as the layout resize effect.
