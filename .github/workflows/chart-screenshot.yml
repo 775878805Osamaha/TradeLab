@@ -80,35 +80,33 @@ jobs:
             adb shell dumpsys meminfo com.android.systemui > screenshots/systemui-memory.txt
             adb shell dumpsys meminfo com.aistudio.tradelab.vzqrpk > screenshots/tradelab-memory.txt
             adb shell dumpsys activity exit-info com.android.systemui > screenshots/systemui-exits.txt || true
-      - name: Open embedded Replay and capture its actual screen
-        run: |
-          # Use the real accessibility hierarchy rather than guessing phone coordinates.
-          adb shell uiautomator dump /sdcard/tradelab-before-replay.xml
-          adb pull /sdcard/tradelab-before-replay.xml screenshots/tradelab-before-replay.xml
-          python3 - <<'PY'
-          import re
-          import subprocess
-          import xml.etree.ElementTree as ET
-          root = ET.parse("screenshots/tradelab-before-replay.xml").getroot()
-          candidates = []
-          for node in root.iter("node"):
-              label = (node.attrib.get("text", "") + " " + node.attrib.get("content-desc", "")).strip()
-              if label == "Replay" or "إعادة العرض داخل الشارت" in label:
-                  match = re.fullmatch(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]", node.attrib.get("bounds", ""))
-                  if match:
-                      x1, y1, x2, y2 = map(int, match.groups())
-                      candidates.append((label, (x1+x2)//2, (y1+y2)//2))
-          if not candidates:
-              raise SystemExit("Replay control not found in real accessibility tree")
-          label, x, y = candidates[0]
-          print("Opening embedded Replay:", label, x, y)
-          subprocess.run(["adb", "shell", "input", "tap", str(x), str(y)], check=True)
-          PY
-          sleep 8
-          adb shell screencap -p /sdcard/tradelab-replay.png
-          adb pull /sdcard/tradelab-replay.png screenshots/tradelab-replay.png
-          adb shell uiautomator dump /sdcard/tradelab-replay-ui.xml
-          adb pull /sdcard/tradelab-replay-ui.xml screenshots/tradelab-replay-ui.xml
+              # Use the real accessibility hierarchy rather than guessing phone coordinates.
+              adb shell uiautomator dump /sdcard/tradelab-before-replay.xml
+              adb pull /sdcard/tradelab-before-replay.xml screenshots/tradelab-before-replay.xml
+              python3 - <<'PY'
+              import re
+              import subprocess
+              import xml.etree.ElementTree as ET
+              root = ET.parse("screenshots/tradelab-before-replay.xml").getroot()
+              candidates = []
+              for node in root.iter("node"):
+                  label = (node.attrib.get("text", "") + " " + node.attrib.get("content-desc", "")).strip()
+                  if label == "Replay" or "إعادة العرض داخل الشارت" in label:
+                      match = re.fullmatch(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]", node.attrib.get("bounds", ""))
+                      if match:
+                          x1, y1, x2, y2 = map(int, match.groups())
+                          candidates.append((label, (x1+x2)//2, (y1+y2)//2))
+              if not candidates:
+                  raise SystemExit("Replay control not found in real accessibility tree")
+              label, x, y = candidates[0]
+              print("Opening embedded Replay:", label, x, y)
+              subprocess.run(["adb", "shell", "input", "tap", str(x), str(y)], check=True)
+              PY
+              sleep 8
+              adb shell screencap -p /sdcard/tradelab-replay.png
+              adb pull /sdcard/tradelab-replay.png screenshots/tradelab-replay.png
+              adb shell uiautomator dump /sdcard/tradelab-replay-ui.xml
+              adb pull /sdcard/tradelab-replay-ui.xml screenshots/tradelab-replay-ui.xml
       - name: Install screenshot analysis dependency
         run: python3 -m pip install --user Pillow
       - name: Validate captured screen has real candlesticks
