@@ -131,9 +131,14 @@ class ChartViewModel(
                 // Every candidate remains sourced and verified; never fill gaps.
                 var verified: List<Candle>? = null
                 var lastFailure: Exception? = null
-                // Search backwards across up to four windows, so a weekend
-                // does not permanently block loading older trading sessions.
-                for (window in 0L..3L) {
+                // A four-page scan covers only 400 minutes on M1, less than
+                // a weekend. Scan contiguous windows covering at least 72h
+                // for intraday charts; stop immediately at the first real page.
+                // No synthetic bars and no skipped historical search windows.
+                val windowsToScan = (72L * 60L / (timeframe.minutes.toLong() * 100L))
+                    .coerceAtLeast(4L)
+                    .coerceAtMost(60L)
+                for (window in 0L until windowsToScan) {
                     val end = pageEnd - window * interval * 100L
                     if (end < 0L) break
                     for (bars in listOf(100L, 40L, 10L, 1L)) {
