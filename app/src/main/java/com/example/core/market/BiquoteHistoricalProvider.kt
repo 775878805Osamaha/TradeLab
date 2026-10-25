@@ -55,7 +55,9 @@ class BiquoteHistoricalProvider(
     suspend fun fetch(symbol: String, tf: Timeframe, from: Long, to: Long): List<Candle> =
         withContext(Dispatchers.IO) {
             require(supports(symbol)) { "Unsupported keyless historical symbol" }
-            require(from >= 0L && to > from) { "Invalid historical range" }
+            // A single closed candle is a valid historical page when paging
+            // across sparse sessions or near the provider's history boundary.
+            require(from >= 0L && to >= from) { "Invalid historical range" }
             val period = tf.minutes.toLong() * 60_000L
             require(period > 0 && to <= System.currentTimeMillis() - period) {
                 "Historical range includes unfinished candles"
