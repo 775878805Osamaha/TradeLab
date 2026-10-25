@@ -1166,9 +1166,11 @@ fun ChartScreen(
                             drawingPaletteHeightPx = it.height
                             drawingPaletteWidthPx = it.width
                         }
+                        .background(TradingCard.copy(alpha = 0.94f), RoundedCornerShape(24.dp))
+                        .padding(horizontal = 3.dp, vertical = 5.dp)
                         .testTag("chart_reference_floating_tools"),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     val referenceTools = listOf(
                         Triple("تقاطع", Icons.Default.FilterCenterFocus, 0),
@@ -1222,10 +1224,11 @@ fun ChartScreen(
                                         }
                                     }.testTag("chart_reference_tool_${index}"),
                                 shape = RoundedCornerShape(50),
-                                color = TradingCard.copy(alpha = 0.86f),
+                                // Unified dark tool rail: only the active tool has a visible ring.
+                                color = if (selected) TradingAccent.copy(alpha = 0.16f) else Color.Transparent,
                                 border = androidx.compose.foundation.BorderStroke(
-                                    if (selected) 1.5.dp else 0.8.dp,
-                                    if (selected) TradingAccent else TradingBorder
+                                    if (selected) 1.5.dp else 0.dp,
+                                    if (selected) TradingAccent else Color.Transparent
                                 )
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
