@@ -1238,7 +1238,11 @@ fun ChartScreen(
                         }
                     }
                     IconButton(
-                        onClick = { drawingPaletteCollapsed = !drawingPaletteCollapsed },
+                        onClick = {
+                            drawingPaletteCollapsed = !drawingPaletteCollapsed
+                            // Keep the palette reachable if expanding makes it taller.
+                            drawingPaletteOffsetPx = 0f
+                        },
                         modifier = Modifier.size(44.dp).testTag("chart_tools_collapse_toggle")
                     ) {
                         Icon(
