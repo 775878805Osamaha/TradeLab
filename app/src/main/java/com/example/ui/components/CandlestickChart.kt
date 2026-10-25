@@ -207,6 +207,12 @@ fun CandlestickChart(
     // leaves most of the canvas empty on phones; fit those bars on first load.
     // Never override user zoom after the initial fit.
     var initialCandleFitApplied by remember { mutableStateOf(false) }
+    // Reset is a user-requested fresh fit, not merely a return to 12px bars.
+    // This effect is declared after the state to avoid referencing an
+    // uninitialized local Compose state holder.
+    LaunchedEffect(resetViewTrigger) {
+        if (resetViewTrigger > 0L) initialCandleFitApplied = false
+    }
     LaunchedEffect(candles.size, chartViewportWidthPx) {
         if (!initialCandleFitApplied && candles.isNotEmpty() && chartViewportWidthPx > 1f) {
             if (candles.size <= 40) {
