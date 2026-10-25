@@ -1340,7 +1340,7 @@ fun ChartScreen(
                 // Historical orders use the isolated Replay account, never the live-paper account.
                 Row(
                     modifier = Modifier.fillMaxWidth().background(TradingBackground)
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
                         .testTag("chart_replay_trading_bar"),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1354,7 +1354,7 @@ fun ChartScreen(
                         onClick = { pendingOrderSide = OrderSide.SELL },
                         enabled = canTradeReplay,
                         colors = ButtonDefaults.buttonColors(containerColor = TradingNegative),
-                        modifier = Modifier.weight(1f).height(64.dp).testTag("chart_replay_sell"),
+                        modifier = Modifier.weight(1f).height(58.dp).testTag("chart_replay_sell"),
                         shape = RoundedCornerShape(28.dp)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1376,7 +1376,7 @@ fun ChartScreen(
                         onClick = { pendingOrderSide = OrderSide.BUY },
                         enabled = canTradeReplay,
                         colors = ButtonDefaults.buttonColors(containerColor = TradingPositive),
-                        modifier = Modifier.weight(1f).height(64.dp).testTag("chart_replay_buy"),
+                        modifier = Modifier.weight(1f).height(58.dp).testTag("chart_replay_buy"),
                         shape = RoundedCornerShape(28.dp)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
