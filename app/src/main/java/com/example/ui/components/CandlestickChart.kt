@@ -113,6 +113,8 @@ fun CandlestickChart(
     var candleWidthPx by remember { mutableFloatStateOf(12f) }
     var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
     var manualPriceScale by remember { mutableFloatStateOf(1f) }
+    // Vertical viewport translation in screen pixels, independent of candle zoom.
+    var pricePanPx by remember { mutableFloatStateOf(0f) }
     var crosshairOffset by remember { mutableStateOf<Offset?>(null) }
     var inspectedCandle by remember { mutableStateOf<Candle?>(null) }
 
@@ -133,6 +135,7 @@ fun CandlestickChart(
             scrollOffsetPx = 0f
             candleWidthPx = 12f
             manualPriceScale = 1f
+            pricePanPx = 0f
             crosshairOffset = null
             inspectedCandle = null
             transformRef[0] = null
@@ -232,6 +235,9 @@ fun CandlestickChart(
                                 }
                             } else {
                                 scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, dragAmount.x)
+                                // Let a single diagonal gesture pan both time and price axes.
+                                // The visual direction follows the finger; reset view restores auto-fit.
+                                pricePanPx = (pricePanPx + dragAmount.y).coerceIn(-6000f, 6000f)
                             }
                         },
                         onDragEnd = {
@@ -336,8 +342,9 @@ fun CandlestickChart(
             val autoMax = maxP + pPadding
             val midpoint = (autoMin + autoMax) / 2.0
             val halfRange = ((autoMax - autoMin) / 2.0) * manualPriceScale
-            val paddedMin = midpoint - halfRange
-            val paddedMax = midpoint + halfRange
+            val pricePanDelta = (pricePanPx / mainChartHeight.coerceAtLeast(1f)) * (halfRange * 2.0)
+            val paddedMin = midpoint - halfRange + pricePanDelta
+            val paddedMax = midpoint + halfRange + pricePanDelta
 
             val transform = ChartTransform(
                 visibleCandles = visibleCandles,
