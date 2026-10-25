@@ -33,10 +33,13 @@ jobs:
       - name: Boot emulator and capture actual app
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
-          target: default
+          api-level: 33
+          target: google_apis
           arch: x86_64
           profile: pixel_6
+          cores: 2
+          ram-size: 4096M
+          heap-size: 512M
           disable-animations: true
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
@@ -59,7 +62,11 @@ jobs:
             adb shell screencap -p /sdcard/tradelab-150s.png
             adb pull /sdcard/tradelab-150s.png screenshots/tradelab-150s.png
             adb shell dumpsys activity activities > screenshots/activity-state.txt
-            adb logcat -d -t 500 > screenshots/logcat-tail.txt
+            adb logcat -d -t 3000 > screenshots/logcat-tail.txt
+            adb shell dumpsys activity processes > screenshots/process-state.txt
+            adb shell dumpsys meminfo com.android.systemui > screenshots/systemui-memory.txt
+            adb shell dumpsys meminfo com.aistudio.tradelab.vzqrpk > screenshots/tradelab-memory.txt
+            adb shell dumpsys activity exit-info com.android.systemui > screenshots/systemui-exits.txt || true
       - name: Install screenshot analysis dependency
         run: python3 -m pip install --user Pillow
       - name: Validate captured screen has real candlesticks
