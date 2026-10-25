@@ -69,6 +69,13 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
+                    var embeddedReplayLaunchRequest by remember { mutableIntStateOf(0) }
+                    val openReplayOnChart = {
+                        embeddedReplayLaunchRequest++
+                        navController.navigate(Screen.Chart.route) {
+                            launchSingleTop = true
+                        }
+                    }
 
                     var chartImmersive by remember { mutableStateOf(true) }
                     // Keep the four primary destinations accessible even when the chart
@@ -145,7 +152,7 @@ class MainActivity : ComponentActivity() {
                                 AccountScreen(
                                     viewModel = accountViewModel,
                                     onNavigateToTrade = { navController.navigate(Screen.Trade.route) },
-                                    onNavigateToReplay = { navController.navigate(Screen.Replay.route) },
+                                    onNavigateToReplay = openReplayOnChart,
                                     onNavigateToBacktest = { navController.navigate(Screen.Backtest.route) },
                                     onNavigateToHistory = { navController.navigate(Screen.History.route) },
                                     onNavigateToRules = { navController.navigate(Screen.Challenge.route) },
@@ -171,7 +178,8 @@ class MainActivity : ComponentActivity() {
                                 ChartScreen(
                                     viewModel = chartViewModel,
                                     replayViewModel = replayViewModel,
-                                    onNavigateToReplay = { navController.navigate(Screen.Replay.route) },
+                                    embeddedReplayLaunchRequest = embeddedReplayLaunchRequest,
+                                    onNavigateToReplay = openReplayOnChart,
                                     onImmersiveChanged = { chartImmersive = it }
                                 )
                             }
@@ -227,7 +235,7 @@ class MainActivity : ComponentActivity() {
                                         navController.navigate(Screen.Backtest.route)
                                     },
                                     onNavigateToReplay = { strategyId ->
-                                        navController.navigate(Screen.Replay.route)
+                                        openReplayOnChart()
                                     },
                                     onBack = { navController.popBackStack() }
                                 )
