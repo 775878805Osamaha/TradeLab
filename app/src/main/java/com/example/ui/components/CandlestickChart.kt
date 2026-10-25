@@ -216,6 +216,12 @@ fun CandlestickChart(
     val requestOlderHistory by rememberUpdatedState(onRequestOlderHistory)
     val loadingOlderHistory by rememberUpdatedState(isLoadingOlderHistory)
     var lastBackfillOldestTime by remember { mutableStateOf<Long?>(null) }
+    // Re-arm pagination after switching symbols/timeframes, even if the
+    // newly loaded history happens to begin at the same timestamp.
+    LaunchedEffect(candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe) {
+        lastBackfillOldestTime = null
+        scrollOffsetPx = 0f
+    }
     LaunchedEffect(candles.firstOrNull()?.openTime, scrollOffsetPx, chartViewportWidthPx,
         candleWidthPx, isLoadingOlderHistory) {
         val oldest = candles.firstOrNull()?.openTime ?: return@LaunchedEffect
