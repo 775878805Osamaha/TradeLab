@@ -44,6 +44,9 @@ jobs:
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell settings put system accelerometer_rotation 0
             adb shell settings put system user_rotation 0
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+            adb shell settings put global animator_duration_scale 0
             adb shell am start -n com.aistudio.tradelab.vzqrpk/com.example.MainActivity
             mkdir -p screenshots
             sleep 35
@@ -84,6 +87,29 @@ jobs:
               print(f"{path.name}: {w}x{h}, candle-color samples teal={teal}, red={red}")
               if path.name.endswith("150s.png") and teal + red < 40:
                   raise SystemExit("No visible candlestick evidence after 150 seconds")
+          PY
+      - name: Reject Android system ANR overlays
+        run: |
+          python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          for path in sorted(Path("screenshots").glob("tradelab-*.png")):
+              im = Image.open(path).convert("RGB")
+              w, h = im.size
+              # The actual API 30 emulator failure shows a large bright modal
+              # covering the dark chart center. Sample a rectangular central area.
+              bright = 0
+              total = 0
+              for y in range(int(h * .38), int(h * .56), 4):
+                  for x in range(int(w * .22), int(w * .78), 4):
+                      r,g,b = im.getpixel((x,y))
+                      total += 1
+                      if min(r,g,b) > 225:
+                          bright += 1
+              ratio = bright / max(1,total)
+              print(f"{path.name}: center bright-overlay ratio={ratio:.3f}")
+              if ratio > .55:
+                  raise SystemExit(f"Potential system ANR or blocking modal in {path.name}")
           PY
       - name: Upload real emulator capture and logs
         if: always()
