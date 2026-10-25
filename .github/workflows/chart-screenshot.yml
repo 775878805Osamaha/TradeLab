@@ -19,7 +19,7 @@ jobs:
       - name: Android SDK
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "emulator"
       - name: Debug signing key
         run: |
           if [ -f debug.keystore.base64 ]; then base64 -d debug.keystore.base64 > debug.keystore || true; fi
@@ -30,6 +30,15 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
+      - name: Enable hardware virtualization for Android emulator
+        run: |
+          if [ ! -e /dev/kvm ]; then
+            echo "::error::KVM is not available on this runner; do not run an unaccelerated emulator."
+            exit 1
+          fi
+          sudo chmod 666 /dev/kvm
+          ls -l /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -accel-check
       - name: Boot emulator and capture actual app
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -37,13 +46,19 @@ jobs:
           target: default
           arch: x86_64
           profile: pixel_6
+          cores: 2
+          ram-size: 2048M
+          heap-size: 256M
           disable-animations: true
           emulator-boot-timeout: 900
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          emulator-options: -no-window -gpu swiftshader_indirect -accel on -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell settings put system accelerometer_rotation 0
             adb shell settings put system user_rotation 0
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+            adb shell settings put global animator_duration_scale 0
             adb shell am start -n com.aistudio.tradelab.vzqrpk/com.example.MainActivity
             mkdir -p screenshots
             sleep 35
@@ -56,7 +71,11 @@ jobs:
             adb shell screencap -p /sdcard/tradelab-150s.png
             adb pull /sdcard/tradelab-150s.png screenshots/tradelab-150s.png
             adb shell dumpsys activity activities > screenshots/activity-state.txt
-            adb logcat -d -t 500 > screenshots/logcat-tail.txt
+            adb logcat -d -t 3000 > screenshots/logcat-tail.txt
+            adb shell dumpsys activity processes > screenshots/process-state.txt
+            adb shell dumpsys meminfo com.android.systemui > screenshots/systemui-memory.txt
+            adb shell dumpsys meminfo com.aistudio.tradelab.vzqrpk > screenshots/tradelab-memory.txt
+            adb shell dumpsys activity exit-info com.android.systemui > screenshots/systemui-exits.txt || true
       - name: Install screenshot analysis dependency
         run: python3 -m pip install --user Pillow
       - name: Validate captured screen has real candlesticks
@@ -84,6 +103,29 @@ jobs:
               print(f"{path.name}: {w}x{h}, candle-color samples teal={teal}, red={red}")
               if path.name.endswith("150s.png") and teal + red < 40:
                   raise SystemExit("No visible candlestick evidence after 150 seconds")
+          PY
+      - name: Reject Android system ANR overlays
+        run: |
+          python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          for path in sorted(Path("screenshots").glob("tradelab-*.png")):
+              im = Image.open(path).convert("RGB")
+              w, h = im.size
+              # The actual API 30 emulator failure shows a large bright modal
+              # covering the dark chart center. Sample a rectangular central area.
+              bright = 0
+              total = 0
+              for y in range(int(h * .38), int(h * .56), 4):
+                  for x in range(int(w * .22), int(w * .78), 4):
+                      r,g,b = im.getpixel((x,y))
+                      total += 1
+                      if min(r,g,b) > 225:
+                          bright += 1
+              ratio = bright / max(1,total)
+              print(f"{path.name}: center bright-overlay ratio={ratio:.3f}")
+              if ratio > .55:
+                  raise SystemExit(f"Potential system ANR or blocking modal in {path.name}")
           PY
       - name: Upload real emulator capture and logs
         if: always()
