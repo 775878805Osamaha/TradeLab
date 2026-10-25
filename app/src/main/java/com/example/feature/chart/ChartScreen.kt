@@ -1265,7 +1265,23 @@ fun ChartScreen(
                                         modifier = Modifier.size(19.dp))
                                 }
                             }
-                            // Tool names remain accessible via icon content descriptions.
+                            // Reference layout uses visible Arabic captions below each circular tool.
+                            // Keep the existing icon content descriptions for accessibility.
+                            Text(
+                                text = when (index) {
+                                    0 -> "مؤشر\\nمتقاطع"
+                                    1 -> "خط اتجاه"
+                                    2 -> "مستوى\\nأفقي"
+                                    3 -> "فيبوناتشي"
+                                    4 -> "تراجع"
+                                    else -> "المزيد"
+                                }.replace("\\n", "\n"),
+                                fontSize = 9.sp,
+                                lineHeight = 11.sp,
+                                textAlign = TextAlign.Center,
+                                color = if (selected) TradingAccentLight else TradingTextSecondary,
+                                modifier = Modifier.width(64.dp)
+                            )
                         }
                     }
                     IconButton(
