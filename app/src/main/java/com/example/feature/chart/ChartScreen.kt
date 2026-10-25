@@ -1057,11 +1057,12 @@ fun ChartScreen(
                     Column(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 68.dp, start = 76.dp, end = 76.dp)
+                            // Keep transport above candles and clear of the left tool rail.
+                            .padding(top = 58.dp, start = 76.dp, end = 12.dp)
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(TradingCard.copy(alpha = 0.94f))
-                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(TradingCard.copy(alpha = 0.90f))
+                            .padding(horizontal = 5.dp, vertical = 3.dp)
                             .testTag("chart_embedded_replay_controls"),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
