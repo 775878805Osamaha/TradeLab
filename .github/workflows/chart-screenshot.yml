@@ -38,7 +38,7 @@ jobs:
           fi
           sudo chmod 666 /dev/kvm
           ls -l /dev/kvm
-          emulator -accel-check
+          "$ANDROID_HOME/emulator/emulator" -accel-check
       - name: Boot emulator and capture actual app
         uses: reactivecircus/android-emulator-runner@v2
         with:
