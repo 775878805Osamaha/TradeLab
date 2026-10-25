@@ -1194,7 +1194,8 @@ fun ChartScreen(
                             drawingPaletteHeightPx = it.height
                             drawingPaletteWidthPx = it.width
                         }
-                        .background(TradingCard.copy(alpha = 0.94f), RoundedCornerShape(24.dp))
+                        // Keep each labeled tool visually separate like the reference,
+                        // rather than drawing one tall opaque pill across the candles.
                         .padding(horizontal = 3.dp, vertical = 5.dp)
                         .testTag("chart_reference_floating_tools"),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -1281,6 +1282,7 @@ fun ChartScreen(
                                 textAlign = TextAlign.Center,
                                 color = if (selected) TradingAccentLight else TradingTextSecondary,
                                 modifier = Modifier.width(64.dp)
+                                    .background(TradingBackground.copy(alpha = 0.80f), RoundedCornerShape(6.dp))
                             )
                         }
                     }
