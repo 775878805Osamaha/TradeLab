@@ -356,6 +356,8 @@ class ChartViewModel(
     }
 
     private fun loadCandlesForCurrentSymbol() {
+        olderHistoryJob?.cancel()
+        _uiState.update { it.copy(isLoadingOlderHistory = false, olderHistoryError = null) }
         val symbol = _uiState.value.selectedSymbol
         val tf = _uiState.value.selectedTimeframe
         val requestedBars = _uiState.value.chartHistoryBars
