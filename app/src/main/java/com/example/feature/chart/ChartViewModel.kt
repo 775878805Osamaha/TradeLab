@@ -325,7 +325,26 @@ class ChartViewModel(
             try {
                 // Start live subscription even if historical REST loading fails.
                 if (symbol in setOf("BTCUSDT", "ETHUSDT")) subscribeToTicks(symbol)
-                val rawCandles = marketDataRepository.getCandles(symbol, tf, from, lastClosedOpen)
+                // A provider may have fewer verified bars than the requested history.
+                // Retry smaller, recent windows instead of replacing the entire chart
+                // with an error. Never fabricate missing OHLC data.
+                var rawCandles = emptyList<com.example.core.model.Candle>()
+                var lastHistoryError: Exception? = null
+                for (depth in listOf(requestedBars, 100, 40, 10).distinct().filter { it <= requestedBars }) {
+                    val attemptFrom = (lastClosedOpen - interval * (depth - 1L)).coerceAtLeast(0L)
+                    try {
+                        val fetched = marketDataRepository.getCandles(symbol, tf, attemptFrom, lastClosedOpen)
+                        if (fetched.isNotEmpty()) {
+                            rawCandles = fetched
+                            break
+                        }
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        lastHistoryError = error
+                    }
+                }
+                if (rawCandles.isEmpty() && lastHistoryError != null) throw lastHistoryError
                 val aggregated = CandleAggregator.aggregate(rawCandles, tf)
                 if (aggregated.any { candle ->
                     candle.symbol != symbol || candle.timeframe != tf ||
