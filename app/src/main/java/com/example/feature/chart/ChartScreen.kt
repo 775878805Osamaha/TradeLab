@@ -905,6 +905,29 @@ fun ChartScreen(
                 )
                 }
 
+                // Overlay the entry control on the chart instead of reserving a
+                // separate row below the candle viewport. Historical prices
+                // remain replay-only and never execute as live orders.
+                if (!isEmbeddedReplay && uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
+                Button(
+                    onClick = {
+                        replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
+                        isEmbeddedReplay = true
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .height(38.dp)
+                        .testTag("chart_start_replay_trading"),
+                    shape = RoundedCornerShape(19.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = TradingAccent)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Replay · تداول تجريبي", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                }
+
                 // Immersive controls float over the chart rather than reserving a fixed top bar.
                 if (immersiveChart) {
                     Row(
@@ -1305,27 +1328,6 @@ fun ChartScreen(
                         modifier = Modifier.testTag("chart_replay_close")) {
                         Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextPrimary)
                     }
-                }
-            }
-
-            // Historical XAU/FX bars are not executable live quotes. Give the
-            // trader a prominent path into the actual replay trading engine.
-            if (!isEmbeddedReplay && uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
-                Button(
-                    onClick = {
-                        replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
-                        isEmbeddedReplay = true
-                    },
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 3.dp)
-                        .height(38.dp)
-                        .testTag("chart_start_replay_trading"),
-                    shape = RoundedCornerShape(19.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = TradingAccent)
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Replay · تداول تجريبي", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
 
