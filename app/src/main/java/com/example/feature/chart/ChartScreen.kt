@@ -915,8 +915,10 @@ fun ChartScreen(
                         isEmbeddedReplay = true
                     },
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .align(Alignment.BottomEnd)
+                        // Keep the volume histogram and time-axis labels unobstructed.
+                        // The right-edge control sits above the volume region instead.
+                        .padding(end = 14.dp, bottom = 110.dp)
                         .height(38.dp)
                         .testTag("chart_start_replay_trading"),
                     shape = RoundedCornerShape(19.dp),
