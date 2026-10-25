@@ -223,7 +223,7 @@ fun CandlestickChart(
             chartViewportWidthPx <= 1f) return@LaunchedEffect
         val threshold = (candles.size * candleWidthPx - chartViewportWidthPx -
             candleWidthPx * 30f).coerceAtLeast(0f)
-        if (scrollOffsetPx >= threshold && lastBackfillOldestTime != oldest) {
+        if (scrollOffsetPx > 0f && scrollOffsetPx >= threshold && lastBackfillOldestTime != oldest) {
             lastBackfillOldestTime = oldest
             requestOlderHistory?.invoke()
         }
