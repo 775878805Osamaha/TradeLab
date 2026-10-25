@@ -71,8 +71,10 @@ class MainActivity : ComponentActivity() {
                     val currentRoute = navBackStackEntry?.destination?.route
 
                     var chartImmersive by remember { mutableStateOf(true) }
-                    val showBottomNav = currentRoute in Screen.bottomNavItems.map { it.route } &&
-                        !(currentRoute == Screen.Chart.route && chartImmersive)
+                    // Keep the four primary destinations accessible even when the chart
+                    // uses its edge-to-edge layout. Immersive affects chart chrome,
+                    // not the app's primary navigation.
+                    val showBottomNav = currentRoute in Screen.bottomNavItems.map { it.route }
 
                     Scaffold(
                         modifier = Modifier
