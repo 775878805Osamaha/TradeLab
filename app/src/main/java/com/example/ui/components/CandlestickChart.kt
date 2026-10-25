@@ -200,7 +200,9 @@ fun CandlestickChart(
         }
     }
 
-    var chartViewportWidthPx by remember { mutableFloatStateOf(600f) }
+    // Wait for the real measured width before applying initial candle fit.
+    // A guessed 600px width can mis-size early Replay candles on narrow phones.
+    var chartViewportWidthPx by remember { mutableFloatStateOf(0f) }
     // Early Replay can have only a few revealed bars. The fixed 12px default
     // leaves most of the canvas empty on phones; fit those bars on first load.
     // Never override user zoom after the initial fit.
