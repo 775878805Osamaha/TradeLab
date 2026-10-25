@@ -80,6 +80,15 @@ jobs:
             adb shell dumpsys meminfo com.android.systemui > screenshots/systemui-memory.txt
             adb shell dumpsys meminfo com.aistudio.tradelab.vzqrpk > screenshots/tradelab-memory.txt
             adb shell dumpsys activity exit-info com.android.systemui > screenshots/systemui-exits.txt || true
+              # Use the real accessibility hierarchy rather than guessing phone coordinates.
+              adb shell uiautomator dump /sdcard/tradelab-before-replay.xml
+              adb pull /sdcard/tradelab-before-replay.xml screenshots/tradelab-before-replay.xml
+              python3 scripts/open_replay_from_ui.py
+              sleep 8
+              adb shell screencap -p /sdcard/tradelab-replay.png
+              adb pull /sdcard/tradelab-replay.png screenshots/tradelab-replay.png
+              adb shell uiautomator dump /sdcard/tradelab-replay-ui.xml
+              adb pull /sdcard/tradelab-replay-ui.xml screenshots/tradelab-replay-ui.xml
       - name: Install screenshot analysis dependency
         run: python3 -m pip install --user Pillow
       - name: Validate captured screen has real candlesticks
