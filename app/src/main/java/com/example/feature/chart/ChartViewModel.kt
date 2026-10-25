@@ -59,6 +59,7 @@ class ChartViewModel(
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
 
     private var candleLoadJob: Job? = null
+    private var olderHistoryJob: Job? = null
     private var tickJob: Job? = null
     private var klineRefreshJob: Job? = null
     private var klineStreamJob: Job? = null
@@ -118,7 +119,8 @@ class ChartViewModel(
         val interval = timeframe.minutes * 60_000L
         if (oldest < interval) return
         _uiState.update { it.copy(isLoadingOlderHistory = true, olderHistoryError = null) }
-        viewModelScope.launch {
+        olderHistoryJob?.cancel()
+        olderHistoryJob = viewModelScope.launch {
             try {
                 val pageEnd = oldest - interval
                 val pageFrom = (pageEnd - interval * 99L).coerceAtLeast(0L)
@@ -164,6 +166,7 @@ class ChartViewModel(
         // Prevent unsupported instruments from retaining a previous exchange quote.
         // The history loader will show an explicit unavailable-source message.
         candleLoadJob?.cancel()
+        olderHistoryJob?.cancel()
         tickJob?.cancel()
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
@@ -171,6 +174,7 @@ class ChartViewModel(
         _uiState.update {
             it.copy(
                 selectedSymbol = symbol, isLoading = true, candleLoadError = null,
+                isLoadingOlderHistory = false, olderHistoryError = null,
                 latestTick = null, candles = emptyList(),
                 openPositions = allPositions.filter { position -> position.symbol == symbol },
                 pendingOrders = allPendingOrders.filter { order -> order.symbol == symbol },
@@ -191,10 +195,12 @@ class ChartViewModel(
         // change the instrument and should not disconnect its live quote.
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
+        olderHistoryJob?.cancel()
         indicatorJob?.cancel()
         _uiState.update {
             it.copy(
                 selectedTimeframe = timeframe, isLoading = true, candleLoadError = null,
+                isLoadingOlderHistory = false, olderHistoryError = null,
                 candles = emptyList(), smaValues = emptyList(), emaValues = emptyList(),
                 bollingerValues = emptyList(), vwapValues = emptyList(),
                 rsiValues = emptyList(), macdValues = emptyList(), atrValues = emptyList(),
