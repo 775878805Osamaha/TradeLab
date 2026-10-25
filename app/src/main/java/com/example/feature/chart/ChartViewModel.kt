@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 data class ChartUiState(
-    val selectedSymbol: String = "BTCUSDT",
+    val selectedSymbol: String = "XAUUSD",
     val selectedTimeframe: Timeframe = Timeframe.M15,
     val candles: List<Candle> = emptyList(),
     val latestTick: Tick? = null,
