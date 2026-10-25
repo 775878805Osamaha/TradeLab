@@ -735,18 +735,21 @@ fun ChartScreen(
             }
             }
 
-            // Timeframe selection scrollable row (all 10 timeframes)
+            // Show the same supported intervals in the standard strip and immersive menu.
+            // Horizontal scrolling preserves legible tap targets on narrow phones.
             if (!immersiveChart) Row(
                 modifier = Modifier.fillMaxWidth().height(48.dp)
                     .background(TradingBackground)
+                    .horizontalScroll(rememberScrollState())
                     .testTag("chart_timeframe_strip"),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                listOf(Timeframe.M1, Timeframe.M5, Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
+                listOf(Timeframe.M1, Timeframe.M3, Timeframe.M5, Timeframe.M15,
+                    Timeframe.H1, Timeframe.H2, Timeframe.H4, Timeframe.D1, Timeframe.W1).forEach { tf ->
                     val selected = uiState.selectedTimeframe == tf
                     Column(
-                        modifier = Modifier.weight(1f).fillMaxHeight()
+                        modifier = Modifier.width(48.dp).fillMaxHeight()
                             .clickable { viewModel.selectTimeframe(tf) }
                             .testTag("tf_chip_${tf.code}"),
                         horizontalAlignment = Alignment.CenterHorizontally,
