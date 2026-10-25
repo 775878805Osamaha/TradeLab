@@ -122,8 +122,28 @@ class ChartViewModel(
             try {
                 val pageEnd = oldest - interval
                 val pageFrom = (pageEnd - interval * 99L).coerceAtLeast(0L)
-                val older = marketDataRepository.getCandles(symbol, timeframe, pageFrom, pageEnd)
-                val verified = CandleAggregator.aggregate(older, timeframe)
+                // A large provider window may be incomplete around holidays.
+                // Retry smaller aligned windows before reporting unavailable history.
+                var verified = emptyList<Candle>()
+                var lastPageFailure: Exception? = null
+                for (depth in listOf(100, 40, 10, 2)) {
+                    val candidateFrom = (pageEnd - interval * (depth - 1L)).coerceAtLeast(0L)
+                    try {
+                        val page = marketDataRepository.getCandles(
+                            symbol, timeframe, candidateFrom, pageEnd
+                        )
+                        val candidate = CandleAggregator.aggregate(page, timeframe)
+                        if (candidate.isNotEmpty()) {
+                            verified = candidate
+                            break
+                        }
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        lastPageFailure = error
+                    }
+                }
+                if (verified.isEmpty() && lastPageFailure != null) throw lastPageFailure
                 if (verified.any { it.symbol != symbol || it.timeframe != timeframe ||
                         it.openTime >= oldest }) {
                     throw IllegalStateException("Historical page contains mismatched or future candles")
