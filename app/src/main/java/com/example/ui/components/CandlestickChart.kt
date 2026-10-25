@@ -120,7 +120,10 @@ fun CandlestickChart(
 
     val transformRef = remember { arrayOfNulls<ChartTransform>(1) }
     var dragStartedInPlot by remember { mutableStateOf(false) }
-    LaunchedEffect(candles) { transformRef[0] = null }
+    // Keep the most recent coordinate transform available while Replay appends
+    // candles. The Canvas refreshes it on redraw; clearing it on every new
+    // candle makes onDragStart reject touches until that redraw completes.
+    // Explicit reset-view still clears the transform below.
     // Avoid creating a new visible OHLC list or scanning the entire history
     // during pan/zoom; range queries are served by the immutable price index.
     val priceRangeIndex = remember(candles) { ChartPriceRangeIndex(candles) }
