@@ -195,6 +195,19 @@ fun CandlestickChart(
     }
 
     var chartViewportWidthPx by remember { mutableFloatStateOf(600f) }
+    // Early Replay can have only a few revealed bars. The fixed 12px default
+    // leaves most of the canvas empty on phones; fit those bars on first load.
+    // Never override user zoom after the initial fit.
+    var initialCandleFitApplied by remember { mutableStateOf(false) }
+    LaunchedEffect(candles.size, chartViewportWidthPx) {
+        if (!initialCandleFitApplied && candles.isNotEmpty() && chartViewportWidthPx > 1f) {
+            if (candles.size <= 40) {
+                candleWidthPx = (chartViewportWidthPx * 0.76f / candles.size)
+                    .coerceIn(12f, 38f)
+            }
+            initialCandleFitApplied = true
+        }
+    }
     Box(modifier = modifier.onSizeChanged { chartViewportWidthPx = (it.width - 122f).coerceAtLeast(1f) }) {
         Canvas(
             modifier = Modifier
