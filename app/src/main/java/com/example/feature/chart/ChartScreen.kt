@@ -1179,7 +1179,7 @@ fun ChartScreen(
                                 detectDragGestures { change, dragAmount ->
                                     change.consume()
                                     val topInsetPx = with(paletteDensity) {
-                                        (if (isEmbeddedReplay) 124.dp else 66.dp).toPx()
+                                        (if (isEmbeddedReplay) 148.dp else 82.dp).toPx()
                                     }
                                     val maxOffset = (chartPaletteContainerHeightPx -
                                         drawingPaletteHeightPx - topInsetPx).coerceAtLeast(0f)
