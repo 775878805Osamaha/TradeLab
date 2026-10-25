@@ -1302,14 +1302,14 @@ fun ChartScreen(
                         replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
                         isEmbeddedReplay = true
                     },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp)
-                        .height(54.dp).testTag("chart_start_replay_trading"),
-                    shape = RoundedCornerShape(26.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp)
+                        .height(38.dp).testTag("chart_start_replay_trading"),
+                    shape = RoundedCornerShape(19.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = TradingAccent)
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("بدء إعادة الشارت والتداول", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("بدء Replay والتداول التجريبي", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
 
