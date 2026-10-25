@@ -1178,13 +1178,10 @@ fun ChartScreen(
                             .pointerInput(chartPaletteContainerHeightPx, chartPaletteContainerWidthPx, drawingPaletteHeightPx, drawingPaletteWidthPx, isEmbeddedReplay) {
                                 detectDragGestures { change, dragAmount ->
                                     change.consume()
-                                    val topInsetPx = with(paletteDensity) {
-                                        (if (isEmbeddedReplay) 148.dp else 82.dp).toPx()
-                                    }
-                                    val maxOffset = (chartPaletteContainerHeightPx -
-                                        drawingPaletteHeightPx - topInsetPx).coerceAtLeast(0f)
+                                    // Use the same bounds as the layout resize effect.
+                                    // This avoids stale or diverging limits after entering Replay.
                                     drawingPaletteOffsetPx =
-                                        (drawingPaletteOffsetPx + dragAmount.y).coerceIn(0f, maxOffset)
+                                        (drawingPaletteOffsetPx + dragAmount.y).coerceIn(0f, chartPaletteMaxYOffsetPx)
                                     // Same axis reserve used by resize clamping: 8dp left + 72dp price rail.
                                     drawingPaletteXOffsetPx =
                                         (drawingPaletteXOffsetPx + dragAmount.x).coerceIn(0f, chartPaletteMaxXOffsetPx)
