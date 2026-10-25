@@ -497,6 +497,7 @@ fun ChartScreen(
                             } else {
                                 replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
                                 isEmbeddedReplay = true
+                                immersiveChart = true
                             }
                         },
                         modifier = Modifier.testTag("chart_to_replay_btn")
@@ -913,6 +914,7 @@ fun ChartScreen(
                     onClick = {
                         replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
                         isEmbeddedReplay = true
+                                immersiveChart = true
                     },
                     modifier = Modifier
                         // Absolute alignment keeps the control on the physical right
@@ -1029,6 +1031,7 @@ fun ChartScreen(
                                 } else {
                                     replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
                                     isEmbeddedReplay = true
+                                immersiveChart = true
                                 }
                             },
                             modifier = Modifier.size(36.dp).testTag("chart_floating_replay")
