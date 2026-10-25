@@ -160,13 +160,19 @@ fun CandlestickChart(
         drawingCurrentOffset = null
     }
 
-    val transformableState = rememberTransformableState { zoomChange, _, _ ->
+    val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
         if (zoomChange.isFinite() && zoomChange > 0f) {
             candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
         }
-        // Transformable handles multi-touch zoom; single-finger panning is
-        // handled exclusively by detectDragGestures below to avoid double pan.
-        // Do not apply panChange here: two detectors may observe the same drag.
+        // Transformable consumes multi-touch transforms; detectDragGestures
+        // below handles one-finger dragging. Apply two-finger translation as
+        // well so the chart does not freeze while users pinch and reposition.
+        if (panChange.x.isFinite() && panChange.x != 0f) {
+            scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, panChange.x)
+        }
+        if (panChange.y.isFinite() && panChange.y != 0f) {
+            pricePanPx = (pricePanPx + panChange.y).coerceIn(-6000f, 6000f)
+        }
     }
 
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
