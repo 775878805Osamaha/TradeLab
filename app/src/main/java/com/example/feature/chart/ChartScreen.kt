@@ -95,6 +95,13 @@ fun ChartScreen(
     val chartPaletteMaxXOffsetPx = (chartPaletteContainerWidthPx - drawingPaletteWidthPx - with(paletteDensity) { 80.dp.toPx() }).coerceAtLeast(0f)
     LaunchedEffect(chartPaletteContainerHeightPx, drawingPaletteHeightPx, chartPaletteContainerWidthPx, drawingPaletteWidthPx, isEmbeddedReplay) {
         if (chartPaletteContainerHeightPx > 0 && drawingPaletteHeightPx > 0) {
+            // On small screens the full rail can exceed the available candle viewport.
+            // Collapse it instead of letting tools cover the price axis or order area.
+            // The collapse control remains available to expand it again manually.
+            if (!drawingPaletteCollapsed &&
+                drawingPaletteHeightPx > (chartPaletteContainerHeightPx - chartPaletteTopInsetPx)) {
+                drawingPaletteCollapsed = true
+            }
             drawingPaletteOffsetPx = drawingPaletteOffsetPx.coerceIn(0f, chartPaletteMaxYOffsetPx)
             drawingPaletteXOffsetPx = drawingPaletteXOffsetPx.coerceIn(0f, chartPaletteMaxXOffsetPx)
         }
