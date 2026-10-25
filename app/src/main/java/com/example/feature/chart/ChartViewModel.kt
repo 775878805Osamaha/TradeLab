@@ -123,17 +123,38 @@ class ChartViewModel(
         olderHistoryJob = viewModelScope.launch {
             try {
                 val pageEnd = oldest - interval
-                val pageFrom = (pageEnd - interval * 99L).coerceAtLeast(0L)
-                val older = marketDataRepository.getCandles(symbol, timeframe, pageFrom, pageEnd)
-                val verified = CandleAggregator.aggregate(older, timeframe)
-                if (verified.any { it.symbol != symbol || it.timeframe != timeframe ||
+                // Market sessions are sparse; try bounded smaller pages when
+                // the provider cannot satisfy the entire 100-bar window.
+                // Every candidate remains sourced and verified; never fill gaps.
+                var verified: List<Candle>? = null
+                var lastFailure: Exception? = null
+                for (bars in listOf(100L, 40L, 10L, 1L)) {
+                    val start = (pageEnd - interval * (bars - 1L)).coerceAtLeast(0L)
+                    try {
+                        val older = marketDataRepository.getCandles(
+                            symbol, timeframe, start, pageEnd
+                        )
+                        val candidate = CandleAggregator.aggregate(older, timeframe)
+                        if (candidate.isNotEmpty()) {
+                            verified = candidate
+                            break
+                        }
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        lastFailure = error
+                    }
+                }
+                val confirmed = verified ?: throw (lastFailure
+                    ?: java.io.IOException("No verified older candles available"))
+                if (confirmed.any { it.symbol != symbol || it.timeframe != timeframe ||
                         it.openTime >= oldest }) {
                     throw IllegalStateException("Historical page contains mismatched or future candles")
                 }
                 if (_uiState.value.selectedSymbol != symbol ||
                     _uiState.value.selectedTimeframe != timeframe) return@launch
                 val existing = _uiState.value.candles
-                val merged = (verified + existing).distinctBy { it.openTime }
+                val merged = (confirmed + existing).distinctBy { it.openTime }
                     .sortedBy { it.openTime }.takeLast(20_000)
                 _uiState.update {
                     it.copy(candles = merged, isLoadingOlderHistory = false,
