@@ -170,7 +170,7 @@ class ChartViewModel(
                 for (window in 0L until windowsToScan) {
                     val end = pageEnd - window * interval * 100L
                     if (end < 0L) break
-                    for (bars in if (window == 0L) listOf(100L, 40L, 10L, 1L) else listOf(100L, 1L)) {
+                    for (bars in listOf(100L, 40L, 10L, 1L)) {
                         // Each page spans exactly 100 candle slots. When a
                         // smaller retry succeeds, the missing older portion
                         // remains discoverable on the next backward request.
