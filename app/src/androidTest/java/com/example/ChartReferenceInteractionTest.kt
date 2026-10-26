@@ -200,6 +200,7 @@ class ChartReferenceInteractionTest {
         compose.waitUntil(30000) { compose.onAllNodesWithTag("symbol_card_XAUUSD").fetchSemanticsNodes().isNotEmpty() }
         captureProviderScreen("tradelab-market-terminal")
         compose.onNodeWithTag("market_search_input").performTextInput("xauusd")
+        compose.waitUntil(5000) { compose.onAllNodesWithTag("symbol_card_BTCUSDT").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithTag("symbol_card_XAUUSD").assertExists()
         compose.onNodeWithTag("symbol_card_BTCUSDT").assertDoesNotExist()
         compose.onNodeWithTag("symbol_card_XAUUSD").performClick()
