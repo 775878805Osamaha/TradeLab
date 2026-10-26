@@ -429,7 +429,8 @@ fun ChartScreen(
 
     Scaffold(
         modifier = modifier.testTag("chart_screen"),
-        containerColor = Color(0xFF020F18),
+        containerColor = Color(0xFF000D16),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (!immersiveChart) TopAppBar(
@@ -935,6 +936,7 @@ fun ChartScreen(
                     },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) },
                     onRequestOlderHistory = if (isEmbeddedReplay) null else ({ viewModel.loadOlderChartHistory() }),
+                    referenceLayout = true,
                     bullishColor = Color(0xFF00B7AA),
                     bearishColor = Color(0xFFFF3D48),
                     isLoadingOlderHistory = uiState.isLoadingOlderHistory
@@ -943,7 +945,7 @@ fun ChartScreen(
 
                 // Historical paging remains available even in immersive mode.
                 // It does not replace the chart or navigate away from it.
-                if (!isEmbeddedReplay && uiState.candles.isNotEmpty()) {
+                if (!immersiveChart && !isEmbeddedReplay && uiState.candles.isNotEmpty()) {
                     Column(
                         modifier = Modifier.align(Alignment.TopStart)
                             .padding(start = 12.dp, top = 58.dp),
@@ -973,7 +975,7 @@ fun ChartScreen(
                 // Overlay the entry control on the chart instead of reserving a
                 // separate row below the candle viewport. Historical prices
                 // remain replay-only and never execute as live orders.
-                if (!isEmbeddedReplay && uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
+                if (!immersiveChart && !isEmbeddedReplay && uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
                 Button(
                     onClick = {
                         replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
@@ -998,8 +1000,20 @@ fun ChartScreen(
 
                 // Selectors live exclusively in the bottom strip in the default layout.
                 if (immersiveChart) {
+                    val headerBars = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
+                    val lastClose = headerBars.lastOrNull()?.close
+                    val priorClose = headerBars.getOrNull(headerBars.lastIndex - 1)?.close
+                    val delta = if (lastClose != null && priorClose != null && priorClose > 0.0)
+                        lastClose - priorClose else null
+                    Text(
+                        text = if (delta != null) String.format(Locale.US, "%+.2f (%+.2f%%)", delta, delta / priorClose!! * 100.0) else "—",
+                        color = if (delta != null && delta < 0.0) TradingNegative else Color(0xFF00B7AA),
+                        fontSize = 11.sp,
+                        style = TextStyle(textDirection = TextDirection.Ltr),
+                        modifier = Modifier.align(AbsoluteAlignment.TopLeft).padding(start = 8.dp, top = 12.dp)
+                    )
                     Row(
-                        Modifier.align(Alignment.TopEnd).padding(8.dp),
+                        Modifier.align(AbsoluteAlignment.TopRight).padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(32.dp)) {
@@ -1171,15 +1185,15 @@ fun ChartScreen(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     val referenceTools = listOf(
-                        Triple("مؤشر\nمتقاطع", Icons.Default.FilterCenterFocus, 0),
-                        Triple("خط اتجاه", Icons.Default.Timeline, 1),
-                        Triple("مستوى أفقي", Icons.Default.HorizontalRule, 2),
-                        Triple("فيبوناتشي", Icons.Default.AutoGraph, 3),
-                        Triple("أشكال", Icons.Default.Category, 4),
-                        Triple("تعليق", Icons.Default.Edit, 5),
-                        Triple("مستطيل", Icons.Default.CropSquare, 6),
-                        Triple("دائرة", Icons.Default.RadioButtonUnchecked, 7),
-                        Triple("مغناطيس", Icons.Default.Assistant, 8)
+                        Triple("مؤشر\nمتقاطع", ReferenceChartIcons.Crosshair, 0),
+                        Triple("خط اتجاه", ReferenceChartIcons.Trend, 1),
+                        Triple("مستوى أفقي", ReferenceChartIcons.Horizontal, 2),
+                        Triple("فيبوناتشي", ReferenceChartIcons.Fibonacci, 3),
+                        Triple("أشكال", ReferenceChartIcons.Shapes, 4),
+                        Triple("تعليق", ReferenceChartIcons.Pencil, 5),
+                        Triple("مستطيل", ReferenceChartIcons.Rectangle, 6),
+                        Triple("دائرة", ReferenceChartIcons.Circle, 7),
+                        Triple("مغناطيس", ReferenceChartIcons.Magnet, 8)
                     )
                     // Dedicated drag handle: tool buttons remain tappable without gesture conflicts.
                     Box(
@@ -1252,7 +1266,7 @@ fun ChartScreen(
                                 fontSize = 9.sp,
                                 lineHeight = 11.sp,
                                 textAlign = TextAlign.Center,
-                                color = if (selected) TradingAccentLight else TradingTextSecondary,
+                                color = if (selected) TradingAccentLight else TradingTextPrimary,
                                 modifier = Modifier.width(44.dp)
                                     .background(TradingBackground.copy(alpha = 0.80f), RoundedCornerShape(6.dp))
                             )

@@ -75,6 +75,7 @@ fun CandlestickChart(
     onAddDrawing: ((ChartDrawing) -> Unit)? = null,
     onSelectTrade: ((TradeJournalEntry) -> Unit)? = null,
     onRequestOlderHistory: (() -> Unit)? = null,
+    referenceLayout: Boolean = false,
     bullishColor: Color = TradingPositive,
     bearishColor: Color = TradingNegative,
     isLoadingOlderHistory: Boolean = false
@@ -267,12 +268,13 @@ fun CandlestickChart(
     LaunchedEffect(resetViewTrigger) {
         if (resetViewTrigger > 0L) initialCandleFitApplied = false
     }
-    LaunchedEffect(candles.size, chartViewportWidthPx) {
+    LaunchedEffect(candles.size, chartViewportWidthPx, initialCandleFitApplied) {
         if (!initialCandleFitApplied && candles.isNotEmpty() && chartViewportWidthPx > 1f) {
             if (candles.size <= 40) {
                 candleWidthPx = (chartViewportWidthPx * 0.76f / candles.size)
                     .coerceIn(12f, 38f)
             }
+            if (referenceLayout) scrollOffsetPx = -chartViewportWidthPx * 0.18f
             initialCandleFitApplied = true
         }
     }
@@ -392,7 +394,7 @@ fun CandlestickChart(
             // Subpanel height split
             val hasSubpanel = indicatorSettings.hasSubpanelIndicators
             val subpanelHeight = if (hasSubpanel) height * 0.22f else 0f
-            val volumeHeight = if (isVolumeVisible) height * 0.14f else 0f
+            val volumeHeight = if (isVolumeVisible) height * (if (referenceLayout) 0.10f else 0.14f) else 0f
             val mainChartHeight = (height - subpanelHeight - volumeHeight).coerceAtLeast(10f)
 
             // Shared, independently testable viewport calculation.
@@ -423,7 +425,7 @@ fun CandlestickChart(
             // Add 3% vertical padding
             val pPadding = (maxP - minP) * 0.055
             val autoMin = minP - pPadding
-            val autoMax = maxP + pPadding
+            val autoMax = maxP + if (referenceLayout) (maxP - minP) * 0.45 else pPadding
             val midpoint = (autoMin + autoMax) / 2.0
             val halfRange = ((autoMax - autoMin) / 2.0) * manualPriceScale
             val pricePanDelta = (pricePanPx / mainChartHeight.coerceAtLeast(1f)) * (halfRange * 2.0)
@@ -452,9 +454,10 @@ fun CandlestickChart(
             }
 
             // Pure price-axis engine keeps levels consistent across redraws and zooms.
-            val priceScale = ChartPriceAxis.calculate(paddedMin, paddedMax, mainChartHeight)
+            val priceScale = ChartPriceAxis.calculate(paddedMin, paddedMax, mainChartHeight, 48.dp.toPx())
             for (tick in priceScale.ticks) {
                 val y = tick.fractionFromTop * mainChartHeight
+                val axisLabel = String.format(Locale.US, "%,.${maxOf(priceScale.decimals, com.example.ui.components.chart.QuotePriceFormatter.decimals(tick.price))}f", tick.price)
                 drawLine(
                     color = TradingBorder.copy(alpha = 0.3f),
                     start = Offset(0f, y),
@@ -465,13 +468,13 @@ fun CandlestickChart(
                     val labelY = (y + priceAxisPaint.textSize * 0.35f)
                         .coerceIn(priceAxisPaint.textSize, height - 8f)
                     val availableLabelWidth = (rightAxisWidth - 14f).coerceAtLeast(20f)
-                    val measuredWidth = priceAxisPaint.measureText(tick.label)
+                    val measuredWidth = priceAxisPaint.measureText(axisLabel)
                     val originalSize = priceAxisPaint.textSize
                     if (measuredWidth > availableLabelWidth) {
                         priceAxisPaint.textSize = (originalSize * availableLabelWidth / measuredWidth)
                             .coerceAtLeast(14f)
                     }
-                    drawText(tick.label, chartWidth + 7f, labelY, priceAxisPaint)
+                    drawText(axisLabel, chartWidth + 7f, labelY, priceAxisPaint)
                     priceAxisPaint.textSize = originalSize
                 }
             }
@@ -678,7 +681,7 @@ fun CandlestickChart(
         // Vertical price-axis scaling; reset-view restores automatic fitting.
         Box(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
+                .align(androidx.compose.ui.AbsoluteAlignment.CenterRight)
                 .width(38.dp)
                 .fillMaxHeight()
                 .testTag("chart_price_axis_scale")
