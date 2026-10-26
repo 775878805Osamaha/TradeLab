@@ -21,7 +21,7 @@ object DrawingHitTest {
             DrawingTool.EXTENDED_LINE -> segment(a,b,1)
             DrawingTool.RAY -> segment(a,b,2)
             DrawingTool.RECTANGLE -> listOf(a,Offset(b.x,a.y),b,Offset(a.x,b.y),a).zipWithNext().minOf{segment(it.first,it.second)}
-            DrawingTool.ELLIPSE -> {
+            DrawingTool.CIRCLE, DrawingTool.ELLIPSE -> {
                 val center=(a+b)/2f;val radiusX=abs(b.x-a.x)/2f;val radiusY=abs(b.y-a.y)/2f
                 if(radiusX<1f||radiusY<1f)segment(a,b) else abs(sqrt(((point.x-center.x)/radiusX).pow(2)+((point.y-center.y)/radiusY).pow(2))-1f)*min(radiusX,radiusY)
             }

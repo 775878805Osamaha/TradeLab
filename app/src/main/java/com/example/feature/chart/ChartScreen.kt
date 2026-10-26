@@ -90,6 +90,17 @@ fun ChartScreen(
             isEmbeddedReplay = true
         }
     }
+    var pendingImageDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
+    val imageContext = androidx.compose.ui.platform.LocalContext.current
+    val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        val drawing = pendingImageDrawing
+        pendingImageDrawing = null
+        if(uri != null && drawing != null && drawing.symbol == uiState.selectedSymbol && drawing.timeframe == uiState.selectedTimeframe.code) {
+            runCatching { imageContext.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                .onSuccess { viewModel.addDrawing(drawing.copy(text=uri.toString())) }
+                .onFailure { android.widget.Toast.makeText(imageContext,"تعذر الاحتفاظ بإذن قراءة الصورة",android.widget.Toast.LENGTH_SHORT).show() }
+        }
+    }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var symbolSearchQuery by remember { mutableStateOf("") }
     var symbolCategoryFilter by remember { mutableStateOf("الكل") }
@@ -109,7 +120,7 @@ fun ChartScreen(
         }
     }
     val drawingPrefs = androidx.compose.ui.platform.LocalContext.current.getSharedPreferences("drawing_catalog", android.content.Context.MODE_PRIVATE)
-    val defaultDrawingFavorites = setOf("INFO_LINE", "HORIZONTAL_LINE", "TRENDLINE", "HORIZONTAL_RAY", "EXTENDED_LINE", "FIBONACCI", "LONG_POSITION", "SHORT_POSITION", "RECTANGLE", "ELLIPSE", "PATH")
+    val defaultDrawingFavorites = setOf("INFO_LINE", "HORIZONTAL_LINE", "TRENDLINE", "HORIZONTAL_RAY", "EXTENDED_LINE", "FIBONACCI", "LONG_POSITION", "SHORT_POSITION", "RECTANGLE", "CIRCLE", "PATH", "VOLUME_PROFILE_FIXED")
     var drawingFavorites by remember { mutableStateOf(drawingPrefs.getStringSet("favorites", defaultDrawingFavorites)?.toSet() ?: defaultDrawingFavorites) }
     var drawingFavoritesVisible by remember { mutableStateOf(drawingPrefs.getBoolean("show_favorites", false)) }
     var editingDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
@@ -447,7 +458,7 @@ fun ChartScreen(
     pendingAnnotation?.let { drawing ->
         AlertDialog(onDismissRequest = { pendingAnnotation = null },
             title = { Text("تعليق على الشارت") },
-            text = { OutlinedTextField(annotationText, { annotationText = it }, singleLine = true) },
+            text = { OutlinedTextField(annotationText, { annotationText = it }, singleLine = drawing.tool != DrawingTool.TABLE, label = { Text(if (drawing.tool == DrawingTool.TABLE) "الأعمدة تفصلها | والصفوف سطور" else "النص") }) },
             confirmButton = { TextButton(enabled = annotationText.isNotBlank(), onClick = {
                 viewModel.addDrawing(drawing.copy(text = annotationText.trim().take(160)))
                 pendingAnnotation = null
@@ -959,7 +970,14 @@ fun ChartScreen(
                     resetViewTrigger = uiState.resetViewTrigger,
                     displayStyle = chartDisplayStyle,
                     onAddDrawing = {
-                        if (it.tool.isTextTool) {
+                        if (it.tool == DrawingTool.IMAGE) {
+                            if(uiState.drawings.count { d -> d.tool == DrawingTool.IMAGE } >= 16)
+                                android.widget.Toast.makeText(imageContext,"الحد الأقصى 16 صورة لكل شارت",android.widget.Toast.LENGTH_SHORT).show()
+                            else {
+                                pendingImageDrawing = it.copy(symbol=uiState.selectedSymbol,timeframe=uiState.selectedTimeframe.code)
+                                imagePicker.launch(arrayOf("image/*"))
+                            }
+                        } else if (it.tool.isTextTool) {
                             annotationText = ""
                             pendingAnnotation = it
                         } else viewModel.addDrawing(it)

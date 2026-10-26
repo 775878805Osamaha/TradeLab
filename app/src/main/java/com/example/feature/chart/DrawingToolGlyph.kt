@@ -22,6 +22,17 @@ internal fun DrawingToolGlyph(tool: DrawingTool, color: Color, modifier: Modifie
         fun dot(x: Float, y: Float) { drawCircle(Color(0xFFF2F2F2), 2.7f*u, p(x,y)); drawCircle(color, 2.7f*u, p(x,y), style = Stroke(w)) }
         fun path(vararg points: Pair<Float,Float>) { val path = Path(); points.forEachIndexed { i, v -> if(i==0) path.moveTo(v.first*u,v.second*u) else path.lineTo(v.first*u,v.second*u) }; drawPath(path,color,style=Stroke(w)) }
         when {
+            tool == DrawingTool.TABLE -> {drawRect(color,p(5f,6f),Size(30*u,28*u),style=Stroke(w));for(v in listOf(15f,25f))line(v,6f,v,34f);for(v in listOf(15f,24f))line(5f,v,35f,v)}
+            tool == DrawingTool.IMAGE -> {drawRect(color,p(5f,5f),Size(30*u,30*u),style=Stroke(w));path(7f to 30f,16f to 20f,22f to 26f,28f to 17f,34f to 28f);dot(14f,13f)}
+            tool == DrawingTool.VOLUME_PROFILE_FIXED || tool == DrawingTool.VOLUME_PROFILE_SESSION -> {
+                line(9f,4f,9f,36f);line(34f,6f,34f,36f);dot(9f,36f);dot(34f,6f)
+                for((y,x) in listOf(11f to 19f,18f to 27f,25f to 22f)) {line(9f,y,x,y);line(x,y,x,y+4f);line(x,y+4f,9f,y+4f)}
+            }
+            tool == DrawingTool.CYCLES -> {for(x in listOf(9f,20f,31f)){line(x,4f,x,36f);dot(x,21f)}}
+            tool == DrawingTool.BARS_PATTERN || tool == DrawingTool.GHOST_FEED || tool == DrawingTool.FORECAST -> {
+                for((x,y) in listOf(9f to 18f,20f to 10f,31f to 15f)){line(x,y-5f,x,y+18f);drawRect(color,p(x-3,y),Size(6*u,11*u),style=Stroke(w))}
+                if(tool==DrawingTool.FORECAST){line(35f,2f,35f,10f);line(32f,7f,35f,10f);line(35f,10f,38f,7f)}
+            }
             tool.isTextTool -> { line(9f,8f,31f,8f); line(20f,8f,20f,32f); line(14f,32f,26f,32f)
                 if (tool != DrawingTool.TEXT) drawRect(color,p(5f,3f),Size(30*u,34*u),style=Stroke(w)) }
             tool in setOf(DrawingTool.HORIZONTAL_LINE, DrawingTool.HORIZONTAL_RAY) -> { line(4f,20f,36f,20f); dot(if(tool==DrawingTool.HORIZONTAL_RAY) 7f else 20f,20f) }
@@ -39,17 +50,19 @@ internal fun DrawingToolGlyph(tool: DrawingTool, color: Color, modifier: Modifie
                 if(tool==DrawingTool.RECTANGLE) {drawRect(color,p(7f,7f),Size(26*u,26*u),style=Stroke(w)); for(v in listOf(7f to 7f,33f to 7f,33f to 33f,7f to 33f))dot(v.first,v.second)}
                 else {path(8f to 23f,25f to 5f,35f to 17f,18f to 35f,8f to 23f);dot(8f,23f);dot(25f,5f);dot(35f,17f);dot(18f,35f)}
             }
-            tool == DrawingTool.ELLIPSE -> {drawOval(color,p(5f,7f),Size(30*u,27*u),style=Stroke(w));dot(35f,20f)}
+            tool == DrawingTool.ELLIPSE || tool == DrawingTool.CIRCLE -> {drawOval(color,p(5f,if(tool==DrawingTool.CIRCLE)5f else 10f),Size(30*u,if(tool==DrawingTool.CIRCLE)30*u else 20*u),style=Stroke(w));dot(35f,20f)}
             tool == DrawingTool.TRIANGLE -> {path(7f to 5f,7f to 34f,34f to 34f,7f to 5f);dot(7f,5f);dot(7f,34f);dot(34f,34f)}
             tool == DrawingTool.BRUSH || tool == DrawingTool.HIGHLIGHTER -> {path(8f to 29f,11f to 20f,29f to 3f,36f to 10f,18f to 28f,8f to 29f); path(5f to 33f,13f to 36f,23f to 32f,30f to 35f,37f to 29f)}
+            tool == DrawingTool.DOUBLE_CURVE -> {val a=Path().apply{moveTo(8*u,35*u);quadraticBezierTo(35*u,35*u,20*u,20*u);quadraticBezierTo(3*u,5*u,32*u,5*u)};drawPath(a,color,style=Stroke(w));dot(8f,35f);dot(32f,5f)}
             tool == DrawingTool.CURVE || tool == DrawingTool.ARC -> {val a=Path().apply{moveTo(6*u,33*u);cubicTo(7*u,7*u,29*u,7*u,34*u,7*u)};drawPath(a,color,style=Stroke(w));dot(6f,33f);dot(34f,7f)}
+            tool == DrawingTool.ARROW_MARKER -> {path(5f to 35f,16f to 14f,25f to 9f,24f to 5f,35f to 5f,32f to 17f,29f to 13f,21f to 23f,5f to 35f)}
             tool == DrawingTool.ARROW_UP || tool == DrawingTool.ARROW_DOWN -> {
                 val a=if(tool==DrawingTool.ARROW_UP) 1f else -1f
                 fun yy(y:Float)=20f+(y-20f)*a
                 path(20f to yy(4f),7f to yy(19f),15f to yy(19f),15f to yy(35f),25f to yy(35f),25f to yy(19f),33f to yy(19f),20f to yy(4f))
             }
             tool == DrawingTool.PRICE_LABEL || tool == DrawingTool.PIN || tool == DrawingTool.FLAG -> {drawRect(color,p(8f,5f),Size(25*u,19*u),style=Stroke(w));line(8f,24f,8f,35f);dot(8f,35f);line(15f,11f,26f,11f);line(15f,17f,26f,17f)}
-            tool in setOf(DrawingTool.ABCD,DrawingTool.XABCD,DrawingTool.HEAD_SHOULDERS,DrawingTool.ELLIOTT_IMPULSE,DrawingTool.ELLIOTT_CORRECTION,DrawingTool.POLYLINE,DrawingTool.PATH,DrawingTool.ANCHORED_VWAP) -> {
+            tool in setOf(DrawingTool.CYPHER,DrawingTool.TRIANGLE_PATTERN,DrawingTool.THREE_DRIVES,DrawingTool.ELLIOTT_TRIANGLE,DrawingTool.ELLIOTT_DOUBLE,DrawingTool.ELLIOTT_TRIPLE,DrawingTool.ABCD,DrawingTool.XABCD,DrawingTool.HEAD_SHOULDERS,DrawingTool.ELLIOTT_IMPULSE,DrawingTool.ELLIOTT_CORRECTION,DrawingTool.POLYLINE,DrawingTool.PATH,DrawingTool.ANCHORED_VWAP) -> {
                 val pts=listOf(5f to 32f,12f to 9f,21f to 25f,28f to 7f,36f to 18f);path(*pts.toTypedArray());pts.forEach{dot(it.first,it.second)}
             }
             tool == DrawingTool.PARALLEL_CHANNEL -> {line(4f,29f,29f,4f);line(11f,36f,36f,11f);dot(4f,29f);dot(29f,4f);dot(36f,11f)}

@@ -56,4 +56,11 @@ class DrawingCatalogMathTests {
         assertEquals(0f,DrawingHitTest.distance(text,t,androidx.compose.ui.geometry.Offset(75f,375f)),.001f)
     }
 
+    @Test fun volumeProfileConservesOnlyActualInRangePositiveVolume() {
+        val bars=listOf(candle(900000,10.0,2.0),candle(1800000,20.0,6.0),candle(2700000,30.0,12.0))
+        val bins=CandleVolumeProfile.calculate(bars,900000,1800000,4)
+        assertEquals(8.0,bins.sumOf{it.volume},.000001)
+        assertTrue(CandleVolumeProfile.calculate(listOf(candle(900000,10.0,0.0)),900000,1800000).isEmpty())
+    }
+
 }

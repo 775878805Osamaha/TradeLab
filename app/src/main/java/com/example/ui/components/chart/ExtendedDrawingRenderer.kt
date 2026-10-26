@@ -10,7 +10,7 @@ import java.util.Locale
 
 /** Drawings use time/price anchors; every transform follows the current viewport. */
 internal object ExtendedDrawingRenderer {
-    fun draw(scope: DrawScope, d: ChartDrawing, t: ChartTransform, history: List<com.example.core.model.Candle>, vwaps: Map<Long,List<VwapPoint>>) = with(scope) {
+    fun draw(scope: DrawScope, d: ChartDrawing, t: ChartTransform, history: List<com.example.core.model.Candle>, vwaps: Map<Long,List<VwapPoint>>, images: Map<Long,ImageBitmap?>, profiles: Map<Long,List<CandleVolumeProfile.Bin>>) = with(scope) {
         val first = if(d.tool == DrawingTool.ANCHORED_TEXT && d.screenX != null && d.screenY != null)
             Offset(d.screenX*t.chartWidth,d.screenY*t.chartHeight)
             else Offset(t.timeToX(d.startTime) ?: return@with, t.priceToY(d.startPrice))
@@ -41,6 +41,56 @@ internal object ExtendedDrawingRenderer {
                 else {val start=if(d.tool==DrawingTool.RAY) first else Offset(0f,first.y-first.x*dy/dx);val x=if(dx>=0 || d.tool==DrawingTool.EXTENDED_LINE)t.chartWidth else 0f;line(start,Offset(x,first.y+(x-first.x)*dy/dx))}
             }
             DrawingTool.ARROW -> arrow(first,last)
+            DrawingTool.ARROW_MARKER -> {
+                val delta=last-first;val length=delta.getDistance().coerceAtLeast(1f);val unit=delta/length;val perpendicular=Offset(-unit.y,unit.x)
+                val shaft=4*density;val head=12*density;val neck=last-unit*min(22*density,length*.5f)
+                polygon(listOf(first+perpendicular*shaft,neck+perpendicular*shaft,neck+perpendicular*head,last,neck-perpendicular*head,neck-perpendicular*shaft,first-perpendicular*shaft),true,true)
+            }
+            DrawingTool.CIRCLE -> drawCircle(c,min(abs(last.x-first.x),abs(last.y-first.y))/2,(first+last)/2f,style=Stroke(w))
+            DrawingTool.DOUBLE_CURVE -> if(points.size>=5) {
+                val path=Path().apply{moveTo(points[0].x,points[0].y);quadraticBezierTo(points[1].x,points[1].y,points[2].x,points[2].y);quadraticBezierTo(points[3].x,points[3].y,points[4].x,points[4].y)}
+                drawPath(path,c,style=Stroke(w))
+            }
+            DrawingTool.CYCLES -> {
+                val interval=abs(last.x-first.x).coerceAtLeast(10*density)
+                var x=first.x%interval
+                while(x<t.chartWidth) {line(Offset(x,0f),Offset(x,t.chartHeight),c.copy(alpha=.55f));x+=interval}
+            }
+            DrawingTool.FORECAST -> {arrow(first,last);text("توقع يدوي",last+Offset(0f,-8*density))}
+            DrawingTool.PROJECTION -> if(points.size>=3) {polygon(points);arrow(points[1],points[2]);text("إسقاط يدوي",points[2])}
+            DrawingTool.BARS_PATTERN,DrawingTool.GHOST_FEED -> {
+                val bars=history.filter { it.openTime in minOf(d.startTime,d.endTime?:d.startTime)..maxOf(d.startTime,d.endTime?:d.startTime) }.takeLast(100)
+                if(bars.isNotEmpty()) {
+                    val high=bars.maxOf{it.high};val low=bars.minOf{it.low};val span=(high-low).coerceAtLeast(.0000001)
+                    val left=min(first.x,last.x);val top=min(first.y,last.y);val width=abs(last.x-first.x).coerceAtLeast(30*density);val height=abs(last.y-first.y).coerceAtLeast(40*density)
+                    fun y(v:Double)=top+((high-v)/span*height).toFloat()
+                    bars.forEachIndexed { index,bar -> val x=left+(index+.5f)*width/bars.size;val alpha=if(d.tool==DrawingTool.GHOST_FEED).4f else .9f
+                        drawLine(c.copy(alpha=alpha),Offset(x,y(bar.high)),Offset(x,y(bar.low)),w)
+                        drawLine(c.copy(alpha=alpha),Offset(x,y(bar.open)),Offset(x,y(bar.close)),(width/bars.size*.65f).coerceAtLeast(w))
+                    }
+                    text("نسخة مرئية من نمط تاريخي",Offset(left,top-7*density))
+                }
+            }
+            DrawingTool.VOLUME_PROFILE_FIXED,DrawingTool.VOLUME_PROFILE_SESSION -> {
+                val bins=profiles[d.id] ?: CandleVolumeProfile.forDrawing(history,d)
+                val max=bins.maxOfOrNull{it.volume}?:0.0
+                if(max>0) bins.forEach { bin ->
+                    val y=t.priceToY(bin.price);drawLine(c.copy(alpha=.6f),Offset(first.x,y),Offset(first.x+(bin.volume/max*65*density).toFloat(),y),4*density)
+                }
+                text(if(max>0) "حجم الشموع عند الإغلاق · تقديري" + if(d.tool==DrawingTool.VOLUME_PROFILE_SESSION) " UTC" else "" else "لا توجد أحجام متاحة للبروفايل",first-Offset(0f,8*density))
+            }
+            DrawingTool.TABLE -> {
+                val rows=d.text.lines().take(20).map{it.split('|').take(8)};val columns=rows.maxOfOrNull{it.size}?:1
+                val cellW=65*density;val cellH=20*density
+                rows.forEachIndexed{r,row->row.forEachIndexed{k,value->text(value,first+Offset(k*cellW+3*density,(r+1)*cellH-5*density))}}
+                for(r in 0..rows.size)line(first+Offset(0f,r*cellH),first+Offset(columns*cellW,r*cellH))
+                for(k in 0..columns)line(first+Offset(k*cellW,0f),first+Offset(k*cellW,rows.size*cellH))
+            }
+            DrawingTool.IMAGE -> {
+                val bitmap=images[d.id]
+                if(bitmap!=null)drawImage(bitmap,srcOffset=androidx.compose.ui.unit.IntOffset.Zero,srcSize=androidx.compose.ui.unit.IntSize(bitmap.width,bitmap.height),dstOffset=androidx.compose.ui.unit.IntOffset(first.x.toInt(),first.y.toInt()),dstSize=androidx.compose.ui.unit.IntSize((100*density).toInt(),(100*density*bitmap.height/bitmap.width).toInt()))
+                else text(if(images.containsKey(d.id)) "الصورة غير متاحة" else "تحميل الصورة…",first)
+            }
             DrawingTool.INFO_LINE -> {line(first,last); val m=MeasurementCalculator.calculate(d.startPrice,d.endPrice?:d.startPrice,d.startTime,d.endTime?:d.startTime);text("${price(m.priceDiff)} (${String.format(Locale.US,"%.2f",m.percentDiff)}%) · ${m.durationFormatted}",last)}
             DrawingTool.BRUSH,DrawingTool.HIGHLIGHTER,DrawingTool.PATH,DrawingTool.POLYLINE -> polygon(points)
             DrawingTool.TRIANGLE -> if(points.size>=3)polygon(points,true,true)
@@ -84,18 +134,18 @@ internal object ExtendedDrawingRenderer {
                 }
                 text(if(series.isNotEmpty())"VWAP" else "VWAP: لا توجد أحجام متاحة",first)
             }
-            DrawingTool.ABCD,DrawingTool.XABCD,DrawingTool.HEAD_SHOULDERS,DrawingTool.ELLIOTT_IMPULSE,DrawingTool.ELLIOTT_CORRECTION -> {
+            DrawingTool.CYPHER,DrawingTool.TRIANGLE_PATTERN,DrawingTool.THREE_DRIVES,DrawingTool.ELLIOTT_TRIANGLE,DrawingTool.ELLIOTT_DOUBLE,DrawingTool.ELLIOTT_TRIPLE,DrawingTool.ABCD,DrawingTool.XABCD,DrawingTool.HEAD_SHOULDERS,DrawingTool.ELLIOTT_IMPULSE,DrawingTool.ELLIOTT_CORRECTION -> {
                 polygon(points)
-                val labels=when(d.tool){DrawingTool.ABCD->listOf("A","B","C","D");DrawingTool.XABCD->listOf("X","A","B","C","D");DrawingTool.ELLIOTT_IMPULSE->listOf("0","1","2","3","4","5");DrawingTool.ELLIOTT_CORRECTION->listOf("0","A","B","C");else->listOf("L","LS","N","H","N","RS","R")}
+                val labels=when(d.tool){DrawingTool.ABCD->listOf("A","B","C","D");DrawingTool.CYPHER,DrawingTool.XABCD->listOf("X","A","B","C","D");DrawingTool.TRIANGLE_PATTERN->listOf("A","B","C","D","E");DrawingTool.THREE_DRIVES->listOf("0","1","A","2","B","3","C");DrawingTool.ELLIOTT_TRIANGLE->listOf("0","A","B","C","D","E");DrawingTool.ELLIOTT_DOUBLE->listOf("0","W","A","X","B","Y","C");DrawingTool.ELLIOTT_TRIPLE->listOf("0","W","A","X","B","Y","C","X","Z");DrawingTool.ELLIOTT_IMPULSE->listOf("0","1","2","3","4","5");DrawingTool.ELLIOTT_CORRECTION->listOf("0","A","B","C");else->listOf("L","LS","N","H","N","RS","R")}
                 points.forEachIndexed{i,p->drawCircle(c,3*density,p);text(labels.getOrElse(i){""},p+Offset(3*density,-7*density))}
             }
             DrawingTool.ARROW_UP,DrawingTool.ARROW_DOWN -> {val sign=if(d.tool==DrawingTool.ARROW_UP) -1 else 1;arrow(first+Offset(0f,-sign*22*density),first)}
             DrawingTool.PRICE_LABEL -> text(price(d.startPrice),first)
             DrawingTool.FLAG -> {line(first,first-Offset(0f,24*density));polygon(listOf(first-Offset(0f,24*density),first+Offset(20*density,-17*density),first-Offset(0f,10*density)),true,true)}
             DrawingTool.PIN -> {drawCircle(c,7*density,first-Offset(0f,9*density),style=Stroke(w));line(first,first-Offset(0f,2*density))}
-            DrawingTool.TEXT,DrawingTool.ANCHORED_TEXT,DrawingTool.NOTE,DrawingTool.CALLOUT -> {
+            DrawingTool.PRICE_NOTE,DrawingTool.SIGNPOST,DrawingTool.TEXT,DrawingTool.ANCHORED_TEXT,DrawingTool.NOTE,DrawingTool.CALLOUT -> {
                 if(d.tool==DrawingTool.NOTE || d.tool==DrawingTool.CALLOUT)drawRoundRect(c.copy(alpha=.15f),first-Offset(4*density,16*density),Size(max(60*density,d.text.length*7*density),22*density))
-                text(d.text,first)
+                text(if(d.tool==DrawingTool.PRICE_NOTE) "${price(d.startPrice)} · ${d.text}" else d.text,first)
             }
             else -> Unit
         }

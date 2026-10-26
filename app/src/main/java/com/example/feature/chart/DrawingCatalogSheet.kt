@@ -27,10 +27,10 @@ internal data class DrawingGroup(val title: String, val tools: List<DrawingTool>
 internal val drawingGroups = listOf(
     DrawingGroup("خطوط اتجاه", listOf(DrawingTool.INFO_LINE, DrawingTool.HORIZONTAL_LINE, DrawingTool.TRENDLINE, DrawingTool.HORIZONTAL_RAY, DrawingTool.EXTENDED_LINE, DrawingTool.RAY, DrawingTool.VERTICAL_LINE, DrawingTool.PARALLEL_CHANNEL)),
     DrawingGroup("جان وفيبوناتشي", listOf(DrawingTool.FIBONACCI, DrawingTool.FIB_FAN)),
-    DrawingGroup("نماذج", listOf(DrawingTool.XABCD, DrawingTool.HEAD_SHOULDERS, DrawingTool.ABCD, DrawingTool.ELLIOTT_IMPULSE, DrawingTool.ELLIOTT_CORRECTION)),
-    DrawingGroup("التنبؤ والقياس", listOf(DrawingTool.LONG_POSITION, DrawingTool.SHORT_POSITION, DrawingTool.ANCHORED_VWAP, DrawingTool.PRICE_RANGE, DrawingTool.DATE_RANGE, DrawingTool.DATE_PRICE_RANGE, DrawingTool.MEASUREMENT)),
-    DrawingGroup("الأشكال الهندسية", listOf(DrawingTool.BRUSH, DrawingTool.HIGHLIGHTER, DrawingTool.ARROW, DrawingTool.ARROW_UP, DrawingTool.ARROW_DOWN, DrawingTool.PATH, DrawingTool.ROTATED_RECTANGLE, DrawingTool.RECTANGLE, DrawingTool.POLYLINE, DrawingTool.ELLIPSE, DrawingTool.CURVE, DrawingTool.ARC, DrawingTool.TRIANGLE)),
-    DrawingGroup("ملاحظة", listOf(DrawingTool.TEXT, DrawingTool.ANCHORED_TEXT, DrawingTool.NOTE, DrawingTool.PRICE_LABEL, DrawingTool.PIN, DrawingTool.CALLOUT, DrawingTool.ANNOTATION, DrawingTool.FLAG))
+    DrawingGroup("نماذج", listOf(DrawingTool.XABCD, DrawingTool.CYPHER, DrawingTool.HEAD_SHOULDERS, DrawingTool.ABCD, DrawingTool.TRIANGLE_PATTERN, DrawingTool.THREE_DRIVES, DrawingTool.ELLIOTT_IMPULSE, DrawingTool.ELLIOTT_CORRECTION, DrawingTool.ELLIOTT_TRIANGLE, DrawingTool.ELLIOTT_DOUBLE, DrawingTool.ELLIOTT_TRIPLE, DrawingTool.CYCLES)),
+    DrawingGroup("التنبؤ والقياس", listOf(DrawingTool.LONG_POSITION, DrawingTool.SHORT_POSITION, DrawingTool.FORECAST, DrawingTool.BARS_PATTERN, DrawingTool.GHOST_FEED, DrawingTool.PROJECTION, DrawingTool.ANCHORED_VWAP, DrawingTool.VOLUME_PROFILE_FIXED, DrawingTool.VOLUME_PROFILE_SESSION, DrawingTool.PRICE_RANGE, DrawingTool.DATE_RANGE, DrawingTool.DATE_PRICE_RANGE, DrawingTool.MEASUREMENT)),
+    DrawingGroup("الأشكال الهندسية", listOf(DrawingTool.BRUSH, DrawingTool.HIGHLIGHTER, DrawingTool.ARROW_MARKER, DrawingTool.ARROW, DrawingTool.ARROW_UP, DrawingTool.ARROW_DOWN, DrawingTool.RECTANGLE, DrawingTool.ROTATED_RECTANGLE, DrawingTool.PATH, DrawingTool.CIRCLE, DrawingTool.ELLIPSE, DrawingTool.POLYLINE, DrawingTool.TRIANGLE, DrawingTool.ARC, DrawingTool.CURVE, DrawingTool.DOUBLE_CURVE)),
+    DrawingGroup("ملاحظة", listOf(DrawingTool.TEXT, DrawingTool.ANCHORED_TEXT, DrawingTool.NOTE, DrawingTool.PRICE_LABEL, DrawingTool.PIN, DrawingTool.TABLE, DrawingTool.CALLOUT, DrawingTool.ANNOTATION, DrawingTool.PRICE_NOTE, DrawingTool.SIGNPOST, DrawingTool.FLAG, DrawingTool.IMAGE))
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,6 +42,7 @@ fun DrawingCatalogSheet(
     canUndo: Boolean, onUndo: () -> Unit, onClear: () -> Unit,
     onSelect: (DrawingTool) -> Unit, onIndicators: () -> Unit, onDismiss: () -> Unit
 ) {
+    val keyboard=androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf("المفضلة") }
     var confirmClear by remember { mutableStateOf(false) }
@@ -57,15 +58,16 @@ fun DrawingCatalogSheet(
         Column(Modifier.fillMaxWidth().fillMaxHeight(.93f).testTag("drawing_catalog_sheet")) {
             Text("رسومات", fontWeight = FontWeight.Bold, fontSize = 23.sp,
                 modifier = Modifier.align(Alignment.Start).padding(horizontal = 18.dp, vertical = 14.dp))
-            TextField(query, { query = it }, singleLine = true,
-                placeholder = { Text("بحث", color = muted) },
-                leadingIcon = { Icon(Icons.Default.Search, "بحث", tint = ink) },
-                trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "مسح البحث", tint = ink) } },
-                shape = RoundedCornerShape(14.dp),
-                colors = TextFieldDefaults.colors(focusedContainerColor = tile, unfocusedContainerColor = tile,
-                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = ink, unfocusedTextColor = ink, cursorColor = ink),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).testTag("drawing_catalog_search"))
+            androidx.compose.foundation.text.BasicTextField(
+                value=query,onValueChange={query=it},singleLine=true,
+                textStyle=androidx.compose.ui.text.TextStyle(color=ink,fontSize=16.sp),
+                modifier=Modifier.fillMaxWidth().padding(horizontal=18.dp).testTag("drawing_catalog_search"),
+                decorationBox={ field -> Row(Modifier.fillMaxWidth().height(48.dp).background(tile,RoundedCornerShape(14.dp)).padding(horizontal=14.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Icon(Icons.Default.Search,"بحث",tint=ink,modifier=Modifier.size(26.dp));Spacer(Modifier.width(10.dp))
+                    Box(Modifier.weight(1f)) { if(query.isBlank())Text("بحث",color=muted,fontSize=17.sp,fontWeight=FontWeight.Bold);field() }
+                    if(query.isNotEmpty())IconButton(onClick={query=""},modifier=Modifier.size(28.dp)){Icon(Icons.Default.Close,"مسح البحث",tint=ink)}
+                } }
+            )
             Row(Modifier.fillMaxWidth().padding(vertical = 14.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 categories.forEach { name ->
@@ -94,7 +96,7 @@ fun DrawingCatalogSheet(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                             row.forEach { tool ->
                                 Box(Modifier.weight(1f).height(82.dp).background(if (active == tool) Color(0xFFE7EEFF) else tile, RoundedCornerShape(14.dp))
-                                    .clickable { onSelect(tool) }.testTag("drawing_tool_${tool.name}")) {
+                                    .clickable { keyboard?.hide(); onSelect(tool) }.testTag("drawing_tool_${tool.name}")) {
                                     Column(Modifier.fillMaxSize().padding(horizontal = 3.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
                                         DrawingToolGlyph(tool, ink, Modifier.size(32.dp))
                                         Text(tool.catalogLabel(), color = ink, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -111,11 +113,13 @@ fun DrawingCatalogSheet(
                 }
                 if (matching.isEmpty()) item { Text(if (query.isBlank()) "أضف أدوات للمفضلة باستخدام النجمة" else "لا توجد أدوات مطابقة", color = muted, modifier = Modifier.padding(18.dp)) }
             }
+            if(category == "المفضلة") {
             HorizontalDivider(color = Color(0xFFEEEEEE))
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Icon(Icons.Default.Edit, null, tint = ink)
                 Text("إظهار المفضلة على الرسم البياني", color = ink, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
-                Switch(showFavorites, onShowFavorites, modifier = Modifier.testTag("drawing_favorites_switch"), colors = SwitchDefaults.colors(checkedTrackColor = ink, checkedThumbColor = Color.White))
+                Switch(showFavorites, onShowFavorites, modifier = Modifier.testTag("drawing_favorites_switch"), colors = SwitchDefaults.colors(checkedTrackColor = ink, checkedThumbColor = Color.White, uncheckedTrackColor=ink, uncheckedThumbColor=Color.White, uncheckedBorderColor=ink))
+            }
             }
         }
     }
@@ -126,6 +130,6 @@ fun DrawingCatalogSheet(
 
 internal fun DrawingTool.catalogLabel(): String = when(this) {
     DrawingTool.TRENDLINE -> "خط الاتجاه"; DrawingTool.HORIZONTAL_LINE -> "خط أفقي"; DrawingTool.VERTICAL_LINE -> "خط رأسي"
-    DrawingTool.RECTANGLE -> "مستطيل"; DrawingTool.ELLIPSE -> "دائرة"; DrawingTool.FIBONACCI -> "تصحيح فيبوناتشي"
+    DrawingTool.RECTANGLE -> "مستطيل"; DrawingTool.ELLIPSE -> "بيضاوي"; DrawingTool.FIBONACCI -> "تصحيح فيبوناتشي"
     DrawingTool.MEASUREMENT -> "أداة القياس"; else -> displayNameAr
 }

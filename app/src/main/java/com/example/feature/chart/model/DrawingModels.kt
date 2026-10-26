@@ -16,7 +16,7 @@ enum class DrawingTool(val displayNameAr: String) {
     RECTANGLE("مستطيل منطقة (Rectangle)"),
     FIBONACCI("تصحيح فيبوناتشي (Fibonacci)"),
     MEASUREMENT("أداة القياس والمدى (Ruler)"),
-    ELLIPSE("دائرة"),
+    ELLIPSE("بيضاوي"),
     ANNOTATION("تعليق"),
     HORIZONTAL_RAY("شعاع أفقي"), EXTENDED_LINE("خط ممتد"), RAY("شعاع"), INFO_LINE("خط المعلومات"),
     ARROW("سهم"), ARROW_UP("علامة السهم أعلى"), ARROW_DOWN("علامة السهم أسفل"),
@@ -28,21 +28,28 @@ enum class DrawingTool(val displayNameAr: String) {
     CALLOUT("نص تفسيري"), FLAG("علامة تمييز"), PIN("شبك"),
     ABCD("نموذج ABCD"), XABCD("نموذج XABCD"), HEAD_SHOULDERS("نموذج الرأس والكتفين"),
     ELLIOTT_IMPULSE("موجة إليوت الدافعة"), ELLIOTT_CORRECTION("موجة إليوت التصحيحية"),
+    ARROW_MARKER("علامة السهم"), CIRCLE("دائرة"), DOUBLE_CURVE("منحنى مزدوج"),
+    TABLE("جدول"), PRICE_NOTE("ملصق السعر"), SIGNPOST("لافتة"), IMAGE("صورة"),
+    FORECAST("التوقعات"), BARS_PATTERN("نمط الأعمدة"), GHOST_FEED("مسار تخيلي"), PROJECTION("إسقاط"),
+    VOLUME_PROFILE_FIXED("بروفايل حجم التداول الثابت"), VOLUME_PROFILE_SESSION("بروفايل أحجام الجلسة"),
+    CYPHER("نمط سيفر"), TRIANGLE_PATTERN("نموذج المثلث"), THREE_DRIVES("نموذج الثلاث موجات"),
+    ELLIOTT_TRIANGLE("موجة إليوت المثلثية"), ELLIOTT_DOUBLE("موجة إليوت الثنائية"), ELLIOTT_TRIPLE("موجة إليوت المركبة"), CYCLES("خطوط دورية"),
     FIB_FAN("مروحة فيبوناتشي"), PARALLEL_CHANNEL("قناة متوازية"), ANCHORED_VWAP("VWAP مثبت")
 }
 
 data class DrawingAnchor(val time: Long, val price: Double)
 
-val DrawingTool.isTextTool: Boolean get() = this in setOf(DrawingTool.ANNOTATION, DrawingTool.TEXT, DrawingTool.ANCHORED_TEXT, DrawingTool.NOTE, DrawingTool.CALLOUT)
-val DrawingTool.isSinglePoint: Boolean get() = isTextTool || this in setOf(DrawingTool.HORIZONTAL_LINE, DrawingTool.VERTICAL_LINE, DrawingTool.HORIZONTAL_RAY, DrawingTool.ARROW_UP, DrawingTool.ARROW_DOWN, DrawingTool.PRICE_LABEL, DrawingTool.FLAG, DrawingTool.PIN, DrawingTool.ANCHORED_VWAP)
+val DrawingTool.isTextTool: Boolean get() = this in setOf(DrawingTool.TABLE, DrawingTool.PRICE_NOTE, DrawingTool.SIGNPOST, DrawingTool.ANNOTATION, DrawingTool.TEXT, DrawingTool.ANCHORED_TEXT, DrawingTool.NOTE, DrawingTool.CALLOUT)
+val DrawingTool.isSinglePoint: Boolean get() = isTextTool || this in setOf(DrawingTool.IMAGE, DrawingTool.VOLUME_PROFILE_SESSION, DrawingTool.HORIZONTAL_LINE, DrawingTool.VERTICAL_LINE, DrawingTool.HORIZONTAL_RAY, DrawingTool.ARROW_UP, DrawingTool.ARROW_DOWN, DrawingTool.PRICE_LABEL, DrawingTool.FLAG, DrawingTool.PIN, DrawingTool.ANCHORED_VWAP)
 val DrawingTool.isVariablePath: Boolean get() = this == DrawingTool.PATH || this == DrawingTool.POLYLINE
 val DrawingTool.isFreehand: Boolean get() = this == DrawingTool.BRUSH || this == DrawingTool.HIGHLIGHTER
 val DrawingTool.anchorCount: Int get() = when(this) {
-    DrawingTool.LONG_POSITION, DrawingTool.SHORT_POSITION, DrawingTool.TRIANGLE, DrawingTool.PARALLEL_CHANNEL, DrawingTool.CURVE, DrawingTool.ARC, DrawingTool.ROTATED_RECTANGLE -> 3
+    DrawingTool.LONG_POSITION, DrawingTool.SHORT_POSITION, DrawingTool.PROJECTION, DrawingTool.TRIANGLE, DrawingTool.PARALLEL_CHANNEL, DrawingTool.CURVE, DrawingTool.ARC, DrawingTool.ROTATED_RECTANGLE -> 3
     DrawingTool.ABCD, DrawingTool.ELLIOTT_CORRECTION -> 4
-    DrawingTool.XABCD -> 5
-    DrawingTool.ELLIOTT_IMPULSE -> 6
-    DrawingTool.HEAD_SHOULDERS -> 7
+    DrawingTool.CYPHER, DrawingTool.TRIANGLE_PATTERN, DrawingTool.DOUBLE_CURVE, DrawingTool.XABCD -> 5
+    DrawingTool.ELLIOTT_TRIANGLE, DrawingTool.ELLIOTT_IMPULSE -> 6
+    DrawingTool.THREE_DRIVES, DrawingTool.ELLIOTT_DOUBLE, DrawingTool.HEAD_SHOULDERS -> 7
+    DrawingTool.ELLIOTT_TRIPLE -> 9
     else -> 2
 }
 

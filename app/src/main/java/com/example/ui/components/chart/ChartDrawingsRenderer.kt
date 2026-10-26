@@ -23,7 +23,9 @@ object ChartDrawingsRenderer {
         drawings: List<ChartDrawing>,
         transform: ChartTransform,
         history: List<com.example.core.model.Candle> = transform.visibleCandles,
-        vwaps: Map<Long,List<VwapPoint>> = emptyMap()
+        vwaps: Map<Long,List<VwapPoint>> = emptyMap(),
+        images: Map<Long,androidx.compose.ui.graphics.ImageBitmap?> = emptyMap(),
+        profiles: Map<Long,List<CandleVolumeProfile.Bin>> = emptyMap()
     ) {
         for (d in drawings) {
             val startX = transform.timeToX(d.startTime) ?: continue
@@ -159,7 +161,7 @@ object ChartDrawingsRenderer {
                     }
                 }
                 DrawingTool.NONE -> {}
-                else -> ExtendedDrawingRenderer.draw(scope, d, transform, history, vwaps)
+                else -> ExtendedDrawingRenderer.draw(scope, d, transform, history, vwaps, images, profiles)
             }
         }
     }

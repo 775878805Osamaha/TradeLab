@@ -23,6 +23,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -150,6 +151,27 @@ fun CandlestickChart(
     val currentDrawings by rememberUpdatedState(drawings)
     var pendingAnchors by remember(activeDrawingTool) { mutableStateOf(emptyList<DrawingAnchor>()) }
     var freehandPoints by remember(activeDrawingTool) { mutableStateOf(emptyList<Offset>()) }
+    val imageContext = androidx.compose.ui.platform.LocalContext.current
+    val imageDrawings = remember(drawings) { drawings.filter { it.tool == DrawingTool.IMAGE }.takeLast(16).map { it.id to it.text } }
+    val drawingImages by produceState<Map<Long, androidx.compose.ui.graphics.ImageBitmap?>>(emptyMap(), imageDrawings) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            imageDrawings.associate { (id, uri) ->
+                id to runCatching {
+                    val source=android.net.Uri.parse(uri)
+                    val bounds=android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds=true }
+                    imageContext.contentResolver.openInputStream(source)?.use { android.graphics.BitmapFactory.decodeStream(it,null,bounds) }
+                    var sample=1
+                    while(bounds.outWidth/sample>512 || bounds.outHeight/sample>512) sample*=2
+                    val options=android.graphics.BitmapFactory.Options().apply { inSampleSize=sample }
+                    imageContext.contentResolver.openInputStream(source)?.use { android.graphics.BitmapFactory.decodeStream(it,null,options) }?.asImageBitmap()
+                }.getOrNull()
+            }
+        }
+    }
+    val candleProfiles = remember(candles,drawings) {
+        drawings.filter { it.tool == DrawingTool.VOLUME_PROFILE_FIXED || it.tool == DrawingTool.VOLUME_PROFILE_SESSION }
+            .associate { it.id to CandleVolumeProfile.forDrawing(candles,it) }
+    }
     val anchoredVwaps = remember(candles, drawings) {
         drawings.filter { it.tool == DrawingTool.ANCHORED_VWAP }.associate { it.id to AnchoredVwap.calculate(candles,it.startTime) }
     }
@@ -388,7 +410,12 @@ fun CandlestickChart(
                             val t = transformRef[0]
                             if (t != null && activeDrawingTool == DrawingTool.NONE) {
                                 currentDrawings.asReversed().firstOrNull { d ->
-                                    DrawingHitTest.distance(d,t,point) < positionHitRadius
+                                    val bitmap=drawingImages[d.id]
+                                    if(d.tool==DrawingTool.IMAGE && bitmap!=null) {
+                                        val x=t.timeToX(d.startTime)?:0f;val y=t.priceToY(d.startPrice)
+                                        val width=positionHitRadius/18f*100f
+                                        point.x in x..(x+width) && point.y in y..(y+width*bitmap.height/bitmap.width)
+                                    } else DrawingHitTest.distance(d,t,point) < positionHitRadius
                                 }?.let { drawingSelection?.invoke(it) }
                             }
                         },
@@ -680,7 +707,7 @@ fun CandlestickChart(
             ChartOverlays.drawHistoricalTradeMarkers(this, transform, historicalTrades)
 
             // 6. Draw User Drawings
-            clipRect(0f, 0f, chartWidth, mainChartHeight) { ChartDrawingsRenderer.drawDrawings(this, drawings, transform, candles, anchoredVwaps) }
+            clipRect(0f, 0f, chartWidth, mainChartHeight) { ChartDrawingsRenderer.drawDrawings(this, drawings, transform, candles, anchoredVwaps, drawingImages, candleProfiles) }
             pendingAnchors.forEach { anchor -> transform.timeToX(anchor.time)?.let { x -> drawCircle(TradingAccent, 4.dp.toPx(), Offset(x, transform.priceToY(anchor.price))) } }
 
             // 7. Active Drawing Preview while dragging
