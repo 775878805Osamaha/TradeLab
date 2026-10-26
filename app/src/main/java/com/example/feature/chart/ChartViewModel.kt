@@ -104,6 +104,37 @@ class ChartViewModel(
         loadCandlesForCurrentSymbol()
     }
 
+    /** A single page covers 100 candle slots; scan at least 72h for closed FX sessions. */
+    private fun historicalScanWindows(timeframe: Timeframe): Long {
+        val pageMinutes = timeframe.minutes.toLong() * 100L
+        return ((72L * 60L + pageMinutes - 1L) / pageMinutes)
+            .coerceAtLeast(1L).coerceAtMost(60L)
+    }
+
+    /** Validate every backfilled candle before it can enter the visible chart. */
+    private fun verifyOlderHistory(
+        candles: List<Candle>,
+        symbol: String,
+        timeframe: Timeframe,
+        start: Long,
+        end: Long,
+        oldest: Long
+    ) {
+        if (candles.any { candle ->
+                candle.symbol != symbol || candle.timeframe != timeframe ||
+                candle.openTime < start || candle.openTime > end ||
+                candle.openTime >= oldest ||
+                !candle.open.isFinite() || !candle.high.isFinite() ||
+                !candle.low.isFinite() || !candle.close.isFinite() ||
+                candle.low <= 0.0 || candle.high < candle.low ||
+                candle.open !in candle.low..candle.high ||
+                candle.close !in candle.low..candle.high ||
+                !candle.volume.isFinite() || candle.volume < 0.0
+            } || candles.map { it.openTime }.toSet().size != candles.size) {
+            throw IllegalStateException("Invalid verified older OHLC page")
+        }
+    }
+
     /**
      * Append only authentic older OHLC bars; retain the current chart on a
      * provider failure. The 20k cap is a memory safety limit, not a promise
@@ -135,9 +166,7 @@ class ChartViewModel(
                 // a weekend. Scan contiguous windows covering at least 72h
                 // for intraday charts; stop immediately at the first real page.
                 // No synthetic bars and no skipped historical search windows.
-                val windowsToScan = (72L * 60L / (timeframe.minutes.toLong() * 100L))
-                    .coerceAtLeast(4L)
-                    .coerceAtMost(60L)
+                val windowsToScan = historicalScanWindows(timeframe)
                 for (window in 0L until windowsToScan) {
                     val end = pageEnd - window * interval * 100L
                     if (end < 0L) break
@@ -154,11 +183,7 @@ class ChartViewModel(
                             if (candidate.isNotEmpty()) {
                                 // A provider can return bars outside the
                                 // requested range; reject them before merging.
-                                if (candidate.any { it.openTime < start || it.openTime > end }) {
-                                    throw IllegalStateException(
-                                        "Historical provider returned candles outside requested page"
-                                    )
-                                }
+                                verifyOlderHistory(candidate, symbol, timeframe, start, end, oldest)
                                 verified = candidate
                                 break
                             }
@@ -441,9 +466,8 @@ class ChartViewModel(
                 // Use bounded requests to avoid downloading huge empty ranges.
                 val initialDepths = listOf(requestedBars, 100, 40, 10, 1)
                     .distinct().filter { it in 1..requestedBars }
-                val scanWindows = if (symbol in setOf("BTCUSDT", "ETHUSDT")) 1L else
-                    (72L * 60L / (tf.minutes.toLong() * 100L))
-                        .coerceAtLeast(4L).coerceAtMost(60L)
+                val scanWindows = if (symbol in setOf("BTCUSDT", "ETHUSDT")) 1L
+                    else historicalScanWindows(tf)
                 for (window in 0L until scanWindows) {
                     val end = lastClosedOpen - window * interval * 100L
                     if (end < 0L) break
@@ -454,6 +478,12 @@ class ChartViewModel(
                                 symbol, tf, attemptFrom, end
                             )
                             if (fetched.isNotEmpty()) {
+                                // Never accept a page from a different symbol,
+                                // timeframe, or requested window.
+                                verifyOlderHistory(
+                                    fetched, symbol, tf, attemptFrom, end,
+                                    lastClosedOpen + interval
+                                )
                                 rawCandles = fetched
                                 break
                             }
