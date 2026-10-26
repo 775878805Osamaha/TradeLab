@@ -23,6 +23,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
@@ -75,6 +76,7 @@ fun CandlestickChart(
     onAddDrawing: ((ChartDrawing) -> Unit)? = null,
     onSelectTrade: ((TradeJournalEntry) -> Unit)? = null,
     onSelectPosition: ((Position) -> Unit)? = null,
+    onSelectDrawing: ((ChartDrawing) -> Unit)? = null,
     onRequestOlderHistory: (() -> Unit)? = null,
     referenceLayout: Boolean = false,
     bullishColor: Color = TradingPositive,
@@ -144,6 +146,13 @@ fun CandlestickChart(
     // during pan/zoom; range queries are served by the immutable price index.
     val priceRangeIndex = remember(candles) { ChartPriceRangeIndex(candles) }
 
+    val drawingSelection by rememberUpdatedState(onSelectDrawing)
+    val currentDrawings by rememberUpdatedState(drawings)
+    var pendingAnchors by remember(activeDrawingTool) { mutableStateOf(emptyList<DrawingAnchor>()) }
+    var freehandPoints by remember(activeDrawingTool) { mutableStateOf(emptyList<Offset>()) }
+    val anchoredVwaps = remember(candles, drawings) {
+        drawings.filter { it.tool == DrawingTool.ANCHORED_VWAP }.associate { it.id to AnchoredVwap.calculate(candles,it.startTime) }
+    }
     // Drawing Interaction State
     var drawingStartOffset by remember { mutableStateOf<Offset?>(null) }
     var drawingCurrentOffset by remember { mutableStateOf<Offset?>(null) }
@@ -301,6 +310,7 @@ fun CandlestickChart(
                             if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingStartOffset = offset
                                 drawingCurrentOffset = offset
+                                if (activeDrawingTool.isFreehand) freehandPoints = listOf(offset)
                             } else if (isCrosshairActive) {
                                 crosshairOffset = offset
                             }
@@ -311,6 +321,9 @@ fun CandlestickChart(
                             change.consume()
                             if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingCurrentOffset = change.position
+                                if (activeDrawingTool.isFreehand && freehandPoints.size < 512 &&
+                                    (freehandPoints.lastOrNull()?.let { (it-change.position).getDistance() } ?: 10f) > 3f)
+                                    freehandPoints = freehandPoints + change.position
                             } else if (isCrosshairActive) {
                                 val transform = transformRef[0]
                                 if (transform != null) {
@@ -334,8 +347,7 @@ fun CandlestickChart(
                                 val transform = transformRef[0]
                                 val distance = (end - start).getDistance()
                                 if (transform != null && onAddDrawing != null && distance >= 10f &&
-                                    activeDrawingTool != DrawingTool.HORIZONTAL_LINE &&
-                                    activeDrawingTool != DrawingTool.VERTICAL_LINE) {
+                                    !activeDrawingTool.isSinglePoint && (activeDrawingTool.anchorCount == 2 || activeDrawingTool.isFreehand)) {
                                     onAddDrawing(
                                         ChartDrawing(
                                             tool = activeDrawingTool,
@@ -344,7 +356,8 @@ fun CandlestickChart(
                                             startTime = transform.xToTime(start.x),
                                             startPrice = transform.yToPrice(start.y),
                                             endTime = transform.xToTime(end.x),
-                                            endPrice = transform.yToPrice(end.y)
+                                            endPrice = transform.yToPrice(end.y),
+                                            anchors = if (activeDrawingTool.isFreehand) freehandPoints.map { DrawingAnchor(transform.xToTime(it.x), transform.yToPrice(it.y)) } else emptyList()
                                         )
                                     )
                                 }
@@ -362,6 +375,23 @@ fun CandlestickChart(
                 }
                 .pointerInput(candles, activeDrawingTool, isCrosshairActive) {
                     detectTapGestures(
+                        onLongPress = { point ->
+                            val t = transformRef[0]
+                            if (t != null && activeDrawingTool == DrawingTool.NONE) {
+                                currentDrawings.asReversed().firstOrNull { d ->
+                                    val a = Offset(t.timeToX(d.startTime) ?: 0f, t.priceToY(d.startPrice))
+                                    val b = Offset(d.endTime?.let { t.timeToX(it) } ?: a.x, d.endPrice?.let { t.priceToY(it) } ?: a.y)
+                                    val segment = b-a
+                                    val f = if(segment.getDistanceSquared()>0f) (((point-a).x*segment.x+(point-a).y*segment.y)/segment.getDistanceSquared()).coerceIn(0f,1f) else 0f
+                                    val distance = when(d.tool) {
+                                        DrawingTool.HORIZONTAL_LINE, DrawingTool.HORIZONTAL_RAY -> kotlin.math.abs(point.y-a.y)
+                                        DrawingTool.VERTICAL_LINE -> kotlin.math.abs(point.x-a.x)
+                                        else -> (point-(a+segment*f)).getDistance()
+                                    }
+                                    distance < positionHitRadius
+                                }?.let { drawingSelection?.invoke(it) }
+                            }
+                        },
                         onTap = { offset ->
                             val transform = transformRef[0]
                             val insidePlot = transform != null &&
@@ -378,9 +408,7 @@ fun CandlestickChart(
                             if (hit != null && selectPosition != null) {
                                 selectPosition?.invoke(hit)
                             } else if (insidePlot && transform != null && onAddDrawing != null &&
-                                (activeDrawingTool == DrawingTool.HORIZONTAL_LINE ||
-                                 activeDrawingTool == DrawingTool.VERTICAL_LINE ||
-                                 activeDrawingTool == DrawingTool.ANNOTATION)) {
+                                activeDrawingTool.isSinglePoint) {
                                 onAddDrawing(
                                     ChartDrawing(
                                         tool = activeDrawingTool,
@@ -390,6 +418,16 @@ fun CandlestickChart(
                                         startPrice = transform.yToPrice(transform.snapDrawingPoint(offset, snapEnabled).y)
                                     )
                                 )
+                            } else if (insidePlot && transform != null && activeDrawingTool != DrawingTool.NONE && !activeDrawingTool.isFreehand) {
+                                val at = transform.snapDrawingPoint(offset, snapEnabled)
+                                val anchors = pendingAnchors + DrawingAnchor(transform.xToTime(at.x), transform.yToPrice(at.y))
+                                pendingAnchors = anchors
+                                if (anchors.size >= activeDrawingTool.anchorCount) {
+                                    onAddDrawing?.invoke(ChartDrawing(tool = activeDrawingTool, symbol = "", timeframe = "",
+                                        startTime = anchors.first().time, startPrice = anchors.first().price,
+                                        endTime = anchors.last().time, endPrice = anchors.last().price, anchors = anchors))
+                                    pendingAnchors = emptyList()
+                                }
                             } else if (isCrosshairActive && insidePlot) {
                                 crosshairOffset = offset
                             }
@@ -455,7 +493,8 @@ fun CandlestickChart(
                 chartHeight = mainChartHeight,
                 candleWidthPx = candleWidthPx,
                 rightAxisWidth = rightAxisWidth,
-                fractionalScrollPx = fractionalScrollPx
+                fractionalScrollPx = fractionalScrollPx,
+                allCandles = candles
             )
 
             transformRef[0] = transform
@@ -639,7 +678,8 @@ fun CandlestickChart(
             ChartOverlays.drawHistoricalTradeMarkers(this, transform, historicalTrades)
 
             // 6. Draw User Drawings
-            ChartDrawingsRenderer.drawDrawings(this, drawings, transform)
+            clipRect(0f, 0f, chartWidth, mainChartHeight) { ChartDrawingsRenderer.drawDrawings(this, drawings, transform, candles, anchoredVwaps) }
+            pendingAnchors.forEach { anchor -> transform.timeToX(anchor.time)?.let { x -> drawCircle(TradingAccent, 4.dp.toPx(), Offset(x, transform.priceToY(anchor.price))) } }
 
             // 7. Active Drawing Preview while dragging
             if (drawingStartOffset != null && drawingCurrentOffset != null && activeDrawingTool != DrawingTool.NONE) {
@@ -652,7 +692,8 @@ fun CandlestickChart(
                     startTime = transform.xToTime(sOff.x),
                     startPrice = transform.yToPrice(sOff.y),
                     endTime = transform.xToTime(cOff.x),
-                    endPrice = transform.yToPrice(cOff.y)
+                    endPrice = transform.yToPrice(cOff.y),
+                    anchors = if(activeDrawingTool.isFreehand) freehandPoints.map { DrawingAnchor(transform.xToTime(it.x), transform.yToPrice(it.y)) } else emptyList()
                 )
                 ChartDrawingsRenderer.drawDrawings(this, listOf(tempDrawing), transform)
             }

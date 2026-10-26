@@ -21,7 +21,9 @@ object ChartDrawingsRenderer {
     fun drawDrawings(
         scope: DrawScope,
         drawings: List<ChartDrawing>,
-        transform: ChartTransform
+        transform: ChartTransform,
+        history: List<com.example.core.model.Candle> = transform.visibleCandles,
+        vwaps: Map<Long,List<VwapPoint>> = emptyMap()
     ) {
         for (d in drawings) {
             val startX = transform.timeToX(d.startTime) ?: continue
@@ -157,6 +159,7 @@ object ChartDrawingsRenderer {
                     }
                 }
                 DrawingTool.NONE -> {}
+                else -> ExtendedDrawingRenderer.draw(scope, d, transform, history, vwaps)
             }
         }
     }

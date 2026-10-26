@@ -17,7 +17,32 @@ enum class DrawingTool(val displayNameAr: String) {
     FIBONACCI("تصحيح فيبوناتشي (Fibonacci)"),
     MEASUREMENT("أداة القياس والمدى (Ruler)"),
     ELLIPSE("دائرة"),
-    ANNOTATION("تعليق")
+    ANNOTATION("تعليق"),
+    HORIZONTAL_RAY("شعاع أفقي"), EXTENDED_LINE("خط ممتد"), RAY("شعاع"), INFO_LINE("خط المعلومات"),
+    ARROW("سهم"), ARROW_UP("علامة السهم أعلى"), ARROW_DOWN("علامة السهم أسفل"),
+    BRUSH("فرشاة"), HIGHLIGHTER("لون مميز"), PATH("مسار"), POLYLINE("متعدد الخطوط"),
+    TRIANGLE("مثلث"), ROTATED_RECTANGLE("مستطيل مائل"), CURVE("منحنى"), ARC("قوس"),
+    PRICE_RANGE("المدى السعري"), DATE_RANGE("المدى الزمني"), DATE_PRICE_RANGE("نطاق التاريخ والسعر"),
+    LONG_POSITION("صفقة شراء"), SHORT_POSITION("صفقة بيع على المكشوف"),
+    TEXT("نص"), ANCHORED_TEXT("نص مثبت"), NOTE("ملاحظة"), PRICE_LABEL("بطاقة السعر"),
+    CALLOUT("نص تفسيري"), FLAG("علامة تمييز"), PIN("شبك"),
+    ABCD("نموذج ABCD"), XABCD("نموذج XABCD"), HEAD_SHOULDERS("نموذج الرأس والكتفين"),
+    ELLIOTT_IMPULSE("موجة إليوت الدافعة"), ELLIOTT_CORRECTION("موجة إليوت التصحيحية"),
+    FIB_FAN("مروحة فيبوناتشي"), PARALLEL_CHANNEL("قناة متوازية"), ANCHORED_VWAP("VWAP مثبت")
+}
+
+data class DrawingAnchor(val time: Long, val price: Double)
+
+val DrawingTool.isTextTool: Boolean get() = this in setOf(DrawingTool.ANNOTATION, DrawingTool.TEXT, DrawingTool.ANCHORED_TEXT, DrawingTool.NOTE, DrawingTool.CALLOUT)
+val DrawingTool.isSinglePoint: Boolean get() = isTextTool || this in setOf(DrawingTool.HORIZONTAL_LINE, DrawingTool.VERTICAL_LINE, DrawingTool.HORIZONTAL_RAY, DrawingTool.ARROW_UP, DrawingTool.ARROW_DOWN, DrawingTool.PRICE_LABEL, DrawingTool.FLAG, DrawingTool.PIN, DrawingTool.ANCHORED_VWAP)
+val DrawingTool.isFreehand: Boolean get() = this == DrawingTool.BRUSH || this == DrawingTool.HIGHLIGHTER
+val DrawingTool.anchorCount: Int get() = when(this) {
+    DrawingTool.LONG_POSITION, DrawingTool.SHORT_POSITION, DrawingTool.TRIANGLE, DrawingTool.PARALLEL_CHANNEL, DrawingTool.CURVE, DrawingTool.ARC, DrawingTool.ROTATED_RECTANGLE -> 3
+    DrawingTool.PATH, DrawingTool.POLYLINE, DrawingTool.ABCD, DrawingTool.ELLIOTT_CORRECTION -> 4
+    DrawingTool.XABCD -> 5
+    DrawingTool.ELLIOTT_IMPULSE -> 6
+    DrawingTool.HEAD_SHOULDERS -> 7
+    else -> 2
 }
 
 data class ChartDrawing(
@@ -31,7 +56,8 @@ data class ChartDrawing(
     val endTime: Long? = null,
     val color: Color = TradingGold,
     val strokeWidth: Float = 2.0f,
-    val text: String = "تعليق"
+    val text: String = "تعليق",
+    val anchors: List<DrawingAnchor> = emptyList()
 ) {
     fun toEntity(): DrawingEntity {
         val json = buildString {
@@ -41,6 +67,10 @@ data class ChartDrawing(
             if (endPrice != null) append(",\"endPrice\":$endPrice")
             if (endTime != null) append(",\"endTime\":$endTime")
             append(",\"textBase64\":\"${Base64.getEncoder().encodeToString(text.toByteArray(Charsets.UTF_8))}\"")
+            if (anchors.isNotEmpty()) {
+                val encoded = anchors.take(512).joinToString(";") { "${it.time}:${it.price}" }
+                append(",\"anchorsBase64\":\"${Base64.getEncoder().encodeToString(encoded.toByteArray(Charsets.UTF_8))}\"")
+            }
             append("}")
         }
         val hex = String.format(Locale.US, "#%08X", color.toArgb().toLong() and 0xFFFFFFFFL)
@@ -63,9 +93,9 @@ data class ChartDrawing(
                 return null
             }
             return try {
-                val sPrice = Regex("\"startPrice\":([0-9.-]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toDoubleOrNull() ?: return null
+                val sPrice = Regex("\"startPrice\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toDoubleOrNull() ?: return null
                 val sTime = Regex("\"startTime\":([0-9]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toLongOrNull() ?: return null
-                val ePrice = Regex("\"endPrice\":([0-9.-]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toDoubleOrNull()
+                val ePrice = Regex("\"endPrice\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toDoubleOrNull()
                 val eTime = Regex("\"endTime\":([0-9]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toLongOrNull()
 
                 val parsedColor = entity.colorHex.removePrefix("#").toLongOrNull(16)?.let { Color(it.toInt()) } ?: TradingGold
@@ -82,7 +112,13 @@ data class ChartDrawing(
                     color = parsedColor,
                     strokeWidth = entity.strokeWidth,
                     text = Regex("\"textBase64\":\"([^\"]*)\"").find(entity.pointsJson)?.groupValues?.get(1)
-                        ?.let { String(Base64.getDecoder().decode(it), Charsets.UTF_8) } ?: "تعليق"
+                        ?.let { String(Base64.getDecoder().decode(it), Charsets.UTF_8) } ?: "تعليق",
+                    anchors = Regex("\"anchorsBase64\":\"([^\"]*)\"").find(entity.pointsJson)?.groupValues?.get(1)
+                        ?.let { String(Base64.getDecoder().decode(it), Charsets.UTF_8) }
+                        ?.split(';')?.take(512)?.mapNotNull { item ->
+                            val parts = item.split(':'); val t = parts.getOrNull(0)?.toLongOrNull(); val p = parts.getOrNull(1)?.toDoubleOrNull()
+                            if (t != null && p != null && p.isFinite() && p > 0) DrawingAnchor(t, p) else null
+                        } ?: emptyList()
                 )
             } catch (e: Exception) {
                 null

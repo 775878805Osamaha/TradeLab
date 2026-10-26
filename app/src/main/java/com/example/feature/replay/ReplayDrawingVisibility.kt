@@ -12,7 +12,8 @@ internal fun visibleReplayDrawings(
 ): List<ChartDrawing> {
     val cutoff = revealedCandleTime ?: return emptyList()
     return drawings.filter { drawing ->
-        drawing.startTime <= cutoff &&
+        drawing.anchors.all { it.time <= cutoff && it.price.isFinite() && it.price > 0.0 } &&
+            drawing.startTime <= cutoff &&
             (drawing.endTime == null || drawing.endTime <= cutoff) &&
             drawing.startPrice.isFinite() && drawing.startPrice > 0.0 &&
             (drawing.endPrice == null || (drawing.endPrice.isFinite() && drawing.endPrice > 0.0))

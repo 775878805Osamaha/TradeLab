@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.flow.first
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -192,6 +193,61 @@ class ChartReferenceInteractionTest {
             }
         }
         compose.onNodeWithText("الحجم المفتوح: 0.01 لوت").assertIsDisplayed()
+    }
+
+    private fun shell(command: String) {
+        val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).use { it.readBytes() }
+    }
+
+    @Test fun drawingCatalogMatchesReferenceAndPersistsMultiPointGeometry() {
+        val app = compose.activity.application as TradeLabApplication
+        val dao = app.database.drawingDao()
+        kotlinx.coroutines.runBlocking { dao.clearDrawings("XAUUSD", "M15") }
+        try {
+            // Match the supplied 691px-wide reference; leave other chart tests at their established viewport.
+            shell("wm size 691x1536")
+            shell("wm density 276")
+            compose.waitUntil(30000) { compose.onAllNodesWithTag("chart_bottom_strip").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithContentDescription("أدوات الرسم").performClick()
+            compose.onNodeWithTag("drawing_catalog_sheet").assertExists()
+            compose.onNodeWithTag("drawing_sheet_handle").performTouchInput {
+                swipe(center, center - androidx.compose.ui.geometry.Offset(0f, 600f), 500)
+            }
+            captureProviderScreen("drawing-catalog-favorites")
+            for ((category, name) in listOf("الأشكال الهندسية" to "shapes", "ملاحظة" to "notes", "نماذج" to "patterns", "التنبؤ والقياس" to "measurement")) {
+                compose.onNodeWithTag("drawing_category_$category").performScrollTo().performClick()
+                captureProviderScreen("drawing-catalog-$name")
+            }
+            compose.onNodeWithTag("drawing_favorites_switch").performClick()
+            androidx.test.espresso.Espresso.pressBack()
+            compose.onNodeWithTag("chart_favorite_TRENDLINE").assertExists()
+            compose.onNodeWithContentDescription("أدوات الرسم").performClick()
+            compose.onNodeWithTag("drawing_favorites_switch").performClick()
+            compose.onNodeWithTag("drawing_catalog_search").performTextInput("مثلث")
+            compose.onNodeWithTag("drawing_tool_TRIANGLE").performClick()
+            compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f))
+                click(androidx.compose.ui.geometry.Offset(width*.75f,height*.55f))
+                click(androidx.compose.ui.geometry.Offset(width*.6f,height*.7f))
+            }
+            compose.waitUntil(10000) {
+                kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().any { it.type == "TRIANGLE" } }
+            }
+            val stored = kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.type == "TRIANGLE" } }
+            org.junit.Assert.assertEquals(3, com.example.feature.chart.model.ChartDrawing.fromEntity(stored)!!.anchors.size)
+            captureProviderScreen("drawing-catalog-triangle")
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                longClick(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f))
+            }
+            compose.onNodeWithTag("drawing_properties").assertIsDisplayed()
+            androidx.test.espresso.Espresso.pressBack()
+        } finally {
+            shell("wm size 864x1536")
+            shell("wm density 346")
+            kotlinx.coroutines.runBlocking { dao.clearDrawings("XAUUSD", "M15") }
+        }
     }
 
 }

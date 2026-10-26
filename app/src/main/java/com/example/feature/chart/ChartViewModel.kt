@@ -333,6 +333,14 @@ class ChartViewModel(
         _uiState.update { it.copy(activeDrawingTool = DrawingTool.NONE) }
     }
 
+    fun updateDrawing(drawing: ChartDrawing) {
+        if (drawing.symbol != _uiState.value.selectedSymbol || drawing.timeframe != _uiState.value.selectedTimeframe.code) return
+        viewModelScope.launch {
+            if (drawingDao != null) withContext(Dispatchers.IO) { drawingDao.insertDrawing(drawing.toEntity()) }
+            else _uiState.update { state -> state.copy(drawings = state.drawings.map { if (it.id == drawing.id) drawing else it }) }
+        }
+    }
+
     fun deleteDrawing(id: Long) {
         viewModelScope.launch {
             if (drawingDao != null) {
