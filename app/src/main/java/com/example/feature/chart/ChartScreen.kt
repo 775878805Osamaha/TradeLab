@@ -57,6 +57,7 @@ fun ChartScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val replayState by replayViewModel.uiState.collectAsState()
+    val orderKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     var isEmbeddedReplay by rememberSaveable { mutableStateOf(false) }
     androidx.activity.compose.BackHandler(enabled = isEmbeddedReplay) {
         replayViewModel.pause()
@@ -345,6 +346,7 @@ fun ChartScreen(
                     onClick = {
                         val confirmedVolume = orderVolumeInput.toDoubleOrNull()
                         if (confirmedVolume != null && confirmedVolume.isFinite() && confirmedVolume > 0.0 && validOrder) {
+                            orderKeyboard?.hide()
                             if (isEmbeddedReplay) replayViewModel.executeOrder(side, confirmedVolume, sl, tp)
                             else viewModel.quickOrder(side, confirmedVolume, sl, tp)
                             pendingOrderSide = null

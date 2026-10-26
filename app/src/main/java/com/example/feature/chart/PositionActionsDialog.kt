@@ -20,6 +20,7 @@ fun PositionActionsDialog(
     onClose: (Double?) -> Unit,
     onProtection: (Double?, Double?) -> Unit
 ) {
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     var mode by remember(position.id) { mutableStateOf("menu") }
     var value by remember(position.id, mode) { mutableStateOf("") }
     val number = value.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
@@ -65,6 +66,7 @@ fun PositionActionsDialog(
                 enabled = mode == "close" || valid,
                 modifier = Modifier.testTag("position_action_confirm"),
                 onClick = {
+                    keyboard?.hide()
                     when (mode) {
                         "close" -> onClose(null)
                         "partial" -> onClose(number)

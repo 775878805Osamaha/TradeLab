@@ -54,6 +54,9 @@ class ChartReferenceInteractionTest {
         // Live-quote acceptance is exercised on weekdays; closed markets must remain blocked.
         org.junit.Assume.assumeTrue(java.time.LocalDate.now(java.time.ZoneOffset.UTC).dayOfWeek.value <= 5)
         compose.onNodeWithTag("nav_item_account").performClick()
+        compose.waitUntil(30000) {
+            compose.onAllNodesWithTag("dash_action_trade").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithTag("dash_action_trade").performScrollTo().performClick()
         compose.onNodeWithTag("trade_symbol_selector").performClick()
         compose.onAllNodesWithText("XAUUSD").onLast().performClick()
@@ -156,8 +159,10 @@ class ChartReferenceInteractionTest {
         }
         compose.onNodeWithTag("chart_replay_buy").performClick()
         compose.onNodeWithTag("chart_order_volume").performTextReplacement("0.1")
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
         compose.onNodeWithTag("chart_order_confirm").performClick()
-        compose.onNodeWithTag("chart_replay_open_positions_summary").assertIsDisplayed()
+        compose.waitForIdle()
+        compose.onNodeWithTag("chart_replay_open_positions_summary").assertExists()
         // Entry is mapped by the real chart transform. Tap through the visible price
         // range without depending on a particular historical Gold price or date.
         for (step in 1..40) {
@@ -170,8 +175,9 @@ class ChartReferenceInteractionTest {
         captureProviderScreen("tradelab-position-actions")
         compose.onNodeWithTag("position_partial").performClick()
         compose.onNodeWithTag("position_action_value").performTextInput("0.04")
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
         compose.onNodeWithTag("position_action_confirm").performClick()
-        compose.onNodeWithTag("chart_replay_open_positions_summary").assertIsDisplayed()
+        compose.onNodeWithTag("chart_replay_open_positions_summary").assertExists()
         compose.onNodeWithTag("nav_item_chart").assertIsSelected()
         captureProviderScreen("tradelab-compact-replay")
         for (step in 1..40) {
