@@ -21,7 +21,11 @@ object ChartDrawingsRenderer {
     fun drawDrawings(
         scope: DrawScope,
         drawings: List<ChartDrawing>,
-        transform: ChartTransform
+        transform: ChartTransform,
+        history: List<com.example.core.model.Candle> = transform.visibleCandles,
+        vwaps: Map<Long,List<VwapPoint>> = emptyMap(),
+        images: Map<Long,androidx.compose.ui.graphics.ImageBitmap?> = emptyMap(),
+        profiles: Map<Long,List<CandleVolumeProfile.Bin>> = emptyMap()
     ) {
         for (d in drawings) {
             val startX = transform.timeToX(d.startTime) ?: continue
@@ -41,11 +45,11 @@ object ChartDrawingsRenderer {
                     // Price tag on right edge
                     scope.drawContext.canvas.nativeCanvas.apply {
                         val paint = android.graphics.Paint().apply {
-                            color = android.graphics.Color.YELLOW
+                            color = d.color.toArgb()
                             textSize = 20f
                             isAntiAlias = true
                         }
-                        drawText(String.format(Locale.US, "%.2f", d.startPrice), transform.chartWidth - 65f, startY - 4f, paint)
+                        drawText(QuotePriceFormatter.forSymbol(d.startPrice,transform.visibleCandles.firstOrNull()?.symbol), transform.chartWidth - 65f, startY - 4f, paint)
                     }
                 }
                 DrawingTool.VERTICAL_LINE -> {
@@ -109,16 +113,16 @@ object ChartDrawingsRenderer {
                                 color = d.color.copy(alpha = 0.8f),
                                 start = Offset(0f, y),
                                 end = Offset(transform.chartWidth, y),
-                                strokeWidth = 1.2f,
+                                strokeWidth = d.strokeWidth,
                                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
                             )
                             scope.drawContext.canvas.nativeCanvas.apply {
                                 val paint = android.graphics.Paint().apply {
-                                    color = android.graphics.Color.parseColor("#F59E0B")
+                                    color = d.color.toArgb()
                                     textSize = 18f
                                     isAntiAlias = true
                                 }
-                                val lbl = String.format(Locale.US, "Fib %.1f%% (%.2f)", lvl * 100, price)
+                                val lbl = String.format(Locale.US, "%.1f%% (%s)", lvl * 100, QuotePriceFormatter.forSymbol(price,transform.visibleCandles.firstOrNull()?.symbol))
                                 drawText(lbl, 10f, y - 4f, paint)
                             }
                         }
@@ -129,10 +133,10 @@ object ChartDrawingsRenderer {
                         val result = MeasurementCalculator.calculate(d.startPrice, d.endPrice, d.startTime, d.endTime)
                         // Arrow line
                         scope.drawLine(
-                            color = TradingAccent,
+                            color = d.color,
                             start = Offset(startX, startY),
                             end = Offset(endX, endY),
-                            strokeWidth = 2.0f
+                            strokeWidth = d.strokeWidth
                         )
                         // Measurement Box
                         val midX = (startX + endX) / 2f
@@ -157,6 +161,7 @@ object ChartDrawingsRenderer {
                     }
                 }
                 DrawingTool.NONE -> {}
+                else -> ExtendedDrawingRenderer.draw(scope, d, transform, history, vwaps, images, profiles)
             }
         }
     }

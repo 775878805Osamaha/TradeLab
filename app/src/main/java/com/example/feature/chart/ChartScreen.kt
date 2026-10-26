@@ -36,7 +36,7 @@ import com.example.core.market.DefaultSymbols
 import com.example.core.model.DataSourceType
 import com.example.core.model.OrderSide
 import com.example.core.model.Timeframe
-import com.example.feature.chart.model.DrawingTool
+import com.example.feature.chart.model.*
 import com.example.feature.replay.ReplayViewModel
 import com.example.feature.results.TradeDetailDialog
 import com.example.ui.components.CandlestickChart
@@ -57,11 +57,48 @@ fun ChartScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val replayState by replayViewModel.uiState.collectAsState()
-    var isEmbeddedReplay by remember { mutableStateOf(false) }
+    val orderKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    var isEmbeddedReplay by rememberSaveable { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = isEmbeddedReplay) {
+        replayViewModel.pause()
+        isEmbeddedReplay = false
+    }
+    var selectedPositionId by remember { mutableStateOf<Long?>(null) }
+    var selectedPositionReplay by remember { mutableStateOf(false) }
+    val selectedPosition = (if (selectedPositionReplay) replayState.openPositions else uiState.openPositions)
+        .firstOrNull { it.id == selectedPositionId }
+    if (selectedPosition != null && selectedPositionReplay == isEmbeddedReplay) {
+        PositionActionsDialog(
+            position = selectedPosition,
+            tick = if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick,
+            onDismiss = { selectedPositionId = null },
+            onClose = { volume ->
+                if (selectedPositionReplay) replayViewModel.closePosition(selectedPosition.id, volume)
+                else viewModel.closeChartPosition(selectedPosition.id, volume)
+                selectedPositionId = null
+            },
+            onProtection = { sl, tp ->
+                if (selectedPositionReplay) replayViewModel.updatePositionProtection(selectedPosition.id, sl, tp)
+                else viewModel.modifyPositionSlTp(selectedPosition.id, sl, tp)
+                selectedPositionId = null
+            }
+        )
+    }
     LaunchedEffect(embeddedReplayLaunchRequest) {
         if (embeddedReplayLaunchRequest > 0) {
             replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
             isEmbeddedReplay = true
+        }
+    }
+    var pendingImageDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
+    val imageContext = androidx.compose.ui.platform.LocalContext.current
+    val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        val drawing = pendingImageDrawing
+        pendingImageDrawing = null
+        if(uri != null && drawing != null && drawing.symbol == uiState.selectedSymbol && drawing.timeframe == uiState.selectedTimeframe.code) {
+            runCatching { imageContext.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                .onSuccess { viewModel.addDrawing(drawing.copy(text=uri.toString())) }
+                .onFailure { android.widget.Toast.makeText(imageContext,"تعذر الاحتفاظ بإذن قراءة الصورة",android.widget.Toast.LENGTH_SHORT).show() }
         }
     }
     var showSymbolSheet by remember { mutableStateOf(false) }
@@ -81,6 +118,15 @@ fun ChartScreen(
             favoritesOnly = false
             recentOnly = false
         }
+    }
+    val drawingPrefs = androidx.compose.ui.platform.LocalContext.current.getSharedPreferences("drawing_catalog", android.content.Context.MODE_PRIVATE)
+    val defaultDrawingFavorites = setOf("INFO_LINE", "HORIZONTAL_LINE", "TRENDLINE", "HORIZONTAL_RAY", "EXTENDED_LINE", "FIBONACCI", "LONG_POSITION", "SHORT_POSITION", "RECTANGLE", "CIRCLE", "PATH", "VOLUME_PROFILE_FIXED")
+    var drawingFavorites by remember { mutableStateOf(drawingPrefs.getStringSet("favorites", defaultDrawingFavorites)?.toSet() ?: defaultDrawingFavorites) }
+    var drawingFavoritesVisible by remember { mutableStateOf(drawingPrefs.getBoolean("show_favorites", false)) }
+    var editingDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
+    editingDrawing?.let { drawing ->
+        DrawingPropertiesDialog(drawing, onDismiss = { editingDrawing = null }, onDelete = { viewModel.deleteDrawing(drawing.id); editingDrawing = null },
+            onSave = { viewModel.updateDrawing(it); editingDrawing = null })
     }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
@@ -320,6 +366,7 @@ fun ChartScreen(
                     onClick = {
                         val confirmedVolume = orderVolumeInput.toDoubleOrNull()
                         if (confirmedVolume != null && confirmedVolume.isFinite() && confirmedVolume > 0.0 && validOrder) {
+                            orderKeyboard?.hide()
                             if (isEmbeddedReplay) replayViewModel.executeOrder(side, confirmedVolume, sl, tp)
                             else viewModel.quickOrder(side, confirmedVolume, sl, tp)
                             pendingOrderSide = null
@@ -411,7 +458,7 @@ fun ChartScreen(
     pendingAnnotation?.let { drawing ->
         AlertDialog(onDismissRequest = { pendingAnnotation = null },
             title = { Text("تعليق على الشارت") },
-            text = { OutlinedTextField(annotationText, { annotationText = it }, singleLine = true) },
+            text = { OutlinedTextField(annotationText, { annotationText = it }, singleLine = drawing.tool != DrawingTool.TABLE, label = { Text(if (drawing.tool == DrawingTool.TABLE) "الأعمدة تفصلها | والصفوف سطور" else "النص") }) },
             confirmButton = { TextButton(enabled = annotationText.isNotBlank(), onClick = {
                 viewModel.addDrawing(drawing.copy(text = annotationText.trim().take(160)))
                 pendingAnnotation = null
@@ -923,18 +970,39 @@ fun ChartScreen(
                     resetViewTrigger = uiState.resetViewTrigger,
                     displayStyle = chartDisplayStyle,
                     onAddDrawing = {
-                        if (it.tool == DrawingTool.ANNOTATION) {
+                        if (it.tool == DrawingTool.IMAGE) {
+                            if(uiState.drawings.count { d -> d.tool == DrawingTool.IMAGE } >= 16)
+                                android.widget.Toast.makeText(imageContext,"الحد الأقصى 16 صورة لكل شارت",android.widget.Toast.LENGTH_SHORT).show()
+                            else {
+                                pendingImageDrawing = it.copy(symbol=uiState.selectedSymbol,timeframe=uiState.selectedTimeframe.code)
+                                imagePicker.launch(arrayOf("image/*"))
+                            }
+                        } else if (it.tool.isTextTool) {
                             annotationText = ""
                             pendingAnnotation = it
                         } else viewModel.addDrawing(it)
                     },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) },
+                    onSelectDrawing = { editingDrawing = it },
+                    onSelectPosition = {
+                        if (isEmbeddedReplay) replayViewModel.pause()
+                        selectedPositionReplay = isEmbeddedReplay
+                        selectedPositionId = it.id
+                    },
                     onRequestOlderHistory = if (isEmbeddedReplay) null else ({ viewModel.loadOlderChartHistory() }),
                     referenceLayout = true,
                     bullishColor = Color(0xFF00B7AA),
                     bearishColor = Color(0xFFFF3D48),
                     isLoadingOlderHistory = uiState.isLoadingOlderHistory
                 )
+                }
+
+                if (uiState.activeDrawingTool != DrawingTool.NONE) {
+                    Text(
+                        "${uiState.activeDrawingTool.catalogLabel()} · " + if (uiState.activeDrawingTool.isSinglePoint) "اضغط لتحديد الموضع" else if (uiState.activeDrawingTool.isFreehand) "اسحب للرسم" else if (uiState.activeDrawingTool.isVariablePath) "اضغط لإضافة نقاط، وانقر مرتين للإنهاء" else if (uiState.activeDrawingTool.anchorCount > 2) "حدد ${uiState.activeDrawingTool.anchorCount} نقاط بالترتيب" else "اسحب أو حدد نقطتين",
+                        color = TradingTextPrimary, fontSize = 11.sp,
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp).background(TradingCard.copy(alpha = .92f), RoundedCornerShape(6.dp)).padding(6.dp).clickable { viewModel.setDrawingTool(uiState.activeDrawingTool) }.testTag("drawing_placement_hint")
+                    )
                 }
 
                 // Historical paging remains available even in immersive mode.
@@ -1249,7 +1317,15 @@ fun ChartScreen(
                         Icon(Icons.Default.DragHandle, contentDescription = "اسحب لتحريك الأدوات",
                             tint = TradingTextSecondary, modifier = Modifier.size(22.dp))
                     }
-                    if (!drawingPaletteCollapsed) referenceTools.forEach { (label, image, index) ->
+                    if (!drawingPaletteCollapsed && drawingFavoritesVisible) {
+                        drawingGroups.flatMap { it.tools }.filter { it.name in drawingFavorites }.forEach { tool ->
+                            IconButton(onClick = { viewModel.setDrawingTool(tool) }, modifier = Modifier.size(38.dp).testTag("chart_favorite_${tool.name}")) {
+                                DrawingToolGlyph(tool, if (uiState.activeDrawingTool == tool) TradingAccent else TradingTextPrimary, Modifier.size(24.dp))
+                            }
+                        }
+                        IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.size(38.dp)) { Icon(Icons.Default.Add, "المزيد من الرسومات") }
+                    }
+                    if (!drawingPaletteCollapsed && !drawingFavoritesVisible) referenceTools.forEach { (label, image, index) ->
                         val selected = when (index) {
                             0 -> uiState.isCrosshairActive
                             1 -> uiState.activeDrawingTool == DrawingTool.TRENDLINE
@@ -1347,7 +1423,7 @@ fun ChartScreen(
                         }
                     },
                     onIndicators = { showIndicatorsDialog = true },
-                    onDrawing = { drawingPaletteCollapsed = !drawingPaletteCollapsed },
+                    onDrawing = { showToolsMenu = true },
                     onMore = { showToolsMenu = true }
                 )
             }
@@ -1420,13 +1496,14 @@ fun ChartScreen(
                     Button(
                         onClick = { pendingOrderSide = OrderSide.SELL },
                         enabled = canTradeReplay,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TradingNegative),
-                        modifier = Modifier.weight(1f).height(58.dp).testTag("chart_replay_sell"),
-                        shape = RoundedCornerShape(28.dp)
+                        modifier = Modifier.weight(1f).height(40.dp).testTag("chart_replay_sell"),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("SELL · بيع", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text(replayTick?.bid?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                            Text(replayTick?.bid?.let { String.format(Locale.US, "%.${DefaultSymbols.getSymbol(replayState.symbol).digits}f", it) } ?: "—", fontSize = 13.sp, fontWeight = FontWeight.Bold,
                                 style = TextStyle(textDirection = TextDirection.Ltr))
                         }
                     }
@@ -1442,13 +1519,14 @@ fun ChartScreen(
                     Button(
                         onClick = { pendingOrderSide = OrderSide.BUY },
                         enabled = canTradeReplay,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TradingPositive),
-                        modifier = Modifier.weight(1f).height(58.dp).testTag("chart_replay_buy"),
-                        shape = RoundedCornerShape(28.dp)
+                        modifier = Modifier.weight(1f).height(40.dp).testTag("chart_replay_buy"),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("BUY · شراء", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text(replayTick?.ask?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                            Text(replayTick?.ask?.let { String.format(Locale.US, "%.${DefaultSymbols.getSymbol(replayState.symbol).digits}f", it) } ?: "—", fontSize = 13.sp, fontWeight = FontWeight.Bold,
                                 style = TextStyle(textDirection = TextDirection.Ltr))
                         }
                     }
@@ -1484,11 +1562,12 @@ fun ChartScreen(
                     Button(
                         onClick = { pendingOrderSide = OrderSide.SELL },
                         enabled = marketTickIsLive,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(64.dp)
+                            .height(40.dp)
                             .testTag("chart_quick_sell_btn"),
-                        shape = RoundedCornerShape(28.dp),
+                        shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TradingNegative)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1512,11 +1591,12 @@ fun ChartScreen(
                     Button(
                         onClick = { pendingOrderSide = OrderSide.BUY },
                         enabled = marketTickIsLive,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(64.dp)
+                            .height(40.dp)
                             .testTag("chart_quick_buy_btn"),
-                        shape = RoundedCornerShape(28.dp),
+                        shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TradingPositive)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1669,57 +1749,20 @@ fun ChartScreen(
         }
     }
 
-    // Drawing Tools Menu Dialog
     if (showToolsMenu) {
-        AlertDialog(
-            onDismissRequest = { showToolsMenu = false },
-            title = { Text("أدوات التحليل والرسم الفني", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val tools = listOf(
-                        DrawingTool.HORIZONTAL_LINE to "خط أفقي (دعم ومقاومة)",
-                        DrawingTool.VERTICAL_LINE to "خط رأسي (توقيت)",
-                        DrawingTool.TRENDLINE to "خط اتجاه (Trendline)",
-                        DrawingTool.RECTANGLE to "مستطيل منطقة (Supply / Demand)",
-                        DrawingTool.FIBONACCI to "مستويات فيبوناتشي (Fibonacci)",
-                        DrawingTool.MEASUREMENT to "أداة القياس والمدى (Ruler)"
-                    )
-                    tools.forEach { (tool, label) ->
-                        TextButton(
-                            onClick = {
-                                viewModel.setDrawingTool(tool)
-                                showToolsMenu = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(label, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
-                        }
-                    }
-                    HorizontalDivider(color = TradingBorder)
-                    TextButton(onClick = {
-                        uiState.drawings.lastOrNull()?.let { viewModel.deleteDrawing(it.id) }
-                        showToolsMenu = false
-                    }, enabled = uiState.drawings.isNotEmpty()) {
-                        Icon(Icons.Default.Undo, contentDescription = null)
-                        Text("تراجع عن آخر رسم")
-                    }
-                    TextButton(
-                        onClick = {
-                            viewModel.clearDrawings()
-                            showToolsMenu = false
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = TradingNegative)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("مسح جميع الرسومات من الشارت", color = TradingNegative)
-                    }
-                }
+        DrawingCatalogSheet(
+            active = uiState.activeDrawingTool, favorites = drawingFavorites, showFavorites = drawingFavoritesVisible,
+            onFavorite = { tool ->
+                drawingFavorites = if (tool.name in drawingFavorites) drawingFavorites - tool.name else drawingFavorites + tool.name
+                drawingPrefs.edit().putStringSet("favorites", drawingFavorites).apply()
             },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showToolsMenu = false }) { Text("إغلاق") }
-            }
+            onShowFavorites = { drawingFavoritesVisible = it; drawingPrefs.edit().putBoolean("show_favorites", it).apply() },
+            canUndo = uiState.drawings.isNotEmpty(),
+            onUndo = { uiState.drawings.lastOrNull()?.let { viewModel.deleteDrawing(it.id) } },
+            onClear = { viewModel.clearDrawings() },
+            onSelect = { viewModel.setDrawingTool(it); showToolsMenu = false },
+            onIndicators = { showToolsMenu = false; showIndicatorsDialog = true },
+            onDismiss = { showToolsMenu = false }
         )
     }
 }

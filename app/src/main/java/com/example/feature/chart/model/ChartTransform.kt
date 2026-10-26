@@ -14,7 +14,8 @@ data class ChartTransform(
     val chartHeight: Float,
     val candleWidthPx: Float,
     val rightAxisWidth: Float = 115f,
-    val fractionalScrollPx: Float = 0f
+    val fractionalScrollPx: Float = 0f,
+    val allCandles: List<Candle> = visibleCandles
 ) {
     val priceSpan: Double = (maxPrice - minPrice).coerceAtLeast(0.0001)
 
@@ -46,21 +47,22 @@ data class ChartTransform(
 
     fun timeToX(time: Long): Float? {
         if (visibleCandles.isEmpty()) return null
-        val exact = visibleCandles.indexOfFirst { it.openTime == time }
-        if (exact >= 0) return candleIndexToX(exact)
-        val right = visibleCandles.indexOfFirst { it.openTime > time }
-        if (right == 0) return candleIndexToX(0)
-        if (right < 0) return candleIndexToX(visibleCandles.lastIndex)
-        val left = right - 1
-        val start = visibleCandles[left].openTime
-        val end = visibleCandles[right].openTime
-        if (end <= start) return candleIndexToX(left)
-        val fraction = ((time - start).toDouble() / (end - start)).coerceIn(0.0, 1.0)
-        return candleIndexToX(left) + (candleIndexToX(right) - candleIndexToX(left)) * fraction.toFloat()
+        fun indexAt(value: Long): Double {
+            val found = allCandles.binarySearchBy(value) { it.openTime }
+            if (found >= 0) return found.toDouble()
+            val right = -found - 1
+            val interval = (visibleCandles.first().timeframe.minutes * 60_000L).coerceAtLeast(1L)
+            if (right == 0) return (value - allCandles.first().openTime).toDouble() / interval
+            if (right >= allCandles.size) return allCandles.lastIndex + (value - allCandles.last().openTime).toDouble() / interval
+            val left = right - 1
+            return left + (value - allCandles[left].openTime).toDouble() / (allCandles[right].openTime - allCandles[left].openTime).coerceAtLeast(1L)
+        }
+        val index = indexAt(time) - indexAt(visibleCandles.first().openTime)
+        return candleIndexToX(0) + index.toFloat() * candleWidthPx
     }
 
     fun xToTime(x: Float): Long {
         val idx = xToCandleIndex(x)
-        return if (idx in visibleCandles.indices) visibleCandles[idx].openTime else System.currentTimeMillis()
+        return if (idx in visibleCandles.indices) visibleCandles[idx].openTime else visibleCandles.getOrNull(idx.coerceIn(0, visibleCandles.lastIndex.coerceAtLeast(0)))?.openTime ?: 0L
     }
 }

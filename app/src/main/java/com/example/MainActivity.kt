@@ -171,10 +171,13 @@ class MainActivity : ComponentActivity() {
 
                             // Sub-Screen: Historical Replay
                             composable(Screen.Replay.route) {
-                                ReplayScreen(
-                                    viewModel = replayViewModel,
-                                    onBack = { navController.popBackStack() }
-                                )
+                                LaunchedEffect(Unit) {
+                                    embeddedReplayLaunchRequest++
+                                    navController.navigate(Screen.Chart.route) {
+                                        popUpTo(Screen.Replay.route) { inclusive = true }
+                                        launchSingleTop = true
+                                    }
+                                }
                             }
 
                             // Sub-Screen: Backtest

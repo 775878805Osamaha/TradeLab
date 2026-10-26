@@ -333,6 +333,14 @@ class ChartViewModel(
         _uiState.update { it.copy(activeDrawingTool = DrawingTool.NONE) }
     }
 
+    fun updateDrawing(drawing: ChartDrawing) {
+        if (drawing.symbol != _uiState.value.selectedSymbol || drawing.timeframe != _uiState.value.selectedTimeframe.code) return
+        viewModelScope.launch {
+            if (drawingDao != null) withContext(Dispatchers.IO) { drawingDao.insertDrawing(drawing.toEntity()) }
+            else _uiState.update { state -> state.copy(drawings = state.drawings.map { if (it.id == drawing.id) drawing else it }) }
+        }
+    }
+
     fun deleteDrawing(id: Long) {
         viewModelScope.launch {
             if (drawingDao != null) {
@@ -367,6 +375,26 @@ class ChartViewModel(
 
     fun selectTradeForDetail(trade: TradeJournalEntry?) {
         _uiState.update { it.copy(selectedTradeForDetail = trade) }
+    }
+
+    fun closeChartPosition(positionId: Long, partialVolume: Double? = null) {
+        val state = _uiState.value
+        val position = state.openPositions.firstOrNull { it.id == positionId } ?: return
+        val tick = state.latestTick
+        if (tick == null || !com.example.core.market.VerifiedMarketQuote.isVerified(tick, position.symbol, System.currentTimeMillis())) {
+            _uiState.update { it.copy(message = "يلزم سعر حديث وموثوق لإغلاق الصفقة") }
+            return
+        }
+        if (partialVolume != null && !com.example.feature.chart.validPartialClose(position.symbol, position.volume, partialVolume)) {
+            _uiState.update { it.copy(message = "حجم الإغلاق الجزئي غير صالح") }
+            return
+        }
+        val exitPrice = if (position.side == PositionSide.BUY) tick.bid else tick.ask
+        viewModelScope.launch {
+            runCatching { tradingRepository.closePosition(positionId, exitPrice, ExitReason.MANUAL_CLOSE, partialVolume).getOrThrow() }
+                .onSuccess { _uiState.update { it.copy(message = "تم إغلاق الحجم المطلوب من الصفقة") } }
+                .onFailure { error -> _uiState.update { it.copy(message = error.message ?: "فشل إغلاق الصفقة") } }
+        }
     }
 
     fun modifyPositionSlTp(positionId: Long, stopLoss: Double?, takeProfit: Double?) {

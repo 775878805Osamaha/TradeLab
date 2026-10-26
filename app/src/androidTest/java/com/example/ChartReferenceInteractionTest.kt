@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.flow.first
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -54,6 +55,9 @@ class ChartReferenceInteractionTest {
         // Live-quote acceptance is exercised on weekdays; closed markets must remain blocked.
         org.junit.Assume.assumeTrue(java.time.LocalDate.now(java.time.ZoneOffset.UTC).dayOfWeek.value <= 5)
         compose.onNodeWithTag("nav_item_account").performClick()
+        compose.waitUntil(30000) {
+            compose.onAllNodesWithTag("dash_action_trade").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithTag("dash_action_trade").performScrollTo().performClick()
         compose.onNodeWithTag("trade_symbol_selector").performClick()
         compose.onAllNodesWithText("XAUUSD").onLast().performClick()
@@ -141,8 +145,132 @@ class ChartReferenceInteractionTest {
     @Test fun compactReplayUsesEmbeddedControlsAndCloses() {
         compose.onNodeWithTag("chart_bottom_replay").performClick()
         compose.onNodeWithTag("chart_embedded_replay_controls").assertIsDisplayed()
-        compose.onNodeWithTag("chart_replay_close").performClick()
+        compose.onNodeWithTag("nav_item_chart").assertIsSelected()
+        compose.onNodeWithTag("chart_bottom_symbol").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
         compose.onNodeWithTag("chart_embedded_replay_controls").assertDoesNotExist()
         compose.onNodeWithTag("chart_bottom_strip").assertIsDisplayed()
     }
+    @Test fun replayPositionLineOpensActionsAndPartialCloseKeepsChart() {
+        // The production Replay account starts at $50. Use an affordable real
+        // forex order so this interaction test also respects its margin checks.
+        compose.onNodeWithTag("chart_bottom_symbol").performClick()
+        compose.onNodeWithTag("chart_symbol_search").performTextInput("GBPUSD")
+        compose.onNodeWithTag("chart_symbol_option_GBPUSD").performClick()
+        compose.onNodeWithTag("chart_bottom_replay").performClick()
+        compose.waitUntil(90000) {
+            compose.onAllNodesWithTag("chart_replay_buy").fetchSemanticsNodes().firstOrNull()
+                ?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null &&
+            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("chart_replay_buy").performClick()
+        compose.onNodeWithTag("chart_order_volume").performTextReplacement("0.02")
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.onNodeWithTag("chart_order_confirm").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("chart_replay_open_positions_summary").assertExists()
+        // Entry is mapped by the real chart transform. Tap through the visible price
+        // range without depending on a particular historical Gold price or date.
+        for (step in 1..40) {
+            if (compose.onAllNodesWithTag("chart_position_actions").fetchSemanticsNodes().isNotEmpty()) break
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(width * .65f, height * step / 42f))
+            }
+        }
+        compose.onNodeWithTag("chart_position_actions").assertIsDisplayed()
+        captureProviderScreen("tradelab-position-actions")
+        compose.onNodeWithTag("position_partial").performClick()
+        compose.onNodeWithTag("position_action_value").performTextInput("0.01")
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.onNodeWithTag("position_action_confirm").performClick()
+        compose.onNodeWithTag("chart_replay_open_positions_summary").assertExists()
+        compose.onNodeWithTag("nav_item_chart").assertIsSelected()
+        captureProviderScreen("tradelab-compact-replay")
+        for (step in 1..40) {
+            if (compose.onAllNodesWithTag("chart_position_actions").fetchSemanticsNodes().isNotEmpty()) break
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(width * .65f, height * step / 42f))
+            }
+        }
+        compose.onNodeWithText("الحجم المفتوح: 0.01 لوت").assertIsDisplayed()
+    }
+
+    @Test fun marketTerminalSearchAndOpenChart() {
+        compose.onNodeWithTag("nav_item_market").performClick()
+        compose.waitUntil(30000) { compose.onAllNodesWithTag("symbol_card_BTCUSDT").fetchSemanticsNodes().isNotEmpty() }
+        captureProviderScreen("tradelab-market-terminal")
+        compose.onNodeWithTag("market_search_input").performTextInput("xauusd")
+        compose.waitUntil(5000) { compose.onAllNodesWithTag("symbol_card_BTCUSDT").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag("symbol_card_XAUUSD").assertExists()
+        compose.onNodeWithTag("symbol_card_BTCUSDT").assertDoesNotExist()
+        compose.onNodeWithTag("symbol_card_XAUUSD").performClick()
+        compose.onNodeWithTag("nav_item_chart").assertIsSelected()
+    }
+
+    private fun shell(command: String) {
+        val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).use { it.readBytes() }
+    }
+
+    @Test fun drawingCatalogMatchesReferenceAndPersistsMultiPointGeometry() {
+        val app = compose.activity.application as TradeLabApplication
+        val dao = app.database.drawingDao()
+        kotlinx.coroutines.runBlocking { dao.clearDrawings("XAUUSD", "M15") }
+        try {
+            // Match the supplied 691px-wide reference; leave other chart tests at their established viewport.
+            shell("wm size 691x1536")
+            shell("wm density 276")
+            compose.waitUntil(30000) { compose.onAllNodesWithTag("chart_bottom_strip").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithContentDescription("أدوات الرسم").performClick()
+            compose.onNodeWithTag("drawing_catalog_sheet").assertExists()
+            compose.onNodeWithTag("drawing_sheet_handle", useUnmergedTree = true).performTouchInput {
+                swipe(center, center - androidx.compose.ui.geometry.Offset(0f, 430f), 500)
+            }
+            captureProviderScreen("drawing-catalog-favorites")
+            for ((category, name) in listOf("الأشكال الهندسية" to "shapes", "ملاحظة" to "notes", "نماذج" to "patterns", "التنبؤ والقياس" to "measurement")) {
+                compose.onNodeWithTag("drawing_category_$category").performScrollTo().performClick()
+                if(name=="shapes" || name=="notes") {
+                    compose.onNodeWithTag("drawing_sheet_handle",useUnmergedTree=true).performTouchInput {
+                        swipe(center,center+androidx.compose.ui.geometry.Offset(0f,if(name=="shapes")130f else 320f),500)
+                    }
+                }
+                if(name=="shapes") compose.onNodeWithTag("drawing_catalog_categories").performTouchInput {
+                    swipe(center,center+androidx.compose.ui.geometry.Offset(65f,0f),400)
+                }
+                captureProviderScreen("drawing-catalog-$name")
+            }
+            compose.onNodeWithTag("drawing_category_المفضلة").performScrollTo().performClick()
+            compose.onNodeWithTag("drawing_favorites_switch").performClick()
+            androidx.test.espresso.Espresso.pressBack()
+            compose.onNodeWithTag("chart_favorite_TRENDLINE").assertExists()
+            compose.onNodeWithContentDescription("أدوات الرسم").performClick()
+            compose.onNodeWithTag("drawing_favorites_switch").performClick()
+            compose.onNodeWithTag("drawing_catalog_search").performTextInput("مثلث")
+            compose.onNodeWithTag("drawing_catalog_grid").performScrollToNode(hasTestTag("drawing_tool_TRIANGLE"))
+            compose.onNodeWithTag("drawing_tool_TRIANGLE").performClick()
+            compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f))
+                click(androidx.compose.ui.geometry.Offset(width*.75f,height*.55f))
+                click(androidx.compose.ui.geometry.Offset(width*.6f,height*.7f))
+            }
+            compose.waitUntil(10000) {
+                kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().any { it.type == "TRIANGLE" } }
+            }
+            val stored = kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.type == "TRIANGLE" } }
+            org.junit.Assert.assertEquals(3, com.example.feature.chart.model.ChartDrawing.fromEntity(stored)!!.anchors.size)
+            captureProviderScreen("drawing-catalog-triangle")
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                longClick(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f))
+            }
+            compose.onNodeWithTag("drawing_properties").assertIsDisplayed()
+            androidx.test.espresso.Espresso.pressBack()
+        } finally {
+            app.getSharedPreferences("drawing_catalog",android.content.Context.MODE_PRIVATE).edit().putBoolean("show_favorites",false).commit()
+            shell("wm size 864x1536")
+            shell("wm density 346")
+            kotlinx.coroutines.runBlocking { dao.clearDrawings("XAUUSD", "M15") }
+        }
+    }
+
 }

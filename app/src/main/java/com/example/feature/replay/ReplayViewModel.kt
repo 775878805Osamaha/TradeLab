@@ -784,7 +784,7 @@ class ReplayViewModel(
         }
     }
 
-    fun closePosition(posId: Long) {
+    fun closePosition(posId: Long, partialVolume: Double? = null) {
         cancelBatchAdvance()
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
         replayEngine.pause()
@@ -802,13 +802,19 @@ class ReplayViewModel(
         val exitPrice = if (pos.side == PositionSide.BUY) tick.bid else tick.ask
         val candle = replayEngine.currentCandle.value
 
-        val (trade, _) = executionEngine.closePosition(
+        if (partialVolume != null && !com.example.feature.chart.validPartialClose(pos.symbol, pos.volume, partialVolume)) {
+            _uiState.update { it.copy(message = "حجم الإغلاق الجزئي غير صالح") }
+            return
+        }
+        val (trade, remainingPosition) = executionEngine.closePosition(
             position = pos,
             exitPrice = exitPrice,
             exitReason = ExitReason.MANUAL_CLOSE,
-            closeTime = candle?.closeTime ?: tick.timestamp
+            closeTime = candle?.closeTime ?: tick.timestamp,
+            partialVolume = partialVolume
         )
         openPositions.remove(pos)
+        if (remainingPosition != null) openPositions.add(remainingPosition)
         closedTrades.add(trade)
         val newBal = ReplayAccountMath.realizedBalance(_uiState.value.currentBalance, trade.netProfitLoss)
 
@@ -818,7 +824,8 @@ class ReplayViewModel(
                 currentEquity = ReplayAccountMath.equity(newBal, openPositions),
                 openPositions = openPositions.toList(),
                 closedTrades = closedTrades.toList(),
-                message = "تم إغلاق الصفقة #${pos.id} في Replay"
+                message = if (remainingPosition == null) "تم إغلاق الصفقة #${pos.id} في Replay"
+                    else "تم إغلاق $partialVolume لوت؛ المتبقي ${remainingPosition.volume} لوت"
             )
         }
         // Manual close changes realized P&L and the journal at the current index.
