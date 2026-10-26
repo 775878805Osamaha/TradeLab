@@ -375,6 +375,15 @@ fun CandlestickChart(
                 }
                 .pointerInput(candles, activeDrawingTool, isCrosshairActive) {
                     detectTapGestures(
+                        onDoubleTap = if(activeDrawingTool.isVariablePath) ({ point ->
+                            val t = transformRef[0]
+                            if(t != null && pendingAnchors.size >= 2) {
+                                val at = t.snapDrawingPoint(point,snapEnabled)
+                                val points = (pendingAnchors + DrawingAnchor(t.xToTime(at.x),t.yToPrice(at.y))).take(512)
+                                onAddDrawing?.invoke(ChartDrawing(tool=activeDrawingTool,symbol="",timeframe="",startTime=points.first().time,startPrice=points.first().price,endTime=points.last().time,endPrice=points.last().price,anchors=points))
+                                pendingAnchors=emptyList()
+                            }
+                        }) else null,
                         onLongPress = { point ->
                             val t = transformRef[0]
                             if (t != null && activeDrawingTool == DrawingTool.NONE) {
@@ -415,14 +424,16 @@ fun CandlestickChart(
                                         symbol = "",
                                         timeframe = "",
                                         startTime = transform.xToTime(transform.snapDrawingPoint(offset, snapEnabled).x),
-                                        startPrice = transform.yToPrice(transform.snapDrawingPoint(offset, snapEnabled).y)
+                                        startPrice = transform.yToPrice(transform.snapDrawingPoint(offset, snapEnabled).y),
+                                        screenX = if(activeDrawingTool == DrawingTool.ANCHORED_TEXT) (offset.x / transform.chartWidth).coerceIn(0f,1f) else null,
+                                        screenY = if(activeDrawingTool == DrawingTool.ANCHORED_TEXT) (offset.y / transform.chartHeight).coerceIn(0f,1f) else null
                                     )
                                 )
                             } else if (insidePlot && transform != null && activeDrawingTool != DrawingTool.NONE && !activeDrawingTool.isFreehand) {
                                 val at = transform.snapDrawingPoint(offset, snapEnabled)
                                 val anchors = pendingAnchors + DrawingAnchor(transform.xToTime(at.x), transform.yToPrice(at.y))
                                 pendingAnchors = anchors
-                                if (anchors.size >= activeDrawingTool.anchorCount) {
+                                if (!activeDrawingTool.isVariablePath && anchors.size >= activeDrawingTool.anchorCount) {
                                     onAddDrawing?.invoke(ChartDrawing(tool = activeDrawingTool, symbol = "", timeframe = "",
                                         startTime = anchors.first().time, startPrice = anchors.first().price,
                                         endTime = anchors.last().time, endPrice = anchors.last().price, anchors = anchors))

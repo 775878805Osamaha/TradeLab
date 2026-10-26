@@ -981,7 +981,7 @@ fun ChartScreen(
 
                 if (uiState.activeDrawingTool != DrawingTool.NONE) {
                     Text(
-                        "${uiState.activeDrawingTool.catalogLabel()} · " + if (uiState.activeDrawingTool.isSinglePoint) "اضغط لتحديد الموضع" else if (uiState.activeDrawingTool.isFreehand) "اسحب للرسم" else if (uiState.activeDrawingTool.anchorCount > 2) "حدد ${uiState.activeDrawingTool.anchorCount} نقاط بالترتيب" else "اسحب أو حدد نقطتين",
+                        "${uiState.activeDrawingTool.catalogLabel()} · " + if (uiState.activeDrawingTool.isSinglePoint) "اضغط لتحديد الموضع" else if (uiState.activeDrawingTool.isFreehand) "اسحب للرسم" else if (uiState.activeDrawingTool.isVariablePath) "اضغط لإضافة نقاط، وانقر مرتين للإنهاء" else if (uiState.activeDrawingTool.anchorCount > 2) "حدد ${uiState.activeDrawingTool.anchorCount} نقاط بالترتيب" else "اسحب أو حدد نقطتين",
                         color = TradingTextPrimary, fontSize = 11.sp,
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp).background(TradingCard.copy(alpha = .92f), RoundedCornerShape(6.dp)).padding(6.dp).clickable { viewModel.setDrawingTool(uiState.activeDrawingTool) }.testTag("drawing_placement_hint")
                     )

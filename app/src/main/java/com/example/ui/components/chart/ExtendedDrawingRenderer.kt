@@ -11,7 +11,9 @@ import java.util.Locale
 /** Drawings use time/price anchors; every transform follows the current viewport. */
 internal object ExtendedDrawingRenderer {
     fun draw(scope: DrawScope, d: ChartDrawing, t: ChartTransform, history: List<com.example.core.model.Candle>, vwaps: Map<Long,List<VwapPoint>>) = with(scope) {
-        val first = Offset(t.timeToX(d.startTime) ?: return@with, t.priceToY(d.startPrice))
+        val first = if(d.tool == DrawingTool.ANCHORED_TEXT && d.screenX != null && d.screenY != null)
+            Offset(d.screenX*t.chartWidth,d.screenY*t.chartHeight)
+            else Offset(t.timeToX(d.startTime) ?: return@with, t.priceToY(d.startPrice))
         val last = Offset(d.endTime?.let { t.timeToX(it) } ?: first.x, d.endPrice?.let { t.priceToY(it) } ?: first.y)
         val points = if(d.anchors.isEmpty()) listOf(first,last) else d.anchors.mapNotNull { a -> t.timeToX(a.time)?.let { Offset(it,t.priceToY(a.price)) } }
         if(points.isEmpty()) return@with

@@ -39,4 +39,10 @@ class DrawingCatalogMathTests {
         val d=ChartDrawing(tool=DrawingTool.HORIZONTAL_LINE,symbol="TEST",timeframe="M15",startTime=900000,startPrice=.0000003)
         assertEquals(d.startPrice,ChartDrawing.fromEntity(d.toEntity())!!.startPrice,1e-14)
     }
+    @Test fun anchoredTextRetainsScreenFractionsAcrossPersistence() {
+        val d=ChartDrawing(tool=DrawingTool.ANCHORED_TEXT,symbol="XAUUSD",timeframe="M15",startTime=900000,startPrice=4000.0,screenX=.25f,screenY=.75f,text="ملاحظة")
+        val restored=ChartDrawing.fromEntity(d.toEntity())!!
+        assertEquals(.25f,restored.screenX!!,0f);assertEquals(.75f,restored.screenY!!,0f)
+    }
+
 }

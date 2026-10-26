@@ -35,10 +35,11 @@ data class DrawingAnchor(val time: Long, val price: Double)
 
 val DrawingTool.isTextTool: Boolean get() = this in setOf(DrawingTool.ANNOTATION, DrawingTool.TEXT, DrawingTool.ANCHORED_TEXT, DrawingTool.NOTE, DrawingTool.CALLOUT)
 val DrawingTool.isSinglePoint: Boolean get() = isTextTool || this in setOf(DrawingTool.HORIZONTAL_LINE, DrawingTool.VERTICAL_LINE, DrawingTool.HORIZONTAL_RAY, DrawingTool.ARROW_UP, DrawingTool.ARROW_DOWN, DrawingTool.PRICE_LABEL, DrawingTool.FLAG, DrawingTool.PIN, DrawingTool.ANCHORED_VWAP)
+val DrawingTool.isVariablePath: Boolean get() = this == DrawingTool.PATH || this == DrawingTool.POLYLINE
 val DrawingTool.isFreehand: Boolean get() = this == DrawingTool.BRUSH || this == DrawingTool.HIGHLIGHTER
 val DrawingTool.anchorCount: Int get() = when(this) {
     DrawingTool.LONG_POSITION, DrawingTool.SHORT_POSITION, DrawingTool.TRIANGLE, DrawingTool.PARALLEL_CHANNEL, DrawingTool.CURVE, DrawingTool.ARC, DrawingTool.ROTATED_RECTANGLE -> 3
-    DrawingTool.PATH, DrawingTool.POLYLINE, DrawingTool.ABCD, DrawingTool.ELLIOTT_CORRECTION -> 4
+    DrawingTool.ABCD, DrawingTool.ELLIOTT_CORRECTION -> 4
     DrawingTool.XABCD -> 5
     DrawingTool.ELLIOTT_IMPULSE -> 6
     DrawingTool.HEAD_SHOULDERS -> 7
@@ -57,7 +58,9 @@ data class ChartDrawing(
     val color: Color = TradingGold,
     val strokeWidth: Float = 2.0f,
     val text: String = "تعليق",
-    val anchors: List<DrawingAnchor> = emptyList()
+    val anchors: List<DrawingAnchor> = emptyList(),
+    val screenX: Float? = null,
+    val screenY: Float? = null
 ) {
     fun toEntity(): DrawingEntity {
         val json = buildString {
@@ -71,6 +74,7 @@ data class ChartDrawing(
                 val encoded = anchors.take(512).joinToString(";") { "${it.time}:${it.price}" }
                 append(",\"anchorsBase64\":\"${Base64.getEncoder().encodeToString(encoded.toByteArray(Charsets.UTF_8))}\"")
             }
+            if (screenX != null && screenY != null) append(",\"screenX\":$screenX,\"screenY\":$screenY")
             append("}")
         }
         val hex = String.format(Locale.US, "#%08X", color.toArgb().toLong() and 0xFFFFFFFFL)
@@ -118,7 +122,9 @@ data class ChartDrawing(
                         ?.split(';')?.take(512)?.mapNotNull { item ->
                             val parts = item.split(':'); val t = parts.getOrNull(0)?.toLongOrNull(); val p = parts.getOrNull(1)?.toDoubleOrNull()
                             if (t != null && p != null && p.isFinite() && p > 0) DrawingAnchor(t, p) else null
-                        } ?: emptyList()
+                        } ?: emptyList(),
+                    screenX = Regex("\"screenX\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f },
+                    screenY = Regex("\"screenY\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f }
                 )
             } catch (e: Exception) {
                 null
