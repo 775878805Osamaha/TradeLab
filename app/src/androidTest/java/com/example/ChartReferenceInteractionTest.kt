@@ -196,6 +196,9 @@ class ChartReferenceInteractionTest {
     }
 
     @Test fun marketTerminalSearchAndOpenChart() {
+        shell("wm size 691x1536")
+        shell("wm density 276")
+        try {
         compose.onNodeWithTag("nav_item_market").performClick()
         compose.waitUntil(30000) { compose.onAllNodesWithTag("symbol_card_BTCUSDT").fetchSemanticsNodes().isNotEmpty() }
         captureProviderScreen("tradelab-market-terminal")
@@ -205,6 +208,7 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("symbol_card_BTCUSDT").assertDoesNotExist()
         compose.onNodeWithTag("symbol_card_XAUUSD").performClick()
         compose.onNodeWithTag("nav_item_chart").assertIsSelected()
+        } finally { shell("wm size 864x1536"); shell("wm density 346") }
     }
 
     private fun shell(command: String) {

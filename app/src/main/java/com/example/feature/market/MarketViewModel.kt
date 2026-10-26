@@ -10,15 +10,15 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-enum class MarketSort(val label: String) { SYMBOL("الرمز"), SPREAD("أقل سبريد"), CHANGE_PCT("أعلى ارتفاع"), LOSERS("أعلى انخفاض"), FAVORITES("المفضلة") }
+enum class MarketSort(val label: String) { DEFAULT("ترتيب الأصول"), SYMBOL("الرمز"), SPREAD("أقل سبريد"), CHANGE_PCT("أعلى ارتفاع"), LOSERS("أعلى انخفاض"), FAVORITES("المفضلة") }
 enum class MarketCategory(val label:String,val category:String?) { ALL("الكل",null), CRYPTO("العملات الرقمية","Crypto"), FOREX("الفوركس","Forex"), STOCKS("الأسهم","Stocks"), INDICES("المؤشرات","Indices"), METALS("المعادن","Metals"), FAVORITES("المفضلة",null) }
-data class MarketUiState(val rows:List<MarketQuoteSnapshot> = emptyList(), val searchQuery:String="",val category:MarketCategory=MarketCategory.ALL,val sortOption:MarketSort=MarketSort.SYMBOL,val compact:Boolean=true,val loading:Boolean=true)
+data class MarketUiState(val rows:List<MarketQuoteSnapshot> = emptyList(), val searchQuery:String="",val category:MarketCategory=MarketCategory.ALL,val sortOption:MarketSort=MarketSort.DEFAULT,val compact:Boolean=true,val loading:Boolean=true)
 
 @OptIn(FlowPreview::class)
 class MarketViewModel(private val marketDataRepository: MarketDataRepository):ViewModel() {
     private val query=MutableStateFlow("")
     private val category=MutableStateFlow(MarketCategory.ALL)
-    private val sort=MutableStateFlow(MarketSort.SYMBOL)
+    private val sort=MutableStateFlow(MarketSort.DEFAULT)
     private val compact=MutableStateFlow(true)
     private val ticks=MutableStateFlow<Map<String,Tick>>(emptyMap())
     private val histories=MutableStateFlow<Map<String,List<Candle>>>(emptyMap())
@@ -29,6 +29,7 @@ class MarketViewModel(private val marketDataRepository: MarketDataRepository):Vi
         val selected=all.filter { (f.searchQuery.isBlank() || it.symbol.symbol.contains(f.searchQuery,true) || it.symbol.name.contains(f.searchQuery,true)) &&
             (f.category==MarketCategory.ALL || f.category==MarketCategory.FAVORITES && it.symbol.isFavorite || f.category.category==it.symbol.category) }
         val ordered=when(f.sortOption){
+            MarketSort.DEFAULT->selected.sortedWith(compareBy<MarketQuoteSnapshot>{ listOf("XAUUSD","BTCUSDT","ETHUSDT","EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD","NZDUSD","USDCHF").indexOf(it.symbol.symbol).let{n->if(n<0)Int.MAX_VALUE else n} }.thenBy{it.symbol.symbol})
             MarketSort.SYMBOL->selected.sortedBy{it.symbol.symbol}
             MarketSort.SPREAD->selected.sortedWith(compareBy<MarketQuoteSnapshot>{it.spread==null}.thenBy{it.spread})
             MarketSort.CHANGE_PCT->selected.sortedWith(compareBy<MarketQuoteSnapshot>{it.changePercent==null}.thenByDescending{it.changePercent})

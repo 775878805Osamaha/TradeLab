@@ -84,13 +84,20 @@ object DefaultSymbols {
         )
     )
 
+    val TERMINAL_FOREX = listOf(
+        SymbolInfo("AUDUSD", "Australian Dollar / US Dollar", "Forex", 5, .0001, 100000.0),
+        SymbolInfo("USDCAD", "US Dollar / Canadian Dollar", "Forex", 5, .0001, 100000.0),
+        SymbolInfo("NZDUSD", "New Zealand Dollar / US Dollar", "Forex", 5, .0001, 100000.0),
+        SymbolInfo("USDCHF", "US Dollar / Swiss Franc", "Forex", 5, .0001, 100000.0)
+    )
+
     fun getSymbol(symbol: String): SymbolInfo {
         val normalized = when (symbol.uppercase()) {
             "BTCUSD" -> "BTCUSDT"
             "ETHUSD" -> "ETHUSDT"
             else -> symbol.uppercase()
         }
-        return SYMBOLS.firstOrNull { it.symbol.equals(normalized, ignoreCase = true) }
+        return (SYMBOLS + TERMINAL_FOREX).firstOrNull { it.symbol.equals(normalized, ignoreCase = true) }
             ?: SymbolInfo(
                 symbol = symbol,
                 name = symbol,
