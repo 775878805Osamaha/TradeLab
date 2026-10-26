@@ -229,6 +229,13 @@ fun CandlestickChart(
             chartViewportWidthPx <= 1f) return@LaunchedEffect
         val threshold = (candles.size * candleWidthPx - chartViewportWidthPx -
             candleWidthPx * 30f).coerceAtLeast(0f)
+        // A failed historical request must not permanently disable automatic
+        // pagination. Re-arm only after the user deliberately pans away from
+        // the oldest edge; this avoids repeated requests on every recomposition.
+        val retryResetThreshold = (threshold - candleWidthPx * 40f).coerceAtLeast(0f)
+        if (scrollOffsetPx < retryResetThreshold && !loadingOlderHistory) {
+            lastBackfillOldestTime = null
+        }
         if (scrollOffsetPx > 0f && scrollOffsetPx >= threshold && lastBackfillOldestTime != oldest) {
             lastBackfillOldestTime = oldest
             requestOlderHistory?.invoke()
