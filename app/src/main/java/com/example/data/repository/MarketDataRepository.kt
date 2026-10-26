@@ -119,7 +119,7 @@ class MarketDataRepository(
                     .map { it.toDomain() }
             ).filter { candle ->
                 candle.symbol == symbol && candle.timeframe == timeframe &&
-                    candle.source in setOf("BIQUOTE_HISTORICAL", "TWELVEDATA_HISTORICAL")
+                    candle.source in setOf("BIQUOTE_HISTORICAL", "TWELVE_DATA_HISTORICAL")
             }
             // A complete contiguous verified cache window needs no network.
             // Never assume that a sparse forex session is complete merely
