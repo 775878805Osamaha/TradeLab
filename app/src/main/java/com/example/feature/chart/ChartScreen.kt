@@ -888,6 +888,11 @@ fun ChartScreen(
                 else emptyList()
             }
 
+            val revealedDrawingTime = replayState.visibleCandles.lastOrNull()?.openTime
+            val displayedDrawings = remember(uiState.drawings, isEmbeddedReplay, revealedDrawingTime) {
+                if (isEmbeddedReplay) com.example.feature.replay.visibleReplayDrawings(uiState.drawings, revealedDrawingTime)
+                else uiState.drawings
+            }
             // Professional Candlestick Chart
             Box(
                 modifier = Modifier
@@ -910,7 +915,7 @@ fun ChartScreen(
                     historicalTrades = if (isEmbeddedReplay) replayState.closedTrades else uiState.historicalTrades,
                     activeDrawingTool = uiState.activeDrawingTool,
                     magnetEnabled = magnetEnabled,
-                    drawings = uiState.drawings,
+                    drawings = displayedDrawings,
                     indicatorSettings = uiState.indicatorSettings,
                     smaValues = if (isEmbeddedReplay) replaySma else uiState.smaValues,
                     emaValues = if (isEmbeddedReplay) replayEma else uiState.emaValues,
