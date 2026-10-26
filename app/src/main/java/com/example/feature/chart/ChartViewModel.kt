@@ -471,7 +471,7 @@ class ChartViewModel(
                 for (window in 0L until scanWindows) {
                     val end = lastClosedOpen - window * interval * 100L
                     if (end < 0L) break
-                    for (depth in if (window == 0L) initialDepths else listOf(100, 1).filter { it <= requestedBars }) {
+                    for (depth in if (window == 0L) initialDepths else listOf(100, 40, 10, 1).filter { it <= requestedBars }) {
                         val attemptFrom = (end - interval * (depth - 1L)).coerceAtLeast(0L)
                         try {
                             val fetched = marketDataRepository.getCandles(
