@@ -53,14 +53,14 @@ fun DrawingCatalogSheet(
     var confirmClear by remember { mutableStateOf(false) }
     val categories = listOf("المفضلة", "أدوات") + drawingGroups.map { it.title } + "المرئيات"
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var heightFraction by rememberSaveable { mutableFloatStateOf(.667f) }
+    var heightFraction by rememberSaveable { mutableFloatStateOf(.649f) }
     val density=androidx.compose.ui.platform.LocalDensity.current
     val screenHeightDp=androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp
     val windowHeight=with(density) { screenHeightDp.dp.toPx() }
     var dragBelowMinimum by remember { mutableFloatStateOf(0f) }
     fun settleHeight() {
         if(dragBelowMinimum > with(density){140.dp.toPx()}) onDismiss()
-        else heightFraction=listOf(.667f,.875f,.96f).minBy { kotlin.math.abs(it-heightFraction) }
+        else heightFraction=listOf(.649f,.875f,.96f).minBy { kotlin.math.abs(it-heightFraction) }
     }
     val ink = Color(0xFF171717)
     val muted = Color(0xFF808080)
@@ -72,8 +72,8 @@ fun DrawingCatalogSheet(
             Box(Modifier.fillMaxWidth().testTag("drawing_sheet_handle").pointerInput(windowHeight) {
                 detectVerticalDragGestures(onDragStart={dragBelowMinimum=0f},onDragEnd={settleHeight()},onDragCancel={settleHeight()}) { change,dy ->
                     change.consume()
-                    if(heightFraction<=.668f && dy>0)dragBelowMinimum+=dy
-                    heightFraction=(heightFraction-dy/windowHeight).coerceIn(.667f,.96f)
+                    if(heightFraction<=.650f && dy>0)dragBelowMinimum+=dy
+                    heightFraction=(heightFraction-dy/windowHeight).coerceIn(.649f,.96f)
                 }
             }.padding(top=18.dp,bottom=8.dp),contentAlignment=Alignment.Center) {
                 Box(Modifier.size(36.dp,4.dp).background(Color(0xFFE7E7E7),RoundedCornerShape(3.dp)))

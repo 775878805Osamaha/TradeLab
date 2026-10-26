@@ -212,7 +212,7 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithContentDescription("أدوات الرسم").performClick()
             compose.onNodeWithTag("drawing_catalog_sheet").assertExists()
             compose.onNodeWithTag("drawing_sheet_handle", useUnmergedTree = true).performTouchInput {
-                swipe(center, center - androidx.compose.ui.geometry.Offset(0f, 400f), 500)
+                swipe(center, center - androidx.compose.ui.geometry.Offset(0f, 430f), 500)
             }
             captureProviderScreen("drawing-catalog-favorites")
             for ((category, name) in listOf("الأشكال الهندسية" to "shapes", "ملاحظة" to "notes", "نماذج" to "patterns", "التنبؤ والقياس" to "measurement")) {
