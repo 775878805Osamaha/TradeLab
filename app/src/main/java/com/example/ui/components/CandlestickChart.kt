@@ -75,6 +75,8 @@ fun CandlestickChart(
     onAddDrawing: ((ChartDrawing) -> Unit)? = null,
     onSelectTrade: ((TradeJournalEntry) -> Unit)? = null,
     onRequestOlderHistory: (() -> Unit)? = null,
+    bullishColor: Color = TradingPositive,
+    bearishColor: Color = TradingNegative,
     isLoadingOlderHistory: Boolean = false
 ) {
     if (candles.isEmpty()) {
@@ -114,6 +116,9 @@ fun CandlestickChart(
     }
 
     val snapEnabled by rememberUpdatedState(magnetEnabled)
+
+    val chartDensity = androidx.compose.ui.platform.LocalDensity.current
+    val axisWidthPx = with(chartDensity) { 54.dp.toPx() }
 
     // Viewport State
     var candleWidthPx by remember { mutableFloatStateOf(12f) }
@@ -271,7 +276,7 @@ fun CandlestickChart(
             initialCandleFitApplied = true
         }
     }
-    Box(modifier = modifier.onSizeChanged { chartViewportWidthPx = (it.width - 122f).coerceAtLeast(1f) }) {
+    Box(modifier = modifier.onSizeChanged { chartViewportWidthPx = (it.width - axisWidthPx).coerceAtLeast(1f) }) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -379,7 +384,9 @@ fun CandlestickChart(
             val width = size.width
             val height = size.height
             // Reserve sufficient width for large formatted prices (e.g. 81,500.00).
-            val rightAxisWidth = 54.dp.toPx()
+            priceAxisPaint.textSize = 10.dp.toPx()
+            timeAxisPaint.textSize = 10.dp.toPx()
+            val rightAxisWidth = axisWidthPx
             val chartWidth = (width - rightAxisWidth).coerceAtLeast(1f)
 
             // Subpanel height split
@@ -492,7 +499,7 @@ fun CandlestickChart(
                 val lowY = transform.priceToY(c.low)
 
                 val isBullish = c.close >= c.open
-                val candleColor = if (isBullish) TradingPositive else TradingNegative
+                val candleColor = if (isBullish) bullishColor else bearishColor
 
                 // Wick line
                 drawLine(
@@ -546,7 +553,7 @@ fun CandlestickChart(
                     val volHeight = (c.volume / maxVol).coerceIn(0.0, 1.0).toFloat() * volumeHeight
                     val y = volTop + volumeHeight - volHeight
                     val isBullish = c.close >= c.open
-                    val volColor = if (isBullish) TradingPositive.copy(alpha = 0.35f) else TradingNegative.copy(alpha = 0.35f)
+                    val volColor = if (isBullish) bullishColor.copy(alpha = 0.35f) else bearishColor.copy(alpha = 0.35f)
 
                     drawRect(
                         color = volColor,

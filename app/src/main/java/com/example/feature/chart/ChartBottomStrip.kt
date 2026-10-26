@@ -68,7 +68,7 @@ internal fun ChartBottomStrip(
             Box {
                 Row(Modifier.clickable { expanded = true }.height(44.dp).testTag("chart_bottom_timeframe"),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text(timeframe.displayName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(timeframe.arabicLabel(), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Icon(Icons.Default.KeyboardArrowDown, "الفاصل الزمني", tint = Color.White, modifier = Modifier.size(16.dp))
                 }
                 DropdownMenu(expanded, { expanded = false }) {
@@ -86,4 +86,11 @@ internal fun ChartBottomStrip(
             }
         }
     }
+}
+
+internal fun Timeframe.arabicLabel(): String = when {
+    minutes < 60 -> "$minutes دق"
+    minutes < 1440 -> "${minutes / 60} س"
+    minutes < 10080 -> "1 يوم"
+    else -> "1 أسبوع"
 }

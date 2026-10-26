@@ -935,6 +935,8 @@ fun ChartScreen(
                     },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) },
                     onRequestOlderHistory = if (isEmbeddedReplay) null else ({ viewModel.loadOlderChartHistory() }),
+                    bullishColor = Color(0xFF00B7AA),
+                    bearishColor = Color(0xFFFF3D48),
                     isLoadingOlderHistory = uiState.isLoadingOlderHistory
                 )
                 }
@@ -1647,6 +1649,13 @@ fun ChartScreen(
                         }
                     }
                     HorizontalDivider(color = TradingBorder)
+                    TextButton(onClick = {
+                        uiState.drawings.lastOrNull()?.let { viewModel.deleteDrawing(it.id) }
+                        showToolsMenu = false
+                    }, enabled = uiState.drawings.isNotEmpty()) {
+                        Icon(Icons.Default.Undo, contentDescription = null)
+                        Text("تراجع عن آخر رسم")
+                    }
                     TextButton(
                         onClick = {
                             viewModel.clearDrawings()
