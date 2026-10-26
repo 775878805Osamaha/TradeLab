@@ -244,6 +244,7 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithTag("drawing_properties").assertIsDisplayed()
             androidx.test.espresso.Espresso.pressBack()
         } finally {
+            app.getSharedPreferences("drawing_catalog",android.content.Context.MODE_PRIVATE).edit().putBoolean("show_favorites",false).commit()
             shell("wm size 864x1536")
             shell("wm density 346")
             kotlinx.coroutines.runBlocking { dao.clearDrawings("XAUUSD", "M15") }

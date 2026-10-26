@@ -45,4 +45,15 @@ class DrawingCatalogMathTests {
         assertEquals(.25f,restored.screenX!!,0f);assertEquals(.75f,restored.screenY!!,0f)
     }
 
+    @Test fun selectionFollowsEveryTriangleEdgeAndAnchoredTextScreenPosition() {
+        val all=listOf(candle(900000,4000.0),candle(1800000,4001.0),candle(2700000,4002.0))
+        val t=ChartTransform(all,3900.0,4100.0,300f,500f,40f)
+        val anchors=listOf(DrawingAnchor(900000,4000.0),DrawingAnchor(1800000,4050.0),DrawingAnchor(2700000,4000.0))
+        val d=ChartDrawing(tool=DrawingTool.TRIANGLE,symbol="XAUUSD",timeframe="M15",startTime=900000,startPrice=4000.0,anchors=anchors)
+        val midpoint=androidx.compose.ui.geometry.Offset((t.timeToX(900000)!!+t.timeToX(1800000)!!)/2,(t.priceToY(4000.0)+t.priceToY(4050.0))/2)
+        assertEquals(0f,DrawingHitTest.distance(d,t,midpoint),.001f)
+        val text=d.copy(tool=DrawingTool.ANCHORED_TEXT,anchors=emptyList(),screenX=.25f,screenY=.75f)
+        assertEquals(0f,DrawingHitTest.distance(text,t,androidx.compose.ui.geometry.Offset(75f,375f)),.001f)
+    }
+
 }

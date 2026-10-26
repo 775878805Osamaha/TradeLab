@@ -388,16 +388,7 @@ fun CandlestickChart(
                             val t = transformRef[0]
                             if (t != null && activeDrawingTool == DrawingTool.NONE) {
                                 currentDrawings.asReversed().firstOrNull { d ->
-                                    val a = Offset(t.timeToX(d.startTime) ?: 0f, t.priceToY(d.startPrice))
-                                    val b = Offset(d.endTime?.let { t.timeToX(it) } ?: a.x, d.endPrice?.let { t.priceToY(it) } ?: a.y)
-                                    val segment = b-a
-                                    val f = if(segment.getDistanceSquared()>0f) (((point-a).x*segment.x+(point-a).y*segment.y)/segment.getDistanceSquared()).coerceIn(0f,1f) else 0f
-                                    val distance = when(d.tool) {
-                                        DrawingTool.HORIZONTAL_LINE, DrawingTool.HORIZONTAL_RAY -> kotlin.math.abs(point.y-a.y)
-                                        DrawingTool.VERTICAL_LINE -> kotlin.math.abs(point.x-a.x)
-                                        else -> (point-(a+segment*f)).getDistance()
-                                    }
-                                    distance < positionHitRadius
+                                    DrawingHitTest.distance(d,t,point) < positionHitRadius
                                 }?.let { drawingSelection?.invoke(it) }
                             }
                         },
