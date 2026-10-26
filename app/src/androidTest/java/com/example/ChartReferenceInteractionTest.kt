@@ -29,6 +29,36 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_floating_timeframe").assertDoesNotExist()
     }
 
+    @Test fun recordActualPanFrameDurations() {
+        val durations = java.util.concurrent.CopyOnWriteArrayList<Long>()
+        val thread = android.os.HandlerThread("chart-frame-measurement").apply { start() }
+        val listener = android.view.Window.OnFrameMetricsAvailableListener { _, metrics, _ ->
+            durations.add(metrics.getMetric(android.view.FrameMetrics.TOTAL_DURATION))
+        }
+        compose.runOnIdle {
+            compose.activity.window.addOnFrameMetricsAvailableListener(listener, android.os.Handler(thread.looper))
+        }
+        try {
+            compose.waitUntil(30000) {
+                compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
+            }
+            repeat(4) {
+                compose.onNodeWithTag("candlestick_canvas").performTouchInput { swipeLeft(durationMillis = 500) }
+                compose.onNodeWithTag("candlestick_canvas").performTouchInput { swipeRight(durationMillis = 500) }
+            }
+        } finally {
+            compose.runOnIdle { compose.activity.window.removeOnFrameMetricsAvailableListener(listener) }
+            thread.quitSafely()
+            thread.join(2000)
+            val samples = durations.filter { it > 0 }.sorted()
+            val p95 = samples.getOrNull(((samples.size - 1) * .95).toInt().coerceAtLeast(0))?.div(1_000_000.0)
+            val overBudget = samples.count { it > 16_666_667L }
+            java.io.File(compose.activity.getExternalFilesDir(null), "chart-frame-metrics.json").writeText(
+                """{"samples":${samples.size},"p95_frame_ms":$p95,"over_16_67ms":$overBudget,"environment":"GitHub Android emulator; software GPU; not a physical-device FPS guarantee"}"""
+            )
+        }
+    }
+
     @Test fun bottomSelectorsOpenActualMenus() {
         compose.onNodeWithTag("chart_bottom_symbol").performClick()
         compose.onNodeWithTag("chart_symbol_search").assertIsDisplayed()
