@@ -174,6 +174,13 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_replay_open_positions_summary").assertIsDisplayed()
         compose.onNodeWithTag("nav_item_chart").assertIsSelected()
         captureProviderScreen("tradelab-compact-replay")
+        for (step in 1..40) {
+            if (compose.onAllNodesWithTag("chart_position_actions").fetchSemanticsNodes().isNotEmpty()) break
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(width * .65f, height * step / 42f))
+            }
+        }
+        compose.onNodeWithText("الحجم المفتوح: 0.06 لوت").assertIsDisplayed()
     }
 
 }

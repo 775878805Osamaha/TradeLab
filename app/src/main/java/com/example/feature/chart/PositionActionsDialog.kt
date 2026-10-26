@@ -40,7 +40,7 @@ fun PositionActionsDialog(
         title = { Text("${position.symbol} · #${position.id}") },
         text = {
             Column {
-                Text("الحجم المفتوح: ${position.volume} لوت")
+                Text("الحجم المفتوح: ${java.math.BigDecimal.valueOf(position.volume).setScale(8, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()} لوت")
                 if (mode == "menu") {
                     TextButton(onClick = { mode = "close" }, modifier = Modifier.testTag("position_close")) { Text("إغلاق الصفقة") }
                     TextButton(onClick = { mode = "sl" }, modifier = Modifier.testTag("position_sl")) { Text("وضع وقف الخسارة") }

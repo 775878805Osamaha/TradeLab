@@ -287,7 +287,7 @@ fun CandlestickChart(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("candlestick_canvas")
-                .transformable(state = transformableState, enabled = activeDrawingTool == DrawingTool.NONE && !isCrosshairActive)
+                .transformable(state = transformableState, enabled = activeDrawingTool == DrawingTool.NONE)
                 // Keep gesture recognition alive while Replay reveals each new candle.
                 // Recreating pointerInput on every candle update cancels active drags.
                 .pointerInput(activeDrawingTool, isCrosshairActive) {
@@ -367,7 +367,7 @@ fun CandlestickChart(
                             val insidePlot = transform != null &&
                                 offset.x in 0f..transform.chartWidth &&
                                 offset.y in 0f..transform.chartHeight
-                            val hit = if (insidePlot && transform != null && activeDrawingTool == DrawingTool.NONE && !isCrosshairActive)
+                            val hit = if (insidePlot && transform != null && activeDrawingTool == DrawingTool.NONE)
                                 selectablePositions.minByOrNull { pos ->
                                     listOfNotNull(pos.entryPrice, pos.stopLoss, pos.takeProfit)
                                         .minOf { kotlin.math.abs(transform.priceToY(it) - offset.y) }
