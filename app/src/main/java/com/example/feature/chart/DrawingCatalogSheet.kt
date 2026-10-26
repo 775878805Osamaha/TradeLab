@@ -81,7 +81,7 @@ fun DrawingCatalogSheet(
         }) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(heightFraction).testTag("drawing_catalog_sheet")) {
             Text("رسومات", fontWeight = FontWeight.Bold, fontSize = 24.sp, lineHeight = 24.sp,
-                modifier = Modifier.align(Alignment.Start).padding(horizontal = 18.dp).padding(top=24.dp,bottom=16.dp))
+                modifier = Modifier.align(Alignment.Start).padding(horizontal = 18.dp).padding(top=24.dp,bottom=13.dp))
             androidx.compose.foundation.text.BasicTextField(
                 value=query,onValueChange={query=it},singleLine=true,
                 textStyle=androidx.compose.ui.text.TextStyle(color=ink,fontSize=16.sp),
@@ -105,6 +105,8 @@ fun DrawingCatalogSheet(
             val matching = groups.map { group -> group.copy(tools = group.tools.filter { tool ->
                 val search = query.isBlank() || tool.displayNameAr.contains(query, true) || tool.name.contains(query, true)
                 search && (query.isNotBlank() || when(category) { "المفضلة" -> tool.name in favorites; "أدوات" -> true; else -> group.title == category })
+            }.let { tools ->
+                if(category=="المفضلة" && group.title=="التنبؤ والقياس") tools.sortedBy { when(it) { DrawingTool.SHORT_POSITION->0;DrawingTool.LONG_POSITION->1;else->2 } } else tools
             }) }.filter { it.tools.isNotEmpty() }
             LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("drawing_catalog_grid"),
                 contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
