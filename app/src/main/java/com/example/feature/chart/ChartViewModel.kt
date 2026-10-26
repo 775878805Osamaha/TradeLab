@@ -426,19 +426,34 @@ class ChartViewModel(
                 // with an error. Never fabricate missing OHLC data.
                 var rawCandles = emptyList<com.example.core.model.Candle>()
                 var lastHistoryError: Exception? = null
-                for (depth in listOf(requestedBars, 100, 40, 10).distinct().filter { it <= requestedBars }) {
-                    val attemptFrom = (lastClosedOpen - interval * (depth - 1L)).coerceAtLeast(0L)
-                    try {
-                        val fetched = marketDataRepository.getCandles(symbol, tf, attemptFrom, lastClosedOpen)
-                        if (fetched.isNotEmpty()) {
-                            rawCandles = fetched
-                            break
+                // Gold/FX markets close over weekends. Search older CLOSED
+                // sessions when the most recent window has no verified candles.
+                // Use bounded requests to avoid downloading huge empty ranges.
+                val initialDepths = listOf(requestedBars, 100, 40, 10, 1)
+                    .distinct().filter { it in 1..requestedBars }
+                val scanWindows = if (symbol in setOf("BTCUSDT", "ETHUSDT")) 1L else
+                    (72L * 60L / (tf.minutes.toLong() * 100L))
+                        .coerceAtLeast(4L).coerceAtMost(60L)
+                for (window in 0L until scanWindows) {
+                    val end = lastClosedOpen - window * interval * 100L
+                    if (end < 0L) break
+                    for (depth in initialDepths) {
+                        val attemptFrom = (end - interval * (depth - 1L)).coerceAtLeast(0L)
+                        try {
+                            val fetched = marketDataRepository.getCandles(
+                                symbol, tf, attemptFrom, end
+                            )
+                            if (fetched.isNotEmpty()) {
+                                rawCandles = fetched
+                                break
+                            }
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            lastHistoryError = error
                         }
-                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                        throw cancelled
-                    } catch (error: Exception) {
-                        lastHistoryError = error
                     }
+                    if (rawCandles.isNotEmpty()) break
                 }
                 if (rawCandles.isEmpty() && lastHistoryError != null) throw lastHistoryError
                 val aggregated = CandleAggregator.aggregate(rawCandles, tf)
