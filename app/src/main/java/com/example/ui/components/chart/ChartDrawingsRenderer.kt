@@ -2,6 +2,7 @@ package com.example.ui.components.chart
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -64,6 +65,19 @@ object ChartDrawingsRenderer {
                             end = Offset(endX, endY),
                             strokeWidth = d.strokeWidth
                         )
+                    }
+                }
+                DrawingTool.ANNOTATION -> {
+                    scope.drawContext.canvas.nativeCanvas.drawText(d.text, startX, startY,
+                        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                            color = d.color.toArgb()
+                            textSize = with(scope) { 12f * density }
+                        })
+                }
+                DrawingTool.ELLIPSE -> {
+                    if (endX != null && endY != null) {
+                        scope.drawOval(d.color, Offset(min(startX, endX), min(startY, endY)),
+                            Size(abs(endX - startX), abs(endY - startY)), style = Stroke(d.strokeWidth))
                     }
                 }
                 DrawingTool.RECTANGLE -> {

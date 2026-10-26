@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.Canvas
+import com.example.feature.chart.model.snapDrawingPoint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -67,6 +68,7 @@ fun CandlestickChart(
     macdValues: List<MacdResult?> = emptyList(),
     atrValues: List<Double?> = emptyList(),
     isCrosshairActive: Boolean = false,
+    magnetEnabled: Boolean = false,
     isVolumeVisible: Boolean = true,
     resetViewTrigger: Long = 0L,
     displayStyle: ChartDisplayStyle = ChartDisplayStyle.CANDLES,
@@ -110,6 +112,8 @@ fun CandlestickChart(
             converted
         }
     }
+
+    val snapEnabled by rememberUpdatedState(magnetEnabled)
 
     // Viewport State
     var candleWidthPx by remember { mutableFloatStateOf(12f) }
@@ -313,8 +317,9 @@ fun CandlestickChart(
                         },
                         onDragEnd = {
                             if (dragStartedInPlot && activeDrawingTool != DrawingTool.NONE && drawingStartOffset != null && drawingCurrentOffset != null) {
-                                val start = drawingStartOffset!!
-                                val end = drawingCurrentOffset!!
+                                val transformForSnap = transformRef[0]
+                                val start = transformForSnap?.snapDrawingPoint(drawingStartOffset!!, snapEnabled) ?: drawingStartOffset!!
+                                val end = transformForSnap?.snapDrawingPoint(drawingCurrentOffset!!, snapEnabled) ?: drawingCurrentOffset!!
                                 val transform = transformRef[0]
                                 val distance = (end - start).getDistance()
                                 if (transform != null && onAddDrawing != null && distance >= 10f &&
@@ -353,14 +358,15 @@ fun CandlestickChart(
                                 offset.y in 0f..transform.chartHeight
                             if (insidePlot && transform != null && onAddDrawing != null &&
                                 (activeDrawingTool == DrawingTool.HORIZONTAL_LINE ||
-                                 activeDrawingTool == DrawingTool.VERTICAL_LINE)) {
+                                 activeDrawingTool == DrawingTool.VERTICAL_LINE ||
+                                 activeDrawingTool == DrawingTool.ANNOTATION)) {
                                 onAddDrawing(
                                     ChartDrawing(
                                         tool = activeDrawingTool,
                                         symbol = "",
                                         timeframe = "",
-                                        startTime = transform.xToTime(offset.x),
-                                        startPrice = transform.yToPrice(offset.y)
+                                        startTime = transform.xToTime(transform.snapDrawingPoint(offset, snapEnabled).x),
+                                        startPrice = transform.yToPrice(transform.snapDrawingPoint(offset, snapEnabled).y)
                                     )
                                 )
                             } else if (isCrosshairActive && insidePlot) {
@@ -373,7 +379,7 @@ fun CandlestickChart(
             val width = size.width
             val height = size.height
             // Reserve sufficient width for large formatted prices (e.g. 81,500.00).
-            val rightAxisWidth = 122f
+            val rightAxisWidth = 54.dp.toPx()
             val chartWidth = (width - rightAxisWidth).coerceAtLeast(1f)
 
             // Subpanel height split

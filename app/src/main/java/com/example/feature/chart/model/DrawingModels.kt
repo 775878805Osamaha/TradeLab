@@ -15,7 +15,9 @@ enum class DrawingTool(val displayNameAr: String) {
     TRENDLINE("خط اتجاه (Trendline)"),
     RECTANGLE("مستطيل منطقة (Rectangle)"),
     FIBONACCI("تصحيح فيبوناتشي (Fibonacci)"),
-    MEASUREMENT("أداة القياس والمدى (Ruler)")
+    MEASUREMENT("أداة القياس والمدى (Ruler)"),
+    ELLIPSE("دائرة"),
+    ANNOTATION("تعليق")
 }
 
 data class ChartDrawing(
@@ -28,7 +30,8 @@ data class ChartDrawing(
     val endPrice: Double? = null,
     val endTime: Long? = null,
     val color: Color = TradingGold,
-    val strokeWidth: Float = 2.0f
+    val strokeWidth: Float = 2.0f,
+    val text: String = "تعليق"
 ) {
     fun toEntity(): DrawingEntity {
         val json = buildString {
@@ -37,6 +40,7 @@ data class ChartDrawing(
             append("\"startTime\":$startTime")
             if (endPrice != null) append(",\"endPrice\":$endPrice")
             if (endTime != null) append(",\"endTime\":$endTime")
+            append(",\"text\":${JSONObject.quote(text)}")
             append("}")
         }
         val hex = String.format(Locale.US, "#%08X", color.value.toLong())
@@ -76,7 +80,8 @@ data class ChartDrawing(
                     endPrice = ePrice,
                     endTime = eTime,
                     color = parsedColor,
-                    strokeWidth = entity.strokeWidth
+                    strokeWidth = entity.strokeWidth,
+                    text = JSONObject(entity.pointsJson).optString("text", "تعليق")
                 )
             } catch (e: Exception) {
                 null

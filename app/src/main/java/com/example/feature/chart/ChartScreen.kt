@@ -88,6 +88,9 @@ fun ChartScreen(
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
     var immersiveChart by remember { mutableStateOf(true) }
+    var pendingAnnotation by remember { mutableStateOf<com.example.feature.chart.model.ChartDrawing?>(null) }
+    var annotationText by remember { mutableStateOf("") }
+    var magnetEnabled by rememberSaveable { mutableStateOf(false) }
     var drawingToolbarExpanded by remember { mutableStateOf(false) }
     var drawingPaletteOffsetPx by rememberSaveable { mutableFloatStateOf(0f) }
     var drawingPaletteXOffsetPx by rememberSaveable { mutableFloatStateOf(0f) }
@@ -97,7 +100,7 @@ fun ChartScreen(
     var chartPaletteContainerHeightPx by remember { mutableIntStateOf(0) }
     var drawingPaletteHeightPx by remember { mutableIntStateOf(0) }
     val paletteDensity = LocalDensity.current
-    val chartPaletteTopInsetPx = with(paletteDensity) { (if (isEmbeddedReplay) 148.dp else 82.dp).toPx() }
+    val chartPaletteTopInsetPx = with(paletteDensity) { (if (isEmbeddedReplay) 148.dp else 52.dp).toPx() }
     val chartPaletteMaxYOffsetPx = (chartPaletteContainerHeightPx - drawingPaletteHeightPx - chartPaletteTopInsetPx).coerceAtLeast(0f)
     val chartPaletteMaxXOffsetPx = (chartPaletteContainerWidthPx - drawingPaletteWidthPx - with(paletteDensity) { 80.dp.toPx() }).coerceAtLeast(0f)
     LaunchedEffect(chartPaletteContainerHeightPx, drawingPaletteHeightPx, chartPaletteContainerWidthPx, drawingPaletteWidthPx, isEmbeddedReplay) {
@@ -413,8 +416,20 @@ fun ChartScreen(
         )
     }
 
+    pendingAnnotation?.let { drawing ->
+        AlertDialog(onDismissRequest = { pendingAnnotation = null },
+            title = { Text("تعليق على الشارت") },
+            text = { OutlinedTextField(annotationText, { annotationText = it }, singleLine = true) },
+            confirmButton = { TextButton(enabled = annotationText.isNotBlank(), onClick = {
+                viewModel.addDrawing(drawing.copy(text = annotationText.trim().take(160)))
+                pendingAnnotation = null
+            }) { Text("حفظ") } },
+            dismissButton = { TextButton(onClick = { pendingAnnotation = null }) { Text("إلغاء") } })
+    }
+
     Scaffold(
         modifier = modifier.testTag("chart_screen"),
+        containerColor = Color(0xFF020F18),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (!immersiveChart) TopAppBar(
@@ -772,7 +787,7 @@ fun ChartScreen(
                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                         }
                         Box(Modifier.width(29.dp).height(3.dp)
-                            .background(if (selected) TradingAccent else Color.Transparent))
+                            .background(if (selected) TradingAccent else Color(0xFF263544)))
                     }
                 }
                 IconButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.size(38.dp)) {
@@ -898,6 +913,7 @@ fun ChartScreen(
                     pendingOrders = if (isEmbeddedReplay) replayState.pendingOrders else uiState.pendingOrders,
                     historicalTrades = if (isEmbeddedReplay) replayState.closedTrades else uiState.historicalTrades,
                     activeDrawingTool = uiState.activeDrawingTool,
+                    magnetEnabled = magnetEnabled,
                     drawings = uiState.drawings,
                     indicatorSettings = uiState.indicatorSettings,
                     smaValues = if (isEmbeddedReplay) replaySma else uiState.smaValues,
@@ -911,7 +927,12 @@ fun ChartScreen(
                     isVolumeVisible = uiState.isVolumeVisible,
                     resetViewTrigger = uiState.resetViewTrigger,
                     displayStyle = chartDisplayStyle,
-                    onAddDrawing = { viewModel.addDrawing(it) },
+                    onAddDrawing = {
+                        if (it.tool == DrawingTool.ANNOTATION) {
+                            annotationText = ""
+                            pendingAnnotation = it
+                        } else viewModel.addDrawing(it)
+                    },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) },
                     onRequestOlderHistory = if (isEmbeddedReplay) null else ({ viewModel.loadOlderChartHistory() }),
                     isLoadingOlderHistory = uiState.isLoadingOlderHistory
@@ -973,119 +994,17 @@ fun ChartScreen(
                 }
                 }
 
-                // Immersive controls float over the chart rather than reserving a fixed top bar.
+                // Selectors live exclusively in the bottom strip in the default layout.
                 if (immersiveChart) {
                     Row(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .fillMaxWidth()
-                            .padding(top = 4.dp, end = 8.dp, start = 8.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(TradingCard.copy(alpha = 0.94f))
-                            .heightIn(min = 48.dp)
-                            .testTag("chart_immersive_floating_header"),
+                        Modifier.align(Alignment.TopEnd).padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Header values are derived from the selected historical or Replay
-                        // candle. Never substitute the static prices in the reference image.
-                        val headerCandles = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
-                        val headerClose = headerCandles.lastOrNull()?.close
-                        val previousClose = headerCandles.getOrNull(headerCandles.lastIndex - 1)?.close
-                        val changePercent = if (headerClose != null && previousClose != null &&
-                            headerClose.isFinite() && previousClose.isFinite() && previousClose > 0.0)
-                            (headerClose - previousClose) / previousClose * 100.0 else null
-                        Column(
-                            modifier = Modifier.clickable { showSymbolSheet = true }
-                                .padding(start = 8.dp, end = 3.dp, top = 2.dp, bottom = 2.dp)
-                                .testTag("chart_floating_symbol_selector")
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(uiState.selectedSymbol, color = TradingTextPrimary,
-                                    fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = "تبديل الزوج",
-                                    tint = TradingTextSecondary, modifier = Modifier.size(16.dp))
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(headerClose?.takeIf { it.isFinite() }?.let {
-                                    String.format(Locale.US, "%.2f", it)
-                                } ?: "—", color = when {
-                                    changePercent == null -> TradingTextSecondary
-                                    changePercent < 0.0 -> TradingNegative
-                                    else -> TradingPositive
-                                }, fontSize = 12.sp,
-                                    style = TextStyle(textDirection = TextDirection.Ltr))
-                                Text(changePercent?.let {
-                                    String.format(Locale.US, "%+.2f%%", it)
-                                } ?: "—", color = when {
-                                    changePercent == null -> TradingTextSecondary
-                                    changePercent < 0.0 -> TradingNegative
-                                    else -> TradingPositive
-                                }, fontSize = 12.sp,
-                                    style = TextStyle(textDirection = TextDirection.Ltr))
-                            }
+                        IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.North, "إعادة ضبط الشارت", tint = TradingTextPrimary)
                         }
-                        Spacer(Modifier.weight(1f))
-                        Box {
-                            TextButton(
-                                onClick = { floatingTimeframeMenuExpanded = true },
-                                modifier = Modifier.testTag("chart_floating_timeframe")
-                            ) {
-                                Text(uiState.selectedTimeframe.displayName, color = TradingAccentLight,
-                                    fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = "الفاصل الزمني",
-                                    tint = TradingTextSecondary, modifier = Modifier.size(16.dp))
-                            }
-                            DropdownMenu(
-                                expanded = floatingTimeframeMenuExpanded,
-                                onDismissRequest = { floatingTimeframeMenuExpanded = false }
-                            ) {
-                                listOf(Timeframe.M1, Timeframe.M3, Timeframe.M5, Timeframe.M15,
-                                    Timeframe.H1, Timeframe.H2, Timeframe.H4, Timeframe.D1, Timeframe.W1).forEach { tf ->
-                                    DropdownMenuItem(
-                                        text = { Text(tf.displayName) },
-                                        onClick = {
-                                            floatingTimeframeMenuExpanded = false
-                                            if (tf != uiState.selectedTimeframe) {
-                                                viewModel.selectTimeframe(tf)
-                                                if (isEmbeddedReplay) {
-                                                    replayViewModel.pause()
-                                                    replayViewModel.loadReplayData(uiState.selectedSymbol, tf)
-                                                }
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                        IconButton(
-                            onClick = { showIndicatorsDialog = true },
-                            modifier = Modifier.size(36.dp).testTag("chart_floating_indicators")
-                        ) {
-                            Icon(Icons.Default.Functions, contentDescription = "المؤشرات",
-                                tint = TradingTextPrimary, modifier = Modifier.size(20.dp))
-                        }
-                        IconButton(
-                            onClick = {
-                                if (isEmbeddedReplay) {
-                                    replayViewModel.pause()
-                                    isEmbeddedReplay = false
-                                } else {
-                                    replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
-                                    isEmbeddedReplay = true
-                                immersiveChart = true
-                                }
-                            },
-                            modifier = Modifier.size(36.dp).testTag("chart_floating_replay")
-                        ) {
-                            Icon(Icons.Default.PlayCircle, contentDescription = if (isEmbeddedReplay) "إنهاء الإعادة" else "إعادة العرض داخل الشارت",
-                                tint = TradingAccentLight, modifier = Modifier.size(20.dp))
-                        }
-                        IconButton(
-                            onClick = { immersiveChart = false },
-                            modifier = Modifier.size(36.dp).testTag("chart_floating_exit_immersive")
-                        ) {
-                            Icon(Icons.Default.FullscreenExit, contentDescription = "إظهار شريط التنقل",
-                                tint = TradingTextPrimary, modifier = Modifier.size(20.dp))
+                        IconButton(onClick = { immersiveChart = false }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.FullscreenExit, "عرض التفاصيل", tint = TradingTextPrimary)
                         }
                     }
                 }
@@ -1233,7 +1152,7 @@ fun ChartScreen(
                         .absoluteOffset(
                             x = 8.dp + with(paletteDensity) { drawingPaletteXOffsetPx.toDp() },
                             y = with(paletteDensity) { drawingPaletteOffsetPx.toDp() } +
-                                if (isEmbeddedReplay) 148.dp else 82.dp
+                                if (isEmbeddedReplay) 148.dp else 52.dp
                         )
                         .onSizeChanged {
                             drawingPaletteHeightPx = it.height
@@ -1241,18 +1160,24 @@ fun ChartScreen(
                         }
                         // Keep each labeled tool visually separate like the reference,
                         // rather than drawing one tall opaque pill across the candles.
-                        .padding(horizontal = 3.dp, vertical = 5.dp)
+                        .width(48.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color(0xE6081722))
+                        .padding(horizontal = 2.dp, vertical = 3.dp)
                         .testTag("chart_reference_floating_tools"),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     val referenceTools = listOf(
-                        Triple("تقاطع", Icons.Default.FilterCenterFocus, 0),
-                        Triple("اتجاه", Icons.Default.ShowChart, 1),
-                        Triple("أفقي", Icons.Default.HorizontalRule, 2),
+                        Triple("مؤشر\nمتقاطع", Icons.Default.FilterCenterFocus, 0),
+                        Triple("خط اتجاه", Icons.Default.Timeline, 1),
+                        Triple("مستوى أفقي", Icons.Default.HorizontalRule, 2),
                         Triple("فيبوناتشي", Icons.Default.AutoGraph, 3),
-                        Triple("تراجع", Icons.Default.Undo, 4),
-                        Triple("المزيد", Icons.Default.MoreHoriz, 5)
+                        Triple("أشكال", Icons.Default.Category, 4),
+                        Triple("تعليق", Icons.Default.Edit, 5),
+                        Triple("مستطيل", Icons.Default.CropSquare, 6),
+                        Triple("دائرة", Icons.Default.RadioButtonUnchecked, 7),
+                        Triple("مغناطيس", Icons.Default.Assistant, 8)
                     )
                     // Dedicated drag handle: tool buttons remain tappable without gesture conflicts.
                     Box(
@@ -1282,27 +1207,34 @@ fun ChartScreen(
                             1 -> uiState.activeDrawingTool == DrawingTool.TRENDLINE
                             2 -> uiState.activeDrawingTool == DrawingTool.HORIZONTAL_LINE
                             3 -> uiState.activeDrawingTool == DrawingTool.FIBONACCI
+                            5 -> uiState.activeDrawingTool == DrawingTool.ANNOTATION
+                            6 -> uiState.activeDrawingTool == DrawingTool.RECTANGLE
+                            7 -> uiState.activeDrawingTool == DrawingTool.ELLIPSE
+                            8 -> magnetEnabled
                             else -> false
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Surface(
-                                modifier = Modifier.size(44.dp)
+                                modifier = Modifier.size(32.dp)
                                     .clickable {
                                         when (index) {
                                             0 -> viewModel.toggleCrosshair()
                                             1 -> viewModel.setDrawingTool(DrawingTool.TRENDLINE)
                                             2 -> viewModel.setDrawingTool(DrawingTool.HORIZONTAL_LINE)
                                             3 -> viewModel.setDrawingTool(DrawingTool.FIBONACCI)
-                                            4 -> uiState.drawings.lastOrNull()?.let { viewModel.deleteDrawing(it.id) }
-                                            5 -> showToolsMenu = true
+                                            4 -> showToolsMenu = true
+                                            5 -> viewModel.setDrawingTool(DrawingTool.ANNOTATION)
+                                            6 -> viewModel.setDrawingTool(DrawingTool.RECTANGLE)
+                                            7 -> viewModel.setDrawingTool(DrawingTool.ELLIPSE)
+                                            8 -> magnetEnabled = !magnetEnabled
                                         }
                                     }.testTag("chart_reference_tool_${index}"),
                                 shape = RoundedCornerShape(50),
                                 // Unified dark tool rail: only the active tool has a visible ring.
                                 color = if (selected) TradingAccent.copy(alpha = 0.16f) else Color.Transparent,
                                 border = androidx.compose.foundation.BorderStroke(
-                                    if (selected) 1.5.dp else 0.dp,
-                                    if (selected) TradingAccent else Color.Transparent
+                                    if (selected) 1.5.dp else 1.dp,
+                                    if (selected) TradingAccent else Color(0xFF263544)
                                 )
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -1314,19 +1246,12 @@ fun ChartScreen(
                             // Reference layout uses visible Arabic captions below each circular tool.
                             // Keep the existing icon content descriptions for accessibility.
                             Text(
-                                text = when (index) {
-                                    0 -> "مؤشر\\nمتقاطع"
-                                    1 -> "خط اتجاه"
-                                    2 -> "مستوى\\nأفقي"
-                                    3 -> "فيبوناتشي"
-                                    4 -> "تراجع"
-                                    else -> "المزيد"
-                                }.replace("\\n", "\n"),
+                                text = label,
                                 fontSize = 9.sp,
                                 lineHeight = 11.sp,
                                 textAlign = TextAlign.Center,
                                 color = if (selected) TradingAccentLight else TradingTextSecondary,
-                                modifier = Modifier.width(64.dp)
+                                modifier = Modifier.width(44.dp)
                                     .background(TradingBackground.copy(alpha = 0.80f), RoundedCornerShape(6.dp))
                             )
                         }
@@ -1346,6 +1271,36 @@ fun ChartScreen(
                         )
                     }
                 }
+            }
+
+            if (immersiveChart) {
+                ChartBottomStrip(
+                    symbol = uiState.selectedSymbol,
+                    timeframe = uiState.selectedTimeframe,
+                    replayActive = isEmbeddedReplay,
+                    onSymbol = { showSymbolSheet = true },
+                    onTimeframe = { tf ->
+                        if (tf != uiState.selectedTimeframe) {
+                            viewModel.selectTimeframe(tf)
+                            if (isEmbeddedReplay) {
+                                replayViewModel.pause()
+                                replayViewModel.loadReplayData(uiState.selectedSymbol, tf)
+                            }
+                        }
+                    },
+                    onReplay = {
+                        if (isEmbeddedReplay) {
+                            replayViewModel.pause()
+                            isEmbeddedReplay = false
+                        } else {
+                            replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
+                            isEmbeddedReplay = true
+                        }
+                    },
+                    onIndicators = { showIndicatorsDialog = true },
+                    onDrawing = { drawingPaletteCollapsed = !drawingPaletteCollapsed },
+                    onMore = { showToolsMenu = true }
+                )
             }
 
             if (isEmbeddedReplay && !immersiveChart) {
