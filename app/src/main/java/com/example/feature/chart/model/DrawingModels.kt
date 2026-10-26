@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.example.data.local.entity.DrawingEntity
 import com.example.ui.theme.TradingGold
-import org.json.JSONObject
+import java.util.Base64
 import java.util.Locale
 import kotlin.math.abs
 
@@ -15,7 +15,9 @@ enum class DrawingTool(val displayNameAr: String) {
     TRENDLINE("خط اتجاه (Trendline)"),
     RECTANGLE("مستطيل منطقة (Rectangle)"),
     FIBONACCI("تصحيح فيبوناتشي (Fibonacci)"),
-    MEASUREMENT("أداة القياس والمدى (Ruler)")
+    MEASUREMENT("أداة القياس والمدى (Ruler)"),
+    ELLIPSE("دائرة"),
+    ANNOTATION("تعليق")
 }
 
 data class ChartDrawing(
@@ -28,7 +30,8 @@ data class ChartDrawing(
     val endPrice: Double? = null,
     val endTime: Long? = null,
     val color: Color = TradingGold,
-    val strokeWidth: Float = 2.0f
+    val strokeWidth: Float = 2.0f,
+    val text: String = "تعليق"
 ) {
     fun toEntity(): DrawingEntity {
         val json = buildString {
@@ -37,9 +40,10 @@ data class ChartDrawing(
             append("\"startTime\":$startTime")
             if (endPrice != null) append(",\"endPrice\":$endPrice")
             if (endTime != null) append(",\"endTime\":$endTime")
+            append(",\"textBase64\":\"${Base64.getEncoder().encodeToString(text.toByteArray(Charsets.UTF_8))}\"")
             append("}")
         }
-        val hex = String.format(Locale.US, "#%08X", color.value.toLong())
+        val hex = String.format(Locale.US, "#%08X", color.toArgb().toLong() and 0xFFFFFFFFL)
         return DrawingEntity(
             id = id,
             symbol = symbol,
@@ -76,7 +80,9 @@ data class ChartDrawing(
                     endPrice = ePrice,
                     endTime = eTime,
                     color = parsedColor,
-                    strokeWidth = entity.strokeWidth
+                    strokeWidth = entity.strokeWidth,
+                    text = Regex("\"textBase64\":\"([^\"]*)\"").find(entity.pointsJson)?.groupValues?.get(1)
+                        ?.let { String(Base64.getDecoder().decode(it), Charsets.UTF_8) } ?: "تعليق"
                 )
             } catch (e: Exception) {
                 null

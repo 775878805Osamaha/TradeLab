@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.Canvas
+import com.example.feature.chart.model.snapDrawingPoint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -67,12 +68,16 @@ fun CandlestickChart(
     macdValues: List<MacdResult?> = emptyList(),
     atrValues: List<Double?> = emptyList(),
     isCrosshairActive: Boolean = false,
+    magnetEnabled: Boolean = false,
     isVolumeVisible: Boolean = true,
     resetViewTrigger: Long = 0L,
     displayStyle: ChartDisplayStyle = ChartDisplayStyle.CANDLES,
     onAddDrawing: ((ChartDrawing) -> Unit)? = null,
     onSelectTrade: ((TradeJournalEntry) -> Unit)? = null,
     onRequestOlderHistory: (() -> Unit)? = null,
+    referenceLayout: Boolean = false,
+    bullishColor: Color = TradingPositive,
+    bearishColor: Color = TradingNegative,
     isLoadingOlderHistory: Boolean = false
 ) {
     if (candles.isEmpty()) {
@@ -110,6 +115,11 @@ fun CandlestickChart(
             converted
         }
     }
+
+    val snapEnabled by rememberUpdatedState(magnetEnabled)
+
+    val chartDensity = androidx.compose.ui.platform.LocalDensity.current
+    val axisWidthPx = with(chartDensity) { 54.dp.toPx() }
 
     // Viewport State
     var candleWidthPx by remember { mutableFloatStateOf(12f) }
@@ -258,16 +268,17 @@ fun CandlestickChart(
     LaunchedEffect(resetViewTrigger) {
         if (resetViewTrigger > 0L) initialCandleFitApplied = false
     }
-    LaunchedEffect(candles.size, chartViewportWidthPx) {
+    LaunchedEffect(candles.size, chartViewportWidthPx, initialCandleFitApplied) {
         if (!initialCandleFitApplied && candles.isNotEmpty() && chartViewportWidthPx > 1f) {
             if (candles.size <= 40) {
                 candleWidthPx = (chartViewportWidthPx * 0.76f / candles.size)
                     .coerceIn(12f, 38f)
             }
+            if (referenceLayout) scrollOffsetPx = -chartViewportWidthPx * 0.18f
             initialCandleFitApplied = true
         }
     }
-    Box(modifier = modifier.onSizeChanged { chartViewportWidthPx = (it.width - 122f).coerceAtLeast(1f) }) {
+    Box(modifier = modifier.onSizeChanged { chartViewportWidthPx = (it.width - axisWidthPx).coerceAtLeast(1f) }) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -313,8 +324,9 @@ fun CandlestickChart(
                         },
                         onDragEnd = {
                             if (dragStartedInPlot && activeDrawingTool != DrawingTool.NONE && drawingStartOffset != null && drawingCurrentOffset != null) {
-                                val start = drawingStartOffset!!
-                                val end = drawingCurrentOffset!!
+                                val transformForSnap = transformRef[0]
+                                val start = transformForSnap?.snapDrawingPoint(drawingStartOffset!!, snapEnabled) ?: drawingStartOffset!!
+                                val end = transformForSnap?.snapDrawingPoint(drawingCurrentOffset!!, snapEnabled) ?: drawingCurrentOffset!!
                                 val transform = transformRef[0]
                                 val distance = (end - start).getDistance()
                                 if (transform != null && onAddDrawing != null && distance >= 10f &&
@@ -353,14 +365,15 @@ fun CandlestickChart(
                                 offset.y in 0f..transform.chartHeight
                             if (insidePlot && transform != null && onAddDrawing != null &&
                                 (activeDrawingTool == DrawingTool.HORIZONTAL_LINE ||
-                                 activeDrawingTool == DrawingTool.VERTICAL_LINE)) {
+                                 activeDrawingTool == DrawingTool.VERTICAL_LINE ||
+                                 activeDrawingTool == DrawingTool.ANNOTATION)) {
                                 onAddDrawing(
                                     ChartDrawing(
                                         tool = activeDrawingTool,
                                         symbol = "",
                                         timeframe = "",
-                                        startTime = transform.xToTime(offset.x),
-                                        startPrice = transform.yToPrice(offset.y)
+                                        startTime = transform.xToTime(transform.snapDrawingPoint(offset, snapEnabled).x),
+                                        startPrice = transform.yToPrice(transform.snapDrawingPoint(offset, snapEnabled).y)
                                     )
                                 )
                             } else if (isCrosshairActive && insidePlot) {
@@ -371,15 +384,18 @@ fun CandlestickChart(
                 }
         ) {
             val width = size.width
-            val height = size.height
+            val timeAxisHeight = if (referenceLayout) 22.dp.toPx() else 0f
+            val height = (size.height - timeAxisHeight).coerceAtLeast(1f)
             // Reserve sufficient width for large formatted prices (e.g. 81,500.00).
-            val rightAxisWidth = 122f
+            priceAxisPaint.textSize = 10.dp.toPx()
+            timeAxisPaint.textSize = 10.dp.toPx()
+            val rightAxisWidth = axisWidthPx
             val chartWidth = (width - rightAxisWidth).coerceAtLeast(1f)
 
             // Subpanel height split
             val hasSubpanel = indicatorSettings.hasSubpanelIndicators
             val subpanelHeight = if (hasSubpanel) height * 0.22f else 0f
-            val volumeHeight = if (isVolumeVisible) height * 0.14f else 0f
+            val volumeHeight = if (isVolumeVisible) height * (if (referenceLayout) 0.10f else 0.14f) else 0f
             val mainChartHeight = (height - subpanelHeight - volumeHeight).coerceAtLeast(10f)
 
             // Shared, independently testable viewport calculation.
@@ -410,7 +426,7 @@ fun CandlestickChart(
             // Add 3% vertical padding
             val pPadding = (maxP - minP) * 0.055
             val autoMin = minP - pPadding
-            val autoMax = maxP + pPadding
+            val autoMax = maxP + if (referenceLayout) (maxP - minP) * 0.45 else pPadding
             val midpoint = (autoMin + autoMax) / 2.0
             val halfRange = ((autoMax - autoMin) / 2.0) * manualPriceScale
             val pricePanDelta = (pricePanPx / mainChartHeight.coerceAtLeast(1f)) * (halfRange * 2.0)
@@ -439,9 +455,11 @@ fun CandlestickChart(
             }
 
             // Pure price-axis engine keeps levels consistent across redraws and zooms.
-            val priceScale = ChartPriceAxis.calculate(paddedMin, paddedMax, mainChartHeight)
+            val priceScale = ChartPriceAxis.calculate(paddedMin, paddedMax, mainChartHeight, 48.dp.toPx())
             for (tick in priceScale.ticks) {
                 val y = tick.fractionFromTop * mainChartHeight
+                val axisLabel = com.example.ui.components.chart.QuotePriceFormatter.forSymbol(
+                    tick.price, candles.firstOrNull()?.symbol, grouping = true, minimumDecimals = priceScale.decimals)
                 drawLine(
                     color = TradingBorder.copy(alpha = 0.3f),
                     start = Offset(0f, y),
@@ -452,13 +470,13 @@ fun CandlestickChart(
                     val labelY = (y + priceAxisPaint.textSize * 0.35f)
                         .coerceIn(priceAxisPaint.textSize, height - 8f)
                     val availableLabelWidth = (rightAxisWidth - 14f).coerceAtLeast(20f)
-                    val measuredWidth = priceAxisPaint.measureText(tick.label)
+                    val measuredWidth = priceAxisPaint.measureText(axisLabel)
                     val originalSize = priceAxisPaint.textSize
                     if (measuredWidth > availableLabelWidth) {
                         priceAxisPaint.textSize = (originalSize * availableLabelWidth / measuredWidth)
                             .coerceAtLeast(14f)
                     }
-                    drawText(tick.label, chartWidth + 7f, labelY, priceAxisPaint)
+                    drawText(axisLabel, chartWidth + 7f, labelY, priceAxisPaint)
                     priceAxisPaint.textSize = originalSize
                 }
             }
@@ -486,7 +504,7 @@ fun CandlestickChart(
                 val lowY = transform.priceToY(c.low)
 
                 val isBullish = c.close >= c.open
-                val candleColor = if (isBullish) TradingPositive else TradingNegative
+                val candleColor = if (isBullish) bullishColor else bearishColor
 
                 // Wick line
                 drawLine(
@@ -523,8 +541,12 @@ fun CandlestickChart(
                 val left = x - textWidth / 2f
                 val right = x + textWidth / 2f
                 if (ChartTimeAxis.shouldDisplay(left, right, chartWidth, lastTimeLabelRight)) {
+                    if (referenceLayout) drawLine(
+                        color = TradingBorder.copy(alpha = 0.25f),
+                        start = Offset(x, 0f), end = Offset(x, height), strokeWidth = 0.5.dp.toPx()
+                    )
                     drawContext.canvas.nativeCanvas.drawText(
-                        label, x, height - 8f, timeAxisPaint
+                        label, x, if (referenceLayout) size.height - 5.dp.toPx() else height - 8f, timeAxisPaint
                     )
                     lastTimeLabelRight = right
                     lastDisplayedDay = day
@@ -540,7 +562,7 @@ fun CandlestickChart(
                     val volHeight = (c.volume / maxVol).coerceIn(0.0, 1.0).toFloat() * volumeHeight
                     val y = volTop + volumeHeight - volHeight
                     val isBullish = c.close >= c.open
-                    val volColor = if (isBullish) TradingPositive.copy(alpha = 0.35f) else TradingNegative.copy(alpha = 0.35f)
+                    val volColor = if (isBullish) bullishColor.copy(alpha = 0.35f) else bearishColor.copy(alpha = 0.35f)
 
                     drawRect(
                         color = volColor,
@@ -558,6 +580,11 @@ fun CandlestickChart(
                 if (series.size == candles.size && endIndex <= series.size)
                     series.subList(startIndex, endIndex)
                 else emptyList()
+
+            if (referenceLayout) {
+                drawLine(Color(0xFF263448), Offset(chartWidth, 0f), Offset(chartWidth, height), 0.5.dp.toPx())
+                drawLine(TradingBorder.copy(alpha = .4f), Offset(0f, height), Offset(width, height), 0.5.dp.toPx())
+            }
 
             // 3. Draw Subpanel (RSI / MACD / ATR)
             if (hasSubpanel) {
@@ -590,7 +617,8 @@ fun CandlestickChart(
             ChartOverlays.drawPriceAndSpread(
                 this, transform, latestTick,
                 showHistoricalLastPrice = endIndex == candles.size,
-                priceAxisWidth = rightAxisWidth
+                priceAxisWidth = rightAxisWidth,
+                referenceLayout = referenceLayout
             )
             ChartOverlays.drawOpenPositions(this, transform, openPositions)
             ChartOverlays.drawPendingOrders(this, transform, pendingOrders)
@@ -636,7 +664,7 @@ fun CandlestickChart(
                     val pAtY = transform.yToPrice(off.y)
                     drawContext.canvas.nativeCanvas.apply {
                         val p = crosshairAxisPaint
-                        val priceLabel = com.example.ui.components.chart.QuotePriceFormatter.price(pAtY)
+                        val priceLabel = com.example.ui.components.chart.QuotePriceFormatter.forSymbol(pAtY, candles.firstOrNull()?.symbol)
                         val originalTextSize = p.textSize
                         val availableWidth = (width - chartWidth - 10f).coerceAtLeast(1f)
                         val naturalWidth = p.measureText(priceLabel)
@@ -665,7 +693,7 @@ fun CandlestickChart(
         // Vertical price-axis scaling; reset-view restores automatic fitting.
         Box(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
+                .align(androidx.compose.ui.AbsoluteAlignment.CenterRight)
                 .width(38.dp)
                 .fillMaxHeight()
                 .testTag("chart_price_axis_scale")

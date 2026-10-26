@@ -15,6 +15,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: 'gradle'
       - uses: android-actions/setup-android@v4
       - name: Android SDK
         run: |
@@ -53,6 +54,9 @@ jobs:
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -accel on -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
+            adb shell wm size 864x1536
+            adb shell wm density 346
+            adb shell cmd overlay enable --user 0 com.android.internal.systemui.navbar.gestural
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell settings put system accelerometer_rotation 0
             adb shell settings put system user_rotation 0
@@ -89,8 +93,13 @@ jobs:
               adb pull /sdcard/tradelab-replay.png screenshots/tradelab-replay.png
               adb shell uiautomator dump /sdcard/tradelab-replay-ui.xml
               adb pull /sdcard/tradelab-replay-ui.xml screenshots/tradelab-replay-ui.xml
+            ./gradlew connectedDebugAndroidTest --stacktrace
+            python3 scripts/extract_chart_frame_metrics.py
+            python3 scripts/collect_provider_screenshots.py
       - name: Install screenshot analysis dependency
         run: python3 -m pip install --user Pillow
+      - name: Compare actual screenshot with supplied reference
+        run: python3 scripts/compare_chart_reference.py
       - name: Validate captured screen has real candlesticks
         run: |
           python3 - <<'PY'
@@ -164,5 +173,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tradelab-chart-emulator-screenshot
-          path: screenshots/
+          path: |
+            screenshots/
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
           if-no-files-found: warn

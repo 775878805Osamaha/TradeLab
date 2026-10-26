@@ -25,4 +25,12 @@ class ReplayDrawingVisibilityTests {
         assertTrue(visibleReplayDrawings(drawings, null).isEmpty())
         assertEquals(1, visibleReplayDrawings(drawings, 100L).size)
     }
+    @Test fun hidesFutureAnnotationsAndIncompleteEllipsesInEmbeddedReplay() {
+        val known = drawing(100L).copy(tool = DrawingTool.ANNOTATION, text = "مستوى معروف")
+        val future = drawing(200L).copy(tool = DrawingTool.ANNOTATION, text = "معلومة مستقبلية")
+        val ellipse = drawing(100L, 200L).copy(tool = DrawingTool.ELLIPSE)
+        assertEquals(listOf(known), visibleReplayDrawings(listOf(known, future, ellipse), 150L))
+        assertEquals(3, visibleReplayDrawings(listOf(known, future, ellipse), 200L).size)
+    }
+
 }

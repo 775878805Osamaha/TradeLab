@@ -27,11 +27,8 @@ data class SymbolMarketRow(
     val spreadPips: Double?
         get() {
             val quote = tick ?: return null
-            if (quote.symbol != symbolInfo.symbol ||
-                quote.source !in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") ||
-                System.currentTimeMillis() - quote.timestamp !in 0..15_000L ||
-                symbolInfo.pipSize <= 0.0
-            ) return null
+            if (!com.example.core.market.VerifiedMarketQuote.isVerified(quote, symbolInfo.symbol) ||
+                symbolInfo.pipSize <= 0.0) return null
             return quote.spread / symbolInfo.pipSize
         }
 }
@@ -123,6 +120,8 @@ class MarketViewModel(
                 currentSymbols.forEach { symbol ->
                     if (symbol !in symbolTickJobs) {
                         symbolTickJobs[symbol] = launch {
+                            if (com.example.core.market.VerifiedMarketQuote.supports(symbol))
+                                marketDataRepository.provider.subscribe(symbol)
                             marketDataRepository.observeTicks(symbol).collect { tick ->
                                 if (tick.symbol == symbol) {
                                     ticksMap.update { current -> current + (symbol to tick) }

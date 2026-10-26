@@ -65,7 +65,10 @@ class BiquoteHistoricalProvider(
             val baseMinutes = when (tf.minutes) { 3 -> 1; 120 -> 60; 10080 -> 1440; else -> tf.minutes }
             val basePeriod = baseMinutes * 60_000L
             val baseFrom = if (baseMinutes != tf.minutes) bucket(from, tf.minutes) else from
-            val requestedBars = (to - baseFrom) / basePeriod + 2L
+            // `to` is the final TARGET candle's opening time. Include every
+            // closed SOURCE bar needed for that candle, not the next target bar.
+            val baseTo = to + period - basePeriod
+            val requestedBars = (baseTo - baseFrom) / basePeriod + 1L
             require(requestedBars in 1L..1000L) {
                 "Biquote supports at most 1000 source bars per request; shorten the history range"
             }
@@ -76,9 +79,9 @@ class BiquoteHistoricalProvider(
                 .addQueryParameter("interval", when (baseMinutes) { 1 -> "1m"; 60 -> "1h"; 1440 -> "1d"; else -> interval(tf) })
                 .addQueryParameter("limit", bars.toString())
                 .addQueryParameter("from", Instant.ofEpochMilli(baseFrom).toString())
-                .addQueryParameter("to", Instant.ofEpochMilli(to + period).toString())
+                .addQueryParameter("to", Instant.ofEpochMilli(baseTo).toString())
                 .build()
-            val body = fetchBody(client, Request.Builder().url(url).build(), "Biquote")
+            val body = fetchBody(client, Request.Builder().url(url).header("Accept", "application/json").header("User-Agent", "TradeLab/2.0").build(), "Biquote")
             val root = JSONObject(body)
             if (root.optString("symbol") != symbol) throw IOException("Biquote symbol mismatch")
             val items = root.optJSONArray("bars") ?: throw IOException("Biquote bars missing")
@@ -90,7 +93,7 @@ class BiquoteHistoricalProvider(
                 // Reject a provider response that violates its requested
                 // historical boundaries. Backfill retries smaller windows
                 // instead of accepting an ambiguous OHLC response.
-                if (openTime < baseFrom || openTime > to) {
+                if (openTime < baseFrom || openTime > baseTo) {
                     throw IOException("Biquote returned a bar outside the requested range")
                 }
                 if (openTime + basePeriod > System.currentTimeMillis()) continue
@@ -119,9 +122,14 @@ class BiquoteHistoricalProvider(
                     .mapNotNull { (start, group) ->
                         val sorted = group.sortedBy { it.openTime }
                         val count = tf.minutes / baseMinutes
-                        if (start < from || start > to || sorted.size != count ||
-                            sorted.indices.any { i -> sorted[i].openTime != start + i * basePeriod }
-                        ) null else Candle(
+                        // Weekly FX/metal candles have real weekend closures.
+                        // Require all weekdays; include any supplied weekend bars,
+                        // never fabricate a Saturday/Sunday OHLC.
+                        val complete = if (tf.minutes == 10080) {
+                            (0..4).all { day -> sorted.any { it.openTime == start + day * basePeriod } }
+                        } else sorted.size == count &&
+                            sorted.indices.all { i -> sorted[i].openTime == start + i * basePeriod }
+                        if (start < from || start > to || !complete) null else Candle(
                             symbol = symbol, timeframe = tf, openTime = start,
                             closeTime = start + period, open = sorted.first().open,
                             high = sorted.maxOf { it.high }, low = sorted.minOf { it.low },
@@ -156,14 +164,14 @@ class BiquoteHistoricalProvider(
                 override fun onFailure(call: Call, e: IOException) {
                     if (continuation.isActive) {
                         continuation.resumeWithException(
-                            IOException("$providerName historical request failed", e)
+                            MarketDataRequestException("$providerName historical network failure: ${e.javaClass.simpleName}", e)
                         )
                     }
                 }
                 override fun onResponse(call: Call, response: Response) {
                     try {
                         val body = response.use {
-                            if (!it.isSuccessful) throw IOException("$providerName HTTP ${it.code}")
+                            if (!it.isSuccessful) throw MarketDataRequestException("$providerName HTTP ${it.code}; Retry-After=${it.header("Retry-After") ?: "none"}")
                             it.body?.string() ?: throw IOException("Empty $providerName response")
                         }
                         if (continuation.isActive) continuation.resume(body)

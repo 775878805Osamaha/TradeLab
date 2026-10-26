@@ -47,7 +47,10 @@ import com.example.ui.theme.TradingCard
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.rgb(0, 13, 22))
+        )
 
         setContent {
             val app = LocalContext.current.applicationContext as TradeLabApplication
@@ -90,53 +93,11 @@ class MainActivity : ComponentActivity() {
                         containerColor = TradingBackground,
                         bottomBar = {
                             if (showBottomNav) {
-                                NavigationBar(
-                                    containerColor = TradingCard,
-                                    modifier = Modifier
-                                        .testTag("bottom_nav_bar"),
-                                    windowInsets = NavigationBarDefaults.windowInsets,
-                                    tonalElevation = 0.dp
-                                ) {
-                                    Screen.bottomNavItems.forEach { screen ->
-                                        val isSelected = currentRoute == screen.route
-                                        NavigationBarItem(
-                                            selected = isSelected,
-                                            onClick = {
-                                                navController.navigate(screen.route) {
-                                                    popUpTo(navController.graph.findStartDestination().id) {
-                                                        saveState = true
-                                                    }
-                                                    launchSingleTop = true
-                                                    restoreState = true
-                                                }
-                                            },
-                                            icon = {
-                                                Icon(
-                                                    imageVector = if (isSelected) screen.selectedIcon else screen.unselectedIcon,
-                                                    contentDescription = stringResource(screen.titleResId)
-                                                )
-                                            },
-                                            label = {
-                                                Text(
-                                                    text = when (screen.route) {
-                                                        Screen.Market.route -> "السوق"
-                                                        Screen.Chart.route -> "الشارت"
-                                                        Screen.Results.route -> "النتائج"
-                                                        Screen.Account.route -> "الحساب"
-                                                        else -> stringResource(screen.titleResId)
-                                                    },
-                                                    style = MaterialTheme.typography.labelSmall
-                                                )
-                                            },
-                                            colors = NavigationBarItemDefaults.colors(
-                                                selectedIconColor = com.example.ui.theme.TradingAccent,
-                                                selectedTextColor = com.example.ui.theme.TradingAccent,
-                                                unselectedIconColor = com.example.ui.theme.TradingTextSecondary,
-                                                unselectedTextColor = com.example.ui.theme.TradingTextSecondary,
-                                                indicatorColor = Color.Transparent
-                                            ),
-                                            modifier = Modifier.testTag("nav_item_${screen.route}")
-                                        )
+                                com.example.ui.navigation.TradingBottomBar(currentRoute) { screen ->
+                                    navController.navigate(screen.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
                                 }
                             }

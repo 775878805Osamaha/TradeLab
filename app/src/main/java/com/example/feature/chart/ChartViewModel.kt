@@ -28,7 +28,7 @@ data class ChartUiState(
     val dataSourceType: DataSourceType = DataSourceType.LIVE_DATA,
     val activeDrawingTool: DrawingTool = DrawingTool.NONE,
     val drawings: List<ChartDrawing> = emptyList(),
-    val indicatorSettings: IndicatorSettings = IndicatorSettings(),
+    val indicatorSettings: IndicatorSettings = IndicatorSettings(isEmaEnabled = false),
     val smaValues: List<Double?> = emptyList(),
     val emaValues: List<Double?> = emptyList(),
     val bollingerValues: List<BollingerBandsResult?> = emptyList(),
@@ -387,11 +387,7 @@ class ChartViewModel(
         }
         val state = _uiState.value
         val tick = state.latestTick
-        if (tick == null || tick.symbol != state.selectedSymbol ||
-            tick.source !in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") ||
-            System.currentTimeMillis() - tick.timestamp !in 0..15_000L ||
-            !tick.bid.isFinite() || !tick.ask.isFinite() ||
-            tick.bid <= 0.0 || tick.ask < tick.bid) {
+        if (tick == null || !com.example.core.market.VerifiedMarketQuote.isVerified(tick, state.selectedSymbol)) {
             _uiState.update { it.copy(message = "لا يمكن تنفيذ أمر بسعر غير متصل أو قديم") }
             return
         }
@@ -455,7 +451,7 @@ class ChartViewModel(
 
             try {
                 // Start live subscription even if historical REST loading fails.
-                if (symbol in setOf("BTCUSDT", "ETHUSDT")) subscribeToTicks(symbol)
+                if (com.example.core.market.VerifiedMarketQuote.supports(symbol)) subscribeToTicks(symbol)
                 // A provider may have fewer verified bars than the requested history.
                 // Retry smaller, recent windows instead of replacing the entire chart
                 // with an error. Never fabricate missing OHLC data.
@@ -490,6 +486,11 @@ class ChartViewModel(
                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                             throw cancelled
                         } catch (error: Exception) {
+                            // A DNS/HTTP outage is not an empty trading session.
+                            // Do not issue dozens of older-window retries for it.
+                            if (generateSequence<Throwable>(error) { it.cause }.any {
+                                it is com.example.core.market.MarketDataRequestException
+                            }) throw error
                             lastHistoryError = error
                         }
                     }
@@ -529,9 +530,9 @@ class ChartViewModel(
                     startKlineRefresh(symbol, tf)
                     startKlineStream(symbol, tf)
                 } else {
-                    // Twelve Data is historical-only here; do not open Binance
-                    // streaming endpoints or continuously consume API quota.
-                    klineRefreshJob?.cancel()
+                    // Forex uses its broker quote subscription; never request
+                    // Binance crypto klines for a forex/metal symbol.
+                    startKlineRefresh(symbol, tf)
                     klineStreamJob?.cancel()
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -597,9 +598,11 @@ class ChartViewModel(
      */
     private fun startKlineRefresh(symbol: String, timeframe: Timeframe) {
         klineRefreshJob?.cancel()
-        if (symbol != "BTCUSDT" && symbol != "ETHUSDT") return
+        if (!com.example.core.market.VerifiedMarketQuote.supports(symbol)) return
         klineRefreshJob = viewModelScope.launch {
-            var lastSuccessfullyRefreshedOpen = Long.MIN_VALUE
+            var lastSuccessfullyRefreshedOpen = _uiState.value.candles.lastOrNull()?.openTime ?: Long.MIN_VALUE
+            var lastAttemptOpen = Long.MIN_VALUE
+            var attemptsForOpen = 0
             while (isActive) {
                 delay(10_000L)
                 if (_uiState.value.selectedSymbol != symbol ||
@@ -616,9 +619,19 @@ class ChartViewModel(
                     // Repeating the same historical request every 10 seconds
                     // wastes bandwidth and risks exchange rate limits.
                     if (lastClosedOpen == lastSuccessfullyRefreshedOpen) continue
-                    val fresh = marketDataRepository.provider.getHistoricalCandles(
-                        symbol, timeframe, lastClosedOpen, lastClosedOpen
-                    )
+                    if (lastClosedOpen != lastAttemptOpen) {
+                        lastAttemptOpen = lastClosedOpen
+                        attemptsForOpen = 0
+                    }
+                    // Closed sessions and outages must not trigger an endless
+                    // 10-second retry loop for the same unavailable candle.
+                    if (attemptsForOpen >= 3) continue
+                    attemptsForOpen++
+                    val fresh = if (symbol in setOf("BTCUSDT", "ETHUSDT")) {
+                        marketDataRepository.provider.getHistoricalCandles(symbol, timeframe, lastClosedOpen, lastClosedOpen)
+                    } else {
+                        marketDataRepository.getCandles(symbol, timeframe, lastClosedOpen, lastClosedOpen)
+                    }
                     if (fresh.isEmpty()) continue
                     // A refresh must not introduce an unfinished, mismatched or
                     // malformed exchange candle into the chart.
@@ -641,7 +654,7 @@ class ChartViewModel(
                         .toSortedMap()
                         .values
                         .toList()
-                        .takeLast(500)
+                        .takeLast(maxOf(500, _uiState.value.chartHistoryBars, previous.size).coerceAtMost(20_000))
                     _uiState.update { state ->
                         if (state.selectedSymbol == symbol && state.selectedTimeframe == timeframe) {
                             state.copy(candles = merged)
@@ -702,13 +715,7 @@ class ChartViewModel(
                 if (_uiState.value.selectedSymbol != symbol) return@collect
                 // A bad or mismatched quote must not overwrite the last trusted bid/ask,
                 // or trigger fills and stop-loss evaluation in the trading engine.
-                if (tick.symbol != symbol ||
-                    tick.source !in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") ||
-                    !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
-                    !tick.bid.isFinite() || !tick.ask.isFinite() ||
-                    tick.bid <= 0.0 || tick.ask < tick.bid ||
-                    tick.timestamp <= 0L ||
-                    tick.timestamp > System.currentTimeMillis() + 5_000L) return@collect
+                if (!com.example.core.market.VerifiedMarketQuote.isVerified(tick, symbol)) return@collect
                 val accepted = _uiState.value.latestTick
                 if (accepted != null && tick.timestamp < accepted.timestamp) return@collect
                 _uiState.update { state ->

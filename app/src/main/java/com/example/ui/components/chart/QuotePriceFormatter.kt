@@ -1,5 +1,6 @@
 package com.example.ui.components.chart
 
+import com.example.core.market.DefaultSymbols
 import java.util.Locale
 import kotlin.math.abs
 
@@ -25,6 +26,20 @@ internal object QuotePriceFormatter {
                 String.format(Locale.US, "%.${precision}f", value)
             }
         } else if (value == 0.0) "0.00" else "—"
+
+    fun forSymbol(value: Double, symbol: String?, grouping: Boolean = false, minimumDecimals: Int = 0): String {
+        if (!value.isFinite() || value < 0.0) return "—"
+        val normalized = when (symbol?.uppercase(Locale.ROOT)) {
+            "BTCUSD" -> "BTCUSDT"
+            "ETHUSD" -> "ETHUSDT"
+            else -> symbol?.uppercase(Locale.ROOT)
+        }
+        val metadataDigits = DefaultSymbols.SYMBOLS.firstOrNull { it.symbol == normalized }?.digits
+        if (metadataDigits == null && value > 0.0 && value < 0.000000000001) return price(value)
+        val fallback = if (value > 0.0 && value < 0.00000001) 12 else decimals(value)
+        val precision = maxOf(metadataDigits ?: fallback, minimumDecimals).coerceIn(0, 12)
+        return String.format(Locale.US, "%${if (grouping) "," else ""}.${precision}f", value)
+    }
 
     fun spread(value: Double): String =
         if (value.isFinite() && value >= 0.0) {

@@ -48,10 +48,7 @@ fun TradeScreen(
             quoteClock = System.currentTimeMillis()
         }
     }
-    val quoteIsVerified = tick != null &&
-        tick.symbol == uiState.selectedSymbol &&
-        tick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
-        quoteClock - tick.timestamp in 0..15_000L
+    val quoteIsVerified = com.example.core.market.VerifiedMarketQuote.isVerified(tick, uiState.selectedSymbol, quoteClock)
     val verifiedTick = tick?.takeIf { quoteIsVerified }
     val symInfo = remember(uiState.selectedSymbol) { DefaultSymbols.getSymbol(uiState.selectedSymbol) }
 
@@ -179,7 +176,7 @@ fun TradeScreen(
                         Column {
                             Text(text = "سعر العرض (Bid)", fontSize = 11.sp, color = TradingTextSecondary)
                             val bidStr = verifiedTick?.let { symInfo.formatPrice(it.bid) } ?: "--"
-                            Text(text = bidStr, style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TradingTextPrimary)
+                            Text(text = bidStr, modifier = Modifier.testTag("trade_quote_bid"), style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TradingTextPrimary)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(text = "السبريد", fontSize = 10.sp, color = TradingTextSecondary)
@@ -196,7 +193,7 @@ fun TradeScreen(
                         Column(horizontalAlignment = Alignment.End) {
                             Text(text = "سعر الطلب (Ask)", fontSize = 11.sp, color = TradingTextSecondary)
                             val askStr = verifiedTick?.let { symInfo.formatPrice(it.ask) } ?: "--"
-                            Text(text = askStr, style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TradingCyan)
+                            Text(text = askStr, modifier = Modifier.testTag("trade_quote_ask"), style = TextStyle(textDirection = TextDirection.Ltr), maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TradingCyan)
                         }
                     }
                 }

@@ -181,10 +181,7 @@ fun MarketScreen(
                     val row = uiState.rows[index]
                     val sym = row.symbolInfo
                     val tick = row.tick
-                    val quoteIsVerified = tick != null &&
-                        tick.symbol == sym.symbol &&
-                        tick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
-                        System.currentTimeMillis() - tick.timestamp in 0..15_000L
+                    val quoteIsVerified = com.example.core.market.VerifiedMarketQuote.isVerified(tick, sym.symbol)
                     val displayTick = tick?.takeIf { quoteIsVerified }
 
                     Card(
