@@ -141,7 +141,9 @@ class ChartReferenceInteractionTest {
     @Test fun compactReplayUsesEmbeddedControlsAndCloses() {
         compose.onNodeWithTag("chart_bottom_replay").performClick()
         compose.onNodeWithTag("chart_embedded_replay_controls").assertIsDisplayed()
-        compose.onNodeWithTag("chart_replay_close").performClick()
+        compose.onNodeWithTag("nav_item_chart").assertIsSelected()
+        compose.onNodeWithTag("chart_bottom_symbol").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
         compose.onNodeWithTag("chart_embedded_replay_controls").assertDoesNotExist()
         compose.onNodeWithTag("chart_bottom_strip").assertIsDisplayed()
     }

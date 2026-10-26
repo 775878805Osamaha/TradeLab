@@ -57,7 +57,32 @@ fun ChartScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val replayState by replayViewModel.uiState.collectAsState()
-    var isEmbeddedReplay by remember { mutableStateOf(false) }
+    var isEmbeddedReplay by rememberSaveable { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = isEmbeddedReplay) {
+        replayViewModel.pause()
+        isEmbeddedReplay = false
+    }
+    var selectedPositionId by remember { mutableStateOf<Long?>(null) }
+    var selectedPositionReplay by remember { mutableStateOf(false) }
+    val selectedPosition = (if (selectedPositionReplay) replayState.openPositions else uiState.openPositions)
+        .firstOrNull { it.id == selectedPositionId }
+    if (selectedPosition != null && selectedPositionReplay == isEmbeddedReplay) {
+        PositionActionsDialog(
+            position = selectedPosition,
+            tick = if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick,
+            onDismiss = { selectedPositionId = null },
+            onClose = { volume ->
+                if (selectedPositionReplay) replayViewModel.closePosition(selectedPosition.id, volume)
+                else viewModel.closeChartPosition(selectedPosition.id, volume)
+                selectedPositionId = null
+            },
+            onProtection = { sl, tp ->
+                if (selectedPositionReplay) replayViewModel.updatePositionProtection(selectedPosition.id, sl, tp)
+                else viewModel.modifyPositionSlTp(selectedPosition.id, sl, tp)
+                selectedPositionId = null
+            }
+        )
+    }
     LaunchedEffect(embeddedReplayLaunchRequest) {
         if (embeddedReplayLaunchRequest > 0) {
             replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
@@ -929,6 +954,11 @@ fun ChartScreen(
                         } else viewModel.addDrawing(it)
                     },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) },
+                    onSelectPosition = {
+                        if (isEmbeddedReplay) replayViewModel.pause()
+                        selectedPositionReplay = isEmbeddedReplay
+                        selectedPositionId = it.id
+                    },
                     onRequestOlderHistory = if (isEmbeddedReplay) null else ({ viewModel.loadOlderChartHistory() }),
                     referenceLayout = true,
                     bullishColor = Color(0xFF00B7AA),
@@ -1420,13 +1450,14 @@ fun ChartScreen(
                     Button(
                         onClick = { pendingOrderSide = OrderSide.SELL },
                         enabled = canTradeReplay,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TradingNegative),
-                        modifier = Modifier.weight(1f).height(58.dp).testTag("chart_replay_sell"),
-                        shape = RoundedCornerShape(28.dp)
+                        modifier = Modifier.weight(1f).height(40.dp).testTag("chart_replay_sell"),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("SELL · بيع", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text(replayTick?.bid?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                            Text(replayTick?.bid?.let { String.format(Locale.US, "%.${DefaultSymbols.getSymbol(replayState.symbol).digits}f", it) } ?: "—", fontSize = 13.sp, fontWeight = FontWeight.Bold,
                                 style = TextStyle(textDirection = TextDirection.Ltr))
                         }
                     }
@@ -1442,13 +1473,14 @@ fun ChartScreen(
                     Button(
                         onClick = { pendingOrderSide = OrderSide.BUY },
                         enabled = canTradeReplay,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TradingPositive),
-                        modifier = Modifier.weight(1f).height(58.dp).testTag("chart_replay_buy"),
-                        shape = RoundedCornerShape(28.dp)
+                        modifier = Modifier.weight(1f).height(40.dp).testTag("chart_replay_buy"),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("BUY · شراء", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text(replayTick?.ask?.let { String.format(Locale.US, "%.2f", it) } ?: "—", fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                            Text(replayTick?.ask?.let { String.format(Locale.US, "%.${DefaultSymbols.getSymbol(replayState.symbol).digits}f", it) } ?: "—", fontSize = 13.sp, fontWeight = FontWeight.Bold,
                                 style = TextStyle(textDirection = TextDirection.Ltr))
                         }
                     }
@@ -1484,11 +1516,12 @@ fun ChartScreen(
                     Button(
                         onClick = { pendingOrderSide = OrderSide.SELL },
                         enabled = marketTickIsLive,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(64.dp)
+                            .height(40.dp)
                             .testTag("chart_quick_sell_btn"),
-                        shape = RoundedCornerShape(28.dp),
+                        shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TradingNegative)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1512,11 +1545,12 @@ fun ChartScreen(
                     Button(
                         onClick = { pendingOrderSide = OrderSide.BUY },
                         enabled = marketTickIsLive,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(64.dp)
+                            .height(40.dp)
                             .testTag("chart_quick_buy_btn"),
-                        shape = RoundedCornerShape(28.dp),
+                        shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TradingPositive)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {

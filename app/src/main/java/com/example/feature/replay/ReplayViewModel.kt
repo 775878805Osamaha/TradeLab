@@ -784,7 +784,7 @@ class ReplayViewModel(
         }
     }
 
-    fun closePosition(posId: Long) {
+    fun closePosition(posId: Long, partialVolume: Double? = null) {
         cancelBatchAdvance()
         if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) return
         replayEngine.pause()
@@ -802,13 +802,19 @@ class ReplayViewModel(
         val exitPrice = if (pos.side == PositionSide.BUY) tick.bid else tick.ask
         val candle = replayEngine.currentCandle.value
 
-        val (trade, _) = executionEngine.closePosition(
+        if (partialVolume != null && (!partialVolume.isFinite() || partialVolume <= 0.0 || partialVolume >= pos.volume)) {
+            _uiState.update { it.copy(message = "حجم الإغلاق الجزئي غير صالح") }
+            return
+        }
+        val (trade, remainingPosition) = executionEngine.closePosition(
             position = pos,
             exitPrice = exitPrice,
             exitReason = ExitReason.MANUAL_CLOSE,
-            closeTime = candle?.closeTime ?: tick.timestamp
+            closeTime = candle?.closeTime ?: tick.timestamp,
+            partialVolume = partialVolume
         )
         openPositions.remove(pos)
+        if (remainingPosition != null) openPositions.add(remainingPosition)
         closedTrades.add(trade)
         val newBal = ReplayAccountMath.realizedBalance(_uiState.value.currentBalance, trade.netProfitLoss)
 

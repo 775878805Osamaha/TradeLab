@@ -74,6 +74,7 @@ fun CandlestickChart(
     displayStyle: ChartDisplayStyle = ChartDisplayStyle.CANDLES,
     onAddDrawing: ((ChartDrawing) -> Unit)? = null,
     onSelectTrade: ((TradeJournalEntry) -> Unit)? = null,
+    onSelectPosition: ((Position) -> Unit)? = null,
     onRequestOlderHistory: (() -> Unit)? = null,
     referenceLayout: Boolean = false,
     bullishColor: Color = TradingPositive,
@@ -116,6 +117,9 @@ fun CandlestickChart(
         }
     }
 
+    val selectablePositions by rememberUpdatedState(openPositions)
+    val selectPosition by rememberUpdatedState(onSelectPosition)
+    val positionHitRadius = with(androidx.compose.ui.platform.LocalDensity.current) { 18.dp.toPx() }
     val snapEnabled by rememberUpdatedState(magnetEnabled)
 
     val chartDensity = androidx.compose.ui.platform.LocalDensity.current
@@ -363,7 +367,17 @@ fun CandlestickChart(
                             val insidePlot = transform != null &&
                                 offset.x in 0f..transform.chartWidth &&
                                 offset.y in 0f..transform.chartHeight
-                            if (insidePlot && transform != null && onAddDrawing != null &&
+                            val hit = if (insidePlot && transform != null && activeDrawingTool == DrawingTool.NONE && !isCrosshairActive)
+                                selectablePositions.minByOrNull { pos ->
+                                    listOfNotNull(pos.entryPrice, pos.stopLoss, pos.takeProfit)
+                                        .minOf { kotlin.math.abs(transform.priceToY(it) - offset.y) }
+                                }?.takeIf { pos ->
+                                    listOfNotNull(pos.entryPrice, pos.stopLoss, pos.takeProfit)
+                                        .any { kotlin.math.abs(transform.priceToY(it) - offset.y) <= positionHitRadius }
+                                } else null
+                            if (hit != null && selectPosition != null) {
+                                selectPosition?.invoke(hit)
+                            } else if (insidePlot && transform != null && onAddDrawing != null &&
                                 (activeDrawingTool == DrawingTool.HORIZONTAL_LINE ||
                                  activeDrawingTool == DrawingTool.VERTICAL_LINE ||
                                  activeDrawingTool == DrawingTool.ANNOTATION)) {

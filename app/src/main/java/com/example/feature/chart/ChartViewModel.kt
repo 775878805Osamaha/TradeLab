@@ -369,6 +369,26 @@ class ChartViewModel(
         _uiState.update { it.copy(selectedTradeForDetail = trade) }
     }
 
+    fun closeChartPosition(positionId: Long, partialVolume: Double? = null) {
+        val state = _uiState.value
+        val position = state.openPositions.firstOrNull { it.id == positionId } ?: return
+        val tick = state.latestTick
+        if (tick == null || !com.example.core.market.VerifiedMarketQuote.isVerified(tick, position.symbol, System.currentTimeMillis())) {
+            _uiState.update { it.copy(message = "يلزم سعر حديث وموثوق لإغلاق الصفقة") }
+            return
+        }
+        if (partialVolume != null && (!partialVolume.isFinite() || partialVolume <= 0.0 || partialVolume >= position.volume)) {
+            _uiState.update { it.copy(message = "حجم الإغلاق الجزئي غير صالح") }
+            return
+        }
+        val exitPrice = if (position.side == PositionSide.BUY) tick.bid else tick.ask
+        viewModelScope.launch {
+            runCatching { tradingRepository.closePosition(positionId, exitPrice, ExitReason.MANUAL_CLOSE, partialVolume).getOrThrow() }
+                .onSuccess { _uiState.update { it.copy(message = "تم إغلاق الحجم المطلوب من الصفقة") } }
+                .onFailure { error -> _uiState.update { it.copy(message = error.message ?: "فشل إغلاق الصفقة") } }
+        }
+    }
+
     fun modifyPositionSlTp(positionId: Long, stopLoss: Double?, takeProfit: Double?) {
         viewModelScope.launch {
             val res = tradingRepository.modifyPosition(positionId, stopLoss, takeProfit)
