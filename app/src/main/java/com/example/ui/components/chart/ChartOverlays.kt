@@ -14,6 +14,18 @@ import com.example.ui.theme.*
 import java.util.Locale
 
 object ChartOverlays {
+    private val badgeTimeFormat = java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.US)
+        .withZone(java.time.ZoneOffset.UTC)
+    private var badgeTimeKey = Long.MIN_VALUE
+    private var badgeTimeText = ""
+    private fun badgeTime(timestamp: Long): String {
+        if (timestamp != badgeTimeKey) {
+            badgeTimeKey = timestamp
+            badgeTimeText = badgeTimeFormat.format(java.time.Instant.ofEpochMilli(timestamp))
+        }
+        return badgeTimeText
+    }
+
     private val badgeTextPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.WHITE
         textSize = 19f
@@ -36,7 +48,8 @@ object ChartOverlays {
         transform: ChartTransform,
         latestTick: Tick?,
         showHistoricalLastPrice: Boolean = true,
-        priceAxisWidth: Float = 122f
+        priceAxisWidth: Float = 122f,
+        referenceLayout: Boolean = false
     ) {
         // Only verified ticks provide executable bid/ask; historical candles
         // are displayed as a chart price, never masquerading as live quotes.
@@ -56,17 +69,20 @@ object ChartOverlays {
         )
         // Reference-style green price label anchored to the actual price axis.
         scope.drawContext.canvas.nativeCanvas.apply {
-            val label = QuotePriceFormatter.price(chartPrice)
+            val label = if (referenceLayout && chartPrice >= 100.0)
+                String.format(java.util.Locale.US, "%,.2f", chartPrice) else QuotePriceFormatter.price(chartPrice)
             val textPaint = badgeTextPaint
             val originalSize = textPaint.textSize
+            if (referenceLayout) textPaint.textSize = 10f * scope.density
             val availableWidth = (scope.size.width - transform.chartWidth)
                 .coerceAtMost(priceAxisWidth).coerceAtLeast(1f)
             val measured = textPaint.measureText(label)
-            textPaint.textSize = originalSize * ((availableWidth - 10f) / measured).coerceIn(0.5f, 1f)
-            val badgeWidth = (textPaint.measureText(label) + 10f).coerceAtMost(availableWidth)
+            textPaint.textSize = textPaint.textSize * ((availableWidth - 10f) / measured).coerceIn(0.5f, 1f)
+            val badgeWidth = if (referenceLayout) availableWidth else (textPaint.measureText(label) + 10f).coerceAtMost(availableWidth)
             val badgeFits = textPaint.measureText(label) + 10f <= availableWidth
-            val top = (y - 15f).coerceAtLeast(0f)
-            val bottom = (y + 15f).coerceAtMost(scope.size.height)
+            val halfHeight = if (referenceLayout) 14f * scope.density else 15f
+            val top = (y - halfHeight).coerceAtLeast(0f)
+            val bottom = (y + halfHeight).coerceAtMost(transform.chartHeight)
             val background = badgeBackgroundPaint
             if (bottom > top && badgeFits) {
                 drawRoundRect(
@@ -77,7 +93,18 @@ object ChartOverlays {
                     5f, 5f, background
                 )
                 drawText(label, transform.chartWidth + 5f,
-                    (top + bottom) / 2f + textPaint.textSize * 0.34f, textPaint)
+                    if (referenceLayout) top + textPaint.textSize * 1.2f
+                    else (top + bottom) / 2f + textPaint.textSize * 0.34f, textPaint)
+                if (referenceLayout) {
+                    // Actual source timestamp, never a fabricated live countdown for historical OHLC.
+                    val sourceTime = latestTick?.timestamp ?: transform.visibleCandles.lastOrNull()?.openTime
+                    if (sourceTime != null) {
+                        textPaint.alpha = 170
+                        drawText(badgeTime(sourceTime), transform.chartWidth + 5f,
+                            bottom - textPaint.textSize * .25f, textPaint)
+                        textPaint.alpha = 255
+                    }
+                }
             }
             textPaint.textSize = originalSize
         }

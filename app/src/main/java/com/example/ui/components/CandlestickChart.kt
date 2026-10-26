@@ -384,7 +384,8 @@ fun CandlestickChart(
                 }
         ) {
             val width = size.width
-            val height = size.height
+            val timeAxisHeight = if (referenceLayout) 22.dp.toPx() else 0f
+            val height = (size.height - timeAxisHeight).coerceAtLeast(1f)
             // Reserve sufficient width for large formatted prices (e.g. 81,500.00).
             priceAxisPaint.textSize = 10.dp.toPx()
             timeAxisPaint.textSize = 10.dp.toPx()
@@ -539,8 +540,12 @@ fun CandlestickChart(
                 val left = x - textWidth / 2f
                 val right = x + textWidth / 2f
                 if (ChartTimeAxis.shouldDisplay(left, right, chartWidth, lastTimeLabelRight)) {
+                    if (referenceLayout) drawLine(
+                        color = TradingBorder.copy(alpha = 0.25f),
+                        start = Offset(x, 0f), end = Offset(x, height), strokeWidth = 0.5.dp.toPx()
+                    )
                     drawContext.canvas.nativeCanvas.drawText(
-                        label, x, height - 8f, timeAxisPaint
+                        label, x, if (referenceLayout) size.height - 5.dp.toPx() else height - 8f, timeAxisPaint
                     )
                     lastTimeLabelRight = right
                     lastDisplayedDay = day
@@ -575,6 +580,11 @@ fun CandlestickChart(
                     series.subList(startIndex, endIndex)
                 else emptyList()
 
+            if (referenceLayout) {
+                drawLine(Color(0xFF263448), Offset(chartWidth, 0f), Offset(chartWidth, height), 0.5.dp.toPx())
+                drawLine(TradingBorder.copy(alpha = .4f), Offset(0f, height), Offset(width, height), 0.5.dp.toPx())
+            }
+
             // 3. Draw Subpanel (RSI / MACD / ATR)
             if (hasSubpanel) {
                 val subpanelTop = mainChartHeight + volumeHeight
@@ -606,7 +616,8 @@ fun CandlestickChart(
             ChartOverlays.drawPriceAndSpread(
                 this, transform, latestTick,
                 showHistoricalLastPrice = endIndex == candles.size,
-                priceAxisWidth = rightAxisWidth
+                priceAxisWidth = rightAxisWidth,
+                referenceLayout = referenceLayout
             )
             ChartOverlays.drawOpenPositions(this, transform, openPositions)
             ChartOverlays.drawPendingOrders(this, transform, pendingOrders)

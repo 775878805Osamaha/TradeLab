@@ -1000,13 +1000,27 @@ fun ChartScreen(
                     val priorClose = headerBars.getOrNull(headerBars.lastIndex - 1)?.close
                     val delta = if (lastClose != null && priorClose != null && priorClose > 0.0)
                         lastClose - priorClose else null
-                    Text(
-                        text = if (delta != null) String.format(Locale.US, "%+.2f (%+.2f%%)", delta, delta / priorClose!! * 100.0) else "—",
-                        color = if (delta != null && delta < 0.0) TradingNegative else Color(0xFF00B7AA),
-                        fontSize = 11.sp,
-                        style = TextStyle(textDirection = TextDirection.Ltr),
-                        modifier = Modifier.align(AbsoluteAlignment.TopLeft).padding(start = 8.dp, top = 12.dp)
-                    )
+                    CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
+                        Row(Modifier.align(AbsoluteAlignment.TopLeft).padding(start = 8.dp, top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(Modifier.size(width = 40.dp, height = 20.dp)
+                                .clip(RoundedCornerShape(12.dp)).background(Color(0xFF15202A))
+                                .clickable { showToolsMenu = true },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceEvenly) {
+                                Box(Modifier.size(8.dp).clip(RoundedCornerShape(50))
+                                    .background(if (headerBars.isNotEmpty()) Color(0xFF00B7AA) else TradingTextSecondary))
+                                Icon(Icons.Default.DragHandle, "أدوات الشارت", tint = TradingNegative, modifier = Modifier.size(19.dp))
+                            }
+                            Text(
+                                text = if (delta != null) String.format(Locale.US, "%+.2f (%+.2f%%)", delta, delta / priorClose!! * 100.0) else "—",
+                                color = if (delta != null && delta < 0.0) TradingNegative else Color(0xFF00B7AA),
+                                fontSize = 10.sp,
+                                style = TextStyle(textDirection = TextDirection.Ltr)
+                            )
+                        }
+                    }
                     Row(
                         Modifier.align(AbsoluteAlignment.TopRight).padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
