@@ -151,6 +151,11 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_bottom_strip").assertIsDisplayed()
     }
     @Test fun replayPositionLineOpensActionsAndPartialCloseKeepsChart() {
+        // The production Replay account starts at $50. Use an affordable real
+        // forex order so this interaction test also respects its margin checks.
+        compose.onNodeWithTag("chart_bottom_symbol").performClick()
+        compose.onNodeWithTag("chart_symbol_search").performTextInput("GBPUSD")
+        compose.onNodeWithTag("chart_symbol_option_GBPUSD").performClick()
         compose.onNodeWithTag("chart_bottom_replay").performClick()
         compose.waitUntil(90000) {
             compose.onAllNodesWithTag("chart_replay_buy").fetchSemanticsNodes().firstOrNull()
@@ -158,7 +163,7 @@ class ChartReferenceInteractionTest {
             compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithTag("chart_replay_buy").performClick()
-        compose.onNodeWithTag("chart_order_volume").performTextReplacement("0.1")
+        compose.onNodeWithTag("chart_order_volume").performTextReplacement("0.02")
         androidx.test.espresso.Espresso.closeSoftKeyboard()
         compose.onNodeWithTag("chart_order_confirm").performClick()
         compose.waitForIdle()
@@ -174,7 +179,7 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_position_actions").assertIsDisplayed()
         captureProviderScreen("tradelab-position-actions")
         compose.onNodeWithTag("position_partial").performClick()
-        compose.onNodeWithTag("position_action_value").performTextInput("0.04")
+        compose.onNodeWithTag("position_action_value").performTextInput("0.01")
         androidx.test.espresso.Espresso.closeSoftKeyboard()
         compose.onNodeWithTag("position_action_confirm").performClick()
         compose.onNodeWithTag("chart_replay_open_positions_summary").assertExists()
@@ -186,7 +191,7 @@ class ChartReferenceInteractionTest {
                 click(androidx.compose.ui.geometry.Offset(width * .65f, height * step / 42f))
             }
         }
-        compose.onNodeWithText("الحجم المفتوح: 0.06 لوت").assertIsDisplayed()
+        compose.onNodeWithText("الحجم المفتوح: 0.01 لوت").assertIsDisplayed()
     }
 
 }

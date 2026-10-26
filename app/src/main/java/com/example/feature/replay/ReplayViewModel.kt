@@ -824,7 +824,8 @@ class ReplayViewModel(
                 currentEquity = ReplayAccountMath.equity(newBal, openPositions),
                 openPositions = openPositions.toList(),
                 closedTrades = closedTrades.toList(),
-                message = "تم إغلاق الصفقة #${pos.id} في Replay"
+                message = if (remainingPosition == null) "تم إغلاق الصفقة #${pos.id} في Replay"
+                    else "تم إغلاق $partialVolume لوت؛ المتبقي ${remainingPosition.volume} لوت"
             )
         }
         // Manual close changes realized P&L and the journal at the current index.
