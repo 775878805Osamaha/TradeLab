@@ -1021,15 +1021,34 @@ fun ChartScreen(
                             )
                         }
                     }
-                    Row(
-                        Modifier.align(AbsoluteAlignment.TopRight).padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { viewModel.triggerResetView() }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.North, "إعادة ضبط الشارت", tint = TradingTextPrimary)
-                        }
-                        IconButton(onClick = { immersiveChart = false }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.FullscreenExit, "عرض التفاصيل", tint = TradingTextPrimary)
+                    Box(Modifier.align(AbsoluteAlignment.TopRight).padding(8.dp)) {
+                        ChartHeaderControls(
+                            symbol = uiState.selectedSymbol,
+                            replayActive = isEmbeddedReplay,
+                            onReset = { viewModel.triggerResetView() },
+                            onReplay = {
+                                if (isEmbeddedReplay) {
+                                    replayViewModel.pause()
+                                    isEmbeddedReplay = false
+                                } else {
+                                    replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
+                                    isEmbeddedReplay = true
+                                }
+                            },
+                            onDetails = { immersiveChart = false }
+                        )
+                    }
+                    val activeIndicators = with(uiState.indicatorSettings) {
+                        listOf(isSmaEnabled, isEmaEnabled, isBollingerEnabled, isVwapEnabled,
+                            isRsiEnabled, isMacdEnabled, isAtrEnabled).count { it }
+                    }
+                    Surface(Modifier.align(AbsoluteAlignment.TopLeft).absoluteOffset(x = 52.dp, y = 26.dp)
+                        .size(width = 38.dp, height = 22.dp).clickable { showIndicatorsDialog = true },
+                        shape = RoundedCornerShape(3.dp), color = Color(0xFF000D16),
+                        border = androidx.compose.foundation.BorderStroke(.7.dp, Color(0xFF243544))) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.KeyboardArrowDown, "المؤشرات النشطة", tint = TradingTextPrimary, modifier = Modifier.size(14.dp))
+                            Text(activeIndicators.toString(), color = TradingTextPrimary, fontSize = 11.sp)
                         }
                     }
                 }
