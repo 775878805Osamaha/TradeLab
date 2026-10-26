@@ -55,9 +55,9 @@ class ChartReferenceInteractionTest {
             val samples = durations.filter { it > 0 }.sorted()
             val p95 = samples.getOrNull(((samples.size - 1) * .95).toInt().coerceAtLeast(0))?.div(1_000_000.0)
             val overBudget = samples.count { it > 16_666_667L }
-            java.io.File(compose.activity.getExternalFilesDir(null), "chart-frame-metrics.json").writeText(
-                """{"samples":${samples.size},"p95_frame_ms":$p95,"over_16_67ms":$overBudget,"environment":"GitHub Android emulator; software GPU; not a physical-device FPS guarantee"}"""
-            )
+            val result = """{"samples":${samples.size},"p95_frame_ms":$p95,"over_16_67ms":$overBudget,"environment":"GitHub Android emulator; software GPU; not a physical-device FPS guarantee"}"""
+            // UTP retains per-test logcat even when it uninstalls the target APK.
+            android.util.Log.i("TradeLabFrameMetrics", result)
         }
     }
 

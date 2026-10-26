@@ -93,7 +93,7 @@ jobs:
               adb shell uiautomator dump /sdcard/tradelab-replay-ui.xml
               adb pull /sdcard/tradelab-replay-ui.xml screenshots/tradelab-replay-ui.xml
             ./gradlew connectedDebugAndroidTest --stacktrace
-            adb pull /sdcard/Android/data/com.aistudio.tradelab.vzqrpk/files/chart-frame-metrics.json screenshots/chart-frame-metrics.json
+            python3 scripts/extract_chart_frame_metrics.py
       - name: Install screenshot analysis dependency
         run: python3 -m pip install --user Pillow
       - name: Compare actual screenshot with supplied reference
