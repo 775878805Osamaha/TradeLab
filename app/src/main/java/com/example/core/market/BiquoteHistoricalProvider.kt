@@ -87,9 +87,10 @@ class BiquoteHistoricalProvider(
                 val row = items.getJSONObject(i)
                 if (row.optBoolean("isOpen", false)) continue
                 val openTime = Instant.parse(row.getString("openTime")).toEpochMilli()
-                if (openTime < baseFrom || openTime > to) {
-                    throw IOException("Biquote returned a bar outside the requested range")
-                }
+                // Providers may include surrounding bars despite the
+                // requested from/to filter. Never import those bars into the
+                // chart; ignore them and validate the retained range below.
+                if (openTime < baseFrom || openTime > to) continue
                 if (openTime + basePeriod > System.currentTimeMillis()) continue
                 val open = row.getDouble("open")
                 val high = row.getDouble("high")
