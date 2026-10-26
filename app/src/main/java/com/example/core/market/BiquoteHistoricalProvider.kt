@@ -87,10 +87,12 @@ class BiquoteHistoricalProvider(
                 val row = items.getJSONObject(i)
                 if (row.optBoolean("isOpen", false)) continue
                 val openTime = Instant.parse(row.getString("openTime")).toEpochMilli()
-                // Providers may include surrounding bars despite the
-                // requested from/to filter. Never import those bars into the
-                // chart; ignore them and validate the retained range below.
-                if (openTime < baseFrom || openTime > to) continue
+                // Reject a provider response that violates its requested
+                // historical boundaries. Backfill retries smaller windows
+                // instead of accepting an ambiguous OHLC response.
+                if (openTime < baseFrom || openTime > to) {
+                    throw IOException("Biquote returned a bar outside the requested range")
+                }
                 if (openTime + basePeriod > System.currentTimeMillis()) continue
                 val open = row.getDouble("open")
                 val high = row.getDouble("high")
