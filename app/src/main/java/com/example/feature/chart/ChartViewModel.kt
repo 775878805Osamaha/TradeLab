@@ -532,7 +532,7 @@ class ChartViewModel(
                 } else {
                     // Forex uses its broker quote subscription; never request
                     // Binance crypto klines for a forex/metal symbol.
-                    klineRefreshJob?.cancel()
+                    startKlineRefresh(symbol, tf)
                     klineStreamJob?.cancel()
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -598,9 +598,11 @@ class ChartViewModel(
      */
     private fun startKlineRefresh(symbol: String, timeframe: Timeframe) {
         klineRefreshJob?.cancel()
-        if (symbol != "BTCUSDT" && symbol != "ETHUSDT") return
+        if (!com.example.core.market.VerifiedMarketQuote.supports(symbol)) return
         klineRefreshJob = viewModelScope.launch {
-            var lastSuccessfullyRefreshedOpen = Long.MIN_VALUE
+            var lastSuccessfullyRefreshedOpen = _uiState.value.candles.lastOrNull()?.openTime ?: Long.MIN_VALUE
+            var lastAttemptOpen = Long.MIN_VALUE
+            var attemptsForOpen = 0
             while (isActive) {
                 delay(10_000L)
                 if (_uiState.value.selectedSymbol != symbol ||
@@ -617,9 +619,19 @@ class ChartViewModel(
                     // Repeating the same historical request every 10 seconds
                     // wastes bandwidth and risks exchange rate limits.
                     if (lastClosedOpen == lastSuccessfullyRefreshedOpen) continue
-                    val fresh = marketDataRepository.provider.getHistoricalCandles(
-                        symbol, timeframe, lastClosedOpen, lastClosedOpen
-                    )
+                    if (lastClosedOpen != lastAttemptOpen) {
+                        lastAttemptOpen = lastClosedOpen
+                        attemptsForOpen = 0
+                    }
+                    // Closed sessions and outages must not trigger an endless
+                    // 10-second retry loop for the same unavailable candle.
+                    if (attemptsForOpen >= 3) continue
+                    attemptsForOpen++
+                    val fresh = if (symbol in setOf("BTCUSDT", "ETHUSDT")) {
+                        marketDataRepository.provider.getHistoricalCandles(symbol, timeframe, lastClosedOpen, lastClosedOpen)
+                    } else {
+                        marketDataRepository.getCandles(symbol, timeframe, lastClosedOpen, lastClosedOpen)
+                    }
                     if (fresh.isEmpty()) continue
                     // A refresh must not introduce an unfinished, mismatched or
                     // malformed exchange candle into the chart.
@@ -642,7 +654,7 @@ class ChartViewModel(
                         .toSortedMap()
                         .values
                         .toList()
-                        .takeLast(500)
+                        .takeLast(maxOf(500, _uiState.value.chartHistoryBars, previous.size).coerceAtMost(20_000))
                     _uiState.update { state ->
                         if (state.selectedSymbol == symbol && state.selectedTimeframe == timeframe) {
                             state.copy(candles = merged)
