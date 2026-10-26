@@ -145,7 +145,11 @@ class MarketDataRepository(
                     .map { it.toDomain() }
             ).filter { candle ->
                 candle.symbol == symbol && candle.timeframe == timeframe &&
-                    candle.source in setOf("BIQUOTE_HISTORICAL", "TWELVE_DATA_HISTORICAL")
+                    candle.source == if (requestedKey.isNotBlank()) {
+                        "TWELVE_DATA_HISTORICAL"
+                    } else {
+                        "BIQUOTE_HISTORICAL"
+                    }
             }
             // A complete contiguous verified cache window needs no network.
             // Never assume that a sparse forex session is complete merely
@@ -235,7 +239,15 @@ class MarketDataRepository(
             // Persist only provider-verified forex/metals OHLC. Repeated chart
             // navigation can then reuse a fully contiguous cached window without
             // another network round trip; session gaps still require provider checks.
-            candleDao.insertCandles(verified.map { it.toEntity() })
+            // Persisting validated OHLC is best-effort; a Room write failure
+            // must not erase real candles already verified from the provider.
+            try {
+                candleDao.insertCandles(verified.map { it.toEntity() })
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Return verified candles even when the optional cache is unavailable.
+            }
             if (requestedBars <= 250L) {
                 synchronized(forexWindowLock) {
                     verifiedForexWindows[windowKey] = verified.toList()
