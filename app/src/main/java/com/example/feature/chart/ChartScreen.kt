@@ -1014,7 +1014,7 @@ fun ChartScreen(
                                 Icon(Icons.Default.DragHandle, "أدوات الشارت", tint = TradingNegative, modifier = Modifier.size(19.dp))
                             }
                             Text(
-                                text = if (delta != null) String.format(Locale.US, "%+.2f (%+.2f%%)", delta, delta / priorClose!! * 100.0) else "—",
+                                text = if (delta != null) String.format(Locale.US, "%+.${DefaultSymbols.getSymbol(uiState.selectedSymbol).digits}f (%+.2f%%)", delta, delta / priorClose!! * 100.0) else "—",
                                 color = if (delta != null && delta < 0.0) TradingNegative else Color(0xFF00B7AA),
                                 fontSize = 10.sp,
                                 style = TextStyle(textDirection = TextDirection.Ltr)

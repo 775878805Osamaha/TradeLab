@@ -458,7 +458,8 @@ fun CandlestickChart(
             val priceScale = ChartPriceAxis.calculate(paddedMin, paddedMax, mainChartHeight, 48.dp.toPx())
             for (tick in priceScale.ticks) {
                 val y = tick.fractionFromTop * mainChartHeight
-                val axisLabel = String.format(Locale.US, "%,.${maxOf(priceScale.decimals, com.example.ui.components.chart.QuotePriceFormatter.decimals(tick.price))}f", tick.price)
+                val axisLabel = com.example.ui.components.chart.QuotePriceFormatter.forSymbol(
+                    tick.price, candles.firstOrNull()?.symbol, grouping = true, minimumDecimals = priceScale.decimals)
                 drawLine(
                     color = TradingBorder.copy(alpha = 0.3f),
                     start = Offset(0f, y),
@@ -663,7 +664,7 @@ fun CandlestickChart(
                     val pAtY = transform.yToPrice(off.y)
                     drawContext.canvas.nativeCanvas.apply {
                         val p = crosshairAxisPaint
-                        val priceLabel = com.example.ui.components.chart.QuotePriceFormatter.price(pAtY)
+                        val priceLabel = com.example.ui.components.chart.QuotePriceFormatter.forSymbol(pAtY, candles.firstOrNull()?.symbol)
                         val originalTextSize = p.textSize
                         val availableWidth = (width - chartWidth - 10f).coerceAtLeast(1f)
                         val naturalWidth = p.measureText(priceLabel)

@@ -69,8 +69,8 @@ object ChartOverlays {
         )
         // Reference-style green price label anchored to the actual price axis.
         scope.drawContext.canvas.nativeCanvas.apply {
-            val label = if (referenceLayout && chartPrice >= 100.0)
-                String.format(java.util.Locale.US, "%,.2f", chartPrice) else QuotePriceFormatter.price(chartPrice)
+            val label = QuotePriceFormatter.forSymbol(chartPrice,
+                transform.visibleCandles.lastOrNull()?.symbol ?: latestTick?.symbol, grouping = referenceLayout)
             val textPaint = badgeTextPaint
             val originalSize = textPaint.textSize
             if (referenceLayout) textPaint.textSize = 10f * scope.density
