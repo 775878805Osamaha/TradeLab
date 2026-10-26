@@ -197,7 +197,7 @@ class ChartReferenceInteractionTest {
 
     @Test fun marketTerminalSearchAndOpenChart() {
         compose.onNodeWithTag("nav_item_market").performClick()
-        compose.waitUntil(30000) { compose.onAllNodesWithTag("symbol_card_XAUUSD").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(30000) { compose.onAllNodesWithTag("market_list").fetchSemanticsNodes().isNotEmpty() }
         captureProviderScreen("tradelab-market-terminal")
         compose.onNodeWithTag("market_search_input").performTextInput("xauusd")
         compose.waitUntil(5000) { compose.onAllNodesWithTag("symbol_card_BTCUSDT").fetchSemanticsNodes().isEmpty() }
