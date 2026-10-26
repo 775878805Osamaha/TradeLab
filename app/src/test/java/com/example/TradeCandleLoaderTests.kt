@@ -9,11 +9,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TradeCandleLoaderTests {
-    @Test fun unsupportedSymbolsNeverCallProvider() = runBlocking {
+    @Test fun goldAndForexUseTheirVerifiedHistoricalProvider() = runBlocking {
         for (symbol in listOf("XAUUSD", "EURUSD", "GBPUSD")) {
-            val result = loadTradeCandles(symbol) { error("Unsupported provider called") }
-            assertTrue(result.candles.isEmpty())
-            assertTrue(result.message!!.contains(symbol))
+            var requested = false
+            val candles = listOf(Candle(symbol = symbol, timeframe = Timeframe.M15,
+                openTime = 60000L, open = 100.0, high = 102.0, low = 99.0, close = 101.0))
+            val result = loadTradeCandles(symbol) { requested = true; candles }
+            assertTrue(requested)
+            assertEquals(candles, result.candles)
+            assertNull(result.message)
         }
     }
 

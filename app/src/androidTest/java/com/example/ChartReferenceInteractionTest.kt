@@ -31,6 +31,49 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_floating_timeframe").assertDoesNotExist()
     }
 
+    private fun captureProviderScreen(name: String) {
+        compose.waitForIdle()
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val descriptor = instrumentation.uiAutomation.executeShellCommand("screencap -p /sdcard/Download/$name.png")
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
+    }
+
+    @Test fun threeMinuteGoldHistoryLoadsRealCandles() {
+        compose.onNodeWithTag("chart_bottom_timeframe").performClick()
+        compose.onNodeWithText("3m").performClick()
+        compose.waitUntil(90000) {
+            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("chart_load_error").assertDoesNotExist()
+        compose.onNodeWithTag("chart_bottom_timeframe").assertTextContains("3 دق", substring = true)
+        captureProviderScreen("tradelab-gold-3m")
+    }
+
+    @Test fun legacyGoldTradeShowsVerifiedBidAskAndHistory() {
+        // Live-quote acceptance is exercised on weekdays; closed markets must remain blocked.
+        org.junit.Assume.assumeTrue(java.time.LocalDate.now(java.time.ZoneOffset.UTC).dayOfWeek.value <= 5)
+        compose.onNodeWithTag("nav_item_account").performClick()
+        compose.onNodeWithTag("dash_action_trade").performScrollTo().performClick()
+        compose.onNodeWithTag("trade_symbol_selector").performClick()
+        compose.onAllNodesWithText("XAUUSD").onLast().performClick()
+        compose.waitUntil(90000) {
+            val node = compose.onAllNodesWithTag("trade_quote_bid").fetchSemanticsNodes().firstOrNull()
+            val text = node?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)
+                ?.joinToString("") { it.text }?.replace(",", "")
+            (text?.toDoubleOrNull() ?: 0.0) > 0.0
+        }
+        val app = compose.activity.application as TradeLabApplication
+        val tick = kotlinx.coroutines.runBlocking { app.marketDataRepository.provider.getLatestTick("XAUUSD") }
+        org.junit.Assert.assertTrue(com.example.core.market.VerifiedMarketQuote.isVerified(tick, "XAUUSD"))
+        compose.onNodeWithTag("trade_quote_ask").assertIsDisplayed()
+        compose.onNodeWithTag("trade_chart_card").performScrollTo()
+        compose.waitUntil(90000) {
+            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("trade_quote_bid").performScrollTo()
+        captureProviderScreen("tradelab-gold-trade")
+    }
+
     @Test fun recordActualPanFrameDurations() {
         val durations = java.util.concurrent.CopyOnWriteArrayList<Long>()
         val thread = android.os.HandlerThread("chart-frame-measurement").apply { start() }

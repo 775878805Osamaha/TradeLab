@@ -137,7 +137,7 @@ fun ChartScreen(
     // Historical gold/forex must not force a full chart-screen recomposition
     // every second when no live quote is subscribed.
     LaunchedEffect(uiState.selectedSymbol) {
-        if (uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")) {
+        if (com.example.core.market.VerifiedMarketQuote.supports(uiState.selectedSymbol)) {
             while (true) {
                 kotlinx.coroutines.delay(5_000L)
                 quoteClock = System.currentTimeMillis()
@@ -145,10 +145,7 @@ fun ChartScreen(
         }
     }
     val headerTick = uiState.latestTick
-    val headerQuoteVerified = headerTick != null &&
-        headerTick.symbol == uiState.selectedSymbol &&
-        headerTick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
-        quoteClock - headerTick.timestamp in 0..15_000L
+    val headerQuoteVerified = com.example.core.market.VerifiedMarketQuote.isVerified(headerTick, uiState.selectedSymbol, quoteClock)
 
     LaunchedEffect(pendingOrderSide) {
         if (pendingOrderSide != null) {
@@ -797,10 +794,7 @@ fun ChartScreen(
             }
 
             val marketTick = uiState.latestTick
-            val marketTickIsLive = marketTick != null &&
-                marketTick.symbol == uiState.selectedSymbol &&
-                marketTick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
-                quoteClock - marketTick.timestamp in 0..15_000L
+            val marketTickIsLive = com.example.core.market.VerifiedMarketQuote.isVerified(marketTick, uiState.selectedSymbol, quoteClock)
             val verifiedBinancePair = uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")
             if (!immersiveChart && !isEmbeddedReplay && verifiedBinancePair && !marketTickIsLive) {
                 Text(

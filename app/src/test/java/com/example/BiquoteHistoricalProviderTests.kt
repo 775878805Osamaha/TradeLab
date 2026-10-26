@@ -133,4 +133,50 @@ class BiquoteHistoricalProviderTests {
         })
     }
 
+    @Test fun threeMinuteCandleIncludesItsLastTwoMinuteRows() = runBlocking {
+        var requestedTo: String? = null
+        var requestedLimit: String? = null
+        val payload = response(bars = (0..2).joinToString(",") { bar(Instant.ofEpochMilli(from + it * step).toString(), 2000 + it) })
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requestedTo = chain.request().url.queryParameter("to")
+            requestedLimit = chain.request().url.queryParameter("limit")
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(payload.toResponseBody()).build()
+        }.build()
+        val candles = BiquoteHistoricalProvider(client).fetch("XAUUSD", Timeframe.M3, from, from)
+        assertEquals(1, candles.size)
+        assertEquals(from + 3 * step, candles.single().closeTime)
+        assertEquals(2003.0, candles.single().close, .0001)
+        assertEquals("2026-01-05T00:02:00Z", requestedTo)
+        assertEquals("3", requestedLimit)
+    }
+    @Test fun directIntervalUsesInclusiveLastOpenNotTheNextCandle() = runBlocking {
+        var requestedTo: String? = null
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requestedTo = chain.request().url.queryParameter("to")
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(response(bars = bar("2026-01-05T00:00:00Z")).toResponseBody()).build()
+        }.build()
+        assertEquals(1, BiquoteHistoricalProvider(client).fetch("XAUUSD", Timeframe.M15, from, from).size)
+        assertEquals("2026-01-05T00:00:00Z", requestedTo)
+    }
+    @Test fun twoHourCandleIncludesBothHourlyRows() = runBlocking {
+        val payload = response(bars = bar("2026-01-05T00:00:00Z") + "," + bar("2026-01-05T01:00:00Z", 2001))
+        val candles = provider(payload).fetch("XAUUSD", Timeframe.H2, from, from)
+        assertEquals(1, candles.size)
+        assertEquals(from + 120 * step, candles.single().closeTime)
+        assertEquals(2002.0, candles.single().close, .0001)
+    }
+    @Test fun weeklyForexUsesRealWeekdaysWithoutInventingWeekendBars() = runBlocking {
+        val payload = response(bars = (0..4).joinToString(",") { bar(Instant.ofEpochMilli(from + it * 86400000L).toString(), 2000 + it) })
+        val candles = provider(payload).fetch("XAUUSD", Timeframe.W1, from, from)
+        assertEquals(1, candles.size)
+        assertEquals(50.0, candles.single().volume, .0001)
+        assertEquals(2005.0, candles.single().close, .0001)
+    }
+    @Test fun weeklyForexRejectsMissingWeekdayRatherThanFillingIt() = runBlocking {
+        val payload = response(bars = listOf(0, 1, 3, 4).joinToString(",") { bar(Instant.ofEpochMilli(from + it * 86400000L).toString()) })
+        assertTrue(provider(payload).fetch("XAUUSD", Timeframe.W1, from, from).isEmpty())
+    }
+
 }

@@ -103,7 +103,7 @@ class TradeViewModel(
                 message = null, isOrderPreviewVisible = false
             )
         }
-        if (symInfo.symbol in setOf("BTCUSDT", "ETHUSDT")) {
+        if (com.example.core.market.VerifiedMarketQuote.supports(symInfo.symbol)) {
             subscribeToSymbolTicks(symInfo.symbol)
         } else {
             // Historical-only forex/metal sources cannot supply a verified
@@ -295,15 +295,9 @@ class TradeViewModel(
         }
 
         // Never submit a virtual market order using an old or unsupported quote.
-        val verifiedMarketQuote = state.latestTick?.let { quote ->
-            quote.symbol == state.selectedSymbol &&
-                quote.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
-                System.currentTimeMillis() - quote.timestamp in 0..15_000L &&
-                quote.bid.isFinite() && quote.ask.isFinite() &&
-                quote.bid > 0.0 && quote.ask >= quote.bid
-        } == true
+        val verifiedMarketQuote = com.example.core.market.VerifiedMarketQuote.isVerified(state.latestTick, state.selectedSymbol)
         if (state.orderType == OrderType.MARKET && !verifiedMarketQuote) {
-            _uiState.update { it.copy(message = "السعر المباشر غير متاح أو متأخر. انتظر تحديث Binance قبل تنفيذ الأمر.") }
+            _uiState.update { it.copy(message = "السعر المباشر غير متاح أو متأخر. انتظر تحديث مصدر السوق قبل تنفيذ الأمر.") }
             return
         }
 
@@ -528,7 +522,7 @@ class TradeViewModel(
     }
 
     private fun subscribeToSymbolTicks(symbol: String) {
-        if (symbol !in setOf("BTCUSDT", "ETHUSDT")) return
+        if (!com.example.core.market.VerifiedMarketQuote.supports(symbol)) return
         tickJob?.cancel()
         tickJob = viewModelScope.launch {
             // Observing the local tick flow alone does not connect Binance.
@@ -536,7 +530,10 @@ class TradeViewModel(
             // quotes even when the chart screen has never been opened.
             marketDataRepository.provider.subscribe(symbol)
             marketDataRepository.observeTicks(symbol).collect { tick ->
-                if (_uiState.value.selectedSymbol != symbol || tick.symbol != symbol) return@collect
+                if (_uiState.value.selectedSymbol != symbol ||
+                    !com.example.core.market.VerifiedMarketQuote.isVerified(tick, symbol)) return@collect
+                val previous = _uiState.value.latestTick
+                if (previous != null && tick.timestamp < previous.timestamp) return@collect
                 _uiState.update { it.copy(latestTick = tick) }
                 tradingRepository.onTickUpdate(tick)
                 recalculateRisk()

@@ -94,6 +94,11 @@ jobs:
               adb pull /sdcard/tradelab-replay-ui.xml screenshots/tradelab-replay-ui.xml
             ./gradlew connectedDebugAndroidTest --stacktrace
             python3 scripts/extract_chart_frame_metrics.py
+            adb pull /sdcard/Download/tradelab-gold-3m.png screenshots/tradelab-gold-3m.png
+            # A closed weekend correctly has no executable Gold bid/ask.
+            if adb shell test -f /sdcard/Download/tradelab-gold-trade.png; then
+              adb pull /sdcard/Download/tradelab-gold-trade.png screenshots/tradelab-gold-trade.png
+            fi
       - name: Install screenshot analysis dependency
         run: python3 -m pip install --user Pillow
       - name: Compare actual screenshot with supplied reference

@@ -455,7 +455,7 @@ class ChartViewModel(
 
             try {
                 // Start live subscription even if historical REST loading fails.
-                if (symbol in setOf("BTCUSDT", "ETHUSDT")) subscribeToTicks(symbol)
+                if (com.example.core.market.VerifiedMarketQuote.supports(symbol)) subscribeToTicks(symbol)
                 // A provider may have fewer verified bars than the requested history.
                 // Retry smaller, recent windows instead of replacing the entire chart
                 // with an error. Never fabricate missing OHLC data.
@@ -490,6 +490,11 @@ class ChartViewModel(
                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                             throw cancelled
                         } catch (error: Exception) {
+                            // A DNS/HTTP outage is not an empty trading session.
+                            // Do not issue dozens of older-window retries for it.
+                            if (generateSequence<Throwable>(error) { it.cause }.any {
+                                it is com.example.core.market.MarketDataRequestException
+                            }) throw error
                             lastHistoryError = error
                         }
                     }
@@ -529,8 +534,8 @@ class ChartViewModel(
                     startKlineRefresh(symbol, tf)
                     startKlineStream(symbol, tf)
                 } else {
-                    // Twelve Data is historical-only here; do not open Binance
-                    // streaming endpoints or continuously consume API quota.
+                    // Forex uses its broker quote subscription; never request
+                    // Binance crypto klines for a forex/metal symbol.
                     klineRefreshJob?.cancel()
                     klineStreamJob?.cancel()
                 }
@@ -702,13 +707,7 @@ class ChartViewModel(
                 if (_uiState.value.selectedSymbol != symbol) return@collect
                 // A bad or mismatched quote must not overwrite the last trusted bid/ask,
                 // or trigger fills and stop-loss evaluation in the trading engine.
-                if (tick.symbol != symbol ||
-                    tick.source !in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") ||
-                    !com.example.core.market.DataIntegrityValidator.validateTick(tick).isValid ||
-                    !tick.bid.isFinite() || !tick.ask.isFinite() ||
-                    tick.bid <= 0.0 || tick.ask < tick.bid ||
-                    tick.timestamp <= 0L ||
-                    tick.timestamp > System.currentTimeMillis() + 5_000L) return@collect
+                if (!com.example.core.market.VerifiedMarketQuote.isVerified(tick, symbol)) return@collect
                 val accepted = _uiState.value.latestTick
                 if (accepted != null && tick.timestamp < accepted.timestamp) return@collect
                 _uiState.update { state ->

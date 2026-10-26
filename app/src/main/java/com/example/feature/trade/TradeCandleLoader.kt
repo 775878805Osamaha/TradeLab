@@ -16,9 +16,8 @@ internal suspend fun loadTradeCandles(
     fetch: suspend () -> List<Candle>
 ): TradeCandleResult {
     currentCoroutineContext().ensureActive()
-    if (symbol !in setOf("BTCUSDT", "ETHUSDT")) {
-        return TradeCandleResult(message = "لا تتوفر بيانات سوق موثوقة للرمز $symbol حالياً.")
-    }
+    // Capability and integrity belong to the repository/provider. Gold/FX
+    // have a real historical provider; do not reject them before fetching.
     return try {
         val candles = fetch()
         // A provider/cache may return after cancellation. Never publish that result.

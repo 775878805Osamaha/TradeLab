@@ -67,6 +67,8 @@ class DefaultMarketDataProvider(
         .readTimeout(6, TimeUnit.SECONDS)
         .build()
 
+    private val forexQuotes = BiquoteQuoteProvider()
+    private val forexQuoteJobs = ConcurrentHashMap<String, Job>()
     private var benchmarkJob: Job? = null
     private var healthCheckJob: Job? = null
     private var binanceWsClient: BinanceWebSocketClient? = null
@@ -96,10 +98,8 @@ class DefaultMarketDataProvider(
             binanceWsClient?.connectionStatus?.collect { status ->
                 // An open socket is not proof of a usable quote. The
                 // health monitor owns CONNECTED/DEGRADED after first tick.
-                if (status != ProviderConnectionStatus.CONNECTED ||
-                    hasFreshVerifiedQuote()) {
-                    _connectionStatus.value = status
-                }
+                _connectionStatus.value = if (hasFreshVerifiedQuote()) ProviderConnectionStatus.CONNECTED
+                    else if (status == ProviderConnectionStatus.CONNECTED) ProviderConnectionStatus.CONNECTING else status
                 updateDiagnostics()
             }
         }
@@ -145,6 +145,7 @@ class DefaultMarketDataProvider(
     }
 
     override suspend fun startStreaming(symbols: List<String>) {
+        symbols.filter { it in VerifiedMarketQuote.forexSymbols }.forEach { subscribe(it) }
         benchmarkJob?.cancel()
         benchmarkJob = scope.launch {
             // Each symbol polls independently: a blocked ETH request must not
@@ -163,6 +164,8 @@ class DefaultMarketDataProvider(
     override suspend fun stopStreaming() {
         benchmarkJob?.cancel()
         benchmarkJob = null
+        forexQuoteJobs.values.forEach { it.cancel() }
+        forexQuoteJobs.clear()
     }
 
     override fun observeRawStream(): Flow<String> = rawStreamFlow.asSharedFlow()
@@ -173,11 +176,36 @@ class DefaultMarketDataProvider(
         if (!_isConnected.value) {
             connect()
         }
+        if (sym in VerifiedMarketQuote.forexSymbols) synchronized(forexQuoteJobs) {
+            if (forexQuoteJobs[sym]?.isActive == true) return@synchronized
+            forexQuoteJobs[sym] = scope.launch {
+                var failures = 0
+                while (isActive && sym in subscribedSymbols) {
+                    try {
+                        val tick = forexQuotes.fetch(sym)
+                        emitTick(tick)
+                        failures = 0
+                        _dataSourceType.value = DataSourceType.LIVE_DATA
+                        _connectionStatus.value = ProviderConnectionStatus.CONNECTED
+                        _lastHttpDiagnostic.value = "Biquote $sym • verified broker bid/ask"
+                        updateDiagnostics()
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (error: Exception) {
+                        failures++
+                        _lastHttpDiagnostic.value = "Biquote $sym • ${error.message?.take(180)}"
+                        updateDiagnostics()
+                    }
+                    // Bounded foreground subscriptions; no polling from redraws/gestures.
+                    delay(if (failures == 0) 5_000L else minOf(30_000L, 5_000L * failures))
+                }
+            }
+        }
     }
 
     override suspend fun unsubscribe(symbol: String) {
         val sym = normalizeSymbol(symbol)
         subscribedSymbols.remove(sym)
+        forexQuoteJobs.remove(sym)?.cancel()
     }
 
     override suspend fun getLatestTick(symbol: String): Tick? {
@@ -407,11 +435,7 @@ class DefaultMarketDataProvider(
     }
 
     private fun hasFreshVerifiedQuote(now: Long = System.currentTimeMillis()): Boolean =
-        latestTicks.values.any { tick ->
-            tick.symbol in setOf("BTCUSDT", "ETHUSDT") &&
-                tick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") &&
-                now - tick.timestamp in 0..15_000L
-        }
+        latestTicks.values.any { VerifiedMarketQuote.isVerified(it, it.symbol, now) }
 
     private fun startHealthCheck() {
         healthCheckJob?.cancel()
