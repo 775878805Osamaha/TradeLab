@@ -44,9 +44,30 @@ class ChartReferenceInteractionTest {
             compose.waitUntil(30000) {
                 compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
             }
+            val bounds = compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode().boundsInRoot
+            val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+            val y = bounds.top + bounds.height * .45f
+            fun drag(from: Float, to: Float) {
+                val downTime = android.os.SystemClock.uptimeMillis()
+                fun send(action: Int, x: Float) {
+                    val event = android.view.MotionEvent.obtain(downTime, android.os.SystemClock.uptimeMillis(), action, x, y, 0)
+                    event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                    try { org.junit.Assert.assertTrue(automation.injectInputEvent(event, true)) }
+                    finally { event.recycle() }
+                }
+                send(android.view.MotionEvent.ACTION_DOWN, from)
+                for (step in 1..24) {
+                    android.os.SystemClock.sleep(16)
+                    send(android.view.MotionEvent.ACTION_MOVE, from + (to - from) * step / 24f)
+                }
+                send(android.view.MotionEvent.ACTION_UP, to)
+                compose.waitForIdle()
+            }
+            durations.clear()
             repeat(4) {
-                compose.onNodeWithTag("candlestick_canvas").performTouchInput { swipeLeft(durationMillis = 500) }
-                compose.onNodeWithTag("candlestick_canvas").performTouchInput { swipeRight(durationMillis = 500) }
+                // Both endpoints stay in the candle plot, clear of the price axis and tool rail.
+                drag(bounds.left + bounds.width * .70f, bounds.left + bounds.width * .30f)
+                drag(bounds.left + bounds.width * .30f, bounds.left + bounds.width * .70f)
             }
         } finally {
             compose.runOnIdle { compose.activity.window.removeOnFrameMetricsAvailableListener(listener) }
