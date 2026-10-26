@@ -37,7 +37,7 @@ internal fun ChartBottomStrip(
     val context = LocalContext.current
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Row(
-            Modifier.fillMaxWidth().height(48.dp).background(Color(0xFF020F18))
+            Modifier.fillMaxWidth().height(44.dp).background(Color(0xFF000D16))
                 .testTag("chart_bottom_strip"),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceEvenly

@@ -19,7 +19,11 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun TradingBottomBar(currentRoute: String?, onNavigate: (Screen) -> Unit) {
-    Box(Modifier.fillMaxWidth().background(Color(0xFF020F18)).navigationBarsPadding()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val gestureNavigation = WindowInsets.navigationBars.getBottom(density) <= with(density) { 32.dp.roundToPx() }
+    Box(Modifier.fillMaxWidth().background(Color(0xFF000D16))
+        .then(if (currentRoute == Screen.Chart.route && gestureNavigation) Modifier.padding(bottom = 12.dp)
+            else Modifier.navigationBarsPadding())
         .padding(horizontal = 7.dp, vertical = 6.dp).testTag("bottom_nav_bar")) {
         Surface(color = Color(0xFF06131F), shape = RoundedCornerShape(13.dp),
             border = BorderStroke(1.dp, Color(0xFF1B2B3C))) {

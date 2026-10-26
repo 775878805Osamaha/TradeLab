@@ -105,13 +105,8 @@ fun ChartScreen(
     val chartPaletteMaxXOffsetPx = (chartPaletteContainerWidthPx - drawingPaletteWidthPx - with(paletteDensity) { 80.dp.toPx() }).coerceAtLeast(0f)
     LaunchedEffect(chartPaletteContainerHeightPx, drawingPaletteHeightPx, chartPaletteContainerWidthPx, drawingPaletteWidthPx, isEmbeddedReplay) {
         if (chartPaletteContainerHeightPx > 0 && drawingPaletteHeightPx > 0) {
-            // On small screens the full rail can exceed the available candle viewport.
-            // Collapse it instead of letting tools cover the price axis or order area.
-            // The collapse control remains available to expand it again manually.
-            if (!drawingPaletteCollapsed &&
-                drawingPaletteHeightPx > (chartPaletteContainerHeightPx - chartPaletteTopInsetPx)) {
-                drawingPaletteCollapsed = true
-            }
+            // Keep the reference rail expanded. Constrain and scroll its contents
+            // on small viewports instead of silently hiding every drawing tool.
             drawingPaletteOffsetPx = drawingPaletteOffsetPx.coerceIn(0f, chartPaletteMaxYOffsetPx)
             drawingPaletteXOffsetPx = drawingPaletteXOffsetPx.coerceIn(0f, chartPaletteMaxXOffsetPx)
         }
@@ -1177,8 +1172,13 @@ fun ChartScreen(
                         // Keep each labeled tool visually separate like the reference,
                         // rather than drawing one tall opaque pill across the candles.
                         .width(48.dp)
+                        .heightIn(max = with(paletteDensity) {
+                            (chartPaletteContainerHeightPx - chartPaletteTopInsetPx)
+                                .coerceAtLeast(48.dp.toPx()).toDp()
+                        })
                         .clip(RoundedCornerShape(24.dp))
                         .background(Color(0xE6081722))
+                        .verticalScroll(rememberScrollState())
                         .padding(horizontal = 2.dp, vertical = 3.dp)
                         .testTag("chart_reference_floating_tools"),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -1198,7 +1198,7 @@ fun ChartScreen(
                     // Dedicated drag handle: tool buttons remain tappable without gesture conflicts.
                     Box(
                         modifier = Modifier
-                            .size(width = 46.dp, height = 22.dp)
+                            .size(width = 44.dp, height = 12.dp)
                             .pointerInput(chartPaletteMaxYOffsetPx, chartPaletteMaxXOffsetPx, isEmbeddedReplay) {
                                 detectDragGestures { change, dragAmount ->
                                     change.consume()
@@ -1265,6 +1265,7 @@ fun ChartScreen(
                                 text = label,
                                 fontSize = 9.sp,
                                 lineHeight = 11.sp,
+                                style = TextStyle(platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)),
                                 textAlign = TextAlign.Center,
                                 color = if (selected) TradingAccentLight else TradingTextPrimary,
                                 modifier = Modifier.width(44.dp)
@@ -1278,7 +1279,7 @@ fun ChartScreen(
                             // Keep the palette reachable if expanding makes it taller.
                             drawingPaletteOffsetPx = 0f
                         },
-                        modifier = Modifier.size(44.dp).testTag("chart_tools_collapse_toggle")
+                        modifier = Modifier.size(32.dp).testTag("chart_tools_collapse_toggle")
                     ) {
                         Icon(
                             if (drawingPaletteCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,

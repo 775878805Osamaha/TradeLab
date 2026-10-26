@@ -14,6 +14,8 @@ class ChartReferenceInteractionTest {
 
     @Test fun fourDestinationsNavigateAndRestoreChartControls() {
         compose.onNodeWithTag("chart_bottom_strip").assertIsDisplayed()
+        compose.onNodeWithTag("chart_reference_tool_0").assertIsDisplayed()
+        compose.onNodeWithTag("chart_reference_tool_8").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("nav_item_chart").assertIsSelected()
         for ((route, screen) in listOf("market" to "market_screen", "results" to "results_screen", "account" to "account_screen")) {
             compose.onNodeWithTag("nav_item_$route").performClick()

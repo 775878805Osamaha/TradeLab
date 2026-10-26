@@ -28,7 +28,7 @@ data class ChartUiState(
     val dataSourceType: DataSourceType = DataSourceType.LIVE_DATA,
     val activeDrawingTool: DrawingTool = DrawingTool.NONE,
     val drawings: List<ChartDrawing> = emptyList(),
-    val indicatorSettings: IndicatorSettings = IndicatorSettings(),
+    val indicatorSettings: IndicatorSettings = IndicatorSettings(isEmaEnabled = false),
     val smaValues: List<Double?> = emptyList(),
     val emaValues: List<Double?> = emptyList(),
     val bollingerValues: List<BollingerBandsResult?> = emptyList(),
