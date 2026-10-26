@@ -59,6 +59,7 @@ class ChartViewModel(
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
 
     private var candleLoadJob: Job? = null
+    private var olderHistoryJob: Job? = null
     private var tickJob: Job? = null
     private var klineRefreshJob: Job? = null
     private var klineStreamJob: Job? = null
@@ -118,20 +119,57 @@ class ChartViewModel(
         val interval = timeframe.minutes * 60_000L
         if (oldest < interval) return
         _uiState.update { it.copy(isLoadingOlderHistory = true, olderHistoryError = null) }
-        viewModelScope.launch {
+        olderHistoryJob?.cancel()
+        olderHistoryJob = viewModelScope.launch {
             try {
+                // Skip closed-market gaps without manufacturing candles.
+                // Retry successive bounded windows when the most recent
+                // preceding interval is empty (weekends and market holidays).
                 val pageEnd = oldest - interval
-                val pageFrom = (pageEnd - interval * 99L).coerceAtLeast(0L)
-                val older = marketDataRepository.getCandles(symbol, timeframe, pageFrom, pageEnd)
-                val verified = CandleAggregator.aggregate(older, timeframe)
-                if (verified.any { it.symbol != symbol || it.timeframe != timeframe ||
+                // Market sessions are sparse; try bounded smaller pages when
+                // the provider cannot satisfy the entire 100-bar window.
+                // Every candidate remains sourced and verified; never fill gaps.
+                var verified: List<Candle>? = null
+                var lastFailure: Exception? = null
+                // A four-page scan covers only 400 minutes on M1, less than
+                // a weekend. Scan contiguous windows covering at least 72h
+                // for intraday charts; stop immediately at the first real page.
+                // No synthetic bars and no skipped historical search windows.
+                val windowsToScan = (72L * 60L / (timeframe.minutes.toLong() * 100L))
+                    .coerceAtLeast(4L)
+                    .coerceAtMost(60L)
+                for (window in 0L until windowsToScan) {
+                    val end = pageEnd - window * interval * 100L
+                    if (end < 0L) break
+                    for (bars in listOf(100L, 40L, 10L, 1L)) {
+                        val start = (end - interval * (bars - 1L)).coerceAtLeast(0L)
+                        try {
+                            val older = marketDataRepository.getCandles(
+                                symbol, timeframe, start, end
+                            )
+                            val candidate = CandleAggregator.aggregate(older, timeframe)
+                            if (candidate.isNotEmpty()) {
+                                verified = candidate
+                                break
+                            }
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            lastFailure = error
+                        }
+                    }
+                    if (verified != null) break
+                }
+                val confirmed = verified ?: throw (lastFailure
+                    ?: java.io.IOException("No verified older candles available"))
+                if (confirmed.any { it.symbol != symbol || it.timeframe != timeframe ||
                         it.openTime >= oldest }) {
                     throw IllegalStateException("Historical page contains mismatched or future candles")
                 }
                 if (_uiState.value.selectedSymbol != symbol ||
                     _uiState.value.selectedTimeframe != timeframe) return@launch
                 val existing = _uiState.value.candles
-                val merged = (verified + existing).distinctBy { it.openTime }
+                val merged = (confirmed + existing).distinctBy { it.openTime }
                     .sortedBy { it.openTime }.takeLast(20_000)
                 _uiState.update {
                     it.copy(candles = merged, isLoadingOlderHistory = false,
@@ -164,6 +202,7 @@ class ChartViewModel(
         // Prevent unsupported instruments from retaining a previous exchange quote.
         // The history loader will show an explicit unavailable-source message.
         candleLoadJob?.cancel()
+        olderHistoryJob?.cancel()
         tickJob?.cancel()
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
@@ -171,6 +210,7 @@ class ChartViewModel(
         _uiState.update {
             it.copy(
                 selectedSymbol = symbol, isLoading = true, candleLoadError = null,
+                isLoadingOlderHistory = false, olderHistoryError = null,
                 latestTick = null, candles = emptyList(),
                 openPositions = allPositions.filter { position -> position.symbol == symbol },
                 pendingOrders = allPendingOrders.filter { order -> order.symbol == symbol },
@@ -191,10 +231,12 @@ class ChartViewModel(
         // change the instrument and should not disconnect its live quote.
         klineRefreshJob?.cancel()
         klineStreamJob?.cancel()
+        olderHistoryJob?.cancel()
         indicatorJob?.cancel()
         _uiState.update {
             it.copy(
                 selectedTimeframe = timeframe, isLoading = true, candleLoadError = null,
+                isLoadingOlderHistory = false, olderHistoryError = null,
                 candles = emptyList(), smaValues = emptyList(), emaValues = emptyList(),
                 bollingerValues = emptyList(), vwapValues = emptyList(),
                 rsiValues = emptyList(), macdValues = emptyList(), atrValues = emptyList(),
@@ -350,6 +392,8 @@ class ChartViewModel(
     }
 
     private fun loadCandlesForCurrentSymbol() {
+        olderHistoryJob?.cancel()
+        _uiState.update { it.copy(isLoadingOlderHistory = false, olderHistoryError = null) }
         val symbol = _uiState.value.selectedSymbol
         val tf = _uiState.value.selectedTimeframe
         val requestedBars = _uiState.value.chartHistoryBars
