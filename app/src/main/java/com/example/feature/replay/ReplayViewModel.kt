@@ -802,7 +802,7 @@ class ReplayViewModel(
         val exitPrice = if (pos.side == PositionSide.BUY) tick.bid else tick.ask
         val candle = replayEngine.currentCandle.value
 
-        if (partialVolume != null && (!partialVolume.isFinite() || partialVolume <= 0.0 || partialVolume >= pos.volume)) {
+        if (partialVolume != null && !com.example.feature.chart.validPartialClose(pos.symbol, pos.volume, partialVolume)) {
             _uiState.update { it.copy(message = "حجم الإغلاق الجزئي غير صالح") }
             return
         }

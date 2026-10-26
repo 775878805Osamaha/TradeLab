@@ -147,4 +147,33 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_embedded_replay_controls").assertDoesNotExist()
         compose.onNodeWithTag("chart_bottom_strip").assertIsDisplayed()
     }
+    @Test fun replayPositionLineOpensActionsAndPartialCloseKeepsChart() {
+        compose.onNodeWithTag("chart_bottom_replay").performClick()
+        compose.waitUntil(90000) {
+            compose.onAllNodesWithTag("chart_replay_buy").fetchSemanticsNodes().firstOrNull()
+                ?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null &&
+            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("chart_replay_buy").performClick()
+        compose.onNodeWithTag("chart_order_volume").performTextReplacement("0.1")
+        compose.onNodeWithTag("chart_order_confirm").performClick()
+        compose.onNodeWithTag("chart_replay_open_positions_summary").assertIsDisplayed()
+        // Entry is mapped by the real chart transform. Tap through the visible price
+        // range without depending on a particular historical Gold price or date.
+        for (step in 1..40) {
+            if (compose.onAllNodesWithTag("chart_position_actions").fetchSemanticsNodes().isNotEmpty()) break
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(width * .65f, height * step / 42f))
+            }
+        }
+        compose.onNodeWithTag("chart_position_actions").assertIsDisplayed()
+        captureProviderScreen("tradelab-position-actions")
+        compose.onNodeWithTag("position_partial").performClick()
+        compose.onNodeWithTag("position_action_value").performTextInput("0.04")
+        compose.onNodeWithTag("position_action_confirm").performClick()
+        compose.onNodeWithTag("chart_replay_open_positions_summary").assertIsDisplayed()
+        compose.onNodeWithTag("nav_item_chart").assertIsSelected()
+        captureProviderScreen("tradelab-compact-replay")
+    }
+
 }

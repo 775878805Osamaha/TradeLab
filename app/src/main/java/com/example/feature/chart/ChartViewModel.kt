@@ -377,7 +377,7 @@ class ChartViewModel(
             _uiState.update { it.copy(message = "يلزم سعر حديث وموثوق لإغلاق الصفقة") }
             return
         }
-        if (partialVolume != null && (!partialVolume.isFinite() || partialVolume <= 0.0 || partialVolume >= position.volume)) {
+        if (partialVolume != null && !com.example.feature.chart.validPartialClose(position.symbol, position.volume, partialVolume)) {
             _uiState.update { it.copy(message = "حجم الإغلاق الجزئي غير صالح") }
             return
         }

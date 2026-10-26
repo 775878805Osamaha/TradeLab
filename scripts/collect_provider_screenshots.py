@@ -3,7 +3,7 @@
 import datetime
 import subprocess
 
-names = ['tradelab-gold-3m']
+names = ['tradelab-gold-3m', 'tradelab-position-actions', 'tradelab-compact-replay']
 if datetime.datetime.now(datetime.timezone.utc).weekday() < 5:
     names.append('tradelab-gold-trade')
 for name in names:

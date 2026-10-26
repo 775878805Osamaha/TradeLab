@@ -27,7 +27,7 @@ fun PositionActionsDialog(
         if (position.side == PositionSide.BUY) it.bid else it.ask
     }
     val valid = when (mode) {
-        "partial" -> number != null && number < position.volume
+        "partial" -> validPartialClose(position.symbol, position.volume, number)
         "sl" -> number != null && price != null &&
             if (position.side == PositionSide.BUY) number < price else number > price
         "tp" -> number != null && price != null &&
@@ -76,4 +76,12 @@ fun PositionActionsDialog(
         },
         dismissButton = { TextButton(onClick = { if (mode == "menu") onDismiss() else mode = "menu" }) { Text(if (mode == "menu") "إلغاء" else "رجوع") } }
     )
+}
+
+internal fun validPartialClose(symbol: String, openVolume: Double, amount: Double?): Boolean {
+    if (amount == null || !amount.isFinite() || amount <= 0.0 || amount >= openVolume) return false
+    val spec = com.example.core.market.DefaultSymbols.getSymbol(symbol)
+    val remaining = openVolume - amount
+    return amount + 1e-9 >= spec.minLot && remaining + 1e-9 >= spec.minLot &&
+        listOf(amount, remaining).all { kotlin.math.abs(it / spec.lotStep - kotlin.math.round(it / spec.lotStep)) <= 1e-6 }
 }
