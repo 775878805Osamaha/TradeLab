@@ -142,6 +142,9 @@ class ChartViewModel(
                     val end = pageEnd - window * interval * 100L
                     if (end < 0L) break
                     for (bars in listOf(100L, 40L, 10L, 1L)) {
+                        // Each page spans exactly 100 candle slots. When a
+                        // smaller retry succeeds, the missing older portion
+                        // remains discoverable on the next backward request.
                         val start = (end - interval * (bars - 1L)).coerceAtLeast(0L)
                         try {
                             val older = marketDataRepository.getCandles(
@@ -149,6 +152,13 @@ class ChartViewModel(
                             )
                             val candidate = CandleAggregator.aggregate(older, timeframe)
                             if (candidate.isNotEmpty()) {
+                                // A provider can return bars outside the
+                                // requested range; reject them before merging.
+                                if (candidate.any { it.openTime < start || it.openTime > end }) {
+                                    throw IllegalStateException(
+                                        "Historical provider returned candles outside requested page"
+                                    )
+                                }
                                 verified = candidate
                                 break
                             }
