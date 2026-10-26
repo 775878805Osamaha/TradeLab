@@ -37,9 +37,28 @@ class MarketDataRepository(
     private val twelveData = TwelveDataHistoricalProvider()
     private val keylessHistorical = BiquoteHistoricalProvider()
 
+    // A bounded exact-window cache also covers verified sparse forex sessions.
+    // Room's contiguous-cache check deliberately cannot recognize weekends.
+    // Only immutable, provider-verified responses enter this cache.
+    private data class HistoricalWindow(
+        val symbol: String, val timeframe: Timeframe, val from: Long, val to: Long,
+        val keyedProvider: Boolean
+    )
+    private val verifiedForexWindows = object :
+        LinkedHashMap<HistoricalWindow, List<Candle>>(48, 0.75f, true) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<HistoricalWindow, List<Candle>>?
+        ): Boolean = size > 48
+    }
+    private val forexWindowLock = Any()
+
     fun configureTwelveDataKey(key: String) {
         require(key.length <= 256) { "API key is too long" }
-        twelveDataApiKey = key.trim()
+        val updated = key.trim()
+        if (updated != twelveDataApiKey) {
+            synchronized(forexWindowLock) { verifiedForexWindows.clear() }
+        }
+        twelveDataApiKey = updated
     }
 
     fun hasTwelveDataKey(): Boolean = twelveDataApiKey.isNotBlank()
@@ -114,6 +133,13 @@ class MarketDataRepository(
             // configured Twelve Data key remains available as an alternative.
             // Do not fabricate bars to fill forex weekend/session gaps.
             val requestedKey = twelveDataApiKey
+            val windowKey = HistoricalWindow(
+                symbol, timeframe, from, to, requestedKey.isNotBlank()
+            )
+            if (requestedBars <= 250L) {
+                synchronized(forexWindowLock) { verifiedForexWindows[windowKey] }
+                    ?.let { return@withContext it }
+            }
             val cachedForex = DataIntegrityValidator.sanitizeCandles(
                 candleDao.getCandlesRange(symbol, timeframe.code, from, to)
                     .map { it.toDomain() }
@@ -210,6 +236,11 @@ class MarketDataRepository(
             // navigation can then reuse a fully contiguous cached window without
             // another network round trip; session gaps still require provider checks.
             candleDao.insertCandles(verified.map { it.toEntity() })
+            if (requestedBars <= 250L) {
+                synchronized(forexWindowLock) {
+                    verifiedForexWindows[windowKey] = verified.toList()
+                }
+            }
             return@withContext verified
         }
         val local = DataIntegrityValidator.sanitizeCandles(
