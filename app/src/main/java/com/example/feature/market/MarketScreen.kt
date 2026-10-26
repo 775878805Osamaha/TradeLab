@@ -1,13 +1,9 @@
 package com.example.feature.market
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -15,294 +11,96 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.core.model.ProviderConnectionStatus
-import com.example.ui.components.DataSourceBadge
-import com.example.ui.theme.*
-import java.text.SimpleDateFormat
-import java.util.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val Navy=Color(0xFF03131D)
+private val CardNavy=Color(0xFF0B1B27)
+private val Edge=Color(0xFF213545)
+private val Muted=Color(0xFF8B9BAE)
+private val Teal=Color(0xFF00C7AD)
+private val Red=Color(0xFFFF3558)
+private val Blue=Color(0xFF126BFF)
+
 @Composable
-fun MarketScreen(
-    viewModel: MarketViewModel,
-    onSelectSymbol: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val uiState by viewModel.uiState.collectAsState()
-    val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.US) }
-
-    Scaffold(
-        modifier = modifier.testTag("market_screen"),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "السوق",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        DataSourceBadge(sourceType = uiState.dataSourceType)
-                    }
-                },
-                actions = {
-                    // Connection Status Indicator Dot
-                    val (connColor, connDesc) = when (uiState.connectionStatus) {
-                        ProviderConnectionStatus.CONNECTED -> Pair(TradingPositive, "متصل")
-                        ProviderConnectionStatus.CONNECTING, ProviderConnectionStatus.RECONNECTING -> Pair(TradingGold, "جاري الاتصال")
-                        ProviderConnectionStatus.DEGRADED -> Pair(Color(0xFFF97316), "اتصال ضعيف")
-                        ProviderConnectionStatus.DISCONNECTED, ProviderConnectionStatus.ERROR -> Pair(TradingNegative, "غير متصل")
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(connColor)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    IconButton(
-                        onClick = { viewModel.toggleFavoritesFilter() },
-                        modifier = Modifier.testTag("filter_favorites_btn")
-                    ) {
-                        Icon(
-                            imageVector = if (uiState.showOnlyFavorites) Icons.Default.Star else Icons.Default.StarBorder,
-                            contentDescription = "المفضلة",
-                            tint = if (uiState.showOnlyFavorites) TradingGold else TradingTextSecondary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TradingBackground)
-            )
+fun MarketScreen(viewModel:MarketViewModel,onSelectSymbol:(String)->Unit,modifier:Modifier=Modifier) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var sortOpen by remember{mutableStateOf(false)}
+    var details by remember{mutableStateOf<MarketQuoteSnapshot?>(null)}
+    Column(modifier.fillMaxSize().background(Navy).padding(horizontal=8.dp).testTag("market_screen")) {
+        Row(Modifier.fillMaxWidth().height(55.dp).padding(horizontal=5.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text("السوق",color=Color.White,fontSize=22.sp,fontWeight=FontWeight.Bold)
+            Spacer(Modifier.width(12.dp))
+            val live=state.rows.isNotEmpty() && state.rows.all{it.freshness==MarketQuoteSnapshot.Freshness.LIVE}
+            Text(if(live)"LIVE DATA ●" else if(state.loading)"جارٍ الاتصال" else "بيانات جزئية / متأخرة",color=if(live)Teal else Muted,fontSize=10.sp,
+                modifier=Modifier.border(1.dp,if(live)Teal else Edge,RoundedCornerShape(5.dp)).padding(8.dp).testTag("market_feed_status"))
+            Spacer(Modifier.weight(1f));Icon(Icons.Default.StarBorder,null,tint=Muted,modifier=Modifier.size(28.dp))
         }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp)
-        ) {
-            // Search Bar
-            OutlinedTextField(
-                value = uiState.searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("market_search_input"),
-                placeholder = { Text("ابحث عن رمز", fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TradingTextSecondary) },
-                trailingIcon = {
-                    if (uiState.searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "مسح")
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(10.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = TradingAccent,
-                    unfocusedBorderColor = TradingBorder,
-                    focusedContainerColor = TradingCard,
-                    unfocusedContainerColor = TradingCard
-                )
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Sorting Filter Chips Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = "ترتيب حسب:",
-                    fontSize = 11.sp,
-                    color = TradingTextSecondary,
-                    modifier = Modifier.align(Alignment.CenterVertically)
-                )
-                listOf(
-                    Pair(MarketSort.SYMBOL, "الرمز"),
-                    Pair(MarketSort.SPREAD, "أقل سبريد")
-                ).forEach { (sortOpt, title) ->
-                    val isSel = uiState.sortOption == sortOpt
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSel) TradingAccent else TradingElevated)
-                            .clickable { viewModel.setSortOption(sortOpt) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = title,
-                            fontSize = 11.sp,
-                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSel) Color.White else TradingTextSecondary
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Market Watchlist Column Headers
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(text = "الرمز / المصدر", fontSize = 11.sp, color = TradingTextSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(36.dp)) {
-                    Text(text = "طلب (Ask)", fontSize = 11.sp, color = TradingTextSecondary)
-                    Text(text = "عرض (Bid)", fontSize = 11.sp, color = TradingTextSecondary)
-                }
-            }
-
-            HorizontalDivider(color = TradingBorder)
-
-            // Symbols List
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-                contentPadding = PaddingValues(vertical = 4.dp)
-            ) {
-                items(uiState.rows.size) { index ->
-                    val row = uiState.rows[index]
-                    val sym = row.symbolInfo
-                    val tick = row.tick
-                    val quoteIsVerified = com.example.core.market.VerifiedMarketQuote.isVerified(tick, sym.symbol)
-                    val displayTick = tick?.takeIf { quoteIsVerified }
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelectSymbol(sym.symbol) }
-                            .testTag("symbol_card_${sym.symbol}"),
-                        shape = RoundedCornerShape(6.dp),
-                        colors = CardDefaults.cardColors(containerColor = TradingCard),
-                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Left: Favorite + Symbol + Category + Spread + Source
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(
-                                    onClick = { viewModel.toggleSymbolFavorite(sym.symbol, sym.isFavorite) },
-                                    modifier = Modifier.size(28.dp).testTag("fav_btn_${sym.symbol}")
-                                ) {
-                                    Icon(
-                                        imageVector = if (sym.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                                        contentDescription = "تفضيل",
-                                        tint = if (sym.isFavorite) TradingGold else TradingTextMuted,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = sym.symbol,
-                                            style = TextStyle(textDirection = TextDirection.Ltr),
-                                            maxLines = 1,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            color = TradingTextPrimary
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        // Category Badge
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(4.dp))
-                                                .background(TradingElevated)
-                                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = sym.category,
-                                                fontSize = 9.sp,
-                                                color = TradingTextSecondary
-                                            )
-                                        }
-                                    }
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = "السبريد: ${row.spreadPips?.let { String.format(Locale.US, "%.1f", it) } ?: "--"} نقطة",
-                                            fontSize = 11.sp,
-                                            color = TradingTextMuted
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        val sourceLabel = if (quoteIsVerified) "Binance · مباشر" else "لا يوجد سعر مباشر"
-                                        Text(
-                                            text = "• $sourceLabel",
-                                            fontSize = 9.sp,
-                                            color = if (quoteIsVerified) TradingCyan else TradingTextMuted
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Right: Ask and Bid prices
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Ask Box
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(TradingElevated)
-                                        .border(1.dp, TradingCyan.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                                ) {
-                                    val askStr = displayTick?.let { sym.formatPrice(it.ask) } ?: "--"
-                                    Text(
-                                        text = askStr,
-                                        style = TextStyle(textDirection = TextDirection.Ltr),
-                                        maxLines = 1,
-                                        color = TradingCyan,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                // Bid Box
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(TradingElevated)
-                                        .border(1.dp, TradingBorder, RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                                ) {
-                                    val bidStr = displayTick?.let { sym.formatPrice(it.bid) } ?: "--"
-                                    Text(
-                                        text = bidStr,
-                                        style = TextStyle(textDirection = TextDirection.Ltr),
-                                        maxLines = 1,
-                                        color = TradingTextPrimary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+        OutlinedTextField(state.searchQuery,viewModel::updateSearchQuery,modifier=Modifier.fillMaxWidth().height(49.dp).testTag("market_search_input"),
+            placeholder={Text("ابحث عن رمز أو اسم الأصل...",fontSize=12.sp)},leadingIcon={Icon(Icons.Default.Search,null,tint=Muted)},singleLine=true,
+            shape=RoundedCornerShape(9.dp),textStyle=TextStyle(fontSize=13.sp,color=Color.White),
+            colors=OutlinedTextFieldDefaults.colors(unfocusedContainerColor=CardNavy,focusedContainerColor=CardNavy,unfocusedBorderColor=Edge,focusedBorderColor=Blue))
+        Row(Modifier.padding(vertical=9.dp).horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+            MarketCategory.entries.forEach{c->Column(Modifier.border(1.dp,if(state.category==c)Blue else Edge,RoundedCornerShape(6.dp)).background(if(state.category==c)Blue.copy(alpha=.12f) else CardNavy).clickable{viewModel.selectCategory(c)}.padding(horizontal=10.dp,vertical=7.dp).testTag("market_category_${c.name}"),horizontalAlignment=Alignment.CenterHorizontally){
+                Icon(when(c){MarketCategory.FAVORITES->Icons.Default.StarBorder;MarketCategory.CRYPTO->Icons.Default.CurrencyBitcoin;MarketCategory.FOREX->Icons.Default.CurrencyExchange;MarketCategory.STOCKS->Icons.Default.Business;MarketCategory.INDICES->Icons.Default.BarChart;MarketCategory.METALS->Icons.Default.Diamond;else->Icons.Default.Dashboard},null,tint=if(state.category==c)Blue else Muted,modifier=Modifier.size(19.dp))
+                Text(c.label,color=Color.White,fontSize=9.sp)
+            }}
+        }
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+            IconButton(onClick={viewModel.setCompact(true)},modifier=Modifier.size(32.dp)){Icon(Icons.Default.ViewList,"عرض بالقائمة",tint=if(state.compact)Blue else Muted)}
+            IconButton(onClick={viewModel.setCompact(false)},modifier=Modifier.size(32.dp)){Icon(Icons.Default.ViewAgenda,"عرض موسع",tint=if(!state.compact)Blue else Muted)}
+            Spacer(Modifier.weight(1f))
+            Box { TextButton(onClick={sortOpen=true}){Text("الترتيب: ${state.sortOption.label} ▾",color=Muted,fontSize=11.sp)}
+                DropdownMenu(sortOpen,{sortOpen=false}){MarketSort.entries.forEach{s->DropdownMenuItem(text={Text(s.label)},onClick={viewModel.setSortOption(s);sortOpen=false})}}
             }
         }
+        Row(Modifier.fillMaxWidth().padding(vertical=5.dp),horizontalArrangement=Arrangement.SpaceAround){listOf("الرمز / المصدر","السعر","التغير","مخطط 24س").forEach{Text(it,color=Muted,fontSize=10.sp)}}
+        if(state.rows.isEmpty()) Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Text(if(state.loading)"جارٍ تحميل السوق…" else "لا توجد أصول مدعومة مطابقة",color=Muted)}
+        LazyColumn(Modifier.fillMaxSize().testTag("market_list"),verticalArrangement=Arrangement.spacedBy(4.dp),contentPadding=PaddingValues(bottom=8.dp)){
+            items(state.rows,key={it.symbol.symbol}) { row->
+                MarketAssetRow(row,state.compact,{onSelectSymbol(row.symbol.symbol)},{viewModel.toggleSymbolFavorite(row.symbol.symbol,row.symbol.isFavorite)},{details=row})
+            }
+        }
+    }
+    details?.let{row->AlertDialog(onDismissRequest={details=null},title={Text(row.symbol.name)},text={Text("${row.symbol.symbol}\n${row.provider}\n${row.freshness}\nوقت المصدر: ${row.providerTimestamp?.let{java.time.Instant.ofEpochMilli(it).toString()} ?: "غير متاح"}\nالسبريد: ${row.spread ?: "غير متاح"}\nالتغير: نافذة 24 ساعة؛ لا يُحسب عند نقص التاريخ.\nالسعر المعروض: منتصف Bid / Ask")},confirmButton={TextButton(onClick={details=null;onSelectSymbol(row.symbol.symbol)}){Text("فتح الشارت")}},dismissButton={TextButton(onClick={details=null}){Text("إغلاق")}})}
+}
+
+@Composable
+private fun MarketAssetRow(row:MarketQuoteSnapshot,compact:Boolean,open:()->Unit,favorite:()->Unit,details:()->Unit){
+    val up=(row.change ?: 0.0)>=0;val color=if(up)Teal else Red
+    fun price(v:Double?)=v?.let{String.format(Locale.US,"%,.${row.symbol.digits}f",it)} ?: "—"
+    Row(Modifier.fillMaxWidth().heightIn(min=if(compact)54.dp else 82.dp).border(1.dp,Edge,RoundedCornerShape(8.dp)).background(CardNavy,RoundedCornerShape(8.dp)).clickable(onClick=open).padding(horizontal=4.dp,vertical=6.dp).testTag("symbol_card_${row.symbol.symbol}"),verticalAlignment=Alignment.CenterVertically){
+        IconButton(onClick=details,modifier=Modifier.size(20.dp)){Icon(Icons.Default.MoreVert,"تفاصيل ${row.symbol.symbol}",tint=Muted,modifier=Modifier.size(16.dp))}
+        Column(Modifier.weight(1.3f)){
+            Text(row.symbol.symbol,color=Color.White,fontSize=11.sp,fontWeight=FontWeight.Bold,style=TextStyle(textDirection=TextDirection.Ltr),maxLines=1)
+            Text(row.symbol.category,color=Muted,fontSize=9.sp)
+            Text(row.provider,color=if(row.freshness==MarketQuoteSnapshot.Freshness.LIVE)Teal else Muted,fontSize=8.sp,maxLines=1)
+            if(row.freshness!=MarketQuoteSnapshot.Freshness.LIVE)Text(if(row.freshness==MarketQuoteSnapshot.Freshness.STALE)"سعر متأخر" else "البيانات غير متاحة حاليًا",color=Muted,fontSize=8.sp)
+        }
+        Column(Modifier.weight(1.15f),horizontalAlignment=Alignment.CenterHorizontally){
+            Text(price(row.last),color=Color.White,fontWeight=FontWeight.Bold,fontSize=12.sp,style=TextStyle(textDirection=TextDirection.Ltr),maxLines=1)
+            Text("${price(row.bid)} / ${price(row.ask)}",color=Muted,fontSize=7.sp,style=TextStyle(textDirection=TextDirection.Ltr),maxLines=1)
+        }
+        Column(Modifier.weight(.75f),horizontalAlignment=Alignment.CenterHorizontally){
+            Text(row.changePercent?.let{String.format(Locale.US,"%+.2f%%",it)} ?: "—",color=color,fontSize=11.sp,fontWeight=FontWeight.Bold,style=TextStyle(textDirection=TextDirection.Ltr))
+            Text(row.change?.let{String.format(Locale.US,"%+.${row.symbol.digits}f",it)} ?: "—",color=color,fontSize=9.sp,style=TextStyle(textDirection=TextDirection.Ltr))
+        }
+        val bars=row.history
+        Canvas(Modifier.weight(.9f).height(32.dp)){
+            if(bars.size>1){val low=bars.minOf{it.close};val high=bars.maxOf{it.close};val span=(high-low).coerceAtLeast(.000000001)
+                val path=Path();bars.forEachIndexed{i,b->val x=i.toFloat()/(bars.size-1)*size.width;val y=size.height-((b.close-low)/span*size.height).toFloat();if(i==0)path.moveTo(x,y) else path.lineTo(x,y)}
+                drawPath(path,if(bars.last().close>=bars.first().close)Teal else Red,style=Stroke(1.2.dp.toPx()))
+            }
+        }
+        IconButton(onClick=favorite,modifier=Modifier.size(28.dp).testTag("fav_btn_${row.symbol.symbol}")){Icon(if(row.symbol.isFavorite)Icons.Default.Star else Icons.Default.StarBorder,"المفضلة",tint=if(row.symbol.isFavorite)Color(0xFFFFB329) else Muted,modifier=Modifier.size(20.dp))}
     }
 }

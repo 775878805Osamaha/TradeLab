@@ -2,153 +2,61 @@ package com.example.feature.market
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.core.model.DataSourceType
-import com.example.core.model.ProviderConnectionStatus
-import com.example.core.model.SymbolInfo
-import com.example.core.model.Tick
+import com.example.core.model.*
+import com.example.core.market.VerifiedMarketQuote
 import com.example.data.repository.MarketDataRepository
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
-enum class MarketSort {
-    SYMBOL,
-    SPREAD,
-    CHANGE_PCT
-}
+enum class MarketSort(val label: String) { SYMBOL("الرمز"), SPREAD("أقل سبريد"), CHANGE_PCT("أعلى ارتفاع"), LOSERS("أعلى انخفاض"), FAVORITES("المفضلة") }
+enum class MarketCategory(val label:String,val category:String?) { ALL("الكل",null), CRYPTO("العملات الرقمية","Crypto"), FOREX("الفوركس","Forex"), STOCKS("الأسهم","Stocks"), INDICES("المؤشرات","Indices"), METALS("المعادن","Metals"), FAVORITES("المفضلة",null) }
+data class MarketUiState(val rows:List<MarketQuoteSnapshot> = emptyList(), val searchQuery:String="",val category:MarketCategory=MarketCategory.ALL,val sortOption:MarketSort=MarketSort.SYMBOL,val compact:Boolean=true,val loading:Boolean=true)
 
-data class SymbolMarketRow(
-    val symbolInfo: SymbolInfo,
-    val tick: Tick?,
-    val dailyChangePct: Double? = null
-) {
-    // Null means the exchange has not provided a fresh, verified spread.
-    // Do not silently substitute an instrument's configured default spread.
-    val spreadPips: Double?
-        get() {
-            val quote = tick ?: return null
-            if (!com.example.core.market.VerifiedMarketQuote.isVerified(quote, symbolInfo.symbol) ||
-                symbolInfo.pipSize <= 0.0) return null
-            return quote.spread / symbolInfo.pipSize
+@OptIn(FlowPreview::class)
+class MarketViewModel(private val marketDataRepository: MarketDataRepository):ViewModel() {
+    private val query=MutableStateFlow("")
+    private val category=MutableStateFlow(MarketCategory.ALL)
+    private val sort=MutableStateFlow(MarketSort.SYMBOL)
+    private val compact=MutableStateFlow(true)
+    private val ticks=MutableStateFlow<Map<String,Tick>>(emptyMap())
+    private val histories=MutableStateFlow<Map<String,List<Candle>>>(emptyMap())
+    private val clock=flow { while(currentCoroutineContext().isActive){emit(System.currentTimeMillis());delay(1000)} }
+    private val rows=combine(marketDataRepository.symbols,ticks,histories,clock){ symbols,prices,bars,now->symbols.map{MarketQuoteSnapshot.from(it,prices[it.symbol],bars[it.symbol].orEmpty(),now)} }
+    private val filters=combine(query.debounce(120),category,sort,compact){q,c,s,v->MarketUiState(searchQuery=q,category=c,sortOption=s,compact=v)}
+    val uiState=combine(rows,filters){all,f->
+        val selected=all.filter { (f.searchQuery.isBlank() || it.symbol.symbol.contains(f.searchQuery,true) || it.symbol.name.contains(f.searchQuery,true)) &&
+            (f.category==MarketCategory.ALL || f.category==MarketCategory.FAVORITES && it.symbol.isFavorite || f.category.category==it.symbol.category) }
+        val ordered=when(f.sortOption){
+            MarketSort.SYMBOL->selected.sortedBy{it.symbol.symbol}
+            MarketSort.SPREAD->selected.sortedWith(compareBy<MarketQuoteSnapshot>{it.spread==null}.thenBy{it.spread})
+            MarketSort.CHANGE_PCT->selected.sortedWith(compareBy<MarketQuoteSnapshot>{it.changePercent==null}.thenByDescending{it.changePercent})
+            MarketSort.LOSERS->selected.sortedWith(compareBy<MarketQuoteSnapshot>{it.changePercent==null}.thenBy{it.changePercent})
+            MarketSort.FAVORITES->selected.sortedWith(compareByDescending<MarketQuoteSnapshot>{it.symbol.isFavorite}.thenBy{it.symbol.symbol})
         }
-}
-
-data class MarketUiState(
-    val rows: List<SymbolMarketRow> = emptyList(),
-    val searchQuery: String = "",
-    val showOnlyFavorites: Boolean = false,
-    val sortOption: MarketSort = MarketSort.SYMBOL,
-    val connectionStatus: ProviderConnectionStatus = ProviderConnectionStatus.DISCONNECTED,
-    val dataSourceType: DataSourceType = DataSourceType.STALE_DATA,
-    val isLoading: Boolean = false
-)
-
-class MarketViewModel(
-    private val marketDataRepository: MarketDataRepository
-) : ViewModel() {
-
-    private val _searchQuery = MutableStateFlow("")
-    private val _showOnlyFavorites = MutableStateFlow(false)
-    private val _sortOption = MutableStateFlow(MarketSort.SYMBOL)
-    private val ticksMap = MutableStateFlow<Map<String, Tick>>(emptyMap())
-    private val symbolTickJobs = mutableMapOf<String, Job>()
-
-    val uiState: StateFlow<MarketUiState> = combine(
-        marketDataRepository.symbols,
-        ticksMap,
-        _searchQuery,
-        _showOnlyFavorites,
-        _sortOption,
-        marketDataRepository.provider.connectionStatus,
-        marketDataRepository.provider.dataSourceType
-    ) { args: Array<Any?> ->
-        @Suppress("UNCHECKED_CAST")
-        val symbols = args[0] as List<SymbolInfo>
-        @Suppress("UNCHECKED_CAST")
-        val ticks = args[1] as Map<String, Tick>
-        val query = args[2] as String
-        val onlyFavs = args[3] as Boolean
-        val sort = args[4] as MarketSort
-        val connStatus = args[5] as ProviderConnectionStatus
-        val dsType = args[6] as DataSourceType
-
-        val filtered = symbols.filter { sym ->
-            val matchesQuery = query.isBlank() || sym.symbol.contains(query, ignoreCase = true) || sym.name.contains(query, ignoreCase = true)
-            val matchesFav = !onlyFavs || sym.isFavorite
-            matchesQuery && matchesFav
-        }.map { sym ->
-            val tick = ticks[sym.symbol]
-            SymbolMarketRow(
-                symbolInfo = sym,
-                tick = tick,
-                dailyChangePct = null // No real 24h change feed: never fabricate market performance
-            )
-        }.let { list ->
-            when (sort) {
-                MarketSort.SYMBOL -> list.sortedBy { it.symbolInfo.symbol }
-                MarketSort.SPREAD -> list.sortedWith(compareBy<SymbolMarketRow> { it.spreadPips == null }.thenBy { it.spreadPips ?: Double.POSITIVE_INFINITY })
-                MarketSort.CHANGE_PCT -> list.sortedWith(compareByDescending<SymbolMarketRow> { it.dailyChangePct != null }.thenByDescending { it.dailyChangePct ?: Double.NEGATIVE_INFINITY })
-            }
+        f.copy(rows=ordered,loading=false)
+    }.stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),MarketUiState())
+    init { viewModelScope.launch {
+        marketDataRepository.initializeSymbolsIfNeeded()
+        val permits=Semaphore(3)
+        marketDataRepository.symbols.map{it.map{symbol->symbol.symbol}.toSet()}.distinctUntilChanged().collectLatest { symbols->
+            coroutineScope { symbols.filter{VerifiedMarketQuote.supports(it)}.forEach { symbol->
+                launch { marketDataRepository.provider.subscribe(symbol);marketDataRepository.observeTicks(symbol).collect{tick->if(tick.symbol==symbol)ticks.update{it+(symbol to tick)}} }
+                launch(Dispatchers.IO) { while(isActive) {
+                    try { permits.withPermit {
+                        val interval=900000L;val to=System.currentTimeMillis()/interval*interval-interval
+                        val bars=marketDataRepository.getCandles(symbol,Timeframe.M15,to-95*interval,to)
+                        histories.update{it+(symbol to bars)}
+                    } } catch(cancelled:CancellationException){throw cancelled} catch(_:Exception){ /* Preserve last genuine history; its timestamps control expiry. */ }
+                    delay(300000)
+                } }
+            } }
         }
-
-        MarketUiState(
-            rows = filtered,
-            searchQuery = query,
-            showOnlyFavorites = onlyFavs,
-            sortOption = sort,
-            connectionStatus = connStatus,
-            dataSourceType = dsType
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MarketUiState())
-
-    init {
-        viewModelScope.launch {
-            marketDataRepository.initializeSymbolsIfNeeded()
-            marketDataRepository.provider.connect()
-
-            // React to changes in the available symbol list, including symbols added
-            // after initial repository initialization. Avoid duplicate subscriptions.
-            marketDataRepository.symbols.collect { symbols ->
-                val currentSymbols = symbols.map { it.symbol }.toSet()
-                val removed = symbolTickJobs.keys - currentSymbols
-                removed.forEach { symbol ->
-                    symbolTickJobs.remove(symbol)?.cancel()
-                }
-                if (removed.isNotEmpty()) {
-                    ticksMap.update { current -> current.filterKeys { it in currentSymbols } }
-                }
-                currentSymbols.forEach { symbol ->
-                    if (symbol !in symbolTickJobs) {
-                        symbolTickJobs[symbol] = launch {
-                            if (com.example.core.market.VerifiedMarketQuote.supports(symbol))
-                                marketDataRepository.provider.subscribe(symbol)
-                            marketDataRepository.observeTicks(symbol).collect { tick ->
-                                if (tick.symbol == symbol) {
-                                    ticksMap.update { current -> current + (symbol to tick) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fun updateSearchQuery(query: String) {
-        _searchQuery.value = query
-    }
-
-    fun toggleFavoritesFilter() {
-        _showOnlyFavorites.value = !_showOnlyFavorites.value
-    }
-
-    fun setSortOption(sort: MarketSort) {
-        _sortOption.value = sort
-    }
-
-    fun toggleSymbolFavorite(symbol: String, currentFav: Boolean) {
-        viewModelScope.launch {
-            marketDataRepository.toggleFavorite(symbol, !currentFav)
-        }
-    }
+    } }
+    fun updateSearchQuery(value:String){query.value=value}
+    fun selectCategory(value:MarketCategory){category.value=value}
+    fun setSortOption(value:MarketSort){sort.value=value}
+    fun setCompact(value:Boolean){compact.value=value}
+    fun toggleSymbolFavorite(symbol:String,current:Boolean){viewModelScope.launch{marketDataRepository.toggleFavorite(symbol,!current)}}
 }

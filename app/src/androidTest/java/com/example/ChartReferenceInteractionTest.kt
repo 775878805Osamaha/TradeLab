@@ -195,6 +195,17 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithText("الحجم المفتوح: 0.01 لوت").assertIsDisplayed()
     }
 
+    @Test fun marketTerminalSearchAndOpenChart() {
+        compose.onNodeWithTag("nav_item_market").performClick()
+        compose.waitUntil(30000) { compose.onAllNodesWithTag("symbol_card_XAUUSD").fetchSemanticsNodes().isNotEmpty() }
+        captureProviderScreen("tradelab-market-terminal")
+        compose.onNodeWithTag("market_search_input").performTextInput("xauusd")
+        compose.onNodeWithTag("symbol_card_XAUUSD").assertExists()
+        compose.onNodeWithTag("symbol_card_BTCUSDT").assertDoesNotExist()
+        compose.onNodeWithTag("symbol_card_XAUUSD").performClick()
+        compose.onNodeWithTag("nav_item_chart").assertIsSelected()
+    }
+
     private fun shell(command: String) {
         val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
         android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).use { it.readBytes() }
