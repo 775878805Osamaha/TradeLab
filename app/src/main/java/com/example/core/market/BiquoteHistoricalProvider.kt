@@ -87,6 +87,9 @@ class BiquoteHistoricalProvider(
                 val row = items.getJSONObject(i)
                 if (row.optBoolean("isOpen", false)) continue
                 val openTime = Instant.parse(row.getString("openTime")).toEpochMilli()
+                // Reject a provider response that violates its requested
+                // historical boundaries. Backfill retries smaller windows
+                // instead of accepting an ambiguous OHLC response.
                 if (openTime < baseFrom || openTime > to) {
                     throw IOException("Biquote returned a bar outside the requested range")
                 }
