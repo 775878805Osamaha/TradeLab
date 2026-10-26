@@ -216,10 +216,15 @@ fun CandlestickChart(
     val requestOlderHistory by rememberUpdatedState(onRequestOlderHistory)
     val loadingOlderHistory by rememberUpdatedState(isLoadingOlderHistory)
     var lastBackfillOldestTime by remember { mutableStateOf<Long?>(null) }
+    // Do not permanently suppress automatic pagination after a transient
+    // provider failure. Back off repeated attempts while the user remains
+    // parked at the same historical edge; a new drag can retry.
+    var lastBackfillScrollOffset by remember { mutableFloatStateOf(0f) }
     // Re-arm pagination after switching symbols/timeframes, even if the
     // newly loaded history happens to begin at the same timestamp.
     LaunchedEffect(candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe) {
         lastBackfillOldestTime = null
+        lastBackfillScrollOffset = 0f
         scrollOffsetPx = 0f
     }
     LaunchedEffect(candles.firstOrNull()?.openTime, scrollOffsetPx, chartViewportWidthPx,
@@ -229,8 +234,14 @@ fun CandlestickChart(
             chartViewportWidthPx <= 1f) return@LaunchedEffect
         val threshold = (candles.size * candleWidthPx - chartViewportWidthPx -
             candleWidthPx * 30f).coerceAtLeast(0f)
-        if (scrollOffsetPx > 0f && scrollOffsetPx >= threshold && lastBackfillOldestTime != oldest) {
+        // If the last request failed, allow another attempt after the user
+        // deliberately pans farther into history (at least five candles).
+        // A stable viewport must not cause an automatic retry loop.
+        val userAdvanced = scrollOffsetPx - lastBackfillScrollOffset >= candleWidthPx * 5f
+        if (scrollOffsetPx > 0f && scrollOffsetPx >= threshold &&
+            (lastBackfillOldestTime != oldest || userAdvanced)) {
             lastBackfillOldestTime = oldest
+            lastBackfillScrollOffset = scrollOffsetPx
             requestOlderHistory?.invoke()
         }
     }
