@@ -114,6 +114,24 @@ class MarketDataRepository(
             // configured Twelve Data key remains available as an alternative.
             // Do not fabricate bars to fill forex weekend/session gaps.
             val requestedKey = twelveDataApiKey
+            val cachedForex = DataIntegrityValidator.sanitizeCandles(
+                candleDao.getCandlesRange(symbol, timeframe.code, from, to)
+                    .map { it.toDomain() }
+            ).filter { candle ->
+                candle.symbol == symbol && candle.timeframe == timeframe &&
+                    candle.source in setOf("BIQUOTE_HISTORICAL", "TWELVEDATA_HISTORICAL")
+            }
+            // A complete contiguous verified cache window needs no network.
+            // Never assume that a sparse forex session is complete merely
+            // because some candles were previously stored.
+            if (HistoricalCandleCoverage.isComplete(
+                    cachedForex, from, to, intervalMillis
+                )) {
+                return@withContext HistoricalCandleIntegrity.validate(
+                    cachedForex, from, to + intervalMillis,
+                    expectedSymbol = symbol, expectedTimeframe = timeframe
+                )
+            }
             // Forex/metals have market-session gaps. Fetch in bounded pages;
             // never fabricate bars and never return a partially successful range.
             val providerLimit = if (requestedKey.isNotBlank()) 1000 else 750
@@ -188,6 +206,10 @@ class MarketDataRepository(
             require(verified.zipWithNext().all { (a, b) -> a.openTime < b.openTime }) {
                 "Historical pages contain duplicate or unordered candle timestamps"
             }
+            // Persist only provider-verified forex/metals OHLC. Repeated chart
+            // navigation can then reuse a fully contiguous cached window without
+            // another network round trip; session gaps still require provider checks.
+            candleDao.insertCandles(verified.map { it.toEntity() })
             return@withContext verified
         }
         val local = DataIntegrityValidator.sanitizeCandles(
