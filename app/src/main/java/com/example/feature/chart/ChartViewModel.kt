@@ -387,11 +387,7 @@ class ChartViewModel(
         }
         val state = _uiState.value
         val tick = state.latestTick
-        if (tick == null || tick.symbol != state.selectedSymbol ||
-            tick.source !in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL") ||
-            System.currentTimeMillis() - tick.timestamp !in 0..15_000L ||
-            !tick.bid.isFinite() || !tick.ask.isFinite() ||
-            tick.bid <= 0.0 || tick.ask < tick.bid) {
+        if (tick == null || !com.example.core.market.VerifiedMarketQuote.isVerified(tick, state.selectedSymbol)) {
             _uiState.update { it.copy(message = "لا يمكن تنفيذ أمر بسعر غير متصل أو قديم") }
             return
         }

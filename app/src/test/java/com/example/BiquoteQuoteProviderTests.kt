@@ -51,4 +51,12 @@ class BiquoteQuoteProviderTests {
         assertFalse(VerifiedMarketQuote.isVerified(tick, "BTCUSDT", now + 15001L))
         assertFalse(VerifiedMarketQuote.isVerified(tick, "ETHUSDT", now))
     }
+    @Test fun marketSpreadUsesTheRealGoldQuoteAndRejectsAnotherSource() {
+        val tick = Tick("XAUUSD", 4000.0, 4000.2, timestamp = System.currentTimeMillis(), source = "BIQUOTE_REST")
+        val symbol = com.example.core.market.DefaultSymbols.getSymbol("XAUUSD")
+        val row = com.example.feature.market.SymbolMarketRow(symbol, tick)
+        assertEquals(20.0, row.spreadPips!!, .00001)
+        assertNull(com.example.feature.market.SymbolMarketRow(symbol, tick.copy(source = "BINANCE_REST_POLL")).spreadPips)
+    }
+
 }

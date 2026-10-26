@@ -13,7 +13,7 @@ class DefaultMarketDataProvider(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) : MarketDataProvider, HistoricalDataProvider, StreamingMarketDataProvider {
 
-    override val providerName: String = "TradeLab Binance Spot Market Data (BTCUSDT / ETHUSDT)"
+    override val providerName: String = "TradeLab Binance Spot + Biquote MT5 verified market data"
 
     private val _isConnected = MutableStateFlow(false)
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
