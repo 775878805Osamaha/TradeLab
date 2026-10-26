@@ -23,7 +23,8 @@ object DrawingHitTest {
             DrawingTool.RECTANGLE -> listOf(a,Offset(b.x,a.y),b,Offset(a.x,b.y),a).zipWithNext().minOf{segment(it.first,it.second)}
             DrawingTool.CIRCLE, DrawingTool.ELLIPSE -> {
                 val center=(a+b)/2f;val radiusX=abs(b.x-a.x)/2f;val radiusY=abs(b.y-a.y)/2f
-                if(radiusX<1f||radiusY<1f)segment(a,b) else abs(sqrt(((point.x-center.x)/radiusX).pow(2)+((point.y-center.y)/radiusY).pow(2))-1f)*min(radiusX,radiusY)
+                if(d.tool==DrawingTool.CIRCLE) abs((point-center).getDistance()-min(radiusX,radiusY))
+                else if(radiusX<1f||radiusY<1f)segment(a,b) else abs(sqrt(((point.x-center.x)/radiusX).pow(2)+((point.y-center.y)/radiusY).pow(2))-1f)*min(radiusX,radiusY)
             }
             else -> {
                 val anchors=d.anchors.mapNotNull { p -> t.timeToX(p.time)?.let{Offset(it,t.priceToY(p.price))} }

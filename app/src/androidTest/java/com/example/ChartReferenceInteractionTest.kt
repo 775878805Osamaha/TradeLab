@@ -212,11 +212,19 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithContentDescription("أدوات الرسم").performClick()
             compose.onNodeWithTag("drawing_catalog_sheet").assertExists()
             compose.onNodeWithTag("drawing_sheet_handle", useUnmergedTree = true).performTouchInput {
-                swipe(center, center - androidx.compose.ui.geometry.Offset(0f, 600f), 500)
+                swipe(center, center - androidx.compose.ui.geometry.Offset(0f, 400f), 500)
             }
             captureProviderScreen("drawing-catalog-favorites")
             for ((category, name) in listOf("الأشكال الهندسية" to "shapes", "ملاحظة" to "notes", "نماذج" to "patterns", "التنبؤ والقياس" to "measurement")) {
                 compose.onNodeWithTag("drawing_category_$category").performScrollTo().performClick()
+                if(name=="shapes" || name=="notes") {
+                    compose.onNodeWithTag("drawing_sheet_handle",useUnmergedTree=true).performTouchInput {
+                        swipe(center,center+androidx.compose.ui.geometry.Offset(0f,if(name=="shapes")130f else 320f),500)
+                    }
+                }
+                if(name=="shapes") compose.onNodeWithTag("drawing_catalog_categories").performTouchInput {
+                    swipe(center,center+androidx.compose.ui.geometry.Offset(65f,0f),400)
+                }
                 captureProviderScreen("drawing-catalog-$name")
             }
             compose.onNodeWithTag("drawing_category_المفضلة").performScrollTo().performClick()
@@ -226,6 +234,7 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithContentDescription("أدوات الرسم").performClick()
             compose.onNodeWithTag("drawing_favorites_switch").performClick()
             compose.onNodeWithTag("drawing_catalog_search").performTextInput("مثلث")
+            compose.onNodeWithTag("drawing_catalog_grid").performScrollToNode(hasTestTag("drawing_tool_TRIANGLE"))
             compose.onNodeWithTag("drawing_tool_TRIANGLE").performClick()
             compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("candlestick_canvas").performTouchInput {

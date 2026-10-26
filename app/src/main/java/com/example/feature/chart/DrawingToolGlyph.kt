@@ -16,7 +16,7 @@ import com.example.feature.chart.model.isTextTool
 internal fun DrawingToolGlyph(tool: DrawingTool, color: Color, modifier: Modifier = Modifier) {
     Canvas(modifier) {
         val u = size.width / 40f
-        val w = 2.1f * u
+        val w = 1.8f * u
         fun p(x: Float, y: Float) = Offset(x * u, y * u)
         fun line(x: Float, y: Float, a: Float, b: Float) = drawLine(color, p(x,y), p(a,b), w)
         fun dot(x: Float, y: Float) { drawCircle(Color(0xFFF2F2F2), 2.7f*u, p(x,y)); drawCircle(color, 2.7f*u, p(x,y), style = Stroke(w)) }
