@@ -141,7 +141,7 @@ class ChartViewModel(
                 for (window in 0L until windowsToScan) {
                     val end = pageEnd - window * interval * 100L
                     if (end < 0L) break
-                    for (bars in listOf(100L, 40L, 10L, 1L)) {
+                    for (bars in if (window == 0L) listOf(100L, 40L, 10L, 1L) else listOf(100L, 1L)) {
                         // Each page spans exactly 100 candle slots. When a
                         // smaller retry succeeds, the missing older portion
                         // remains discoverable on the next backward request.
@@ -447,7 +447,7 @@ class ChartViewModel(
                 for (window in 0L until scanWindows) {
                     val end = lastClosedOpen - window * interval * 100L
                     if (end < 0L) break
-                    for (depth in initialDepths) {
+                    for (depth in if (window == 0L) initialDepths else listOf(100, 1).filter { it <= requestedBars }) {
                         val attemptFrom = (end - interval * (depth - 1L)).coerceAtLeast(0L)
                         try {
                             val fetched = marketDataRepository.getCandles(
