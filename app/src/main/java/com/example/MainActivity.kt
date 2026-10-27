@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
             val tradeViewModel by remember { lazy { TradeViewModel(app.tradingRepository, app.marketDataRepository) } }
             val resultsViewModel by remember { lazy { ResultsViewModel(app.tradingRepository) } }
             val historyViewModel by remember { lazy { HistoryViewModel(app.tradingRepository) } }
-            val replayViewModel by remember { lazy { ReplayViewModel(app.marketDataRepository, reportSink = { app.tradingRepository.replayReport.value = it }) } }
+            val replayViewModel by remember { lazy { ReplayViewModel(app.marketDataRepository, reportSink = { app.tradingRepository.replayReport.value = it }, sessionStore = app.trainingSessionStore) } }
             val backtestViewModel by remember { lazy { BacktestViewModel(app.marketDataRepository, tradingRepository = app.tradingRepository) } }
             val calendarViewModel by remember { lazy { TradingCalendarViewModel(app.tradingRepository) } }
 
@@ -110,16 +110,7 @@ class MainActivity : ComponentActivity() {
                         ) {
                             // Primary Tab: Account
                             composable(Screen.Account.route) {
-                                AccountScreen(
-                                    viewModel = accountViewModel,
-                                    onNavigateToTrade = { navController.navigate(Screen.Trade.route) },
-                                    onNavigateToReplay = openReplayOnChart,
-                                    onNavigateToBacktest = { navController.navigate(Screen.Backtest.route) },
-                                    onNavigateToHistory = { navController.navigate(Screen.History.route) },
-                                    onNavigateToRules = { navController.navigate(Screen.Challenge.route) },
-                                    onNavigateToCalendar = { navController.navigate(Screen.Calendar.route) },
-                                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
-                                )
+                                com.example.feature.account.TrainingAccountScreen(replayViewModel,openReplayOnChart)
                             }
 
                             // Primary Tab: Market
@@ -128,7 +119,7 @@ class MainActivity : ComponentActivity() {
                                     viewModel = marketViewModel,
                                     onSelectSymbol = { symbol ->
                                         chartViewModel.selectSymbol(symbol)
-                                        tradeViewModel.selectSymbol(symbol)
+                                        replayViewModel.loadReplayData(symbol)
                                         navController.navigate(Screen.Chart.route)
                                     }
                                 )
@@ -147,17 +138,15 @@ class MainActivity : ComponentActivity() {
 
                             // Primary Tab: Trade
                             composable(Screen.Trade.route) {
-                                TradeScreen(
-                                    viewModel = tradeViewModel
-                                )
+                                androidx.compose.runtime.LaunchedEffect(Unit) { openReplayOnChart() }
                             }
 
                             // Primary Tab: Results
                             composable(Screen.Results.route) {
                                 ResultsScreen(
                                     viewModel = resultsViewModel,
-                                    onNavigateToHistory = { navController.navigate(Screen.History.route) },
-                                    onNavigateToBacktest = { navController.navigate(Screen.Backtest.route) }
+                                    onNavigateToHistory = { resultsViewModel.setSelectedTab(com.example.feature.results.ResultsTab.JOURNAL) },
+                                    onNavigateToBacktest = openReplayOnChart
                                 )
                             }
 

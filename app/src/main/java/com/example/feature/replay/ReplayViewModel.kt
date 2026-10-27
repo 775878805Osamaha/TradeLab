@@ -58,19 +58,22 @@ data class ReplayUiState(
     val lastSignalMessage: String? = null,
     val isLoading: Boolean = false,
     val message: String? = null
-)
+) : java.io.Serializable
 
-data class ReplayEquitySample(val candleIndex: Int, val equity: Double, val balance: Double)
+data class ReplayEquitySample(val candleIndex: Int, val equity: Double, val balance: Double) : java.io.Serializable
 
 class ReplayViewModel(
     private val marketDataRepository: MarketDataRepository,
     private val executionEngine: ExecutionEngine = ExecutionEngine(),
     val replayEngine: HistoricalReplayEngine = HistoricalReplayEngine(),
-    private val reportSink: ((ReplayReport) -> Unit)? = null
+    private val reportSink: ((ReplayReport) -> Unit)? = null,
+    private val sessionStore: TrainingSessionStore? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ReplayUiState(isLoading = true))
     val uiState: StateFlow<ReplayUiState> = _uiState.asStateFlow()
+
+    private val persistenceOwner=sessionStore?.newOwner()
 
     private val openPositions = mutableListOf<Position>()
     private val pendingOrders = mutableListOf<Order>()
@@ -109,8 +112,19 @@ class ReplayViewModel(
         reportSink?.invoke(ReplayReport(replayAccount(),openPositions.toList(),pendingOrders.toList(),closedTrades.toList()))
     }
 
+    fun configureTrainingBalance(balance: Double): Boolean {
+        if (!balance.isFinite() || balance <= 0 || balance > 1_000_000_000 || openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty()) return false
+        _uiState.update { it.copy(initialBalance=balance,currentBalance=balance,currentEquity=balance,peakEquity=balance) }
+        hasPublishedReport=true
+        accountSnapshots.clear()
+        if(replayEngine.totalCandles.value>0) replayEngine.initialize(replayEngine.snapshotCandles(),replayEngine.currentIndex.value)
+        saveAccountSnapshot()
+        return true
+    }
+
     private fun saveAccountSnapshot() {
         publishReport()
+        if (!_uiState.value.isLoading && replayEngine.totalCandles.value > 0) sessionStore?.save(TrainingSessionSnapshot(_uiState.value.copy(isPlaying=false),replayEngine.snapshotCandles(),nextId),persistenceOwner!!)
         val index = replayEngine.currentIndex.value
         // Any new execution or account edit forks the timeline at this bar.
         // Checkpoints from a previous future must never be restored.
@@ -163,7 +177,17 @@ class ReplayViewModel(
 
     init {
         setupReplayEngineCallbacks()
-        loadReplayData()
+        viewModelScope.launch {
+            val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sessionStore?.read() }
+            if (saved != null) {
+                _uiState.value=saved.state.copy(isPlaying=false,isLoading=false)
+                openPositions.addAll(saved.state.openPositions);pendingOrders.addAll(saved.state.pendingOrders);closedTrades.addAll(saved.state.closedTrades)
+                nextId=saved.nextId
+                replayEngine.initialize(saved.candles,saved.state.currentIndex)
+                hasPublishedReport=true
+                saveAccountSnapshot()
+            } else loadReplayData("XAUUSD")
+        }
     }
 
     private fun setupReplayEngineCallbacks() {
@@ -271,6 +295,10 @@ class ReplayViewModel(
         historyBars: Int = _uiState.value.requestedHistoryBars,
         endOffsetBars: Int = _uiState.value.historyEndOffsetBars
     ) {
+        if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty()) {
+            _uiState.update { it.copy(message="أغلق الصفقات والأوامر قبل تغيير بيانات التدريب") };return
+        }
+        if (!_uiState.value.isLoading && replayEngine.totalCandles.value > 0 && _uiState.value.symbol==symbol && _uiState.value.timeframe==tf && _uiState.value.requestedHistoryBars==historyBars && _uiState.value.historyEndOffsetBars==endOffsetBars) return
         require(endOffsetBars in 0..100_000) { "Historical offset must be 0 to 100000 bars" }
         require(historyBars in 50..5_000) { "Replay history must contain 50 to 5000 bars" }
         cancelBatchAdvance()
@@ -281,8 +309,9 @@ class ReplayViewModel(
         replayEngine.clear()
         // A new dataset must never inherit positions, pending orders, journal or IDs
         // from the previous replay session, even if loading subsequently fails.
-        resetReplayAccount()
-        nextId = 1L
+        val retainedBalance=_uiState.value.currentBalance
+        _uiState.update { it.copy(currentEquity=retainedBalance,openPositions=emptyList(),pendingOrders=emptyList()) }
+        nextId = maxOf(nextId,1L)
         accountSnapshots.clear()
         // Do not continue displaying a previous instrument's replay while switching.
         _uiState.update {

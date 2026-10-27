@@ -26,7 +26,7 @@ data class VirtualAccount(
     val mode: AccountMode = AccountMode.LIVE_PAPER,
     val isSelected: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
-) {
+) : java.io.Serializable {
     val usedMargin: Double get() = margin
 
     val marginLevelFormatted: String

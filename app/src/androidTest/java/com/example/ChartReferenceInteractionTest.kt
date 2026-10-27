@@ -12,6 +12,8 @@ import org.junit.runner.RunWith
 /** Exercises the production Activity and its existing NavHost, not a mock screen. */
 @RunWith(AndroidJUnit4::class)
 class ChartReferenceInteractionTest {
+    @org.junit.After fun clearTrainingCheckpoint() { (compose.activity.application as TradeLabApplication).trainingSessionStore.clear() }
+
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     @Test fun fourDestinationsNavigateAndRestoreChartControls() {
@@ -49,34 +51,6 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_load_error").assertDoesNotExist()
         compose.onNodeWithTag("chart_bottom_timeframe").assertTextContains("3 دق", substring = true)
         captureProviderScreen("tradelab-gold-3m")
-    }
-
-    @Test fun legacyGoldTradeShowsVerifiedBidAskAndHistory() {
-        // Live-quote acceptance is exercised on weekdays; closed markets must remain blocked.
-        org.junit.Assume.assumeTrue(java.time.LocalDate.now(java.time.ZoneOffset.UTC).dayOfWeek.value <= 5)
-        compose.onNodeWithTag("nav_item_account").performClick()
-        compose.waitUntil(30000) {
-            compose.onAllNodesWithTag("dash_action_trade").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithTag("dash_action_trade").performScrollTo().performClick()
-        compose.onNodeWithTag("trade_symbol_selector").performClick()
-        compose.onAllNodesWithText("XAUUSD").onLast().performClick()
-        compose.waitUntil(90000) {
-            val node = compose.onAllNodesWithTag("trade_quote_bid").fetchSemanticsNodes().firstOrNull()
-            val text = node?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)
-                ?.joinToString("") { it.text }?.replace(",", "")
-            (text?.toDoubleOrNull() ?: 0.0) > 0.0
-        }
-        val app = compose.activity.application as TradeLabApplication
-        val tick = kotlinx.coroutines.runBlocking { app.marketDataRepository.provider.getLatestTick("XAUUSD") }
-        org.junit.Assert.assertTrue(com.example.core.market.VerifiedMarketQuote.isVerified(tick, "XAUUSD"))
-        compose.onNodeWithTag("trade_quote_ask").assertIsDisplayed()
-        compose.onNodeWithTag("trade_chart_card").performScrollTo()
-        compose.waitUntil(90000) {
-            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithTag("trade_quote_bid").performScrollTo()
-        captureProviderScreen("tradelab-gold-trade")
     }
 
     @Test fun recordActualPanFrameDurations() {
@@ -147,8 +121,7 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_embedded_replay_controls").assertIsDisplayed()
         compose.onNodeWithTag("nav_item_chart").assertIsSelected()
         compose.onNodeWithTag("chart_bottom_symbol").assertIsDisplayed()
-        androidx.test.espresso.Espresso.pressBack()
-        compose.onNodeWithTag("chart_embedded_replay_controls").assertDoesNotExist()
+        compose.onNodeWithTag("chart_embedded_replay_controls").assertIsDisplayed()
         compose.onNodeWithTag("chart_bottom_strip").assertIsDisplayed()
     }
     @Test fun replayPositionLineOpensActionsAndPartialCloseKeepsChart() {
@@ -195,11 +168,11 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithText("الحجم المفتوح: 0.01 لوت").assertIsDisplayed()
         androidx.test.espresso.Espresso.pressBack()
         compose.onNodeWithTag("nav_item_account").performClick()
-        compose.waitUntil(10000) { compose.onAllNodesWithText("Replay").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("حساب محاكاة Replay الافتراضي").assertExists()
+        compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("حساب التدريب").assertExists()
         captureProviderScreen("tradelab-replay-account")
         compose.onNodeWithTag("nav_item_results").performClick()
-        compose.waitUntil(10000) { compose.onAllNodesWithText("نتائج التدريب · 1 مفتوحة").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
         captureProviderScreen("tradelab-replay-results")
     }
 

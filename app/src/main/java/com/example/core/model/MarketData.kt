@@ -91,7 +91,7 @@ data class Tick(
     val timestamp: Long = System.currentTimeMillis(),
     val source: String = "MARKET_FEED",
     val volume: Double = 0.0
-) {
+) : java.io.Serializable {
     val spread: Double get() = (ask - bid)
     val mid: Double get() = (ask + bid) / 2.0
 }
@@ -107,7 +107,7 @@ data class Candle(
     val close: Double,
     val volume: Double = 0.0,
     val source: String = "MARKET_FEED"
-) {
+) : java.io.Serializable {
     val isBullish: Boolean get() = close >= open
     val isBearish: Boolean get() = close < open
     val body: Double get() = kotlin.math.abs(close - open)

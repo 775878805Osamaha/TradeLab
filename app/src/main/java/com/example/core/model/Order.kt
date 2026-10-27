@@ -43,7 +43,7 @@ data class Order(
     val swap: Double = 0.0,
     val slippage: Double = 0.0,
     val comment: String? = null
-) {
+) : java.io.Serializable {
     // Backwards-compatible aliases
     val side: OrderSide get() = direction
     val executedPrice: Double? get() = executionPrice

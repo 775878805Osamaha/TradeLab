@@ -76,13 +76,13 @@ fun ResultsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = if(uiState.isReplayReport) "نتائج التدريب · ${uiState.openPositionsCount} مفتوحة" else "النتائج",
+                        text = "النتائج",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 actions = {
-                    TextButton(onClick = viewModel::toggleReportSource) { Text(if(uiState.isReplayReport) "Replay" else "تداول ورقي") }
+
 
                     IconButton(
                         onClick = { viewModel.setExportDialogOpen(true) },
@@ -107,7 +107,7 @@ fun ResultsScreen(
                 .padding(paddingValues)
         ) {
             Column(Modifier.fillMaxWidth().background(ResultsCardBackground).padding(horizontal=12.dp,vertical=8.dp).testTag("results_positions_summary")) {
-                Text("${if(uiState.isReplayReport) "Replay" else "تداول ورقي"} · ${uiState.openPositionsCount} مفتوحة · ${uiState.trades.size} مغلقة",color=ResultsText,fontSize=12.sp)
+                Text("حساب التدريب · ${uiState.openPositionsCount} مفتوحة · ${uiState.trades.size} مغلقة",color=ResultsText,fontSize=12.sp)
                 Text("الربح العائم: ${money(uiState.openPositions.sumOf { it.profitLoss },true)} · الربح المحقق: ${money(uiState.trades.sumOf { it.netProfitLoss },true)}",color=ResultsMuted,fontSize=11.sp)
                 uiState.openPositions.take(2).forEach { position ->
                     Text("${position.symbol} · ${position.side} · ${position.volume} لوت · ${money(position.profitLoss,true)}",color=ResultsProfit,fontSize=11.sp)
@@ -121,7 +121,7 @@ fun ResultsScreen(
                 contentColor = TradingAccent,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                ResultsTab.values().forEach { tab ->
+                ResultsTab.values().filter { it != ResultsTab.COMPARISON }.forEach { tab ->
                     Tab(
                         selected = uiState.selectedTab == tab,
                         onClick = { viewModel.setSelectedTab(tab) },
@@ -308,7 +308,7 @@ private fun ResultsOverviewContent(
                                 onClick = onNavigateToBacktest,
                                 colors = ButtonDefaults.buttonColors(containerColor = ResultsPrimary),
                                 modifier = Modifier.testTag("results_start_backtest")
-                            ) { Text("ابدأ اختبارًا", color = Color.White) }
+                            ) { Text("ابدأ التداول على الشارت", color = Color.White) }
                         }
                     } else {
                         EquityCurveChart(

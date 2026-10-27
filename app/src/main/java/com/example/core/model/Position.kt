@@ -27,7 +27,7 @@ data class Position(
     val mode: String = "LIVE_PAPER",
     val trailingStopDistance: Double? = null,
     val isBreakEven: Boolean = false
-) {
+) : java.io.Serializable {
     val netProfitLoss: Double get() = profitLoss - commission - swap
 
     val pnlPercent: Double

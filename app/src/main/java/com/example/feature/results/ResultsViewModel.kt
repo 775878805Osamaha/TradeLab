@@ -30,7 +30,7 @@ data class ResultsUiState(
     val pastRuns: List<BacktestRun> = emptyList(),
     val selectedRunsForComparison: Set<Long> = emptySet(),
     val selectedTab: ResultsTab = ResultsTab.OVERVIEW,
-    val selectedPeriod: ResultsPeriod = ResultsPeriod.MONTH,
+    val selectedPeriod: ResultsPeriod = ResultsPeriod.ALL,
     val curveType: ChartCurveType = ChartCurveType.EQUITY_AND_BALANCE,
     val isPercentageMode: Boolean = false,
     val selectedTradeForDetail: TradeJournalEntry? = null,
@@ -43,60 +43,14 @@ class ResultsViewModel(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ResultsUiState(isLoading = true))
-    private val showReplay = MutableStateFlow(true)
-    fun toggleReportSource() { showReplay.value = !showReplay.value }
-    val uiState: StateFlow<ResultsUiState> = combine(_uiState, tradingRepository.replayReport, showReplay) { live, report, selected ->
-        if (!selected || report == null) live else live.copy(
-            isReplayReport = true, openPositionsCount = report.positions.size, openPositions = report.positions,
-            initialBalance = report.account.initialBalance, currentBalance = report.account.balance,
-            metrics = StatisticsCalculator.calculate(report.account.initialBalance,report.trades,report.account.equity),
-            equityPoints = StatisticsCalculator.buildEquityCurve(report.account.initialBalance,report.trades),
-            trades = report.trades, dailySummaries = StatisticsCalculator.calculateDailySummaries(report.trades), isLoading = false)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ResultsUiState(isLoading=true))
-
-    init {
-        // Collect trades and account state
-        viewModelScope.launch {
-            tradingRepository.selectedAccount.filterNotNull().flatMapLatest { acc ->
-                tradingRepository.getTradesForAccount(acc.id).map { trades ->
-                    Pair(acc, trades)
-                }
-            }.collect { (acc, trades) ->
-                val metrics = StatisticsCalculator.calculate(
-                    initialBalance = acc.initialBalance,
-                    trades = trades,
-                    currentEquity = acc.equity
-                )
-                val curve = StatisticsCalculator.buildEquityCurve(acc.initialBalance, trades)
-                val daily = StatisticsCalculator.calculateDailySummaries(trades)
-
-                _uiState.update {
-                    it.copy(
-                        initialBalance = acc.initialBalance,
-                        currentBalance = acc.balance,
-                        metrics = metrics,
-                        equityPoints = curve,
-                        trades = trades,
-                        dailySummaries = daily,
-                        isLoading = false
-                    )
-                }
-            }
-        }
-
-        viewModelScope.launch {
-            tradingRepository.selectedAccount.filterNotNull().flatMapLatest { account ->
-                tradingRepository.getPositionsForAccount(account.id)
-            }.collect { positions -> _uiState.update { it.copy(openPositions=positions,openPositionsCount=positions.size) } }
-        }
-
-        // Collect past runs for comparison
-        viewModelScope.launch {
-            tradingRepository.allBacktestRuns.collect { runs ->
-                _uiState.update { it.copy(pastRuns = runs) }
-            }
-        }
-    }
+    val uiState: StateFlow<ResultsUiState> = combine(_uiState, tradingRepository.replayReport) { base, report ->
+        if (report == null) base.copy(isReplayReport=true,isLoading=false) else base.copy(
+            isReplayReport=true,openPositionsCount=report.positions.size,openPositions=report.positions,
+            initialBalance=report.account.initialBalance,currentBalance=report.account.balance,
+            metrics=StatisticsCalculator.calculate(report.account.initialBalance,report.trades,report.account.equity),
+            equityPoints=StatisticsCalculator.buildEquityCurve(report.account.initialBalance,report.trades),
+            trades=report.trades,dailySummaries=StatisticsCalculator.calculateDailySummaries(report.trades),isLoading=false)
+    }.stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),ResultsUiState(isLoading=true))
 
     fun setSelectedPeriod(period: ResultsPeriod) {
         _uiState.update { it.copy(selectedPeriod = period) }
