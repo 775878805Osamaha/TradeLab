@@ -27,7 +27,8 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
     var zoom by remember { mutableFloatStateOf(1f) }
     var selected by remember(points,mode){mutableStateOf<Int?>(null)}
     val visible=remember(points,zoom){points.takeLast((points.size/zoom).toInt().coerceAtLeast(2))}
-    val date=remember{SimpleDateFormat("MMM dd",Locale.US)}
+    val span=(points.lastOrNull()?.timestamp?:0L)-(points.firstOrNull()?.timestamp?:0L)
+    val date=remember(span){SimpleDateFormat(if(span<3_600_000L)"HH:mm:ss" else if(span<172_800_000L)"HH:mm" else "MMM dd",Locale.US)}
     fun value(p:EquityPoint)=when(mode){"Balance"->p.balance;"التراجع"->-p.drawdown;"الربح التراكمي"->p.balance-(points.firstOrNull()?.balance?:p.balance);else->p.equity}
     val selectedPoint=selected?.let{visible.getOrNull(it)}
     Box(Modifier.fillMaxWidth().height(if(expanded)340.dp else 154.dp)) {
@@ -75,6 +76,7 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
             val barWidth=minOf(8.dp.toPx(),slot*.65f)
             days.forEachIndexed { i,day->val h=(abs(day.pnl)/maxBar*barsH*.9).toFloat();drawRect(if(day.pnl>=0)V3Profit else V3Loss,Offset((i+.5f)*slot-barWidth/2,plotH+barsH-h),androidx.compose.ui.geometry.Size(barWidth.coerceAtLeast(1f),h))}
         }
+        if(selectedPoint==null) Text(mode,color=V3Muted,fontSize=7.sp,modifier=Modifier.align(Alignment.TopStart))
         Text("صافي يومي $",color=V3Muted,fontSize=6.sp,modifier=Modifier.align(Alignment.BottomEnd).padding(bottom=16.dp))
         if(selectedPoint!=null) Text("${date.format(Date(selectedPoint.timestamp))} · ${v3Money(value(selectedPoint))}",color=V3Text,fontSize=9.sp,modifier=Modifier.align(Alignment.TopStart))
         if(!expanded) IconButton(onClick=onExpand,modifier=Modifier.align(Alignment.BottomStart).padding(bottom=26.dp).size(22.dp).testTag("results_chart_expand")) { Icon(Icons.Default.Fullscreen,"تكبير المنحنى",tint=V3Muted,modifier=Modifier.size(16.dp)) }

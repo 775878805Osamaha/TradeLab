@@ -10,8 +10,9 @@ object TrainingReportMapper {
             peak=maxOf(peak,sample.equity)
             EquityPoint(sample.timestamp,sample.balance,sample.equity,(peak-sample.equity).coerceAtLeast(0.0),peak)
         }
-        val baseline=EquityPoint(fundedAt,s.initialBalance,s.initialBalance,0.0,s.initialBalance)
-        val curve=listOf(baseline)+samples.filter { it.timestamp>=fundedAt }
+        val baselineAt=minOf(fundedAt,samples.firstOrNull()?.timestamp?:fundedAt)
+        val baseline=EquityPoint(baselineAt,s.initialBalance,s.initialBalance,0.0,s.initialBalance)
+        val curve=listOf(baseline)+samples
         val account=VirtualAccount(id=9999,name="حساب التدريب",initialBalance=s.initialBalance,balance=s.currentBalance,
             equity=s.currentEquity,mode=AccountMode.REPLAY)
         return ReplayReport(account,s.openPositions,s.pendingOrders,s.closedTrades.mapIndexed { i,t -> t.copy(id=i+1L) },curve,
