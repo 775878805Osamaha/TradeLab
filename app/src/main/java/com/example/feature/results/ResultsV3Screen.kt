@@ -66,7 +66,7 @@ fun ResultsScreen(viewModel:ResultsViewModel,onNavigateToHistory:()->Unit,onNavi
         }
         Row(Modifier.fillMaxWidth().padding(horizontal=8.dp).border(.7.dp,V3Border,RoundedCornerShape(5.dp)).testTag("results_tabs").horizontalScroll(rememberScrollState())) {
             tabs.forEach { tab->val active=state.selectedTab==tab
-                Column(Modifier.width(if(tab==ResultsTab.STATISTICS)80.dp else 75.dp).border(if(active).7.dp else 0.dp,if(active)V3Blue else Color.Transparent,RoundedCornerShape(4.dp)).background(if(active)V3Blue.copy(alpha=.16f) else Color.Transparent).clickable{viewModel.setSelectedTab(tab)}.testTag("results_tab_${tab.name}")) {
+                Column(Modifier.width(when(tab){ResultsTab.OVERVIEW->65.dp;ResultsTab.CURVES->97.dp;ResultsTab.JOURNAL->67.dp;ResultsTab.STATISTICS->80.dp;ResultsTab.DAILY->76.dp;else->75.dp}).border(if(active).7.dp else 0.dp,if(active)V3Blue else Color.Transparent,RoundedCornerShape(4.dp)).background(if(active)V3Blue.copy(alpha=.16f) else Color.Transparent).clickable{viewModel.setSelectedTab(tab)}.testTag("results_tab_${tab.name}")) {
                     Text(tab.displayNameAr,color=if(active)V3Blue else V3Muted,fontSize=9.sp,lineHeight=14.sp,maxLines=1,textAlign=TextAlign.Center,modifier=Modifier.fillMaxWidth().padding(horizontal=4.dp,vertical=9.dp))
                     Box(Modifier.fillMaxWidth().height(1.dp).background(if(active)V3Blue else Color.Transparent))
                 }
