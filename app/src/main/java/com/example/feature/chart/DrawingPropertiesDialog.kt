@@ -38,7 +38,7 @@ internal fun DrawingPropertiesDialog(drawing: ChartDrawing, onDismiss: () -> Uni
             if(drawing.tool.isTextTool) OutlinedTextField(text,{text=it},label={Text("النص")})
             prices.forEachIndexed { i,value -> OutlinedTextField(value,{next -> prices=prices.toMutableList().also { it[i]=next }},modifier=Modifier.testTag("drawing_price_$i"),label={Text("سعر النقطة ${i+1}")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal)) }
             Text("نمط الخط")
-            Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(4.dp)) { DrawingLineStyle.values().forEach { style ->
+            Row(Modifier.horizontalScroll(rememberScrollState()).testTag("drawing_style_controls"),horizontalArrangement=Arrangement.spacedBy(4.dp)) { DrawingLineStyle.values().forEach { style ->
                 FilterChip(selected=lineStyle==style,onClick={lineStyle=style},label={Text(style.titleAr)},modifier=Modifier.testTag("drawing_style_${style.name}"))
             } }
             if(drawing.tool.supportsFill) {

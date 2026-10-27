@@ -367,8 +367,15 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithTag("drawing_properties").assertIsDisplayed()
             compose.onNodeWithTag("drawing_price_0").performTextReplacement("4000.25")
             androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.onNodeWithTag("drawing_style_controls").performScrollTo()
+            compose.onNodeWithTag("drawing_style_DOTTED").performScrollTo().assertIsDisplayed().performClick()
+            compose.onNodeWithTag("drawing_fill_opacity").performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(.25f) }
+            captureProviderScreen("drawing-edit-properties")
             compose.onNodeWithTag("drawing_save").performClick()
             compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id })!!.startPrice==4000.25 } }
+            val propertiesSaved=kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id })!! }
+            org.junit.Assert.assertEquals(com.example.feature.chart.model.DrawingLineStyle.DOTTED,propertiesSaved.lineStyle)
+            org.junit.Assert.assertEquals(.25f,propertiesSaved.fillOpacity,.001f)
             captureProviderScreen("drawing-edit-saved")
             compose.onNodeWithContentDescription("أدوات الرسم").performClick()
             compose.onNodeWithTag("drawing_catalog_search").performTextInput("مستطيل")
