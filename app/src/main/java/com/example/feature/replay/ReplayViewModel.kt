@@ -102,8 +102,15 @@ class ReplayViewModel(
     )
     private val accountSnapshots = java.util.TreeMap<Int, AccountSnapshot>()
 
-    private fun saveAccountSnapshot() {
+    private var hasPublishedReport = false
+    private fun publishReport() {
+        if (!hasPublishedReport && openPositions.isEmpty() && pendingOrders.isEmpty() && closedTrades.isEmpty()) return
+        hasPublishedReport = true
         reportSink?.invoke(ReplayReport(replayAccount(),openPositions.toList(),pendingOrders.toList(),closedTrades.toList()))
+    }
+
+    private fun saveAccountSnapshot() {
+        publishReport()
         val index = replayEngine.currentIndex.value
         // Any new execution or account edit forks the timeline at this bar.
         // Checkpoints from a previous future must never be restored.
@@ -142,7 +149,7 @@ class ReplayViewModel(
                 equitySamples = snapshot.equitySamples
             )
         }
-        reportSink?.invoke(ReplayReport(replayAccount(),openPositions.toList(),pendingOrders.toList(),closedTrades.toList()))
+        publishReport()
     }
 
     private var activeStrategy: Strategy? = null

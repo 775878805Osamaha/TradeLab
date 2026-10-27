@@ -292,10 +292,10 @@ private fun ResultsOverviewContent(
                             Modifier.padding(horizontal = 12.dp, vertical = 7.dp), fontSize = 11.sp, color = ResultsText)
                     }
                     if (trades.isEmpty()) {
-                        Column(Modifier.fillMaxWidth().height(170.dp),
+                        Column(Modifier.fillMaxWidth().height(110.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center) {
-                            Text("ابدأ أول اختبار لعرض نتائجك", color = ResultsMuted, fontSize = 13.sp)
+                            Text("لا توجد صفقات مغلقة بعد", color = ResultsMuted, fontSize = 13.sp)
                             Spacer(Modifier.height(12.dp))
                             Button(
                                 onClick = onNavigateToBacktest,
