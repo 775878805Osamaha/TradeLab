@@ -65,7 +65,8 @@ data class ReplayEquitySample(val candleIndex: Int, val equity: Double, val bala
 class ReplayViewModel(
     private val marketDataRepository: MarketDataRepository,
     private val executionEngine: ExecutionEngine = ExecutionEngine(),
-    val replayEngine: HistoricalReplayEngine = HistoricalReplayEngine()
+    val replayEngine: HistoricalReplayEngine = HistoricalReplayEngine(),
+    private val reportSink: ((ReplayReport) -> Unit)? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ReplayUiState(isLoading = true))
@@ -102,6 +103,7 @@ class ReplayViewModel(
     private val accountSnapshots = java.util.TreeMap<Int, AccountSnapshot>()
 
     private fun saveAccountSnapshot() {
+        reportSink?.invoke(ReplayReport(replayAccount(),openPositions.toList(),pendingOrders.toList(),closedTrades.toList()))
         val index = replayEngine.currentIndex.value
         // Any new execution or account edit forks the timeline at this bar.
         // Checkpoints from a previous future must never be restored.
@@ -140,6 +142,7 @@ class ReplayViewModel(
                 equitySamples = snapshot.equitySamples
             )
         }
+        reportSink?.invoke(ReplayReport(replayAccount(),openPositions.toList(),pendingOrders.toList(),closedTrades.toList()))
     }
 
     private var activeStrategy: Strategy? = null

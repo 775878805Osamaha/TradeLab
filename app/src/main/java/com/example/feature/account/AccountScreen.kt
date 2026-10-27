@@ -71,6 +71,8 @@ fun AccountScreen(
                     )
                 },
                 actions = {
+                    TextButton(onClick = viewModel::toggleReportSource) { Text(if(uiState.isReplayReport) "Replay" else "تداول ورقي") }
+
                     IconButton(
                         onClick = onNavigateToCalendar,
                         modifier = Modifier.testTag("nav_calendar_btn")

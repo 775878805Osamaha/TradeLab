@@ -18,6 +18,8 @@ enum class ResultsTab(val displayNameAr: String) {
 }
 
 data class ResultsUiState(
+    val isReplayReport: Boolean = false,
+    val openPositionsCount: Int = 0,
     val initialBalance: Double = 50.0,
     val currentBalance: Double = 50.0,
     val metrics: PerformanceMetrics? = null,
@@ -40,7 +42,16 @@ class ResultsViewModel(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ResultsUiState(isLoading = true))
-    val uiState: StateFlow<ResultsUiState> = _uiState.asStateFlow()
+    private val showReplay = MutableStateFlow(true)
+    fun toggleReportSource() { showReplay.value = !showReplay.value }
+    val uiState: StateFlow<ResultsUiState> = combine(_uiState, tradingRepository.replayReport, showReplay) { live, report, selected ->
+        if (!selected || report == null) live else live.copy(
+            isReplayReport = true, openPositionsCount = report.positions.size,
+            initialBalance = report.account.initialBalance, currentBalance = report.account.balance,
+            metrics = StatisticsCalculator.calculate(report.account.initialBalance,report.trades,report.account.equity),
+            equityPoints = StatisticsCalculator.buildEquityCurve(report.account.initialBalance,report.trades),
+            trades = report.trades, dailySummaries = StatisticsCalculator.calculateDailySummaries(report.trades), isLoading = false)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ResultsUiState(isLoading=true))
 
     init {
         // Collect trades and account state

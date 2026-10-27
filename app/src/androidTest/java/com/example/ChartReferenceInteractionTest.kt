@@ -193,6 +193,14 @@ class ChartReferenceInteractionTest {
             }
         }
         compose.onNodeWithText("الحجم المفتوح: 0.01 لوت").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        compose.onNodeWithTag("nav_item_account").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithText("Replay").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("حساب محاكاة Replay الافتراضي").assertExists()
+        captureProviderScreen("tradelab-replay-account")
+        compose.onNodeWithTag("nav_item_results").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithText("نتائج التدريب · 1 مفتوحة").fetchSemanticsNodes().isNotEmpty() }
+        captureProviderScreen("tradelab-replay-results")
     }
 
     @Test fun marketTerminalSearchAndOpenChart() {

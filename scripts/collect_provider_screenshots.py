@@ -4,7 +4,7 @@ import datetime
 import subprocess
 import sys
 
-names = ['tradelab-market-terminal', 'tradelab-gold-3m', 'tradelab-position-actions', 'tradelab-compact-replay'] + ['drawing-catalog-' + name for name in ['favorites', 'shapes', 'notes', 'patterns', 'measurement', 'triangle']]
+names = ['tradelab-replay-account', 'tradelab-replay-results', 'tradelab-market-terminal', 'tradelab-gold-3m', 'tradelab-position-actions', 'tradelab-compact-replay'] + ['drawing-catalog-' + name for name in ['favorites', 'shapes', 'notes', 'patterns', 'measurement', 'triangle']]
 if datetime.datetime.now(datetime.timezone.utc).weekday() < 5:
     names.append('tradelab-gold-trade')
 for name in names:

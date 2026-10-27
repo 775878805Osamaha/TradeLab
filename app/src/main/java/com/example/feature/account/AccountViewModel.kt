@@ -16,6 +16,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 data class AccountUiState(
+    val isReplayReport: Boolean = false,
     val selectedAccount: VirtualAccount? = null,
     val allAccounts: List<VirtualAccount> = emptyList(),
     val challengeStatus: ChallengeStatus? = null,
@@ -39,7 +40,20 @@ class AccountViewModel(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountUiState(isLoading = true))
-    val uiState: StateFlow<AccountUiState> = _uiState.asStateFlow()
+    private val showReplay = MutableStateFlow(true)
+    fun toggleReportSource() { showReplay.value = !showReplay.value }
+    val uiState: StateFlow<AccountUiState> = combine(_uiState,tradingRepository.replayReport,showReplay) { live, report, selected ->
+        if (!selected || report == null) live else {
+            val metrics=StatisticsCalculator.calculate(report.account.initialBalance,report.trades,report.account.equity)
+            live.copy(isReplayReport=true, selectedAccount=report.account, openPositionsCount=report.positions.size,
+                pendingOrdersCount=report.orders.size,totalClosedTrades=report.trades.size,
+                unrealizedProfitLoss=report.positions.sumOf{it.profitLoss},realizedProfitLoss=report.trades.sumOf{it.netProfitLoss},
+                totalProfitLoss=report.account.equity-report.account.initialBalance,
+                winRatePct=metrics.winRatePct,profitFactor=metrics.profitFactor,maxDrawdown=metrics.maxDrawdown,
+                todayProfitLoss=report.trades.filter { java.time.Instant.ofEpochMilli(it.closeTime).atZone(java.time.ZoneId.systemDefault()).toLocalDate()==java.time.LocalDate.now() }.sumOf{it.netProfitLoss},
+                isMarginWarning=report.account.freeMargin < 15.0,challengeStatus=null,isLoading=false)
+        }
+    }.stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),AccountUiState(isLoading=true))
 
     init {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -52,7 +66,7 @@ class AccountViewModel(
                 tradingRepository.allAccounts
             ) { selected, accounts ->
                 Pair(selected, accounts)
-            }.collect { (selected, accounts) ->
+            }.collectLatest { (selected, accounts) ->
                 if (selected != null) {
                     combine(
                         tradingRepository.getTradesForAccount(selected.id),
@@ -123,12 +137,14 @@ class AccountViewModel(
     }
 
     fun selectAccount(id: Long) {
+        showReplay.value=false
         viewModelScope.launch {
             tradingRepository.selectAccount(id)
         }
     }
 
     fun resetAccount(balance: Double = 50.0) {
+        if (uiState.value.isReplayReport) { _uiState.update { it.copy(message="أعد ضبط جلسة التدريب من الشارت") }; return }
         val current = _uiState.value.selectedAccount ?: return
         viewModelScope.launch {
             tradingRepository.resetAccount(current.id, balance)

@@ -37,6 +37,8 @@ class TradingRepository(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) {
 
+    val replayReport = MutableStateFlow<ReplayReport?>(null)
+
     // Cached live tick prices for high-frequency position evaluation without DB churn
     private val latestTicks = ConcurrentHashMap<String, Tick>()
 

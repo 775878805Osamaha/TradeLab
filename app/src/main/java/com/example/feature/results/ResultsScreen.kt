@@ -76,12 +76,14 @@ fun ResultsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "النتائج",
+                        text = if(uiState.isReplayReport) "نتائج التدريب · ${uiState.openPositionsCount} مفتوحة" else "النتائج",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 actions = {
+                    TextButton(onClick = viewModel::toggleReportSource) { Text(if(uiState.isReplayReport) "Replay" else "تداول ورقي") }
+
                     IconButton(
                         onClick = { viewModel.setExportDialogOpen(true) },
                         modifier = Modifier.testTag("export_results_btn")
