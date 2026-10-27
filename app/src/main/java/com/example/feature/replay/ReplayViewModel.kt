@@ -26,18 +26,18 @@ data class ReplayUiState(
     val symbol: String = "BTCUSDT",
     val timeframe: Timeframe = Timeframe.M15,
     val datasetId: Long = 0,
-    val initialBalance: Double = 50.0,
+    val initialBalance: Double = 100.0,
     val maxOpenPositions: Int = 10,
     val maxPendingOrders: Int = 20,
     val maxDrawdownPercent: Double = 100.0,
-    val peakEquity: Double = 50.0,
+    val peakEquity: Double = 100.0,
     val maxObservedDrawdownPercent: Double = 0.0,
     val equitySamples: List<ReplayEquitySample> = emptyList(),
     val riskGuardEnabled: Boolean = true,
     val maxConsecutiveLosses: Int = 0,
     val maxSessionLossUsd: Double = 0.0,
-    val currentBalance: Double = 50.0,
-    val currentEquity: Double = 50.0,
+    val currentBalance: Double = 100.0,
+    val currentEquity: Double = 100.0,
     val visibleCandles: List<Candle> = emptyList(),
     val currentCandle: Candle? = null,
     val latestTick: Tick? = null,
@@ -120,7 +120,7 @@ class ReplayViewModel(
 
     fun configureTrainingBalance(balance: Double): Boolean {
         if (!balance.isFinite() || balance <= 0 || balance > 1_000_000_000 || openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty()) return false
-        _uiState.update { it.copy(initialBalance=balance,currentBalance=balance,currentEquity=balance,peakEquity=balance) }
+        _uiState.update { it.copy(initialBalance=balance,currentBalance=balance,currentEquity=balance,peakEquity=balance,equitySamples=emptyList(),maxObservedDrawdownPercent=0.0,datasetId=it.datasetId+1) }
         hasPublishedReport=true
         accountSnapshots.clear()
         if(replayEngine.totalCandles.value>0) replayEngine.initialize(replayEngine.snapshotCandles(),replayEngine.currentIndex.value)
