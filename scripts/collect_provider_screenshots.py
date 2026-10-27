@@ -10,6 +10,17 @@ for name in names:
     if result.returncode and "--allow-missing" not in sys.argv:
         raise SystemExit(result.returncode)
 
-result = subprocess.run(['adb', 'pull', '/sdcard/Download/results-v3-layout.json', 'screenshots/results-v3-layout.json'])
-if result.returncode and "--allow-missing" not in sys.argv:
-    raise SystemExit(result.returncode)
+# UTP retains per-test logcat after uninstalling the target APK.
+from pathlib import Path
+import json
+import re
+found = False
+for path in Path('app/build/outputs/androidTest-results/connected').rglob('*replayPositionLineOpensActionsAndPartialCloseKeepsChart*.txt'):
+    for line in path.read_text(errors='replace').splitlines():
+        if 'TradeLabResultsLayout' in line:
+            match = re.search(r'(\{.*\})', line)
+            if match:
+                Path('screenshots/results-v3-layout.json').write_text(json.dumps(json.loads(match.group(1)), indent=2))
+                found = True
+if not found and "--allow-missing" not in sys.argv:
+    raise SystemExit('Results geometry missing from retained native test logcat')
