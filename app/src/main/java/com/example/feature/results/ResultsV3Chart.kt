@@ -15,6 +15,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.model.EquityPoint
@@ -37,6 +39,7 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
     val date=remember(span){SimpleDateFormat(if(span<3_600_000L)"HH:mm:ss" else if(span<172_800_000L)"HH:mm" else "MMM dd",Locale.US)}
     fun value(p:EquityPoint)=when(mode){"Balance"->p.balance;"التراجع"->-p.drawdown;"الربح التراكمي"->p.balance-(points.firstOrNull()?.balance?:p.balance);else->p.equity}
     val selectedPoint=selected?.let{visible.getOrNull(it)}
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     Box(Modifier.fillMaxWidth().height(if(expanded)340.dp else 151.dp)) {
         Canvas(Modifier.fillMaxSize().testTag("results_equity_chart")
             .pointerInput(visible){detectTapGestures { at ->
@@ -56,7 +59,7 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
             for(i in 0..4){
                 val py=plotH*i/4
                 drawLine(V3Border.copy(alpha=.45f),Offset(0f,py),Offset(plotW,py),.6.dp.toPx())
-                drawContext.canvas.nativeCanvas.drawText(String.format(Locale.US,"%,.2f",max-(max-min)*i/4),plotW+4.dp.toPx(),py+3.dp.toPx(),paint)
+                drawContext.canvas.nativeCanvas.drawText(String.format(Locale.US,"%,.2f",max-(max-min)*i/4),plotW+4.dp.toPx(),maxOf(py+3.dp.toPx(),8.sp.toPx()),paint)
             }
             for(i in 0..6){val px=plotW*i/6;drawLine(V3Border.copy(alpha=.4f),Offset(px,0f),Offset(px,plotH+barsH),.6.dp.toPx())}
             if(visible.isNotEmpty()) {
@@ -92,5 +95,6 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
         Text("صافي النتائج اليومية ($)",color=V3Muted,fontSize=7.sp,maxLines=1,modifier=Modifier.align(Alignment.BottomEnd).absolutePadding(right=44.dp,bottom=26.dp))
         if(selectedPoint!=null) Text("${date.format(Date(selectedPoint.timestamp))} · ${v3Money(value(selectedPoint))}",color=V3Text,fontSize=9.sp,modifier=Modifier.align(Alignment.TopStart))
         if(!expanded) IconButton(onClick=onExpand,modifier=Modifier.align(Alignment.BottomStart).padding(bottom=26.dp).size(22.dp).testTag("results_chart_expand")) { Icon(Icons.Default.Fullscreen,"تكبير المنحنى",tint=V3Muted,modifier=Modifier.size(16.dp)) }
+    }
     }
 }

@@ -20,6 +20,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,7 +39,7 @@ fun TradeDetailDialog(
     onDismiss: () -> Unit
 ) {
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US) }
-    val sym = remember { com.example.core.market.DefaultSymbols.getSymbol(trade.symbol) }
+    val sym = remember(trade.symbol) { com.example.core.market.DefaultSymbols.getSymbol(trade.symbol) }
     val riskAmount = trade.stopLoss?.let {
         kotlin.math.abs(trade.entryPrice - it) * trade.volume * sym.contractSize
     }
@@ -94,7 +96,8 @@ fun TradeDetailDialog(
                     }
 
                     Text(
-                        text = String.format(Locale.US, "%s$%.2f", if (trade.netProfitLoss >= 0) "+" else "", trade.netProfitLoss),
+                        text = v3Money(trade.netProfitLoss,true),
+                        style = TextStyle(textDirection=TextDirection.Ltr),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (trade.netProfitLoss >= 0) TradingPositive else TradingNegative
@@ -108,13 +111,20 @@ fun TradeDetailDialog(
                 DetailRow("سعر الخروج", String.format(Locale.US, "%.${sym.digits}f", trade.exitPrice))
                 DetailRow("وقف الخسارة (SL)", trade.stopLoss?.let { String.format(Locale.US, "%.${sym.digits}f", it) } ?: "غير محدد")
                 DetailRow("جني الأرباح (TP)", trade.takeProfit?.let { String.format(Locale.US, "%.${sym.digits}f", it) } ?: "غير محدد")
-                DetailRow("الربح الإجمالي (Gross)", String.format(Locale.US, "$%.2f", trade.profitLoss))
-                DetailRow("العمولة (Commission)", String.format(Locale.US, "-$%.2f", trade.commission))
-                DetailRow("رسوم التبييت (Swap)", String.format(Locale.US, "$%.2f", trade.swap))
-                DetailRow("مبلغ المخاطرة (Risk)", riskAmount?.let { String.format(Locale.US, "$%.2f", it) } ?: "N/A")
+                DetailRow("الربح الإجمالي (Gross)", v3Money(trade.profitLoss,true))
+                DetailRow("العمولة (Commission)", v3Money(-trade.commission))
+                DetailRow("رسوم التبييت (Swap)", v3Money(trade.swap,true))
+                DetailRow("مبلغ المخاطرة (Risk)", riskAmount?.let { v3Money(it) } ?: "—")
                 DetailRow("المضاعف R (R-Multiple)", if(riskAmount!=null && riskAmount>0)String.format(Locale.US, "%.2f R", trade.rMultiple) else "—")
                 DetailRow("السبريد", "مضمن في أسعار التنفيذ؛ لا يُخصم مرة أخرى")
-                DetailRow("سبب الخروج", trade.exitReason.name)
+                DetailRow("سبب الخروج", when(trade.exitReason) {
+                    ExitReason.TAKE_PROFIT->"جني الربح"
+                    ExitReason.STOP_LOSS->"وقف الخسارة"
+                    ExitReason.MANUAL_CLOSE->"إغلاق يدوي"
+                    ExitReason.STRATEGY_CLOSE->"إغلاق الاستراتيجية"
+                    ExitReason.TRAILING_STOP->"وقف متحرك"
+                    ExitReason.BREAK_EVEN->"تعادل"
+                })
                 DetailRow("الاستراتيجية", trade.strategyId ?: "يدوي (Manual)")
                 DetailRow("وقت الفتح", sdf.format(Date(trade.openTime)))
                 DetailRow("وقت الإغلاق", sdf.format(Date(trade.closeTime)))
@@ -304,8 +314,8 @@ private fun DetailRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, fontSize = 12.sp, color = TradingTextSecondary)
-        Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TradingTextPrimary)
+        Text(text = label, fontSize = 12.sp, color = TradingTextSecondary, modifier=Modifier.weight(1f).padding(end=8.dp))
+        Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TradingTextPrimary, style = TextStyle(textDirection=TextDirection.ContentOrLtr), modifier=Modifier.weight(1f), textAlign=androidx.compose.ui.text.style.TextAlign.End)
     }
 }
 
