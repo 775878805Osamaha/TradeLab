@@ -743,9 +743,17 @@ fun CandlestickChart(
                 val rendered=if(dragPreview!=null)drawings.map { if(it.id==dragPreview!!.id)dragPreview!! else it } else drawings
                 ChartDrawingsRenderer.drawDrawings(this, rendered, transform, candles, anchoredVwaps, drawingImages, candleProfiles)
                 rendered.firstOrNull { it.id==selectedDrawingId }?.let { selected ->
-                    DrawingEditing.handles(selected,transform).forEach { p ->
-                        drawCircle(Color(0xFF020D18),8.dp.toPx(),p)
-                        drawCircle(Color(0xFF2962FF),8.dp.toPx(),p,style=androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                    DrawingEditing.handles(selected,transform).forEachIndexed { index,p ->
+                        val radius=13.dp.toPx()
+                        val stroke=androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx())
+                        if(selected.tool==DrawingTool.RECTANGLE && index%2==1) {
+                            val top=Offset(p.x-radius,p.y-radius);val size=Size(radius*2,radius*2)
+                            drawRoundRect(Color(0xFF020D18),top,size,androidx.compose.ui.geometry.CornerRadius(5.dp.toPx()))
+                            drawRoundRect(Color(0xFF2962FF),top,size,androidx.compose.ui.geometry.CornerRadius(5.dp.toPx()),style=stroke)
+                        } else {
+                            drawCircle(Color(0xFF020D18),radius,p)
+                            drawCircle(Color(0xFF2962FF),radius,p,style=stroke)
+                        }
                     }
                 }
             }
