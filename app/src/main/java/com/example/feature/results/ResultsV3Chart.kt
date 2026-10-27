@@ -32,15 +32,16 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
         val until=visible.lastOrNull()?.timestamp?.let(TrainingAnalyticsCalculator::dayStart)
         days.filter { from!=null && until!=null && it.time in from..until }
     }
-    val span=(points.lastOrNull()?.timestamp?:0L)-(points.firstOrNull()?.timestamp?:0L)
+    val timeline=remember(visible){ResultsChartTimeline(visible.map { it.timestamp })}
+    val span=timeline.duration
     val date=remember(span){SimpleDateFormat(if(span<3_600_000L)"HH:mm:ss" else if(span<172_800_000L)"HH:mm" else "MMM dd",Locale.US)}
     fun value(p:EquityPoint)=when(mode){"Balance"->p.balance;"التراجع"->-p.drawdown;"الربح التراكمي"->p.balance-(points.firstOrNull()?.balance?:p.balance);else->p.equity}
     val selectedPoint=selected?.let{visible.getOrNull(it)}
-    Box(Modifier.fillMaxWidth().height(if(expanded)340.dp else 154.dp)) {
+    Box(Modifier.fillMaxWidth().height(if(expanded)340.dp else 151.dp)) {
         Canvas(Modifier.fillMaxSize().testTag("results_equity_chart")
             .pointerInput(visible){detectTapGestures { at ->
                 val width=(size.width-40.dp.toPx()).coerceAtLeast(1f)
-                selected=((at.x/width).coerceIn(0f,1f)*(visible.size-1)).toInt().coerceAtLeast(0)
+                selected=timeline.nearest((at.x/width).toDouble())
             }}
             .pointerInput(points){detectTransformGestures { _,_,change,_->zoom=(zoom*change).coerceIn(1f,8f) }}) {
             val right=40.dp.toPx();val plotW=(size.width-right).coerceAtLeast(1f)
@@ -50,7 +51,7 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
             val pad=maxOf((hi-lo)*.13,abs(hi)*.002,0.01)
             val min=lo-pad;val max=hi+pad
             fun y(v:Double)=(plotH-(v-min)/(max-min)*plotH).toFloat()
-            fun x(i:Int)=if(visible.size<2)0f else i.toFloat()/(visible.size-1)*plotW
+            fun x(i:Int)=timeline.fraction(visible[i].timestamp).toFloat()*plotW
             val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=V3Muted.toArgb();textSize=8.sp.toPx();typeface=android.graphics.Typeface.create("sans-serif",0)}
             for(i in 0..4){
                 val py=plotH*i/4
@@ -60,7 +61,8 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
             for(i in 0..6){val px=plotW*i/6;drawLine(V3Border.copy(alpha=.4f),Offset(px,0f),Offset(px,plotH+barsH),.6.dp.toPx())}
             if(visible.isNotEmpty()) {
                 val path=Path();val fill=Path()
-                path.moveTo(0f,y(vals.first()));fill.moveTo(0f,plotH);fill.lineTo(0f,y(vals.first()))
+                val firstX=if(visible.size==1)0f else x(0)
+                path.moveTo(firstX,y(vals.first()));fill.moveTo(firstX,plotH);fill.lineTo(firstX,y(vals.first()))
                 val stride=(visible.size/800).coerceAtLeast(1)
                 visible.indices.filter{it%stride==0 || it==visible.lastIndex}.forEach{i->path.lineTo(x(i),y(vals[i]));fill.lineTo(x(i),y(vals[i]))}
                 if(visible.size==1){path.lineTo(plotW,y(vals.first()));fill.lineTo(plotW,y(vals.first()))}
@@ -72,17 +74,22 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
                 paint.color=Color.White.toArgb();paint.textSize=7.sp.toPx()
                 drawContext.canvas.nativeCanvas.drawText(String.format(Locale.US,"%.2f",vals.last()),plotW+2.dp.toPx(),lastY+2.dp.toPx(),paint)
                 paint.color=V3Muted.toArgb();paint.textSize=7.sp.toPx()
-                for(i in 0..4){val index=((visible.lastIndex)*i/4).coerceAtLeast(0);val text=date.format(Date(visible[index].timestamp));val textW=paint.measureText(text)
+                for(i in 0..4){val text=date.format(Date(timeline.timeAt(i/4.0)));val textW=paint.measureText(text)
                     drawContext.canvas.nativeCanvas.drawText(text,(plotW*i/4-textW/2).coerceIn(0f,(plotW-textW).coerceAtLeast(0f)),size.height-1.dp.toPx(),paint)}
                 selected?.takeIf { it in visible.indices }?.let{i->drawLine(V3Muted,Offset(x(i),0f),Offset(x(i),plotH),.7.dp.toPx());drawCircle(V3Profit,3.dp.toPx(),Offset(x(i),y(vals[i])))}
             }
             val maxBar=plottedDays.maxOfOrNull{abs(it.pnl)}?.coerceAtLeast(.01)?:1.0
             val slot=plotW/(plottedDays.size.coerceAtLeast(1))
             val barWidth=minOf(8.dp.toPx(),slot*.65f)
-            plottedDays.forEachIndexed { i,day->val h=(abs(day.pnl)/maxBar*barsH*.9).toFloat();drawRect(if(day.pnl>=0)V3Profit else V3Loss,Offset((i+.5f)*slot-barWidth/2,plotH+barsH-h),androidx.compose.ui.geometry.Size(barWidth.coerceAtLeast(1f),h))}
+            plottedDays.forEach { day->
+                // Daily totals belong at that day’s last visible observation.
+                val at=visible.lastOrNull { TrainingAnalyticsCalculator.dayStart(it.timestamp)==day.time }?.timestamp ?: day.time
+                val center=timeline.fraction(at).toFloat()*plotW
+                val left=(center-barWidth/2).coerceIn(0f,(plotW-barWidth).coerceAtLeast(0f))
+                val h=(abs(day.pnl)/maxBar*barsH*.9).toFloat();drawRect(if(day.pnl>=0)V3Profit else V3Loss,Offset(left,plotH+barsH-h),androidx.compose.ui.geometry.Size(barWidth.coerceAtLeast(1f),h))}
         }
         if(selectedPoint==null) Text(mode,color=V3Muted,fontSize=7.sp,modifier=Modifier.align(Alignment.TopStart))
-        Text("صافي يومي $",color=V3Muted,fontSize=6.sp,modifier=Modifier.align(Alignment.BottomEnd).padding(bottom=16.dp))
+        Text("صافي النتائج اليومية ($)",color=V3Muted,fontSize=7.sp,maxLines=1,modifier=Modifier.align(Alignment.BottomEnd).absolutePadding(right=44.dp,bottom=26.dp))
         if(selectedPoint!=null) Text("${date.format(Date(selectedPoint.timestamp))} · ${v3Money(value(selectedPoint))}",color=V3Text,fontSize=9.sp,modifier=Modifier.align(Alignment.TopStart))
         if(!expanded) IconButton(onClick=onExpand,modifier=Modifier.align(Alignment.BottomStart).padding(bottom=26.dp).size(22.dp).testTag("results_chart_expand")) { Icon(Icons.Default.Fullscreen,"تكبير المنحنى",tint=V3Muted,modifier=Modifier.size(16.dp)) }
     }
