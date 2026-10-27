@@ -33,4 +33,24 @@ class DrawingStylePersistenceTest {
         assertEquals(d,DrawingEditing.drag(d,t,Offset(100f,100f),Offset(130f,140f),0))
         assertNotEquals(d.copy(isLocked=false),DrawingEditing.drag(d.copy(isLocked=false),t,Offset(100f,100f),Offset(130f,140f),0))
     }
+    private fun transform():ChartTransform {
+        val candles=(0..9).map { i->Candle(symbol="XAUUSD",timeframe=Timeframe.M1,openTime=1_000_000L+i*60_000,open=100.0,high=110.0,low=90.0,close=100.0) }
+        return ChartTransform(candles,90.0,110.0,400f,400f,40f)
+    }
+    @Test fun filledEllipseCircleAndTriangleAcceptInteriorTouches() {
+        val t=transform()
+        val d=drawing().copy(startTime=1_120_000,endTime=1_360_000,fillOpacity=.35f)
+        val center=Offset((t.timeToX(d.startTime)!!+t.timeToX(d.endTime!!)!!)/2,200f)
+        for(tool in listOf(DrawingTool.CIRCLE,DrawingTool.ELLIPSE)) {
+            assertEquals(0f,DrawingHitTest.distance(d.copy(tool=tool),t,center),0f)
+            assertTrue(DrawingHitTest.distance(d.copy(tool=tool,fillOpacity=0f),t,center)>0f)
+        }
+        val triangle=d.copy(tool=DrawingTool.TRIANGLE,anchors=listOf(DrawingAnchor(1_120_000,105.0),DrawingAnchor(1_360_000,105.0),DrawingAnchor(1_240_000,95.0)))
+        assertEquals(0f,DrawingHitTest.distance(triangle,t,Offset(180f,180f)),0f)
+    }
+    @Test fun rotatedRectangleHitTestingIncludesItsFourthSide() {
+        val t=transform()
+        val d=drawing().copy(tool=DrawingTool.ROTATED_RECTANGLE,fillOpacity=0f,anchors=listOf(DrawingAnchor(1_120_000,105.0),DrawingAnchor(1_360_000,105.0),DrawingAnchor(1_360_000,95.0)))
+        assertEquals(0f,DrawingHitTest.distance(d,t,Offset(100f,200f)),.001f)
+    }
 }

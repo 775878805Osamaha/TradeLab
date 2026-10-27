@@ -14,6 +14,16 @@ object DrawingHitTest {
             val f=when(mode){1->raw;2->raw.coerceAtLeast(0f);else->raw.coerceIn(0f,1f)}
             return (point-(start+delta*f)).getDistance()
         }
+        fun insidePolygon(vertices:List<Offset>):Boolean {
+            if(vertices.size<3)return false
+            var inside=false
+            var previous=vertices.last()
+            for(next in vertices) {
+                if((next.y>point.y)!=(previous.y>point.y) && point.x<(previous.x-next.x)*(point.y-next.y)/(previous.y-next.y)+next.x)inside=!inside
+                previous=next
+            }
+            return inside
+        }
         return when(d.tool) {
             DrawingTool.HORIZONTAL_LINE -> abs(point.y-a.y)
             DrawingTool.HORIZONTAL_RAY -> segment(a,Offset(t.chartWidth,a.y))
@@ -29,17 +39,24 @@ object DrawingHitTest {
                     else ps.minOf { segment(Offset(a.x,it.y),Offset(right,it.y)) }
                 }
             }
-            DrawingTool.RECTANGLE -> if(point.x in min(a.x,b.x)..max(a.x,b.x) && point.y in min(a.y,b.y)..max(a.y,b.y))0f else listOf(a,Offset(b.x,a.y),b,Offset(a.x,b.y),a).zipWithNext().minOf{segment(it.first,it.second)}
+            DrawingTool.RECTANGLE,DrawingTool.PRICE_RANGE,DrawingTool.DATE_RANGE,DrawingTool.DATE_PRICE_RANGE -> if(point.x in min(a.x,b.x)..max(a.x,b.x) && point.y in min(a.y,b.y)..max(a.y,b.y))0f else listOf(a,Offset(b.x,a.y),b,Offset(a.x,b.y),a).zipWithNext().minOf{segment(it.first,it.second)}
             DrawingTool.CIRCLE, DrawingTool.ELLIPSE -> {
                 val center=(a+b)/2f;val radiusX=abs(b.x-a.x)/2f;val radiusY=abs(b.y-a.y)/2f
-                if(d.tool==DrawingTool.CIRCLE) abs((point-center).getDistance()-min(radiusX,radiusY))
-                else if(radiusX<1f||radiusY<1f)segment(a,b) else abs(sqrt(((point.x-center.x)/radiusX).pow(2)+((point.y-center.y)/radiusY).pow(2))-1f)*min(radiusX,radiusY)
+                if(d.tool==DrawingTool.CIRCLE) {
+                    val distance=(point-center).getDistance();val radius=min(radiusX,radiusY)
+                    if(d.fillOpacity>0f && distance<=radius)0f else abs(distance-radius)
+                } else if(radiusX<1f||radiusY<1f)segment(a,b) else {
+                    val radius=sqrt(((point.x-center.x)/radiusX).pow(2)+((point.y-center.y)/radiusY).pow(2))
+                    if(d.fillOpacity>0f && radius<=1f)0f else abs(radius-1f)*min(radiusX,radiusY)
+                }
             }
             else -> {
                 val anchors=d.anchors.mapNotNull { p -> t.timeToX(p.time)?.let{Offset(it,t.priceToY(p.price))} }
                 val closed=d.tool in setOf(DrawingTool.TRIANGLE,DrawingTool.ROTATED_RECTANGLE)
-                val points=if(closed && anchors.size>2)anchors+anchors.first() else anchors
-                if(points.size>1)points.zipWithNext().minOf{segment(it.first,it.second)}
+                val vertices=if(d.tool==DrawingTool.ROTATED_RECTANGLE && anchors.size>=3)listOf(anchors[0],anchors[1],anchors[2],anchors[0]+anchors[2]-anchors[1]) else anchors
+                val points=if(closed && vertices.size>2)vertices+vertices.first() else vertices
+                if(closed && d.fillOpacity>0f && insidePolygon(vertices))0f
+                else if(points.size>1)points.zipWithNext().minOf{segment(it.first,it.second)}
                 else if(d.tool.isSinglePoint) (point-a).getDistance() else segment(a,b)
             }
         }
