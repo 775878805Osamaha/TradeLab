@@ -351,6 +351,9 @@ class ChartReferenceInteractionTest {
                 click(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f))
             }
             compose.onNodeWithTag("drawing_selection_toolbar").assertIsDisplayed()
+            val propertiesBounds=compose.onNodeWithTag("drawing_edit_properties").fetchSemanticsNode().boundsInRoot
+            val replayBounds=compose.onNodeWithTag("chart_embedded_replay_controls").fetchSemanticsNode().boundsInRoot
+            org.junit.Assert.assertTrue("Drawing properties must remain below Replay controls",propertiesBounds.top>=replayBounds.bottom)
             captureProviderScreen("drawing-edit-selected")
             compose.onNodeWithTag("candlestick_canvas").performTouchInput {
                 swipe(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f),androidx.compose.ui.geometry.Offset(width*.60f,height*.40f),600)

@@ -6,6 +6,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -128,6 +130,8 @@ fun ChartScreen(
     var drawingFavoritesVisible by remember { mutableStateOf(drawingPrefs.getBoolean("show_favorites", false)) }
     fun stampDrawing(d:ChartDrawing)=if(isEmbeddedReplay)d.copy(replayCreatedAt=replayState.visibleCandles.lastOrNull()?.openTime) else d
     var selectedDrawingId by remember(uiState.selectedSymbol,uiState.selectedTimeframe,isEmbeddedReplay) { mutableStateOf<Long?>(null) }
+    var chartContentTopPx by remember { mutableFloatStateOf(0f) }
+    var replayPanelBottomPx by remember { mutableFloatStateOf(0f) }
     var editingDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
     editingDrawing?.let { drawing ->
         DrawingPropertiesDialog(drawing, onDismiss = { editingDrawing = null }, onDelete = { viewModel.deleteDrawing(drawing.id); editingDrawing = null },
@@ -947,6 +951,7 @@ fun ChartScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .onGloballyPositioned { chartContentTopPx=it.boundsInRoot().top }
                     .onSizeChanged {
                         chartPaletteContainerHeightPx = it.height
                         chartPaletteContainerWidthPx = it.width
@@ -1015,7 +1020,7 @@ fun ChartScreen(
                         onUpdate={change->viewModel.patchDrawing(selected.id) { current->stampDrawing(change(current)) }},
                         onDelete={viewModel.deleteDrawing(selected.id);selectedDrawingId=null},
                         onDismiss={selectedDrawingId=null},
-                        modifier=Modifier.align(Alignment.TopCenter).absolutePadding(left=54.dp,right=4.dp,top=if(isEmbeddedReplay)176.dp else 136.dp))
+                        modifier=Modifier.align(Alignment.TopCenter).absolutePadding(left=54.dp,right=4.dp,top=if(isEmbeddedReplay && immersiveChart && replayPanelBottomPx>chartContentTopPx) with(paletteDensity){(replayPanelBottomPx-chartContentTopPx).toDp()}+4.dp else 136.dp))
                 }
 
                 if (uiState.activeDrawingTool != DrawingTool.NONE) {
@@ -1152,7 +1157,8 @@ fun ChartScreen(
                             .clip(RoundedCornerShape(18.dp))
                             .background(TradingCard.copy(alpha = 0.90f))
                             .padding(horizontal = 5.dp, vertical = 3.dp)
-                            .testTag("chart_embedded_replay_controls"),
+                            .testTag("chart_embedded_replay_controls")
+                            .onGloballyPositioned { replayPanelBottomPx=it.boundsInRoot().bottom },
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Row(
