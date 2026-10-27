@@ -71,9 +71,11 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
                 selected?.takeIf { it in visible.indices }?.let{i->drawLine(V3Muted,Offset(x(i),0f),Offset(x(i),plotH),.7.dp.toPx());drawCircle(V3Profit,3.dp.toPx(),Offset(x(i),y(vals[i])))}
             }
             val maxBar=days.maxOfOrNull{abs(it.pnl)}?.coerceAtLeast(.01)?:1.0
-            val barWidth=plotW/(days.size.coerceAtLeast(1))
-            days.forEachIndexed { i,day->val h=(abs(day.pnl)/maxBar*barsH*.9).toFloat();drawRect(if(day.pnl>=0)V3Profit else V3Loss,Offset(i*barWidth,plotH+barsH-h),androidx.compose.ui.geometry.Size((barWidth*.65f).coerceAtLeast(1f),h))}
+            val slot=plotW/(days.size.coerceAtLeast(1))
+            val barWidth=minOf(8.dp.toPx(),slot*.65f)
+            days.forEachIndexed { i,day->val h=(abs(day.pnl)/maxBar*barsH*.9).toFloat();drawRect(if(day.pnl>=0)V3Profit else V3Loss,Offset((i+.5f)*slot-barWidth/2,plotH+barsH-h),androidx.compose.ui.geometry.Size(barWidth.coerceAtLeast(1f),h))}
         }
+        Text("صافي يومي $",color=V3Muted,fontSize=6.sp,modifier=Modifier.align(Alignment.BottomEnd).padding(bottom=16.dp))
         if(selectedPoint!=null) Text("${date.format(Date(selectedPoint.timestamp))} · ${v3Money(value(selectedPoint))}",color=V3Text,fontSize=9.sp,modifier=Modifier.align(Alignment.TopStart))
         if(!expanded) IconButton(onClick=onExpand,modifier=Modifier.align(Alignment.BottomStart).padding(bottom=26.dp).size(22.dp).testTag("results_chart_expand")) { Icon(Icons.Default.Fullscreen,"تكبير المنحنى",tint=V3Muted,modifier=Modifier.size(16.dp)) }
     }

@@ -56,25 +56,26 @@ fun ResultsScreen(viewModel:ResultsViewModel,onNavigateToHistory:()->Unit,onNavi
         state.dailySummaries,a.curve,{viewModel.setExportDialogOpen(false)})
     if(custom) CustomDates(state.customStart,state.customEnd,{start,end->viewModel.setCustomRange(start,end);custom=false},{custom=false})
     if(expanded && a!=null) Dialog(onDismissRequest={expanded=false}) { Frame(Modifier.fillMaxWidth()){TextButton(onClick={expanded=false}){Text("إغلاق")};ResultsV3Chart(a.curve,a.days,mode,true)} }
+    CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(lineHeight=TextUnit.Unspecified,letterSpacing=0.sp)) {
     Column(modifier.fillMaxSize().background(V3Bg).testTag("results_screen")) {
-        Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().heightIn(min=51.dp).padding(horizontal=12.dp).testTag("results_header"),verticalAlignment=Alignment.CenterVertically) {
             Text("النتائج",color=V3Text,fontSize=18.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
             Text("حساب التدريب",color=V3Blue,fontSize=13.sp,modifier=Modifier.semantics { contentDescription="حساب التدريب · ${state.openPositionsCount} مفتوحة · ${state.trades.size} مغلقة" }.testTag("results_positions_summary"))
             IconButton(onClick={viewModel.setExportDialogOpen(true)},enabled=a!=null,modifier=Modifier.size(32.dp).testTag("export_results_btn")){Icon(Icons.Default.FileDownload,"تصدير النتائج",tint=V3Blue,modifier=Modifier.size(20.dp))}
             Box(Modifier.size(48.dp),contentAlignment=Alignment.Center){Image(painterResource(R.drawable.tradelab_reference_mark),"هوية التطبيق",Modifier.size(42.dp));Box(Modifier.align(Alignment.BottomStart).size(7.dp).clip(RoundedCornerShape(50)).background(if(a!=null)V3Profit else V3Muted))}
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp).border(.7.dp,V3Border,RoundedCornerShape(5.dp)).horizontalScroll(rememberScrollState())) {
+        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp).border(.7.dp,V3Border,RoundedCornerShape(5.dp)).testTag("results_tabs").horizontalScroll(rememberScrollState())) {
             tabs.forEach { tab->val active=state.selectedTab==tab
                 Column(Modifier.width(76.dp).border(if(active).7.dp else 0.dp,if(active)V3Blue else Color.Transparent,RoundedCornerShape(4.dp)).background(if(active)V3Blue.copy(alpha=.16f) else Color.Transparent).clickable{viewModel.setSelectedTab(tab)}.testTag("results_tab_${tab.name}")) {
-                    Text(tab.displayNameAr,color=if(active)V3Blue else V3Muted,fontSize=9.sp,maxLines=1,modifier=Modifier.padding(horizontal=8.dp,vertical=9.dp))
+                    Text(tab.displayNameAr,color=if(active)V3Blue else V3Muted,fontSize=9.sp,lineHeight=14.sp,maxLines=1,modifier=Modifier.padding(horizontal=8.dp,vertical=9.dp))
                     Box(Modifier.fillMaxWidth().height(1.dp).background(if(active)V3Blue else Color.Transparent))
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().heightIn(min=40.dp).padding(horizontal=10.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().heightIn(min=40.dp).padding(horizontal=10.dp,vertical=11.dp).testTag("results_filters"),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             LazyRow(Modifier.weight(1f).testTag("results_periods"),horizontalArrangement=Arrangement.spacedBy(4.dp)) {items(ResultsPeriod.values().toList()){period->
                 val active=state.selectedPeriod==period
-                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(if(active)V3Blue else V3Card).border(.7.dp,if(active)V3Blue else V3Border,RoundedCornerShape(4.dp)).clickable{if(period==ResultsPeriod.CUSTOM)custom=true else viewModel.setSelectedPeriod(period)}.padding(horizontal=7.dp,vertical=7.dp).testTag("results_period_${period.name}")){Text(period.titleAr,color=if(active)Color.White else V3Muted,fontSize=8.sp,maxLines=1)}
+                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(if(active)V3Blue else V3Card).border(.7.dp,if(active)V3Blue else V3Border,RoundedCornerShape(4.dp)).clickable{if(period==ResultsPeriod.CUSTOM)custom=true else viewModel.setSelectedPeriod(period)}.padding(horizontal=7.dp,vertical=7.dp).testTag("results_period_${period.name}")){Text(period.titleAr,color=if(active)Color.White else V3Muted,fontSize=8.sp,lineHeight=11.sp,maxLines=1)}
             }}
             val format=remember{SimpleDateFormat("yyyy/MM/dd",Locale.US)}
             Row(Modifier.border(.7.dp,V3Border,RoundedCornerShape(4.dp)).clickable{custom=true}.padding(6.dp).testTag("results_custom_dates"),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
@@ -118,17 +119,17 @@ fun ResultsScreen(viewModel:ResultsViewModel,onNavigateToHistory:()->Unit,onNavi
             ResultsTab.COMPARISON->Unit
         }
     }
+    }
 }
 
 @Composable private fun Hero(a:TrainingAnalytics,onExpand:()->Unit) {
     var info by remember { mutableStateOf(false) }
     if(info) AlertDialog(onDismissRequest={info=false},title={Text("الحساب والأداء")},text={Text("الرصيد: ${v3Money(a.closing)}\nEquity: ${v3Money(a.metrics.equity)}\nالربح العائم: ${v3Money(a.floating,true)}\nرأس المال المودع هو رصيد البداية، ولا يُضاف مرتين. الربح المحقق بعد العمولات والتبييت، والسبريد مضمن في أسعار التنفيذ. الأعمدة تمثل صافي نتائج أيام التدريب.")},confirmButton={TextButton(onClick={info=false}){Text("إغلاق")}})
     Frame(Modifier.fillMaxWidth().testTag("results_hero_card")) {Column(Modifier.padding(8.dp)){
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.Top) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr){Row(Modifier.fillMaxWidth().heightIn(min=76.dp),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.Top) {
             Column(Modifier.weight(1.2f)) {Row(verticalAlignment=Alignment.CenterVertically){Text("صافي الربح",color=V3Text,fontSize=12.sp,fontWeight=FontWeight.Bold);Icon(Icons.Default.Info,"تعريفات الحساب",tint=V3Muted,modifier=Modifier.padding(start=5.dp).size(11.dp).clickable{info=true})};Num(v3Money(a.metrics.netProfit,true),24,if(a.metrics.netProfit<0)V3Loss else if(a.metrics.netProfit>0)V3Profit else V3Muted);Num((if(a.metrics.returnPct>0)"+" else "")+pct(a.metrics.returnPct),15,if(a.metrics.netProfit<0)V3Loss else V3Profit)}
             Row(Modifier.weight(2.2f),horizontalArrangement=Arrangement.spacedBy(7.dp)) {listOf("الرصيد النهائي" to a.closing,"الرصيد الابتدائي" to a.opening,"إجمالي الإيداعات" to a.deposits).forEach{(label,value)->Frame(Modifier.weight(1f)){Column(Modifier.padding(horizontal=5.dp,vertical=7.dp),verticalArrangement=Arrangement.spacedBy(4.dp)){Text(label,color=V3Muted,fontSize=8.sp,maxLines=1);Num(v3Money(value),10)}}}}
         }}
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("Equity",fontSize=7.sp,color=V3Muted);Text("الأعمدة: صافي يومي ($)",fontSize=7.sp,color=V3Muted)}
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr){ResultsV3Chart(a.curve,a.days,onExpand=onExpand)}
         if(a.trades.isEmpty())Text("لا توجد صفقات مغلقة في هذه الفترة",color=V3Muted,fontSize=8.sp)
     }}
@@ -152,19 +153,19 @@ fun ResultsScreen(viewModel:ResultsViewModel,onNavigateToHistory:()->Unit,onNavi
         Metric("متوسط مدة الصفقة",if(count>0)"${m.avgDurationMillis/3600000} س ${(m.avgDurationMillis/60000)%60} د" else "—",Icons.Default.Schedule,Color(0xFF8B4DFF),"من الفتح إلى الإغلاق"),
         Metric("نسبة شارب",number(m.sharpeRatio),Icons.Default.ShowChart,V3Blue,"العائد / المخاطرة اليومية")
     )
-    BoxWithConstraints {
+    BoxWithConstraints(Modifier.testTag("results_metrics_grid")) {
         val columns=if(maxWidth>=350.dp && LocalDensity.current.fontScale<1.3f)3 else 2
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr){Column(verticalArrangement=Arrangement.spacedBy(6.dp)){
-            items.chunked(columns).forEach{row->Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {row.forEachIndexed{index,item->
-                Frame(Modifier.weight(1f).heightIn(min=64.dp).testTag("results_metric_${item.title}")){
-                    Row(Modifier.padding(8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)){
+            items.chunked(columns).forEach{row->Row(Modifier.height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(6.dp)) {row.forEachIndexed{index,item->
+                Frame(Modifier.weight(if(columns==3)listOf(1.08f,.97f,.99f)[index] else 1f).fillMaxHeight().heightIn(min=64.dp).testTag("results_metric_${item.title}")){
+                    Row(Modifier.padding(horizontal=8.dp,vertical=6.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)){
                         if(item.title=="معدل النجاح") Box(Modifier.size(45.dp).clickable{showWinDetails=true}.semantics { contentDescription="${item.value}، ${item.note}" },contentAlignment=Alignment.Center){
                             Canvas(Modifier.fillMaxSize()){drawArc(V3Border,0f,360f,false,style=androidx.compose.ui.graphics.drawscope.Stroke(6.dp.toPx()));if(count>0)drawArc(V3Profit,-90f,(m.winRatePct*3.6).toFloat(),false,style=androidx.compose.ui.graphics.drawscope.Stroke(6.dp.toPx(),cap=androidx.compose.ui.graphics.StrokeCap.Round))};Num(item.value,9)
                         } else Box(Modifier.size(26.dp).clip(RoundedCornerShape(6.dp)).background(item.color.copy(alpha=.12f)),contentAlignment=Alignment.Center){Icon(item.icon,null,tint=item.color,modifier=Modifier.size(18.dp))}
-                        Column(Modifier.weight(1f),horizontalAlignment=Alignment.End,verticalArrangement=Arrangement.spacedBy(3.dp)){
-                            Text(item.title,color=V3Muted,fontSize=9.sp,maxLines=2,textAlign=TextAlign.End)
-                            if(item.title!="معدل النجاح")Num(item.value,if(item.title=="متوسط مدة الصفقة")12 else 16,if(item.color==V3Loss)V3Loss else V3Text)
-                            Text(item.note,color=V3Muted,fontSize=7.sp,maxLines=2,textAlign=TextAlign.End)
+                        Column(Modifier.weight(1f),horizontalAlignment=Alignment.End,verticalArrangement=Arrangement.spacedBy(2.dp)){
+                            Text(item.title,color=V3Muted,fontSize=9.sp,lineHeight=11.sp,maxLines=2,textAlign=TextAlign.End,style=TextStyle(textDirection=TextDirection.Rtl))
+                            if(item.title!="معدل النجاح")Num(item.value,if(item.title=="متوسط مدة الصفقة")12 else 16,if(item.color==V3Loss)V3Loss else V3Text,Modifier.align(Alignment.Start))
+                            Text(item.note,color=V3Muted,fontSize=7.sp,lineHeight=8.sp,maxLines=2,textAlign=TextAlign.End,style=TextStyle(textDirection=TextDirection.Rtl))
                         }
                     }
                 }
@@ -175,7 +176,7 @@ fun ResultsScreen(viewModel:ResultsViewModel,onNavigateToHistory:()->Unit,onNavi
 
 @Composable private fun RecentTable(a:TrainingAnalytics,vm:ResultsViewModel,all:Boolean) {
     Frame(Modifier.fillMaxWidth().testTag("results_recent_trades")) {
-        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically){Text("أحدث الصفقات",fontSize=12.sp,color=V3Text,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Text("عرض الكل  ‹",color=V3Blue,fontSize=10.sp,modifier=Modifier.clickable{vm.setSelectedTab(ResultsTab.JOURNAL)}.testTag("results_show_all"))}
+        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically){Text("أحدث الصفقات",fontSize=12.sp,lineHeight=16.sp,color=V3Text,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Text("عرض الكل  ‹",color=V3Blue,fontSize=10.sp,modifier=Modifier.clickable{vm.setSelectedTab(ResultsTab.JOURNAL)}.testTag("results_show_all"))}
         TradeHeaders()
         a.trades.indices.reversed().take(5).forEach{i->TradeRow(a.trades[i],a.recordedAt[i]){vm.selectTradeForDetail(a.trades[i])}}
         if(a.trades.isEmpty())EmptyActivity()
@@ -185,7 +186,7 @@ fun ResultsScreen(viewModel:ResultsViewModel,onNavigateToHistory:()->Unit,onNavi
 @Composable private fun TradeCells(values:List<String>,header:Boolean=false,colors:Map<Int,Color> = emptyMap()) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr){Row(Modifier.fillMaxWidth().background(if(header)V3Border.copy(alpha=.2f) else Color.Transparent).padding(horizontal=5.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically){
         val weights=listOf(.9f,.8f,.8f,.5f,.55f,.8f,1.35f)
-        values.forEachIndexed{i,v->Text(v,color=colors[i]?:if(header)V3Muted else V3Text,fontSize=if(header)7.sp else 8.sp,fontWeight=if(i==0&&!header)FontWeight.Bold else FontWeight.Normal,modifier=Modifier.weight(weights[i]),textAlign=TextAlign.Center,maxLines=1,style=TextStyle(textDirection=if(i==4)TextDirection.Rtl else TextDirection.Ltr))}
+        values.forEachIndexed{i,v->Text(v,color=colors[i]?:if(header)V3Muted else V3Text,fontSize=if(header)7.sp else 8.sp,fontWeight=if(i==0&&!header)FontWeight.Bold else FontWeight.Normal,modifier=Modifier.weight(weights[i]),textAlign=TextAlign.Center,maxLines=1,style=TextStyle(textDirection=if(i==4)TextDirection.Rtl else TextDirection.Ltr,lineHeight=if(header)12.sp else 13.sp))}
         Icon(Icons.Default.MoreVert,null,tint=if(header)Color.Transparent else V3Muted,modifier=Modifier.size(10.dp))
     }}
 }
@@ -204,7 +205,7 @@ fun ResultsScreen(viewModel:ResultsViewModel,onNavigateToHistory:()->Unit,onNavi
 @Composable private fun CustomDates(initialStart:Long?,initialEnd:Long?,onApply:(Long,Long)->Unit,onDismiss:()->Unit) {
     var start by remember{mutableStateOf(initialStart?:System.currentTimeMillis())}
     var stage by remember{mutableIntStateOf(0)}
-    key(stage){val picker=rememberDatePickerState(initialSelectedDateMillis=if(stage==0)start else initialEnd?:System.currentTimeMillis())
+    key(stage){val picker=rememberDatePickerState(initialSelectedDateMillis=if(stage==0)start else initialEnd?:System.currentTimeMillis(),selectableDates=object:SelectableDates{override fun isSelectableDate(utcTimeMillis:Long)=utcTimeMillis<=System.currentTimeMillis()})
         DatePickerDialog(onDismissRequest=onDismiss,confirmButton={TextButton(onClick={val chosen=picker.selectedDateMillis?:return@TextButton;if(stage==0){start=chosen;stage=1}else onApply(start,chosen)},enabled=picker.selectedDateMillis!=null&&(stage==0||picker.selectedDateMillis!!>=start)){Text(if(stage==0)"اختيار تاريخ النهاية" else "تطبيق")}},dismissButton={TextButton(onClick=onDismiss){Text("إلغاء")}}){Text(if(stage==0)"تاريخ بداية التسجيل" else "تاريخ نهاية التسجيل",modifier=Modifier.padding(16.dp));DatePicker(picker)}
     }
 }

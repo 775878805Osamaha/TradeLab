@@ -224,6 +224,12 @@ class ChartReferenceInteractionTest {
         try {
             compose.waitUntil(10000) { compose.onAllNodesWithTag("results_hero_card").fetchSemanticsNodes().isNotEmpty() }
             captureProviderScreen("results-v3-overview")
+            val geometry=org.json.JSONObject()
+            listOf("results_header","results_tabs","results_filters","results_hero_card","results_metrics_grid","results_recent_trades").forEach { tag ->
+                val bounds=compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+                geometry.put(tag,org.json.JSONArray(listOf(bounds.left,bounds.top,bounds.right,bounds.bottom)))
+            }
+            shell("printf '%s' '${geometry}' > /sdcard/Download/results-v3-layout.json")
             compose.onNodeWithTag("results_periods").performScrollToNode(hasTestTag("results_period_WEEK"))
             compose.onNodeWithTag("results_period_WEEK").performClick()
             compose.waitUntil(10000) { compose.onAllNodesWithTag("results_trade_5").fetchSemanticsNodes().isNotEmpty() }
@@ -321,8 +327,11 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithContentDescription("أدوات الرسم").performClick()
             compose.onNodeWithTag("drawing_favorites_switch").performClick()
             compose.onNodeWithTag("drawing_catalog_search").performTextInput("مثلث")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.waitForIdle()
             compose.onNodeWithTag("drawing_catalog_grid").performScrollToNode(hasTestTag("drawing_tool_TRIANGLE"))
-            compose.onNodeWithTag("drawing_tool_TRIANGLE").performClick()
+            compose.onNodeWithTag("drawing_tool_TRIANGLE").assertIsDisplayed().performClick()
+            compose.waitUntil(10000) { compose.onAllNodesWithTag("drawing_catalog_sheet").fetchSemanticsNodes().isEmpty() }
             compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("candlestick_canvas").performTouchInput {
                 click(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f))

@@ -64,8 +64,11 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
             value
         } catch(error:Exception){android.util.Log.e("TrainingSession","Checkpoint unavailable",error);null}
     }
-    private fun decode(bytes:ByteArray):TrainingSessionSnapshot =
-        ObjectInputStream(ByteArrayInputStream(bytes)).use { it.readObject() as TrainingSessionSnapshot }
+    private fun decode(bytes:ByteArray):TrainingSessionSnapshot {
+        val raw=ByteArrayInputStream(bytes)
+        val input=if(bytes.size>2 && bytes[0]==0x1f.toByte() && bytes[1]==0x8b.toByte())java.util.zip.GZIPInputStream(raw) else raw
+        return ObjectInputStream(input).use { it.readObject() as TrainingSessionSnapshot }
+    }
 
     private fun commitRoom(snapshot:TrainingSessionSnapshot) {
         val dao=database!!.trainingDao()
@@ -77,7 +80,10 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
             com.example.data.local.entity.TrainingExecutionEntity(ordinal=index,symbol=t.symbol,marketCloseTime=t.closeTime,recordedAt=at,
                 netAmount=java.math.BigDecimal.valueOf(t.netProfitLoss).toPlainString(),commissionAmount=java.math.BigDecimal.valueOf(t.commission).toPlainString(),volume=java.math.BigDecimal.valueOf(t.volume).toPlainString())
         }
-        val bytes=ByteArrayOutputStream().also { buffer -> ObjectOutputStream(buffer).use { it.writeObject(snapshot) } }.toByteArray()
+        val bytes=ByteArrayOutputStream().also { buffer ->
+            val compressed=object:java.util.zip.GZIPOutputStream(buffer){init{def.setLevel(java.util.zip.Deflater.BEST_SPEED)}}
+            ObjectOutputStream(compressed).use { it.writeObject(snapshot) }
+        }.toByteArray()
         val initial=java.math.BigDecimal.valueOf(snapshot.state.initialBalance).toPlainString()
         val funding=previous?.checkpoint?.takeIf { it.initialAmount==initial }?.fundedAt ?: now
         dao.replace(com.example.data.local.entity.TrainingCheckpointEntity(payload=bytes,initialAmount=initial,

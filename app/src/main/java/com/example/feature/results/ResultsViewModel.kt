@@ -58,7 +58,7 @@ class ResultsViewModel(
         }
     }.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),ResultsUiState(isLoading=true))
 
-    fun setCustomRange(start:Long,end:Long) { if(start<=end)_uiState.update { it.copy(selectedPeriod=ResultsPeriod.CUSTOM,customStart=start,customEnd=end) } }
+    fun setCustomRange(start:Long,end:Long) { if(start<=end && start<=System.currentTimeMillis())_uiState.update { it.copy(selectedPeriod=ResultsPeriod.CUSTOM,customStart=start,customEnd=end) } }
 
     fun setSelectedPeriod(period: ResultsPeriod) {
         _uiState.update { it.copy(selectedPeriod = period) }

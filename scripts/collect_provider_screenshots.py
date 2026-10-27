@@ -9,3 +9,7 @@ for name in names:
     result = subprocess.run(['adb', 'pull', f'/sdcard/Download/{name}.png', f'screenshots/{name}.png'])
     if result.returncode and "--allow-missing" not in sys.argv:
         raise SystemExit(result.returncode)
+
+result = subprocess.run(['adb', 'pull', '/sdcard/Download/results-v3-layout.json', 'screenshots/results-v3-layout.json'])
+if result.returncode and "--allow-missing" not in sys.argv:
+    raise SystemExit(result.returncode)
