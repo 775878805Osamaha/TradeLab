@@ -236,6 +236,20 @@ class ChartReferenceInteractionTest {
             shell("wm size 691x1536")
             shell("wm density 276")
             compose.waitUntil(30000) { compose.onAllNodesWithTag("chart_bottom_strip").fetchSemanticsNodes().isNotEmpty() }
+            // A previous activity can restore the GBPUSD training dataset. Establish
+            // the exact dataset whose Room drawings this test asserts below.
+            compose.onNodeWithTag("chart_bottom_symbol").performClick()
+            compose.onNodeWithTag("chart_symbol_search").performTextInput("XAUUSD")
+            compose.onNodeWithTag("chart_symbol_option_XAUUSD").performClick()
+            compose.onNodeWithTag("chart_bottom_timeframe").performClick()
+            compose.onNodeWithText("15m").performClick()
+            compose.waitUntil(90000) {
+                compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithTag("chart_replay_buy").fetchSemanticsNodes().firstOrNull()
+                    ?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null
+            }
+            compose.onNodeWithTag("chart_bottom_symbol").assertTextContains("XAUUSD", substring=true)
+            compose.onNodeWithTag("chart_bottom_timeframe").assertTextContains("15 دق", substring=true)
             compose.onNodeWithContentDescription("أدوات الرسم").performClick()
             compose.onNodeWithTag("drawing_catalog_sheet").assertExists()
             compose.onNodeWithTag("drawing_sheet_handle", useUnmergedTree = true).performTouchInput {
