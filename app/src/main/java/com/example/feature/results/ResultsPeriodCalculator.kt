@@ -20,6 +20,15 @@ data class ResultsPeriodSnapshot(
 
 /** The selected period has its own opening balance, not the account's original deposit. */
 object ResultsPeriodCalculator {
+    /** Shared by the visible overview and export, including intratrade equity risk. */
+    fun forDisplay(state: ResultsUiState, now: Long): ResultsPeriodSnapshot {
+        val closed = calculate(state.initialBalance, state.trades, state.selectedPeriod, now)
+        return if (state.selectedPeriod == ResultsPeriod.ALL && state.metrics != null) {
+            closed.copy(closingBalance = state.currentBalance, metrics = state.metrics,
+                curve = state.equityPoints)
+        } else closed
+    }
+
     fun cutoff(period: ResultsPeriod, now: Long): Long? {
         if (period == ResultsPeriod.ALL) return null
         val calendar = Calendar.getInstance().apply {

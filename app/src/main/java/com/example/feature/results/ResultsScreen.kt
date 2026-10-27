@@ -50,12 +50,9 @@ fun ResultsScreen(
     if (uiState.isExportDialogOpen && metrics != null) {
         // Export exactly the period shown on the overview; other tabs retain
         // their existing full-account export behavior.
-        val periodReport = remember(uiState.trades, uiState.initialBalance, uiState.selectedPeriod, uiState.selectedTab) {
+        val periodReport = remember(uiState.trades, uiState.initialBalance, uiState.currentBalance, uiState.metrics, uiState.equityPoints, uiState.selectedPeriod, uiState.selectedTab) {
             if (uiState.selectedTab == ResultsTab.OVERVIEW) {
-                ResultsPeriodCalculator.calculate(
-                    uiState.initialBalance, uiState.trades,
-                    uiState.selectedPeriod, System.currentTimeMillis()
-                )
+                ResultsPeriodCalculator.forDisplay(uiState, System.currentTimeMillis())
             } else null
         }
         val exportedTrades = periodReport?.trades ?: uiState.trades
@@ -215,7 +212,7 @@ private fun ResultsOverviewContent(
     val period = uiState.selectedPeriod
     val now = remember { System.currentTimeMillis() }
     val snapshot = remember(uiState.trades, uiState.initialBalance,uiState.metrics,uiState.equityPoints, period, now) {
-        ResultsPeriodCalculator.calculate(uiState.initialBalance, uiState.trades, period, now).let { if(period==ResultsPeriod.ALL && uiState.metrics!=null) it.copy(metrics=uiState.metrics,curve=uiState.equityPoints) else it }
+        ResultsPeriodCalculator.forDisplay(uiState, now)
     }
     val metrics = snapshot.metrics
     val trades = snapshot.trades

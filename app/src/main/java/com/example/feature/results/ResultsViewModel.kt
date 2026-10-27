@@ -47,7 +47,7 @@ class ResultsViewModel(
         if (report == null) base.copy(isReplayReport=true,isLoading=false) else base.copy(
             isReplayReport=true,openPositionsCount=report.positions.size,openPositions=report.positions,
             initialBalance=report.account.initialBalance,currentBalance=report.account.balance,
-            metrics=StatisticsCalculator.calculate(report.account.initialBalance,report.trades,report.account.equity).copy(maxDrawdown=report.maxDrawdown,maxDrawdownPct=report.maxDrawdownPercent),
+            metrics=StatisticsCalculator.calculate(report.account.initialBalance,report.trades,report.account.equity).copy(maxDrawdown=report.maxDrawdown,maxDrawdownPct=report.maxDrawdownPercent, recoveryFactor=if(report.maxDrawdown>0) report.trades.sumOf{it.netProfitLoss}/report.maxDrawdown else null),
             equityPoints=report.curve.ifEmpty { StatisticsCalculator.buildEquityCurve(report.account.initialBalance,report.trades) },
             trades=report.trades,dailySummaries=StatisticsCalculator.calculateDailySummaries(report.trades),isLoading=false)
     }.stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),ResultsUiState(isLoading=true))

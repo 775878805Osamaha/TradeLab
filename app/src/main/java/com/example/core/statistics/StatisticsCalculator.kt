@@ -132,13 +132,8 @@ object StatisticsCalculator {
         val avgWin = if (winningTrades > 0) grossProfit / winningTrades else null
         val avgLoss = if (losingTrades > 0) grossLoss / losingTrades else null
 
-        // Expectancy = (Win% * AvgWin) - (Loss% * AvgLoss)
-        val expectancy = if (totalTrades > 0 && avgWin != null) {
-            val winProb = winningTrades.toDouble() / totalTrades
-            val lossProb = losingTrades.toDouble() / totalTrades
-            val lossVal = avgLoss ?: 0.0
-            (winProb * avgWin) - (lossProb * lossVal)
-        } else null
+        // Mean net result per closed trade, including losses and breakeven trades.
+        val expectancy = if (totalTrades > 0) trades.sumOf { it.netProfitLoss } / totalTrades else null
 
         val avgRMultiple = if (rCount > 0) totalRMultiple / rCount else null
         val avgDuration = if (totalTrades > 0) totalDuration / totalTrades else 0L

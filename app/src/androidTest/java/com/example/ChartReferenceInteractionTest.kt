@@ -127,12 +127,11 @@ class ChartReferenceInteractionTest {
     @Test fun replayPositionLineOpensActionsAndPartialCloseKeepsChart() {
         compose.onNodeWithTag("nav_item_account").performClick()
         compose.waitUntil(90000) { compose.onAllNodesWithTag("training_start").fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null && compose.onAllNodesWithTag("training_start").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("training_start_balance").performTextReplacement("100")
+        compose.onNodeWithTag("training_start_balance").performScrollTo().performTextReplacement("100")
         androidx.test.espresso.Espresso.closeSoftKeyboard()
-        compose.onNodeWithTag("training_start").performClick()
+        compose.onNodeWithTag("training_start").performScrollTo().performClick()
 
-        // The production Replay account starts at $50. Use an affordable real
-        // forex order so this interaction test also respects its margin checks.
+        // Use a real forex dataset and respect the funded account margin checks.
         compose.onNodeWithTag("chart_bottom_symbol").performClick()
         compose.onNodeWithTag("chart_symbol_search").performTextInput("GBPUSD")
         compose.onNodeWithTag("chart_symbol_option_GBPUSD").performClick()
@@ -188,6 +187,23 @@ class ChartReferenceInteractionTest {
         compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("تداول ورقي").assertDoesNotExist()
         captureProviderScreen("tradelab-training-restored")
+        compose.onNodeWithTag("nav_item_chart").performClick()
+        for (step in 1..40) {
+            if (compose.onAllNodesWithTag("chart_position_actions").fetchSemanticsNodes().isNotEmpty()) break
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(width * .65f, height * step / 42f))
+            }
+        }
+        compose.onNodeWithTag("position_close").performClick()
+        compose.onNodeWithTag("position_action_confirm").performClick()
+        compose.waitUntil(10000) { app.tradingRepository.replayReport.value?.let { it.positions.isEmpty() && it.trades.size==2 } == true }
+        val finalReport = app.tradingRepository.replayReport.value!!
+        org.junit.Assert.assertEquals(100.0 + finalReport.trades.sumOf { it.netProfitLoss }, finalReport.account.balance, 0.000001)
+        org.junit.Assert.assertEquals(finalReport.account.balance, finalReport.account.equity, 0.000001)
+        org.junit.Assert.assertEquals(0.02, finalReport.trades.sumOf { it.volume }, 0.000001)
+        compose.onNodeWithTag("nav_item_results").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب · 0 مفتوحة · 2 مغلقة").fetchSemanticsNodes().isNotEmpty() }
+        captureProviderScreen("tradelab-training-completed")
     }
 
     @Test fun marketTerminalSearchAndOpenChart() {
