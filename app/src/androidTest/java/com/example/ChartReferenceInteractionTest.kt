@@ -283,6 +283,7 @@ class ChartReferenceInteractionTest {
                 click(androidx.compose.ui.geometry.Offset(width*.75f,height*.55f))
                 click(androidx.compose.ui.geometry.Offset(width*.6f,height*.7f))
             }
+            captureProviderScreen("drawing-catalog-triangle")
             compose.waitUntil(10000) {
                 kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().any { it.type == "TRIANGLE" } }
             }
