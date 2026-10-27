@@ -27,6 +27,11 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
     var zoom by remember { mutableFloatStateOf(1f) }
     var selected by remember(points,mode){mutableStateOf<Int?>(null)}
     val visible=remember(points,zoom){points.takeLast((points.size/zoom).toInt().coerceAtLeast(2))}
+    val plottedDays=remember(days,visible) {
+        val from=visible.firstOrNull()?.timestamp?.let(TrainingAnalyticsCalculator::dayStart)
+        val until=visible.lastOrNull()?.timestamp?.let(TrainingAnalyticsCalculator::dayStart)
+        days.filter { from!=null && until!=null && it.time in from..until }
+    }
     val span=(points.lastOrNull()?.timestamp?:0L)-(points.firstOrNull()?.timestamp?:0L)
     val date=remember(span){SimpleDateFormat(if(span<3_600_000L)"HH:mm:ss" else if(span<172_800_000L)"HH:mm" else "MMM dd",Locale.US)}
     fun value(p:EquityPoint)=when(mode){"Balance"->p.balance;"التراجع"->-p.drawdown;"الربح التراكمي"->p.balance-(points.firstOrNull()?.balance?:p.balance);else->p.equity}
@@ -71,10 +76,10 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
                     drawContext.canvas.nativeCanvas.drawText(text,(plotW*i/4-textW/2).coerceIn(0f,(plotW-textW).coerceAtLeast(0f)),size.height-1.dp.toPx(),paint)}
                 selected?.takeIf { it in visible.indices }?.let{i->drawLine(V3Muted,Offset(x(i),0f),Offset(x(i),plotH),.7.dp.toPx());drawCircle(V3Profit,3.dp.toPx(),Offset(x(i),y(vals[i])))}
             }
-            val maxBar=days.maxOfOrNull{abs(it.pnl)}?.coerceAtLeast(.01)?:1.0
-            val slot=plotW/(days.size.coerceAtLeast(1))
+            val maxBar=plottedDays.maxOfOrNull{abs(it.pnl)}?.coerceAtLeast(.01)?:1.0
+            val slot=plotW/(plottedDays.size.coerceAtLeast(1))
             val barWidth=minOf(8.dp.toPx(),slot*.65f)
-            days.forEachIndexed { i,day->val h=(abs(day.pnl)/maxBar*barsH*.9).toFloat();drawRect(if(day.pnl>=0)V3Profit else V3Loss,Offset((i+.5f)*slot-barWidth/2,plotH+barsH-h),androidx.compose.ui.geometry.Size(barWidth.coerceAtLeast(1f),h))}
+            plottedDays.forEachIndexed { i,day->val h=(abs(day.pnl)/maxBar*barsH*.9).toFloat();drawRect(if(day.pnl>=0)V3Profit else V3Loss,Offset((i+.5f)*slot-barWidth/2,plotH+barsH-h),androidx.compose.ui.geometry.Size(barWidth.coerceAtLeast(1f),h))}
         }
         if(selectedPoint==null) Text(mode,color=V3Muted,fontSize=7.sp,modifier=Modifier.align(Alignment.TopStart))
         Text("صافي يومي $",color=V3Muted,fontSize=6.sp,modifier=Modifier.align(Alignment.BottomEnd).padding(bottom=16.dp))
