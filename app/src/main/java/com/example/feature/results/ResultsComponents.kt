@@ -53,10 +53,9 @@ fun TradeDetailDialog(
             colors = CardDefaults.cardColors(containerColor = TradingCard),
             border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
         ) {
+            Column(Modifier.padding(20.dp)) {
             Column(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState()),
+                modifier = Modifier.weight(1f,fill=false).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
@@ -130,8 +129,8 @@ fun TradeDetailDialog(
                 DetailRow("وقت الإغلاق", sdf.format(Date(trade.closeTime)))
                 DetailRow("مدة الصفقة", "${trade.durationMillis / 1000} ثانية (${trade.durationMillis / 60000} دقيقة)")
 
-                Spacer(modifier = Modifier.height(6.dp))
-
+            }
+                Spacer(modifier = Modifier.height(10.dp))
                 Button(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
