@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDirection
@@ -133,7 +134,7 @@ fun TradeDetailDialog(
                 Spacer(modifier = Modifier.height(10.dp))
                 Button(
                     onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("trade_detail_close"),
                     colors = ButtonDefaults.buttonColors(containerColor = TradingElevated)
                 ) {
                     Text("إغلاق", color = TradingTextPrimary)

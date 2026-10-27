@@ -248,8 +248,10 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithTag("results_tab_JOURNAL").performClick()
             compose.onNodeWithTag("results_trade_5").performClick()
             compose.onNodeWithText("تفاصيل الصفقة #5").assertExists()
+            val closeBounds=compose.onNodeWithTag("trade_detail_close").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            org.junit.Assert.assertTrue("Close action must remain fully visible below scrolling attributes",closeBounds.height>=40*compose.activity.resources.displayMetrics.density)
             captureProviderScreen("results-v3-trade-detail")
-            compose.onNodeWithContentDescription("إغلاق").performClick()
+            compose.onNodeWithTag("trade_detail_close").performClick()
             compose.onNodeWithTag("results_tab_STATISTICS").performClick()
             captureProviderScreen("results-v3-statistics")
             compose.onNodeWithTag("results_tab_DAILY").performClick()
