@@ -13,11 +13,15 @@ enum class ResultsTab(val displayNameAr: String) {
     OVERVIEW("نظرة عامة"),
     CURVES("المنحنيات البيانية"),
     JOURNAL("يوميات الصفقات"),
+    STATISTICS("إحصائيات الصفقات"),
     DAILY("النتائج اليومية"),
     COMPARISON("مقارنة الاختبارات")
 }
 
 data class ResultsUiState(
+    val analytics: TrainingAnalytics? = null,
+    val customStart:Long?=null,
+    val customEnd:Long?=null,
     val isReplayReport: Boolean = false,
     val openPositionsCount: Int = 0,
     val openPositions: List<Position> = emptyList(),
@@ -39,18 +43,22 @@ data class ResultsUiState(
 )
 
 class ResultsViewModel(
-    private val tradingRepository: TradingRepository
+    private val tradingRepository: TradingRepository,
+    private val trainingStore:com.example.feature.replay.TrainingSessionStore?=null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ResultsUiState(isLoading = true))
-    val uiState: StateFlow<ResultsUiState> = combine(_uiState, tradingRepository.replayReport) { base, report ->
-        if (report == null) base.copy(isReplayReport=true,isLoading=false) else base.copy(
-            isReplayReport=true,openPositionsCount=report.positions.size,openPositions=report.positions,
-            initialBalance=report.account.initialBalance,currentBalance=report.account.balance,
-            metrics=StatisticsCalculator.calculate(report.account.initialBalance,report.trades,report.account.equity).copy(maxDrawdown=report.maxDrawdown,maxDrawdownPct=report.maxDrawdownPercent, recoveryFactor=if(report.maxDrawdown>0) report.trades.sumOf{it.netProfitLoss}/report.maxDrawdown else null),
-            equityPoints=report.curve.ifEmpty { StatisticsCalculator.buildEquityCurve(report.account.initialBalance,report.trades) },
-            trades=report.trades,dailySummaries=StatisticsCalculator.calculateDailySummaries(report.trades),isLoading=false)
-    }.stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),ResultsUiState(isLoading=true))
+    private val reports=trainingStore?.observeReports() ?: tradingRepository.replayReport
+    val uiState: StateFlow<ResultsUiState> = combine(_uiState, reports) { base, report ->
+        if(report==null) base.copy(isReplayReport=true,isLoading=false) else {
+            val analytics=TrainingAnalyticsCalculator.calculate(report,base.selectedPeriod,customStart=base.customStart,customEnd=base.customEnd)
+            base.copy(analytics=analytics,isReplayReport=true,openPositionsCount=report.positions.size,openPositions=report.positions,
+                initialBalance=analytics.opening,currentBalance=analytics.closing,metrics=analytics.metrics,equityPoints=analytics.curve,
+                trades=analytics.trades,dailySummaries=analytics.days.map { day-> val f=java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US);DailySummary(java.text.SimpleDateFormat("dd/MM",java.util.Locale.US).format(java.util.Date(day.time)),f.format(java.util.Date(day.time)),day.pnl,day.count,analytics.trades.filterIndexed { i,_ -> TrainingAnalyticsCalculator.dayStart(analytics.recordedAt[i])==day.time }.sumOf { it.volume },if(day.count>0)day.wins*100.0/day.count else 0.0) },isLoading=false)
+        }
+    }.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),ResultsUiState(isLoading=true))
+
+    fun setCustomRange(start:Long,end:Long) { if(start<=end)_uiState.update { it.copy(selectedPeriod=ResultsPeriod.CUSTOM,customStart=start,customEnd=end) } }
 
     fun setSelectedPeriod(period: ResultsPeriod) {
         _uiState.update { it.copy(selectedPeriod = period) }

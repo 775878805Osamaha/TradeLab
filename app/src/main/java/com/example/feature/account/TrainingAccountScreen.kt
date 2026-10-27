@@ -50,7 +50,7 @@ fun TrainingAccountScreen(viewModel: ReplayViewModel, onChart: () -> Unit) {
     fun money(value: Double) = String.format(Locale.US, "$%,.2f", value)
     fun pnlColor(value: Double) = if (value < 0) TrainingLoss else if (value > 0) TrainingProfit else TrainingText
     val realized = state.closedTrades.sumOf { it.netProfitLoss }
-    val floating = state.openPositions.sumOf { it.profitLoss }
+    val floating = state.openPositions.sumOf { it.netProfitLoss }
     val wins = state.closedTrades.count { it.netProfitLoss > 0 }
     val losses = state.closedTrades.count { it.netProfitLoss < 0 }
     val winRate = if (state.closedTrades.isEmpty()) "—" else String.format(Locale.US, "%.1f%%", wins * 100.0 / state.closedTrades.size)

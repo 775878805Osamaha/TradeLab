@@ -66,4 +66,11 @@ class ReplayAccountMathTest {
         assertEquals(0.0, ReplayAccountMath.usedMargin(emptyList()), 0.0)
         assertEquals(1000.0, ReplayAccountMath.freeMargin(1000.0, emptyList()), 0.0)
     }
+    @Test fun openingSpreadAndAccruedFeesAffectEquityWithoutChangingBalance() {
+        val marked=ReplayAccountMath.markToMarket(position(10.0).copy(entryPrice=2000.2,commission=.1,swap=.05),
+            com.example.core.model.Tick("XAUUSD",2000.0,2000.2,1000))
+        assertEquals(-.2,marked.profitLoss,.000001)
+        assertEquals(99.65,ReplayAccountMath.equity(100.0,listOf(marked)),.000001)
+    }
+
 }

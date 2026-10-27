@@ -130,6 +130,12 @@ class ReplayViewModel(
     }
 
     private fun saveAccountSnapshot() {
+        val financial=_uiState.value
+        val last=financial.equitySamples.lastOrNull()
+        if(!financial.isLoading && replayEngine.totalCandles.value>0 &&
+            (last==null || last.balance!=financial.currentBalance || last.equity!=financial.currentEquity)) {
+            recordEquitySample(financial.currentBalance,financial.currentEquity,preserveAtIndex=true)
+        }
         publishReport()
         if (!_uiState.value.isLoading) sessionStore?.save(TrainingSessionSnapshot(_uiState.value.copy(isPlaying=false),replayEngine.snapshotCandles(),nextId),persistenceOwner!!)
         val index = replayEngine.currentIndex.value
@@ -819,7 +825,7 @@ class ReplayViewModel(
 
         when (result) {
             is com.example.core.execution.ExecutionResult.Success -> {
-                val pos = result.position.copy(id = nextId++)
+                val pos = ReplayAccountMath.markToMarket(result.position.copy(id = nextId++),tick)
                 openPositions.add(pos)
                 _uiState.update {
                     it.copy(
@@ -867,7 +873,7 @@ class ReplayViewModel(
             partialVolume = partialVolume
         )
         openPositions.remove(pos)
-        if (remainingPosition != null) openPositions.add(remainingPosition)
+        if (remainingPosition != null) openPositions.add(ReplayAccountMath.markToMarket(remainingPosition,tick))
         closedTrades.add(trade)
         val newBal = ReplayAccountMath.realizedBalance(_uiState.value.currentBalance, trade.netProfitLoss)
 
@@ -1034,7 +1040,7 @@ class ReplayViewModel(
             )
             when (result) {
                 is com.example.core.execution.ExecutionResult.Success -> {
-                    openPositions.add(result.position.copy(id = nextId++))
+                    openPositions.add(ReplayAccountMath.markToMarket(result.position.copy(id = nextId++),tick))
                     pendingIterator.remove()
                     // Persist the changed margin/equity before checking the next
                     // pending order, including multiple triggers on this bar.
@@ -1129,7 +1135,7 @@ class ReplayViewModel(
         saveAccountSnapshot()
     }
 
-    private fun recordEquitySample(balance: Double, equity: Double) {
+    private fun recordEquitySample(balance: Double, equity: Double, preserveAtIndex:Boolean=false) {
         if (!balance.isFinite() || !equity.isFinite()) return
         val index = replayEngine.currentIndex.value
         _uiState.update { state ->
@@ -1141,7 +1147,7 @@ class ReplayViewModel(
             val prefix = when {
                 history.isEmpty() -> history
                 history.last().candleIndex < index -> history
-                history.last().candleIndex == index -> history.dropLast(1)
+                history.last().candleIndex == index -> if(preserveAtIndex)history else history.dropLast(1)
                 else -> {
                     // Binary-search the sorted timeline rather than scanning all
                     // historical samples after a rewind or a timeline fork.

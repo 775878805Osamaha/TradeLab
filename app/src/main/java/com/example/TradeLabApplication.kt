@@ -9,7 +9,7 @@ import com.example.data.repository.TradingRepository
 
 class TradeLabApplication : Application() {
 
-    val trainingSessionStore by lazy { com.example.feature.replay.TrainingSessionStore(this) }
+    val trainingSessionStore by lazy { com.example.feature.replay.TrainingSessionStore(this, database) }
 
     val historyKeyStore: HistoryKeyStore by lazy { HistoryKeyStore(this) }
 

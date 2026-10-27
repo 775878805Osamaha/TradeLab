@@ -8,5 +8,7 @@ data class ReplayReport(
     val trades: List<TradeJournalEntry>,
     val curve: List<EquityPoint> = emptyList(),
     val maxDrawdown: Double = 0.0,
-    val maxDrawdownPercent: Double = 0.0
+    val maxDrawdownPercent: Double = 0.0,
+    val recordedAt: List<Long> = emptyList(),
+    val fundedAt: Long = 0L
 )

@@ -7,7 +7,7 @@ import com.example.core.statistics.StatisticsCalculator
 import java.util.Calendar
 
 enum class ResultsPeriod(val titleAr: String) {
-    ALL("الكل"), MONTH("شهر"), WEEK("أسبوع")
+    ALL("الكل"), YEAR("سنة"), SIX_MONTHS("6 أشهر"), THREE_MONTHS("3 أشهر"), MONTH("شهر"), WEEK("أسبوع"), CUSTOM("مخصص")
 }
 
 data class ResultsPeriodSnapshot(

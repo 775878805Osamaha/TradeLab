@@ -33,7 +33,7 @@ import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ResultsScreen(
+fun LegacyResultsScreen(
     viewModel: ResultsViewModel,
     onNavigateToHistory: () -> Unit,
     onNavigateToBacktest: () -> Unit = {},
@@ -139,6 +139,7 @@ fun ResultsScreen(
                 ResultsTab.OVERVIEW -> ResultsOverviewContent(viewModel, uiState, onNavigateToBacktest)
                 ResultsTab.CURVES -> ResultsCurvesContent(viewModel, uiState)
                 ResultsTab.JOURNAL -> ResultsJournalContent(viewModel, uiState)
+                ResultsTab.STATISTICS -> ResultsJournalContent(viewModel, uiState)
                 ResultsTab.DAILY -> ResultsDailyContent(viewModel, uiState)
                 ResultsTab.COMPARISON -> ResultsComparisonContent(viewModel, uiState)
             }
@@ -237,7 +238,7 @@ private fun ResultsOverviewContent(
                     Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.CalendarMonth, null, tint = ResultsMuted, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text(when(period) { ResultsPeriod.MONTH -> "هذا الشهر"; ResultsPeriod.WEEK -> "هذا الأسبوع"; ResultsPeriod.ALL -> "كل الفترات" },
+                        Text(when(period) { ResultsPeriod.MONTH -> "هذا الشهر"; ResultsPeriod.WEEK -> "هذا الأسبوع"; ResultsPeriod.ALL -> "كل الفترات"; else -> period.titleAr },
                             color = ResultsText, fontSize = 12.sp)
                     }
                 }

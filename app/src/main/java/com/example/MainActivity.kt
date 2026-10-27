@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
             val marketViewModel = remember { MarketViewModel(app.marketDataRepository) }
             val chartViewModel = remember { ChartViewModel(app.marketDataRepository, app.tradingRepository, app.database.drawingDao()) }
             val tradeViewModel by remember { lazy { TradeViewModel(app.tradingRepository, app.marketDataRepository) } }
-            val resultsViewModel by remember { lazy { ResultsViewModel(app.tradingRepository) } }
+            val resultsViewModel by remember { lazy { ResultsViewModel(app.tradingRepository, app.trainingSessionStore) } }
             val historyViewModel by remember { lazy { HistoryViewModel(app.tradingRepository) } }
             val replayViewModel = remember { ReplayViewModel(app.marketDataRepository, reportSink = { app.tradingRepository.replayReport.value = it }, sessionStore = app.trainingSessionStore) }
             val backtestViewModel by remember { lazy { BacktestViewModel(app.marketDataRepository, tradingRepository = app.tradingRepository) } }

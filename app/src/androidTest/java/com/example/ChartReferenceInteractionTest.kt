@@ -178,13 +178,13 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithText("حساب التدريب").assertExists()
         captureProviderScreen("tradelab-replay-account")
         compose.onNodeWithTag("nav_item_results").performClick()
-        compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
         captureProviderScreen("tradelab-replay-results")
         val app=compose.activity.application as TradeLabApplication
         compose.waitUntil(10000) { app.trainingSessionStore.read()?.state?.let { it.initialBalance==100.0 && it.openPositions.size==1 && it.closedTrades.size==1 && it.openPositions.first().symbol=="GBPUSD" && it.closedTrades.first().symbol=="GBPUSD" } == true }
         app.tradingRepository.replayReport.value=null
         compose.activityRule.scenario.recreate()
-        compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("تداول ورقي").assertDoesNotExist()
         captureProviderScreen("tradelab-training-restored")
         compose.onNodeWithTag("nav_item_chart").performClick()
@@ -202,8 +202,46 @@ class ChartReferenceInteractionTest {
         org.junit.Assert.assertEquals(finalReport.account.balance, finalReport.account.equity, 0.000001)
         org.junit.Assert.assertEquals(0.02, finalReport.trades.sumOf { it.volume }, 0.000001)
         compose.onNodeWithTag("nav_item_results").performClick()
-        compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب · 0 مفتوحة · 2 مغلقة").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("حساب التدريب · 0 مفتوحة · 2 مغلقة").fetchSemanticsNodes().isNotEmpty() }
         captureProviderScreen("tradelab-training-completed")
+        // Populate the reference's last-five table by executing more actual provider-backed orders.
+        repeat(3) { iteration ->
+            compose.onNodeWithTag("nav_item_chart").performClick()
+            compose.onNodeWithTag(if(iteration%2==0)"chart_replay_sell" else "chart_replay_buy").performClick()
+            compose.onNodeWithTag("chart_order_volume").performTextReplacement("0.01")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.onNodeWithTag("chart_order_confirm").performClick()
+            for (step in 1..40) {
+                if (compose.onAllNodesWithTag("chart_position_actions").fetchSemanticsNodes().isNotEmpty()) break
+                compose.onNodeWithTag("candlestick_canvas").performTouchInput { click(androidx.compose.ui.geometry.Offset(width*.65f,height*step/42f)) }
+            }
+            compose.onNodeWithTag("position_close").performClick()
+            compose.onNodeWithTag("position_action_confirm").performClick()
+        }
+        compose.onNodeWithTag("nav_item_results").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("حساب التدريب · 0 مفتوحة · 5 مغلقة").fetchSemanticsNodes().isNotEmpty() }
+        shell("wm size 691x1536");shell("wm density 276")
+        try {
+            compose.waitUntil(10000) { compose.onAllNodesWithTag("results_hero_card").fetchSemanticsNodes().isNotEmpty() }
+            captureProviderScreen("results-v3-overview")
+            compose.onNodeWithTag("results_period_WEEK").performClick()
+            compose.waitUntil(10000) { compose.onAllNodesWithTag("results_trade_5").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("results_period_ALL").performClick()
+            compose.onNodeWithTag("results_chart_expand").performClick()
+            compose.onNodeWithText("إغلاق").performClick()
+            compose.onNodeWithTag("results_tab_CURVES").performClick()
+            captureProviderScreen("results-v3-curves")
+            compose.onNodeWithTag("results_tab_JOURNAL").performClick()
+            compose.onNodeWithTag("results_trade_5").performClick()
+            compose.onNodeWithText("تفاصيل الصفقة #5").assertExists()
+            captureProviderScreen("results-v3-trade-detail")
+            compose.onNodeWithContentDescription("إغلاق").performClick()
+            compose.onNodeWithTag("results_tab_STATISTICS").performClick()
+            captureProviderScreen("results-v3-statistics")
+            compose.onNodeWithTag("results_tab_DAILY").performClick()
+            captureProviderScreen("results-v3-daily")
+            compose.onNodeWithTag("results_tab_OVERVIEW").performClick()
+        } finally {shell("wm size 864x1536");shell("wm density 346")}
     }
 
     @Test fun marketTerminalSearchAndOpenChart() {
