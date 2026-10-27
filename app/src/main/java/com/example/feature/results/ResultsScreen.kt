@@ -298,7 +298,7 @@ private fun ResultsOverviewContent(
                         Text(if (uiState.isPercentageMode) "عرض القيمة ($)" else "عرض النسبة (%)",
                             Modifier.padding(horizontal = 12.dp, vertical = 7.dp), fontSize = 11.sp, color = ResultsText)
                     }
-                    if (trades.isEmpty()) {
+                    if (trades.isEmpty() && uiState.equityPoints.size < 2) {
                         Column(Modifier.fillMaxWidth().height(110.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center) {

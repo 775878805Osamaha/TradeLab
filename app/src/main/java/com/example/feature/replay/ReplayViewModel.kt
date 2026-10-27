@@ -111,10 +111,11 @@ class ReplayViewModel(
         if (!hasPublishedReport && openPositions.isEmpty() && pendingOrders.isEmpty() && closedTrades.isEmpty()) return
         hasPublishedReport = true
         var peak=_uiState.value.initialBalance
-        val curve=_uiState.value.equitySamples.map { sample ->
+        val observed=_uiState.value.equitySamples.map { sample ->
             peak=maxOf(peak,sample.equity)
             EquityPoint(sample.timestamp,sample.balance,sample.equity,(peak-sample.equity).coerceAtLeast(0.0),peak)
         }
+        val curve=if(observed.isEmpty()) observed else listOf(EquityPoint(observed.first().timestamp-1,_uiState.value.initialBalance,_uiState.value.initialBalance,0.0,_uiState.value.initialBalance))+observed
         reportSink?.invoke(ReplayReport(replayAccount(),openPositions.toList(),pendingOrders.toList(),closedTrades.toList(),curve,curve.maxOfOrNull{it.drawdown}?:0.0,_uiState.value.maxObservedDrawdownPercent))
     }
 
