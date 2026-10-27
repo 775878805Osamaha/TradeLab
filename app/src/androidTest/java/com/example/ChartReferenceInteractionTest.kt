@@ -370,6 +370,25 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithTag("drawing_save").performClick()
             compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id })!!.startPrice==4000.25 } }
             captureProviderScreen("drawing-edit-saved")
+            compose.onNodeWithContentDescription("أدوات الرسم").performClick()
+            compose.onNodeWithTag("drawing_catalog_search").performTextInput("مستطيل")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.onNodeWithTag("drawing_catalog_grid").performScrollToNode(hasTestTag("drawing_tool_RECTANGLE"))
+            compose.onNodeWithTag("drawing_tool_RECTANGLE").performClick()
+            compose.waitUntil(10000) { compose.onAllNodesWithTag("drawing_catalog_sheet").fetchSemanticsNodes().isEmpty() }
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(width*.50f,height*.45f))
+                click(androidx.compose.ui.geometry.Offset(width*.75f,height*.65f))
+            }
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().any { it.type=="RECTANGLE" } } }
+            val rectangle=kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.type=="RECTANGLE" } }
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput { click(androidx.compose.ui.geometry.Offset(width*.625f,height*.55f)) }
+            compose.onNodeWithTag("drawing_selection_toolbar").assertIsDisplayed()
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                swipe(androidx.compose.ui.geometry.Offset(width*.625f,height*.55f),androidx.compose.ui.geometry.Offset(width*.665f,height*.58f),600)
+            }
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id }.pointsJson!=rectangle.pointsJson } }
+            captureProviderScreen("drawing-edit-rectangle")
             compose.activityRule.scenario.recreate()
             compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
             org.junit.Assert.assertEquals(4000.25,kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id })!!.startPrice },0.0)
