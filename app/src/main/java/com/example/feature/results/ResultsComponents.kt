@@ -221,12 +221,15 @@ fun ExportDialog(
     var copied by remember { mutableStateOf(false) }
 
     val exportedText = remember(exportFormat, metrics, trades, dailySummaries, points) {
+        val symbols=trades.map { it.symbol }.distinct().sorted().joinToString("|").ifEmpty { "N/A" }
+        val strategies=trades.map { it.strategyId ?: "Manual" }.distinct().joinToString("|").ifEmpty { "N/A" }
+        // Journal entries do not retain a timeframe; never label the report as M15 by default.
         when (exportFormat) {
-            "CSV_SUMMARY" -> ResultsExporter.exportSummaryCsv(metrics)
+            "CSV_SUMMARY" -> ResultsExporter.exportSummaryCsv(metrics,strategyName=strategies,symbol=symbols,timeframe="N/A")
             "CSV_TRADES" -> ResultsExporter.exportTradesCsv(trades)
             "CSV_DAILY" -> ResultsExporter.exportDailyResultsCsv(dailySummaries)
             "CSV_EQUITY" -> ResultsExporter.exportEquityPointsCsv(points)
-            "JSON" -> ResultsExporter.exportCompleteJson(metrics, trades, dailySummaries, points)
+            "JSON" -> ResultsExporter.exportCompleteJson(metrics, trades, dailySummaries, points,strategyName=strategies,symbol=symbols,timeframe="N/A")
             else -> ""
         }
     }
