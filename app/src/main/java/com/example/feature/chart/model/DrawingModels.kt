@@ -45,6 +45,9 @@ enum class DrawingLineStyle(val titleAr:String) {
         DOTTED->androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(width,3f*width))
     }
 }
+val DrawingTool.supportsLineStyle:Boolean get()=this !in setOf(DrawingTool.NONE,DrawingTool.IMAGE,DrawingTool.TEXT,DrawingTool.ANCHORED_TEXT,DrawingTool.ANNOTATION,DrawingTool.NOTE,DrawingTool.CALLOUT,DrawingTool.PRICE_NOTE,DrawingTool.SIGNPOST,DrawingTool.PRICE_LABEL,DrawingTool.BARS_PATTERN,DrawingTool.GHOST_FEED,DrawingTool.VOLUME_PROFILE_FIXED,DrawingTool.VOLUME_PROFILE_SESSION)
+val DrawingTool.supportsStrokeWidth:Boolean get()=supportsLineStyle || this in setOf(DrawingTool.BARS_PATTERN,DrawingTool.GHOST_FEED)
+val DrawingTool.supportsColor:Boolean get()=this!=DrawingTool.IMAGE && this!=DrawingTool.NONE
 val DrawingTool.supportsFill:Boolean get()=this in setOf(DrawingTool.RECTANGLE,DrawingTool.ELLIPSE,DrawingTool.CIRCLE,DrawingTool.TRIANGLE,DrawingTool.ROTATED_RECTANGLE,DrawingTool.ARROW_MARKER,DrawingTool.LONG_POSITION,DrawingTool.SHORT_POSITION,DrawingTool.PRICE_RANGE,DrawingTool.DATE_RANGE,DrawingTool.DATE_PRICE_RANGE)
 
 data class DrawingAnchor(val time: Long, val price: Double)

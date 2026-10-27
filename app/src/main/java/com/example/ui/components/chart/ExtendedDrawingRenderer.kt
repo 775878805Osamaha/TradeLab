@@ -31,7 +31,7 @@ internal object ExtendedDrawingRenderer {
             val path=Path().apply {moveTo(p[0].x,p[0].y);p.drop(1).forEach{lineTo(it.x,it.y)};if(close)this.close()}
             if(fill)drawPath(path,c.copy(alpha=d.fillOpacity))
             drawPath(path,if(d.tool==DrawingTool.HIGHLIGHTER)c.copy(alpha=.35f) else c,
-                style=Stroke(if(d.tool==DrawingTool.HIGHLIGHTER) 12*density else w, cap=StrokeCap.Round, join=StrokeJoin.Round,pathEffect=d.lineStyle.pathEffect(w)))
+                style=Stroke(if(d.tool==DrawingTool.HIGHLIGHTER) 6*density*w else w, cap=StrokeCap.Round, join=StrokeJoin.Round,pathEffect=d.lineStyle.pathEffect(w)))
         }
         when(d.tool) {
             DrawingTool.HORIZONTAL_RAY -> line(first,Offset(t.chartWidth,first.y))

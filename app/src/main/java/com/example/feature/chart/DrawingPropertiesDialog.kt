@@ -35,17 +35,21 @@ internal fun DrawingPropertiesDialog(drawing: ChartDrawing, onDismiss: () -> Uni
     val valid = prices.all { it.toDoubleOrNull()?.let { p -> p.isFinite() && p > 0 } == true }
     AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("drawing_properties"), title = { Text(drawing.tool.catalogLabel()) },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if(drawing.tool.supportsColor) {
             Text("لون الرسم")
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { listOf(Color(0xFF2962FF),Color(0xFF00B7AA),Color(0xFFFF3D48),Color(0xFFF5A623),Color.White).forEach { c ->
                 Box(Modifier.size(30.dp).background(c).clickable { color = c })
             } }
-            Text("سُمك الخط: ${width.toInt()}"); Slider(width,{width=it},valueRange=1f..6f,steps=4)
+            }
+            if(drawing.tool.supportsStrokeWidth) { Text("سُمك الخط: ${width.toInt()}"); Slider(width,{width=it},valueRange=1f..6f,steps=4) }
             if(drawing.tool.isTextTool) OutlinedTextField(text,{text=it},label={Text("النص")})
             prices.forEachIndexed { i,value -> OutlinedTextField(value,{next -> prices=prices.toMutableList().also { it[i]=next };editedPrices=editedPrices+i},modifier=Modifier.testTag("drawing_price_$i"),label={Text("سعر النقطة ${i+1}")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal)) }
+            if(drawing.tool.supportsLineStyle) {
             Text("نمط الخط")
             Row(Modifier.horizontalScroll(rememberScrollState()).testTag("drawing_style_controls"),horizontalArrangement=Arrangement.spacedBy(4.dp)) { DrawingLineStyle.values().forEach { style ->
                 FilterChip(selected=lineStyle==style,onClick={lineStyle=style},label={Text(style.titleAr)},modifier=Modifier.testTag("drawing_style_${style.name}"))
             } }
+            }
             if(drawing.tool.supportsFill) {
                 Text("كثافة التعبئة: ${(fillOpacity*100).toInt()}%")
                 Slider(fillOpacity,{fillOpacity=it},valueRange=0f..1f,modifier=Modifier.testTag("drawing_fill_opacity"))
