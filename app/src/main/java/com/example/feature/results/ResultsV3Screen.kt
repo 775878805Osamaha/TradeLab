@@ -72,7 +72,7 @@ fun ResultsScreen(viewModel:ResultsViewModel,onNavigateToHistory:()->Unit,onNavi
             }
         }
         Row(Modifier.fillMaxWidth().heightIn(min=40.dp).padding(horizontal=10.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            LazyRow(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(4.dp)) {items(ResultsPeriod.values().toList()){period->
+            LazyRow(Modifier.weight(1f).testTag("results_periods"),horizontalArrangement=Arrangement.spacedBy(4.dp)) {items(ResultsPeriod.values().toList()){period->
                 val active=state.selectedPeriod==period
                 Box(Modifier.clip(RoundedCornerShape(4.dp)).background(if(active)V3Blue else V3Card).border(.7.dp,if(active)V3Blue else V3Border,RoundedCornerShape(4.dp)).clickable{if(period==ResultsPeriod.CUSTOM)custom=true else viewModel.setSelectedPeriod(period)}.padding(horizontal=7.dp,vertical=7.dp).testTag("results_period_${period.name}")){Text(period.titleAr,color=if(active)Color.White else V3Muted,fontSize=8.sp,maxLines=1)}
             }}
@@ -121,11 +121,14 @@ fun ResultsScreen(viewModel:ResultsViewModel,onNavigateToHistory:()->Unit,onNavi
 }
 
 @Composable private fun Hero(a:TrainingAnalytics,onExpand:()->Unit) {
+    var info by remember { mutableStateOf(false) }
+    if(info) AlertDialog(onDismissRequest={info=false},title={Text("الحساب والأداء")},text={Text("الرصيد: ${v3Money(a.closing)}\nEquity: ${v3Money(a.metrics.equity)}\nالربح العائم: ${v3Money(a.floating,true)}\nرأس المال المودع هو رصيد البداية، ولا يُضاف مرتين. الربح المحقق بعد العمولات والتبييت، والسبريد مضمن في أسعار التنفيذ. الأعمدة تمثل صافي نتائج أيام التدريب.")},confirmButton={TextButton(onClick={info=false}){Text("إغلاق")}})
     Frame(Modifier.fillMaxWidth().testTag("results_hero_card")) {Column(Modifier.padding(8.dp)){
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.Top) {
-            Column(Modifier.weight(1.2f)) {Text("صافي الربح  ⓘ",color=V3Text,fontSize=12.sp,fontWeight=FontWeight.Bold);Num(v3Money(a.metrics.netProfit,true),24,if(a.metrics.netProfit<0)V3Loss else if(a.metrics.netProfit>0)V3Profit else V3Muted);Num((if(a.metrics.returnPct>0)"+" else "")+pct(a.metrics.returnPct),15,if(a.metrics.netProfit<0)V3Loss else V3Profit)}
+            Column(Modifier.weight(1.2f)) {Row(verticalAlignment=Alignment.CenterVertically){Text("صافي الربح",color=V3Text,fontSize=12.sp,fontWeight=FontWeight.Bold);Icon(Icons.Default.Info,"تعريفات الحساب",tint=V3Muted,modifier=Modifier.padding(start=5.dp).size(11.dp).clickable{info=true})};Num(v3Money(a.metrics.netProfit,true),24,if(a.metrics.netProfit<0)V3Loss else if(a.metrics.netProfit>0)V3Profit else V3Muted);Num((if(a.metrics.returnPct>0)"+" else "")+pct(a.metrics.returnPct),15,if(a.metrics.netProfit<0)V3Loss else V3Profit)}
             Row(Modifier.weight(2.2f),horizontalArrangement=Arrangement.spacedBy(7.dp)) {listOf("الرصيد النهائي" to a.closing,"الرصيد الابتدائي" to a.opening,"إجمالي الإيداعات" to a.deposits).forEach{(label,value)->Frame(Modifier.weight(1f)){Column(Modifier.padding(horizontal=5.dp,vertical=7.dp),verticalArrangement=Arrangement.spacedBy(4.dp)){Text(label,color=V3Muted,fontSize=8.sp,maxLines=1);Num(v3Money(value),10)}}}}
         }}
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("Equity",fontSize=7.sp,color=V3Muted);Text("الأعمدة: صافي يومي ($)",fontSize=7.sp,color=V3Muted)}
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr){ResultsV3Chart(a.curve,a.days,onExpand=onExpand)}
         if(a.trades.isEmpty())Text("لا توجد صفقات مغلقة في هذه الفترة",color=V3Muted,fontSize=8.sp)
     }}

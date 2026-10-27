@@ -30,7 +30,7 @@ internal fun ResultsV3Chart(points:List<EquityPoint>,days:List<TrainingDay>,mode
     val date=remember{SimpleDateFormat("MMM dd",Locale.US)}
     fun value(p:EquityPoint)=when(mode){"Balance"->p.balance;"التراجع"->-p.drawdown;"الربح التراكمي"->p.balance-(points.firstOrNull()?.balance?:p.balance);else->p.equity}
     val selectedPoint=selected?.let{visible.getOrNull(it)}
-    Box(Modifier.fillMaxWidth().height(if(expanded)340.dp else 160.dp)) {
+    Box(Modifier.fillMaxWidth().height(if(expanded)340.dp else 154.dp)) {
         Canvas(Modifier.fillMaxSize().testTag("results_equity_chart")
             .pointerInput(visible){detectTapGestures { at ->
                 val width=(size.width-40.dp.toPx()).coerceAtLeast(1f)

@@ -68,7 +68,7 @@ class ReplayAccountMathTest {
     }
     @Test fun openingSpreadAndAccruedFeesAffectEquityWithoutChangingBalance() {
         val marked=ReplayAccountMath.markToMarket(position(10.0).copy(entryPrice=2000.2,commission=.1,swap=.05),
-            com.example.core.model.Tick("XAUUSD",2000.0,2000.2,1000))
+            com.example.core.model.Tick("XAUUSD",2000.0,2000.2,timestamp=1000))
         assertEquals(-.2,marked.profitLoss,.000001)
         assertEquals(99.65,ReplayAccountMath.equity(100.0,listOf(marked)),.000001)
     }

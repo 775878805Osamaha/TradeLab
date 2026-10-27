@@ -224,8 +224,16 @@ class ChartReferenceInteractionTest {
         try {
             compose.waitUntil(10000) { compose.onAllNodesWithTag("results_hero_card").fetchSemanticsNodes().isNotEmpty() }
             captureProviderScreen("results-v3-overview")
+            compose.onNodeWithTag("results_periods").performScrollToNode(hasTestTag("results_period_WEEK"))
             compose.onNodeWithTag("results_period_WEEK").performClick()
             compose.waitUntil(10000) { compose.onAllNodesWithTag("results_trade_5").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("results_periods").performScrollToNode(hasTestTag("results_period_ALL"))
+            compose.onNodeWithTag("results_period_ALL").performClick()
+            compose.onNodeWithTag("results_custom_dates").performClick()
+            compose.onNodeWithText("اختيار تاريخ النهاية").performClick()
+            compose.onNodeWithText("تطبيق").performClick()
+            compose.waitUntil(10000){compose.onAllNodesWithTag("results_trade_5").fetchSemanticsNodes().isNotEmpty()}
+            compose.onNodeWithTag("results_periods").performScrollToNode(hasTestTag("results_period_ALL"))
             compose.onNodeWithTag("results_period_ALL").performClick()
             compose.onNodeWithTag("results_chart_expand").performClick()
             compose.onNodeWithText("إغلاق").performClick()
