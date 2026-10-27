@@ -290,16 +290,22 @@ class ReplayViewModel(
 
     fun hasHistoricalApiKey(): Boolean = marketDataRepository.hasTwelveDataKey()
 
+    fun canChangeDataset(): Boolean {
+        val allowed=openPositions.isEmpty() && pendingOrders.isEmpty()
+        if(!allowed) _uiState.update { it.copy(message="أغلق الصفقات والأوامر قبل تغيير بيانات التدريب") }
+        return allowed
+    }
+
     fun loadReplayData(
         symbol: String = "BTCUSDT",
         tf: Timeframe = Timeframe.M15,
         historyBars: Int = _uiState.value.requestedHistoryBars,
         endOffsetBars: Int = _uiState.value.historyEndOffsetBars
     ) {
+        if (!_uiState.value.isLoading && replayEngine.totalCandles.value > 0 && _uiState.value.symbol==symbol && _uiState.value.timeframe==tf && _uiState.value.requestedHistoryBars==historyBars && _uiState.value.historyEndOffsetBars==endOffsetBars) return
         if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty()) {
             _uiState.update { it.copy(message="أغلق الصفقات والأوامر قبل تغيير بيانات التدريب") };return
         }
-        if (!_uiState.value.isLoading && replayEngine.totalCandles.value > 0 && _uiState.value.symbol==symbol && _uiState.value.timeframe==tf && _uiState.value.requestedHistoryBars==historyBars && _uiState.value.historyEndOffsetBars==endOffsetBars) return
         require(endOffsetBars in 0..100_000) { "Historical offset must be 0 to 100000 bars" }
         require(historyBars in 50..5_000) { "Replay history must contain 50 to 5000 bars" }
         cancelBatchAdvance()

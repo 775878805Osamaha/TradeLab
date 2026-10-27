@@ -481,7 +481,7 @@ fun ChartScreen(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clickable { showSymbolSheet = true }
+                            .clickable { if(replayViewModel.canChangeDataset()) showSymbolSheet = true }
                             .testTag("symbol_selector_btn")
                     ) {
                         Text(
@@ -1406,9 +1406,9 @@ fun ChartScreen(
                     symbol = uiState.selectedSymbol,
                     timeframe = uiState.selectedTimeframe,
                     replayActive = isEmbeddedReplay,
-                    onSymbol = { showSymbolSheet = true },
+                    onSymbol = { if(replayViewModel.canChangeDataset()) showSymbolSheet = true },
                     onTimeframe = { tf ->
-                        if (tf != uiState.selectedTimeframe) {
+                        if (tf != uiState.selectedTimeframe && replayViewModel.canChangeDataset()) {
                             viewModel.selectTimeframe(tf)
                             if (isEmbeddedReplay) {
                                 replayViewModel.pause()
