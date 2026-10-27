@@ -36,9 +36,11 @@ class TrainingSessionStore(context: Context) {
                     return super.resolveClass(desc)
                 }
             }.use{it.readObject() as TrainingSessionSnapshot}
-            require(value.candles.size in 2..5000 && value.state.currentIndex in value.candles.indices)
+            require(value.candles.size in 0..5000)
+            if(value.candles.isNotEmpty()) require(value.state.currentIndex in value.candles.indices)
+            else require(value.state.openPositions.isEmpty() && value.state.pendingOrders.isEmpty())
             require(value.state.initialBalance.isFinite() && value.state.initialBalance>0 && value.state.currentBalance.isFinite() && value.state.currentEquity.isFinite())
-            require(DataIntegrityValidator.validateHistoricalSeries(value.candles).isValid)
+            if(value.candles.isNotEmpty()) require(DataIntegrityValidator.validateHistoricalSeries(value.candles).isValid)
             value
         } catch(error:Exception){android.util.Log.e("TrainingSession","Checkpoint unavailable",error);null}
     }

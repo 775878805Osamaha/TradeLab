@@ -124,7 +124,7 @@ class ReplayViewModel(
 
     private fun saveAccountSnapshot() {
         publishReport()
-        if (!_uiState.value.isLoading && replayEngine.totalCandles.value > 0) sessionStore?.save(TrainingSessionSnapshot(_uiState.value.copy(isPlaying=false),replayEngine.snapshotCandles(),nextId),persistenceOwner!!)
+        if (!_uiState.value.isLoading) sessionStore?.save(TrainingSessionSnapshot(_uiState.value.copy(isPlaying=false),replayEngine.snapshotCandles(),nextId),persistenceOwner!!)
         val index = replayEngine.currentIndex.value
         // Any new execution or account edit forks the timeline at this bar.
         // Checkpoints from a previous future must never be restored.
@@ -183,9 +183,10 @@ class ReplayViewModel(
                 _uiState.value=saved.state.copy(isPlaying=false,isLoading=false)
                 openPositions.addAll(saved.state.openPositions);pendingOrders.addAll(saved.state.pendingOrders);closedTrades.addAll(saved.state.closedTrades)
                 nextId=saved.nextId
-                replayEngine.initialize(saved.candles,saved.state.currentIndex)
+                if(saved.candles.isNotEmpty()) replayEngine.initialize(saved.candles,saved.state.currentIndex)
                 hasPublishedReport=true
                 saveAccountSnapshot()
+                if(saved.candles.isEmpty())loadReplayData(saved.state.symbol,saved.state.timeframe)
             } else loadReplayData("XAUUSD")
         }
     }
