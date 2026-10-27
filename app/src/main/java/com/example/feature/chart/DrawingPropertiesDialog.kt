@@ -26,7 +26,12 @@ internal fun DrawingPropertiesDialog(drawing: ChartDrawing, onDismiss: () -> Uni
     var locked by remember(drawing.id) { mutableStateOf(drawing.isLocked) }
     var text by remember(drawing.id) { mutableStateOf(drawing.text) }
     val original = remember(drawing) { drawing.anchors.ifEmpty { listOfNotNull(DrawingAnchor(drawing.startTime,drawing.startPrice), drawing.endTime?.let { t -> drawing.endPrice?.let { DrawingAnchor(t,it) } }) } }
-    var prices by remember(drawing.id) { mutableStateOf(original.map { it.price.toString() }) }
+    val pricePrecision=remember(drawing.symbol) { com.example.core.market.DefaultSymbols.getSymbol(drawing.symbol).digits }
+    var editedPrices by remember(drawing.id) { mutableStateOf(emptySet<Int>()) }
+    var prices by remember(drawing.id) { mutableStateOf(original.map { anchor ->
+        val formatted=String.format(java.util.Locale.US,"%.${pricePrecision}f",anchor.price)
+        if((formatted.toDoubleOrNull()?:0.0)>0.0)formatted else anchor.price.toString()
+    }) }
     val valid = prices.all { it.toDoubleOrNull()?.let { p -> p.isFinite() && p > 0 } == true }
     AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("drawing_properties"), title = { Text(drawing.tool.catalogLabel()) },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -36,7 +41,7 @@ internal fun DrawingPropertiesDialog(drawing: ChartDrawing, onDismiss: () -> Uni
             } }
             Text("سُمك الخط: ${width.toInt()}"); Slider(width,{width=it},valueRange=1f..6f,steps=4)
             if(drawing.tool.isTextTool) OutlinedTextField(text,{text=it},label={Text("النص")})
-            prices.forEachIndexed { i,value -> OutlinedTextField(value,{next -> prices=prices.toMutableList().also { it[i]=next }},modifier=Modifier.testTag("drawing_price_$i"),label={Text("سعر النقطة ${i+1}")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal)) }
+            prices.forEachIndexed { i,value -> OutlinedTextField(value,{next -> prices=prices.toMutableList().also { it[i]=next };editedPrices=editedPrices+i},modifier=Modifier.testTag("drawing_price_$i"),label={Text("سعر النقطة ${i+1}")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal)) }
             Text("نمط الخط")
             Row(Modifier.horizontalScroll(rememberScrollState()).testTag("drawing_style_controls"),horizontalArrangement=Arrangement.spacedBy(4.dp)) { DrawingLineStyle.values().forEach { style ->
                 FilterChip(selected=lineStyle==style,onClick={lineStyle=style},label={Text(style.titleAr)},modifier=Modifier.testTag("drawing_style_${style.name}"))
@@ -49,7 +54,7 @@ internal fun DrawingPropertiesDialog(drawing: ChartDrawing, onDismiss: () -> Uni
             TextButton(onClick = onDelete) { Text("حذف الرسم", color = Color(0xFFFF3D48)) }
         } },
         confirmButton = { TextButton(modifier=Modifier.testTag("drawing_save"),enabled=valid,onClick={
-            val anchors=original.mapIndexed { i,a -> a.copy(price=prices[i].toDouble()) }
+            val anchors=original.mapIndexed { i,a -> if(i in editedPrices)a.copy(price=prices[i].toDouble()) else a }
             onSave(drawing.copy(color=color,strokeWidth=width,text=text,lineStyle=lineStyle,fillOpacity=fillOpacity,isLocked=locked,startPrice=anchors.first().price,
                 endPrice=if(drawing.endPrice!=null) anchors.last().price else null,
                 anchors=if(drawing.anchors.isNotEmpty())anchors else emptyList()))

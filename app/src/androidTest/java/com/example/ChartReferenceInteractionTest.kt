@@ -379,6 +379,7 @@ class ChartReferenceInteractionTest {
             val propertiesSaved=kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id })!! }
             org.junit.Assert.assertEquals(com.example.feature.chart.model.DrawingLineStyle.DOTTED,propertiesSaved.lineStyle)
             org.junit.Assert.assertEquals(.25f,propertiesSaved.fillOpacity,.001f)
+            org.junit.Assert.assertEquals("Saving properties must preserve untouched anchor precision",originalModel.anchors.drop(1),propertiesSaved.anchors.drop(1))
             captureProviderScreen("drawing-edit-saved")
             compose.onNodeWithContentDescription("أدوات الرسم").performClick()
             compose.onNodeWithTag("drawing_catalog_search").performTextInput("مستطيل")
