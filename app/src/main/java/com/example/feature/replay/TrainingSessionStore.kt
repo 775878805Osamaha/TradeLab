@@ -24,7 +24,13 @@ class TrainingSessionStore(context: Context) {
         try { val out=ObjectOutputStream(stream);out.writeObject(snapshot);out.flush();file.finishWrite(stream) }
         catch(error:Exception){file.failWrite(stream);android.util.Log.e("TrainingSession","Checkpoint write failed",error)}
     } } } }
-    fun save(snapshot:TrainingSessionSnapshot,token:Long){writes.trySend(token to snapshot)}
+    fun save(snapshot:TrainingSessionSnapshot,token:Long){
+        val state=snapshot.state.copy(
+            visibleCandles=ArrayList(snapshot.state.visibleCandles),
+            openPositions=ArrayList(snapshot.state.openPositions),pendingOrders=ArrayList(snapshot.state.pendingOrders),
+            closedTrades=ArrayList(snapshot.state.closedTrades),equitySamples=ArrayList(snapshot.state.equitySamples))
+        writes.trySend(token to snapshot.copy(state=state,candles=ArrayList(snapshot.candles)))
+    }
     fun read():TrainingSessionSnapshot? {
         if(!file.baseFile.exists()) return null
         return try {

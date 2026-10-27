@@ -19,7 +19,7 @@ class TrainingSessionStoreTest {
         val context=object:ContextWrapper(base){override fun getFilesDir()=folder}
         val store=TrainingSessionStore(context)
         val candles=(0..2).map{Candle("XAUUSD",Timeframe.M15,(it+1)*900000L,open=2000.0,high=2001.0,low=1999.0,close=2000.0,volume=1.0,source="USER_IMPORTED")}
-        val saved=TrainingSessionSnapshot(ReplayUiState(symbol="XAUUSD",initialBalance=100.0,currentBalance=99.5,currentEquity=99.2,currentIndex=1,totalCandles=3,isLoading=false),candles,8)
+        val saved=TrainingSessionSnapshot(ReplayUiState(symbol="XAUUSD",initialBalance=100.0,currentBalance=99.5,currentEquity=99.2,currentIndex=1,totalCandles=3,isLoading=false,visibleCandles=candles.subList(0,2)),candles,8)
         store.save(saved,store.newOwner())
         val deadline=System.currentTimeMillis()+5000
         var read:TrainingSessionSnapshot?=null
@@ -30,6 +30,7 @@ class TrainingSessionStoreTest {
         assertEquals(1,read.state.currentIndex)
         assertEquals(8L,read.nextId)
         assertEquals(candles,read.candles)
+        assertEquals(candles.take(2),read.state.visibleCandles)
         store.clear();folder.deleteRecursively()
     }
 }
