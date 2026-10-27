@@ -1015,7 +1015,7 @@ fun ChartScreen(
                         onUpdate={viewModel.updateDrawing(stampDrawing(it))},
                         onDelete={viewModel.deleteDrawing(selected.id);selectedDrawingId=null},
                         onDismiss={selectedDrawingId=null},
-                        modifier=Modifier.align(Alignment.TopCenter).padding(top=if(isEmbeddedReplay)176.dp else 136.dp))
+                        modifier=Modifier.align(Alignment.TopCenter).absolutePadding(left=54.dp,right=4.dp,top=if(isEmbeddedReplay)176.dp else 136.dp))
                 }
 
                 if (uiState.activeDrawingTool != DrawingTool.NONE) {

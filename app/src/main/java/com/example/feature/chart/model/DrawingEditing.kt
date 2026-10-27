@@ -18,6 +18,7 @@ object DrawingEditing {
         handles(d,t).withIndex().minByOrNull { (it.value-p).getDistance() }?.takeIf { (it.value-p).getDistance()<=radius }?.index?.let { if(d.tool.isFreehand && d.anchors.size>2 && it==1)d.anchors.lastIndex else it }
 
     fun drag(d:ChartDrawing,t:ChartTransform,origin:Offset,current:Offset,handle:Int?):ChartDrawing {
+        if(d.isLocked)return d
         if(d.tool==DrawingTool.ANCHORED_TEXT) return d.copy(screenX=(current.x/t.chartWidth).coerceIn(0f,1f),screenY=(current.y/t.chartHeight).coerceIn(0f,1f))
         val delta=current-origin
         val points=d.anchors.ifEmpty { listOfNotNull(DrawingAnchor(d.startTime,d.startPrice),d.endTime?.let { time->d.endPrice?.let { DrawingAnchor(time,it) } }) }

@@ -18,7 +18,7 @@ internal object ExtendedDrawingRenderer {
         val points = if(d.anchors.isEmpty()) listOf(first,last) else d.anchors.mapNotNull { a -> t.timeToX(a.time)?.let { Offset(it,t.priceToY(a.price)) } }
         if(points.isEmpty()) return@with
         val c = d.color; val w = d.strokeWidth
-        fun line(a:Offset,b:Offset,color:Color=c) = drawLine(color,a,b,w)
+        fun line(a:Offset,b:Offset,color:Color=c) = drawLine(color,a,b,w,pathEffect=d.lineStyle.pathEffect(w))
         fun text(value:String, at:Offset,color:Color=c) {
             drawContext.canvas.nativeCanvas.drawText(value, at.x, at.y, android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { this.color=color.toArgb();textSize=11f*density })
         }
@@ -29,9 +29,9 @@ internal object ExtendedDrawingRenderer {
         }
         fun polygon(p:List<Offset>, fill:Boolean=false, close:Boolean=false) {
             val path=Path().apply {moveTo(p[0].x,p[0].y);p.drop(1).forEach{lineTo(it.x,it.y)};if(close)this.close()}
-            if(fill)drawPath(path,c.copy(alpha=.12f))
+            if(fill)drawPath(path,c.copy(alpha=d.fillOpacity))
             drawPath(path,if(d.tool==DrawingTool.HIGHLIGHTER)c.copy(alpha=.35f) else c,
-                style=Stroke(if(d.tool==DrawingTool.HIGHLIGHTER) 12*density else w, cap=StrokeCap.Round, join=StrokeJoin.Round))
+                style=Stroke(if(d.tool==DrawingTool.HIGHLIGHTER) 12*density else w, cap=StrokeCap.Round, join=StrokeJoin.Round,pathEffect=d.lineStyle.pathEffect(w)))
         }
         when(d.tool) {
             DrawingTool.HORIZONTAL_RAY -> line(first,Offset(t.chartWidth,first.y))
@@ -46,10 +46,14 @@ internal object ExtendedDrawingRenderer {
                 val shaft=4*density;val head=12*density;val neck=last-unit*min(22*density,length*.5f)
                 polygon(listOf(first+perpendicular*shaft,neck+perpendicular*shaft,neck+perpendicular*head,last,neck-perpendicular*head,neck-perpendicular*shaft,first-perpendicular*shaft),true,true)
             }
-            DrawingTool.CIRCLE -> drawCircle(c,min(abs(last.x-first.x),abs(last.y-first.y))/2,(first+last)/2f,style=Stroke(w))
+            DrawingTool.CIRCLE -> {
+                val radius=min(abs(last.x-first.x),abs(last.y-first.y))/2
+                drawCircle(c.copy(alpha=d.fillOpacity),radius,(first+last)/2f)
+                drawCircle(c,radius,(first+last)/2f,style=Stroke(w,pathEffect=d.lineStyle.pathEffect(w)))
+            }
             DrawingTool.DOUBLE_CURVE -> if(points.size>=5) {
                 val path=Path().apply{moveTo(points[0].x,points[0].y);quadraticBezierTo(points[1].x,points[1].y,points[2].x,points[2].y);quadraticBezierTo(points[3].x,points[3].y,points[4].x,points[4].y)}
-                drawPath(path,c,style=Stroke(w))
+                drawPath(path,c,style=Stroke(w,pathEffect=d.lineStyle.pathEffect(w)))
             }
             DrawingTool.CYCLES -> {
                 val interval=abs(last.x-first.x).coerceAtLeast(10*density)
@@ -97,7 +101,7 @@ internal object ExtendedDrawingRenderer {
             DrawingTool.ROTATED_RECTANGLE -> if(points.size>=3)polygon(listOf(points[0],points[1],points[2],points[0]+points[2]-points[1]),true,true)
             DrawingTool.CURVE,DrawingTool.ARC -> if(points.size>=3) {
                 val p=Path().apply{moveTo(points[0].x,points[0].y);quadraticBezierTo(points[1].x,points[1].y,points[2].x,points[2].y)}
-                drawPath(p,c,style=Stroke(w))
+                drawPath(p,c,style=Stroke(w,pathEffect=d.lineStyle.pathEffect(w)))
             }
             DrawingTool.PARALLEL_CHANNEL -> if(points.size>=3) {
                 val shift=points[2]-points[1];line(points[0],points[1]);line(points[0]+shift,points[2]);line(points[0]+shift/2f,points[1]+shift/2f,c.copy(alpha=.4f))
@@ -108,7 +112,7 @@ internal object ExtendedDrawingRenderer {
             DrawingTool.LONG_POSITION,DrawingTool.SHORT_POSITION -> if(points.size>=3) {
                 val entry=points[0];val target=points[1];val stop=points[2]
                 val right=maxOf(entry.x,target.x,stop.x,entry.x+80*density)
-                fun zone(at:Offset,color:Color){drawRect(color.copy(alpha=.18f),Offset(entry.x,min(entry.y,at.y)),Size(right-entry.x,abs(entry.y-at.y)));line(Offset(entry.x,at.y),Offset(right,at.y),color)}
+                fun zone(at:Offset,color:Color){drawRect(color.copy(alpha=d.fillOpacity),Offset(entry.x,min(entry.y,at.y)),Size(right-entry.x,abs(entry.y-at.y)));line(Offset(entry.x,at.y),Offset(right,at.y),color)}
                 zone(target,Color(0xFF00B7AA));zone(stop,Color(0xFFFF3D48));line(entry,Offset(right,entry.y))
                 val targetPrice=d.anchors.getOrNull(1)?.price?:return@with;val stopPrice=d.anchors.getOrNull(2)?.price?:return@with
                 val risk=abs(d.startPrice-stopPrice);val reward=abs(targetPrice-d.startPrice)
@@ -116,7 +120,7 @@ internal object ExtendedDrawingRenderer {
                 text(if(valid && risk>0)"R:R ${String.format(Locale.US,"%.2f",reward/risk)} · SL ${price(stopPrice)} · TP ${price(targetPrice)}" else "SL / TP: اتجاه غير صالح",Offset(entry.x, min(target.y,stop.y)-6*density))
             }
             DrawingTool.PRICE_RANGE,DrawingTool.DATE_RANGE,DrawingTool.DATE_PRICE_RANGE -> {
-                drawRect(c.copy(alpha=.12f),Offset(min(first.x,last.x),min(first.y,last.y)),Size(abs(last.x-first.x),abs(last.y-first.y)))
+                drawRect(c.copy(alpha=d.fillOpacity),Offset(min(first.x,last.x),min(first.y,last.y)),Size(abs(last.x-first.x),abs(last.y-first.y)))
                 arrow(first,if(d.tool==DrawingTool.PRICE_RANGE)Offset(first.x,last.y) else if(d.tool==DrawingTool.DATE_RANGE)Offset(last.x,first.y) else last)
                 val m=MeasurementCalculator.calculate(d.startPrice,d.endPrice?:d.startPrice,d.startTime,d.endTime?:d.startTime)
                 val label=when(d.tool){DrawingTool.DATE_RANGE->m.durationFormatted;DrawingTool.PRICE_RANGE->"${price(m.priceDiff)} (${String.format(Locale.US,"%.2f",m.percentDiff)}%)";else->"${price(m.priceDiff)} · ${m.durationFormatted}"}
@@ -142,7 +146,7 @@ internal object ExtendedDrawingRenderer {
             DrawingTool.ARROW_UP,DrawingTool.ARROW_DOWN -> {val sign=if(d.tool==DrawingTool.ARROW_UP) -1 else 1;arrow(first+Offset(0f,-sign*22*density),first)}
             DrawingTool.PRICE_LABEL -> text(price(d.startPrice),first)
             DrawingTool.FLAG -> {line(first,first-Offset(0f,24*density));polygon(listOf(first-Offset(0f,24*density),first+Offset(20*density,-17*density),first-Offset(0f,10*density)),true,true)}
-            DrawingTool.PIN -> {drawCircle(c,7*density,first-Offset(0f,9*density),style=Stroke(w));line(first,first-Offset(0f,2*density))}
+            DrawingTool.PIN -> {drawCircle(c,7*density,first-Offset(0f,9*density),style=Stroke(w,pathEffect=d.lineStyle.pathEffect(w)));line(first,first-Offset(0f,2*density))}
             DrawingTool.PRICE_NOTE,DrawingTool.SIGNPOST,DrawingTool.TEXT,DrawingTool.ANCHORED_TEXT,DrawingTool.NOTE,DrawingTool.CALLOUT -> {
                 if(d.tool==DrawingTool.NOTE || d.tool==DrawingTool.CALLOUT)drawRoundRect(c.copy(alpha=.15f),first-Offset(4*density,16*density),Size(max(60*density,d.text.length*7*density),22*density))
                 text(if(d.tool==DrawingTool.PRICE_NOTE) "${price(d.startPrice)} · ${d.text}" else d.text,first)

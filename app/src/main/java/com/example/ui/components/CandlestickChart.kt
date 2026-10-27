@@ -346,7 +346,7 @@ fun CandlestickChart(
                                 val selected=currentDrawings.firstOrNull { it.id==selectionId }
                                 val candidate=selected?.takeIf { DrawingEditing.handleAt(it,transform,offset,positionHitRadius)!=null || DrawingHitTest.distance(it,transform,offset)<positionHitRadius }
                                     ?: currentDrawings.asReversed().firstOrNull { DrawingHitTest.distance(it,transform,offset)<positionHitRadius }
-                                if(candidate!=null) {
+                                if(candidate!=null && !candidate.isLocked) {
                                     dragOriginal=candidate;dragPreview=candidate;dragOrigin=offset;dragTransform=transform
                                     dragHandle=DrawingEditing.handleAt(candidate,transform,offset,positionHitRadius)
                                     drawingSelection?.invoke(candidate)
@@ -742,7 +742,7 @@ fun CandlestickChart(
             clipRect(0f, 0f, chartWidth, mainChartHeight) {
                 val rendered=if(dragPreview!=null)drawings.map { if(it.id==dragPreview!!.id)dragPreview!! else it } else drawings
                 ChartDrawingsRenderer.drawDrawings(this, rendered, transform, candles, anchoredVwaps, drawingImages, candleProfiles)
-                rendered.firstOrNull { it.id==selectedDrawingId }?.let { selected ->
+                rendered.firstOrNull { it.id==selectedDrawingId && !it.isLocked }?.let { selected ->
                     DrawingEditing.handles(selected,transform).forEachIndexed { index,p ->
                         val radius=13.dp.toPx()
                         val stroke=androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx())

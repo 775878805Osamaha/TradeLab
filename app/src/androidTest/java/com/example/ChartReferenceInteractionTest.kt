@@ -389,9 +389,27 @@ class ChartReferenceInteractionTest {
             }
             compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id }.pointsJson!=rectangle.pointsJson } }
             captureProviderScreen("drawing-edit-rectangle")
+            compose.onNodeWithTag("drawing_edit_style").performClick()
+            compose.onNodeWithTag("drawing_edit_fill").performClick()
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id })!!.let { it.lineStyle==com.example.feature.chart.model.DrawingLineStyle.DASHED && it.fillOpacity>.18f } } }
+            captureProviderScreen("drawing-edit-styled")
+            compose.onNodeWithTag("drawing_edit_lock").performClick()
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id })!!.isLocked } }
+            val lockedSnapshot=kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id } }
+            captureProviderScreen("drawing-edit-locked")
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                swipe(androidx.compose.ui.geometry.Offset(width*.665f,height*.58f),androidx.compose.ui.geometry.Offset(width*.70f,height*.62f),600)
+            }
+            org.junit.Assert.assertEquals(lockedSnapshot.pointsJson,kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id }.pointsJson })
+            compose.onNodeWithTag("drawing_edit_lock").performClick()
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { !com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id })!!.isLocked } }
             compose.activityRule.scenario.recreate()
             compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
             org.junit.Assert.assertEquals(4000.25,kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id })!!.startPrice },0.0)
+            val restoredStyle=kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id })!! }
+            org.junit.Assert.assertEquals(com.example.feature.chart.model.DrawingLineStyle.DASHED,restoredStyle.lineStyle)
+            org.junit.Assert.assertTrue(restoredStyle.fillOpacity>.18f)
+            org.junit.Assert.assertFalse(restoredStyle.isLocked)
         } finally {
             app.getSharedPreferences("drawing_catalog",android.content.Context.MODE_PRIVATE).edit().putBoolean("show_favorites",false).commit()
             shell("wm size 864x1536")
