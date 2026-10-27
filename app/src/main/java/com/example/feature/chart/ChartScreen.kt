@@ -126,6 +126,7 @@ fun ChartScreen(
     val defaultDrawingFavorites = setOf("INFO_LINE", "HORIZONTAL_LINE", "TRENDLINE", "HORIZONTAL_RAY", "EXTENDED_LINE", "FIBONACCI", "LONG_POSITION", "SHORT_POSITION", "RECTANGLE", "CIRCLE", "PATH", "VOLUME_PROFILE_FIXED")
     var drawingFavorites by remember { mutableStateOf(drawingPrefs.getStringSet("favorites", defaultDrawingFavorites)?.toSet() ?: defaultDrawingFavorites) }
     var drawingFavoritesVisible by remember { mutableStateOf(drawingPrefs.getBoolean("show_favorites", false)) }
+    var selectedDrawingId by remember(uiState.selectedSymbol,uiState.selectedTimeframe,isEmbeddedReplay) { mutableStateOf<Long?>(null) }
     var editingDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
     editingDrawing?.let { drawing ->
         DrawingPropertiesDialog(drawing, onDismiss = { editingDrawing = null }, onDelete = { viewModel.deleteDrawing(drawing.id); editingDrawing = null },
@@ -937,6 +938,9 @@ fun ChartScreen(
                 if (isEmbeddedReplay) com.example.feature.replay.visibleReplayDrawings(uiState.drawings, revealedDrawingTime)
                 else uiState.drawings
             }
+            LaunchedEffect(displayedDrawings,uiState.activeDrawingTool) {
+                if(uiState.activeDrawingTool!=DrawingTool.NONE || displayedDrawings.none { it.id==selectedDrawingId })selectedDrawingId=null
+            }
             // Professional Candlestick Chart
             Box(
                 modifier = Modifier
@@ -986,7 +990,10 @@ fun ChartScreen(
                         } else viewModel.addDrawing(it)
                     },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) },
-                    onSelectDrawing = { editingDrawing = it },
+                    onSelectDrawing = { selectedDrawingId = it.id },
+                    selectedDrawingId = selectedDrawingId,
+                    onClearDrawingSelection = { selectedDrawingId=null },
+                    onUpdateDrawing = viewModel::updateDrawing,
                     onSelectPosition = {
                         if (isEmbeddedReplay) replayViewModel.pause()
                         selectedPositionReplay = isEmbeddedReplay
@@ -998,6 +1005,15 @@ fun ChartScreen(
                     bearishColor = Color(0xFFFF3D48),
                     isLoadingOlderHistory = uiState.isLoadingOlderHistory
                 )
+                }
+
+                displayedDrawings.firstOrNull { it.id==selectedDrawingId }?.takeIf { uiState.activeDrawingTool==DrawingTool.NONE }?.let { selected ->
+                    DrawingSelectionToolbar(selected,
+                        onProperties={editingDrawing=selected},
+                        onUpdate=viewModel::updateDrawing,
+                        onDelete={viewModel.deleteDrawing(selected.id);selectedDrawingId=null},
+                        onDismiss={selectedDrawingId=null},
+                        modifier=Modifier.align(Alignment.TopCenter).padding(top=76.dp,start=48.dp,end=6.dp))
                 }
 
                 if (uiState.activeDrawingTool != DrawingTool.NONE) {

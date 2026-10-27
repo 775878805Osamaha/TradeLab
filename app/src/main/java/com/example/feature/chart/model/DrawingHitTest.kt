@@ -20,7 +20,16 @@ object DrawingHitTest {
             DrawingTool.VERTICAL_LINE -> abs(point.x-a.x)
             DrawingTool.EXTENDED_LINE -> segment(a,b,1)
             DrawingTool.RAY -> segment(a,b,2)
-            DrawingTool.RECTANGLE -> listOf(a,Offset(b.x,a.y),b,Offset(a.x,b.y),a).zipWithNext().minOf{segment(it.first,it.second)}
+            DrawingTool.FIBONACCI -> FibonacciCalculator.calculateLevels(d.startPrice,d.endPrice?:d.startPrice).minOf { (_,price)->abs(point.y-t.priceToY(price)) }
+            DrawingTool.LONG_POSITION,DrawingTool.SHORT_POSITION -> {
+                val ps=DrawingEditing.handles(d,t)
+                if(ps.size<3)segment(a,b) else {
+                    val right=maxOf(ps.maxOf { it.x },a.x+80f* (t.chartWidth/400f).coerceAtLeast(1f))
+                    if(point.x in a.x..right && point.y in ps.minOf { it.y }..ps.maxOf { it.y })0f
+                    else ps.minOf { segment(Offset(a.x,it.y),Offset(right,it.y)) }
+                }
+            }
+            DrawingTool.RECTANGLE -> if(point.x in min(a.x,b.x)..max(a.x,b.x) && point.y in min(a.y,b.y)..max(a.y,b.y))0f else listOf(a,Offset(b.x,a.y),b,Offset(a.x,b.y),a).zipWithNext().minOf{segment(it.first,it.second)}
             DrawingTool.CIRCLE, DrawingTool.ELLIPSE -> {
                 val center=(a+b)/2f;val radiusX=abs(b.x-a.x)/2f;val radiusY=abs(b.y-a.y)/2f
                 if(d.tool==DrawingTool.CIRCLE) abs((point-center).getDistance()-min(radiusX,radiusY))

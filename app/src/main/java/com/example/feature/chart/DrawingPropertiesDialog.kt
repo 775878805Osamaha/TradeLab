@@ -31,10 +31,10 @@ internal fun DrawingPropertiesDialog(drawing: ChartDrawing, onDismiss: () -> Uni
             } }
             Text("سُمك الخط: ${width.toInt()}"); Slider(width,{width=it},valueRange=1f..6f,steps=4)
             if(drawing.tool.isTextTool) OutlinedTextField(text,{text=it},label={Text("النص")})
-            prices.forEachIndexed { i,value -> OutlinedTextField(value,{next -> prices=prices.toMutableList().also { it[i]=next }},label={Text("سعر النقطة ${i+1}")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal)) }
+            prices.forEachIndexed { i,value -> OutlinedTextField(value,{next -> prices=prices.toMutableList().also { it[i]=next }},modifier=Modifier.testTag("drawing_price_$i"),label={Text("سعر النقطة ${i+1}")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal)) }
             TextButton(onClick = onDelete) { Text("حذف الرسم", color = Color(0xFFFF3D48)) }
         } },
-        confirmButton = { TextButton(enabled=valid,onClick={
+        confirmButton = { TextButton(modifier=Modifier.testTag("drawing_save"),enabled=valid,onClick={
             val anchors=original.mapIndexed { i,a -> a.copy(price=prices[i].toDouble()) }
             onSave(drawing.copy(color=color,strokeWidth=width,text=text,startPrice=anchors.first().price,
                 endPrice=if(drawing.endPrice!=null) anchors.last().price else null,

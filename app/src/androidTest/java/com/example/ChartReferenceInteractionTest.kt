@@ -348,10 +348,31 @@ class ChartReferenceInteractionTest {
             org.junit.Assert.assertEquals(3, com.example.feature.chart.model.ChartDrawing.fromEntity(stored)!!.anchors.size)
             captureProviderScreen("drawing-catalog-triangle")
             compose.onNodeWithTag("candlestick_canvas").performTouchInput {
-                longClick(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f))
+                click(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f))
             }
+            compose.onNodeWithTag("drawing_selection_toolbar").assertIsDisplayed()
+            captureProviderScreen("drawing-edit-selected")
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                swipe(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f),androidx.compose.ui.geometry.Offset(width*.60f,height*.40f),600)
+            }
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id }.pointsJson!=stored.pointsJson } }
+            val dragged=kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id } }
+            val draggedModel=com.example.feature.chart.model.ChartDrawing.fromEntity(dragged)!!
+            val originalModel=com.example.feature.chart.model.ChartDrawing.fromEntity(stored)!!
+            org.junit.Assert.assertNotEquals(originalModel.anchors[0],draggedModel.anchors[0])
+            org.junit.Assert.assertEquals(originalModel.anchors.drop(1),draggedModel.anchors.drop(1))
+            compose.onNodeWithTag("drawing_edit_color").performClick()
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id }.colorHex!=stored.colorHex } }
+            compose.onNodeWithTag("drawing_edit_properties").performClick()
             compose.onNodeWithTag("drawing_properties").assertIsDisplayed()
-            androidx.test.espresso.Espresso.pressBack()
+            compose.onNodeWithTag("drawing_price_0").performTextReplacement("4000.25")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.onNodeWithTag("drawing_save").performClick()
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id })!!.startPrice==4000.25 } }
+            captureProviderScreen("drawing-edit-saved")
+            compose.activityRule.scenario.recreate()
+            compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
+            org.junit.Assert.assertEquals(4000.25,kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id })!!.startPrice },0.0)
         } finally {
             app.getSharedPreferences("drawing_catalog",android.content.Context.MODE_PRIVATE).edit().putBoolean("show_favorites",false).commit()
             shell("wm size 864x1536")
