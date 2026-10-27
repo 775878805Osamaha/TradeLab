@@ -10,11 +10,12 @@ object DrawingEditing {
         else Offset(t.timeToX(d.startTime)?:return emptyList(),t.priceToY(d.startPrice))
         val b=Offset(d.endTime?.let(t::timeToX)?:a.x,d.endPrice?.let(t::priceToY)?:a.y)
         if(d.tool==DrawingTool.RECTANGLE) return listOf(a,Offset((a.x+b.x)/2,a.y),Offset(b.x,a.y),Offset(b.x,(a.y+b.y)/2),b,Offset((a.x+b.x)/2,b.y),Offset(a.x,b.y),Offset(a.x,(a.y+b.y)/2))
-        return if(d.anchors.isNotEmpty())d.anchors.mapNotNull { p->t.timeToX(p.time)?.let { Offset(it,t.priceToY(p.price)) } }
+        val anchors=if(d.tool.isFreehand && d.anchors.size>2)listOf(d.anchors.first(),d.anchors.last()) else d.anchors
+        return if(anchors.isNotEmpty())anchors.mapNotNull { p->t.timeToX(p.time)?.let { Offset(it,t.priceToY(p.price)) } }
         else if(d.endTime!=null && d.endPrice!=null)listOf(a,b) else listOf(a)
     }
     fun handleAt(d:ChartDrawing,t:ChartTransform,p:Offset,radius:Float):Int? =
-        handles(d,t).withIndex().minByOrNull { (it.value-p).getDistance() }?.takeIf { (it.value-p).getDistance()<=radius }?.index
+        handles(d,t).withIndex().minByOrNull { (it.value-p).getDistance() }?.takeIf { (it.value-p).getDistance()<=radius }?.index?.let { if(d.tool.isFreehand && d.anchors.size>2 && it==1)d.anchors.lastIndex else it }
 
     fun drag(d:ChartDrawing,t:ChartTransform,origin:Offset,current:Offset,handle:Int?):ChartDrawing {
         if(d.tool==DrawingTool.ANCHORED_TEXT) return d.copy(screenX=(current.x/t.chartWidth).coerceIn(0f,1f),screenY=(current.y/t.chartHeight).coerceIn(0f,1f))

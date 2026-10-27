@@ -45,4 +45,13 @@ class DrawingEditingTest {
         assertEquals(d.anchors.drop(1),moved.anchors.drop(1))
         assertEquals(moved,ChartDrawing.fromEntity(moved.toEntity()))
     }
+    @Test fun freehandKeepsOnlyEndpointHandlesAndTranslatesItsWholeStroke() {
+        val d=drawing(DrawingTool.BRUSH).copy(anchors=(0..5).map { DrawingAnchor(candles[it+1].openTime,101.0+it) })
+        val handles=DrawingEditing.handles(d,t)
+        assertEquals(2,handles.size)
+        assertEquals(5,DrawingEditing.handleAt(d,t,handles.last(),10f))
+        val moved=DrawingEditing.drag(d,t,Offset(100f,100f),Offset(140f,120f),null)
+        assertEquals(d.anchors.size,moved.anchors.size)
+        moved.anchors.forEachIndexed { i,a->assertEquals(d.anchors[i].time+60_000,a.time) }
+    }
 }
