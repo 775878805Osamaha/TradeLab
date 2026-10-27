@@ -67,7 +67,8 @@ data class ChartDrawing(
     val text: String = "تعليق",
     val anchors: List<DrawingAnchor> = emptyList(),
     val screenX: Float? = null,
-    val screenY: Float? = null
+    val screenY: Float? = null,
+    val replayCreatedAt: Long? = null
 ) {
     fun toEntity(): DrawingEntity {
         val json = buildString {
@@ -82,6 +83,7 @@ data class ChartDrawing(
                 append(",\"anchorsBase64\":\"${Base64.getEncoder().encodeToString(encoded.toByteArray(Charsets.UTF_8))}\"")
             }
             if (screenX != null && screenY != null) append(",\"screenX\":$screenX,\"screenY\":$screenY")
+            if(replayCreatedAt!=null)append(",\"replayCreatedAt\":$replayCreatedAt")
             append("}")
         }
         val hex = String.format(Locale.US, "#%08X", color.toArgb().toLong() and 0xFFFFFFFFL)
@@ -130,6 +132,7 @@ data class ChartDrawing(
                             val parts = item.split(':'); val t = parts.getOrNull(0)?.toLongOrNull(); val p = parts.getOrNull(1)?.toDoubleOrNull()
                             if (t != null && p != null && p.isFinite() && p > 0) DrawingAnchor(t, p) else null
                         } ?: emptyList(),
+                    replayCreatedAt = Regex("\"replayCreatedAt\":([0-9]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toLongOrNull(),
                     screenX = Regex("\"screenX\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f },
                     screenY = Regex("\"screenY\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f }
                 )

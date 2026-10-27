@@ -33,4 +33,13 @@ class ReplayDrawingVisibilityTests {
         assertEquals(3, visibleReplayDrawings(listOf(known, future, ellipse), 200L).size)
     }
 
+    @Test fun manualProjectionUsesCreationTimeAndStillDisappearsBeforeCreation() {
+        val projected=drawing(100L,400L).copy(replayCreatedAt=150L)
+        assertEquals(listOf(projected),visibleReplayDrawings(listOf(projected),150L))
+        assertTrue(visibleReplayDrawings(listOf(projected),149L).isEmpty())
+        val restored=ChartDrawing.fromEntity(projected.toEntity())!!
+        assertEquals(projected,restored)
+        val edited=projected.copy(replayCreatedAt=200L)
+        assertTrue(visibleReplayDrawings(listOf(edited),199L).isEmpty())
+    }
 }
