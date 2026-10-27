@@ -162,6 +162,9 @@ interface BacktestDao {
 
 @Dao
 interface DrawingDao {
+    @Query("SELECT * FROM drawings WHERE id = :id")
+    suspend fun getDrawing(id:Long):DrawingEntity?
+
     @Query("SELECT * FROM drawings WHERE symbol = :symbol AND timeframe = :timeframe")
     fun getDrawings(symbol: String, timeframe: String): Flow<List<DrawingEntity>>
 

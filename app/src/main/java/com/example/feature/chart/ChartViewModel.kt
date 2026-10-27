@@ -16,6 +16,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class ChartUiState(
     val selectedSymbol: String = "XAUUSD",
@@ -55,6 +57,7 @@ class ChartViewModel(
     private val drawingDao: DrawingDao? = null
 ) : ViewModel() {
 
+    private val drawingMutationMutex=Mutex()
     private val _uiState = MutableStateFlow(ChartUiState())
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
 
@@ -333,42 +336,52 @@ class ChartViewModel(
         _uiState.update { it.copy(activeDrawingTool = DrawingTool.NONE) }
     }
 
-    fun updateDrawing(drawing: ChartDrawing) {
-        if (drawing.symbol != _uiState.value.selectedSymbol || drawing.timeframe != _uiState.value.selectedTimeframe.code) return
+    /** Apply successive controls to the latest persisted row, not a stale UI copy. */
+    fun patchDrawing(id:Long,change:(ChartDrawing)->ChartDrawing) {
+        val sym=_uiState.value.selectedSymbol
+        val tf=_uiState.value.selectedTimeframe.code
         viewModelScope.launch {
-            if (drawingDao != null) withContext(Dispatchers.IO) { drawingDao.insertDrawing(drawing.toEntity()) }
-            else _uiState.update { state -> state.copy(drawings = state.drawings.map { if (it.id == drawing.id) drawing else it }) }
+            drawingMutationMutex.withLock {
+                val base=if(drawingDao!=null)withContext(Dispatchers.IO) { drawingDao.getDrawing(id)?.let(ChartDrawing::fromEntity) }
+                    else _uiState.value.drawings.firstOrNull { it.id==id }
+                if(base==null || base.symbol!=sym || base.timeframe!=tf)return@withLock
+                val next=change(base).copy(id=base.id,symbol=base.symbol,timeframe=base.timeframe)
+                if(next==base)return@withLock
+                if(drawingDao!=null)withContext(Dispatchers.IO) { drawingDao.insertDrawing(next.toEntity()) }
+                else _uiState.update { state->state.copy(drawings=state.drawings.map { if(it.id==id)next else it }) }
+            }
         }
     }
 
-    fun deleteDrawing(id: Long) {
+    fun updateDrawing(drawing:ChartDrawing) {
+        if(drawing.symbol!=_uiState.value.selectedSymbol || drawing.timeframe!=_uiState.value.selectedTimeframe.code)return
+        patchDrawing(drawing.id) { drawing }
+    }
+
+    fun updateDrawingGeometry(drawing:ChartDrawing) {
+        patchDrawing(drawing.id) { current ->
+            if(current.isLocked)current else current.copy(startTime=drawing.startTime,startPrice=drawing.startPrice,
+                endTime=drawing.endTime,endPrice=drawing.endPrice,anchors=drawing.anchors,
+                screenX=drawing.screenX,screenY=drawing.screenY,replayCreatedAt=drawing.replayCreatedAt)
+        }
+    }
+
+    fun deleteDrawing(id:Long) {
         viewModelScope.launch {
-            if (drawingDao != null) {
-                withContext(Dispatchers.IO) {
-                    drawingDao.deleteDrawing(id)
-                }
-            } else {
-                _uiState.update { state ->
-                    state.copy(drawings = state.drawings.filter { d -> d.id != id })
-                }
+            drawingMutationMutex.withLock {
+                if(drawingDao!=null)withContext(Dispatchers.IO) { drawingDao.deleteDrawing(id) }
+                else _uiState.update { state->state.copy(drawings=state.drawings.filter { it.id!=id }) }
             }
         }
     }
 
     fun clearDrawings() {
-        val sym = _uiState.value.selectedSymbol
-        val tf = _uiState.value.selectedTimeframe.code
+        val sym=_uiState.value.selectedSymbol
+        val tf=_uiState.value.selectedTimeframe.code
         viewModelScope.launch {
-            if (drawingDao != null) {
-                withContext(Dispatchers.IO) {
-                    drawingDao.clearDrawings(sym, tf)
-                }
-            } else {
-                _uiState.update { state ->
-                    if (state.selectedSymbol == sym && state.selectedTimeframe.code == tf) {
-                        state.copy(drawings = emptyList())
-                    } else state
-                }
+            drawingMutationMutex.withLock {
+                if(drawingDao!=null)withContext(Dispatchers.IO) { drawingDao.clearDrawings(sym,tf) }
+                else _uiState.update { state->if(state.selectedSymbol==sym && state.selectedTimeframe.code==tf)state.copy(drawings=emptyList()) else state }
             }
         }
     }

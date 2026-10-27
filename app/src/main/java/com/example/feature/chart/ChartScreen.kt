@@ -995,7 +995,7 @@ fun ChartScreen(
                     onSelectDrawing = { selectedDrawingId = it.id },
                     selectedDrawingId = selectedDrawingId,
                     onClearDrawingSelection = { selectedDrawingId=null },
-                    onUpdateDrawing = {viewModel.updateDrawing(stampDrawing(it))},
+                    onUpdateDrawing = {viewModel.updateDrawingGeometry(stampDrawing(it))},
                     onSelectPosition = {
                         if (isEmbeddedReplay) replayViewModel.pause()
                         selectedPositionReplay = isEmbeddedReplay
@@ -1012,7 +1012,7 @@ fun ChartScreen(
                 displayedDrawings.firstOrNull { it.id==selectedDrawingId }?.takeIf { uiState.activeDrawingTool==DrawingTool.NONE }?.let { selected ->
                     DrawingSelectionToolbar(selected,
                         onProperties={editingDrawing=selected},
-                        onUpdate={viewModel.updateDrawing(stampDrawing(it))},
+                        onUpdate={change->viewModel.patchDrawing(selected.id) { current->stampDrawing(change(current)) }},
                         onDelete={viewModel.deleteDrawing(selected.id);selectedDrawingId=null},
                         onDismiss={selectedDrawingId=null},
                         modifier=Modifier.align(Alignment.TopCenter).absolutePadding(left=54.dp,right=4.dp,top=if(isEmbeddedReplay)176.dp else 136.dp))
