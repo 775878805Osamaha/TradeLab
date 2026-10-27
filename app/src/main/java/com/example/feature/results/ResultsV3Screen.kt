@@ -78,9 +78,13 @@ fun ResultsScreen(viewModel:ResultsViewModel,onNavigateToHistory:()->Unit,onNavi
                 Box(Modifier.clip(RoundedCornerShape(4.dp)).background(if(active)V3Blue else V3Card).border(.7.dp,if(active)V3Blue else V3Border,RoundedCornerShape(4.dp)).clickable{if(period==ResultsPeriod.CUSTOM)custom=true else viewModel.setSelectedPeriod(period)}.padding(horizontal=7.dp,vertical=7.dp).testTag("results_period_${period.name}")){Text(period.titleAr,color=if(active)Color.White else V3Muted,fontSize=8.sp,lineHeight=11.sp,maxLines=1)}
             }}
             val format=remember{SimpleDateFormat("yyyy/MM/dd",Locale.US)}
-            Row(Modifier.border(.7.dp,V3Border,RoundedCornerShape(4.dp)).clickable{custom=true}.padding(6.dp).testTag("results_custom_dates"),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
-                Icon(Icons.Default.CalendarMonth,null,tint=V3Muted,modifier=Modifier.size(13.dp))
-                Text(if(a!=null)"${format.format(Date(a.start))} – ${format.format(Date(a.end))}" else "اختيار الفترة",fontSize=8.sp,color=V3Muted,style=TextStyle(textDirection=TextDirection.Ltr))
+            // Reference: x19..306 at276dpi, with calendar physically left of the range.
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(Modifier.width(166.dp).border(.7.dp,V3Border,RoundedCornerShape(4.dp)).clickable{custom=true}.padding(horizontal=7.dp,vertical=6.dp).testTag("results_custom_dates"),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+                    Icon(Icons.Default.CalendarMonth,null,tint=V3Muted,modifier=Modifier.size(13.dp))
+                    Text(if(a!=null)"${format.format(Date(a.start))} – ${format.format(Date(a.end))}" else "اختيار الفترة",fontSize=9.sp,lineHeight=11.sp,maxLines=1,textAlign=TextAlign.Center,color=V3Muted,style=TextStyle(textDirection=TextDirection.Ltr),modifier=Modifier.weight(1f))
+                    Icon(Icons.Default.KeyboardArrowDown,null,tint=V3Muted,modifier=Modifier.size(12.dp))
+                }
             }
         }
         if(state.isLoading) LinearProgressIndicator(Modifier.fillMaxWidth(),color=V3Profit)

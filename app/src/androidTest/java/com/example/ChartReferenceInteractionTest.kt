@@ -225,7 +225,7 @@ class ChartReferenceInteractionTest {
             compose.waitUntil(10000) { compose.onAllNodesWithTag("results_hero_card").fetchSemanticsNodes().isNotEmpty() }
             captureProviderScreen("results-v3-overview")
             val geometry=org.json.JSONObject()
-            listOf("results_header","results_tabs","results_filters","results_hero_card","results_metrics_grid","results_recent_trades").forEach { tag ->
+            listOf("results_header","results_tabs","results_filters","results_custom_dates","results_hero_card","results_metrics_grid","results_recent_trades").forEach { tag ->
                 val bounds=compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
                 geometry.put(tag,org.json.JSONArray(listOf(bounds.left,bounds.top,bounds.right,bounds.bottom)))
             }
