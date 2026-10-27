@@ -125,6 +125,12 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_bottom_strip").assertIsDisplayed()
     }
     @Test fun replayPositionLineOpensActionsAndPartialCloseKeepsChart() {
+        compose.onNodeWithTag("nav_item_account").performClick()
+        compose.waitUntil(90000) { compose.onAllNodesWithTag("training_start").fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null && compose.onAllNodesWithTag("training_start").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("training_start_balance").performTextReplacement("100")
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.onNodeWithTag("training_start").performClick()
+
         // The production Replay account starts at $50. Use an affordable real
         // forex order so this interaction test also respects its margin checks.
         compose.onNodeWithTag("chart_bottom_symbol").performClick()
@@ -174,6 +180,13 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("nav_item_results").performClick()
         compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
         captureProviderScreen("tradelab-replay-results")
+        val app=compose.activity.application as TradeLabApplication
+        compose.waitUntil(10000) { app.trainingSessionStore.read()?.state?.let { it.initialBalance==100.0 && it.openPositions.size==1 && it.closedTrades.size==1 } == true }
+        app.tradingRepository.replayReport.value=null
+        compose.activityRule.scenario.recreate()
+        compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("تداول ورقي").assertDoesNotExist()
+        captureProviderScreen("tradelab-training-restored")
     }
 
     @Test fun marketTerminalSearchAndOpenChart() {
