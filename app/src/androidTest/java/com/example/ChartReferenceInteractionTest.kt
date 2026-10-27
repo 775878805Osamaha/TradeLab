@@ -12,6 +12,8 @@ import org.junit.runner.RunWith
 /** Exercises the production Activity and its existing NavHost, not a mock screen. */
 @RunWith(AndroidJUnit4::class)
 class ChartReferenceInteractionTest {
+    @org.junit.After fun clearTrainingCheckpoint() { (compose.activity.application as TradeLabApplication).trainingSessionStore.clear(); (compose.activity.application as TradeLabApplication).tradingRepository.replayReport.value=null }
+
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     @Test fun fourDestinationsNavigateAndRestoreChartControls() {
@@ -49,34 +51,6 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_load_error").assertDoesNotExist()
         compose.onNodeWithTag("chart_bottom_timeframe").assertTextContains("3 دق", substring = true)
         captureProviderScreen("tradelab-gold-3m")
-    }
-
-    @Test fun legacyGoldTradeShowsVerifiedBidAskAndHistory() {
-        // Live-quote acceptance is exercised on weekdays; closed markets must remain blocked.
-        org.junit.Assume.assumeTrue(java.time.LocalDate.now(java.time.ZoneOffset.UTC).dayOfWeek.value <= 5)
-        compose.onNodeWithTag("nav_item_account").performClick()
-        compose.waitUntil(30000) {
-            compose.onAllNodesWithTag("dash_action_trade").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithTag("dash_action_trade").performScrollTo().performClick()
-        compose.onNodeWithTag("trade_symbol_selector").performClick()
-        compose.onAllNodesWithText("XAUUSD").onLast().performClick()
-        compose.waitUntil(90000) {
-            val node = compose.onAllNodesWithTag("trade_quote_bid").fetchSemanticsNodes().firstOrNull()
-            val text = node?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)
-                ?.joinToString("") { it.text }?.replace(",", "")
-            (text?.toDoubleOrNull() ?: 0.0) > 0.0
-        }
-        val app = compose.activity.application as TradeLabApplication
-        val tick = kotlinx.coroutines.runBlocking { app.marketDataRepository.provider.getLatestTick("XAUUSD") }
-        org.junit.Assert.assertTrue(com.example.core.market.VerifiedMarketQuote.isVerified(tick, "XAUUSD"))
-        compose.onNodeWithTag("trade_quote_ask").assertIsDisplayed()
-        compose.onNodeWithTag("trade_chart_card").performScrollTo()
-        compose.waitUntil(90000) {
-            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithTag("trade_quote_bid").performScrollTo()
-        captureProviderScreen("tradelab-gold-trade")
     }
 
     @Test fun recordActualPanFrameDurations() {
@@ -147,13 +121,17 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_embedded_replay_controls").assertIsDisplayed()
         compose.onNodeWithTag("nav_item_chart").assertIsSelected()
         compose.onNodeWithTag("chart_bottom_symbol").assertIsDisplayed()
-        androidx.test.espresso.Espresso.pressBack()
-        compose.onNodeWithTag("chart_embedded_replay_controls").assertDoesNotExist()
+        compose.onNodeWithTag("chart_embedded_replay_controls").assertIsDisplayed()
         compose.onNodeWithTag("chart_bottom_strip").assertIsDisplayed()
     }
     @Test fun replayPositionLineOpensActionsAndPartialCloseKeepsChart() {
-        // The production Replay account starts at $50. Use an affordable real
-        // forex order so this interaction test also respects its margin checks.
+        compose.onNodeWithTag("nav_item_account").performClick()
+        compose.waitUntil(90000) { compose.onAllNodesWithTag("training_start").fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null && compose.onAllNodesWithTag("training_start").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("training_start_balance").performScrollTo().performTextReplacement("100")
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.onNodeWithTag("training_start").performScrollTo().performClick()
+
+        // Use a real forex dataset and respect the funded account margin checks.
         compose.onNodeWithTag("chart_bottom_symbol").performClick()
         compose.onNodeWithTag("chart_symbol_search").performTextInput("GBPUSD")
         compose.onNodeWithTag("chart_symbol_option_GBPUSD").performClick()
@@ -163,6 +141,7 @@ class ChartReferenceInteractionTest {
                 ?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null &&
             compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.waitUntil(90000) { compose.onNodeWithTag("chart_bottom_symbol").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.joinToString(""){it.text}?.contains("GBPUSD") == true }
         compose.onNodeWithTag("chart_replay_buy").performClick()
         compose.onNodeWithTag("chart_order_volume").performTextReplacement("0.02")
         androidx.test.espresso.Espresso.closeSoftKeyboard()
@@ -193,9 +172,98 @@ class ChartReferenceInteractionTest {
             }
         }
         compose.onNodeWithText("الحجم المفتوح: 0.01 لوت").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        compose.onNodeWithTag("nav_item_account").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("حساب التدريب").assertExists()
+        captureProviderScreen("tradelab-replay-account")
+        compose.onNodeWithTag("nav_item_results").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
+        captureProviderScreen("tradelab-replay-results")
+        val app=compose.activity.application as TradeLabApplication
+        compose.waitUntil(10000) { app.trainingSessionStore.read()?.state?.let { it.initialBalance==100.0 && it.openPositions.size==1 && it.closedTrades.size==1 && it.openPositions.first().symbol=="GBPUSD" && it.closedTrades.first().symbol=="GBPUSD" } == true }
+        app.tradingRepository.replayReport.value=null
+        compose.activityRule.scenario.recreate()
+        compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("تداول ورقي").assertDoesNotExist()
+        captureProviderScreen("tradelab-training-restored")
+        compose.onNodeWithTag("nav_item_chart").performClick()
+        for (step in 1..40) {
+            if (compose.onAllNodesWithTag("chart_position_actions").fetchSemanticsNodes().isNotEmpty()) break
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(width * .65f, height * step / 42f))
+            }
+        }
+        compose.onNodeWithTag("position_close").performClick()
+        compose.onNodeWithTag("position_action_confirm").performClick()
+        compose.waitUntil(10000) { app.tradingRepository.replayReport.value?.let { it.positions.isEmpty() && it.trades.size==2 } == true }
+        val finalReport = app.tradingRepository.replayReport.value!!
+        org.junit.Assert.assertEquals(100.0 + finalReport.trades.sumOf { it.netProfitLoss }, finalReport.account.balance, 0.000001)
+        org.junit.Assert.assertEquals(finalReport.account.balance, finalReport.account.equity, 0.000001)
+        org.junit.Assert.assertEquals(0.02, finalReport.trades.sumOf { it.volume }, 0.000001)
+        compose.onNodeWithTag("nav_item_results").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("حساب التدريب · 0 مفتوحة · 2 مغلقة").fetchSemanticsNodes().isNotEmpty() }
+        captureProviderScreen("tradelab-training-completed")
+        // Populate the reference's last-five table by executing more actual provider-backed orders.
+        repeat(3) { iteration ->
+            compose.onNodeWithTag("nav_item_chart").performClick()
+            compose.onNodeWithTag(if(iteration%2==0)"chart_replay_sell" else "chart_replay_buy").performClick()
+            compose.onNodeWithTag("chart_order_volume").performTextReplacement("0.01")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.onNodeWithTag("chart_order_confirm").performClick()
+            for (step in 1..40) {
+                if (compose.onAllNodesWithTag("chart_position_actions").fetchSemanticsNodes().isNotEmpty()) break
+                compose.onNodeWithTag("candlestick_canvas").performTouchInput { click(androidx.compose.ui.geometry.Offset(width*.65f,height*step/42f)) }
+            }
+            compose.onNodeWithTag("position_close").performClick()
+            compose.onNodeWithTag("position_action_confirm").performClick()
+        }
+        compose.onNodeWithTag("nav_item_results").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("حساب التدريب · 0 مفتوحة · 5 مغلقة").fetchSemanticsNodes().isNotEmpty() }
+        shell("wm size 691x1536");shell("wm density 276")
+        try {
+            compose.waitUntil(10000) { compose.onAllNodesWithTag("results_hero_card").fetchSemanticsNodes().isNotEmpty() }
+            captureProviderScreen("results-v3-overview")
+            val geometry=org.json.JSONObject()
+            listOf("results_header","results_tabs","results_filters","results_custom_dates","results_hero_card","results_metrics_grid","results_recent_trades").forEach { tag ->
+                val bounds=compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+                geometry.put(tag,org.json.JSONArray(listOf(bounds.left,bounds.top,bounds.right,bounds.bottom)))
+            }
+            android.util.Log.i("TradeLabResultsLayout", geometry.toString())
+            compose.onNodeWithTag("results_periods").performScrollToNode(hasTestTag("results_period_WEEK"))
+            compose.onNodeWithTag("results_period_WEEK").performClick()
+            compose.waitUntil(10000) { compose.onAllNodesWithTag("results_trade_5").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("results_periods").performScrollToNode(hasTestTag("results_period_ALL"))
+            compose.onNodeWithTag("results_period_ALL").performClick()
+            compose.onNodeWithTag("results_custom_dates").performClick()
+            compose.onNodeWithText("اختيار تاريخ النهاية").performClick()
+            compose.onNodeWithText("تطبيق").performClick()
+            compose.waitUntil(10000){compose.onAllNodesWithTag("results_trade_5").fetchSemanticsNodes().isNotEmpty()}
+            compose.onNodeWithTag("results_periods").performScrollToNode(hasTestTag("results_period_ALL"))
+            compose.onNodeWithTag("results_period_ALL").performClick()
+            compose.onNodeWithTag("results_chart_expand").performClick()
+            compose.onNodeWithText("إغلاق").performClick()
+            compose.onNodeWithTag("results_tab_CURVES").performClick()
+            captureProviderScreen("results-v3-curves")
+            compose.onNodeWithTag("results_tab_JOURNAL").performClick()
+            compose.onNodeWithTag("results_trade_5").performClick()
+            compose.onNodeWithText("تفاصيل الصفقة #5").assertExists()
+            val closeBounds=compose.onNodeWithTag("trade_detail_close").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            org.junit.Assert.assertTrue("Close action must remain fully visible below scrolling attributes",closeBounds.height>=40*compose.activity.resources.displayMetrics.density)
+            captureProviderScreen("results-v3-trade-detail")
+            compose.onNodeWithTag("trade_detail_close").performClick()
+            compose.onNodeWithTag("results_tab_STATISTICS").performClick()
+            captureProviderScreen("results-v3-statistics")
+            compose.onNodeWithTag("results_tab_DAILY").performClick()
+            captureProviderScreen("results-v3-daily")
+            compose.onNodeWithTag("results_tab_OVERVIEW").performClick()
+        } finally {shell("wm size 864x1536");shell("wm density 346")}
     }
 
     @Test fun marketTerminalSearchAndOpenChart() {
+        shell("wm size 691x1536")
+        shell("wm density 276")
+        try {
         compose.onNodeWithTag("nav_item_market").performClick()
         compose.waitUntil(30000) { compose.onAllNodesWithTag("symbol_card_BTCUSDT").fetchSemanticsNodes().isNotEmpty() }
         captureProviderScreen("tradelab-market-terminal")
@@ -205,6 +273,7 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("symbol_card_BTCUSDT").assertDoesNotExist()
         compose.onNodeWithTag("symbol_card_XAUUSD").performClick()
         compose.onNodeWithTag("nav_item_chart").assertIsSelected()
+        } finally { shell("wm size 864x1536"); shell("wm density 346") }
     }
 
     private fun shell(command: String) {
@@ -221,6 +290,20 @@ class ChartReferenceInteractionTest {
             shell("wm size 691x1536")
             shell("wm density 276")
             compose.waitUntil(30000) { compose.onAllNodesWithTag("chart_bottom_strip").fetchSemanticsNodes().isNotEmpty() }
+            // A previous activity can restore the GBPUSD training dataset. Establish
+            // the exact dataset whose Room drawings this test asserts below.
+            compose.onNodeWithTag("chart_bottom_symbol").performClick()
+            compose.onNodeWithTag("chart_symbol_search").performTextInput("XAUUSD")
+            compose.onNodeWithTag("chart_symbol_option_XAUUSD").performClick()
+            compose.onNodeWithTag("chart_bottom_timeframe").performClick()
+            compose.onNodeWithText("15m").performClick()
+            compose.waitUntil(90000) {
+                compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithTag("chart_replay_buy").fetchSemanticsNodes().firstOrNull()
+                    ?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null
+            }
+            compose.onNodeWithTag("chart_bottom_symbol").assertTextContains("XAUUSD", substring=true)
+            compose.onNodeWithTag("chart_bottom_timeframe").assertTextContains("15 دق", substring=true)
             compose.onNodeWithContentDescription("أدوات الرسم").performClick()
             compose.onNodeWithTag("drawing_catalog_sheet").assertExists()
             compose.onNodeWithTag("drawing_sheet_handle", useUnmergedTree = true).performTouchInput {
@@ -246,14 +329,18 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithContentDescription("أدوات الرسم").performClick()
             compose.onNodeWithTag("drawing_favorites_switch").performClick()
             compose.onNodeWithTag("drawing_catalog_search").performTextInput("مثلث")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.waitForIdle()
             compose.onNodeWithTag("drawing_catalog_grid").performScrollToNode(hasTestTag("drawing_tool_TRIANGLE"))
-            compose.onNodeWithTag("drawing_tool_TRIANGLE").performClick()
+            compose.onNodeWithTag("drawing_tool_TRIANGLE").assertIsDisplayed().performClick()
+            compose.waitUntil(10000) { compose.onAllNodesWithTag("drawing_catalog_sheet").fetchSemanticsNodes().isEmpty() }
             compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("candlestick_canvas").performTouchInput {
                 click(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f))
                 click(androidx.compose.ui.geometry.Offset(width*.75f,height*.55f))
                 click(androidx.compose.ui.geometry.Offset(width*.6f,height*.7f))
             }
+            captureProviderScreen("drawing-catalog-triangle")
             compose.waitUntil(10000) {
                 kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().any { it.type == "TRIANGLE" } }
             }

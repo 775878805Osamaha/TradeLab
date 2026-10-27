@@ -19,7 +19,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,7 +40,7 @@ fun TradeDetailDialog(
     onDismiss: () -> Unit
 ) {
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US) }
-    val sym = remember { com.example.core.market.DefaultSymbols.getSymbol(trade.symbol) }
+    val sym = remember(trade.symbol) { com.example.core.market.DefaultSymbols.getSymbol(trade.symbol) }
     val riskAmount = trade.stopLoss?.let {
         kotlin.math.abs(trade.entryPrice - it) * trade.volume * sym.contractSize
     }
@@ -51,10 +54,9 @@ fun TradeDetailDialog(
             colors = CardDefaults.cardColors(containerColor = TradingCard),
             border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
         ) {
+            Column(Modifier.padding(20.dp)) {
             Column(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState()),
+                modifier = Modifier.weight(1f,fill=false).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
@@ -94,7 +96,8 @@ fun TradeDetailDialog(
                     }
 
                     Text(
-                        text = String.format(Locale.US, "%s$%.2f", if (trade.netProfitLoss >= 0) "+" else "", trade.netProfitLoss),
+                        text = v3Money(trade.netProfitLoss,true),
+                        style = TextStyle(textDirection=TextDirection.Ltr),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (trade.netProfitLoss >= 0) TradingPositive else TradingNegative
@@ -104,26 +107,34 @@ fun TradeDetailDialog(
                 // Attributes List
                 DetailRow("رمز الأداة", trade.symbol)
                 DetailRow("حجم العقد (Volume)", "${trade.volume} Lot")
-                DetailRow("سعر الدخول", String.format(Locale.US, "%.4f", trade.entryPrice))
-                DetailRow("سعر الخروج", String.format(Locale.US, "%.4f", trade.exitPrice))
-                DetailRow("وقف الخسارة (SL)", trade.stopLoss?.let { String.format(Locale.US, "%.4f", it) } ?: "غير محدد")
-                DetailRow("جني الأرباح (TP)", trade.takeProfit?.let { String.format(Locale.US, "%.4f", it) } ?: "غير محدد")
-                DetailRow("الربح الإجمالي (Gross)", String.format(Locale.US, "$%.2f", trade.profitLoss))
-                DetailRow("العمولة (Commission)", String.format(Locale.US, "-$%.2f", trade.commission))
-                DetailRow("رسوم التبييت (Swap)", String.format(Locale.US, "$%.2f", trade.swap))
-                DetailRow("مبلغ المخاطرة (Risk)", riskAmount?.let { String.format(Locale.US, "$%.2f", it) } ?: "N/A")
-                DetailRow("المضاعف R (R-Multiple)", String.format(Locale.US, "%.2f R", trade.rMultiple))
-                DetailRow("سبب الخروج", trade.exitReason.name)
+                DetailRow("سعر الدخول", String.format(Locale.US, "%.${sym.digits}f", trade.entryPrice))
+                DetailRow("سعر الخروج", String.format(Locale.US, "%.${sym.digits}f", trade.exitPrice))
+                DetailRow("وقف الخسارة (SL)", trade.stopLoss?.let { String.format(Locale.US, "%.${sym.digits}f", it) } ?: "غير محدد")
+                DetailRow("جني الأرباح (TP)", trade.takeProfit?.let { String.format(Locale.US, "%.${sym.digits}f", it) } ?: "غير محدد")
+                DetailRow("الربح الإجمالي (Gross)", v3Money(trade.profitLoss,true))
+                DetailRow("العمولة (Commission)", v3Money(-trade.commission))
+                DetailRow("رسوم التبييت (Swap)", v3Money(trade.swap,true))
+                DetailRow("مبلغ المخاطرة (Risk)", riskAmount?.let { v3Money(it) } ?: "—")
+                DetailRow("المضاعف R (R-Multiple)", if(riskAmount!=null && riskAmount>0)String.format(Locale.US, "%.2f R", trade.rMultiple) else "—")
+                DetailRow("السبريد", "مضمن في أسعار التنفيذ؛ لا يُخصم مرة أخرى")
+                DetailRow("سبب الخروج", when(trade.exitReason) {
+                    ExitReason.TAKE_PROFIT->"جني الربح"
+                    ExitReason.STOP_LOSS->"وقف الخسارة"
+                    ExitReason.MANUAL_CLOSE->"إغلاق يدوي"
+                    ExitReason.STRATEGY_CLOSE->"إغلاق الاستراتيجية"
+                    ExitReason.TRAILING_STOP->"وقف متحرك"
+                    ExitReason.BREAK_EVEN->"تعادل"
+                })
                 DetailRow("الاستراتيجية", trade.strategyId ?: "يدوي (Manual)")
                 DetailRow("وقت الفتح", sdf.format(Date(trade.openTime)))
                 DetailRow("وقت الإغلاق", sdf.format(Date(trade.closeTime)))
                 DetailRow("مدة الصفقة", "${trade.durationMillis / 1000} ثانية (${trade.durationMillis / 60000} دقيقة)")
 
-                Spacer(modifier = Modifier.height(6.dp))
-
+            }
+                Spacer(modifier = Modifier.height(10.dp))
                 Button(
                     onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("trade_detail_close"),
                     colors = ButtonDefaults.buttonColors(containerColor = TradingElevated)
                 ) {
                     Text("إغلاق", color = TradingTextPrimary)
@@ -210,12 +221,15 @@ fun ExportDialog(
     var copied by remember { mutableStateOf(false) }
 
     val exportedText = remember(exportFormat, metrics, trades, dailySummaries, points) {
+        val symbols=trades.map { it.symbol }.distinct().sorted().joinToString("|").ifEmpty { "N/A" }
+        val strategies=trades.map { it.strategyId ?: "Manual" }.distinct().joinToString("|").ifEmpty { "N/A" }
+        // Journal entries do not retain a timeframe; never label the report as M15 by default.
         when (exportFormat) {
-            "CSV_SUMMARY" -> ResultsExporter.exportSummaryCsv(metrics)
+            "CSV_SUMMARY" -> ResultsExporter.exportSummaryCsv(metrics,strategyName=strategies,symbol=symbols,timeframe="N/A")
             "CSV_TRADES" -> ResultsExporter.exportTradesCsv(trades)
             "CSV_DAILY" -> ResultsExporter.exportDailyResultsCsv(dailySummaries)
             "CSV_EQUITY" -> ResultsExporter.exportEquityPointsCsv(points)
-            "JSON" -> ResultsExporter.exportCompleteJson(metrics, trades, dailySummaries, points)
+            "JSON" -> ResultsExporter.exportCompleteJson(metrics, trades, dailySummaries, points,strategyName=strategies,symbol=symbols,timeframe="N/A")
             else -> ""
         }
     }
@@ -303,8 +317,8 @@ private fun DetailRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, fontSize = 12.sp, color = TradingTextSecondary)
-        Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TradingTextPrimary)
+        Text(text = label, fontSize = 12.sp, color = TradingTextSecondary, modifier=Modifier.weight(1f).padding(end=8.dp))
+        Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TradingTextPrimary, style = TextStyle(textDirection=TextDirection.ContentOrLtr), modifier=Modifier.weight(1f), textAlign=androidx.compose.ui.text.style.TextAlign.End)
     }
 }
 

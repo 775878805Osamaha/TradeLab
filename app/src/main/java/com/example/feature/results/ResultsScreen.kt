@@ -33,7 +33,7 @@ import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ResultsScreen(
+fun LegacyResultsScreen(
     viewModel: ResultsViewModel,
     onNavigateToHistory: () -> Unit,
     onNavigateToBacktest: () -> Unit = {},
@@ -50,12 +50,9 @@ fun ResultsScreen(
     if (uiState.isExportDialogOpen && metrics != null) {
         // Export exactly the period shown on the overview; other tabs retain
         // their existing full-account export behavior.
-        val periodReport = remember(uiState.trades, uiState.initialBalance, uiState.selectedPeriod, uiState.selectedTab) {
+        val periodReport = remember(uiState.trades, uiState.initialBalance, uiState.currentBalance, uiState.metrics, uiState.equityPoints, uiState.selectedPeriod, uiState.selectedTab) {
             if (uiState.selectedTab == ResultsTab.OVERVIEW) {
-                ResultsPeriodCalculator.calculate(
-                    uiState.initialBalance, uiState.trades,
-                    uiState.selectedPeriod, System.currentTimeMillis()
-                )
+                ResultsPeriodCalculator.forDisplay(uiState, System.currentTimeMillis())
             } else null
         }
         val exportedTrades = periodReport?.trades ?: uiState.trades
@@ -82,6 +79,8 @@ fun ResultsScreen(
                     )
                 },
                 actions = {
+
+
                     IconButton(
                         onClick = { viewModel.setExportDialogOpen(true) },
                         modifier = Modifier.testTag("export_results_btn")
@@ -104,6 +103,13 @@ fun ResultsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            Column(Modifier.fillMaxWidth().background(ResultsCardBackground).padding(horizontal=12.dp,vertical=8.dp).testTag("results_positions_summary")) {
+                Text("حساب التدريب · ${uiState.openPositionsCount} مفتوحة · ${uiState.trades.size} مغلقة",color=ResultsText,fontSize=12.sp)
+                Text("الربح العائم: ${money(uiState.openPositions.sumOf { it.profitLoss },true)} · الربح المحقق: ${money(uiState.trades.sumOf { it.netProfitLoss },true)}",color=ResultsMuted,fontSize=11.sp)
+                uiState.openPositions.take(2).forEach { position ->
+                    Text("${position.symbol} · ${position.side} · ${position.volume} لوت · ${money(position.profitLoss,true)}",color=ResultsProfit,fontSize=11.sp)
+                }
+            }
             // Main Results Tabs
             ScrollableTabRow(
                 selectedTabIndex = uiState.selectedTab.ordinal,
@@ -112,7 +118,7 @@ fun ResultsScreen(
                 contentColor = TradingAccent,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                ResultsTab.values().forEach { tab ->
+                ResultsTab.values().filter { it != ResultsTab.COMPARISON }.forEach { tab ->
                     Tab(
                         selected = uiState.selectedTab == tab,
                         onClick = { viewModel.setSelectedTab(tab) },
@@ -133,6 +139,7 @@ fun ResultsScreen(
                 ResultsTab.OVERVIEW -> ResultsOverviewContent(viewModel, uiState, onNavigateToBacktest)
                 ResultsTab.CURVES -> ResultsCurvesContent(viewModel, uiState)
                 ResultsTab.JOURNAL -> ResultsJournalContent(viewModel, uiState)
+                ResultsTab.STATISTICS -> ResultsJournalContent(viewModel, uiState)
                 ResultsTab.DAILY -> ResultsDailyContent(viewModel, uiState)
                 ResultsTab.COMPARISON -> ResultsComparisonContent(viewModel, uiState)
             }
@@ -205,8 +212,8 @@ private fun ResultsOverviewContent(
 ) {
     val period = uiState.selectedPeriod
     val now = remember { System.currentTimeMillis() }
-    val snapshot = remember(uiState.trades, uiState.initialBalance, period, now) {
-        ResultsPeriodCalculator.calculate(uiState.initialBalance, uiState.trades, period, now)
+    val snapshot = remember(uiState.trades, uiState.initialBalance,uiState.metrics,uiState.equityPoints, period, now) {
+        ResultsPeriodCalculator.forDisplay(uiState, now)
     }
     val metrics = snapshot.metrics
     val trades = snapshot.trades
@@ -231,7 +238,7 @@ private fun ResultsOverviewContent(
                     Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.CalendarMonth, null, tint = ResultsMuted, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text(when(period) { ResultsPeriod.MONTH -> "هذا الشهر"; ResultsPeriod.WEEK -> "هذا الأسبوع"; ResultsPeriod.ALL -> "كل الفترات" },
+                        Text(when(period) { ResultsPeriod.MONTH -> "هذا الشهر"; ResultsPeriod.WEEK -> "هذا الأسبوع"; ResultsPeriod.ALL -> "كل الفترات"; else -> period.titleAr },
                             color = ResultsText, fontSize = 12.sp)
                     }
                 }
@@ -289,17 +296,17 @@ private fun ResultsOverviewContent(
                         Text(if (uiState.isPercentageMode) "عرض القيمة ($)" else "عرض النسبة (%)",
                             Modifier.padding(horizontal = 12.dp, vertical = 7.dp), fontSize = 11.sp, color = ResultsText)
                     }
-                    if (trades.isEmpty()) {
-                        Column(Modifier.fillMaxWidth().height(170.dp),
+                    if (trades.isEmpty() && uiState.equityPoints.size < 2) {
+                        Column(Modifier.fillMaxWidth().height(110.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center) {
-                            Text("ابدأ أول اختبار لعرض نتائجك", color = ResultsMuted, fontSize = 13.sp)
+                            Text("لا توجد صفقات مغلقة بعد", color = ResultsMuted, fontSize = 13.sp)
                             Spacer(Modifier.height(12.dp))
                             Button(
                                 onClick = onNavigateToBacktest,
                                 colors = ButtonDefaults.buttonColors(containerColor = ResultsPrimary),
                                 modifier = Modifier.testTag("results_start_backtest")
-                            ) { Text("ابدأ اختبارًا", color = Color.White) }
+                            ) { Text("ابدأ التداول على الشارت", color = Color.White) }
                         }
                     } else {
                         EquityCurveChart(

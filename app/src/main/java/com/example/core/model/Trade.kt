@@ -30,7 +30,7 @@ data class TradeJournalEntry(
     val rMultiple: Double = 0.0,
     val notes: String = "",
     val mode: String = "LIVE_PAPER"
-) {
+) : java.io.Serializable {
     val durationMillis: Long get() = closeTime - openTime
     val isWin: Boolean get() = netProfitLoss > 0.0
 }

@@ -7,11 +7,21 @@ import com.example.core.model.Position
  * Balance includes realized P&L; equity additionally includes floating P&L.
  */
 object ReplayAccountMath {
+    fun markToMarket(position: Position, tick: com.example.core.model.Tick): Position {
+        require(position.symbol==tick.symbol && tick.bid.isFinite() && tick.ask.isFinite() && tick.bid>0 && tick.ask>=tick.bid)
+        val price=if(position.side==com.example.core.model.PositionSide.BUY)tick.bid else tick.ask
+        val move=if(position.side==com.example.core.model.PositionSide.BUY)price-position.entryPrice else position.entryPrice-price
+        val pnl=move*position.volume*com.example.core.market.DefaultSymbols.getSymbol(position.symbol).contractSize
+        require(pnl.isFinite())
+        return position.copy(currentPrice=price,profitLoss=pnl)
+    }
+
     fun equity(balance: Double, openPositions: List<Position>): Double {
         require(balance.isFinite()) { "Replay balance must be finite" }
         val floating = openPositions.sumOf { position ->
             require(position.profitLoss.isFinite()) { "Replay floating P&L must be finite" }
-            position.profitLoss
+            require(position.commission.isFinite() && position.swap.isFinite()) { "Replay costs must be finite" }
+            position.netProfitLoss
         }
         val result = balance + floating
         require(result.isFinite()) { "Replay equity overflow" }

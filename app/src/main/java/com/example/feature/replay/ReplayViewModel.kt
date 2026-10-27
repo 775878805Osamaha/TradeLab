@@ -25,18 +25,19 @@ enum class ReplayInteractionMode {
 data class ReplayUiState(
     val symbol: String = "BTCUSDT",
     val timeframe: Timeframe = Timeframe.M15,
-    val initialBalance: Double = 50.0,
+    val datasetId: Long = 0,
+    val initialBalance: Double = 100.0,
     val maxOpenPositions: Int = 10,
     val maxPendingOrders: Int = 20,
     val maxDrawdownPercent: Double = 100.0,
-    val peakEquity: Double = 50.0,
+    val peakEquity: Double = 100.0,
     val maxObservedDrawdownPercent: Double = 0.0,
     val equitySamples: List<ReplayEquitySample> = emptyList(),
     val riskGuardEnabled: Boolean = true,
     val maxConsecutiveLosses: Int = 0,
     val maxSessionLossUsd: Double = 0.0,
-    val currentBalance: Double = 50.0,
-    val currentEquity: Double = 50.0,
+    val currentBalance: Double = 100.0,
+    val currentEquity: Double = 100.0,
     val visibleCandles: List<Candle> = emptyList(),
     val currentCandle: Candle? = null,
     val latestTick: Tick? = null,
@@ -58,18 +59,22 @@ data class ReplayUiState(
     val lastSignalMessage: String? = null,
     val isLoading: Boolean = false,
     val message: String? = null
-)
+) : java.io.Serializable
 
-data class ReplayEquitySample(val candleIndex: Int, val equity: Double, val balance: Double)
+data class ReplayEquitySample(val candleIndex: Int, val equity: Double, val balance: Double,val timestamp:Long=System.currentTimeMillis(),val datasetId:Long=0) : java.io.Serializable
 
 class ReplayViewModel(
     private val marketDataRepository: MarketDataRepository,
     private val executionEngine: ExecutionEngine = ExecutionEngine(),
-    val replayEngine: HistoricalReplayEngine = HistoricalReplayEngine()
+    val replayEngine: HistoricalReplayEngine = HistoricalReplayEngine(),
+    private val reportSink: ((ReplayReport) -> Unit)? = null,
+    private val sessionStore: TrainingSessionStore? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ReplayUiState(isLoading = true))
     val uiState: StateFlow<ReplayUiState> = _uiState.asStateFlow()
+
+    private val persistenceOwner=sessionStore?.newOwner()
 
     private val openPositions = mutableListOf<Position>()
     private val pendingOrders = mutableListOf<Order>()
@@ -101,7 +106,38 @@ class ReplayViewModel(
     )
     private val accountSnapshots = java.util.TreeMap<Int, AccountSnapshot>()
 
+    private var hasPublishedReport = false
+    private fun publishReport() {
+        if (!hasPublishedReport && openPositions.isEmpty() && pendingOrders.isEmpty() && closedTrades.isEmpty()) return
+        hasPublishedReport = true
+        var peak=_uiState.value.initialBalance
+        val observed=_uiState.value.equitySamples.map { sample ->
+            peak=maxOf(peak,sample.equity)
+            EquityPoint(sample.timestamp,sample.balance,sample.equity,(peak-sample.equity).coerceAtLeast(0.0),peak)
+        }
+        val curve=if(observed.isEmpty()) observed else listOf(EquityPoint(observed.first().timestamp-1,_uiState.value.initialBalance,_uiState.value.initialBalance,0.0,_uiState.value.initialBalance))+observed
+        reportSink?.invoke(ReplayReport(replayAccount(),openPositions.toList(),pendingOrders.toList(),closedTrades.toList(),curve,curve.maxOfOrNull{it.drawdown}?:0.0,_uiState.value.maxObservedDrawdownPercent))
+    }
+
+    fun configureTrainingBalance(balance: Double): Boolean {
+        if (!balance.isFinite() || balance <= 0 || balance > 1_000_000_000 || openPositions.isNotEmpty() || pendingOrders.isNotEmpty() || closedTrades.isNotEmpty()) return false
+        _uiState.update { it.copy(initialBalance=balance,currentBalance=balance,currentEquity=balance,peakEquity=balance,equitySamples=emptyList(),maxObservedDrawdownPercent=0.0,datasetId=it.datasetId+1) }
+        hasPublishedReport=true
+        accountSnapshots.clear()
+        if(replayEngine.totalCandles.value>0) replayEngine.initialize(replayEngine.snapshotCandles(),replayEngine.currentIndex.value)
+        saveAccountSnapshot()
+        return true
+    }
+
     private fun saveAccountSnapshot() {
+        val financial=_uiState.value
+        val last=financial.equitySamples.lastOrNull()
+        if(!financial.isLoading && replayEngine.totalCandles.value>0 &&
+            (last==null || last.balance!=financial.currentBalance || last.equity!=financial.currentEquity)) {
+            recordEquitySample(financial.currentBalance,financial.currentEquity,preserveAtIndex=true)
+        }
+        publishReport()
+        if (!_uiState.value.isLoading) sessionStore?.save(TrainingSessionSnapshot(_uiState.value.copy(isPlaying=false),replayEngine.snapshotCandles(),nextId),persistenceOwner!!)
         val index = replayEngine.currentIndex.value
         // Any new execution or account edit forks the timeline at this bar.
         // Checkpoints from a previous future must never be restored.
@@ -140,6 +176,7 @@ class ReplayViewModel(
                 equitySamples = snapshot.equitySamples
             )
         }
+        publishReport()
     }
 
     private var activeStrategy: Strategy? = null
@@ -153,7 +190,18 @@ class ReplayViewModel(
 
     init {
         setupReplayEngineCallbacks()
-        loadReplayData()
+        viewModelScope.launch {
+            val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sessionStore?.read() }
+            if (saved != null) {
+                _uiState.value=saved.state.copy(isPlaying=false,isLoading=false)
+                openPositions.addAll(saved.state.openPositions);pendingOrders.addAll(saved.state.pendingOrders);closedTrades.addAll(saved.state.closedTrades)
+                nextId=saved.nextId
+                if(saved.candles.isNotEmpty()) replayEngine.initialize(saved.candles,saved.state.currentIndex)
+                hasPublishedReport=true
+                saveAccountSnapshot()
+                if(saved.candles.isEmpty())loadReplayData(saved.state.symbol,saved.state.timeframe)
+            } else loadReplayData("XAUUSD")
+        }
     }
 
     private fun setupReplayEngineCallbacks() {
@@ -255,12 +303,22 @@ class ReplayViewModel(
 
     fun hasHistoricalApiKey(): Boolean = marketDataRepository.hasTwelveDataKey()
 
+    fun canChangeDataset(): Boolean {
+        val allowed=openPositions.isEmpty() && pendingOrders.isEmpty()
+        if(!allowed) _uiState.update { it.copy(message="أغلق الصفقات والأوامر قبل تغيير بيانات التدريب") }
+        return allowed
+    }
+
     fun loadReplayData(
         symbol: String = "BTCUSDT",
         tf: Timeframe = Timeframe.M15,
         historyBars: Int = _uiState.value.requestedHistoryBars,
         endOffsetBars: Int = _uiState.value.historyEndOffsetBars
     ) {
+        if (!_uiState.value.isLoading && replayEngine.totalCandles.value > 0 && _uiState.value.symbol==symbol && _uiState.value.timeframe==tf && _uiState.value.requestedHistoryBars==historyBars && _uiState.value.historyEndOffsetBars==endOffsetBars) return
+        if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty()) {
+            _uiState.update { it.copy(message="أغلق الصفقات والأوامر قبل تغيير بيانات التدريب") };return
+        }
         require(endOffsetBars in 0..100_000) { "Historical offset must be 0 to 100000 bars" }
         require(historyBars in 50..5_000) { "Replay history must contain 50 to 5000 bars" }
         cancelBatchAdvance()
@@ -271,13 +329,14 @@ class ReplayViewModel(
         replayEngine.clear()
         // A new dataset must never inherit positions, pending orders, journal or IDs
         // from the previous replay session, even if loading subsequently fails.
-        resetReplayAccount()
-        nextId = 1L
+        val retainedBalance=_uiState.value.currentBalance
+        _uiState.update { it.copy(currentEquity=retainedBalance,openPositions=emptyList(),pendingOrders=emptyList()) }
+        nextId = maxOf(nextId,1L)
         accountSnapshots.clear()
         // Do not continue displaying a previous instrument's replay while switching.
         _uiState.update {
             it.copy(
-                symbol = symbol, timeframe = tf, requestedHistoryBars = historyBars,
+                symbol = symbol, timeframe = tf, requestedHistoryBars = historyBars, datasetId=it.datasetId+1,
                 historyEndOffsetBars = endOffsetBars,
                 isLoading = true, message = null,
                 visibleCandles = emptyList(), currentCandle = null, latestTick = null,
@@ -766,7 +825,7 @@ class ReplayViewModel(
 
         when (result) {
             is com.example.core.execution.ExecutionResult.Success -> {
-                val pos = result.position.copy(id = nextId++)
+                val pos = ReplayAccountMath.markToMarket(result.position.copy(id = nextId++),tick)
                 openPositions.add(pos)
                 _uiState.update {
                     it.copy(
@@ -814,7 +873,7 @@ class ReplayViewModel(
             partialVolume = partialVolume
         )
         openPositions.remove(pos)
-        if (remainingPosition != null) openPositions.add(remainingPosition)
+        if (remainingPosition != null) openPositions.add(ReplayAccountMath.markToMarket(remainingPosition,tick))
         closedTrades.add(trade)
         val newBal = ReplayAccountMath.realizedBalance(_uiState.value.currentBalance, trade.netProfitLoss)
 
@@ -981,7 +1040,7 @@ class ReplayViewModel(
             )
             when (result) {
                 is com.example.core.execution.ExecutionResult.Success -> {
-                    openPositions.add(result.position.copy(id = nextId++))
+                    openPositions.add(ReplayAccountMath.markToMarket(result.position.copy(id = nextId++),tick))
                     pendingIterator.remove()
                     // Persist the changed margin/equity before checking the next
                     // pending order, including multiple triggers on this bar.
@@ -1076,18 +1135,19 @@ class ReplayViewModel(
         saveAccountSnapshot()
     }
 
-    private fun recordEquitySample(balance: Double, equity: Double) {
+    private fun recordEquitySample(balance: Double, equity: Double, preserveAtIndex:Boolean=false) {
         if (!balance.isFinite() || !equity.isFinite()) return
         val index = replayEngine.currentIndex.value
         _uiState.update { state ->
             // A manual trade can replace an existing candle checkpoint, or a
             // rewind can fork the timeline. Derive the high-water mark from the
             // retained prefix instead of carrying a peak from an abandoned future.
-            val history = state.equitySamples
+            val retained = state.equitySamples.takeWhile { it.datasetId != state.datasetId }
+            val history = state.equitySamples.drop(retained.size)
             val prefix = when {
                 history.isEmpty() -> history
                 history.last().candleIndex < index -> history
-                history.last().candleIndex == index -> history.dropLast(1)
+                history.last().candleIndex == index -> if(preserveAtIndex)history else history.dropLast(1)
                 else -> {
                     // Binary-search the sorted timeline rather than scanning all
                     // historical samples after a rewind or a timeline fork.
@@ -1111,7 +1171,7 @@ class ReplayViewModel(
                 previousPeak = state.peakEquity
                 previousWorst = state.maxObservedDrawdownPercent
             } else {
-                for (sample in prefix) {
+                for (sample in retained + prefix) {
                     previousPeak = maxOf(previousPeak, sample.equity)
                     if (previousPeak > 0.0) {
                         previousWorst = maxOf(previousWorst,
@@ -1124,7 +1184,7 @@ class ReplayViewModel(
             // The replay cursor normally moves forward one bar. Reuse the
             // existing immutable prefix instead of filtering the entire session
             // on every candle (quadratic work for long 5000-bar replays).
-            val samples = prefix + ReplayEquitySample(index, equity, balance)
+            val samples = retained + prefix + ReplayEquitySample(index, equity, balance,System.currentTimeMillis(),state.datasetId)
             val worstDrawdown = maxOf(previousWorst, drawdown)
             state.copy(
                 peakEquity = peak,

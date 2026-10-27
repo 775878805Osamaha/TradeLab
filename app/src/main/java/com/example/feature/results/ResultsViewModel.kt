@@ -13,13 +13,20 @@ enum class ResultsTab(val displayNameAr: String) {
     OVERVIEW("نظرة عامة"),
     CURVES("المنحنيات البيانية"),
     JOURNAL("يوميات الصفقات"),
+    STATISTICS("إحصائيات الصفقات"),
     DAILY("النتائج اليومية"),
     COMPARISON("مقارنة الاختبارات")
 }
 
 data class ResultsUiState(
-    val initialBalance: Double = 50.0,
-    val currentBalance: Double = 50.0,
+    val analytics: TrainingAnalytics? = null,
+    val customStart:Long?=null,
+    val customEnd:Long?=null,
+    val isReplayReport: Boolean = false,
+    val openPositionsCount: Int = 0,
+    val openPositions: List<Position> = emptyList(),
+    val initialBalance: Double = 100.0,
+    val currentBalance: Double = 100.0,
     val metrics: PerformanceMetrics? = null,
     val equityPoints: List<EquityPoint> = emptyList(),
     val trades: List<TradeJournalEntry> = emptyList(),
@@ -27,7 +34,7 @@ data class ResultsUiState(
     val pastRuns: List<BacktestRun> = emptyList(),
     val selectedRunsForComparison: Set<Long> = emptySet(),
     val selectedTab: ResultsTab = ResultsTab.OVERVIEW,
-    val selectedPeriod: ResultsPeriod = ResultsPeriod.MONTH,
+    val selectedPeriod: ResultsPeriod = ResultsPeriod.ALL,
     val curveType: ChartCurveType = ChartCurveType.EQUITY_AND_BALANCE,
     val isPercentageMode: Boolean = false,
     val selectedTradeForDetail: TradeJournalEntry? = null,
@@ -36,49 +43,41 @@ data class ResultsUiState(
 )
 
 class ResultsViewModel(
-    private val tradingRepository: TradingRepository
+    private val tradingRepository: TradingRepository,
+    private val trainingStore:com.example.feature.replay.TrainingSessionStore?=null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ResultsUiState(isLoading = true))
-    val uiState: StateFlow<ResultsUiState> = _uiState.asStateFlow()
-
-    init {
-        // Collect trades and account state
-        viewModelScope.launch {
-            tradingRepository.selectedAccount.filterNotNull().flatMapLatest { acc ->
-                tradingRepository.getTradesForAccount(acc.id).map { trades ->
-                    Pair(acc, trades)
-                }
-            }.collect { (acc, trades) ->
-                val metrics = StatisticsCalculator.calculate(
-                    initialBalance = acc.initialBalance,
-                    trades = trades,
-                    currentEquity = acc.equity
-                )
-                val curve = StatisticsCalculator.buildEquityCurve(acc.initialBalance, trades)
-                val daily = StatisticsCalculator.calculateDailySummaries(trades)
-
-                _uiState.update {
-                    it.copy(
-                        initialBalance = acc.initialBalance,
-                        currentBalance = acc.balance,
-                        metrics = metrics,
-                        equityPoints = curve,
-                        trades = trades,
-                        dailySummaries = daily,
-                        isLoading = false
-                    )
-                }
+    private val reports=trainingStore?.observeReports() ?: tradingRepository.replayReport
+    private data class ReportSelection(val period:ResultsPeriod,val start:Long?,val end:Long?)
+    private data class PreparedReport(val report:ReplayReport?,val analytics:TrainingAnalytics?,val days:List<DailySummary>)
+    private val selection=_uiState.map { ReportSelection(it.selectedPeriod,it.customStart,it.customEnd) }.distinctUntilChanged()
+    // Tab selection, detail dialogs and export visibility never invalidate account calculations.
+    private val prepared=combine(reports,selection) { report,range ->
+        if(report==null) PreparedReport(null,null,emptyList()) else {
+            val a=TrainingAnalyticsCalculator.calculate(report,range.period,customStart=range.start,customEnd=range.end)
+            val volumeByDay=a.trades.indices.groupBy { TrainingAnalyticsCalculator.dayStart(a.recordedAt[it]) }
+                .mapValues { (_,indices)->indices.sumOf { a.trades[it].volume } }
+            val keyFormat=java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US)
+            val labelFormat=java.text.SimpleDateFormat("dd/MM",java.util.Locale.US)
+            val daily=a.days.map { day->
+                val date=java.util.Date(day.time)
+                DailySummary(labelFormat.format(date),keyFormat.format(date),day.pnl,day.count,
+                    volumeByDay[day.time]?:0.0,if(day.count>0)day.wins*100.0/day.count else 0.0)
             }
+            PreparedReport(report,a,daily)
         }
+    }.flowOn(kotlinx.coroutines.Dispatchers.Default)
+    val uiState: StateFlow<ResultsUiState> = combine(_uiState,prepared) { base,prepared ->
+        val report=prepared.report
+        val a=prepared.analytics
+        if(report==null || a==null) base.copy(isReplayReport=true,isLoading=false) else
+            base.copy(analytics=a,isReplayReport=true,openPositionsCount=report.positions.size,openPositions=report.positions,
+                initialBalance=a.opening,currentBalance=a.closing,metrics=a.metrics,equityPoints=a.curve,
+                trades=a.trades,dailySummaries=prepared.days,isLoading=false)
+    }.stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),ResultsUiState(isLoading=true))
 
-        // Collect past runs for comparison
-        viewModelScope.launch {
-            tradingRepository.allBacktestRuns.collect { runs ->
-                _uiState.update { it.copy(pastRuns = runs) }
-            }
-        }
-    }
+    fun setCustomRange(start:Long,end:Long) { if(start<=end && start<=System.currentTimeMillis())_uiState.update { it.copy(selectedPeriod=ResultsPeriod.CUSTOM,customStart=start,customEnd=end) } }
 
     fun setSelectedPeriod(period: ResultsPeriod) {
         _uiState.update { it.copy(selectedPeriod = period) }

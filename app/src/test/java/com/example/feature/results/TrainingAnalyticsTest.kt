@@ -1,0 +1,25 @@
+package com.example.feature.results
+
+import com.example.core.model.*
+import org.junit.Assert.*
+import org.junit.Test
+import java.util.Calendar
+
+class TrainingAnalyticsTest {
+    private fun time(month:Int,day:Int)=Calendar.getInstance().apply{clear();set(2026,month,day,12,0)}.timeInMillis
+    private val now=time(Calendar.OCTOBER,27)
+    private fun trade(net:Double,id:Long=1,marketTime:Long=1_000_000)=TradeJournalEntry(id=id,accountId=9999,symbol="XAUUSD",side=PositionSide.BUY,volume=.01,entryPrice=2000.0,exitPrice=2000.0+net,profitLoss=net,openTime=marketTime-1000,closeTime=marketTime,exitReason=ExitReason.MANUAL_CLOSE)
+    private fun report(values:List<Double>,times:List<Long> = values.map{now-1000},curve:List<EquityPoint> = emptyList())=ReplayReport(VirtualAccount(name="test",initialBalance=100.0,balance=100+values.sum(),equity=100+values.sum()),emptyList(),emptyList(),values.mapIndexed{i,v->trade(v,i+1L)},curve,recordedAt=times,fundedAt=time(Calendar.SEPTEMBER,1))
+    @Test fun initialFundingIsNotProfitAndIsNeverCountedTwice(){val a=TrainingAnalyticsCalculator.calculate(report(emptyList()),now=now);assertEquals(100.0,a.opening,0.0);assertEquals(100.0,a.deposits,0.0);assertEquals(100.0,a.closing,0.0);assertEquals(0.0,a.metrics.netProfit,0.0);assertNull(a.metrics.sharpeRatio)}
+    @Test fun filtersByRegistrationRatherThanHistoricMarketDate(){val a=TrainingAnalyticsCalculator.calculate(report(listOf(20.0,-5.0),listOf(time(Calendar.SEPTEMBER,20),now-1000)),ResultsPeriod.MONTH,now);assertEquals(120.0,a.opening,0.0);assertEquals(115.0,a.closing,0.0);assertEquals(-5.0,a.metrics.netProfit,0.0);assertEquals(1,a.trades.size);assertEquals(0.0,a.deposits,0.0)}
+    @Test fun floatingLossAffectsEquityDrawdownButNotRealizedProfit(){val funded=time(Calendar.SEPTEMBER,1);val curve=listOf(EquityPoint(funded,100.0,100.0,0.0,100.0),EquityPoint(now-2000,100.0,120.0,0.0,120.0),EquityPoint(now-1000,100.0,80.0,0.0,120.0));val a=TrainingAnalyticsCalculator.calculate(report(emptyList(),curve=curve),now=now);assertEquals(40.0,a.metrics.maxDrawdown,0.0);assertEquals(100.0/3,a.metrics.maxDrawdownPct,0.000001);assertEquals(0.0,a.metrics.netProfit,0.0);assertEquals(-20.0,a.floating,0.0)}
+    @Test fun profitFactorUsesNetResultsAndAllWinsAreUnbounded(){val a=TrainingAnalyticsCalculator.calculate(report(listOf(20.0,-10.0,0.0)),now=now);assertEquals(2.0,a.metrics.profitFactor!!,0.0);assertEquals(100.0/3,a.metrics.winRatePct,0.000001);assertEquals(10.0/3,a.metrics.expectancy!!,0.000001);assertNull(TrainingAnalyticsCalculator.calculate(report(listOf(10.0)),now=now).metrics.profitFactor)}
+    @Test fun breakevenBreaksStreakAndLossOnlyExpectancyIsNegative(){val a=TrainingAnalyticsCalculator.calculate(report(listOf(1.0,0.0,1.0,-1.0,-1.0)),now=now);assertEquals(1,a.metrics.maxConsecutiveWins);assertEquals(2,a.metrics.maxConsecutiveLosses);assertEquals(-2.0,TrainingAnalyticsCalculator.calculate(report(listOf(-2.0)),now=now).metrics.expectancy!!,0.0)}
+    @Test fun futureRegistrationNeverEntersAnalytics(){val a=TrainingAnalyticsCalculator.calculate(report(listOf(1000.0),listOf(now+10000)),now=now);assertEquals(0,a.trades.size);assertEquals(100.0,a.closing,0.0)}
+    @Test fun customRangeCarriesPriorCapitalAndIncludesWholeEndDay(){val a=TrainingAnalyticsCalculator.calculate(report(listOf(5.0,10.0,-2.0),listOf(time(Calendar.OCTOBER,1),time(Calendar.OCTOBER,2),time(Calendar.OCTOBER,3))),ResultsPeriod.CUSTOM,now,time(Calendar.OCTOBER,2),time(Calendar.OCTOBER,2));assertEquals(105.0,a.opening,0.0);assertEquals(115.0,a.closing,0.0);assertEquals(1,a.trades.size)}
+    @Test fun matchingTimestampsRetainExecutionOrder(){val a=TrainingAnalyticsCalculator.calculate(report(listOf(10.0,-20.0,5.0)),now=now);assertEquals(listOf(1L,2L,3L),a.trades.map{it.id});assertEquals(95.0,a.closing,0.0)}
+    @Test fun decimalAggregationDoesNotAccumulateBinaryCashErrors(){val a=TrainingAnalyticsCalculator.calculate(report(List(1000){.1}),now=now);assertEquals(100.0,a.metrics.netProfit,0.0);assertEquals(200.0,a.closing,0.0)}
+    @Test fun dailyBalanceAndCountsUseTheSameFilteredExecutions(){val a=TrainingAnalyticsCalculator.calculate(report(listOf(10.0,-5.0,2.0),listOf(time(Calendar.OCTOBER,1),time(Calendar.OCTOBER,2),time(Calendar.OCTOBER,2))),now=now);assertEquals(2,a.days.size);assertEquals(2,a.days.last().count);assertEquals(107.0,a.days.last().closing,0.0)}
+    @Test fun zeroStartingCapitalDoesNotProduceInfinity(){val r=report(listOf(0.0)).copy(account=VirtualAccount(name="zero",initialBalance=0.0));val a=TrainingAnalyticsCalculator.calculate(r,now=now);assertEquals(0.0,a.metrics.returnPct,0.0);assertNull(a.metrics.sharpeRatio)}
+    @Test fun sharpeRequiresMultipleDailyReturnsAndIsNotAnnualized(){val a=TrainingAnalyticsCalculator.calculate(report(listOf(10.0),listOf(time(Calendar.OCTOBER,2))),now=now);assertNull(a.metrics.sharpeRatio);val b=TrainingAnalyticsCalculator.calculate(report(listOf(10.0,-5.0),listOf(time(Calendar.OCTOBER,2),time(Calendar.OCTOBER,3))),now=now);assertNotNull(b.metrics.sharpeRatio);assertTrue(b.metrics.sharpeRatio!!.isFinite())}
+}

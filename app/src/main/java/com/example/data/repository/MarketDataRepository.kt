@@ -75,6 +75,9 @@ class MarketDataRepository(
     }
 
     suspend fun initializeSymbolsIfNeeded() = withContext(Dispatchers.IO) {
+        DefaultSymbols.TERMINAL_FOREX.forEach { symbol ->
+            if (symbolDao.getSymbol(symbol.symbol) == null) symbolDao.insertSymbols(listOf(symbol.toEntity()))
+        }
         val existing = symbolDao.getSymbol("XAUUSD")
         if (existing == null) {
             val entities = DefaultSymbols.SYMBOLS.map { it.toEntity() }

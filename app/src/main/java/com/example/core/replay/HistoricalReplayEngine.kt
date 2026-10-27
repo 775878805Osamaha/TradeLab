@@ -28,6 +28,8 @@ class HistoricalReplayEngine(
 ) {
     val replayClock = ReplayClock(scope)
 
+    fun snapshotCandles(): List<Candle> = allCandles.toList()
+
     private var allCandles: List<Candle> = emptyList()
     private val checkpoints = ConcurrentHashMap<Int, ReplayCheckpoint>()
 

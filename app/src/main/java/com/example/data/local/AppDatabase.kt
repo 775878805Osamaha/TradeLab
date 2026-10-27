@@ -13,6 +13,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [
         AccountEntity::class,
+        TrainingCheckpointEntity::class, TrainingExecutionEntity::class,
         SymbolEntity::class,
         CandleEntity::class,
         TickEntity::class,
@@ -25,10 +26,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         IndicatorConfigEntity::class,
         ReplaySessionEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun trainingDao(): TrainingDao
     abstract fun accountDao(): AccountDao
     abstract fun symbolDao(): SymbolDao
     abstract fun candleDao(): CandleDao
@@ -54,6 +56,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS training_checkpoints (id INTEGER NOT NULL, payload BLOB NOT NULL, initialAmount TEXT NOT NULL, balanceAmount TEXT NOT NULL, fundedAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(id))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS training_executions (checkpointId INTEGER NOT NULL, ordinal INTEGER NOT NULL, symbol TEXT NOT NULL, marketCloseTime INTEGER NOT NULL, recordedAt INTEGER NOT NULL, netAmount TEXT NOT NULL, commissionAmount TEXT NOT NULL, volume TEXT NOT NULL, PRIMARY KEY(checkpointId, ordinal))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_training_executions_checkpointId ON training_executions(checkpointId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_training_executions_recordedAt ON training_executions(recordedAt)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -61,8 +72,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tradelab_database.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                 INSTANCE = instance
                 instance

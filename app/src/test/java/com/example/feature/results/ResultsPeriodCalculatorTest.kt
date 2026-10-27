@@ -144,4 +144,34 @@ class ResultsPeriodCalculatorTest {
         assertEquals(older.closeTime, a.trades.first().closeTime)
     }
 
+    @Test fun fullAccountDisplayAndExportRetainIntratradeRisk() {
+        val now = date(2026, Calendar.OCTOBER, 24)
+        val trades = listOf(trade(now - 1000, 10.0))
+        val metrics = com.example.core.statistics.StatisticsCalculator.calculate(100.0, trades, 105.0)
+            .copy(maxDrawdown = 20.0, maxDrawdownPct = 20.0)
+        val curve = listOf(com.example.core.model.EquityPoint(now, 110.0, 105.0, 20.0, 125.0))
+        val state = ResultsUiState(initialBalance=100.0,currentBalance=110.0,trades=trades,metrics=metrics,equityPoints=curve)
+        val report = ResultsPeriodCalculator.forDisplay(state,now)
+        assertEquals(20.0, report.metrics.maxDrawdown, 0.00001)
+        assertEquals(105.0, report.metrics.equity, 0.00001)
+        assertEquals(110.0, report.closingBalance, 0.00001)
+        assertEquals(curve, report.curve)
+    }
+
+    @Test fun lossOnlyAccountHasNegativeExpectancy() {
+        val now = date(2026, Calendar.OCTOBER, 24)
+        val result = ResultsPeriodCalculator.calculate(100.0,
+            listOf(trade(now-2000,-10.0),trade(now-1000,-20.0)),ResultsPeriod.ALL,now)
+        assertEquals(-15.0, result.metrics.expectancy!!, 0.00001)
+        assertEquals(0.0, result.metrics.winRatePct, 0.00001)
+    }
+
+    @Test fun breakevenTradesRemainInExpectancyDenominator() {
+        val now = date(2026, Calendar.OCTOBER, 24)
+        val result = ResultsPeriodCalculator.calculate(100.0,
+            listOf(trade(now-2000,10.0),trade(now-1000,0.0)),ResultsPeriod.ALL,now)
+        assertEquals(5.0, result.metrics.expectancy!!, 0.00001)
+        assertEquals(50.0, result.metrics.winRatePct, 0.00001)
+    }
+
 }
