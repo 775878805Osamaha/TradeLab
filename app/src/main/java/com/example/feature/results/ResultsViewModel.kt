@@ -20,6 +20,7 @@ enum class ResultsTab(val displayNameAr: String) {
 data class ResultsUiState(
     val isReplayReport: Boolean = false,
     val openPositionsCount: Int = 0,
+    val openPositions: List<Position> = emptyList(),
     val initialBalance: Double = 50.0,
     val currentBalance: Double = 50.0,
     val metrics: PerformanceMetrics? = null,
@@ -46,7 +47,7 @@ class ResultsViewModel(
     fun toggleReportSource() { showReplay.value = !showReplay.value }
     val uiState: StateFlow<ResultsUiState> = combine(_uiState, tradingRepository.replayReport, showReplay) { live, report, selected ->
         if (!selected || report == null) live else live.copy(
-            isReplayReport = true, openPositionsCount = report.positions.size,
+            isReplayReport = true, openPositionsCount = report.positions.size, openPositions = report.positions,
             initialBalance = report.account.initialBalance, currentBalance = report.account.balance,
             metrics = StatisticsCalculator.calculate(report.account.initialBalance,report.trades,report.account.equity),
             equityPoints = StatisticsCalculator.buildEquityCurve(report.account.initialBalance,report.trades),
@@ -81,6 +82,12 @@ class ResultsViewModel(
                     )
                 }
             }
+        }
+
+        viewModelScope.launch {
+            tradingRepository.selectedAccount.filterNotNull().flatMapLatest { account ->
+                tradingRepository.getPositionsForAccount(account.id)
+            }.collect { positions -> _uiState.update { it.copy(openPositions=positions,openPositionsCount=positions.size) } }
         }
 
         // Collect past runs for comparison

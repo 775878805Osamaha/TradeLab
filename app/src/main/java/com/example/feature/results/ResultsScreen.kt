@@ -106,6 +106,13 @@ fun ResultsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            Column(Modifier.fillMaxWidth().background(ResultsCardBackground).padding(horizontal=12.dp,vertical=8.dp).testTag("results_positions_summary")) {
+                Text("${if(uiState.isReplayReport) "Replay" else "تداول ورقي"} · ${uiState.openPositionsCount} مفتوحة · ${uiState.trades.size} مغلقة",color=ResultsText,fontSize=12.sp)
+                Text("الربح العائم: ${money(uiState.openPositions.sumOf { it.profitLoss },true)} · الربح المحقق: ${money(uiState.trades.sumOf { it.netProfitLoss },true)}",color=ResultsMuted,fontSize=11.sp)
+                uiState.openPositions.take(2).forEach { position ->
+                    Text("${position.symbol} · ${position.side} · ${position.volume} لوت · ${money(position.profitLoss,true)}",color=ResultsProfit,fontSize=11.sp)
+                }
+            }
             // Main Results Tabs
             ScrollableTabRow(
                 selectedTabIndex = uiState.selectedTab.ordinal,
