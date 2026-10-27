@@ -819,7 +819,7 @@ fun ChartScreen(
                     val selected = uiState.selectedTimeframe == tf
                     Column(
                         modifier = Modifier.width(48.dp).fillMaxHeight()
-                            .clickable { viewModel.selectTimeframe(tf) }
+                            .clickable { if(replayViewModel.canChangeDataset()) { replayViewModel.loadReplayData(uiState.selectedSymbol,tf);viewModel.selectTimeframe(tf) } }
                             .testTag("tf_chip_${tf.code}"),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Bottom
@@ -1708,6 +1708,7 @@ fun ChartScreen(
                                     recentSymbols = ArrayList(
                                         (listOf(sym.symbol) + recentSymbols.filter { it != sym.symbol }).take(8)
                                     )
+                                    replayViewModel.loadReplayData(sym.symbol,uiState.selectedTimeframe)
                                     viewModel.selectSymbol(sym.symbol)
                                     showSymbolSheet = false
                                 }

@@ -142,6 +142,7 @@ class ChartReferenceInteractionTest {
                 ?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null &&
             compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.waitUntil(90000) { compose.onNodeWithTag("chart_bottom_symbol").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.joinToString(""){it.text}?.contains("GBPUSD") == true }
         compose.onNodeWithTag("chart_replay_buy").performClick()
         compose.onNodeWithTag("chart_order_volume").performTextReplacement("0.02")
         androidx.test.espresso.Espresso.closeSoftKeyboard()
@@ -181,7 +182,7 @@ class ChartReferenceInteractionTest {
         compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
         captureProviderScreen("tradelab-replay-results")
         val app=compose.activity.application as TradeLabApplication
-        compose.waitUntil(10000) { app.trainingSessionStore.read()?.state?.let { it.initialBalance==100.0 && it.openPositions.size==1 && it.closedTrades.size==1 } == true }
+        compose.waitUntil(10000) { app.trainingSessionStore.read()?.state?.let { it.initialBalance==100.0 && it.openPositions.size==1 && it.closedTrades.size==1 && it.openPositions.first().symbol=="GBPUSD" && it.closedTrades.first().symbol=="GBPUSD" } == true }
         app.tradingRepository.replayReport.value=null
         compose.activityRule.scenario.recreate()
         compose.waitUntil(10000) { compose.onAllNodesWithText("حساب التدريب · 1 مفتوحة · 1 مغلقة").fetchSemanticsNodes().isNotEmpty() }
