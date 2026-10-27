@@ -150,6 +150,8 @@ fun CandlestickChart(
     // during pan/zoom; range queries are served by the immutable price index.
     val priceRangeIndex = remember(candles) { ChartPriceRangeIndex(candles) }
 
+    val addDrawing by rememberUpdatedState(onAddDrawing)
+    val clearDrawingSelection by rememberUpdatedState(onClearDrawingSelection)
     val drawingSelection by rememberUpdatedState(onSelectDrawing)
     val currentDrawings by rememberUpdatedState(drawings)
     val selectionId by rememberUpdatedState(selectedDrawingId)
@@ -178,6 +180,7 @@ fun CandlestickChart(
             }
         }
     }
+    val currentDrawingImages by rememberUpdatedState(drawingImages)
     val candleProfiles = remember(candles,drawings) {
         drawings.filter { it.tool == DrawingTool.VOLUME_PROFILE_FIXED || it.tool == DrawingTool.VOLUME_PROFILE_SESSION }
             .associate { it.id to CandleVolumeProfile.forDrawing(candles,it) }
@@ -392,9 +395,9 @@ fun CandlestickChart(
                                 val end = transformForSnap?.snapDrawingPoint(drawingCurrentOffset!!, snapEnabled) ?: drawingCurrentOffset!!
                                 val transform = transformRef[0]
                                 val distance = (end - start).getDistance()
-                                if (transform != null && onAddDrawing != null && distance >= 10f &&
+                                if (transform != null && addDrawing != null && distance >= 10f &&
                                     !activeDrawingTool.isSinglePoint && (activeDrawingTool.anchorCount == 2 || activeDrawingTool.isFreehand)) {
-                                    onAddDrawing(
+                                    addDrawing?.invoke(
                                         ChartDrawing(
                                             tool = activeDrawingTool,
                                             symbol = "",
@@ -427,7 +430,7 @@ fun CandlestickChart(
                             if(t != null && pendingAnchors.size >= 2) {
                                 val at = t.snapDrawingPoint(point,snapEnabled)
                                 val points = (pendingAnchors + DrawingAnchor(t.drawingTimeAtX(at.x),t.yToPrice(at.y))).take(512)
-                                onAddDrawing?.invoke(ChartDrawing(tool=activeDrawingTool,symbol="",timeframe="",startTime=points.first().time,startPrice=points.first().price,endTime=points.last().time,endPrice=points.last().price,anchors=points))
+                                addDrawing?.invoke(ChartDrawing(tool=activeDrawingTool,symbol="",timeframe="",startTime=points.first().time,startPrice=points.first().price,endTime=points.last().time,endPrice=points.last().price,anchors=points))
                                 pendingAnchors=emptyList()
                             }
                         }) else null,
@@ -435,7 +438,7 @@ fun CandlestickChart(
                             val t = transformRef[0]
                             if (t != null && activeDrawingTool == DrawingTool.NONE) {
                                 currentDrawings.asReversed().firstOrNull { d ->
-                                    val bitmap=drawingImages[d.id]
+                                    val bitmap=currentDrawingImages[d.id]
                                     if(d.tool==DrawingTool.IMAGE && bitmap!=null) {
                                         val x=t.timeToX(d.startTime)?:0f;val y=t.priceToY(d.startPrice)
                                         val width=positionHitRadius/18f*100f
@@ -463,9 +466,9 @@ fun CandlestickChart(
                                 drawingSelection?.invoke(drawingHit)
                             } else if (hit != null && selectPosition != null) {
                                 selectPosition?.invoke(hit)
-                            } else if (insidePlot && transform != null && onAddDrawing != null &&
+                            } else if (insidePlot && transform != null && addDrawing != null &&
                                 activeDrawingTool.isSinglePoint) {
-                                onAddDrawing(
+                                addDrawing?.invoke(
                                     ChartDrawing(
                                         tool = activeDrawingTool,
                                         symbol = "",
@@ -481,14 +484,14 @@ fun CandlestickChart(
                                 val anchors = pendingAnchors + DrawingAnchor(transform.drawingTimeAtX(at.x), transform.yToPrice(at.y))
                                 pendingAnchors = anchors
                                 if (!activeDrawingTool.isVariablePath && anchors.size >= activeDrawingTool.anchorCount) {
-                                    onAddDrawing?.invoke(ChartDrawing(tool = activeDrawingTool, symbol = "", timeframe = "",
+                                    addDrawing?.invoke(ChartDrawing(tool = activeDrawingTool, symbol = "", timeframe = "",
                                         startTime = anchors.first().time, startPrice = anchors.first().price,
                                         endTime = anchors.last().time, endPrice = anchors.last().price, anchors = anchors))
                                     pendingAnchors = emptyList()
                                 }
                             } else if (isCrosshairActive && insidePlot) {
                                 crosshairOffset = offset
-                            } else if(insidePlot) onClearDrawingSelection?.invoke()
+                            } else if(insidePlot) clearDrawingSelection?.invoke()
                         }
                     )
                 }
