@@ -214,8 +214,8 @@ private fun ResultsOverviewContent(
 ) {
     val period = uiState.selectedPeriod
     val now = remember { System.currentTimeMillis() }
-    val snapshot = remember(uiState.trades, uiState.initialBalance, period, now) {
-        ResultsPeriodCalculator.calculate(uiState.initialBalance, uiState.trades, period, now)
+    val snapshot = remember(uiState.trades, uiState.initialBalance,uiState.metrics,uiState.equityPoints, period, now) {
+        ResultsPeriodCalculator.calculate(uiState.initialBalance, uiState.trades, period, now).let { if(period==ResultsPeriod.ALL && uiState.metrics!=null) it.copy(metrics=uiState.metrics,curve=uiState.equityPoints) else it }
     }
     val metrics = snapshot.metrics
     val trades = snapshot.trades
