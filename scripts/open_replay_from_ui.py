@@ -5,6 +5,10 @@ import subprocess
 import xml.etree.ElementTree as ET
 
 root = ET.parse("screenshots/tradelab-before-replay.xml").getroot()
+labels={ (n.attrib.get("text", "")+" "+n.attrib.get("content-desc", "")).strip() for n in root.iter("node") }
+if "تاريخ الإعادة" in labels and "تقدم شمعة" in labels:
+    print("Historical training is already active",flush=True)
+    raise SystemExit(0)
 candidates = []
 for node in root.iter("node"):
     label = (node.attrib.get("text", "") + " " + node.attrib.get("content-desc", "")).strip()

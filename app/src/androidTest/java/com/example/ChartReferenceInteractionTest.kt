@@ -12,7 +12,7 @@ import org.junit.runner.RunWith
 /** Exercises the production Activity and its existing NavHost, not a mock screen. */
 @RunWith(AndroidJUnit4::class)
 class ChartReferenceInteractionTest {
-    @org.junit.After fun clearTrainingCheckpoint() { (compose.activity.application as TradeLabApplication).trainingSessionStore.clear() }
+    @org.junit.After fun clearTrainingCheckpoint() { (compose.activity.application as TradeLabApplication).trainingSessionStore.clear(); (compose.activity.application as TradeLabApplication).tradingRepository.replayReport.value=null }
 
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
