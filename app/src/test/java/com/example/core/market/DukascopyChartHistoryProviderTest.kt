@@ -13,6 +13,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Instant
 
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [28], application = android.app.Application::class)
 class DukascopyChartHistoryProviderTest {
     private val day = Instant.parse("2025-04-30T00:00:00Z").toEpochMilli()
     private fun compressed(offsets: List<Int>, bad: Boolean = false): ByteArray {
