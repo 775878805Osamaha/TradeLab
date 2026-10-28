@@ -125,8 +125,24 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
         return output.toByteArray()
     }
 
-    private suspend fun download(url: String): ByteArray? = suspendCancellableCoroutine { continuation ->
-        val call = client.newCall(Request.Builder().url(url).build())
+    private class ArchiveHttpFailure(val status: Int, val retryAfter: Long?) : IOException("Historical archive HTTP $status")
+
+    private suspend fun download(url: String): ByteArray? {
+        for (attempt in 0..2) {
+            try { return downloadOnce(url) }
+            catch (error: ArchiveHttpFailure) {
+                // Retry transient service failures only, respecting a short Retry-After.
+                if (error.status != 503 || attempt == 2 || (error.retryAfter ?: 0L) > 10L) {
+                    throw MarketDataRequestException(error.message ?: "Historical archive unavailable", error)
+                }
+                kotlinx.coroutines.delay(maxOf(error.retryAfter ?: (attempt + 1L), 1L) * 1000L)
+            }
+        }
+        throw IOException("Historical archive unavailable")
+    }
+
+    private suspend fun downloadOnce(url: String): ByteArray? = suspendCancellableCoroutine { continuation ->
+        val call = client.newCall(Request.Builder().url(url).header("User-Agent", "TradeLab/3.0 (historical chart research)").header("Accept", "application/octet-stream").build())
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -136,7 +152,7 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
                 try {
                     val bytes = response.use {
                         if (it.code == 404) null else {
-                            if (!it.isSuccessful) throw MarketDataRequestException("Historical archive HTTP ${it.code}")
+                            if (!it.isSuccessful) throw ArchiveHttpFailure(it.code, it.header("Retry-After")?.toLongOrNull())
                             val input = it.body?.byteStream() ?: throw IOException("Empty archive body")
                             val data = readBounded(input, 200_000)
                             require(data.size <= 200_000) { "Archive body exceeds limit" }

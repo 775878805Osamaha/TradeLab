@@ -21,6 +21,7 @@ class ChartHistoryProviderPagingTest {
         assertTrue(candles.all { it.source == com.example.core.market.DukascopyChartHistoryProvider.SOURCE })
         assertTrue(candles.all { it.open in 1000.0..10000.0 })
         android.util.Log.i("TradeLabArchive", "year-old gold M1 count=${candles.size} first=${candles.first().openTime} open=${candles.first().open}")
+        Unit
     }
 
     @Test fun verifiedGoldHistoryPagesBackwardsAcrossEverySupportedTimeframe() = runBlocking {
