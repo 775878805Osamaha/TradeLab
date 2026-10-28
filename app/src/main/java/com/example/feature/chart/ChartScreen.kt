@@ -1270,7 +1270,183 @@ fun ChartScreen(
                         Button(
                             onClick = { viewModel.retryCandleLoad() },
                             modifier = Modifier.testTag("chart_retry_load_btn"),
-                            colors = ButtonDefaults.buttonColors(containerColor …3036 tokens truncated…                   onDrawing = { showToolsMenu = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = TradingAccent)
+                        ) {
+                            Text("إعادة المحاولة")
+                        }
+                    }
+                }
+
+                // Compact TradingView-style tools on the chart itself.
+                // Buttons select the existing functional drawing tools; no image overlay.
+                // Reference-style drawing controls remain visible over Replay candles.
+                Column(
+                    modifier = Modifier.align(AbsoluteAlignment.TopLeft)
+                        // Physical left, not RTL logical start: keep the price axis clear.
+                        .absoluteOffset(
+                            x = 8.dp + with(paletteDensity) { drawingPaletteXOffsetPx.toDp() },
+                            y = with(paletteDensity) { drawingPaletteOffsetPx.toDp() } +
+                                if (isEmbeddedReplay) 148.dp else 52.dp
+                        )
+                        .onSizeChanged {
+                            drawingPaletteHeightPx = it.height
+                            drawingPaletteWidthPx = it.width
+                        }
+                        // Keep each labeled tool visually separate like the reference,
+                        // rather than drawing one tall opaque pill across the candles.
+                        .width(48.dp)
+                        .heightIn(max = with(paletteDensity) {
+                            (chartPaletteContainerHeightPx - chartPaletteTopInsetPx)
+                                .coerceAtLeast(48.dp.toPx()).toDp()
+                        })
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color(0xE6081722))
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 2.dp, vertical = 3.dp)
+                        .testTag("chart_reference_floating_tools"),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    val referenceTools = listOf(
+                        Triple("مؤشر\nمتقاطع", ReferenceChartIcons.Crosshair, 0),
+                        Triple("خط اتجاه", ReferenceChartIcons.Trend, 1),
+                        Triple("مستوى أفقي", ReferenceChartIcons.Horizontal, 2),
+                        Triple("فيبوناتشي", ReferenceChartIcons.Fibonacci, 3),
+                        Triple("أشكال", ReferenceChartIcons.Shapes, 4),
+                        Triple("تعليق", ReferenceChartIcons.Pencil, 5),
+                        Triple("مستطيل", ReferenceChartIcons.Rectangle, 6),
+                        Triple("دائرة", ReferenceChartIcons.Circle, 7),
+                        Triple("مغناطيس", ReferenceChartIcons.Magnet, 8)
+                    )
+                    // Dedicated drag handle: tool buttons remain tappable without gesture conflicts.
+                    Box(
+                        modifier = Modifier
+                            .size(width = 44.dp, height = 12.dp)
+                            .pointerInput(chartPaletteMaxYOffsetPx, chartPaletteMaxXOffsetPx, isEmbeddedReplay) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    // Use the same bounds as the layout resize effect.
+                                    // This avoids stale or diverging limits after entering Replay.
+                                    drawingPaletteOffsetPx =
+                                        (drawingPaletteOffsetPx + dragAmount.y).coerceIn(0f, chartPaletteMaxYOffsetPx)
+                                    // Same axis reserve used by resize clamping: 8dp left + 72dp price rail.
+                                    drawingPaletteXOffsetPx =
+                                        (drawingPaletteXOffsetPx + dragAmount.x).coerceIn(0f, chartPaletteMaxXOffsetPx)
+                                }
+                            }
+                            .testTag("chart_tools_drag_handle"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.DragHandle, contentDescription = "اسحب لتحريك الأدوات",
+                            tint = TradingTextSecondary, modifier = Modifier.size(22.dp))
+                    }
+                    if (!drawingPaletteCollapsed && drawingFavoritesVisible) {
+                        drawingGroups.flatMap { it.tools }.filter { it.name in drawingFavorites }.forEach { tool ->
+                            IconButton(onClick = { viewModel.setDrawingTool(tool) }, modifier = Modifier.size(38.dp).testTag("chart_favorite_${tool.name}")) {
+                                DrawingToolGlyph(tool, if (uiState.activeDrawingTool == tool) TradingAccent else TradingTextPrimary, Modifier.size(24.dp))
+                            }
+                        }
+                        IconButton(onClick = { showToolsMenu = true }, modifier = Modifier.size(38.dp)) { Icon(Icons.Default.Add, "المزيد من الرسومات") }
+                    }
+                    if (!drawingPaletteCollapsed && !drawingFavoritesVisible) referenceTools.forEach { (label, image, index) ->
+                        val selected = when (index) {
+                            0 -> uiState.isCrosshairActive
+                            1 -> uiState.activeDrawingTool == DrawingTool.TRENDLINE
+                            2 -> uiState.activeDrawingTool == DrawingTool.HORIZONTAL_LINE
+                            3 -> uiState.activeDrawingTool == DrawingTool.FIBONACCI
+                            5 -> uiState.activeDrawingTool == DrawingTool.ANNOTATION
+                            6 -> uiState.activeDrawingTool == DrawingTool.RECTANGLE
+                            7 -> uiState.activeDrawingTool == DrawingTool.ELLIPSE
+                            8 -> magnetEnabled
+                            else -> false
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Surface(
+                                modifier = Modifier.size(32.dp)
+                                    .clickable {
+                                        when (index) {
+                                            0 -> viewModel.toggleCrosshair()
+                                            1 -> viewModel.setDrawingTool(DrawingTool.TRENDLINE)
+                                            2 -> viewModel.setDrawingTool(DrawingTool.HORIZONTAL_LINE)
+                                            3 -> viewModel.setDrawingTool(DrawingTool.FIBONACCI)
+                                            4 -> showToolsMenu = true
+                                            5 -> viewModel.setDrawingTool(DrawingTool.ANNOTATION)
+                                            6 -> viewModel.setDrawingTool(DrawingTool.RECTANGLE)
+                                            7 -> viewModel.setDrawingTool(DrawingTool.ELLIPSE)
+                                            8 -> magnetEnabled = !magnetEnabled
+                                        }
+                                    }.testTag("chart_reference_tool_${index}"),
+                                shape = RoundedCornerShape(50),
+                                // Unified dark tool rail: only the active tool has a visible ring.
+                                color = if (selected) TradingAccent.copy(alpha = 0.16f) else Color.Transparent,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    if (selected) 1.5.dp else 1.dp,
+                                    if (selected) TradingAccent else Color(0xFF263544)
+                                )
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(image, contentDescription = label,
+                                        tint = if (selected) TradingAccent else TradingTextPrimary,
+                                        modifier = Modifier.size(19.dp))
+                                }
+                            }
+                            // Reference layout uses visible Arabic captions below each circular tool.
+                            // Keep the existing icon content descriptions for accessibility.
+                            Text(
+                                text = label,
+                                fontSize = 9.sp,
+                                lineHeight = 11.sp,
+                                style = TextStyle(platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)),
+                                textAlign = TextAlign.Center,
+                                color = if (selected) TradingAccentLight else TradingTextPrimary,
+                                modifier = Modifier.width(44.dp)
+                                    .background(TradingBackground.copy(alpha = 0.80f), RoundedCornerShape(6.dp))
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = {
+                            drawingPaletteCollapsed = !drawingPaletteCollapsed
+                            // Keep the palette reachable if expanding makes it taller.
+                            drawingPaletteOffsetPx = 0f
+                        },
+                        modifier = Modifier.size(32.dp).testTag("chart_tools_collapse_toggle")
+                    ) {
+                        Icon(
+                            if (drawingPaletteCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                            contentDescription = if (drawingPaletteCollapsed) "إظهار الأدوات" else "طي الأدوات",
+                            tint = TradingTextPrimary
+                        )
+                    }
+                }
+            }
+
+            if (immersiveChart) {
+                ChartBottomStrip(
+                    symbol = uiState.selectedSymbol,
+                    timeframe = uiState.selectedTimeframe,
+                    replayActive = isEmbeddedReplay,
+                    onSymbol = { if (!isEmbeddedReplay || replayViewModel.canChangeDataset()) showSymbolSheet = true },
+                    onTimeframe = { tf ->
+                        if (tf != uiState.selectedTimeframe && (!isEmbeddedReplay || replayViewModel.canChangeDataset())) {
+                            viewModel.selectTimeframe(tf)
+                            if (isEmbeddedReplay) {
+                                replayViewModel.pause()
+                                replayViewModel.loadReplayData(uiState.selectedSymbol, tf)
+                            }
+                        }
+                    },
+                    onReplay = {
+                        if (isEmbeddedReplay) {
+                            replayViewModel.pause()
+                            isEmbeddedReplay = false
+                        } else {
+                            replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
+                            isEmbeddedReplay = true
+                        }
+                    },
+                    onIndicators = { showIndicatorsDialog = true },
+                    onDrawing = { showToolsMenu = true },
                     onMore = { showToolsMenu = true }
                 )
             }
