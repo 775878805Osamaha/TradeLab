@@ -71,7 +71,7 @@ class DrawingEditingTest {
     @Test fun fibonacciAndRiskAnchorEditsPreserveOtherPointsAndPersist() {
         for(tool in listOf(DrawingTool.FIBONACCI,DrawingTool.LONG_POSITION,DrawingTool.SHORT_POSITION)) {
             val anchors=if(tool==DrawingTool.FIBONACCI)emptyList() else listOf(DrawingAnchor(candles[2].openTime,100.0),DrawingAnchor(candles[5].openTime,105.0),DrawingAnchor(candles[5].openTime,95.0))
-            val d=drawing(tool).copy(anchors=anchors)
+            val d=drawing(tool).copy(startPrice=anchors.firstOrNull()?.price?:105.0,anchors=anchors)
             val h=DrawingEditing.handles(d,t)
             val moved=DrawingEditing.drag(d,t,h[1],h[1]+Offset(20f,-10f),1)
             assertEquals(d.startTime,moved.startTime)
