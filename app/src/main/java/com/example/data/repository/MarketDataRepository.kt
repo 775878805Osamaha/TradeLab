@@ -31,6 +31,9 @@ class MarketDataRepository(
 ) {
 
     private val chartArchive = com.example.core.market.DukascopyChartHistoryProvider(archiveDirectory = archiveDirectory)
+    private val freeFileArchive = archiveDirectory?.let {
+        com.example.core.market.HistDataChartHistoryProvider(java.io.File(it.parentFile,"histdata-history-v1"))
+    }
 
     /** Deep analysis history is an attributed BID archive, separate from live quotes. */
     suspend fun getOlderChartCandles(symbol: String, timeframe: Timeframe, from: Long, to: Long): List<Candle> {
@@ -49,14 +52,19 @@ class MarketDataRepository(
         }
         val cached = withContext(Dispatchers.IO) {
             candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
-                .filter { it.source == com.example.core.market.DukascopyChartHistoryProvider.SOURCE }
+                .filter { it.source in setOf(com.example.core.market.DukascopyChartHistoryProvider.SOURCE,
+                    com.example.core.market.HistDataChartHistoryProvider.SOURCE) }
         }
         if (HistoricalCandleCoverage.isComplete(cached, from, to, timeframe.minutes * 60_000L)) {
             return HistoricalCandleIntegrity.validate(cached, from, to + timeframe.minutes * 60_000L,
                 expectedSymbol = symbol, expectedTimeframe = timeframe)
         }
-        val candles = chartArchive.fetch(symbol, timeframe, from, to)
-        if (candles.isEmpty()) return getCandles(symbol, timeframe, from, to)
+        val candles = com.example.core.market.FreeChartHistory.load(
+            cachedAlternative = { freeFileArchive?.cached(symbol,timeframe,from,to) },
+            primary = { chartArchive.fetch(symbol,timeframe,from,to) },
+            alternative = freeFileArchive?.let { archive -> suspend { archive.fetch(symbol,timeframe,from,to) } }
+        )
+        if (candles.isEmpty() && freeFileArchive==null) return getCandles(symbol, timeframe, from, to)
         withContext(Dispatchers.IO) { candleDao.insertCandles(candles.map { it.toEntity() }) }
         return candles
     }

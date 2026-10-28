@@ -1075,8 +1075,13 @@ fun ChartScreen(
                             Text(message, fontSize = 10.sp, color = TradingTextSecondary,
                                 modifier = Modifier.widthIn(max = 240.dp).padding(6.dp).testTag("chart_history_download_message"))
                         }
-                        if (uiState.candles.firstOrNull()?.source == com.example.core.market.DukascopyChartHistoryProvider.SOURCE) {
-                            Text("Dukascopy · BID", fontSize = 10.sp, color = TradingTextSecondary,
+                        val sourceLabel = when(uiState.candles.firstOrNull()?.source) {
+                            com.example.core.market.DukascopyChartHistoryProvider.SOURCE -> "Dukascopy · BID"
+                            com.example.core.market.HistDataChartHistoryProvider.SOURCE -> "HistData · BID · الحجم غير متاح"
+                            else -> null
+                        }
+                        if (sourceLabel!=null) {
+                            Text(sourceLabel, fontSize = 10.sp, color = TradingTextSecondary,
                                 modifier = Modifier.padding(horizontal = 8.dp).testTag("chart_history_source"))
                         }
                         uiState.olderHistoryError?.let { historyError ->

@@ -16,14 +16,18 @@ class ChartHistoryProviderPagingTest {
     @Test fun downloadsOver100000ActualGoldMinuteCandles() = runBlocking {
         kotlinx.coroutines.withTimeout(12L*60_000) {
             val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as TradeLabApplication
-            val end = HistoricalCandleBoundary.currentOpen(System.currentTimeMillis(),60_000L)-60_000L
-            var candles = app.marketDataRepository.getCandles("XAUUSD",Timeframe.M1,end-39*60_000L,end)
+            val from = java.time.Instant.parse("2025-04-30T10:00:00Z").toEpochMilli()
+            val directory=java.io.File(app.cacheDir,"histdata-history-v1")
+            // Fetch the actual public free annual ZIP once, then exercise the
+            // production repository/pager over its persisted M1 data.
+            val source=com.example.core.market.HistDataChartHistoryProvider(directory)
+            var candles=source.fetch("XAUUSD",Timeframe.M1,from,from+299*60_000L)
             assertTrue(candles.isNotEmpty())
             var pages=0
             var result: com.example.feature.chart.history.ChartHistoryDownload.Result? = null
             for (attempt in 0..2) {
                 try {
-                    result = com.example.feature.chart.history.ChartHistoryDownload.run(candles,pauseMillis=1000,
+                    result = com.example.feature.chart.history.ChartHistoryDownload.run(candles,pauseMillis=250,
                 fetchBefore={oldest ->
                     ChartHistoryPaging.before("XAUUSD",Timeframe.M1,oldest) { start,end ->
                         app.marketDataRepository.getOlderChartCandles("XAUUSD",Timeframe.M1,start,end)
@@ -43,21 +47,26 @@ class ChartHistoryProviderPagingTest {
             }
             assertEquals(com.example.feature.chart.history.ChartHistoryDownload.Result.TARGET_REACHED,result)
             assertTrue(candles.size>100_000)
-            val allowed = setOf(com.example.core.market.DukascopyChartHistoryProvider.SOURCE,"BIQUOTE_HISTORICAL")
+            val allowed = setOf(com.example.core.market.DukascopyChartHistoryProvider.SOURCE,"BIQUOTE_HISTORICAL",com.example.core.market.HistDataChartHistoryProvider.SOURCE)
             assertTrue(candles.all { it.source in allowed })
             assertTrue(candles.zipWithNext().all { (a,b) -> a.openTime<b.openTime })
             val archived = candles.count { it.source==com.example.core.market.DukascopyChartHistoryProvider.SOURCE }
-            android.util.Log.i("TradeLabDeepHistory", """{"symbol":"XAUUSD","timeframe":"M1","actualCandles":${candles.size},"archiveCandles":$archived,"recentProviderCandles":${candles.size-archived},"pages":$pages,"oldest":${candles.first().openTime},"newest":${candles.last().openTime},"synthetic":false}""")
+            val histData=candles.count { it.source==com.example.core.market.HistDataChartHistoryProvider.SOURCE }
+            assertTrue("The free source must supply the large download",histData>100_000)
+            val offline=okhttp3.OkHttpClient.Builder().addInterceptor { throw java.io.IOException("Offline verification") }.build()
+            assertEquals(300,com.example.core.market.HistDataChartHistoryProvider(directory,offline)
+                .fetch("XAUUSD",Timeframe.M1,from,from+299*60_000L).size)
+            android.util.Log.i("TradeLabDeepHistory", """{"symbol":"XAUUSD","timeframe":"M1","actualCandles":${candles.size},"archiveCandles":$archived,"histDataCandles":$histData,"recentProviderCandles":${candles.size-archived-histData},"pages":$pages,"oldest":${candles.first().openTime},"newest":${candles.last().openTime},"synthetic":false,"offlineCacheVerified":true}""")
         }
         Unit
     }
 
-    @Test fun yearOldMinuteGoldLoadsFromOfficialArchiveWithoutAKey() = runBlocking {
-        val source = com.example.core.market.DukascopyChartHistoryProvider()
+    @Test fun yearOldMinuteGoldLoadsFromFreeHistoryWithoutAKey() = runBlocking {
+        val app=InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as TradeLabApplication
         val from = java.time.Instant.parse("2025-04-30T10:00:00Z").toEpochMilli()
-        val candles = source.fetch("XAUUSD", Timeframe.M1, from, from + 299 * 60_000L)
+        val candles = app.marketDataRepository.getOlderChartCandles("XAUUSD", Timeframe.M1, from, from + 299 * 60_000L)
         assertEquals(300, candles.size)
-        assertTrue(candles.all { it.source == com.example.core.market.DukascopyChartHistoryProvider.SOURCE })
+        assertTrue(candles.all { it.source in setOf(com.example.core.market.DukascopyChartHistoryProvider.SOURCE,com.example.core.market.HistDataChartHistoryProvider.SOURCE) })
         assertTrue(candles.all { it.open in 1000.0..10000.0 })
         android.util.Log.i("TradeLabArchive", "year-old gold M1 count=${candles.size} first=${candles.first().openTime} open=${candles.first().open}")
         Unit
