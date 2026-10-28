@@ -67,6 +67,7 @@ fun ChartScreen(
         isEmbeddedReplay = false
     }
     LaunchedEffect(isEmbeddedReplay, replayState.symbol, replayState.timeframe, replayState.isLoading) {
+        if (isEmbeddedReplay) viewModel.stopDeepChartHistory()
         if (isEmbeddedReplay && !replayState.isLoading) { viewModel.selectSymbol(replayState.symbol);viewModel.selectTimeframe(replayState.timeframe) }
     }
     var selectedPositionId by remember { mutableStateOf<Long?>(null) }
@@ -1048,6 +1049,31 @@ fun ChartScreen(
                                 else "تحميل الأقدم · ${String.format(Locale.US, "%,d", uiState.candles.size)} شمعة",
                                 fontSize = 11.sp
                             )
+                        }
+                        if (uiState.candles.size < com.example.feature.chart.history.ChartHistoryDownload.TARGET || uiState.isDownloadingDeepHistory) {
+                            TextButton(
+                                onClick = {
+                                    if (uiState.isDownloadingDeepHistory) viewModel.stopDeepChartHistory()
+                                    else viewModel.downloadDeepChartHistory()
+                                },
+                                enabled = uiState.isDownloadingDeepHistory || (!uiState.isLoading && !uiState.isLoadingOlderHistory),
+                                modifier = Modifier.heightIn(min = 40.dp).testTag("chart_download_deep_history"),
+                                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)
+                            ) {
+                                Text(if (uiState.isDownloadingDeepHistory)
+                                    "إيقاف · ${String.format(Locale.US, "%,d", uiState.candles.size)} / 100,001"
+                                    else "تحميل 100 ألف+", fontSize = 11.sp)
+                            }
+                        }
+                        val oldestDate = remember(uiState.candles.first().openTime) {
+                            java.time.Instant.ofEpochMilli(uiState.candles.first().openTime)
+                                .atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
+                        }
+                        Text("أقدم شمعة محملة: $oldestDate", fontSize = 10.sp, color = TradingTextSecondary,
+                            modifier = Modifier.padding(horizontal = 8.dp).testTag("chart_oldest_history_date"))
+                        uiState.historyDownloadMessage?.let { message ->
+                            Text(message, fontSize = 10.sp, color = TradingTextSecondary,
+                                modifier = Modifier.widthIn(max = 240.dp).padding(6.dp).testTag("chart_history_download_message"))
                         }
                         if (uiState.candles.firstOrNull()?.source == com.example.core.market.DukascopyChartHistoryProvider.SOURCE) {
                             Text("Dukascopy · BID", fontSize = 10.sp, color = TradingTextSecondary,
