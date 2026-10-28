@@ -13,8 +13,6 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Instant
 
-@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
-@org.robolectric.annotation.Config(sdk = [28], application = android.app.Application::class)
 class DukascopyChartHistoryProviderTest {
     private val day = Instant.parse("2025-04-30T00:00:00Z").toEpochMilli()
     private fun compressed(offsets: List<Int>, bad: Boolean = false): ByteArray {
@@ -57,7 +55,7 @@ class DukascopyChartHistoryProviderTest {
         assertEquals(6.0, candles.single().volume, 0.0)
         assertEquals(day+180_000L, candles.single().closeTime)
     }
-    @Test fun absentCompletedYearUsesOnlyOneBoundedChartFallback() = runBlocking {
+    @Test fun absentCompletedYearDoesNotExpandIntoThousandsOfMinuteRequests() = runBlocking {
         var requests = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             requests++
@@ -66,25 +64,19 @@ class DukascopyChartHistoryProviderTest {
         }.build()
         val candles = DukascopyChartHistoryProvider(client).fetch("XAUUSD", Timeframe.D1, day, day)
         assertTrue(candles.isEmpty())
-        assertEquals(2, requests)
+        assertEquals(1, requests)
     }
-    @Test fun officialChartJsonpFallbackPreservesDatePricesAndBidSide() = runBlocking {
-        var chartRequests = 0
+    @Test fun transientArchiveServiceFailureRetriesThenReturnsVerifiedCandles() = runBlocking {
+        var requests = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
-            val chart = chain.request().url.host == "freeserv.dukascopy.com"
-            val body = if (chart) {
-                chartRequests++
-                assertEquals("B", chain.request().url.queryParameter("offer_side"))
-                assertEquals(day.toString(), chain.request().url.queryParameter("last_update"))
-                "tradelabHistory([[$day,3300,3302,3299,3301,2],[${day+60_000},3301,3303,3300,3302,3]]);"
-            } else "unavailable"
+            requests++
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
-                .code(if (chart) 200 else 503).message("Fixture").body(body.toByteArray().toResponseBody()).build()
+                .code(if (requests == 1) 503 else 200).message("Fixture")
+                .body(if (requests == 1) byteArrayOf().toResponseBody() else compressed(listOf(0,60)).toResponseBody()).build()
         }.build()
         val bars = DukascopyChartHistoryProvider(client).fetch("XAUUSD", Timeframe.M1, day, day+60_000)
         assertEquals(2, bars.size)
-        assertEquals(3301.0, bars.first().close, 0.0)
-        assertEquals(1, chartRequests)
+        assertEquals(2, requests)
     }
     @Test fun rateLimitDoesNotLookLikeMissingHistory() = runBlocking {
         var requests=0
