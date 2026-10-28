@@ -17,28 +17,46 @@ class ChartReferenceInteractionTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     @Test fun analysisLoadsOlderCandlesWhenPannedToHistoryEdge() {
-        fun loadedCount(): Int {
-            val text = compose.onNodeWithTag("chart_load_older_history").fetchSemanticsNode()
-                .config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)
-                ?.joinToString("") { it.text }.orEmpty()
-            return text.substringAfter("·", "").filter { it.isDigit() }.toIntOrNull() ?: 0
-        }
+        fun loadedCount(): Int = compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode()
+            .config[com.example.ui.components.ChartLoadedCandleCount]
         compose.waitUntil(90000) {
             compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
                 compose.onAllNodesWithTag("chart_load_older_history").fetchSemanticsNodes().isNotEmpty()
         }
         val initial = loadedCount()
         org.junit.Assert.assertTrue(initial > 0)
-        // Physical rightward pan reveals older bars, with no Replay activation.
-        repeat(12) {
-            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
-                swipe(androidx.compose.ui.geometry.Offset(width * .25f, height * .45f),
-                    androidx.compose.ui.geometry.Offset(width * .85f, height * .45f), 250)
+        val bounds = compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode().boundsInRoot
+        val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        try {
+            // Inject real-timed native drags; virtual Compose gesture timestamps can
+            // collapse several swipes into one render frame on the software GPU.
+            repeat(12) {
+                val downTime = android.os.SystemClock.uptimeMillis()
+                fun send(action: Int, x: Float) {
+                    val event = android.view.MotionEvent.obtain(downTime, android.os.SystemClock.uptimeMillis(),
+                        action, x, bounds.top + bounds.height * .45f, 0)
+                    event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                    try { org.junit.Assert.assertTrue(automation.injectInputEvent(event, true)) }
+                    finally { event.recycle() }
+                }
+                val from = bounds.left + bounds.width * .25f
+                val to = bounds.left + bounds.width * .85f
+                send(android.view.MotionEvent.ACTION_DOWN, from)
+                for (step in 1..24) {
+                    android.os.SystemClock.sleep(16)
+                    send(android.view.MotionEvent.ACTION_MOVE, from + (to - from) * step / 24f)
+                }
+                send(android.view.MotionEvent.ACTION_UP, to)
+                compose.waitForIdle()
+                val node = compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode()
+                android.util.Log.i("TradeLabHistoryPan", "drag=$it first=${node.config[com.example.ui.components.ChartFirstVisibleIndex]} loaded=${loadedCount()}")
             }
+            compose.waitUntil(90000) { loadedCount() > initial }
+            compose.onNodeWithTag("chart_embedded_replay_controls").assertDoesNotExist()
+        } finally {
+            captureProviderScreen("tradelab-analysis-older-history")
+            compose.onRoot().printToLog("TradeLabHistoryPanTree")
         }
-        compose.waitUntil(90000) { loadedCount() > initial }
-        compose.onNodeWithTag("chart_embedded_replay_controls").assertDoesNotExist()
-        captureProviderScreen("tradelab-analysis-older-history")
     }
 
     @Test fun yearShortcutLoadsActualHistoricalGoldOnTheChart() {
