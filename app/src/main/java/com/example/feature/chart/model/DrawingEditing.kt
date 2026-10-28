@@ -22,9 +22,15 @@ object DrawingEditing {
         handles(d,t).withIndex().minByOrNull { (it.value-p).getDistance() }?.takeIf { (it.value-p).getDistance()<=radius }?.index?.let { if(d.tool.isFreehand && d.anchors.size>2 && it==1)d.anchors.lastIndex else it }
 
     fun drag(d:ChartDrawing,t:ChartTransform,origin:Offset,current:Offset,handle:Int?):ChartDrawing {
-        if(d.isLocked)return d
-        if(d.tool==DrawingTool.ANCHORED_TEXT) return d.copy(screenX=(current.x/t.chartWidth).coerceIn(0f,1f),screenY=(current.y/t.chartHeight).coerceIn(0f,1f))
+        if(d.isLocked || !origin.x.isFinite() || !origin.y.isFinite() || !current.x.isFinite() || !current.y.isFinite())return d
         val delta=current-origin
+        if(d.tool==DrawingTool.ANCHORED_TEXT) {
+            if(!t.chartWidth.isFinite() || !t.chartHeight.isFinite() || t.chartWidth<=0f || t.chartHeight<=0f)return d
+            val start=handles(d,t).firstOrNull()?:return d
+            // Keep the initial finger-to-anchor offset when dragging the text body.
+            // Derive every preview from the original drawing, so deltas never accumulate.
+            return d.copy(screenX=((start.x+delta.x)/t.chartWidth).coerceIn(0f,1f),screenY=((start.y+delta.y)/t.chartHeight).coerceIn(0f,1f))
+        }
         val points=d.anchors.ifEmpty { listOfNotNull(DrawingAnchor(d.startTime,d.startPrice),d.endTime?.let { time->d.endPrice?.let { DrawingAnchor(time,it) } }) }
         fun moved(a:DrawingAnchor,dx:Float,dy:Float):DrawingAnchor {
             val x=t.timeToX(a.time)?:return a

@@ -1,10 +1,11 @@
 package com.example.feature.chart.model
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import kotlin.math.*
 
 object DrawingHitTest {
-    fun distance(d: ChartDrawing, t: ChartTransform, point: Offset, density:Float = 1f): Float {
+    fun distance(d: ChartDrawing, t: ChartTransform, point: Offset, density:Float = 1f, imageSize:Size? = null): Float {
         val a = if(d.tool==DrawingTool.ANCHORED_TEXT && d.screenX!=null && d.screenY!=null) Offset(d.screenX*t.chartWidth,d.screenY*t.chartHeight)
             else Offset(t.timeToX(d.startTime)?:return Float.MAX_VALUE,t.priceToY(d.startPrice))
         val b = Offset(d.endTime?.let{t.timeToX(it)}?:a.x,d.endPrice?.let{t.priceToY(it)}?:a.y)
@@ -40,6 +41,11 @@ object DrawingHitTest {
             return min(quadratic(start,left,middle,depth+1),quadratic(middle,right,end,depth+1))
         }
         return when(d.tool) {
+            DrawingTool.IMAGE -> if(imageSize!=null && imageSize.width>0f && imageSize.height>0f) {
+                val dx=maxOf(a.x-point.x,0f,point.x-a.x-imageSize.width)
+                val dy=maxOf(a.y-point.y,0f,point.y-a.y-imageSize.height)
+                hypot(dx,dy)
+            } else (point-a).getDistance()
             DrawingTool.CURVE,DrawingTool.ARC -> if(anchors.size>=3)quadratic(anchors[0],anchors[1],anchors[2]) else Float.MAX_VALUE
             DrawingTool.DOUBLE_CURVE -> if(anchors.size>=5)min(quadratic(anchors[0],anchors[1],anchors[2]),quadratic(anchors[2],anchors[3],anchors[4])) else Float.MAX_VALUE
             DrawingTool.PARALLEL_CHANNEL -> if(anchors.size>=3) {
@@ -76,7 +82,23 @@ object DrawingHitTest {
                     if(d.fillOpacity>0f && distance<=radius)0f else abs(distance-radius)
                 } else if(radiusX<1f||radiusY<1f)segment(a,b) else {
                     val radius=sqrt(((point.x-center.x)/radiusX).pow(2)+((point.y-center.y)/radiusY).pow(2))
-                    if(d.fillOpacity>0f && radius<=1f)0f else abs(radius-1f)*min(radiusX,radiusY)
+                    if(d.fillOpacity>0f && radius<=1f)0f else {
+                        // Radial error scaled by the short radius vastly understates
+                        // distance near the long-axis tips. Approximate the nearest
+                        // quarter-ellipse with a <=0.25px chord error at chart scales.
+                        val count=ceil(PI/2*sqrt(max(radiusX,radiusY)/2.0)).toInt().coerceIn(8,512)
+                        val sx=if(point.x<center.x)-1f else 1f
+                        val sy=if(point.y<center.y)-1f else 1f
+                        var previous=center+Offset(sx*radiusX,0f)
+                        var nearest=Float.MAX_VALUE
+                        for(i in 1..count) {
+                            val angle=PI/2*i/count
+                            val next=center+Offset(sx*radiusX*cos(angle).toFloat(),sy*radiusY*sin(angle).toFloat())
+                            nearest=min(nearest,segment(previous,next))
+                            previous=next
+                        }
+                        nearest
+                    }
                 }
             }
             else -> {

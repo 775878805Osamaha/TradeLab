@@ -92,7 +92,7 @@ internal object ExtendedDrawingRenderer {
             }
             DrawingTool.IMAGE -> {
                 val bitmap=images[d.id]
-                if(bitmap!=null)drawImage(bitmap,srcOffset=androidx.compose.ui.unit.IntOffset.Zero,srcSize=androidx.compose.ui.unit.IntSize(bitmap.width,bitmap.height),dstOffset=androidx.compose.ui.unit.IntOffset(first.x.toInt(),first.y.toInt()),dstSize=androidx.compose.ui.unit.IntSize((100*density).toInt(),(100*density*bitmap.height/bitmap.width).toInt()))
+                if(bitmap!=null)drawImage(bitmap,srcOffset=androidx.compose.ui.unit.IntOffset.Zero,srcSize=androidx.compose.ui.unit.IntSize(bitmap.width,bitmap.height),dstOffset=androidx.compose.ui.unit.IntOffset(first.x.toInt(),first.y.toInt()),dstSize=DrawingImageGeometry.size(bitmap.width,bitmap.height,density))
                 else text(if(images.containsKey(d.id)) "الصورة غير متاحة" else "تحميل الصورة…",first)
             }
             DrawingTool.INFO_LINE -> {line(first,last); val m=MeasurementCalculator.calculate(d.startPrice,d.endPrice?:d.startPrice,d.startTime,d.endTime?:d.startTime);text("${price(m.priceDiff)} (${String.format(Locale.US,"%.2f",m.percentDiff)}%) · ${m.durationFormatted}",last)}
