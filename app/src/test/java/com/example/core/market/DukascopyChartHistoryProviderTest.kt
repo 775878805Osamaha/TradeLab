@@ -66,6 +66,24 @@ class DukascopyChartHistoryProviderTest {
         assertTrue(candles.isEmpty())
         assertEquals(2, requests)
     }
+    @Test fun officialChartJsonpFallbackPreservesDatePricesAndBidSide() = runBlocking {
+        var chartRequests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val chart = chain.request().url.host == "freeserv.dukascopy.com"
+            val body = if (chart) {
+                chartRequests++
+                assertEquals("B", chain.request().url.queryParameter("offer_side"))
+                assertEquals(day.toString(), chain.request().url.queryParameter("last_update"))
+                "tradelabHistory([[$day,3300,3302,3299,3301,2],[${day+60_000},3301,3303,3300,3302,3]]);"
+            } else "unavailable"
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (chart) 200 else 503).message("Fixture").body(body.toByteArray().toResponseBody()).build()
+        }.build()
+        val bars = DukascopyChartHistoryProvider(client).fetch("XAUUSD", Timeframe.M1, day, day+60_000)
+        assertEquals(2, bars.size)
+        assertEquals(3301.0, bars.first().close, 0.0)
+        assertEquals(1, chartRequests)
+    }
     @Test fun rateLimitDoesNotLookLikeMissingHistory() = runBlocking {
         var requests=0
         val client=OkHttpClient.Builder().addInterceptor { chain ->

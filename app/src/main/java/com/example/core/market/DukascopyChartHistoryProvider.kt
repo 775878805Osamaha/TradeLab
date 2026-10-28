@@ -80,7 +80,7 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
             val count = minOf(1000L, (until - cursor) / step).coerceAtLeast(1L)
             val url = HttpUrl.Builder().scheme("https").host("freeserv.dukascopy.com")
                 .addPathSegment("2.0").addPathSegment("index.php")
-                .addQueryParameter("path", "chart/json3")
+                .addQueryParameter("path", "chart/json3").addQueryParameter("jsonp", "tradelabHistory")
                 .addQueryParameter("instrument", symbol.take(3) + "/" + symbol.drop(3))
                 .addQueryParameter("interval", intervalName).addQueryParameter("offer_side", "B")
                 .addQueryParameter("last_update", cursor.toString()).addQueryParameter("time_direction", "N")
@@ -209,7 +209,7 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
     }
 
     private suspend fun downloadOnce(url: String): ByteArray? = suspendCancellableCoroutine { continuation ->
-        val call = client.newCall(Request.Builder().url(url).header("User-Agent", "TradeLab/3.0 (historical chart research)").header("Accept", "application/octet-stream").build())
+        val call = client.newCall(Request.Builder().url(url).header("User-Agent", "TradeLab/3.0 (historical chart research)").header("Accept", "*/*").build())
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
