@@ -417,7 +417,15 @@ class ReplayViewModel(
                 val startIndex = if (targetTime == null) minOf(20, candles.lastIndex)
                     else candles.indexOfFirst { it.openTime >= targetTime }.coerceAtLeast(0)
                 replayEngine.initialize(candles, startIndex = startIndex)
-                _uiState.update { it.copy(isLoading = false) }
+                // Publish the exact initialized cursor before saving. Flow collectors may
+                // otherwise still contain the cleared engine's previous cursor.
+                _uiState.update { it.copy(isLoading = false,
+                    visibleCandles = replayEngine.visibleCandles.value,
+                    currentCandle = replayEngine.currentCandle.value,
+                    latestTick = replayEngine.currentTick.value,
+                    currentIndex = replayEngine.currentIndex.value,
+                    totalCandles = replayEngine.totalCandles.value,
+                    currentReplayTime = replayEngine.currentReplayTime.value) }
                 saveAccountSnapshot()
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -544,11 +552,11 @@ class ReplayViewModel(
         }
     }
 
-    fun jumpToTimestamp(timestamp: Long) {
+    fun jumpToTimestamp(timestamp: Long, targetTimeframe: Timeframe = _uiState.value.timeframe) {
         cancelBatchAdvance()
         if (_uiState.value.isLoading) return
         val now = System.currentTimeMillis()
-        if (timestamp < 0L || timestamp > now - _uiState.value.timeframe.minutes * 60_000L) {
+        if (timestamp < 0L || timestamp > now - targetTimeframe.minutes * 60_000L) {
             _uiState.update { it.copy(message = "اختر تاريخًا تاريخيًا مكتملًا") }; return
         }
         // Arbitrary jumps can skip execution of stops and strategies.
@@ -559,8 +567,8 @@ class ReplayViewModel(
             return
         }
         val loaded = replayEngine.snapshotCandles()
-        if (loaded.isEmpty() || timestamp < loaded.first().openTime || timestamp > loaded.last().openTime) {
-            loadReplayData(_uiState.value.symbol, _uiState.value.timeframe, endOffsetBars = 0, targetTime = timestamp)
+        if (targetTimeframe != _uiState.value.timeframe || loaded.isEmpty() || timestamp < loaded.first().openTime || timestamp > loaded.last().openTime) {
+            loadReplayData(_uiState.value.symbol, targetTimeframe, endOffsetBars = 0, targetTime = timestamp)
             return
         }
         replayEngine.pause()
@@ -572,9 +580,15 @@ class ReplayViewModel(
         saveAccountSnapshot()
     }
 
-    fun jumpOneYearBack() = jumpToTimestamp(
-        com.example.core.market.ReplayDateWindow.oneYearBefore(System.currentTimeMillis())
-    )
+    fun jumpOneYearBack() {
+        // The keyless metals/FX source retains daily history, not year-old minute bars.
+        // The action's label explicitly announces the daily timeframe.
+        val timeframe = if (_uiState.value.symbol in setOf("BTCUSDT", "ETHUSDT"))
+            _uiState.value.timeframe else Timeframe.D1
+        val target = com.example.core.market.ReplayDateWindow.oneYearBefore(System.currentTimeMillis())
+        jumpToTimestamp(com.example.core.market.HistoricalCandleBoundary.currentOpen(
+            target, timeframe.minutes * 60_000L), timeframe)
+    }
 
     fun setSpeed(sp: Float) {
         cancelBatchAdvance()

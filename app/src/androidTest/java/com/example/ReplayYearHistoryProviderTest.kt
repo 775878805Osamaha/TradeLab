@@ -19,8 +19,7 @@ class ReplayYearHistoryProviderTest {
         val app = ApplicationProvider.getApplicationContext<TradeLabApplication>()
         val now = System.currentTimeMillis()
         val target = ReplayDateWindow.oneYearBefore(now)
-        for ((symbol, timeframe) in listOf("XAUUSD" to Timeframe.M1,
-            "XAUUSD" to Timeframe.M15, "BTCUSDT" to Timeframe.M1)) {
+        for ((symbol, timeframe) in listOf("XAUUSD" to Timeframe.D1, "BTCUSDT" to Timeframe.M1)) {
             val interval = timeframe.minutes * 60_000L
             var requests = 0
             val loaded = ReplayDateHistory.load(

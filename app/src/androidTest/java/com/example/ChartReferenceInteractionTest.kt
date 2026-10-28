@@ -34,19 +34,19 @@ class ChartReferenceInteractionTest {
         val cutoff = System.currentTimeMillis() - 300L * 86_400_000L
         compose.waitUntil(120000) {
             saved = app.trainingSessionStore.read()
-            saved?.let { it.state.symbol == "XAUUSD" && it.state.timeframe == com.example.core.model.Timeframe.M1 &&
+            saved?.let { it.state.symbol == "XAUUSD" && it.state.timeframe == com.example.core.model.Timeframe.D1 &&
                 it.state.currentCandle?.openTime?.let { time -> time < cutoff } == true &&
                 it.candles.isNotEmpty() } == true
         }
         val checkpoint = saved!!
         org.junit.Assert.assertTrue(checkpoint.candles.size <= 300)
-        org.junit.Assert.assertTrue(checkpoint.candles.all { it.openTime < cutoff })
+        org.junit.Assert.assertTrue(checkpoint.state.visibleCandles.all { it.openTime <= checkpoint.state.currentCandle!!.openTime })
         org.junit.Assert.assertTrue(checkpoint.state.currentCandle!!.openTime >
             com.example.core.market.ReplayDateWindow.oneYearBefore(System.currentTimeMillis()) - 86_400_000L)
         compose.onNodeWithTag("candlestick_canvas").assertIsDisplayed()
         compose.onNodeWithTag("chart_no_data").assertDoesNotExist()
         captureProviderScreen("tradelab-year-history")
-        android.util.Log.i("TradeLabYearHistoryUI", "XAUUSD/M1 current=${checkpoint.state.currentCandle!!.openTime} bars=${checkpoint.candles.size}")
+        android.util.Log.i("TradeLabYearHistoryUI", "XAUUSD/D1 current=${checkpoint.state.currentCandle!!.openTime} bars=${checkpoint.candles.size}")
     }
 
     @Test fun fourDestinationsNavigateAndRestoreChartControls() {

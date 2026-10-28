@@ -405,7 +405,9 @@ fun ChartScreen(
                         showReplayDatePicker = false
                     }, enabled = !replayState.isLoading && !replayState.isBatchAdvancing,
                         modifier = Modifier.testTag("chart_replay_one_year_back")) {
-                        Text(androidx.compose.ui.res.stringResource(com.example.R.string.chart_one_year_back))
+                        Text(androidx.compose.ui.res.stringResource(
+                            if (replayState.symbol in setOf("BTCUSDT", "ETHUSDT")) com.example.R.string.chart_one_year_back
+                            else com.example.R.string.chart_one_year_back_daily))
                     }
                     TextButton(onClick = { showReplayDatePicker = false }) { Text("إلغاء") }
                 }
