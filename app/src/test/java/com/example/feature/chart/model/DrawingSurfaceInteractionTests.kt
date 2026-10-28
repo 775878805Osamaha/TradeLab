@@ -40,7 +40,8 @@ class DrawingSurfaceInteractionTests {
     @Test fun draggingImageBodyPreservesTouchOffsetAndPersistsItsMarketAnchor() {
         val d=drawing(DrawingTool.IMAGE);val a=anchor(d);val touch=a+Offset(70f,35f)
         val moved=DrawingEditing.drag(d,t,touch,touch+Offset(50f,20f),null)
-        assertEquals(a+Offset(50f,20f),anchor(moved))
+        assertEquals(a.x+50f,anchor(moved).x,.001f)
+        assertEquals(a.y+20f,anchor(moved).y,.001f)
         assertEquals(moved,ChartDrawing.fromEntity(moved.toEntity()))
     }
     @Test fun anchoredTextBodyDoesNotJumpToTheFingerAtDragStart() {
