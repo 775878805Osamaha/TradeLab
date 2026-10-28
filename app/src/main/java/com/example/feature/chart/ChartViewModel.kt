@@ -485,7 +485,9 @@ class ChartViewModel(
                     if (rawCandles.isNotEmpty()) break
                 }
                 if (rawCandles.isEmpty() && lastHistoryError != null) throw lastHistoryError
-                val aggregated = CandleAggregator.aggregate(rawCandles, tf)
+                // The repository already returns verified TARGET-timeframe bars.
+                // Re-bucketing W1 here shifts Monday opens to Unix-epoch Thursday.
+                val aggregated = rawCandles
                 if (aggregated.any { candle ->
                     candle.symbol != symbol || candle.timeframe != tf ||
                     candle.openTime > lastClosedOpen ||

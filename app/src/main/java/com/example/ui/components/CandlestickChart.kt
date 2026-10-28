@@ -50,6 +50,7 @@ import kotlin.math.min
 // Inspectable viewport state for native gesture regression tests.
 val ChartFirstVisibleIndex = SemanticsPropertyKey<Int>("ChartFirstVisibleIndex")
 val ChartLoadedCandleCount = SemanticsPropertyKey<Int>("ChartLoadedCandleCount")
+val ChartOldestCandleTime = SemanticsPropertyKey<Long>("ChartOldestCandleTime")
 
 enum class ChartDisplayStyle(val label: String) {
     CANDLES("شموع"),
@@ -326,6 +327,7 @@ fun CandlestickChart(
                 .testTag("candlestick_canvas")
                 .semantics {
                     this[ChartLoadedCandleCount] = candles.size
+                    this[ChartOldestCandleTime] = candles.first().openTime
                     this[ChartFirstVisibleIndex] = ChartViewport.window(candles.size,
                         chartViewportWidthPx, candleWidthPx, scrollOffsetPx).startIndex
                 }

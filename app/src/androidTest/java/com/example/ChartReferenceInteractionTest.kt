@@ -59,6 +59,24 @@ class ChartReferenceInteractionTest {
         }
     }
 
+    @Test fun weeklyAnalysisKeepsMondayOpensAndLoadsOlderWeeks() {
+        compose.onNodeWithTag("chart_bottom_timeframe").performClick()
+        compose.onNodeWithText("1W").performClick()
+        compose.waitUntil(90000) {
+            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithTag("chart_load_older_history").fetchSemanticsNodes().isNotEmpty()
+        }
+        fun oldest(): Long = compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode()
+            .config[com.example.ui.components.ChartOldestCandleTime]
+        val first = oldest()
+        val week = 7L * 86_400_000L
+        org.junit.Assert.assertEquals(4L * 86_400_000L, Math.floorMod(first, week))
+        compose.onNodeWithTag("chart_load_older_history").performClick()
+        compose.waitUntil(120000) { oldest() < first }
+        org.junit.Assert.assertEquals(4L * 86_400_000L, Math.floorMod(oldest(), week))
+        captureProviderScreen("tradelab-analysis-weekly-history")
+    }
+
     @Test fun yearShortcutLoadsActualHistoricalGoldOnTheChart() {
         val app = compose.activity.application as TradeLabApplication
         compose.onNodeWithTag("chart_bottom_symbol").performClick()
