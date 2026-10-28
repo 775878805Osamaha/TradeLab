@@ -51,6 +51,7 @@ import kotlin.math.min
 val ChartFirstVisibleIndex = SemanticsPropertyKey<Int>("ChartFirstVisibleIndex")
 val ChartLoadedCandleCount = SemanticsPropertyKey<Int>("ChartLoadedCandleCount")
 val ChartOldestCandleTime = SemanticsPropertyKey<Long>("ChartOldestCandleTime")
+val ChartPriceIndexReady = SemanticsPropertyKey<Boolean>("ChartPriceIndexReady")
 
 enum class ChartDisplayStyle(val label: String) {
     CANDLES("شموع"),
@@ -332,6 +333,7 @@ fun CandlestickChart(
                 .semantics {
                     this[ChartLoadedCandleCount] = candles.size
                     this[ChartOldestCandleTime] = candles.first().openTime
+                    this[ChartPriceIndexReady] = priceRangeIndex != null
                     this[ChartFirstVisibleIndex] = ChartViewport.window(candles.size,
                         chartViewportWidthPx, candleWidthPx, scrollOffsetPx).startIndex
                 }
