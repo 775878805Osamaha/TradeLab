@@ -107,9 +107,10 @@ fun CandlestickChart(
         return
     }
 
+    val candleIdentity = ChartCandleIdentity(candles)
     // Convert only when candle data or display style changes, not on each
     // canvas redraw caused by zoom, pan, crosshair or other UI gestures.
-    val heikinAshiCandles = remember(candles, displayStyle) {
+    val heikinAshiCandles = remember(candleIdentity, displayStyle) {
         if (displayStyle != ChartDisplayStyle.HEIKIN_ASHI) emptyList()
         else {
             val converted = ArrayList<Candle>(candles.size)
@@ -152,7 +153,10 @@ fun CandlestickChart(
     // Explicit reset-view still clears the transform below.
     // Avoid creating a new visible OHLC list or scanning the entire history
     // during pan/zoom; range queries are served by the immutable price index.
-    val priceRangeIndex = remember(candles) { ChartPriceRangeIndex(candles) }
+    val preparedPriceRange by produceState<ChartPriceRangeSnapshot?>(null, candleIdentity) {
+        value = ChartPriceRangeSnapshot.prepare(candles)
+    }
+    val priceRangeIndex = preparedPriceRange?.indexFor(candles)
 
     val drawingSelection by rememberUpdatedState(onSelectDrawing)
     val currentDrawings by rememberUpdatedState(drawings)
@@ -175,11 +179,11 @@ fun CandlestickChart(
             }
         }
     }
-    val candleProfiles = remember(candles,drawings) {
+    val candleProfiles = remember(candleIdentity,drawings) {
         drawings.filter { it.tool == DrawingTool.VOLUME_PROFILE_FIXED || it.tool == DrawingTool.VOLUME_PROFILE_SESSION }
             .associate { it.id to CandleVolumeProfile.forDrawing(candles,it) }
     }
-    val anchoredVwaps = remember(candles, drawings) {
+    val anchoredVwaps = remember(candleIdentity, drawings) {
         drawings.filter { it.tool == DrawingTool.ANCHORED_VWAP }.associate { it.id to AnchoredVwap.calculate(candles,it.startTime) }
     }
     // Drawing Interaction State
@@ -408,7 +412,7 @@ fun CandlestickChart(
                         }
                     )
                 }
-                .pointerInput(candles, activeDrawingTool, isCrosshairActive) {
+                .pointerInput(candleIdentity, activeDrawingTool, isCrosshairActive) {
                     detectTapGestures(
                         onDoubleTap = if(activeDrawingTool.isVariablePath) ({ point ->
                             val t = transformRef[0]
@@ -510,7 +514,10 @@ fun CandlestickChart(
             if (visibleCandles.isEmpty()) return@Canvas
 
             // Calculate min & max prices for visible range
-            val priceRange = priceRangeIndex.query(startIndex, endIndex)
+            // While the new index builds off Main, scan only the visible candles.
+            // Do not apply the previous series' scale to newly loaded prices.
+            val priceRange = priceRangeIndex?.query(startIndex, endIndex)
+                ?: (visibleCandles.minOf { it.low } to visibleCandles.maxOf { it.high })
             var minP = priceRange.first
             var maxP = priceRange.second
             if (minP == maxP) {
@@ -651,7 +658,8 @@ fun CandlestickChart(
             // 2. Draw Volume Bars
             if (isVolumeVisible) {
                 val volTop = mainChartHeight
-                val maxVol = max(1.0, priceRangeIndex.maxVolume(startIndex, endIndex))
+                val maxVol = max(1.0, priceRangeIndex?.maxVolume(startIndex, endIndex)
+                    ?: visibleCandles.maxOf { it.volume.coerceAtLeast(0.0) })
                 visibleCandles.forEachIndexed { i, c ->
                     val x = transform.candleIndexToX(i)
                     val volHeight = (c.volume / maxVol).coerceIn(0.0, 1.0).toFloat() * volumeHeight

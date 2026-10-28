@@ -4,7 +4,15 @@ import com.example.core.model.Candle
 import com.example.core.model.Timeframe
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.fail
 import org.junit.Test
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 class ChartPriceRangeIndexTest {
@@ -23,6 +31,62 @@ class ChartPriceRangeIndexTest {
     @Test fun emptyIndexUsesSafeRange() {
         assertEquals(0.0 to 1.0, ChartPriceRangeIndex(emptyList()).query(0, 1))
         assertEquals(0.0, ChartPriceRangeIndex(emptyList()).maxVolume(0, 1), 0.0)
+    }
+
+    @Test fun preparingLargeHistoryReadsCandlesOffTheCallingThread() = runBlocking {
+        val caller = Thread.currentThread()
+        val candles = object : AbstractList<Candle>() {
+            override val size = 100_001
+            override fun get(index: Int): Candle {
+                check(Thread.currentThread() !== caller) { "Large history read on the UI caller" }
+                return candle(index)
+            }
+        }
+        val snapshot = ChartPriceRangeSnapshot.prepare(candles)
+        val range = snapshot.indexFor(candles)!!.query(99_950, 100_001)
+        val expected = (99_950..100_000).map(::candle)
+        assertEquals(expected.minOf { it.low }, range.first, 0.0)
+        assertEquals(expected.maxOf { it.high }, range.second, 0.0)
+    }
+
+    @Test fun obsoletePreparationStopsBeforeReadingTheWholeHistory() = runBlocking {
+        val buildJob = Job()
+        var reads = 0
+        val candles = object : AbstractList<Candle>() {
+            override val size = 100_001
+            override fun get(index: Int): Candle {
+                if (++reads == 3_000) buildJob.cancel()
+                return candle(index)
+            }
+        }
+        try {
+            withContext(buildJob) { ChartPriceRangeSnapshot.prepare(candles) }
+            fail("Cancelled preparation must not publish an index")
+        } catch (_: CancellationException) {
+            assertTrue("Cancelled work must stop promptly, reads=$reads", reads in 3_000..4_096)
+        } finally { buildJob.cancel() }
+    }
+
+    @Test fun aPreviousIndexCannotScaleAnEqualCopyOrAnUpdatedLiveCandle() = runBlocking {
+        val original = List(500, ::candle)
+        val snapshot = ChartPriceRangeSnapshot.prepare(original)
+        assertNotNull(snapshot.indexFor(original))
+        assertNull(snapshot.indexFor(original.toList()))
+        val updated = original.toMutableList().apply { this[lastIndex] = last().copy(high=1_000.0) }
+        assertNull(snapshot.indexFor(updated))
+        assertEquals(1_000.0, ChartPriceRangeSnapshot.prepare(updated).indexFor(updated)!!.query(490, 500).second, 0.0)
+    }
+
+    @Test fun candleKeysNeverWalkThroughLargeListsToCheckEquality() {
+        fun series() = object : AbstractList<Candle>() {
+            override val size = 100_001
+            override fun get(index: Int): Candle = error("A render key must never read OHLC")
+        }
+        val first = series()
+        val second = series()
+        assertEquals(ChartCandleIdentity(first), ChartCandleIdentity(first))
+        assertEquals(ChartCandleIdentity(first).hashCode(), ChartCandleIdentity(first).hashCode())
+        assertNotEquals(ChartCandleIdentity(first), ChartCandleIdentity(second))
     }
 
     @Test fun largeHistoryMatchesBruteForceOnTwoThousandViewports() {

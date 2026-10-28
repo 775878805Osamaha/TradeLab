@@ -1,6 +1,10 @@
 package com.example.ui.components
 
 import com.example.core.model.Candle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlin.math.min
 
@@ -8,7 +12,7 @@ import kotlin.math.min
  * Immutable segment tree for fast OHLC range queries during chart gestures.
  * Build: O(n); viewport query: O(log n) without allocating candle slices.
  */
-internal class ChartPriceRangeIndex(candles: List<Candle>) {
+internal class ChartPriceRangeIndex(candles: List<Candle>, checkpoint: () -> Unit = {}) {
     private val length = candles.size
     private var capacity = 1
     private val lows: DoubleArray
@@ -16,20 +20,24 @@ internal class ChartPriceRangeIndex(candles: List<Candle>) {
     private val volumes: DoubleArray
 
     init {
+        checkpoint()
         while (capacity < length) capacity = capacity shl 1
         lows = DoubleArray(capacity * 2) { Double.POSITIVE_INFINITY }
         highs = DoubleArray(capacity * 2) { Double.NEGATIVE_INFINITY }
         volumes = DoubleArray(capacity * 2)
         candles.forEachIndexed { i, candle ->
+            if (i % 1024 == 0) checkpoint()
             lows[capacity + i] = candle.low
             highs[capacity + i] = candle.high
             volumes[capacity + i] = candle.volume.coerceAtLeast(0.0)
         }
         for (i in capacity - 1 downTo 1) {
+            if (i % 1024 == 0) checkpoint()
             lows[i] = min(lows[i * 2], lows[i * 2 + 1])
             highs[i] = max(highs[i * 2], highs[i * 2 + 1])
             volumes[i] = max(volumes[i * 2], volumes[i * 2 + 1])
         }
+        checkpoint()
     }
 
     /** Fast maximum-volume lookup for the current viewport, no full scan. */
@@ -69,5 +77,26 @@ internal class ChartPriceRangeIndex(candles: List<Candle>) {
             right = right shr 1
         }
         return if (low.isFinite() && high.isFinite()) low to high else 0.0 to 1.0
+    }
+}
+
+/** Constant-time Compose key: a new immutable series must not compare 100k OHLC objects. */
+internal class ChartCandleIdentity(private val candles: List<Candle>) {
+    override fun equals(other: Any?): Boolean = other is ChartCandleIdentity && other.candles === candles
+    override fun hashCode(): Int = System.identityHashCode(candles)
+}
+
+/** Never let an older asynchronous index set the scale of a different candle series. */
+internal class ChartPriceRangeSnapshot private constructor(
+    private val candles: List<Candle>, private val index: ChartPriceRangeIndex
+) {
+    fun indexFor(current: List<Candle>): ChartPriceRangeIndex? = if (current === candles) index else null
+
+    companion object {
+        suspend fun prepare(candles: List<Candle>): ChartPriceRangeSnapshot = withContext(Dispatchers.Default) {
+            val context = currentCoroutineContext()
+            val index = ChartPriceRangeIndex(candles) { context.ensureActive() }
+            ChartPriceRangeSnapshot(candles, index)
+        }
     }
 }
