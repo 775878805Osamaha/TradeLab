@@ -29,8 +29,12 @@ object DrawingHitTest {
         // makes empty space selectable while missing the actual curve.
         fun quadratic(start:Offset,control:Offset,end:Offset,depth:Int=0):Float {
             val chord=end-start
-            val flatness=if(chord.getDistanceSquared()==0f)(control-start).getDistance()
-                else abs(chord.x*(start.y-control.y)-(start.x-control.x)*chord.y)/chord.getDistance()
+            val lengthSquared=chord.getDistanceSquared()
+            val projection=if(lengthSquared>0f) {
+                val relative=control-start
+                ((relative.x*chord.x+relative.y*chord.y)/lengthSquared).coerceIn(0f,1f)
+            } else 0f
+            val flatness=(control-(start+chord*projection)).getDistance()
             if(depth>=12 || flatness<=.5f)return segment(start,end)
             val left=(start+control)/2f;val right=(control+end)/2f;val middle=(left+right)/2f
             return min(quadratic(start,left,middle,depth+1),quadratic(middle,right,end,depth+1))

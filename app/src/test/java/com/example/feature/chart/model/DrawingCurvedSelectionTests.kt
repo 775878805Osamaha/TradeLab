@@ -52,6 +52,12 @@ class DrawingCurvedSelectionTests {
         assertEquals(0f,distance(d,Offset(first+interval,50f)),.001f)
         assertTrue(distance(d,Offset(first+interval/2f,50f))>20f)
     }
+    @Test fun collinearControlBeyondEndpointsKeepsTheCurvesOvershootSelectable() {
+        val points=listOf(DrawingAnchor(900000,4000.0),DrawingAnchor(8100000,4000.0),DrawingAnchor(2700000,4000.0))
+        val d=drawing(DrawingTool.CURVE,points)
+        val at=(pixel(points[0])+pixel(points[1])*2f+pixel(points[2]))/4f
+        assertTrue(distance(d,at)<1f)
+    }
     @Test fun coincidentCurveAnchorsRemainSelectableWithoutNaN() {
         val d=drawing(DrawingTool.CURVE,List(3){anchors.first()})
         assertEquals(0f,distance(d,pixel(anchors.first())),.001f)
