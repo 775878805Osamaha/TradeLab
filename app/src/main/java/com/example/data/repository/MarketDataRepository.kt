@@ -34,6 +34,7 @@ class MarketDataRepository(
     private val freeFileArchive = archiveDirectory?.let {
         com.example.core.market.HistDataChartHistoryProvider(java.io.File(it.parentFile,"histdata-history-v1"))
     }
+    fun freeChartHistoryWarning(symbol: String): String? = freeFileArchive?.warning(symbol)
 
     /** Deep analysis history is an attributed BID archive, separate from live quotes. */
     suspend fun getOlderChartCandles(symbol: String, timeframe: Timeframe, from: Long, to: Long): List<Candle> {

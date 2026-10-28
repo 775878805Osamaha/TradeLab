@@ -1084,6 +1084,10 @@ fun ChartScreen(
                             Text(sourceLabel, fontSize = 10.sp, color = TradingTextSecondary,
                                 modifier = Modifier.padding(horizontal = 8.dp).testTag("chart_history_source"))
                         }
+                        uiState.historySourceWarning?.let { warning ->
+                            Text(warning,fontSize=10.sp,color=TradingTextSecondary,
+                                modifier=Modifier.widthIn(max=240.dp).padding(6.dp).testTag("chart_history_source_warning"))
+                        }
                         uiState.olderHistoryError?.let { historyError ->
                             Text(historyError, fontSize = 10.sp,
                                 color = TradingTextSecondary,

@@ -99,6 +99,19 @@ class HistDataChartHistoryProviderTest {
         assertEquals(HistDataChartHistoryProvider.SOURCE,bar.source)
     }
 
+    @Test fun ambiguousMinutesAndEveryAffectedHigherCandleAreQuarantinedWithoutChoosingPrices() = runBlocking {
+        val provider=HistDataChartHistoryProvider(temp.newFolder())
+        val rows=(listOf(row(),row(close="2002"))+(1..5).map { row("20250106 000${it}00") }).joinToString("\n")
+        provider.importZip("XAUUSD",2025,null,file(zip(rows)))
+        val minutes=provider.cached("XAUUSD",Timeframe.M1,start,start+5*60_000)!!
+        assertEquals(5,minutes.size)
+        assertTrue(minutes.none { it.openTime==start })
+        val three=provider.cached("XAUUSD",Timeframe.M3,start,start+180_000)!!
+        assertEquals(start+180_000,three.single().openTime)
+        assertTrue(provider.cached("XAUUSD",Timeframe.H1,start,start)!!.isEmpty())
+        assertNotNull(provider.warning("XAUUSD"))
+    }
+
     @Test fun weeklyBarsStartMondayAndClosedWindowsAreVerifiedEmpty() = runBlocking {
         val provider=HistDataChartHistoryProvider(temp.newFolder())
         provider.importZip("XAUUSD",2025,null,file(zip(row("20250105 190000")+"\n"+row("20250108 190000"))))

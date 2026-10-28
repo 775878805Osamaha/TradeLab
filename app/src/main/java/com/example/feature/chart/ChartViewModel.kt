@@ -48,6 +48,7 @@ data class ChartUiState(
     val olderHistoryError: String? = null,
     val isDownloadingDeepHistory: Boolean = false,
     val historyDownloadMessage: String? = null,
+    val historySourceWarning: String? = null,
     val candleLoadError: String? = null,
     val connectionDiagnostic: String = "لم يتم اختبار الاتصال بعد",
     val message: String? = null
@@ -156,7 +157,9 @@ class ChartViewModel(
                 }
                 val merged = mergeChartCandles(symbol, timeframe, confirmed) ?: return@launch
                 _uiState.update {
-                    it.copy(isLoadingOlderHistory = false, olderHistoryError = if (confirmed.isEmpty())
+                    it.copy(isLoadingOlderHistory = false,
+                        historySourceWarning = marketDataRepository.freeChartHistoryWarning(symbol) ?: it.historySourceWarning,
+                        olderHistoryError = if (confirmed.isEmpty())
                         "لا تتوفر شموع أقدم من المصدر لهذه الفترة. يمكنك إعادة المحاولة." else null)
                 }
                 if (confirmed.isNotEmpty()) recalculateIndicators(merged, _uiState.value.indicatorSettings)
@@ -193,6 +196,8 @@ class ChartViewModel(
                         val merged = mergeChartCandles(symbol, timeframe, page)
                             ?: throw kotlinx.coroutines.CancellationException("Chart changed")
                         recalculateIndicators(merged, _uiState.value.indicatorSettings)
+                        _uiState.update { it.copy(historySourceWarning =
+                            marketDataRepository.freeChartHistoryWarning(symbol) ?: it.historySourceWarning) }
                     })
                 _uiState.update { it.copy(historyDownloadMessage = when(result) {
                     ChartHistoryDownload.Result.TARGET_REACHED -> "تم تحميل أكثر من 100 ألف شمعة فعلية"
@@ -261,7 +266,7 @@ class ChartViewModel(
         _uiState.update {
             it.copy(
                 selectedSymbol = symbol, isLoading = true, candleLoadError = null,
-                isLoadingOlderHistory = false, isDownloadingDeepHistory = false, historyDownloadMessage = null, olderHistoryError = null,
+                isLoadingOlderHistory = false, isDownloadingDeepHistory = false, historyDownloadMessage = null, historySourceWarning = null, olderHistoryError = null,
                 latestTick = null, candles = emptyList(),
                 openPositions = allPositions.filter { position -> position.symbol == symbol },
                 pendingOrders = allPendingOrders.filter { order -> order.symbol == symbol },
@@ -287,7 +292,7 @@ class ChartViewModel(
         _uiState.update {
             it.copy(
                 selectedTimeframe = timeframe, isLoading = true, candleLoadError = null,
-                isLoadingOlderHistory = false, isDownloadingDeepHistory = false, historyDownloadMessage = null, olderHistoryError = null,
+                isLoadingOlderHistory = false, isDownloadingDeepHistory = false, historyDownloadMessage = null, historySourceWarning = null, olderHistoryError = null,
                 candles = emptyList(), smaValues = emptyList(), emaValues = emptyList(),
                 bollingerValues = emptyList(), vwapValues = emptyList(),
                 rsiValues = emptyList(), macdValues = emptyList(), atrValues = emptyList(),
@@ -469,7 +474,7 @@ class ChartViewModel(
     private fun loadCandlesForCurrentSymbol() {
         historyDownloadGeneration++
         olderHistoryJob?.cancel()
-        _uiState.update { it.copy(isLoadingOlderHistory = false, isDownloadingDeepHistory = false, historyDownloadMessage = null, olderHistoryError = null) }
+        _uiState.update { it.copy(isLoadingOlderHistory = false, isDownloadingDeepHistory = false, historyDownloadMessage = null, historySourceWarning = null, olderHistoryError = null) }
         val symbol = _uiState.value.selectedSymbol
         val tf = _uiState.value.selectedTimeframe
         val requestedBars = _uiState.value.chartHistoryBars
