@@ -147,7 +147,7 @@ class ChartViewModel(
         val symbol = snapshot.selectedSymbol
         val timeframe = snapshot.selectedTimeframe
         val oldest = snapshot.candles.first().openTime
-        _uiState.update { it.copy(isLoadingOlderHistory = true, olderHistoryError = null) }
+        _uiState.update { it.copy(isLoadingOlderHistory = true, olderHistoryError = null, historyDownloadMessage = null) }
         olderHistoryJob?.cancel()
         olderHistoryJob = viewModelScope.launch {
             try {
