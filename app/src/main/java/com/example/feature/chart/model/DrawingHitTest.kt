@@ -24,7 +24,32 @@ object DrawingHitTest {
             }
             return inside
         }
+        val anchors=d.anchors.mapNotNull { p -> t.timeToX(p.time)?.let{Offset(it,t.priceToY(p.price))} }
+        // Flatten the rendered quadratic, not its control-point polygon. The latter
+        // makes empty space selectable while missing the actual curve.
+        fun quadratic(start:Offset,control:Offset,end:Offset,depth:Int=0):Float {
+            val chord=end-start
+            val flatness=if(chord.getDistanceSquared()==0f)(control-start).getDistance()
+                else abs(chord.x*(start.y-control.y)-(start.x-control.x)*chord.y)/chord.getDistance()
+            if(depth>=12 || flatness<=.5f)return segment(start,end)
+            val left=(start+control)/2f;val right=(control+end)/2f;val middle=(left+right)/2f
+            return min(quadratic(start,left,middle,depth+1),quadratic(middle,right,end,depth+1))
+        }
         return when(d.tool) {
+            DrawingTool.CURVE,DrawingTool.ARC -> if(anchors.size>=3)quadratic(anchors[0],anchors[1],anchors[2]) else Float.MAX_VALUE
+            DrawingTool.DOUBLE_CURVE -> if(anchors.size>=5)min(quadratic(anchors[0],anchors[1],anchors[2]),quadratic(anchors[2],anchors[3],anchors[4])) else Float.MAX_VALUE
+            DrawingTool.PARALLEL_CHANNEL -> if(anchors.size>=3) {
+                val shift=anchors[2]-anchors[1]
+                minOf(segment(anchors[0],anchors[1]),segment(anchors[0]+shift,anchors[2]),segment(anchors[0]+shift/2f,anchors[1]+shift/2f))
+            } else Float.MAX_VALUE
+            DrawingTool.FIB_FAN -> FibonacciCalculator.DEFAULT_LEVELS.minOf { level -> segment(a,Offset(b.x,(a.y+(b.y-a.y)*level).toFloat())) }
+            DrawingTool.CYCLES -> {
+                val interval=abs(b.x-a.x).coerceAtLeast(10*density)
+                val first=a.x%interval
+                val lastIndex=floor((t.chartWidth-first)/interval).toInt().coerceAtLeast(0)
+                val index=round((point.x-first)/interval).toInt().coerceIn(0,lastIndex)
+                segment(Offset(first+index*interval,0f),Offset(first+index*interval,t.chartHeight))
+            }
             DrawingTool.HORIZONTAL_LINE -> abs(point.y-a.y)
             DrawingTool.HORIZONTAL_RAY -> segment(a,Offset(t.chartWidth,a.y))
             DrawingTool.VERTICAL_LINE -> abs(point.x-a.x)
@@ -51,7 +76,6 @@ object DrawingHitTest {
                 }
             }
             else -> {
-                val anchors=d.anchors.mapNotNull { p -> t.timeToX(p.time)?.let{Offset(it,t.priceToY(p.price))} }
                 val closed=d.tool in setOf(DrawingTool.TRIANGLE,DrawingTool.ROTATED_RECTANGLE)
                 val vertices=if(d.tool==DrawingTool.ROTATED_RECTANGLE && anchors.size>=3)listOf(anchors[0],anchors[1],anchors[2],anchors[0]+anchors[2]-anchors[1]) else anchors
                 val points=if(closed && vertices.size>2)vertices+vertices.first() else vertices
