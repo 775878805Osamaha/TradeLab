@@ -128,4 +128,6 @@
     <string name="history_removed">Key removed.</string>
     <string name="history_save_error">Could not save the key on this device.</string>
     <string name="history_configured">A key is saved on this device.</string>
+    <string name="chart_one_year_back">One year ago</string>
+    <string name="chart_one_year_back_daily">One year ago · Daily</string>
 </resources>

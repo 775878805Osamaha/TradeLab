@@ -57,6 +57,7 @@ fun ChartScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val replayState by replayViewModel.uiState.collectAsState()
+    val historyTargetTime by replayViewModel.historyTargetTime.collectAsState()
     val orderKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     var isEmbeddedReplay by rememberSaveable { mutableStateOf(true) }
     androidx.activity.compose.BackHandler(enabled = isEmbeddedReplay && replayState.isPlaying) {
@@ -383,7 +384,7 @@ fun ChartScreen(
     }
 
     if (showReplayDatePicker) {
-        val datePickerState = rememberDatePickerState()
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = historyTargetTime ?: replayState.currentCandle?.openTime)
         DatePickerDialog(
             onDismissRequest = { showReplayDatePicker = false },
             confirmButton = {
@@ -398,7 +399,18 @@ fun ChartScreen(
                 ) { Text("انتقال") }
             },
             dismissButton = {
-                TextButton(onClick = { showReplayDatePicker = false }) { Text("إلغاء") }
+                Row {
+                    TextButton(onClick = {
+                        replayViewModel.jumpOneYearBack()
+                        showReplayDatePicker = false
+                    }, enabled = !replayState.isLoading && !replayState.isBatchAdvancing,
+                        modifier = Modifier.testTag("chart_replay_one_year_back")) {
+                        Text(androidx.compose.ui.res.stringResource(
+                            if (replayState.symbol in setOf("BTCUSDT", "ETHUSDT")) com.example.R.string.chart_one_year_back
+                            else com.example.R.string.chart_one_year_back_daily))
+                    }
+                    TextButton(onClick = { showReplayDatePicker = false }) { Text("إلغاء") }
+                }
             }
         ) { DatePicker(state = datePickerState) }
     }
@@ -686,7 +698,7 @@ fun ChartScreen(
                                 replayViewModel.loadReplayData(
                                     uiState.selectedSymbol,
                                     uiState.selectedTimeframe,
-                                    endOffsetBars = offset
+                                    endOffsetBars = offset, targetTime = null
                                 )
                             },
                             enabled = !replayState.isLoading && !replayState.isBatchAdvancing,
@@ -696,7 +708,7 @@ fun ChartScreen(
                             Text(
                                 if (offset == 0) "الأحدث" else "-$offset",
                                 fontSize = 11.sp,
-                                color = if (replayState.historyEndOffsetBars == offset)
+                                color = if (historyTargetTime == null && replayState.historyEndOffsetBars == offset)
                                     TradingAccentLight else TradingTextSecondary
                             )
                         }
@@ -949,7 +961,7 @@ fun ChartScreen(
             ) {
                 // Reset pan/zoom when the instrument, timeframe, or replay context changes.
                 // Do not key on candle data: incoming prices must not jump the viewport.
-                key(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay) {
+                key(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay, if (isEmbeddedReplay) replayState.datasetId else 0L) {
                 CandlestickChart(
                     candles = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles,
                     latestTick = (if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick)

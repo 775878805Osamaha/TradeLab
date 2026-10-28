@@ -16,6 +16,39 @@ class ChartReferenceInteractionTest {
 
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
+    @Test fun yearShortcutLoadsActualHistoricalGoldOnTheChart() {
+        val app = compose.activity.application as TradeLabApplication
+        compose.onNodeWithTag("chart_bottom_symbol").performClick()
+        compose.onNodeWithTag("chart_symbol_search").performTextInput("XAUUSD")
+        compose.onNodeWithTag("chart_symbol_option_XAUUSD").performClick()
+        compose.onNodeWithTag("chart_bottom_timeframe").performClick()
+        compose.onNodeWithText("1m").performClick()
+        compose.waitUntil(90000) {
+            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithTag("chart_replay_buy").fetchSemanticsNodes().firstOrNull()
+                    ?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null
+        }
+        compose.onNodeWithTag("chart_replay_date_picker").performClick()
+        compose.onNodeWithTag("chart_replay_one_year_back").assertIsDisplayed().performClick()
+        var saved: com.example.feature.replay.TrainingSessionSnapshot? = null
+        val cutoff = System.currentTimeMillis() - 300L * 86_400_000L
+        compose.waitUntil(120000) {
+            saved = app.trainingSessionStore.read()
+            saved?.let { it.state.symbol == "XAUUSD" && it.state.timeframe == com.example.core.model.Timeframe.D1 &&
+                it.state.currentCandle?.openTime?.let { time -> time < cutoff } == true &&
+                it.candles.isNotEmpty() } == true
+        }
+        val checkpoint = saved!!
+        org.junit.Assert.assertTrue(checkpoint.candles.size <= 300)
+        org.junit.Assert.assertTrue(checkpoint.state.visibleCandles.all { it.openTime <= checkpoint.state.currentCandle!!.openTime })
+        org.junit.Assert.assertTrue(checkpoint.state.currentCandle!!.openTime >
+            com.example.core.market.ReplayDateWindow.oneYearBefore(System.currentTimeMillis()) - 86_400_000L)
+        compose.onNodeWithTag("candlestick_canvas").assertIsDisplayed()
+        compose.onNodeWithTag("chart_no_data").assertDoesNotExist()
+        captureProviderScreen("tradelab-year-history")
+        android.util.Log.i("TradeLabYearHistoryUI", "XAUUSD/D1 current=${checkpoint.state.currentCandle!!.openTime} bars=${checkpoint.candles.size}")
+    }
+
     @Test fun fourDestinationsNavigateAndRestoreChartControls() {
         compose.onNodeWithTag("chart_bottom_strip").assertIsDisplayed()
         compose.onNodeWithTag("chart_reference_tool_0").assertIsDisplayed()
