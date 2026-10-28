@@ -11,6 +11,8 @@ import com.example.data.repository.TradingRepository
 import com.example.feature.chart.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import com.example.feature.chart.history.ChartHistoryPaging
+import com.example.feature.chart.history.ChartHistoryDownload
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -44,6 +46,9 @@ data class ChartUiState(
     val chartHistoryBars: Int = 250,
     val isLoadingOlderHistory: Boolean = false,
     val olderHistoryError: String? = null,
+    val isDownloadingDeepHistory: Boolean = false,
+    val historyDownloadMessage: String? = null,
+    val historySourceWarning: String? = null,
     val candleLoadError: String? = null,
     val connectionDiagnostic: String = "لم يتم اختبار الاتصال بعد",
     val message: String? = null
@@ -60,6 +65,7 @@ class ChartViewModel(
 
     private var candleLoadJob: Job? = null
     private var olderHistoryJob: Job? = null
+    private var historyDownloadGeneration = 0L
     private var tickJob: Job? = null
     private var klineRefreshJob: Job? = null
     private var klineStreamJob: Job? = null
@@ -135,95 +141,110 @@ class ChartViewModel(
         }
     }
 
-    /**
-     * Append only authentic older OHLC bars; retain the current chart on a
-     * provider failure. The 20k cap is a memory safety limit, not a promise
-     * that every historical source has this much verified data.
-     */
+    /** Load one verified timestamp page without discarding already loaded history. */
     fun loadOlderChartHistory() {
         val snapshot = _uiState.value
-        if (snapshot.isLoading || snapshot.isLoadingOlderHistory ||
-            snapshot.candles.isEmpty() || snapshot.candles.size >= 20_000) return
+        if (snapshot.isLoading || snapshot.isLoadingOlderHistory || snapshot.candles.isEmpty()) return
         val symbol = snapshot.selectedSymbol
         val timeframe = snapshot.selectedTimeframe
         val oldest = snapshot.candles.first().openTime
-        val interval = timeframe.minutes * 60_000L
-        if (oldest < interval) return
-        _uiState.update { it.copy(isLoadingOlderHistory = true, olderHistoryError = null) }
+        _uiState.update { it.copy(isLoadingOlderHistory = true, olderHistoryError = null, historyDownloadMessage = null) }
         olderHistoryJob?.cancel()
         olderHistoryJob = viewModelScope.launch {
             try {
-                // Skip closed-market gaps without manufacturing candles.
-                // Retry successive bounded windows when the most recent
-                // preceding interval is empty (weekends and market holidays).
-                val pageEnd = oldest - interval
-                // Market sessions are sparse; try bounded smaller pages when
-                // the provider cannot satisfy the entire 100-bar window.
-                // Every candidate remains sourced and verified; never fill gaps.
-                var verified: List<Candle>? = null
-                var lastFailure: Exception? = null
-                // A four-page scan covers only 400 minutes on M1, less than
-                // a weekend. Scan contiguous windows covering at least 72h
-                // for intraday charts; stop immediately at the first real page.
-                // No synthetic bars and no skipped historical search windows.
-                val windowsToScan = historicalScanWindows(timeframe)
-                for (window in 0L until windowsToScan) {
-                    val end = pageEnd - window * interval * 100L
-                    if (end < 0L) break
-                    for (bars in listOf(100L, 40L, 10L, 1L)) {
-                        // Each page spans exactly 100 candle slots. When a
-                        // smaller retry succeeds, the missing older portion
-                        // remains discoverable on the next backward request.
-                        val start = (end - interval * (bars - 1L)).coerceAtLeast(0L)
-                        try {
-                            val older = marketDataRepository.getCandles(
-                                symbol, timeframe, start, end
-                            )
-                            val candidate = CandleAggregator.aggregate(older, timeframe)
-                            if (candidate.isNotEmpty()) {
-                                // A provider can return bars outside the
-                                // requested range; reject them before merging.
-                                verifyOlderHistory(candidate, symbol, timeframe, start, end, oldest)
-                                verified = candidate
-                                break
-                            }
-                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                            throw cancelled
-                        } catch (error: Exception) {
-                            lastFailure = error
-                        }
-                    }
-                    if (verified != null) break
+                val confirmed = ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
+                    marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
                 }
-                val confirmed = verified ?: throw (lastFailure
-                    ?: java.io.IOException("No verified older candles available"))
-                if (confirmed.any { it.symbol != symbol || it.timeframe != timeframe ||
-                        it.openTime >= oldest }) {
-                    throw IllegalStateException("Historical page contains mismatched or future candles")
-                }
-                if (_uiState.value.selectedSymbol != symbol ||
-                    _uiState.value.selectedTimeframe != timeframe) return@launch
-                val existing = _uiState.value.candles
-                val merged = (confirmed + existing).distinctBy { it.openTime }
-                    .sortedBy { it.openTime }.takeLast(20_000)
+                val merged = mergeChartCandles(symbol, timeframe, confirmed) ?: return@launch
                 _uiState.update {
-                    it.copy(candles = merged, isLoadingOlderHistory = false,
-                        olderHistoryError = if (merged.size == existing.size)
-                            "لا تتوفر شموع تاريخية أقدم مؤكدة من المصدر" else null)
+                    it.copy(isLoadingOlderHistory = false,
+                        historySourceWarning = marketDataRepository.freeChartHistoryWarning(symbol) ?: it.historySourceWarning,
+                        olderHistoryError = if (confirmed.isEmpty())
+                        "لا تتوفر شموع أقدم من المصدر لهذه الفترة. يمكنك إعادة المحاولة." else null)
                 }
-                if (merged.size != existing.size) {
-                    recalculateIndicators(merged, _uiState.value.indicatorSettings)
-                }
+                if (confirmed.isNotEmpty()) recalculateIndicators(merged, _uiState.value.indicatorSettings)
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                if (_uiState.value.selectedSymbol == symbol &&
-                    _uiState.value.selectedTimeframe == timeframe) {
+                if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe) {
                     _uiState.update { it.copy(isLoadingOlderHistory = false,
-                        olderHistoryError = (error.message ?: "تعذر تحميل الشموع الأقدم").take(160)) }
+                        olderHistoryError = "تعذر تحميل الأقدم: " + (error.message ?: "حاول مجددًا").take(160)) }
                 }
             }
         }
+    }
+
+    /** Explicit, cancellable download. Resume uses the oldest retained verified candle. */
+    fun downloadDeepChartHistory() {
+        val snapshot = _uiState.value
+        if (snapshot.isLoading || snapshot.isLoadingOlderHistory || snapshot.candles.isEmpty()) return
+        val symbol = snapshot.selectedSymbol
+        val timeframe = snapshot.selectedTimeframe
+        if (snapshot.candles.size >= ChartHistoryDownload.TARGET) return
+        val generation = ++historyDownloadGeneration
+        _uiState.update { it.copy(isLoadingOlderHistory = true, isDownloadingDeepHistory = true,
+            olderHistoryError = null, historyDownloadMessage = null) }
+        olderHistoryJob?.cancel()
+        olderHistoryJob = viewModelScope.launch {
+            try {
+                val result = ChartHistoryDownload.run(snapshot.candles,
+                    fetchBefore = { oldest ->
+                        ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
+                            marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
+                        }
+                    }, append = { page ->
+                        val merged = mergeChartCandles(symbol, timeframe, page)
+                            ?: throw kotlinx.coroutines.CancellationException("Chart changed")
+                        recalculateIndicators(merged, _uiState.value.indicatorSettings)
+                        _uiState.update { it.copy(historySourceWarning =
+                            marketDataRepository.freeChartHistoryWarning(symbol) ?: it.historySourceWarning) }
+                    })
+                _uiState.update { it.copy(historyDownloadMessage = when(result) {
+                    ChartHistoryDownload.Result.TARGET_REACHED -> "تم تحميل أكثر من 100 ألف شمعة فعلية"
+                    ChartHistoryDownload.Result.NO_OLDER_PAGE -> "لا توجد شموع أقدم في النطاق الذي فحصه المصدر. يمكنك إعادة المحاولة."
+                }) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe) {
+                    _uiState.update { it.copy(olderHistoryError = "توقف التحميل؛ الشموع محفوظة. أعد المحاولة: " +
+                        (error.message ?: "تعذر الاتصال بالمصدر").take(120)) }
+                }
+            } finally {
+                if (historyDownloadGeneration == generation &&
+                    _uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe &&
+                    _uiState.value.isDownloadingDeepHistory) {
+                    _uiState.update { it.copy(isLoadingOlderHistory = false, isDownloadingDeepHistory = false) }
+                }
+            }
+        }
+    }
+
+    fun stopDeepChartHistory() {
+        if (!_uiState.value.isDownloadingDeepHistory) return
+        historyDownloadGeneration++
+        olderHistoryJob?.cancel()
+        _uiState.update { it.copy(isLoadingOlderHistory = false, isDownloadingDeepHistory = false,
+            historyDownloadMessage = "تم إيقاف التحميل. يمكنك الاستكمال من أقدم شمعة محملة.") }
+    }
+
+    /** Merge off the UI thread; retry if a live candle arrived during the merge. */
+    private suspend fun mergeChartCandles(
+        symbol: String, timeframe: Timeframe, incoming: List<Candle>
+    ): List<Candle>? {
+        while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+            val snapshot = _uiState.value
+            if (snapshot.selectedSymbol != symbol || snapshot.selectedTimeframe != timeframe) return null
+            val merged = withContext(Dispatchers.Default) { ChartHistoryPaging.merge(snapshot.candles, incoming) }
+            var applied = false
+            _uiState.update { state ->
+                applied = state.selectedSymbol == symbol && state.selectedTimeframe == timeframe &&
+                    state.candles === snapshot.candles
+                if (applied) state.copy(candles = merged) else state
+            }
+            if (applied) return merged
+        }
+        return null
     }
 
     fun retryChartHistory() {
@@ -245,7 +266,7 @@ class ChartViewModel(
         _uiState.update {
             it.copy(
                 selectedSymbol = symbol, isLoading = true, candleLoadError = null,
-                isLoadingOlderHistory = false, olderHistoryError = null,
+                isLoadingOlderHistory = false, isDownloadingDeepHistory = false, historyDownloadMessage = null, historySourceWarning = null, olderHistoryError = null,
                 latestTick = null, candles = emptyList(),
                 openPositions = allPositions.filter { position -> position.symbol == symbol },
                 pendingOrders = allPendingOrders.filter { order -> order.symbol == symbol },
@@ -271,7 +292,7 @@ class ChartViewModel(
         _uiState.update {
             it.copy(
                 selectedTimeframe = timeframe, isLoading = true, candleLoadError = null,
-                isLoadingOlderHistory = false, olderHistoryError = null,
+                isLoadingOlderHistory = false, isDownloadingDeepHistory = false, historyDownloadMessage = null, historySourceWarning = null, olderHistoryError = null,
                 candles = emptyList(), smaValues = emptyList(), emaValues = emptyList(),
                 bollingerValues = emptyList(), vwapValues = emptyList(),
                 rsiValues = emptyList(), macdValues = emptyList(), atrValues = emptyList(),
@@ -451,8 +472,9 @@ class ChartViewModel(
     }
 
     private fun loadCandlesForCurrentSymbol() {
+        historyDownloadGeneration++
         olderHistoryJob?.cancel()
-        _uiState.update { it.copy(isLoadingOlderHistory = false, olderHistoryError = null) }
+        _uiState.update { it.copy(isLoadingOlderHistory = false, isDownloadingDeepHistory = false, historyDownloadMessage = null, historySourceWarning = null, olderHistoryError = null) }
         val symbol = _uiState.value.selectedSymbol
         val tf = _uiState.value.selectedTimeframe
         val requestedBars = _uiState.value.chartHistoryBars
@@ -525,7 +547,9 @@ class ChartViewModel(
                     if (rawCandles.isNotEmpty()) break
                 }
                 if (rawCandles.isEmpty() && lastHistoryError != null) throw lastHistoryError
-                val aggregated = CandleAggregator.aggregate(rawCandles, tf)
+                // The repository already returns verified TARGET-timeframe bars.
+                // Re-bucketing W1 here shifts Monday opens to Unix-epoch Thursday.
+                val aggregated = rawCandles
                 if (aggregated.any { candle ->
                     candle.symbol != symbol || candle.timeframe != tf ||
                     candle.openTime > lastClosedOpen ||
@@ -602,18 +626,7 @@ class ChartViewModel(
                     candle.open !in candle.low..candle.high ||
                     candle.close !in candle.low..candle.high ||
                     !candle.volume.isFinite() || candle.volume < 0.0) return@collect
-                val existing = _uiState.value.candles
-                val merged = (existing + candle)
-                    .associateBy { it.openTime }
-                    .toSortedMap()
-                    .values
-                    .toList()
-                    .takeLast(500)
-                _uiState.update { state ->
-                    if (state.selectedSymbol == symbol && state.selectedTimeframe == timeframe) {
-                        state.copy(candles = merged)
-                    } else state
-                }
+                val merged = mergeChartCandles(symbol, timeframe, listOf(candle)) ?: return@collect
                 recalculateIndicators(merged, _uiState.value.indicatorSettings)
             }
         }
@@ -676,18 +689,7 @@ class ChartViewModel(
                     lastSuccessfullyRefreshedOpen = lastClosedOpen
                     if (_uiState.value.selectedSymbol != symbol ||
                         _uiState.value.selectedTimeframe != timeframe) break
-                    val previous = _uiState.value.candles
-                    val merged = (previous + fresh)
-                        .associateBy { it.openTime }
-                        .toSortedMap()
-                        .values
-                        .toList()
-                        .takeLast(maxOf(500, _uiState.value.chartHistoryBars, previous.size).coerceAtMost(20_000))
-                    _uiState.update { state ->
-                        if (state.selectedSymbol == symbol && state.selectedTimeframe == timeframe) {
-                            state.copy(candles = merged)
-                        } else state
-                    }
+                    val merged = mergeChartCandles(symbol, timeframe, fresh) ?: break
                     recalculateIndicators(merged, _uiState.value.indicatorSettings)
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                     // Cancellation of the screen or symbol must stop polling promptly.

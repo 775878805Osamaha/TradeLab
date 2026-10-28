@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,6 +46,11 @@ import java.util.*
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+
+// Inspectable viewport state for native gesture regression tests.
+val ChartFirstVisibleIndex = SemanticsPropertyKey<Int>("ChartFirstVisibleIndex")
+val ChartLoadedCandleCount = SemanticsPropertyKey<Int>("ChartLoadedCandleCount")
+val ChartOldestCandleTime = SemanticsPropertyKey<Long>("ChartOldestCandleTime")
 
 enum class ChartDisplayStyle(val label: String) {
     CANDLES("شموع"),
@@ -275,7 +282,7 @@ fun CandlestickChart(
     LaunchedEffect(candles.firstOrNull()?.openTime, scrollOffsetPx, chartViewportWidthPx,
         candleWidthPx, isLoadingOlderHistory) {
         val oldest = candles.firstOrNull()?.openTime ?: return@LaunchedEffect
-        if (requestOlderHistory == null || loadingOlderHistory || candles.size >= 20_000 ||
+        if (requestOlderHistory == null || loadingOlderHistory ||
             chartViewportWidthPx <= 1f) return@LaunchedEffect
         val threshold = (candles.size * candleWidthPx - chartViewportWidthPx -
             candleWidthPx * 30f).coerceAtLeast(0f)
@@ -318,6 +325,12 @@ fun CandlestickChart(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("candlestick_canvas")
+                .semantics {
+                    this[ChartLoadedCandleCount] = candles.size
+                    this[ChartOldestCandleTime] = candles.first().openTime
+                    this[ChartFirstVisibleIndex] = ChartViewport.window(candles.size,
+                        chartViewportWidthPx, candleWidthPx, scrollOffsetPx).startIndex
+                }
                 .transformable(state = transformableState, enabled = activeDrawingTool == DrawingTool.NONE)
                 // Keep gesture recognition alive while Replay reveals each new candle.
                 // Recreating pointerInput on every candle update cancels active drags.

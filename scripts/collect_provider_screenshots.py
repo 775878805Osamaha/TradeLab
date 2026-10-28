@@ -4,7 +4,7 @@ import datetime
 import subprocess
 import sys
 
-names = ['tradelab-year-history', 'results-v3-overview', 'results-v3-curves', 'results-v3-trade-detail', 'results-v3-statistics', 'results-v3-daily', 'tradelab-training-completed', 'tradelab-training-restored', 'tradelab-replay-account', 'tradelab-replay-results', 'tradelab-market-terminal', 'tradelab-gold-3m', 'tradelab-position-actions', 'tradelab-compact-replay'] + ['drawing-catalog-' + name for name in ['favorites', 'shapes', 'notes', 'patterns', 'measurement', 'triangle']]
+names = ['tradelab-analysis-bulk-history', 'tradelab-analysis-weekly-history', 'tradelab-analysis-older-history', 'tradelab-year-history', 'results-v3-overview', 'results-v3-curves', 'results-v3-trade-detail', 'results-v3-statistics', 'results-v3-daily', 'tradelab-training-completed', 'tradelab-training-restored', 'tradelab-replay-account', 'tradelab-replay-results', 'tradelab-market-terminal', 'tradelab-gold-3m', 'tradelab-position-actions', 'tradelab-compact-replay'] + ['drawing-catalog-' + name for name in ['favorites', 'shapes', 'notes', 'patterns', 'measurement', 'triangle']]
 for name in names:
     result = subprocess.run(['adb', 'pull', f'/sdcard/Download/{name}.png', f'screenshots/{name}.png'])
     if result.returncode and "--allow-missing" not in sys.argv:
@@ -14,6 +14,12 @@ for name in names:
 from pathlib import Path
 import json
 import re
+for path in Path('app/build/outputs/androidTest-results/connected').rglob('*downloadsOver100000ActualGoldMinuteCandles*.txt'):
+    for line in path.read_text(errors='replace').splitlines():
+        if 'TradeLabDeepHistory:' in line:
+            match = re.search(r'(\{.*\})', line)
+            if match:
+                Path('screenshots/tradelab-deep-history-proof.json').write_text(json.dumps(json.loads(match.group(1)), indent=2))
 found = False
 for path in Path('app/build/outputs/androidTest-results/connected').rglob('*replayPositionLineOpensActionsAndPartialCloseKeepsChart*.txt'):
     for line in path.read_text(errors='replace').splitlines():

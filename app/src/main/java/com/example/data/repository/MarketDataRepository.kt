@@ -26,8 +26,49 @@ import kotlinx.coroutines.withContext
 class MarketDataRepository(
     val provider: DefaultMarketDataProvider,
     private val candleDao: CandleDao,
-    private val symbolDao: SymbolDao
+    private val symbolDao: SymbolDao,
+    archiveDirectory: java.io.File? = null
 ) {
+
+    private val chartArchive = com.example.core.market.DukascopyChartHistoryProvider(archiveDirectory = archiveDirectory)
+    private val freeFileArchive = archiveDirectory?.let {
+        com.example.core.market.HistDataChartHistoryProvider(java.io.File(it.parentFile,"histdata-history-v1"))
+    }
+    fun freeChartHistoryWarning(symbol: String): String? = freeFileArchive?.warning(symbol)
+
+    /** Deep analysis history is an attributed BID archive, separate from live quotes. */
+    suspend fun getOlderChartCandles(symbol: String, timeframe: Timeframe, from: Long, to: Long): List<Candle> {
+        if (hasTwelveDataKey() || !com.example.core.market.DukascopyChartHistoryProvider.supports(symbol)) {
+            return getCandles(symbol, timeframe, from, to)
+        }
+        val split = com.example.core.market.ChartHistorySourceWindow.split(timeframe,from,to,System.currentTimeMillis())
+        split.recent?.let { recent ->
+            // A known unpublished archive tail must be requested from the live-history
+            // source, rather than silently jumping over it to an older archive day.
+            val tail = try { getCandles(symbol,timeframe,recent.from,recent.to) }
+                catch (_: com.example.core.market.NoHistoricalCandlesException) { emptyList() }
+            val older = split.archive?.let { getOlderChartCandles(symbol,timeframe,it.from,it.to) } ?: emptyList()
+            return HistoricalCandleIntegrity.validate(older+tail,from,to+timeframe.minutes*60_000L,
+                expectedSymbol=symbol,expectedTimeframe=timeframe)
+        }
+        val cached = withContext(Dispatchers.IO) {
+            candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
+                .filter { it.source in setOf(com.example.core.market.DukascopyChartHistoryProvider.SOURCE,
+                    com.example.core.market.HistDataChartHistoryProvider.SOURCE) }
+        }
+        if (HistoricalCandleCoverage.isComplete(cached, from, to, timeframe.minutes * 60_000L)) {
+            return HistoricalCandleIntegrity.validate(cached, from, to + timeframe.minutes * 60_000L,
+                expectedSymbol = symbol, expectedTimeframe = timeframe)
+        }
+        val candles = com.example.core.market.FreeChartHistory.load(
+            cachedAlternative = { freeFileArchive?.cached(symbol,timeframe,from,to) },
+            primary = { chartArchive.fetch(symbol,timeframe,from,to) },
+            alternative = freeFileArchive?.let { archive -> suspend { archive.fetch(symbol,timeframe,from,to) } }
+        )
+        if (candles.isEmpty() && freeFileArchive==null) return getCandles(symbol, timeframe, from, to)
+        withContext(Dispatchers.IO) { candleDao.insertCandles(candles.map { it.toEntity() }) }
+        return candles
+    }
 
     val providerDiagnostics: StateFlow<MarketDataDiagnostic> = provider.diagnosticInfo
 
