@@ -13,6 +13,31 @@ import org.junit.runner.RunWith
 /** Real source coverage, separate from the 100k+ synthetic arithmetic regression. */
 @RunWith(AndroidJUnit4::class)
 class ChartHistoryProviderPagingTest {
+    @Test fun downloadsOver100000ActualArchivedGoldMinuteCandles() = runBlocking {
+        kotlinx.coroutines.withTimeout(8L*60_000) {
+            val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as TradeLabApplication
+            val from = java.time.Instant.parse("2025-04-30T10:00:00Z").toEpochMilli()
+            var candles = app.marketDataRepository.getOlderChartCandles("XAUUSD",Timeframe.M1,from,from+299*60_000L)
+            assertTrue(candles.isNotEmpty())
+            var pages=0
+            val result = com.example.feature.chart.history.ChartHistoryDownload.run(candles,pauseMillis=1000,
+                fetchBefore={oldest ->
+                    ChartHistoryPaging.before("XAUUSD",Timeframe.M1,oldest) { start,end ->
+                        app.marketDataRepository.getOlderChartCandles("XAUUSD",Timeframe.M1,start,end)
+                    }
+                },append={page ->
+                    candles=ChartHistoryPaging.merge(candles,page)
+                    if(++pages%10==0) android.util.Log.i("TradeLabDeepHistoryProgress","pages=$pages actualCandles=${candles.size}")
+                })
+            assertEquals(com.example.feature.chart.history.ChartHistoryDownload.Result.TARGET_REACHED,result)
+            assertTrue(candles.size>100_000)
+            assertTrue(candles.all { it.source==com.example.core.market.DukascopyChartHistoryProvider.SOURCE })
+            assertTrue(candles.zipWithNext().all { (a,b) -> a.openTime<b.openTime })
+            android.util.Log.i("TradeLabDeepHistory", """{"symbol":"XAUUSD","timeframe":"M1","source":"DUKASCOPY_BID_HISTORY","actualCandles":${candles.size},"pages":$pages,"oldest":${candles.first().openTime},"newest":${candles.last().openTime},"synthetic":false}""")
+        }
+        Unit
+    }
+
     @Test fun yearOldMinuteGoldLoadsFromOfficialArchiveWithoutAKey() = runBlocking {
         val source = com.example.core.market.DukascopyChartHistoryProvider()
         val from = java.time.Instant.parse("2025-04-30T10:00:00Z").toEpochMilli()

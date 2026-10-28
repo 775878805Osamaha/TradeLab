@@ -14,6 +14,12 @@ for name in names:
 from pathlib import Path
 import json
 import re
+for path in Path('app/build/outputs/androidTest-results/connected').rglob('*downloadsOver100000ActualArchivedGoldMinuteCandles*.txt'):
+    for line in path.read_text(errors='replace').splitlines():
+        if 'TradeLabDeepHistory:' in line:
+            match = re.search(r'(\{.*\})', line)
+            if match:
+                Path('screenshots/tradelab-deep-history-proof.json').write_text(json.dumps(json.loads(match.group(1)), indent=2))
 found = False
 for path in Path('app/build/outputs/androidTest-results/connected').rglob('*replayPositionLineOpensActionsAndPartialCloseKeepsChart*.txt'):
     for line in path.read_text(errors='replace').splitlines():
