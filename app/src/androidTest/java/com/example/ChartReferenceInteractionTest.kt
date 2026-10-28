@@ -16,6 +16,31 @@ class ChartReferenceInteractionTest {
 
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
+    @Test fun analysisLoadsOlderCandlesWhenPannedToHistoryEdge() {
+        fun loadedCount(): Int {
+            val text = compose.onNodeWithTag("chart_load_older_history").fetchSemanticsNode()
+                .config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)
+                ?.joinToString("") { it.text }.orEmpty()
+            return text.substringAfter("·", "").filter { it.isDigit() }.toIntOrNull() ?: 0
+        }
+        compose.waitUntil(90000) {
+            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithTag("chart_load_older_history").fetchSemanticsNodes().isNotEmpty()
+        }
+        val initial = loadedCount()
+        org.junit.Assert.assertTrue(initial > 0)
+        // Physical rightward pan reveals older bars, with no Replay activation.
+        repeat(12) {
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                swipe(androidx.compose.ui.geometry.Offset(width * .25f, height * .45f),
+                    androidx.compose.ui.geometry.Offset(width * .85f, height * .45f), 250)
+            }
+        }
+        compose.waitUntil(90000) { loadedCount() > initial }
+        compose.onNodeWithTag("chart_embedded_replay_controls").assertDoesNotExist()
+        captureProviderScreen("tradelab-analysis-older-history")
+    }
+
     @Test fun yearShortcutLoadsActualHistoricalGoldOnTheChart() {
         val app = compose.activity.application as TradeLabApplication
         compose.onNodeWithTag("chart_bottom_symbol").performClick()

@@ -275,7 +275,7 @@ fun CandlestickChart(
     LaunchedEffect(candles.firstOrNull()?.openTime, scrollOffsetPx, chartViewportWidthPx,
         candleWidthPx, isLoadingOlderHistory) {
         val oldest = candles.firstOrNull()?.openTime ?: return@LaunchedEffect
-        if (requestOlderHistory == null || loadingOlderHistory || candles.size >= 20_000 ||
+        if (requestOlderHistory == null || loadingOlderHistory ||
             chartViewportWidthPx <= 1f) return@LaunchedEffect
         val threshold = (candles.size * candleWidthPx - chartViewportWidthPx -
             candleWidthPx * 30f).coerceAtLeast(0f)
