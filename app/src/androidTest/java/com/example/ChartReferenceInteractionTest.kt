@@ -23,6 +23,7 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_symbol_option_XAUUSD").performClick()
         compose.onNodeWithTag("chart_bottom_timeframe").performClick()
         compose.onNodeWithText("1m").performClick()
+        compose.onNodeWithTag("chart_bottom_replay").performClick()
         compose.waitUntil(90000) {
             compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
                 compose.onAllNodesWithTag("chart_replay_buy").fetchSemanticsNodes().firstOrNull()
@@ -154,7 +155,8 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_embedded_replay_controls").assertIsDisplayed()
         compose.onNodeWithTag("nav_item_chart").assertIsSelected()
         compose.onNodeWithTag("chart_bottom_symbol").assertIsDisplayed()
-        compose.onNodeWithTag("chart_embedded_replay_controls").assertIsDisplayed()
+        compose.onNodeWithTag("chart_replay_close").performClick()
+        compose.onNodeWithTag("chart_embedded_replay_controls").assertDoesNotExist()
         compose.onNodeWithTag("chart_bottom_strip").assertIsDisplayed()
     }
     @Test fun replayPositionLineOpensActionsAndPartialCloseKeepsChart() {
@@ -168,7 +170,8 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_bottom_symbol").performClick()
         compose.onNodeWithTag("chart_symbol_search").performTextInput("GBPUSD")
         compose.onNodeWithTag("chart_symbol_option_GBPUSD").performClick()
-        compose.onNodeWithTag("chart_bottom_replay").performClick()
+        // Starting training already entered Replay explicitly through the account.
+        compose.onNodeWithTag("chart_embedded_replay_controls").assertIsDisplayed()
         compose.waitUntil(90000) {
             compose.onAllNodesWithTag("chart_replay_buy").fetchSemanticsNodes().firstOrNull()
                 ?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null &&
@@ -330,6 +333,7 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithTag("chart_symbol_option_XAUUSD").performClick()
             compose.onNodeWithTag("chart_bottom_timeframe").performClick()
             compose.onNodeWithText("15m").performClick()
+            compose.onNodeWithTag("chart_bottom_replay").performClick()
             compose.waitUntil(90000) {
                 compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
                 compose.onAllNodesWithTag("chart_replay_buy").fetchSemanticsNodes().firstOrNull()

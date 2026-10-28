@@ -52,6 +52,7 @@ fun ChartScreen(
     replayViewModel: ReplayViewModel,
     onNavigateToReplay: () -> Unit,
     embeddedReplayLaunchRequest: Int = 0,
+    onEmbeddedReplayLaunchConsumed: () -> Unit = {},
     onImmersiveChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -59,13 +60,14 @@ fun ChartScreen(
     val replayState by replayViewModel.uiState.collectAsState()
     val historyTargetTime by replayViewModel.historyTargetTime.collectAsState()
     val orderKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    var isEmbeddedReplay by rememberSaveable { mutableStateOf(true) }
-    androidx.activity.compose.BackHandler(enabled = isEmbeddedReplay && replayState.isPlaying) {
+    // A restored training account must not activate Replay on chart entry.
+    var isEmbeddedReplay by rememberSaveable { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = isEmbeddedReplay) {
         replayViewModel.pause()
-        isEmbeddedReplay = true
+        isEmbeddedReplay = false
     }
-    LaunchedEffect(replayState.symbol,replayState.timeframe,replayState.isLoading) {
-        if (!replayState.isLoading) { viewModel.selectSymbol(replayState.symbol);viewModel.selectTimeframe(replayState.timeframe) }
+    LaunchedEffect(isEmbeddedReplay, replayState.symbol, replayState.timeframe, replayState.isLoading) {
+        if (isEmbeddedReplay && !replayState.isLoading) { viewModel.selectSymbol(replayState.symbol);viewModel.selectTimeframe(replayState.timeframe) }
     }
     var selectedPositionId by remember { mutableStateOf<Long?>(null) }
     var selectedPositionReplay by remember { mutableStateOf(false) }
@@ -92,6 +94,7 @@ fun ChartScreen(
         if (embeddedReplayLaunchRequest > 0) {
             replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
             isEmbeddedReplay = true
+            onEmbeddedReplayLaunchConsumed()
         }
     }
     var pendingImageDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
@@ -493,7 +496,7 @@ fun ChartScreen(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clickable { if(replayViewModel.canChangeDataset()) showSymbolSheet = true }
+                            .clickable { if (!isEmbeddedReplay || replayViewModel.canChangeDataset()) showSymbolSheet = true }
                             .testTag("symbol_selector_btn")
                     ) {
                         Text(
@@ -570,7 +573,7 @@ fun ChartScreen(
                         onClick = {
                             if (isEmbeddedReplay) {
                                 replayViewModel.pause()
-                                isEmbeddedReplay = true
+                                isEmbeddedReplay = false
                             } else {
                                 replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
                                 isEmbeddedReplay = true
@@ -831,7 +834,12 @@ fun ChartScreen(
                     val selected = uiState.selectedTimeframe == tf
                     Column(
                         modifier = Modifier.width(48.dp).fillMaxHeight()
-                            .clickable { if(replayViewModel.canChangeDataset()) { replayViewModel.loadReplayData(uiState.selectedSymbol,tf);viewModel.selectTimeframe(tf) } }
+                            .clickable {
+                                if (!isEmbeddedReplay || replayViewModel.canChangeDataset()) {
+                                    if (isEmbeddedReplay) replayViewModel.loadReplayData(uiState.selectedSymbol, tf)
+                                    viewModel.selectTimeframe(tf)
+                                }
+                            }
                             .testTag("tf_chip_${tf.code}"),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Bottom
@@ -1111,7 +1119,7 @@ fun ChartScreen(
                             onReplay = {
                                 if (isEmbeddedReplay) {
                                     replayViewModel.pause()
-                                    isEmbeddedReplay = true
+                                    isEmbeddedReplay = false
                                 } else {
                                     replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
                                     isEmbeddedReplay = true
@@ -1186,7 +1194,7 @@ fun ChartScreen(
                                     }
                                 }
                             }
-                            IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = true },
+                            IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false },
                                 modifier = Modifier.size(32.dp).testTag("chart_replay_close")) {
                                 Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextSecondary)
                             }
@@ -1418,9 +1426,9 @@ fun ChartScreen(
                     symbol = uiState.selectedSymbol,
                     timeframe = uiState.selectedTimeframe,
                     replayActive = isEmbeddedReplay,
-                    onSymbol = { if(replayViewModel.canChangeDataset()) showSymbolSheet = true },
+                    onSymbol = { if (!isEmbeddedReplay || replayViewModel.canChangeDataset()) showSymbolSheet = true },
                     onTimeframe = { tf ->
-                        if (tf != uiState.selectedTimeframe && replayViewModel.canChangeDataset()) {
+                        if (tf != uiState.selectedTimeframe && (!isEmbeddedReplay || replayViewModel.canChangeDataset())) {
                             viewModel.selectTimeframe(tf)
                             if (isEmbeddedReplay) {
                                 replayViewModel.pause()
@@ -1431,7 +1439,7 @@ fun ChartScreen(
                     onReplay = {
                         if (isEmbeddedReplay) {
                             replayViewModel.pause()
-                            isEmbeddedReplay = true
+                            isEmbeddedReplay = false
                         } else {
                             replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
                             isEmbeddedReplay = true
@@ -1484,7 +1492,7 @@ fun ChartScreen(
                             }
                         }
                     }
-                    IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = true },
+                    IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false },
                         modifier = Modifier.testTag("chart_replay_close")) {
                         Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextPrimary)
                     }
@@ -1720,7 +1728,7 @@ fun ChartScreen(
                                     recentSymbols = ArrayList(
                                         (listOf(sym.symbol) + recentSymbols.filter { it != sym.symbol }).take(8)
                                     )
-                                    replayViewModel.loadReplayData(sym.symbol,uiState.selectedTimeframe)
+                                    if (isEmbeddedReplay) replayViewModel.loadReplayData(sym.symbol, uiState.selectedTimeframe)
                                     viewModel.selectSymbol(sym.symbol)
                                     showSymbolSheet = false
                                 }

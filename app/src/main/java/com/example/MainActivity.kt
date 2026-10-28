@@ -119,7 +119,6 @@ class MainActivity : ComponentActivity() {
                                     viewModel = marketViewModel,
                                     onSelectSymbol = { symbol ->
                                         chartViewModel.selectSymbol(symbol)
-                                        replayViewModel.loadReplayData(symbol)
                                         navController.navigate(Screen.Chart.route)
                                     }
                                 )
@@ -131,6 +130,7 @@ class MainActivity : ComponentActivity() {
                                     viewModel = chartViewModel,
                                     replayViewModel = replayViewModel,
                                     embeddedReplayLaunchRequest = embeddedReplayLaunchRequest,
+                                    onEmbeddedReplayLaunchConsumed = { embeddedReplayLaunchRequest = 0 },
                                     onNavigateToReplay = openReplayOnChart,
                                     onImmersiveChanged = { chartImmersive = it }
                                 )
