@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import com.example.feature.chart.history.ChartHistoryPaging
 import com.example.feature.chart.history.ChartHistoryDownload
+import com.example.feature.chart.history.ChartHistoryRetry
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -141,6 +142,23 @@ class ChartViewModel(
         }
     }
 
+    /** Retries only the pending page; already merged bars never enter the retry block. */
+    private suspend fun fetchOlderChartHistory(
+        symbol: String, timeframe: Timeframe, oldest: Long, generation: Long
+    ): List<Candle> = ChartHistoryRetry.run(onRetry = { retry ->
+        _uiState.update { state ->
+            if (historyDownloadGeneration != generation || state.selectedSymbol != symbol ||
+                state.selectedTimeframe != timeframe || !state.isLoadingOlderHistory) state
+            else state.copy(historyDownloadMessage = retry?.let {
+                "انقطع الاتصال مؤقتًا؛ إعادة المحاولة ${it.attempt}/${it.maxAttempts} بعد ${it.delayMillis / 1000} ث. الشموع المحملة باقية."
+            })
+        }
+    }) {
+        ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
+            marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
+        }
+    }
+
     /** Load one verified timestamp page without discarding already loaded history. */
     fun loadOlderChartHistory() {
         val snapshot = _uiState.value
@@ -148,13 +166,12 @@ class ChartViewModel(
         val symbol = snapshot.selectedSymbol
         val timeframe = snapshot.selectedTimeframe
         val oldest = snapshot.candles.first().openTime
+        val generation = ++historyDownloadGeneration
         _uiState.update { it.copy(isLoadingOlderHistory = true, olderHistoryError = null, historyDownloadMessage = null) }
         olderHistoryJob?.cancel()
         olderHistoryJob = viewModelScope.launch {
             try {
-                val confirmed = ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
-                    marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
-                }
+                val confirmed = fetchOlderChartHistory(symbol, timeframe, oldest, generation)
                 val merged = mergeChartCandles(symbol, timeframe, confirmed) ?: return@launch
                 _uiState.update {
                     it.copy(isLoadingOlderHistory = false,
@@ -166,7 +183,8 @@ class ChartViewModel(
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe) {
+                if (historyDownloadGeneration == generation &&
+                    _uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe) {
                     _uiState.update { it.copy(isLoadingOlderHistory = false,
                         olderHistoryError = "تعذر تحميل الأقدم: " + (error.message ?: "حاول مجددًا").take(160)) }
                 }
@@ -189,9 +207,7 @@ class ChartViewModel(
             try {
                 val result = ChartHistoryDownload.run(snapshot.candles,
                     fetchBefore = { oldest ->
-                        ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
-                            marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
-                        }
+                        fetchOlderChartHistory(symbol, timeframe, oldest, generation)
                     }, append = { page ->
                         val merged = mergeChartCandles(symbol, timeframe, page)
                             ?: throw kotlinx.coroutines.CancellationException("Chart changed")
@@ -206,7 +222,8 @@ class ChartViewModel(
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe) {
+                if (historyDownloadGeneration == generation &&
+                    _uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe) {
                     _uiState.update { it.copy(olderHistoryError = "توقف التحميل؛ الشموع محفوظة. أعد المحاولة: " +
                         (error.message ?: "تعذر الاتصال بالمصدر").take(120)) }
                 }
