@@ -6,6 +6,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -126,10 +128,14 @@ fun ChartScreen(
     val defaultDrawingFavorites = setOf("INFO_LINE", "HORIZONTAL_LINE", "TRENDLINE", "HORIZONTAL_RAY", "EXTENDED_LINE", "FIBONACCI", "LONG_POSITION", "SHORT_POSITION", "RECTANGLE", "CIRCLE", "PATH", "VOLUME_PROFILE_FIXED")
     var drawingFavorites by remember { mutableStateOf(drawingPrefs.getStringSet("favorites", defaultDrawingFavorites)?.toSet() ?: defaultDrawingFavorites) }
     var drawingFavoritesVisible by remember { mutableStateOf(drawingPrefs.getBoolean("show_favorites", false)) }
+    fun stampDrawing(d:ChartDrawing)=if(isEmbeddedReplay)d.copy(replayCreatedAt=replayState.visibleCandles.lastOrNull()?.openTime) else d
+    var selectedDrawingId by remember(uiState.selectedSymbol,uiState.selectedTimeframe,isEmbeddedReplay) { mutableStateOf<Long?>(null) }
+    var chartContentTopPx by remember { mutableFloatStateOf(0f) }
+    var replayPanelBottomPx by remember { mutableFloatStateOf(0f) }
     var editingDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
     editingDrawing?.let { drawing ->
         DrawingPropertiesDialog(drawing, onDismiss = { editingDrawing = null }, onDelete = { viewModel.deleteDrawing(drawing.id); editingDrawing = null },
-            onSave = { viewModel.updateDrawing(it); editingDrawing = null })
+            onSave = { viewModel.updateDrawing(stampDrawing(it)); editingDrawing = null })
     }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
@@ -937,11 +943,15 @@ fun ChartScreen(
                 if (isEmbeddedReplay) com.example.feature.replay.visibleReplayDrawings(uiState.drawings, revealedDrawingTime)
                 else uiState.drawings
             }
+            LaunchedEffect(displayedDrawings,uiState.activeDrawingTool) {
+                if(uiState.activeDrawingTool!=DrawingTool.NONE || displayedDrawings.none { it.id==selectedDrawingId })selectedDrawingId=null
+            }
             // Professional Candlestick Chart
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .onGloballyPositioned { chartContentTopPx=it.boundsInRoot().top }
                     .onSizeChanged {
                         chartPaletteContainerHeightPx = it.height
                         chartPaletteContainerWidthPx = it.width
@@ -972,7 +982,8 @@ fun ChartScreen(
                     isVolumeVisible = uiState.isVolumeVisible,
                     resetViewTrigger = uiState.resetViewTrigger,
                     displayStyle = chartDisplayStyle,
-                    onAddDrawing = {
+                    onAddDrawing = { raw ->
+                        val it=stampDrawing(raw)
                         if (it.tool == DrawingTool.IMAGE) {
                             if(uiState.drawings.count { d -> d.tool == DrawingTool.IMAGE } >= 16)
                                 android.widget.Toast.makeText(imageContext,"الحد الأقصى 16 صورة لكل شارت",android.widget.Toast.LENGTH_SHORT).show()
@@ -986,7 +997,10 @@ fun ChartScreen(
                         } else viewModel.addDrawing(it)
                     },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) },
-                    onSelectDrawing = { editingDrawing = it },
+                    onSelectDrawing = { selectedDrawingId = it.id },
+                    selectedDrawingId = selectedDrawingId,
+                    onClearDrawingSelection = { selectedDrawingId=null },
+                    onUpdateDrawing = {viewModel.updateDrawingGeometry(stampDrawing(it))},
                     onSelectPosition = {
                         if (isEmbeddedReplay) replayViewModel.pause()
                         selectedPositionReplay = isEmbeddedReplay
@@ -998,6 +1012,15 @@ fun ChartScreen(
                     bearishColor = Color(0xFFFF3D48),
                     isLoadingOlderHistory = uiState.isLoadingOlderHistory
                 )
+                }
+
+                displayedDrawings.firstOrNull { it.id==selectedDrawingId }?.takeIf { uiState.activeDrawingTool==DrawingTool.NONE }?.let { selected ->
+                    DrawingSelectionToolbar(selected,
+                        onProperties={editingDrawing=selected},
+                        onUpdate={change->viewModel.patchDrawing(selected.id) { current->stampDrawing(change(current)) }},
+                        onDelete={viewModel.deleteDrawing(selected.id);selectedDrawingId=null},
+                        onDismiss={selectedDrawingId=null},
+                        modifier=Modifier.align(Alignment.TopCenter).absolutePadding(left=54.dp,right=4.dp,top=if(isEmbeddedReplay && immersiveChart && replayPanelBottomPx>chartContentTopPx) with(paletteDensity){(replayPanelBottomPx-chartContentTopPx).toDp()}+4.dp else 136.dp))
                 }
 
                 if (uiState.activeDrawingTool != DrawingTool.NONE) {
@@ -1134,7 +1157,8 @@ fun ChartScreen(
                             .clip(RoundedCornerShape(18.dp))
                             .background(TradingCard.copy(alpha = 0.90f))
                             .padding(horizontal = 5.dp, vertical = 3.dp)
-                            .testTag("chart_embedded_replay_controls"),
+                            .testTag("chart_embedded_replay_controls")
+                            .onGloballyPositioned { replayPanelBottomPx=it.boundsInRoot().bottom },
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Row(

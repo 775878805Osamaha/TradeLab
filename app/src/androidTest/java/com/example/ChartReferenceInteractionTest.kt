@@ -348,10 +348,116 @@ class ChartReferenceInteractionTest {
             org.junit.Assert.assertEquals(3, com.example.feature.chart.model.ChartDrawing.fromEntity(stored)!!.anchors.size)
             captureProviderScreen("drawing-catalog-triangle")
             compose.onNodeWithTag("candlestick_canvas").performTouchInput {
-                longClick(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f))
+                click(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f))
             }
+            compose.onNodeWithTag("drawing_selection_toolbar").assertIsDisplayed()
+            val propertiesBounds=compose.onNodeWithTag("drawing_edit_properties").fetchSemanticsNode().boundsInRoot
+            val replayBounds=compose.onNodeWithTag("chart_embedded_replay_controls").fetchSemanticsNode().boundsInRoot
+            org.junit.Assert.assertTrue("Drawing properties must remain below Replay controls",propertiesBounds.top>=replayBounds.bottom)
+            captureProviderScreen("drawing-edit-selected")
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                swipe(androidx.compose.ui.geometry.Offset(width*.55f,height*.45f),androidx.compose.ui.geometry.Offset(width*.60f,height*.40f),600)
+            }
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id }.pointsJson!=stored.pointsJson } }
+            val dragged=kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id } }
+            val draggedModel=com.example.feature.chart.model.ChartDrawing.fromEntity(dragged)!!
+            val originalModel=com.example.feature.chart.model.ChartDrawing.fromEntity(stored)!!
+            org.junit.Assert.assertNotEquals(originalModel.anchors[0],draggedModel.anchors[0])
+            org.junit.Assert.assertEquals(originalModel.anchors.drop(1),draggedModel.anchors.drop(1))
+            compose.onNodeWithTag("drawing_edit_color").performClick()
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id }.colorHex!=stored.colorHex } }
+            compose.onNodeWithTag("drawing_edit_properties").performClick()
             compose.onNodeWithTag("drawing_properties").assertIsDisplayed()
-            androidx.test.espresso.Espresso.pressBack()
+            compose.onNodeWithTag("drawing_price_0").performTextReplacement("4000.25")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.onNodeWithTag("drawing_style_controls").performScrollTo()
+            compose.onNodeWithTag("drawing_style_DOTTED").performScrollTo().assertIsDisplayed().performClick()
+            compose.onNodeWithTag("drawing_fill_opacity").performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(.25f) }
+            captureProviderScreen("drawing-edit-properties")
+            compose.onNodeWithTag("drawing_save").performClick()
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id })!!.startPrice==4000.25 } }
+            val propertiesSaved=kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id })!! }
+            org.junit.Assert.assertEquals(com.example.feature.chart.model.DrawingLineStyle.DOTTED,propertiesSaved.lineStyle)
+            org.junit.Assert.assertEquals(.25f,propertiesSaved.fillOpacity,.001f)
+            org.junit.Assert.assertEquals("Saving properties must preserve untouched anchor precision",originalModel.anchors.drop(1),propertiesSaved.anchors.drop(1))
+            captureProviderScreen("drawing-edit-saved")
+            compose.onNodeWithContentDescription("أدوات الرسم").performClick()
+            compose.onNodeWithTag("drawing_catalog_search").performTextInput("مستطيل")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.onNodeWithTag("drawing_catalog_grid").performScrollToNode(hasTestTag("drawing_tool_RECTANGLE"))
+            compose.onNodeWithTag("drawing_tool_RECTANGLE").performClick()
+            compose.waitUntil(10000) { compose.onAllNodesWithTag("drawing_catalog_sheet").fetchSemanticsNodes().isEmpty() }
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(width*.50f,height*.45f))
+                click(androidx.compose.ui.geometry.Offset(width*.75f,height*.65f))
+            }
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().any { it.type=="RECTANGLE" } } }
+            val rectangle=kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.type=="RECTANGLE" } }
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput { click(androidx.compose.ui.geometry.Offset(width*.625f,height*.55f)) }
+            compose.onNodeWithTag("drawing_selection_toolbar").assertIsDisplayed()
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                swipe(androidx.compose.ui.geometry.Offset(width*.625f,height*.55f),androidx.compose.ui.geometry.Offset(width*.665f,height*.58f),600)
+            }
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id }.pointsJson!=rectangle.pointsJson } }
+            captureProviderScreen("drawing-edit-rectangle")
+            compose.onNodeWithTag("drawing_edit_style").performClick()
+            compose.onNodeWithTag("drawing_edit_fill").performClick()
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id })!!.let { it.lineStyle==com.example.feature.chart.model.DrawingLineStyle.DASHED && it.fillOpacity>.18f } } }
+            captureProviderScreen("drawing-edit-styled")
+            compose.onNodeWithTag("drawing_edit_lock").performClick()
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id })!!.isLocked } }
+            val lockedSnapshot=kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id } }
+            captureProviderScreen("drawing-edit-locked")
+            compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                swipe(androidx.compose.ui.geometry.Offset(width*.665f,height*.58f),androidx.compose.ui.geometry.Offset(width*.70f,height*.62f),600)
+            }
+            org.junit.Assert.assertEquals(lockedSnapshot.pointsJson,kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id }.pointsJson })
+            compose.onNodeWithTag("drawing_edit_lock").performClick()
+            compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { !com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id })!!.isLocked } }
+            compose.activityRule.scenario.recreate()
+            compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
+            org.junit.Assert.assertEquals(4000.25,kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==stored.id })!!.startPrice },0.0)
+            val restoredStyle=kotlinx.coroutines.runBlocking { com.example.feature.chart.model.ChartDrawing.fromEntity(dao.getDrawings("XAUUSD","M15").first().first { it.id==rectangle.id })!! }
+            org.junit.Assert.assertEquals(com.example.feature.chart.model.DrawingLineStyle.DASHED,restoredStyle.lineStyle)
+            org.junit.Assert.assertTrue(restoredStyle.fillOpacity>.18f)
+            org.junit.Assert.assertFalse(restoredStyle.isLocked)
+
+            // Select and edit rendered regions away from the original anchor as users do.
+            for((tool,query) in listOf("HORIZONTAL_LINE" to "خط أفقي", "FIBONACCI" to "فيبوناتشي", "LONG_POSITION" to "صفقة شراء")) {
+                kotlinx.coroutines.runBlocking { dao.clearDrawings("XAUUSD","M15") }
+                compose.waitForIdle()
+                compose.onNodeWithContentDescription("أدوات الرسم").performClick()
+                compose.onNodeWithTag("drawing_catalog_search").performTextInput(query)
+                androidx.test.espresso.Espresso.closeSoftKeyboard()
+                compose.onNodeWithTag("drawing_catalog_grid").performScrollToNode(hasTestTag("drawing_tool_$tool"))
+                compose.onNodeWithTag("drawing_tool_$tool").performClick()
+                compose.waitUntil(10000) { compose.onAllNodesWithTag("drawing_catalog_sheet").fetchSemanticsNodes().isEmpty() }
+                compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                    click(androidx.compose.ui.geometry.Offset(width*.55f,height*.50f))
+                    if(tool=="FIBONACCI")click(androidx.compose.ui.geometry.Offset(width*.75f,height*.65f))
+                    if(tool=="LONG_POSITION") {
+                        click(androidx.compose.ui.geometry.Offset(width*.57f,height*.40f))
+                        click(androidx.compose.ui.geometry.Offset(width*.56f,height*.65f))
+                    }
+                }
+                compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().any { it.type==tool } } }
+                val before=kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.type==tool } }
+                val touchX=if(tool=="HORIZONTAL_LINE") .80f else if(tool=="LONG_POSITION") .70f else .55f
+                val touchY=if(tool=="LONG_POSITION") .55f else .50f
+                compose.onNodeWithTag("candlestick_canvas").performTouchInput { click(androidx.compose.ui.geometry.Offset(width*touchX,height*touchY)) }
+                compose.onNodeWithTag("drawing_selection_toolbar").assertIsDisplayed()
+                compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                    swipe(androidx.compose.ui.geometry.Offset(width*touchX,height*touchY),androidx.compose.ui.geometry.Offset(width*touchX,height*(touchY-.04f)),600)
+                }
+                compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==before.id }.pointsJson!=before.pointsJson } }
+                val after=kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==before.id } }
+                val beforeModel=com.example.feature.chart.model.ChartDrawing.fromEntity(before)!!
+                val afterModel=com.example.feature.chart.model.ChartDrawing.fromEntity(after)!!
+                org.junit.Assert.assertNotEquals(beforeModel.startPrice,afterModel.startPrice)
+                if(tool=="FIBONACCI")org.junit.Assert.assertEquals(beforeModel.endPrice,afterModel.endPrice)
+                if(tool=="LONG_POSITION")org.junit.Assert.assertEquals(beforeModel.anchors[1].price-beforeModel.anchors[2].price,afterModel.anchors[1].price-afterModel.anchors[2].price,.00001)
+                captureProviderScreen("drawing-edit-${tool.lowercase(java.util.Locale.US)}")
+            }
         } finally {
             app.getSharedPreferences("drawing_catalog",android.content.Context.MODE_PRIVATE).edit().putBoolean("show_favorites",false).commit()
             shell("wm size 864x1536")

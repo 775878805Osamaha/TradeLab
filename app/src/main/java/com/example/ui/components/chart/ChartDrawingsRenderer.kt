@@ -40,7 +40,7 @@ object ChartDrawingsRenderer {
                         start = Offset(0f, startY),
                         end = Offset(transform.chartWidth, startY),
                         strokeWidth = d.strokeWidth,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f), 0f)
+                        pathEffect = d.lineStyle.pathEffect(d.strokeWidth)
                     )
                     // Price tag on right edge
                     scope.drawContext.canvas.nativeCanvas.apply {
@@ -58,7 +58,7 @@ object ChartDrawingsRenderer {
                         start = Offset(startX, 0f),
                         end = Offset(startX, transform.chartHeight),
                         strokeWidth = d.strokeWidth,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+                        pathEffect = d.lineStyle.pathEffect(d.strokeWidth)
                     )
                 }
                 DrawingTool.TRENDLINE -> {
@@ -67,7 +67,8 @@ object ChartDrawingsRenderer {
                             color = d.color,
                             start = Offset(startX, startY),
                             end = Offset(endX, endY),
-                            strokeWidth = d.strokeWidth
+                            strokeWidth = d.strokeWidth,
+                            pathEffect = d.lineStyle.pathEffect(d.strokeWidth)
                         )
                     }
                 }
@@ -80,8 +81,9 @@ object ChartDrawingsRenderer {
                 }
                 DrawingTool.ELLIPSE -> {
                     if (endX != null && endY != null) {
+                        scope.drawOval(d.color.copy(alpha=d.fillOpacity),Offset(min(startX,endX),min(startY,endY)),Size(abs(endX-startX),abs(endY-startY)))
                         scope.drawOval(d.color, Offset(min(startX, endX), min(startY, endY)),
-                            Size(abs(endX - startX), abs(endY - startY)), style = Stroke(d.strokeWidth))
+                            Size(abs(endX - startX), abs(endY - startY)), style = Stroke(d.strokeWidth,pathEffect=d.lineStyle.pathEffect(d.strokeWidth)))
                     }
                 }
                 DrawingTool.RECTANGLE -> {
@@ -92,7 +94,7 @@ object ChartDrawingsRenderer {
                         val rectHeight = abs(endY - startY)
 
                         scope.drawRect(
-                            color = d.color.copy(alpha = 0.18f),
+                            color = d.color.copy(alpha = d.fillOpacity),
                             topLeft = Offset(left, top),
                             size = Size(rectWidth, rectHeight)
                         )
@@ -100,7 +102,7 @@ object ChartDrawingsRenderer {
                             color = d.color,
                             topLeft = Offset(left, top),
                             size = Size(rectWidth, rectHeight),
-                            style = Stroke(width = d.strokeWidth)
+                            style = Stroke(width = d.strokeWidth,pathEffect=d.lineStyle.pathEffect(d.strokeWidth))
                         )
                     }
                 }
@@ -114,7 +116,7 @@ object ChartDrawingsRenderer {
                                 start = Offset(0f, y),
                                 end = Offset(transform.chartWidth, y),
                                 strokeWidth = d.strokeWidth,
-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
+                                pathEffect = d.lineStyle.pathEffect(d.strokeWidth)
                             )
                             scope.drawContext.canvas.nativeCanvas.apply {
                                 val paint = android.graphics.Paint().apply {
@@ -136,7 +138,8 @@ object ChartDrawingsRenderer {
                             color = d.color,
                             start = Offset(startX, startY),
                             end = Offset(endX, endY),
-                            strokeWidth = d.strokeWidth
+                            strokeWidth = d.strokeWidth,
+                            pathEffect = d.lineStyle.pathEffect(d.strokeWidth)
                         )
                         // Measurement Box
                         val midX = (startX + endX) / 2f

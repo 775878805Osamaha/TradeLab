@@ -37,6 +37,19 @@ enum class DrawingTool(val displayNameAr: String) {
     FIB_FAN("مروحة فيبوناتشي"), PARALLEL_CHANNEL("قناة متوازية"), ANCHORED_VWAP("VWAP مثبت")
 }
 
+enum class DrawingLineStyle(val titleAr:String) {
+    SOLID("متصل"), DASHED("متقطع"), DOTTED("منقط");
+    fun pathEffect(width:Float):androidx.compose.ui.graphics.PathEffect? = when(this) {
+        SOLID->null
+        DASHED->androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f*width,5f*width))
+        DOTTED->androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(width,3f*width))
+    }
+}
+val DrawingTool.supportsLineStyle:Boolean get()=this !in setOf(DrawingTool.NONE,DrawingTool.IMAGE,DrawingTool.TEXT,DrawingTool.ANCHORED_TEXT,DrawingTool.ANNOTATION,DrawingTool.NOTE,DrawingTool.CALLOUT,DrawingTool.PRICE_NOTE,DrawingTool.SIGNPOST,DrawingTool.PRICE_LABEL,DrawingTool.BARS_PATTERN,DrawingTool.GHOST_FEED,DrawingTool.VOLUME_PROFILE_FIXED,DrawingTool.VOLUME_PROFILE_SESSION)
+val DrawingTool.supportsStrokeWidth:Boolean get()=supportsLineStyle || this in setOf(DrawingTool.BARS_PATTERN,DrawingTool.GHOST_FEED)
+val DrawingTool.supportsColor:Boolean get()=this!=DrawingTool.IMAGE && this!=DrawingTool.NONE
+val DrawingTool.supportsFill:Boolean get()=this in setOf(DrawingTool.RECTANGLE,DrawingTool.ELLIPSE,DrawingTool.CIRCLE,DrawingTool.TRIANGLE,DrawingTool.ROTATED_RECTANGLE,DrawingTool.ARROW_MARKER,DrawingTool.LONG_POSITION,DrawingTool.SHORT_POSITION,DrawingTool.PRICE_RANGE,DrawingTool.DATE_RANGE,DrawingTool.DATE_PRICE_RANGE)
+
 data class DrawingAnchor(val time: Long, val price: Double)
 
 val DrawingTool.isTextTool: Boolean get() = this in setOf(DrawingTool.TABLE, DrawingTool.PRICE_NOTE, DrawingTool.SIGNPOST, DrawingTool.ANNOTATION, DrawingTool.TEXT, DrawingTool.ANCHORED_TEXT, DrawingTool.NOTE, DrawingTool.CALLOUT)
@@ -67,7 +80,11 @@ data class ChartDrawing(
     val text: String = "تعليق",
     val anchors: List<DrawingAnchor> = emptyList(),
     val screenX: Float? = null,
-    val screenY: Float? = null
+    val screenY: Float? = null,
+    val replayCreatedAt: Long? = null,
+    val lineStyle:DrawingLineStyle = DrawingLineStyle.SOLID,
+    val fillOpacity:Float = if(tool in setOf(DrawingTool.CIRCLE,DrawingTool.ELLIPSE))0f else if(tool in setOf(DrawingTool.TRIANGLE,DrawingTool.ROTATED_RECTANGLE,DrawingTool.ARROW_MARKER,DrawingTool.PRICE_RANGE,DrawingTool.DATE_RANGE,DrawingTool.DATE_PRICE_RANGE)) .12f else .18f,
+    val isLocked:Boolean = false
 ) {
     fun toEntity(): DrawingEntity {
         val json = buildString {
@@ -82,6 +99,8 @@ data class ChartDrawing(
                 append(",\"anchorsBase64\":\"${Base64.getEncoder().encodeToString(encoded.toByteArray(Charsets.UTF_8))}\"")
             }
             if (screenX != null && screenY != null) append(",\"screenX\":$screenX,\"screenY\":$screenY")
+            if(replayCreatedAt!=null)append(",\"replayCreatedAt\":$replayCreatedAt")
+            append(",\"lineStyle\":\"${lineStyle.name}\",\"fillOpacity\":${fillOpacity.takeIf { it.isFinite() }?.coerceIn(0f,1f)?:.18f},\"locked\":$isLocked")
             append("}")
         }
         val hex = String.format(Locale.US, "#%08X", color.toArgb().toLong() and 0xFFFFFFFFL)
@@ -130,6 +149,12 @@ data class ChartDrawing(
                             val parts = item.split(':'); val t = parts.getOrNull(0)?.toLongOrNull(); val p = parts.getOrNull(1)?.toDoubleOrNull()
                             if (t != null && p != null && p.isFinite() && p > 0) DrawingAnchor(t, p) else null
                         } ?: emptyList(),
+                    lineStyle = Regex("\"lineStyle\":\"([^\"]*)\"").find(entity.pointsJson)?.groupValues?.get(1)?.let { runCatching { DrawingLineStyle.valueOf(it) }.getOrNull() }
+                        ?: if(tool in setOf(DrawingTool.HORIZONTAL_LINE,DrawingTool.VERTICAL_LINE,DrawingTool.FIBONACCI))DrawingLineStyle.DASHED else DrawingLineStyle.SOLID,
+                    fillOpacity = Regex("\"fillOpacity\":([^,}]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f,1f)
+                        ?: if(tool in setOf(DrawingTool.CIRCLE,DrawingTool.ELLIPSE))0f else if(tool in setOf(DrawingTool.TRIANGLE,DrawingTool.ROTATED_RECTANGLE,DrawingTool.ARROW_MARKER,DrawingTool.PRICE_RANGE,DrawingTool.DATE_RANGE,DrawingTool.DATE_PRICE_RANGE)) .12f else .18f,
+                    isLocked = Regex("\"locked\":(true|false)").find(entity.pointsJson)?.groupValues?.get(1)=="true",
+                    replayCreatedAt = Regex("\"replayCreatedAt\":([0-9]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toLongOrNull(),
                     screenX = Regex("\"screenX\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f },
                     screenY = Regex("\"screenY\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f }
                 )

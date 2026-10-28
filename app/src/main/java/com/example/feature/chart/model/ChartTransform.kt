@@ -61,6 +61,20 @@ data class ChartTransform(
         return candleIndexToX(0) + index.toFloat() * candleWidthPx
     }
 
+    /** Continuous inverse of timeToX, including the empty space beyond the last candle. */
+    fun drawingTimeAtX(x:Float):Long {
+        if(visibleCandles.isEmpty() || allCandles.isEmpty() || candleWidthPx<=0f)return 0L
+        val first=allCandles.binarySearchBy(visibleCandles.first().openTime) { it.openTime }.coerceAtLeast(0)
+        val index=first+(x-candleIndexToX(0))/candleWidthPx
+        val left=kotlin.math.floor(index.toDouble()).toInt()
+        val interval=(visibleCandles.first().timeframe.minutes*60_000L).coerceAtLeast(1L)
+        return when {
+            left<0->allCandles.first().openTime+(index*interval).toLong()
+            left>=allCandles.lastIndex->allCandles.last().openTime+((index-allCandles.lastIndex)*interval).toLong()
+            else->allCandles[left].openTime+((index-left)*(allCandles[left+1].openTime-allCandles[left].openTime)).toLong()
+        }.coerceAtLeast(0L)
+    }
+
     fun xToTime(x: Float): Long {
         val idx = xToCandleIndex(x)
         return if (idx in visibleCandles.indices) visibleCandles[idx].openTime else visibleCandles.getOrNull(idx.coerceIn(0, visibleCandles.lastIndex.coerceAtLeast(0)))?.openTime ?: 0L
