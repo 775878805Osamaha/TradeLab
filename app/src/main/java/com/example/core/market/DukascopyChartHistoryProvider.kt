@@ -42,7 +42,16 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
         require((to - from) / interval < 1000) { "Archive chart requests must stay bounded" }
         val base = when { tf.minutes < 60 -> Timeframe.M1; tf.minutes < 1440 -> Timeframe.H1; else -> Timeframe.D1 }
         val until = to + interval
-        val raw = load(symbol, base, from, until, intArrayOf(64))
+        val raw = try { load(symbol, base, from, until, intArrayOf(64)) }
+        catch (error: MarketDataRequestException) {
+            // Official chart service is an independent transport for the same BID feed.
+            // Never switch transports to conceal a rate-limit or integrity failure.
+            if (generateSequence<Throwable>(error) { it.cause }.any { it is ArchiveHttpFailure && it.status == 503 }) {
+                return@withContext loadChartService(symbol, tf, from, to)
+            }
+            throw error
+        }
+        if (raw.isEmpty()) return@withContext loadChartService(symbol, tf, from, to)
         val groups = raw.groupBy { HistoricalCandleBoundary.currentOpen(it.openTime, interval) }
         val result = groups.toSortedMap().mapNotNull { (start, bars) ->
             if (start < from || start > to) null else Candle(symbol, tf, start,
@@ -51,6 +60,64 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
                 source = SOURCE)
         }
         HistoricalCandleIntegrity.validate(result, from, until, SOURCE, symbol, tf)
+    }
+
+    private suspend fun loadChartService(symbol: String, tf: Timeframe, from: Long, to: Long): List<Candle> {
+        val base = when (tf) { Timeframe.M3 -> Timeframe.M1; Timeframe.H2 -> Timeframe.H1; Timeframe.W1 -> Timeframe.D1; else -> tf }
+        val intervalName = when (base) {
+            Timeframe.M1 -> "1MIN"; Timeframe.M5 -> "5MIN"; Timeframe.M15 -> "15MIN"; Timeframe.M30 -> "30MIN"
+            Timeframe.H1 -> "1HOUR"; Timeframe.H4 -> "4HOUR"; Timeframe.D1 -> "1DAY"
+            else -> throw IOException("Unsupported archive chart interval")
+        }
+        val step = base.minutes * 60_000L
+        val until = to + tf.minutes * 60_000L
+        var cursor = from
+        val candles = ArrayList<Candle>()
+        var requests = 0
+        while (cursor < until) {
+            currentCoroutineContext().ensureActive()
+            require(requests++ < 8) { "Historical chart page request budget exceeded" }
+            val count = minOf(1000L, (until - cursor) / step).coerceAtLeast(1L)
+            val url = HttpUrl.Builder().scheme("https").host("freeserv.dukascopy.com")
+                .addPathSegment("2.0").addPathSegment("index.php")
+                .addQueryParameter("path", "chart/json3")
+                .addQueryParameter("instrument", symbol.take(3) + "/" + symbol.drop(3))
+                .addQueryParameter("interval", intervalName).addQueryParameter("offer_side", "B")
+                .addQueryParameter("last_update", cursor.toString()).addQueryParameter("time_direction", "N")
+                .addQueryParameter("limit", count.toString()).build()
+            val bytes = try { downloadOnce(url.toString()) }
+                catch (error: ArchiveHttpFailure) { throw MarketDataRequestException("Historical chart service HTTP ${error.status}", error) }
+            if (bytes == null) break
+            val text = bytes.toString(Charsets.UTF_8).trim()
+            val json = if (text.startsWith("[")) text else {
+                require(Regex("[A-Za-z_$][A-Za-z0-9_$]*").matches(text.substringBefore('('))) { "Invalid historical JSONP wrapper" }
+                text.substringAfter('(').substringBeforeLast(')')
+            }
+            val rows = org.json.JSONArray(json)
+            if (rows.length() == 0) break
+            var last = Long.MIN_VALUE
+            var accepted = 0
+            for (i in 0 until rows.length()) {
+                val row = rows.getJSONArray(i)
+                val time = row.getLong(0)
+                require(time > last && time >= cursor) { "Unordered historical chart response" }
+                last = time
+                if (time >= until) continue
+                candles.add(Candle(symbol, base, time, closeTime = time + step,
+                    open = row.getDouble(1), high = row.getDouble(2), low = row.getDouble(3),
+                    close = row.getDouble(4), volume = row.optDouble(5, 0.0), source = SOURCE))
+                accepted++
+            }
+            if (accepted == 0) throw IOException("Chart service returned no candles in the requested historical window")
+            if (last >= until - step) break
+            cursor = last + step
+        }
+        val targetStep = tf.minutes * 60_000L
+        val result = candles.groupBy { HistoricalCandleBoundary.currentOpen(it.openTime, targetStep) }
+            .toSortedMap().map { (start, bars) -> Candle(symbol, tf, start, closeTime = start + targetStep,
+                open = bars.first().open, high = bars.maxOf { it.high }, low = bars.minOf { it.low },
+                close = bars.last().close, volume = bars.sumOf { it.volume }, source = SOURCE) }
+        return HistoricalCandleIntegrity.validate(result, from, until, SOURCE, symbol, tf)
     }
 
     private suspend fun load(symbol: String, base: Timeframe, from: Long, until: Long, budget: IntArray): List<Candle> {

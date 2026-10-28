@@ -55,7 +55,7 @@ class DukascopyChartHistoryProviderTest {
         assertEquals(6.0, candles.single().volume, 0.0)
         assertEquals(day+180_000L, candles.single().closeTime)
     }
-    @Test fun absentCompletedYearDoesNotExpandIntoThousandsOfMinuteRequests() = runBlocking {
+    @Test fun absentCompletedYearUsesOnlyOneBoundedChartFallback() = runBlocking {
         var requests = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             requests++
@@ -64,7 +64,7 @@ class DukascopyChartHistoryProviderTest {
         }.build()
         val candles = DukascopyChartHistoryProvider(client).fetch("XAUUSD", Timeframe.D1, day, day)
         assertTrue(candles.isEmpty())
-        assertEquals(1, requests)
+        assertEquals(2, requests)
     }
     @Test fun rateLimitDoesNotLookLikeMissingHistory() = runBlocking {
         var requests=0
