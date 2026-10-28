@@ -57,4 +57,13 @@ class TwelveDataHistoricalProviderTest {
             assertFalse(error.toString().contains("private"))
         }
     }
+
+    @Test fun missingSourceMinuteCannotBecomeACompleteThreeMinuteCandle() = runBlocking {
+        val rows = listOf(0,2).joinToString(",") { minute ->
+            """{"datetime":"2025-04-30 00:0$minute:00","open":"2000","high":"2002","low":"1999","close":"2001"}"""
+        }
+        val payload = """{"meta":{"symbol":"XAU/USD","interval":"1min"},"values":[$rows],"status":"ok"}"""
+        try { TwelveDataHistoricalProvider(client(payload=payload)).fetch("XAUUSD",Timeframe.M3,start,start,"fixture-key"); fail() }
+        catch (error: java.io.IOException) { assertTrue(error.message!!.contains("incomplete three-minute")) }
+    }
 }

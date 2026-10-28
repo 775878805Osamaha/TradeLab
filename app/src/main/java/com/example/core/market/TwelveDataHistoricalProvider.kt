@@ -73,6 +73,9 @@ class TwelveDataHistoricalProvider(
             val minutes = fetch(symbol, Timeframe.M1, from, to + 120_000L, apiKey)
             val bars = minutes.groupBy { HistoricalCandleBoundary.currentOpen(it.openTime, intervalMillis) }
                 .toSortedMap().map { (start, rows) ->
+                    if (rows.size != 3 || rows.indices.any { rows[it].openTime != start + it * 60_000L }) {
+                        throw IOException("Twelve Data returned an incomplete three-minute candle")
+                    }
                     Candle(symbol, timeframe, start, open = rows.first().open, high = rows.maxOf { it.high },
                         low = rows.minOf { it.low }, close = rows.last().close, volume = rows.sumOf { it.volume },
                         closeTime = start + intervalMillis, source = "TWELVE_DATA_HISTORICAL")
