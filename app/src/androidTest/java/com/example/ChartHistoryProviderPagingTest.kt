@@ -13,6 +13,16 @@ import org.junit.runner.RunWith
 /** Real source coverage, separate from the 100k+ synthetic arithmetic regression. */
 @RunWith(AndroidJUnit4::class)
 class ChartHistoryProviderPagingTest {
+    @Test fun yearOldMinuteGoldLoadsFromOfficialArchiveWithoutAKey() = runBlocking {
+        val source = com.example.core.market.DukascopyChartHistoryProvider()
+        val from = java.time.Instant.parse("2025-04-30T10:00:00Z").toEpochMilli()
+        val candles = source.fetch("XAUUSD", Timeframe.M1, from, from + 299 * 60_000L)
+        assertEquals(300, candles.size)
+        assertTrue(candles.all { it.source == com.example.core.market.DukascopyChartHistoryProvider.SOURCE })
+        assertTrue(candles.all { it.open in 1000.0..10000.0 })
+        android.util.Log.i("TradeLabArchive", "year-old gold M1 count=${candles.size} first=${candles.first().openTime} open=${candles.first().open}")
+    }
+
     @Test fun verifiedGoldHistoryPagesBackwardsAcrossEverySupportedTimeframe() = runBlocking {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as TradeLabApplication
         for (tf in Timeframe.entries) {
@@ -23,7 +33,7 @@ class ChartHistoryProviderPagingTest {
             var requests = 0
             val older = ChartHistoryPaging.before("XAUUSD", tf, recent.first().openTime) { from, to ->
                 requests++
-                app.marketDataRepository.getCandles("XAUUSD", tf, from, to)
+                app.marketDataRepository.getOlderChartCandles("XAUUSD", tf, from, to)
             }
             assertTrue("Older source coverage unavailable for ${tf.code}", older.isNotEmpty())
             assertTrue(older.all { it.openTime < recent.first().openTime })

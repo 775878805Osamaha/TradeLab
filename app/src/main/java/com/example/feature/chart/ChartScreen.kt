@@ -1049,6 +1049,10 @@ fun ChartScreen(
                                 fontSize = 11.sp
                             )
                         }
+                        if (uiState.candles.firstOrNull()?.source == com.example.core.market.DukascopyChartHistoryProvider.SOURCE) {
+                            Text("Dukascopy · BID", fontSize = 10.sp, color = TradingTextSecondary,
+                                modifier = Modifier.padding(horizontal = 8.dp).testTag("chart_history_source"))
+                        }
                         uiState.olderHistoryError?.let { historyError ->
                             Text(historyError, fontSize = 10.sp,
                                 color = TradingTextSecondary,

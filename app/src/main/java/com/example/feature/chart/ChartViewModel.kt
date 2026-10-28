@@ -148,7 +148,7 @@ class ChartViewModel(
         olderHistoryJob = viewModelScope.launch {
             try {
                 val confirmed = ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
-                    marketDataRepository.getCandles(symbol, timeframe, from, to)
+                    marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
                 }
                 val merged = mergeChartCandles(symbol, timeframe, confirmed) ?: return@launch
                 _uiState.update {
