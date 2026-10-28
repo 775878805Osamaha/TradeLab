@@ -30,7 +30,7 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
             "AUDUSD", "USDCAD", "NZDUSD", "EURJPY", "GBPJPY", "EURGBP")
         fun supports(symbol: String) = symbol in symbols
     }
-    // Immutable decompressed files, bounded to roughly 1 MB of candle records.
+    // Retain at most 24 immutable decompressed files.
     private val cache = object : LinkedHashMap<String, List<Candle>>(24, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Candle>>?) = size > 24
     }
@@ -42,7 +42,7 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
         require((to - from) / interval < 1000) { "Archive chart requests must stay bounded" }
         val base = when { tf.minutes < 60 -> Timeframe.M1; tf.minutes < 1440 -> Timeframe.H1; else -> Timeframe.D1 }
         val until = to + interval
-        val raw = load(symbol, base, from, until)
+        val raw = load(symbol, base, from, until, intArrayOf(64))
         val groups = raw.groupBy { HistoricalCandleBoundary.currentOpen(it.openTime, interval) }
         val result = groups.toSortedMap().mapNotNull { (start, bars) ->
             if (start < from || start > to) null else Candle(symbol, tf, start,
@@ -53,7 +53,7 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
         HistoricalCandleIntegrity.validate(result, from, until, SOURCE, symbol, tf)
     }
 
-    private suspend fun load(symbol: String, base: Timeframe, from: Long, until: Long): List<Candle> {
+    private suspend fun load(symbol: String, base: Timeframe, from: Long, until: Long, budget: IntArray): List<Candle> {
         var date = Instant.ofEpochMilli(from).atZone(ZoneOffset.UTC).toLocalDate()
         date = when (base) { Timeframe.D1 -> date.withDayOfYear(1); Timeframe.H1 -> date.withDayOfMonth(1); else -> date }
         val result = ArrayList<Candle>()
@@ -69,6 +69,7 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
             }
             val cached = synchronized(cache) { cache[path] }
             val records = if (cached != null) cached else {
+                require(budget[0]-- > 0) { "Archive page exceeded its request budget; retry a shorter window" }
                 val bytes = download("https://datafeed.dukascopy.com/datafeed/$path")
                 if (bytes == null) null else decode(bytes, symbol, base, start, end).also { decoded ->
                     // Current files can be extended by the publisher; do not freeze them in cache.
@@ -76,11 +77,12 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
                 }
             }
             if (records != null) result.addAll(records.filter { it.openTime >= from && it.openTime < until })
-            else if (base != Timeframe.M1) {
+            else if (base != Timeframe.M1 && end > System.currentTimeMillis()) {
                 // Current monthly/yearly files may not be published yet. Use finer official archives.
                 val finer = if (base == Timeframe.D1) Timeframe.H1 else Timeframe.M1
-                result.addAll(load(symbol, finer, maxOf(from, start), minOf(until, end)))
+                result.addAll(load(symbol, finer, maxOf(from, start), minOf(until, end), budget))
             }
+            require(result.size <= 100_000) { "Archive page exceeds its source-record budget" }
             date = next
         }
         return result.sortedBy { it.openTime }
