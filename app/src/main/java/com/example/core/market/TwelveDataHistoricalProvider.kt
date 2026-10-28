@@ -60,9 +60,26 @@ class TwelveDataHistoricalProvider(
         require(supports(symbol)) { "Unsupported Twelve Data instrument" }
         require(apiKey.isNotBlank()) { "Twelve Data API key is required" }
         require(apiKey.length <= 256) { "Twelve Data API key is too long" }
-        require(from >= 0L && to > from) { "Invalid historical range" }
+        require(from >= 0L && to >= from) { "Invalid historical range" }
         val intervalMillis = timeframe.minutes.toLong() * 60_000L
         require(intervalMillis > 0L) { "Invalid historical timeframe" }
+        require(HistoricalCandleBoundary.currentOpen(from, intervalMillis) == from &&
+            HistoricalCandleBoundary.currentOpen(to, intervalMillis) == to) { "Historical range must align to candle opens" }
+        if (timeframe == Timeframe.M3) {
+            // Twelve Data has no native 3min interval. Read every underlying M1
+            // candle, including the last two minutes of the final target bar.
+            require((to - from) / intervalMillis + 1 <= 1666) { "Maximum 1666 three-minute candles per request" }
+            require(HistoricalCandleBoundary.isClosedRange(to, System.currentTimeMillis(), intervalMillis))
+            val minutes = fetch(symbol, Timeframe.M1, from, to + 120_000L, apiKey)
+            val bars = minutes.groupBy { HistoricalCandleBoundary.currentOpen(it.openTime, intervalMillis) }
+                .toSortedMap().map { (start, rows) ->
+                    Candle(symbol, timeframe, start, open = rows.first().open, high = rows.maxOf { it.high },
+                        low = rows.minOf { it.low }, close = rows.last().close, volume = rows.sumOf { it.volume },
+                        closeTime = start + intervalMillis, source = "TWELVE_DATA_HISTORICAL")
+                }
+            return@withContext HistoricalCandleIntegrity.validate(bars, from, to + intervalMillis,
+                expectedSource = "TWELVE_DATA_HISTORICAL", expectedSymbol = symbol, expectedTimeframe = timeframe)
+        }
         require((to - from) / intervalMillis + 1 <= 5000) { "Maximum 5000 candles per request" }
         val now = System.currentTimeMillis()
         require(to <= now - intervalMillis) { "Historical range includes an unfinished candle" }
@@ -84,7 +101,7 @@ class TwelveDataHistoricalProvider(
         val payload = fetchBody(httpClient, request, "Twelve Data")
         val root = JSONObject(payload)
         if (root.optString("status") == "error" || root.has("code")) {
-            throw IOException("Twelve Data rejected the request (check API key, quota and plan)")
+            throw MarketDataRequestException("Twelve Data rejected the request (check API key, quota and plan)")
         }
         val meta = root.optJSONObject("meta")
             ?: throw IOException("Twelve Data response is missing metadata")
@@ -150,14 +167,14 @@ class TwelveDataHistoricalProvider(
                 override fun onFailure(call: Call, e: IOException) {
                     if (continuation.isActive) {
                         continuation.resumeWithException(
-                            IOException("$providerName historical request failed", e)
+                            MarketDataRequestException("$providerName historical request failed", e)
                         )
                     }
                 }
                 override fun onResponse(call: Call, response: Response) {
                     try {
                         val body = response.use {
-                            if (!it.isSuccessful) throw IOException("$providerName HTTP ${it.code}")
+                            if (!it.isSuccessful) throw MarketDataRequestException("$providerName HTTP ${it.code}")
                             it.body?.string() ?: throw IOException("Empty $providerName response")
                         }
                         if (continuation.isActive) continuation.resume(body)

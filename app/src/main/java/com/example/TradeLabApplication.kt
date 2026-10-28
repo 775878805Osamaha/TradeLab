@@ -26,7 +26,8 @@ class TradeLabApplication : Application() {
         MarketDataRepository(
             provider = marketDataProvider,
             candleDao = database.candleDao(),
-            symbolDao = database.symbolDao()
+            symbolDao = database.symbolDao(),
+            archiveDirectory = java.io.File(cacheDir, "chart-archives-v1")
         ).also { repository ->
             // Restore the user-provided key after process recreation.
             repository.configureTwelveDataKey(historyKeyStore.read())

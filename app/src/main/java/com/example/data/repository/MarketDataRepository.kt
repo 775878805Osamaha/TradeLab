@@ -26,10 +26,11 @@ import kotlinx.coroutines.withContext
 class MarketDataRepository(
     val provider: DefaultMarketDataProvider,
     private val candleDao: CandleDao,
-    private val symbolDao: SymbolDao
+    private val symbolDao: SymbolDao,
+    archiveDirectory: java.io.File? = null
 ) {
 
-    private val chartArchive = com.example.core.market.DukascopyChartHistoryProvider()
+    private val chartArchive = com.example.core.market.DukascopyChartHistoryProvider(archiveDirectory = archiveDirectory)
 
     /** Deep analysis history is an attributed BID archive, separate from live quotes. */
     suspend fun getOlderChartCandles(symbol: String, timeframe: Timeframe, from: Long, to: Long): List<Candle> {

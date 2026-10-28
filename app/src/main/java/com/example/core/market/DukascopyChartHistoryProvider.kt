@@ -7,10 +7,14 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.*
 import org.tukaani.xz.LZMAInputStream
 import java.io.ByteArrayInputStream
 import java.io.IOException
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.*
@@ -22,7 +26,13 @@ import kotlin.coroutines.resumeWithException
 /** Official archived BID candles. Never substitutes this feed for executable quotes. */
 class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpClient.Builder()
     .connectTimeout(8, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS)
-    .callTimeout(25, TimeUnit.SECONDS).build()) {
+    .callTimeout(25, TimeUnit.SECONDS).build(),
+    archiveDirectory: File? = null,
+    private val pageTimeoutMillis: Long = 90_000L
+) {
+    private val disk = archiveDirectory?.let { ChartArchiveDiskCache(it) }
+    // Serialize archive work so simultaneous timeframe changes do not flood the feed.
+    private val pageLock = Mutex()
     companion object {
         const val SOURCE = "DUKASCOPY_BID_HISTORY"
         private const val DAY = 86_400_000L
@@ -36,6 +46,12 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
     }
 
     suspend fun fetch(symbol: String, tf: Timeframe, from: Long, to: Long): List<Candle> = withContext(Dispatchers.IO) {
+        withTimeoutOrNull(pageTimeoutMillis) {
+            pageLock.withLock { fetchPage(symbol, tf, from, to) }
+        } ?: throw MarketDataRequestException("انتهت مهلة تحميل الأرشيف؛ أعد المحاولة")
+    }
+
+    private suspend fun fetchPage(symbol: String, tf: Timeframe, from: Long, to: Long): List<Candle> {
         require(supports(symbol) && from >= 0 && from <= to)
         val interval = tf.minutes * 60_000L
         require(HistoricalCandleBoundary.isClosedRange(to, System.currentTimeMillis(), interval))
@@ -50,7 +66,7 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
                 close = bars.last().close, volume = bars.sumOf { it.volume }, closeTime = start + interval,
                 source = SOURCE)
         }
-        HistoricalCandleIntegrity.validate(result, from, until, SOURCE, symbol, tf)
+        return HistoricalCandleIntegrity.validate(result, from, until, SOURCE, symbol, tf)
     }
 
     private suspend fun load(symbol: String, base: Timeframe, from: Long, until: Long, budget: IntArray): List<Candle> {
@@ -78,13 +94,18 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
                 date = next
                 continue
             }
-            val cached = synchronized(cache) { cache[path] }
+            val cached = synchronized(cache) { cache[path] } ?: disk?.read(path)?.let { bytes ->
+                try { decode(bytes, symbol, base, start, end).also { cache[path] = it } }
+                catch (_: IOException) { disk.remove(path); null }
+                catch (_: IllegalArgumentException) { disk.remove(path); null }
+            }
             val records = if (cached != null) cached else {
                 require(budget[0]-- > 0) { "Archive page exceeded its request budget; retry a shorter window" }
                 val bytes = download("https://datafeed.dukascopy.com/datafeed/$path")
                 if (bytes == null) null else decode(bytes, symbol, base, start, end).also { decoded ->
                     // Current files can be extended by the publisher; do not freeze them in cache.
                     if (end < System.currentTimeMillis()) synchronized(cache) { cache[path] = decoded }
+                    disk?.write(path, bytes)
                 }
             }
             if (records != null) result.addAll(records.filter { it.openTime >= from && it.openTime < until })
@@ -143,6 +164,10 @@ class DukascopyChartHistoryProvider(private val client: OkHttpClient = OkHttpCli
                     throw MarketDataRequestException(error.message ?: "Historical archive unavailable", error)
                 }
                 kotlinx.coroutines.delay(maxOf(error.retryAfter ?: (attempt + 1L), 1L) * 1000L)
+            } catch (error: MarketDataRequestException) {
+                // A dropped socket/read timeout can recover; never retry a provider rejection.
+                if (error.cause !is IOException || attempt == 2) throw error
+                kotlinx.coroutines.delay((attempt + 1L) * 1000L)
             }
         }
         throw IOException("Historical archive unavailable")

@@ -2,10 +2,16 @@ package com.example.core.market
 
 import com.example.core.model.Timeframe
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import okhttp3.*
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 import org.tukaani.xz.LZMA2Options
 import org.tukaani.xz.LZMAOutputStream
 import java.io.ByteArrayOutputStream
@@ -14,6 +20,7 @@ import java.nio.ByteOrder
 import java.time.Instant
 
 class DukascopyChartHistoryProviderTest {
+    @get:Rule val temp = TemporaryFolder()
     private val day = Instant.parse("2025-04-30T00:00:00Z").toEpochMilli()
     private fun compressed(offsets: List<Int>, bad: Boolean = false): ByteArray {
         val buffer = ByteBuffer.allocate(offsets.size * 24).order(ByteOrder.BIG_ENDIAN)
@@ -88,5 +95,75 @@ class DukascopyChartHistoryProviderTest {
         try { DukascopyChartHistoryProvider(client).fetch("XAUUSD",Timeframe.M1,day,day);fail("429 must propagate") }
         catch (_: MarketDataRequestException) { }
         assertEquals(1,requests)
+    }
+
+    @Test fun archiveSurvivesProviderRecreationAndIsReusedAcrossTimeframes() = runBlocking {
+        var requests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(compressed(listOf(0,60,120,180,240,300)).toResponseBody()).build()
+        }.build()
+        val directory = temp.newFolder()
+        DukascopyChartHistoryProvider(client, directory).fetch("XAUUSD", Timeframe.M1, day, day+300_000)
+        val offline = OkHttpClient.Builder().addInterceptor { throw java.io.IOException("Offline") }.build()
+        val bars = DukascopyChartHistoryProvider(offline, directory).fetch("XAUUSD", Timeframe.M3, day, day+180_000)
+        assertEquals(2, bars.size)
+        assertEquals(1, requests)
+        // Damaged local files must be discarded and verified network bytes fetched again.
+        directory.listFiles()!!.single().writeBytes(byteArrayOf(1,2,3))
+        assertEquals(2, DukascopyChartHistoryProvider(client, directory).fetch("XAUUSD", Timeframe.M1, day, day+60_000).size)
+        assertEquals(2, requests)
+    }
+
+    @Test fun socketFailureRecoversButPageDeadlineRemainsAnError() = runBlocking {
+        var requests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            if (requests == 1) throw java.net.SocketTimeoutException("Fixture")
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(compressed(listOf(0,60)).toResponseBody()).build()
+        }.build()
+        assertEquals(2, DukascopyChartHistoryProvider(client).fetch("XAUUSD", Timeframe.M1, day, day+60_000).size)
+        assertEquals(2, requests)
+        val failing = OkHttpClient.Builder().addInterceptor { throw java.net.SocketTimeoutException("Fixture") }.build()
+        try {
+            DukascopyChartHistoryProvider(failing, pageTimeoutMillis=50).fetch("XAUUSD",Timeframe.M1,day,day)
+            fail("Deadline must not be an empty trading session")
+        } catch (_: MarketDataRequestException) { }
+    }
+
+    @Test fun simultaneousPagesShareVerifiedArchiveAndCallerCanCancel() = runBlocking {
+        val requests = java.util.concurrent.atomic.AtomicInteger()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests.incrementAndGet()
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(compressed(listOf(0,60)).toResponseBody()).build()
+        }.build()
+        val provider = DukascopyChartHistoryProvider(client)
+        (1..5).map { async { provider.fetch("XAUUSD",Timeframe.M1,day,day+60_000) } }.awaitAll()
+        assertEquals(1, requests.get())
+        val failing = DukascopyChartHistoryProvider(OkHttpClient.Builder().addInterceptor {
+            throw java.net.SocketTimeoutException("Fixture")
+        }.build())
+        val job = async { failing.fetch("XAUUSD",Timeframe.M1,day,day) }
+        delay(50)
+        job.cancel()
+        try { job.await(); fail("Caller cancellation must propagate") } catch (_: CancellationException) { }
+        Unit
+    }
+
+    @Test fun diskCacheEvictsOldestAndIgnoresOversizedFiles() {
+        val directory = temp.newFolder()
+        val disk = ChartArchiveDiskCache(directory, maxBytes=8)
+        disk.write("first", byteArrayOf(1,2,3,4))
+        directory.listFiles()!!.single().setLastModified(1)
+        disk.write("second", byteArrayOf(5,6,7,8))
+        disk.write("third", byteArrayOf(9,10,11,12))
+        assertNull(disk.read("first"))
+        assertArrayEquals(byteArrayOf(5,6,7,8), disk.read("second"))
+        assertTrue(directory.listFiles()!!.sumOf { it.length() } <= 8L)
+        disk.write("oversized", ByteArray(200_001))
+        assertNull(disk.read("oversized"))
     }
 }
