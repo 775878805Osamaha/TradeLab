@@ -111,7 +111,7 @@ internal object ExtendedDrawingRenderer {
             }
             DrawingTool.LONG_POSITION,DrawingTool.SHORT_POSITION -> if(points.size>=3) {
                 val entry=points[0];val target=points[1];val stop=points[2]
-                val right=maxOf(entry.x,target.x,stop.x,entry.x+80*density)
+                val right=DrawingEditing.positionRight(points,density)
                 fun zone(at:Offset,color:Color){drawRect(color.copy(alpha=d.fillOpacity),Offset(entry.x,min(entry.y,at.y)),Size(right-entry.x,abs(entry.y-at.y)));line(Offset(entry.x,at.y),Offset(right,at.y),color)}
                 zone(target,Color(0xFF00B7AA));zone(stop,Color(0xFFFF3D48));line(entry,Offset(right,entry.y))
                 val targetPrice=d.anchors.getOrNull(1)?.price?:return@with;val stopPrice=d.anchors.getOrNull(2)?.price?:return@with

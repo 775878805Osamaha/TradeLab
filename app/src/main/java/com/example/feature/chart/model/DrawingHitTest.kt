@@ -4,7 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import kotlin.math.*
 
 object DrawingHitTest {
-    fun distance(d: ChartDrawing, t: ChartTransform, point: Offset): Float {
+    fun distance(d: ChartDrawing, t: ChartTransform, point: Offset, density:Float = 1f): Float {
         val a = if(d.tool==DrawingTool.ANCHORED_TEXT && d.screenX!=null && d.screenY!=null) Offset(d.screenX*t.chartWidth,d.screenY*t.chartHeight)
             else Offset(t.timeToX(d.startTime)?:return Float.MAX_VALUE,t.priceToY(d.startPrice))
         val b = Offset(d.endTime?.let{t.timeToX(it)}?:a.x,d.endPrice?.let{t.priceToY(it)}?:a.y)
@@ -34,7 +34,7 @@ object DrawingHitTest {
             DrawingTool.LONG_POSITION,DrawingTool.SHORT_POSITION -> {
                 val ps=DrawingEditing.handles(d,t)
                 if(ps.size<3)segment(a,b) else {
-                    val right=maxOf(ps.maxOf { it.x },a.x+80f* (t.chartWidth/400f).coerceAtLeast(1f))
+                    val right=DrawingEditing.positionRight(ps,density)
                     if(point.x in a.x..right && point.y in ps.minOf { it.y }..ps.maxOf { it.y })0f
                     else ps.minOf { segment(Offset(a.x,it.y),Offset(right,it.y)) }
                 }

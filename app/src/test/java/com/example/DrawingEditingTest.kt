@@ -54,4 +54,40 @@ class DrawingEditingTest {
         assertEquals(d.anchors.size,moved.anchors.size)
         moved.anchors.forEachIndexed { i,a->assertEquals(d.anchors[i].time+60_000,a.time) }
     }
+    @Test fun riskPositionHitAreaMatchesRenderedMinimumWidthAtEveryDensity() {
+        for(tool in listOf(DrawingTool.LONG_POSITION,DrawingTool.SHORT_POSITION)) {
+            val prices=if(tool==DrawingTool.LONG_POSITION)listOf(100.0,105.0,95.0) else listOf(100.0,95.0,105.0)
+            val d=drawing(tool).copy(startPrice=prices[0],anchors=prices.map { DrawingAnchor(candles[2].openTime,it) })
+            val points=DrawingEditing.handles(d,t)
+            for(density in listOf(1f,1.725f,3f)) {
+                val right=DrawingEditing.positionRight(points,density)
+                assertEquals(points[0].x+80f*density,right,.001f)
+                val inside=Offset(right-1f,t.priceToY(102.0))
+                assertEquals(0f,DrawingHitTest.distance(d,t,inside,density),0f)
+                assertTrue(DrawingHitTest.distance(d,t,Offset(right+30f,inside.y),density)>20f)
+            }
+        }
+    }
+    @Test fun fibonacciAndRiskAnchorEditsPreserveOtherPointsAndPersist() {
+        for(tool in listOf(DrawingTool.FIBONACCI,DrawingTool.LONG_POSITION,DrawingTool.SHORT_POSITION)) {
+            val anchors=if(tool==DrawingTool.FIBONACCI)emptyList() else listOf(DrawingAnchor(candles[2].openTime,100.0),DrawingAnchor(candles[5].openTime,105.0),DrawingAnchor(candles[5].openTime,95.0))
+            val d=drawing(tool).copy(anchors=anchors)
+            val h=DrawingEditing.handles(d,t)
+            val moved=DrawingEditing.drag(d,t,h[1],h[1]+Offset(20f,-10f),1)
+            assertEquals(d.startTime,moved.startTime)
+            assertEquals(d.startPrice,moved.startPrice,0.0)
+            if(anchors.isNotEmpty())assertEquals(anchors[2],moved.anchors[2])
+            assertEquals(moved,ChartDrawing.fromEntity(moved.toEntity()))
+        }
+    }
+    @Test fun horizontalLineSelectsFarFromItsAnchorAndMovesInPrice() {
+        val d=drawing(DrawingTool.HORIZONTAL_LINE).copy(endTime=null,endPrice=null)
+        val touch=Offset(390f,t.priceToY(d.startPrice))
+        assertEquals(0f,DrawingHitTest.distance(d,t,touch),0f)
+        val moved=DrawingEditing.drag(d,t,touch,touch+Offset(0f,20f),null)
+        assertEquals(d.startTime,moved.startTime)
+        assertEquals(104.0,moved.startPrice,.000001)
+        assertEquals(moved,ChartDrawing.fromEntity(moved.toEntity()))
+    }
+
 }

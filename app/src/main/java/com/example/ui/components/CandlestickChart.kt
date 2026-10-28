@@ -344,8 +344,8 @@ fun CandlestickChart(
                             if (!dragStartedInPlot) return@detectDragGestures
                             if(activeDrawingTool==DrawingTool.NONE && !isCrosshairActive && transform!=null) {
                                 val selected=currentDrawings.firstOrNull { it.id==selectionId }
-                                val candidate=selected?.takeIf { DrawingEditing.handleAt(it,transform,offset,positionHitRadius)!=null || DrawingHitTest.distance(it,transform,offset)<positionHitRadius }
-                                    ?: currentDrawings.asReversed().firstOrNull { DrawingHitTest.distance(it,transform,offset)<positionHitRadius }
+                                val candidate=selected?.takeIf { DrawingEditing.handleAt(it,transform,offset,positionHitRadius)!=null || DrawingHitTest.distance(it,transform,offset,positionHitRadius/18f)<positionHitRadius }
+                                    ?: currentDrawings.asReversed().firstOrNull { DrawingHitTest.distance(it,transform,offset,positionHitRadius/18f)<positionHitRadius }
                                 if(candidate!=null && !candidate.isLocked) {
                                     dragOriginal=candidate;dragPreview=candidate;dragOrigin=offset;dragTransform=transform
                                     dragHandle=DrawingEditing.handleAt(candidate,transform,offset,positionHitRadius)
@@ -443,7 +443,7 @@ fun CandlestickChart(
                                         val x=t.timeToX(d.startTime)?:0f;val y=t.priceToY(d.startPrice)
                                         val width=positionHitRadius/18f*100f
                                         point.x in x..(x+width) && point.y in y..(y+width*bitmap.height/bitmap.width)
-                                    } else DrawingHitTest.distance(d,t,point) < positionHitRadius
+                                    } else DrawingHitTest.distance(d,t,point,positionHitRadius/18f) < positionHitRadius
                                 }?.let { drawingSelection?.invoke(it) }
                             }
                         },
@@ -461,7 +461,7 @@ fun CandlestickChart(
                                         .any { kotlin.math.abs(transform.priceToY(it) - offset.y) <= positionHitRadius }
                                 } else null
                             val drawingHit=if(insidePlot && transform!=null && activeDrawingTool==DrawingTool.NONE && !isCrosshairActive)
-                                currentDrawings.asReversed().firstOrNull { DrawingHitTest.distance(it,transform,offset)<=positionHitRadius } else null
+                                currentDrawings.asReversed().firstOrNull { DrawingHitTest.distance(it,transform,offset,positionHitRadius/18f)<=positionHitRadius } else null
                             if(drawingHit!=null) {
                                 drawingSelection?.invoke(drawingHit)
                             } else if (hit != null && selectPosition != null) {

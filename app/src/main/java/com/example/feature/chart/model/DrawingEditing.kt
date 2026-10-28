@@ -4,6 +4,10 @@ import androidx.compose.ui.geometry.Offset
 
 /** Geometry for direct manipulation; all saved coordinates stay in market space. */
 object DrawingEditing {
+    /** Same minimum 80dp risk-zone width for rendering and touch selection. */
+    fun positionRight(points:List<Offset>,density:Float):Float =
+        maxOf(points.maxOf { it.x },points.first().x+80f*density)
+
     fun handles(d:ChartDrawing,t:ChartTransform):List<Offset> {
         val a=if(d.tool==DrawingTool.ANCHORED_TEXT && d.screenX!=null && d.screenY!=null)
             Offset(d.screenX*t.chartWidth,d.screenY*t.chartHeight)

@@ -421,6 +421,43 @@ class ChartReferenceInteractionTest {
             org.junit.Assert.assertEquals(com.example.feature.chart.model.DrawingLineStyle.DASHED,restoredStyle.lineStyle)
             org.junit.Assert.assertTrue(restoredStyle.fillOpacity>.18f)
             org.junit.Assert.assertFalse(restoredStyle.isLocked)
+
+            // Select and edit rendered regions away from the original anchor as users do.
+            for((tool,query) in listOf("HORIZONTAL_LINE" to "خط أفقي", "FIBONACCI" to "فيبوناتشي", "LONG_POSITION" to "صفقة شراء")) {
+                kotlinx.coroutines.runBlocking { dao.clearDrawings("XAUUSD","M15") }
+                compose.waitForIdle()
+                compose.onNodeWithContentDescription("أدوات الرسم").performClick()
+                compose.onNodeWithTag("drawing_catalog_search").performTextInput(query)
+                androidx.test.espresso.Espresso.closeSoftKeyboard()
+                compose.onNodeWithTag("drawing_catalog_grid").performScrollToNode(hasTestTag("drawing_tool_$tool"))
+                compose.onNodeWithTag("drawing_tool_$tool").performClick()
+                compose.waitUntil(10000) { compose.onAllNodesWithTag("drawing_catalog_sheet").fetchSemanticsNodes().isEmpty() }
+                compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                    click(androidx.compose.ui.geometry.Offset(width*.55f,height*.50f))
+                    if(tool=="FIBONACCI")click(androidx.compose.ui.geometry.Offset(width*.75f,height*.65f))
+                    if(tool=="LONG_POSITION") {
+                        click(androidx.compose.ui.geometry.Offset(width*.57f,height*.40f))
+                        click(androidx.compose.ui.geometry.Offset(width*.56f,height*.65f))
+                    }
+                }
+                compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().any { it.type==tool } } }
+                val before=kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.type==tool } }
+                val touchX=if(tool=="HORIZONTAL_LINE") .80f else if(tool=="LONG_POSITION") .70f else .55f
+                val touchY=if(tool=="LONG_POSITION") .55f else .50f
+                compose.onNodeWithTag("candlestick_canvas").performTouchInput { click(androidx.compose.ui.geometry.Offset(width*touchX,height*touchY)) }
+                compose.onNodeWithTag("drawing_selection_toolbar").assertIsDisplayed()
+                compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+                    swipe(androidx.compose.ui.geometry.Offset(width*touchX,height*touchY),androidx.compose.ui.geometry.Offset(width*touchX,height*(touchY-.04f)),600)
+                }
+                compose.waitUntil(10000) { kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==before.id }.pointsJson!=before.pointsJson } }
+                val after=kotlinx.coroutines.runBlocking { dao.getDrawings("XAUUSD","M15").first().first { it.id==before.id } }
+                val beforeModel=com.example.feature.chart.model.ChartDrawing.fromEntity(before)!!
+                val afterModel=com.example.feature.chart.model.ChartDrawing.fromEntity(after)!!
+                org.junit.Assert.assertNotEquals(beforeModel.startPrice,afterModel.startPrice)
+                if(tool=="FIBONACCI")org.junit.Assert.assertEquals(beforeModel.endPrice,afterModel.endPrice)
+                if(tool=="LONG_POSITION")org.junit.Assert.assertEquals(beforeModel.anchors[1].price-beforeModel.anchors[2].price,afterModel.anchors[1].price-afterModel.anchors[2].price,.00001)
+                captureProviderScreen("drawing-edit-${tool.lowercase(java.util.Locale.US)}")
+            }
         } finally {
             app.getSharedPreferences("drawing_catalog",android.content.Context.MODE_PRIVATE).edit().putBoolean("show_favorites",false).commit()
             shell("wm size 864x1536")
