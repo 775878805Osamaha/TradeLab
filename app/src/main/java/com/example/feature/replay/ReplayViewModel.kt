@@ -74,6 +74,10 @@ class ReplayViewModel(
     private val _uiState = MutableStateFlow(ReplayUiState(isLoading = true))
     val uiState: StateFlow<ReplayUiState> = _uiState.asStateFlow()
 
+    // Keep the serialized account/checkpoint shape compatible with existing sessions.
+    private val _historyTargetTime = MutableStateFlow<Long?>(null)
+    val historyTargetTime: StateFlow<Long?> = _historyTargetTime.asStateFlow()
+
     private val persistenceOwner=sessionStore?.newOwner()
 
     private val openPositions = mutableListOf<Position>()
@@ -194,6 +198,9 @@ class ReplayViewModel(
             val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sessionStore?.read() }
             if (saved != null) {
                 _uiState.value=saved.state.copy(isPlaying=false,isLoading=false)
+                if (saved.candles.isNotEmpty() && saved.state.historyEndOffsetBars == 0) {
+                    _historyTargetTime.value = saved.candles.getOrNull(saved.state.currentIndex)?.openTime
+                }
                 openPositions.addAll(saved.state.openPositions);pendingOrders.addAll(saved.state.pendingOrders);closedTrades.addAll(saved.state.closedTrades)
                 nextId=saved.nextId
                 if(saved.candles.isNotEmpty()) replayEngine.initialize(saved.candles,saved.state.currentIndex)
@@ -261,6 +268,7 @@ class ReplayViewModel(
             _uiState.update { it.copy(message = "ملف CSV كبير جدًا؛ الحد الأقصى 12 ميجابايت") }
             return
         }
+        _historyTargetTime.value = null
         cancelBatchAdvance()
         replayLoadJob?.cancel()
         replayEngine.pause()
@@ -313,14 +321,19 @@ class ReplayViewModel(
         symbol: String = "BTCUSDT",
         tf: Timeframe = Timeframe.M15,
         historyBars: Int = _uiState.value.requestedHistoryBars,
-        endOffsetBars: Int = _uiState.value.historyEndOffsetBars
+        endOffsetBars: Int = _uiState.value.historyEndOffsetBars,
+        targetTime: Long? = _historyTargetTime.value
     ) {
-        if (!_uiState.value.isLoading && replayEngine.totalCandles.value > 0 && _uiState.value.symbol==symbol && _uiState.value.timeframe==tf && _uiState.value.requestedHistoryBars==historyBars && _uiState.value.historyEndOffsetBars==endOffsetBars) return
+        if (!_uiState.value.isLoading && replayEngine.totalCandles.value > 0 && _uiState.value.symbol==symbol && _uiState.value.timeframe==tf && _uiState.value.requestedHistoryBars==historyBars && _uiState.value.historyEndOffsetBars==endOffsetBars && _historyTargetTime.value==targetTime) return
         if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty()) {
             _uiState.update { it.copy(message="أغلق الصفقات والأوامر قبل تغيير بيانات التدريب") };return
         }
         require(endOffsetBars in 0..100_000) { "Historical offset must be 0 to 100000 bars" }
         require(historyBars in 50..5_000) { "Replay history must contain 50 to 5000 bars" }
+        if (targetTime != null && (targetTime < 0L || targetTime > System.currentTimeMillis() - tf.minutes * 60_000L)) {
+            _uiState.update { it.copy(message = "اختر تاريخًا تاريخيًا مكتملًا") }; return
+        }
+        _historyTargetTime.value = targetTime
         cancelBatchAdvance()
         replayLoadJob?.cancel()
         replayEngine.pause()
@@ -359,23 +372,33 @@ class ReplayViewModel(
                 // Requesting an unfinished bar causes the verified repository to reject replay.
                 val latestClosedOpen = com.example.core.market.HistoricalCandleBoundary
                     .currentOpen(now, interval) - interval
-                val lastClosedOpen = latestClosedOpen - interval * endOffsetBars.toLong()
-                require(lastClosedOpen >= interval * (historyBars - 1L)) {
-                    "Historical range predates available exchange timestamps"
+                val windows = if (targetTime != null) {
+                    com.example.core.market.ReplayDateWindow.windows(targetTime, now, interval, historyBars)
+                } else {
+                    val end = latestClosedOpen - interval * endOffsetBars.toLong()
+                    require(end >= interval * (historyBars - 1L)) {
+                        "Historical range predates available exchange timestamps"
+                    }
+                    listOf(com.example.core.market.ReplayDateWindow.Window(end - interval * (historyBars - 1L), end))
                 }
-                val from = lastClosedOpen - interval * (historyBars - 1L)
-                val candles = marketDataRepository.getCandles(symbol, tf, from, lastClosedOpen)
-                if (candles.size < 2) {
+                val loaded = com.example.core.market.ReplayDateHistory.load(windows, targetTime) { from, to ->
+                    marketDataRepository.getCandles(symbol, tf, from, to)
+                }
+                if (loaded == null) {
                     _uiState.update {
                         it.copy(isLoading = false, message = "لا توجد شموع تاريخية موثوقة لهذا الرمز في النطاق المطلوب.")
                     }
                     return@launch
                 }
+                val candles = loaded.candles
+                val from = loaded.window.from
+                val lastClosedOpen = loaded.window.to
                 // A superseded request must not initialize the engine with the old instrument.
                 if (_uiState.value.symbol != symbol ||
                     _uiState.value.timeframe != tf ||
                     _uiState.value.requestedHistoryBars != historyBars ||
-                    _uiState.value.historyEndOffsetBars != endOffsetBars) return@launch
+                    _uiState.value.historyEndOffsetBars != endOffsetBars ||
+                    _historyTargetTime.value != targetTime) return@launch
                 val audit = com.example.core.market.HistoricalDataAudit.inspect(candles)
                 val validation = com.example.core.market.DataIntegrityValidator
                     .validateHistoricalSeries(candles)
@@ -391,7 +414,9 @@ class ReplayViewModel(
                     }
                     return@launch
                 }
-                replayEngine.initialize(candles, startIndex = minOf(20, candles.lastIndex))
+                val startIndex = if (targetTime == null) minOf(20, candles.lastIndex)
+                    else candles.indexOfFirst { it.openTime >= targetTime }.coerceAtLeast(0)
+                replayEngine.initialize(candles, startIndex = startIndex)
                 _uiState.update { it.copy(isLoading = false) }
                 saveAccountSnapshot()
             } catch (cancelled: CancellationException) {
@@ -401,7 +426,7 @@ class ReplayViewModel(
                 _uiState.update { state ->
                     if (state.symbol == symbol && state.timeframe == tf &&
                         state.requestedHistoryBars == historyBars &&
-                        state.historyEndOffsetBars == endOffsetBars) {
+                        state.historyEndOffsetBars == endOffsetBars && _historyTargetTime.value == targetTime) {
                         state.copy(
                             isLoading = false,
                             message = "تعذر تحميل بيانات إعادة العرض لهذا الرمز. تحقق من الاتصال وتوفر الشموع المكتملة."
@@ -521,9 +546,10 @@ class ReplayViewModel(
 
     fun jumpToTimestamp(timestamp: Long) {
         cancelBatchAdvance()
-        if (_uiState.value.isLoading || _uiState.value.totalCandles == 0) {
-            _uiState.update { it.copy(message = "لا يمكن الانتقال قبل تحميل بيانات Replay") }
-            return
+        if (_uiState.value.isLoading) return
+        val now = System.currentTimeMillis()
+        if (timestamp < 0L || timestamp > now - _uiState.value.timeframe.minutes * 60_000L) {
+            _uiState.update { it.copy(message = "اختر تاريخًا تاريخيًا مكتملًا") }; return
         }
         // Arbitrary jumps can skip execution of stops and strategies.
         // Keep jumps disabled after trades until timeline replay is transactional.
@@ -532,13 +558,23 @@ class ReplayViewModel(
             _uiState.update { it.copy(message = "القفز بعد التداول غير متاح؛ استخدم الرجوع شمعة واحدة") }
             return
         }
+        val loaded = replayEngine.snapshotCandles()
+        if (loaded.isEmpty() || timestamp < loaded.first().openTime || timestamp > loaded.last().openTime) {
+            loadReplayData(_uiState.value.symbol, _uiState.value.timeframe, endOffsetBars = 0, targetTime = timestamp)
+            return
+        }
         replayEngine.pause()
         // Seeking on a pristine account starts a fresh, non-trading timeline.
         // Discard old checkpoint history so it cannot be restored accidentally.
         accountSnapshots.clear()
         replayEngine.jumpToTimestamp(timestamp)
+        _historyTargetTime.value = timestamp
         saveAccountSnapshot()
     }
+
+    fun jumpOneYearBack() = jumpToTimestamp(
+        com.example.core.market.ReplayDateWindow.oneYearBefore(System.currentTimeMillis())
+    )
 
     fun setSpeed(sp: Float) {
         cancelBatchAdvance()

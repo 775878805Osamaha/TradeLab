@@ -137,4 +137,5 @@
     <string name="history_removed">تم حذف المفتاح.</string>
     <string name="history_save_error">تعذر حفظ المفتاح على الجهاز.</string>
     <string name="history_configured">يوجد مفتاح محفوظ على الجهاز.</string>
+    <string name="chart_one_year_back">قبل سنة</string>
 </resources>

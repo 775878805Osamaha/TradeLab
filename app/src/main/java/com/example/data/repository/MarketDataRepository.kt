@@ -233,7 +233,7 @@ class MarketDataRepository(
                 expectedTimeframe = timeframe
             )
             if (verified.isEmpty()) {
-                throw java.io.IOException("No verified historical candles for $symbol")
+                throw com.example.core.market.NoHistoricalCandlesException(symbol)
             }
             // Never hand replay duplicate or out-of-order timestamps across pages.
             require(verified.zipWithNext().all { (a, b) -> a.openTime < b.openTime }) {
