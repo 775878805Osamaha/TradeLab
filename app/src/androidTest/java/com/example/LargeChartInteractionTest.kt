@@ -1,10 +1,15 @@
 package com.example
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.referentialEqualityPolicy
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.core.model.Candle
@@ -16,6 +21,9 @@ import com.example.ui.components.ChartPriceIndexReady
 import com.example.ui.components.ChartDrawingAnalysisReady
 import com.example.feature.chart.model.ChartDrawing
 import com.example.feature.chart.model.DrawingTool
+import com.example.feature.chart.model.IndicatorSettings
+import com.example.feature.chart.ChartIndicatorPreparation
+import com.example.feature.chart.PreparedChartIndicators
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -30,6 +38,43 @@ class LargeChartInteractionTest {
         return Candle("XAUUSD", Timeframe.M1, time, open=open, high=open+2,
             low=open-2, close=open+0.5, volume=Math.floorMod(index,100).toDouble(),
             closeTime=time+60_000L, source="TEST_FIXTURE")
+    }
+
+    @Test fun largeHistoryIndicatorsKeepPanningAfterRapidSettingsChanges() {
+        val bars=List(100_001,::candle)
+        val settings=mutableStateOf(IndicatorSettings(isSmaEnabled=true,isBollingerEnabled=true,
+            isVwapEnabled=true,isRsiEnabled=true,isMacdEnabled=true,isAtrEnabled=true))
+        compose.setContent {
+            val active=settings.value
+            val calculation by produceState<Pair<IndicatorSettings,PreparedChartIndicators>?>(null,active) {
+                value=active to ChartIndicatorPreparation.calculate(bars,active)
+            }
+            val prepared=calculation?.takeIf { it.first==active }?.second
+            val values=prepared ?: PreparedChartIndicators()
+            MaterialTheme {
+                Box(Modifier.fillMaxSize()) {
+                    CandlestickChart(bars,modifier=Modifier.fillMaxSize(),indicatorSettings=active,
+                        smaValues=values.sma,emaValues=values.ema,bollingerValues=values.bollinger,
+                        vwapValues=values.vwap,rsiValues=values.rsi,macdValues=values.macd,atrValues=values.atr)
+                    if(prepared!=null) Text("جاهز ${active.smaPeriod}",Modifier.testTag("large_indicators_ready"))
+                }
+            }
+        }
+        fun await(period: Int)=compose.waitUntil(15_000) {
+            compose.onAllNodesWithText("جاهز $period").fetchSemanticsNodes().isNotEmpty()
+        }
+        await(20)
+        compose.runOnIdle { settings.value=settings.value.copy(smaPeriod=34,rsiPeriod=9) }
+        compose.runOnIdle { settings.value=settings.value.copy(smaPeriod=53,emaPeriod=21,bollingerPeriod=25) }
+        await(53)
+        fun node()=compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode()
+        val initial=node().config[ChartFirstVisibleIndex]
+        compose.onNodeWithTag("candlestick_canvas").performTouchInput { swipeRight(durationMillis=600) }
+        compose.waitForIdle()
+        assertTrue(node().config[ChartFirstVisibleIndex]<initial)
+        compose.runOnIdle { settings.value=IndicatorSettings(isEmaEnabled=false) }
+        await(20)
+        assertEquals(100_001,node().config[ChartLoadedCandleCount])
     }
 
     @Test fun largeHistoryAnalysisToolsStayPannableAfterAnchorEditsAndRemoval() {

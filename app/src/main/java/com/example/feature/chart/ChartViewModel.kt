@@ -321,7 +321,11 @@ class ChartViewModel(
     }
 
     fun updateIndicatorSettings(settings: IndicatorSettings) {
-        _uiState.update { it.copy(indicatorSettings = settings) }
+        _uiState.update {
+            if(it.indicatorSettings==settings) it else it.copy(indicatorSettings=settings,
+                smaValues=emptyList(),emaValues=emptyList(),bollingerValues=emptyList(),
+                vwapValues=emptyList(),rsiValues=emptyList(),macdValues=emptyList(),atrValues=emptyList())
+        }
         recalculateIndicators(_uiState.value.candles, settings)
     }
 
@@ -723,14 +727,7 @@ class ChartViewModel(
         val requestedTimeframe = _uiState.value.selectedTimeframe
         indicatorJob?.cancel()
         indicatorJob = viewModelScope.launch(Dispatchers.Default) {
-            val sma = if (settings.isSmaEnabled) TechnicalIndicators.calculateSma(candles, settings.smaPeriod) else emptyList()
-            val ema = if (settings.isEmaEnabled) TechnicalIndicators.calculateEma(candles, settings.emaPeriod) else emptyList()
-            val bb = if (settings.isBollingerEnabled) TechnicalIndicators.calculateBollingerBands(candles, settings.bollingerPeriod, settings.bollingerStdDev) else emptyList()
-            val vwap = if (settings.isVwapEnabled) TechnicalIndicators.calculateVwap(candles) else emptyList()
-
-            val rsi = if (settings.isRsiEnabled) TechnicalIndicators.calculateRsi(candles, settings.rsiPeriod) else emptyList()
-            val macd = if (settings.isMacdEnabled) TechnicalIndicators.calculateMacd(candles, settings.macdFast, settings.macdSlow, settings.macdSignal) else emptyList()
-            val atr = if (settings.isAtrEnabled) TechnicalIndicators.calculateAtr(candles, settings.atrPeriod) else emptyList()
+            val calculated = ChartIndicatorPreparation.calculate(candles, settings)
 
             _uiState.update {
                 // Indicator calculations run off the UI thread and can finish after
@@ -742,13 +739,13 @@ class ChartViewModel(
                     // every asynchronous indicator completion.
                     it.candles !== candles) return@update it
                 it.copy(
-                    smaValues = sma,
-                    emaValues = ema,
-                    bollingerValues = bb,
-                    vwapValues = vwap,
-                    rsiValues = rsi,
-                    macdValues = macd,
-                    atrValues = atr
+                    smaValues = calculated.sma,
+                    emaValues = calculated.ema,
+                    bollingerValues = calculated.bollinger,
+                    vwapValues = calculated.vwap,
+                    rsiValues = calculated.rsi,
+                    macdValues = calculated.macd,
+                    atrValues = calculated.atr
                 )
             }
         }

@@ -14,12 +14,14 @@ object TechnicalIndicators {
     /**
      * Simple Moving Average (SMA)
      */
-    fun calculateSma(candles: List<Candle>, period: Int): List<Double?> {
-        if (candles.size < period) return List(candles.size) { null }
+    fun calculateSma(candles: List<Candle>, period: Int, checkpoint: () -> Unit = {}): List<Double?> {
+        checkpoint()
+        if (candles.size < period) return List(candles.size) { if(it%1024==0) checkpoint(); null }
         val result = mutableListOf<Double?>()
         var sum = 0.0
 
         for (i in candles.indices) {
+            if(i%1024==0) checkpoint()
             sum += candles[i].close
             if (i >= period) {
                 sum -= candles[i - period].close
@@ -36,14 +38,16 @@ object TechnicalIndicators {
     /**
      * Exponential Moving Average (EMA)
      */
-    fun calculateEma(candles: List<Candle>, period: Int): List<Double?> {
-        if (candles.size < period) return List(candles.size) { null }
+    fun calculateEma(candles: List<Candle>, period: Int, checkpoint: () -> Unit = {}): List<Double?> {
+        checkpoint()
+        if (candles.size < period) return List(candles.size) { if(it%1024==0) checkpoint(); null }
         val result = mutableListOf<Double?>()
         val multiplier = 2.0 / (period + 1)
 
         // Calculate initial SMA
         var sum = 0.0
         for (i in 0 until period) {
+            if(i%1024==0) checkpoint()
             sum += candles[i].close
             result.add(null)
         }
@@ -51,6 +55,7 @@ object TechnicalIndicators {
         result[period - 1] = prevEma
 
         for (i in period until candles.size) {
+            if(i%1024==0) checkpoint()
             val ema = (candles[i].close - prevEma) * multiplier + prevEma
             result.add(ema)
             prevEma = ema
@@ -61,11 +66,13 @@ object TechnicalIndicators {
     /**
      * Relative Strength Index (RSI)
      */
-    fun calculateRsi(candles: List<Candle>, period: Int = 14): List<Double?> {
-        if (candles.size <= period) return List(candles.size) { null }
+    fun calculateRsi(candles: List<Candle>, period: Int = 14, checkpoint: () -> Unit = {}): List<Double?> {
+        checkpoint()
+        if (candles.size <= period) return List(candles.size) { if(it%1024==0) checkpoint(); null }
         val result = mutableListOf<Double?>()
 
         for (i in 0..period) {
+            if(i%1024==0) checkpoint()
             result.add(null)
         }
 
@@ -73,6 +80,7 @@ object TechnicalIndicators {
         var avgLoss = 0.0
 
         for (i in 1..period) {
+            if(i%1024==0) checkpoint()
             val change = candles[i].close - candles[i - 1].close
             if (change > 0) avgGain += change else avgLoss += abs(change)
         }
@@ -84,6 +92,7 @@ object TechnicalIndicators {
         result[period] = initialRsi
 
         for (i in (period + 1) until candles.size) {
+            if(i%1024==0) checkpoint()
             val change = candles[i].close - candles[i - 1].close
             val gain = if (change > 0) change else 0.0
             val loss = if (change < 0) abs(change) else 0.0
@@ -106,13 +115,16 @@ object TechnicalIndicators {
         candles: List<Candle>,
         fastPeriod: Int = 12,
         slowPeriod: Int = 26,
-        signalPeriod: Int = 9
+        signalPeriod: Int = 9,
+        checkpoint: () -> Unit = {}
     ): List<MacdResult?> {
-        val fastEma = calculateEma(candles, fastPeriod)
-        val slowEma = calculateEma(candles, slowPeriod)
+        checkpoint()
+        val fastEma = calculateEma(candles, fastPeriod, checkpoint)
+        val slowEma = calculateEma(candles, slowPeriod, checkpoint)
         val macdLine = mutableListOf<Double?>()
 
         for (i in candles.indices) {
+            if(i%1024==0) checkpoint()
             val fast = fastEma[i]
             val slow = slowEma[i]
             if (fast != null && slow != null) {
@@ -124,13 +136,17 @@ object TechnicalIndicators {
 
         // Calculate Signal line (EMA of MACD line)
         val signalMultiplier = 2.0 / (signalPeriod + 1)
-        val validMacdIndices = macdLine.mapIndexedNotNull { index, v -> if (v != null) Pair(index, v) else null }
+        val validMacdIndices = macdLine.mapIndexedNotNull { index, v ->
+            if(index%1024==0) checkpoint()
+            if (v != null) Pair(index, v) else null
+        }
 
-        val result = MutableList<MacdResult?>(candles.size) { null }
+        val result = MutableList<MacdResult?>(candles.size) { if(it%1024==0) checkpoint(); null }
         if (validMacdIndices.size < signalPeriod) return result
 
         var sum = 0.0
         for (i in 0 until signalPeriod) {
+            if(i%1024==0) checkpoint()
             sum += validMacdIndices[i].second
         }
         var prevSignal = sum / signalPeriod
@@ -138,6 +154,7 @@ object TechnicalIndicators {
         result[startIdx] = MacdResult(macdLine[startIdx]!!, prevSignal, macdLine[startIdx]!! - prevSignal)
 
         for (i in signalPeriod until validMacdIndices.size) {
+            if(i%1024==0) checkpoint()
             val (idx, macdVal) = validMacdIndices[i]
             val signal = (macdVal - prevSignal) * signalMultiplier + prevSignal
             result[idx] = MacdResult(macdVal, signal, macdVal - signal)
@@ -150,12 +167,14 @@ object TechnicalIndicators {
     /**
      * Average True Range (ATR)
      */
-    fun calculateAtr(candles: List<Candle>, period: Int = 14): List<Double?> {
-        if (candles.size < period) return List(candles.size) { null }
+    fun calculateAtr(candles: List<Candle>, period: Int = 14, checkpoint: () -> Unit = {}): List<Double?> {
+        checkpoint()
+        if (candles.size < period) return List(candles.size) { if(it%1024==0) checkpoint(); null }
         val result = mutableListOf<Double?>()
 
         val trueRanges = mutableListOf<Double>()
         for (i in candles.indices) {
+            if(i%1024==0) checkpoint()
             if (i == 0) {
                 trueRanges.add(candles[i].high - candles[i].low)
             } else {
@@ -170,6 +189,7 @@ object TechnicalIndicators {
 
         var sum = 0.0
         for (i in 0 until period) {
+            if(i%1024==0) checkpoint()
             sum += trueRanges[i]
             result.add(null)
         }
@@ -177,6 +197,7 @@ object TechnicalIndicators {
         result[period - 1] = prevAtr
 
         for (i in period until candles.size) {
+            if(i%1024==0) checkpoint()
             val atr = (prevAtr * (period - 1) + trueRanges[i]) / period
             result.add(atr)
             prevAtr = atr
@@ -191,18 +212,22 @@ object TechnicalIndicators {
     fun calculateBollingerBands(
         candles: List<Candle>,
         period: Int = 20,
-        stdDevMultiplier: Double = 2.0
+        stdDevMultiplier: Double = 2.0,
+        checkpoint: () -> Unit = {}
     ): List<BollingerBandsResult?> {
-        val sma = calculateSma(candles, period)
+        checkpoint()
+        val sma = calculateSma(candles, period, checkpoint)
         val result = mutableListOf<BollingerBandsResult?>()
 
         for (i in candles.indices) {
+            if(i%1024==0) checkpoint()
             val middle = sma[i]
             if (middle == null || i < period - 1) {
                 result.add(null)
             } else {
                 var varianceSum = 0.0
                 for (j in (i - period + 1)..i) {
+                    if(j%1024==0) checkpoint()
                     val diff = candles[j].close - middle
                     varianceSum += diff * diff
                 }
@@ -219,12 +244,14 @@ object TechnicalIndicators {
     /**
      * Volume Weighted Average Price (VWAP)
      */
-    fun calculateVwap(candles: List<Candle>): List<Double> {
+    fun calculateVwap(candles: List<Candle>, checkpoint: () -> Unit = {}): List<Double> {
+        checkpoint()
         val result = mutableListOf<Double>()
         var cumulativeTypicalPriceVolume = 0.0
         var cumulativeVolume = 0.0
 
-        for (candle in candles) {
+        for ((index,candle) in candles.withIndex()) {
+            if(index%1024==0) checkpoint()
             val typicalPrice = (candle.high + candle.low + candle.close) / 3.0
             val volume = if (candle.volume > 0) candle.volume else 1.0
             cumulativeTypicalPriceVolume += (typicalPrice * volume)
