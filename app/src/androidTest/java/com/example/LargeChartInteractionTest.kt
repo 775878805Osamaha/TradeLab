@@ -17,6 +17,8 @@ import com.example.core.model.Timeframe
 import com.example.ui.components.CandlestickChart
 import com.example.ui.components.ChartFirstVisibleIndex
 import com.example.ui.components.ChartLoadedCandleCount
+import com.example.ui.components.ChartDisplayStyle
+import com.example.ui.components.ChartDisplayReady
 import com.example.ui.components.ChartPriceIndexReady
 import com.example.ui.components.ChartDrawingAnalysisReady
 import com.example.feature.chart.model.ChartDrawing
@@ -38,6 +40,37 @@ class LargeChartInteractionTest {
         return Candle("XAUUSD", Timeframe.M1, time, open=open, high=open+2,
             low=open-2, close=open+0.5, volume=Math.floorMod(index,100).toDouble(),
             closeTime=time+60_000L, source="TEST_FIXTURE")
+    }
+
+    @Test fun heikinAshiLargeHistoryRemainsPannableAfterStyleAndSourceChanges() {
+        val series=mutableStateOf<List<Candle>>(List(100_001,::candle),referentialEqualityPolicy())
+        val style=mutableStateOf(ChartDisplayStyle.HEIKIN_ASHI)
+        compose.setContent { MaterialTheme {
+            CandlestickChart(series.value,displayStyle=style.value,modifier=Modifier.fillMaxSize())
+        } }
+        fun node()=compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode()
+        fun awaitReady()=compose.waitUntil(15_000) {
+            node().config[ChartDisplayReady] && node().config[ChartPriceIndexReady]
+        }
+        awaitReady()
+        val initial=node().config[ChartFirstVisibleIndex]
+        compose.onNodeWithTag("candlestick_canvas").performTouchInput { swipeRight(durationMillis=600) }
+        compose.waitForIdle()
+        assertTrue(node().config[ChartFirstVisibleIndex]<initial)
+        val visibleTime=series.value[node().config[ChartFirstVisibleIndex]].openTime
+        compose.runOnIdle { style.value=ChartDisplayStyle.LINE }
+        awaitReady()
+        compose.runOnIdle { style.value=ChartDisplayStyle.HEIKIN_ASHI }
+        compose.runOnIdle { series.value=List(500) { candle(it-500) }+series.value }
+        awaitReady()
+        assertEquals(100_501,node().config[ChartLoadedCandleCount])
+        assertEquals(visibleTime,series.value[node().config[ChartFirstVisibleIndex]].openTime)
+        compose.runOnIdle { series.value=series.value.toMutableList().apply {
+            this[lastIndex]=last().copy(high=2_100.0)
+        } }
+        compose.waitForIdle();awaitReady()
+        assertEquals(visibleTime,series.value[node().config[ChartFirstVisibleIndex]].openTime)
+        compose.onNodeWithTag("chart_display_preparing").assertDoesNotExist()
     }
 
     @Test fun largeHistoryIndicatorsKeepPanningAfterRapidSettingsChanges() {
