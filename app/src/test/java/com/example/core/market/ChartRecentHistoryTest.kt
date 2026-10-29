@@ -4,6 +4,8 @@ import com.example.core.model.Candle
 import com.example.core.model.Timeframe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.IOException
@@ -38,6 +40,37 @@ class ChartRecentHistoryTest {
         val result=ChartRecentHistory.load(tf,today,today+interval,today+2*interval,
             recent={emptyList()},archive={_,_ -> fail("No completed day is covered");emptyList()})
         assertTrue(result.isEmpty())
+    }
+
+    @Test fun cancelledRecentCallbackCannotStartArchiveFallback() = runBlocking {
+        for (returnsPage in listOf(false, true)) {
+            val job = Job()
+            var archiveCalls = 0
+            try {
+                withContext(job) {
+                    ChartRecentHistory.load(tf,today-86_400_000L,today-interval,today,
+                        recent={ job.cancel(); if(returnsPage) listOf(bar(today-interval)) else emptyList() },
+                        archive={_,_ -> archiveCalls++; emptyList()})
+                    fail("A cancelled recent request must not return a page")
+                }
+                fail("Cancellation must propagate")
+            } catch (_: CancellationException) {
+                assertEquals(0,archiveCalls)
+            } finally { job.cancel() }
+        }
+    }
+
+    @Test fun cancelledArchiveCallbackCannotPublishItsPage() = runBlocking {
+        val job = Job()
+        try {
+            withContext(job) {
+                ChartRecentHistory.load(tf,today-86_400_000L,today-interval,today,
+                    recent={emptyList()},archive={_,_ -> job.cancel(); listOf(bar(today-interval))})
+                fail("A cancelled archive response must not be published")
+            }
+            fail("Cancellation must propagate")
+        } catch (_: CancellationException) { /* Expected even for a non-suspending cache callback. */ }
+        finally { job.cancel() }
     }
 
     @Test fun quotasNetworkErrorsAndCancellationAreNotTreatedAsExhaustedRetention() = runBlocking {
