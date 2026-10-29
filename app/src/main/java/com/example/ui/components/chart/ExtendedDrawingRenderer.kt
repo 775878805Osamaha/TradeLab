@@ -72,7 +72,8 @@ internal object ExtendedDrawingRenderer {
                 }
             }
             DrawingTool.VOLUME_PROFILE_FIXED,DrawingTool.VOLUME_PROFILE_SESSION -> {
-                val bins=profiles[d.id] ?: CandleVolumeProfile.forDrawing(history,d)
+                val bins=profiles[d.id]
+                if(bins==null) { text("جاري حساب بروفايل الحجم…",first);return@with }
                 val max=bins.maxOfOrNull{it.volume}?:0.0
                 if(max>0) bins.forEach { bin ->
                     val y=t.priceToY(bin.price);drawLine(c.copy(alpha=.6f),Offset(first.x,y),Offset(first.x+(bin.volume/max*65*density).toFloat(),y),4*density)
@@ -123,7 +124,8 @@ internal object ExtendedDrawingRenderer {
                 text(label,Offset(min(first.x,last.x),min(first.y,last.y)-5*density))
             }
             DrawingTool.ANCHORED_VWAP -> {
-                val series = vwaps[d.id] ?: AnchoredVwap.calculate(history,d.startTime)
+                val series = vwaps[d.id]
+                if(series==null) { text("جاري حساب VWAP…",first);return@with }
                 val startTime = t.visibleCandles.firstOrNull()?.openTime ?: return@with
                 val endTime = t.visibleCandles.lastOrNull()?.openTime ?: return@with
                 val from = series.binarySearchBy(startTime) { it.time }.let { if(it<0) -it-1 else it }.coerceAtLeast(0)

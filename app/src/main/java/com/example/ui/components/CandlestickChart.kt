@@ -52,6 +52,7 @@ val ChartFirstVisibleIndex = SemanticsPropertyKey<Int>("ChartFirstVisibleIndex")
 val ChartLoadedCandleCount = SemanticsPropertyKey<Int>("ChartLoadedCandleCount")
 val ChartOldestCandleTime = SemanticsPropertyKey<Long>("ChartOldestCandleTime")
 val ChartPriceIndexReady = SemanticsPropertyKey<Boolean>("ChartPriceIndexReady")
+val ChartDrawingAnalysisReady = SemanticsPropertyKey<Boolean>("ChartDrawingAnalysisReady")
 
 enum class ChartDisplayStyle(val label: String) {
     CANDLES("شموع"),
@@ -180,13 +181,13 @@ fun CandlestickChart(
             }
         }
     }
-    val candleProfiles = remember(candleIdentity,drawings) {
-        drawings.filter { it.tool == DrawingTool.VOLUME_PROFILE_FIXED || it.tool == DrawingTool.VOLUME_PROFILE_SESSION }
-            .associate { it.id to CandleVolumeProfile.forDrawing(candles,it) }
+    val drawingAnalysisRequest = ChartDrawingAnalysisRequest(candles,drawings)
+    val preparedDrawingAnalysis by produceState<ChartDrawingAnalysisSnapshot?>(null,drawingAnalysisRequest) {
+        value = ChartDrawingAnalysisSnapshot.prepare(drawingAnalysisRequest)
     }
-    val anchoredVwaps = remember(candleIdentity, drawings) {
-        drawings.filter { it.tool == DrawingTool.ANCHORED_VWAP }.associate { it.id to AnchoredVwap.calculate(candles,it.startTime) }
-    }
+    val drawingAnalysis = preparedDrawingAnalysis?.takeIf { it.matches(drawingAnalysisRequest) }
+    val candleProfiles = drawingAnalysis?.profiles.orEmpty()
+    val anchoredVwaps = drawingAnalysis?.vwaps.orEmpty()
     // Drawing Interaction State
     var drawingStartOffset by remember { mutableStateOf<Offset?>(null) }
     var drawingCurrentOffset by remember { mutableStateOf<Offset?>(null) }
@@ -334,6 +335,7 @@ fun CandlestickChart(
                     this[ChartLoadedCandleCount] = candles.size
                     this[ChartOldestCandleTime] = candles.first().openTime
                     this[ChartPriceIndexReady] = priceRangeIndex != null
+                    this[ChartDrawingAnalysisReady] = drawingAnalysisRequest.isEmpty || drawingAnalysis != null
                     this[ChartFirstVisibleIndex] = ChartViewport.window(candles.size,
                         chartViewportWidthPx, candleWidthPx, scrollOffsetPx).startIndex
                 }
