@@ -1008,6 +1008,7 @@ fun ChartScreen(
                     },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) },
                     onSelectDrawing = { editingDrawing = it },
+                    onUpdateDrawing = { viewModel.updateDrawing(it) },
                     onSelectPosition = {
                         if (isEmbeddedReplay) replayViewModel.pause()
                         selectedPositionReplay = isEmbeddedReplay

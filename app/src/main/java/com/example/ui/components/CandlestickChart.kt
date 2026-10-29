@@ -88,6 +88,7 @@ fun CandlestickChart(
     onSelectTrade: ((TradeJournalEntry) -> Unit)? = null,
     onSelectPosition: ((Position) -> Unit)? = null,
     onSelectDrawing: ((ChartDrawing) -> Unit)? = null,
+    onUpdateDrawing: ((ChartDrawing) -> Unit)? = null,
     onRequestOlderHistory: (() -> Unit)? = null,
     referenceLayout: Boolean = false,
     bullishColor: Color = TradingPositive,
@@ -151,6 +152,15 @@ fun CandlestickChart(
 
     val drawingSelection by rememberUpdatedState(onSelectDrawing)
     val currentDrawings by rememberUpdatedState(drawings)
+    val updateDrawing by rememberUpdatedState(onUpdateDrawing)
+    var anchorTransform by remember { mutableStateOf<ChartTransform?>(null) }
+    var editingAnchor by remember { mutableStateOf<Pair<ChartDrawing, Boolean>?>(null) }
+    var anchorPreview by remember { mutableStateOf<ChartDrawing?>(null) }
+    val anchorRadius = with(androidx.compose.ui.platform.LocalDensity.current) { 18.dp.toPx() }
+    val editableTools = setOf(DrawingTool.TRENDLINE, DrawingTool.RECTANGLE, DrawingTool.RAY,
+        DrawingTool.EXTENDED_LINE, DrawingTool.ARROW, DrawingTool.HORIZONTAL_LINE,
+        DrawingTool.VERTICAL_LINE, DrawingTool.HORIZONTAL_RAY)
+
     var pendingAnchors by remember(activeDrawingTool) { mutableStateOf(emptyList<DrawingAnchor>()) }
     var freehandPoints by remember(activeDrawingTool) { mutableStateOf(emptyList<Offset>()) }
     val imageContext = androidx.compose.ui.platform.LocalContext.current
@@ -332,7 +342,7 @@ fun CandlestickChart(
                 .transformable(state = transformableState, enabled = activeDrawingTool == DrawingTool.NONE)
                 // Keep gesture recognition alive while Replay reveals each new candle.
                 // Recreating pointerInput on every candle update cancels active drags.
-                .pointerInput(activeDrawingTool, isCrosshairActive) {
+                .pointerInput(activeDrawingTool, isCrosshairActive, candles.first().symbol, candles.first().timeframe) {
                     detectDragGestures(
                         onDragStart = { offset ->
                             val transform = transformRef[0]
@@ -340,6 +350,18 @@ fun CandlestickChart(
                                 offset.x in 0f..transform.chartWidth &&
                                 offset.y in 0f..transform.chartHeight
                             if (!dragStartedInPlot) return@detectDragGestures
+                            editingAnchor = null
+                            anchorPreview = null
+                            anchorTransform = transform
+                            if (activeDrawingTool == DrawingTool.NONE && !isCrosshairActive && updateDrawing != null && transform != null) {
+                                editingAnchor = currentDrawings.asReversed().filter { it.id != 0L && it.tool in editableTools }.firstNotNullOfOrNull { d ->
+                                    fun near(time: Long?, price: Double?): Boolean = time != null && price != null &&
+                                        (transform.timeToX(time)?.let { Offset(it,transform.priceToY(price)) - offset }?.getDistance() ?: Float.MAX_VALUE) <= anchorRadius
+                                    when { near(d.endTime,d.endPrice) -> d to true
+                                        near(d.startTime,d.startPrice) -> d to false
+                                        else -> null }
+                                }
+                            }
                             if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingStartOffset = offset
                                 drawingCurrentOffset = offset
@@ -352,7 +374,15 @@ fun CandlestickChart(
                             if (!dragStartedInPlot) return@detectDragGestures
                             // Only consume drags after the gesture has started inside the plot.
                             change.consume()
-                            if (activeDrawingTool != DrawingTool.NONE) {
+                            if (editingAnchor != null) {
+                                val (original, end) = editingAnchor!!
+                                val t = anchorTransform
+                                if (t != null) {
+                                    val point = t.snapDrawingPoint(Offset(change.position.x.coerceIn(0f,t.chartWidth),change.position.y.coerceIn(0f,t.chartHeight)), snapEnabled)
+                                    anchorPreview = if (end) original.copy(endTime=t.xToTime(point.x),endPrice=t.yToPrice(point.y))
+                                        else original.copy(startTime=t.xToTime(point.x),startPrice=t.yToPrice(point.y))
+                                }
+                            } else if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingCurrentOffset = change.position
                                 if (activeDrawingTool.isFreehand && freehandPoints.size < 512 &&
                                     (freehandPoints.lastOrNull()?.let { (it-change.position).getDistance() } ?: 10f) > 3f)
@@ -373,6 +403,11 @@ fun CandlestickChart(
                             }
                         },
                         onDragEnd = {
+                            anchorPreview?.let { preview ->
+                                if (currentDrawings.any { it == editingAnchor?.first }) updateDrawing?.invoke(preview)
+                            }
+                            editingAnchor = null
+                            anchorPreview = null
                             if (dragStartedInPlot && activeDrawingTool != DrawingTool.NONE && drawingStartOffset != null && drawingCurrentOffset != null) {
                                 val transformForSnap = transformRef[0]
                                 val start = transformForSnap?.snapDrawingPoint(drawingStartOffset!!, snapEnabled) ?: drawingStartOffset!!
@@ -400,6 +435,8 @@ fun CandlestickChart(
                             dragStartedInPlot = false
                         },
                         onDragCancel = {
+                            editingAnchor = null
+                            anchorPreview = null
                             drawingStartOffset = null
                             drawingCurrentOffset = null
                             dragStartedInPlot = false
@@ -723,7 +760,23 @@ fun CandlestickChart(
             ChartOverlays.drawHistoricalTradeMarkers(this, transform, historicalTrades)
 
             // 6. Draw User Drawings
-            clipRect(0f, 0f, chartWidth, mainChartHeight) { ChartDrawingsRenderer.drawDrawings(this, drawings, transform, candles, anchoredVwaps, drawingImages, candleProfiles) }
+            clipRect(0f, 0f, chartWidth, mainChartHeight) { ChartDrawingsRenderer.drawDrawings(this, drawings.map { d -> anchorPreview?.takeIf { it.id == d.id && it.symbol == d.symbol && it.timeframe == d.timeframe } ?: d }, transform, candles, anchoredVwaps, drawingImages, candleProfiles) }
+            if (activeDrawingTool == DrawingTool.NONE && !isCrosshairActive && onUpdateDrawing != null) {
+                clipRect(0f,0f,chartWidth,mainChartHeight) {
+                    drawings.filter { it.id != 0L && it.tool in editableTools }.forEach { original ->
+                        val d = anchorPreview?.takeIf { it.id == original.id && it.symbol == original.symbol && it.timeframe == original.timeframe } ?: original
+                        fun handle(time: Long?, price: Double?) {
+                            if(time != null && price != null) transform.timeToX(time)?.let { x ->
+                                val at=Offset(x,transform.priceToY(price))
+                                drawCircle(Color.Black,5.dp.toPx(),at)
+                                drawCircle(d.color,5.dp.toPx(),at,style=androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
+                            }
+                        }
+                        handle(d.startTime,d.startPrice)
+                        handle(d.endTime,d.endPrice)
+                    }
+                }
+            }
             pendingAnchors.forEach { anchor -> transform.timeToX(anchor.time)?.let { x -> drawCircle(TradingAccent, 4.dp.toPx(), Offset(x, transform.priceToY(anchor.price))) } }
 
             // 7. Active Drawing Preview while dragging
