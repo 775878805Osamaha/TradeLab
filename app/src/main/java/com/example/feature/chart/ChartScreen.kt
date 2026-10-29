@@ -109,11 +109,14 @@ fun ChartScreen(
                 .onFailure { android.widget.Toast.makeText(imageContext,"تعذر الاحتفاظ بإذن قراءة الصورة",android.widget.Toast.LENGTH_SHORT).show() }
         }
     }
+    val workspacePrefs = remember(imageContext) { imageContext.getSharedPreferences("chart_workspace",0) }
+    LaunchedEffect(viewModel) { viewModel.updateIndicatorSettings(ChartWorkspaceSettings.load(workspacePrefs)) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var symbolSearchQuery by remember { mutableStateOf("") }
     var symbolCategoryFilter by remember { mutableStateOf("الكل") }
     // Save a list rather than a Set so Compose's default Bundle saver can restore it.
-    var favoriteSymbolsList by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
+    var favoriteSymbolsList by rememberSaveable { mutableStateOf(ArrayList(workspacePrefs.getStringSet("favorite_symbols",emptySet())!!.sorted())) }
+    LaunchedEffect(favoriteSymbolsList) { workspacePrefs.edit().putStringSet("favorite_symbols",favoriteSymbolsList.toSet()).apply() }
     val favoriteSymbols = favoriteSymbolsList.toSet()
     var favoritesOnly by remember { mutableStateOf(false) }
     var symbolSortFavoritesFirst by remember { mutableStateOf(true) }
@@ -134,13 +137,17 @@ fun ChartScreen(
     var editingDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
     editingDrawing?.let { drawing ->
         DrawingPropertiesDialog(drawing, onDismiss = { editingDrawing = null }, onDelete = { viewModel.deleteDrawing(drawing.id); editingDrawing = null },
-            onSave = { viewModel.updateDrawing(it); editingDrawing = null })
+            onSave = { viewModel.updateDrawing(it); editingDrawing = null },
+            onCopy = { viewModel.addDrawing(it.copy(id=0)); editingDrawing = null })
     }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
     var showChartExtras by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
-    var chartDisplayStyle by remember { mutableStateOf(ChartDisplayStyle.CANDLES) }
+    var showPriceAlert by remember { mutableStateOf(false) }
+    var hideDrawings by rememberSaveable { mutableStateOf(false) }
+    var chartDisplayStyle by remember { mutableStateOf(runCatching { ChartDisplayStyle.valueOf(workspacePrefs.getString("display_style","CANDLES")!!) }.getOrDefault(ChartDisplayStyle.CANDLES)) }
+    LaunchedEffect(chartDisplayStyle) { workspacePrefs.edit().putString("display_style",chartDisplayStyle.name).apply() }
     var immersiveChart by remember { mutableStateOf(true) }
     var pendingAnnotation by remember { mutableStateOf<com.example.feature.chart.model.ChartDrawing?>(null) }
     var annotationText by remember { mutableStateOf("") }
@@ -466,10 +473,22 @@ fun ChartScreen(
         )
     }
 
+    ChartPriceAlert(uiState.selectedSymbol,uiState.latestTick,isEmbeddedReplay,showPriceAlert) { showPriceAlert=false }
+    if(showChartExtras) AlertDialog(onDismissRequest={showChartExtras=false},title={Text("إعدادات الشارت")},text={
+        Column {
+            ChartDisplayStyle.entries.forEach { style -> TextButton(onClick={chartDisplayStyle=style}) { Text((if(chartDisplayStyle==style) "✓ " else "")+style.label) } }
+            TextButton(onClick={viewModel.toggleVolume()}) { Text(if(uiState.isVolumeVisible) "إخفاء الحجم" else "إظهار الحجم") }
+            TextButton(onClick={magnetEnabled=!magnetEnabled}) { Text(if(magnetEnabled) "إيقاف المغناطيس" else "تفعيل المغناطيس") }
+            TextButton(onClick={hideDrawings=!hideDrawings}) { Text(if(hideDrawings) "إظهار الرسومات" else "إخفاء الرسومات") }
+            TextButton(onClick={viewModel.triggerResetView();showChartExtras=false}) { Text("إعادة ضبط العرض") }
+            TextButton(onClick={showPriceAlert=true;showChartExtras=false}) { Text("تنبيه سعر أثناء فتح الشارت") }
+        }
+    },confirmButton={TextButton(onClick={showChartExtras=false}) {Text("إغلاق")}})
+
     if (showIndicatorsDialog) {
         ChartIndicatorsDialog(
             currentSettings = uiState.indicatorSettings,
-            onSaveSettings = { viewModel.updateIndicatorSettings(it) },
+            onSaveSettings = { ChartWorkspaceSettings.save(workspacePrefs,"indicators",it); viewModel.updateIndicatorSettings(it) },
             onDismiss = { showIndicatorsDialog = false }
         )
     }
@@ -916,45 +935,25 @@ fun ChartScreen(
                 }
             }
 
-            // Replay indicators only see revealed candles (strict no-lookahead).
-            val replaySma = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
-                if (isEmbeddedReplay && uiState.indicatorSettings.isSmaEnabled)
-                    com.example.core.indicators.TechnicalIndicators.calculateSma(replayState.visibleCandles, uiState.indicatorSettings.smaPeriod)
-                else emptyList()
+            // Only revealed candles enter the worker; rewinds invalidate its snapshot.
+            val replayBars = replayState.visibleCandles
+            val replaySettings = uiState.indicatorSettings
+            val replayPrepared by produceState<Triple<List<com.example.core.model.Candle>,com.example.feature.chart.model.IndicatorSettings,PreparedChartIndicators>?>(
+                null,isEmbeddedReplay,com.example.ui.components.ChartCandleIdentity(replayBars),replaySettings) {
+                value = if(isEmbeddedReplay) Triple(replayBars,replaySettings,ChartIndicatorPreparation.calculate(replayBars,replaySettings)) else null
             }
-            val replayEma = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
-                if (isEmbeddedReplay && uiState.indicatorSettings.isEmaEnabled)
-                    com.example.core.indicators.TechnicalIndicators.calculateEma(replayState.visibleCandles, uiState.indicatorSettings.emaPeriod)
-                else emptyList()
-            }
-            val replayBollinger = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
-                if (isEmbeddedReplay && uiState.indicatorSettings.isBollingerEnabled)
-                    com.example.core.indicators.TechnicalIndicators.calculateBollingerBands(replayState.visibleCandles, uiState.indicatorSettings.bollingerPeriod, uiState.indicatorSettings.bollingerStdDev)
-                else emptyList()
-            }
-            val replayVwap = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
-                if (isEmbeddedReplay && uiState.indicatorSettings.isVwapEnabled)
-                    com.example.core.indicators.TechnicalIndicators.calculateVwap(replayState.visibleCandles)
-                else emptyList()
-            }
-            val replayRsi = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
-                if (isEmbeddedReplay && uiState.indicatorSettings.isRsiEnabled)
-                    com.example.core.indicators.TechnicalIndicators.calculateRsi(replayState.visibleCandles, uiState.indicatorSettings.rsiPeriod)
-                else emptyList()
-            }
-            val replayMacd = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
-                if (isEmbeddedReplay && uiState.indicatorSettings.isMacdEnabled)
-                    com.example.core.indicators.TechnicalIndicators.calculateMacd(replayState.visibleCandles, uiState.indicatorSettings.macdFast, uiState.indicatorSettings.macdSlow, uiState.indicatorSettings.macdSignal)
-                else emptyList()
-            }
-            val replayAtr = remember(isEmbeddedReplay, replayState.visibleCandles, uiState.indicatorSettings) {
-                if (isEmbeddedReplay && uiState.indicatorSettings.isAtrEnabled)
-                    com.example.core.indicators.TechnicalIndicators.calculateAtr(replayState.visibleCandles, uiState.indicatorSettings.atrPeriod)
-                else emptyList()
-            }
+            val replayValues = replayPrepared?.takeIf { isEmbeddedReplay && it.first === replayBars && it.second == replaySettings }?.third ?: PreparedChartIndicators()
+            val replaySma = replayValues.sma
+            val replayEma = replayValues.ema
+            val replayBollinger = replayValues.bollinger
+            val replayVwap = replayValues.vwap
+            val replayRsi = replayValues.rsi
+            val replayMacd = replayValues.macd
+            val replayAtr = replayValues.atr
 
             val revealedDrawingTime = replayState.visibleCandles.lastOrNull()?.openTime
-            val displayedDrawings = remember(uiState.drawings, isEmbeddedReplay, revealedDrawingTime) {
+            val displayedDrawings = remember(uiState.drawings, isEmbeddedReplay, revealedDrawingTime, hideDrawings) {
+                if(hideDrawings) emptyList() else
                 if (isEmbeddedReplay) com.example.feature.replay.visibleReplayDrawings(uiState.drawings, revealedDrawingTime)
                 else uiState.drawings
             }
@@ -1008,6 +1007,7 @@ fun ChartScreen(
                     },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) },
                     onSelectDrawing = { editingDrawing = it },
+                    onUpdateDrawing = { viewModel.updateDrawing(it) },
                     onSelectPosition = {
                         if (isEmbeddedReplay) replayViewModel.pause()
                         selectedPositionReplay = isEmbeddedReplay
@@ -1486,7 +1486,7 @@ fun ChartScreen(
                     },
                     onIndicators = { showIndicatorsDialog = true },
                     onDrawing = { showToolsMenu = true },
-                    onMore = { showToolsMenu = true }
+                    onMore = { showChartExtras = true }
                 )
             }
 
