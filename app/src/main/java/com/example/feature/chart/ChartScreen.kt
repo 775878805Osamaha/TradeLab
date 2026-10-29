@@ -142,6 +142,7 @@ fun ChartScreen(
     }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
+    var showHistoryDetails by remember { mutableStateOf(false) }
     var showChartExtras by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var showPriceAlert by remember { mutableStateOf(false) }
@@ -481,9 +482,71 @@ fun ChartScreen(
             TextButton(onClick={magnetEnabled=!magnetEnabled}) { Text(if(magnetEnabled) "إيقاف المغناطيس" else "تفعيل المغناطيس") }
             TextButton(onClick={hideDrawings=!hideDrawings}) { Text(if(hideDrawings) "إظهار الرسومات" else "إخفاء الرسومات") }
             TextButton(onClick={viewModel.triggerResetView();showChartExtras=false}) { Text("إعادة ضبط العرض") }
+            TextButton(onClick={showHistoryDetails=true;showChartExtras=false}) { Text("إدارة بيانات الشارت") }
             TextButton(onClick={showPriceAlert=true;showChartExtras=false}) { Text("تنبيه سعر أثناء فتح الشارت") }
         }
     },confirmButton={TextButton(onClick={showChartExtras=false}) {Text("إغلاق")}})
+
+    if(showHistoryDetails && !isEmbeddedReplay && uiState.candles.isNotEmpty()) {
+        AlertDialog(onDismissRequest={showHistoryDetails=false},title={Text("إدارة بيانات الشارت")},
+            text={Column(Modifier.verticalScroll(rememberScrollState())) {
+                        OutlinedButton(
+                            onClick = { viewModel.loadOlderChartHistory() },
+                            enabled = !uiState.isLoading && !uiState.isLoadingOlderHistory,
+                            modifier = Modifier.height(34.dp).testTag("chart_load_older_history"),
+                            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                if (uiState.isLoadingOlderHistory) "جاري تحميل الأقدم..."
+                                else "تحميل الأقدم · ${String.format(Locale.US, "%,d", uiState.candles.size)} شمعة",
+                                fontSize = 11.sp
+                            )
+                        }
+                        if (uiState.candles.size < com.example.feature.chart.history.ChartHistoryDownload.TARGET || uiState.isDownloadingDeepHistory) {
+                            TextButton(
+                                onClick = {
+                                    if (uiState.isDownloadingDeepHistory) viewModel.stopDeepChartHistory()
+                                    else viewModel.downloadDeepChartHistory()
+                                },
+                                enabled = uiState.isDownloadingDeepHistory || (!uiState.isLoading && !uiState.isLoadingOlderHistory),
+                                modifier = Modifier.heightIn(min = 40.dp).testTag("chart_download_deep_history"),
+                                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)
+                            ) {
+                                Text(if (uiState.isDownloadingDeepHistory)
+                                    "إيقاف · ${String.format(Locale.US, "%,d", uiState.candles.size)} / 100,001"
+                                    else "تحميل 100 ألف+", fontSize = 11.sp)
+                            }
+                        }
+                        val oldestDate = remember(uiState.candles.first().openTime) {
+                            java.time.Instant.ofEpochMilli(uiState.candles.first().openTime)
+                                .atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
+                        }
+                        Text("أقدم شمعة محملة: $oldestDate", fontSize = 10.sp, color = TradingTextSecondary,
+                            modifier = Modifier.padding(horizontal = 8.dp).testTag("chart_oldest_history_date"))
+                        uiState.historyDownloadMessage?.let { message ->
+                            Text(message, fontSize = 10.sp, color = TradingTextSecondary,
+                                modifier = Modifier.widthIn(max = 240.dp).padding(6.dp).testTag("chart_history_download_message"))
+                        }
+                        val sourceLabel = when(uiState.candles.firstOrNull()?.source) {
+                            com.example.core.market.DukascopyChartHistoryProvider.SOURCE -> "Dukascopy · BID"
+                            com.example.core.market.HistDataChartHistoryProvider.SOURCE -> "HistData · BID · الحجم غير متاح"
+                            else -> null
+                        }
+                        if (sourceLabel!=null) {
+                            Text(sourceLabel, fontSize = 10.sp, color = TradingTextSecondary,
+                                modifier = Modifier.padding(horizontal = 8.dp).testTag("chart_history_source"))
+                        }
+                        uiState.historySourceWarning?.let { warning ->
+                            Text(warning,fontSize=10.sp,color=TradingTextSecondary,
+                                modifier=Modifier.widthIn(max=240.dp).padding(6.dp).testTag("chart_history_source_warning"))
+                        }
+                        uiState.olderHistoryError?.let { historyError ->
+                            Text(historyError, fontSize = 10.sp,
+                                color = TradingTextSecondary,
+                                modifier = Modifier.widthIn(max = 240.dp).padding(6.dp).testTag("chart_older_history_error"))
+                        }
+            }},confirmButton={TextButton(onClick={showHistoryDetails=false}) {Text("إغلاق")}})
+    }
 
     if (showIndicatorsDialog) {
         ChartIndicatorsDialog(
@@ -1027,73 +1090,6 @@ fun ChartScreen(
                         color = TradingTextPrimary, fontSize = 11.sp,
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp).background(TradingCard.copy(alpha = .92f), RoundedCornerShape(6.dp)).padding(6.dp).clickable { viewModel.setDrawingTool(uiState.activeDrawingTool) }.testTag("drawing_placement_hint")
                     )
-                }
-
-                // Historical paging remains available even in immersive mode.
-                // It does not replace the chart or navigate away from it.
-                if (!isEmbeddedReplay && uiState.candles.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier.align(AbsoluteAlignment.BottomRight)
-                            .padding(end = 12.dp, bottom = 30.dp)
-                            .background(TradingBackground.copy(alpha = 0.88f), RoundedCornerShape(8.dp)),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        OutlinedButton(
-                            onClick = { viewModel.loadOlderChartHistory() },
-                            enabled = !uiState.isLoading && !uiState.isLoadingOlderHistory,
-                            modifier = Modifier.height(34.dp).testTag("chart_load_older_history"),
-                            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)
-                        ) {
-                            Text(
-                                if (uiState.isLoadingOlderHistory) "جاري تحميل الأقدم..."
-                                else "تحميل الأقدم · ${String.format(Locale.US, "%,d", uiState.candles.size)} شمعة",
-                                fontSize = 11.sp
-                            )
-                        }
-                        if (uiState.candles.size < com.example.feature.chart.history.ChartHistoryDownload.TARGET || uiState.isDownloadingDeepHistory) {
-                            TextButton(
-                                onClick = {
-                                    if (uiState.isDownloadingDeepHistory) viewModel.stopDeepChartHistory()
-                                    else viewModel.downloadDeepChartHistory()
-                                },
-                                enabled = uiState.isDownloadingDeepHistory || (!uiState.isLoading && !uiState.isLoadingOlderHistory),
-                                modifier = Modifier.heightIn(min = 40.dp).testTag("chart_download_deep_history"),
-                                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)
-                            ) {
-                                Text(if (uiState.isDownloadingDeepHistory)
-                                    "إيقاف · ${String.format(Locale.US, "%,d", uiState.candles.size)} / 100,001"
-                                    else "تحميل 100 ألف+", fontSize = 11.sp)
-                            }
-                        }
-                        val oldestDate = remember(uiState.candles.first().openTime) {
-                            java.time.Instant.ofEpochMilli(uiState.candles.first().openTime)
-                                .atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
-                        }
-                        Text("أقدم شمعة محملة: $oldestDate", fontSize = 10.sp, color = TradingTextSecondary,
-                            modifier = Modifier.padding(horizontal = 8.dp).testTag("chart_oldest_history_date"))
-                        uiState.historyDownloadMessage?.let { message ->
-                            Text(message, fontSize = 10.sp, color = TradingTextSecondary,
-                                modifier = Modifier.widthIn(max = 240.dp).padding(6.dp).testTag("chart_history_download_message"))
-                        }
-                        val sourceLabel = when(uiState.candles.firstOrNull()?.source) {
-                            com.example.core.market.DukascopyChartHistoryProvider.SOURCE -> "Dukascopy · BID"
-                            com.example.core.market.HistDataChartHistoryProvider.SOURCE -> "HistData · BID · الحجم غير متاح"
-                            else -> null
-                        }
-                        if (sourceLabel!=null) {
-                            Text(sourceLabel, fontSize = 10.sp, color = TradingTextSecondary,
-                                modifier = Modifier.padding(horizontal = 8.dp).testTag("chart_history_source"))
-                        }
-                        uiState.historySourceWarning?.let { warning ->
-                            Text(warning,fontSize=10.sp,color=TradingTextSecondary,
-                                modifier=Modifier.widthIn(max=240.dp).padding(6.dp).testTag("chart_history_source_warning"))
-                        }
-                        uiState.olderHistoryError?.let { historyError ->
-                            Text(historyError, fontSize = 10.sp,
-                                color = TradingTextSecondary,
-                                modifier = Modifier.widthIn(max = 240.dp).padding(6.dp).testTag("chart_older_history_error"))
-                        }
-                    }
                 }
 
                 // Overlay the entry control on the chart instead of reserving a

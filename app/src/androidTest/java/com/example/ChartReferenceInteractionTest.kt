@@ -18,12 +18,14 @@ class ChartReferenceInteractionTest {
 
     @Test fun bulkHistoryDownloadPreservesAnalysisAndCanStopOrRetryAfterSourceError() {
         compose.waitUntil(90000) {
-            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
-                compose.onAllNodesWithTag("chart_download_deep_history").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
         }
         fun count() = compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode()
             .config[com.example.ui.components.ChartLoadedCandleCount]
         val initial=count()
+        compose.onNodeWithTag("chart_download_deep_history").assertDoesNotExist()
+        compose.onNodeWithContentDescription("المزيد").performClick()
+        compose.onNodeWithText("إدارة بيانات الشارت").performClick()
         compose.onNodeWithTag("chart_download_deep_history").performClick()
         compose.waitUntil(10000) {
             compose.onAllNodesWithText("إيقاف",substring=true).fetchSemanticsNodes().isNotEmpty() ||
@@ -34,9 +36,10 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithTag("chart_history_download_message").assertTextContains("تم إيقاف",substring=true)
         } else compose.onNodeWithTag("chart_older_history_error").assertExists()
         compose.onNodeWithTag("chart_download_deep_history").assertIsEnabled().assertTextContains("تحميل 100 ألف+")
+        compose.onNodeWithText("إغلاق").performClick()
         org.junit.Assert.assertTrue(count()>=initial)
         compose.onNodeWithTag("chart_embedded_replay_controls").assertDoesNotExist()
-        compose.onNodeWithTag("chart_oldest_history_date").assertExists()
+        compose.onNodeWithTag("chart_oldest_history_date").assertDoesNotExist()
         captureProviderScreen("tradelab-analysis-bulk-history")
     }
 
@@ -44,8 +47,7 @@ class ChartReferenceInteractionTest {
         fun loadedCount(): Int = compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode()
             .config[com.example.ui.components.ChartLoadedCandleCount]
         compose.waitUntil(90000) {
-            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
-                compose.onAllNodesWithTag("chart_load_older_history").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
         }
         val initial = loadedCount()
         org.junit.Assert.assertTrue(initial > 0)
@@ -87,15 +89,17 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_bottom_timeframe").performClick()
         compose.onNodeWithText("1W").performClick()
         compose.waitUntil(90000) {
-            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
-                compose.onAllNodesWithTag("chart_load_older_history").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty()
         }
         fun oldest(): Long = compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode()
             .config[com.example.ui.components.ChartOldestCandleTime]
         val first = oldest()
         val week = 7L * 86_400_000L
         org.junit.Assert.assertEquals(4L * 86_400_000L, Math.floorMod(first, week))
+        compose.onNodeWithContentDescription("المزيد").performClick()
+        compose.onNodeWithText("إدارة بيانات الشارت").performClick()
         compose.onNodeWithTag("chart_load_older_history").performClick()
+        compose.onNodeWithText("إغلاق").performClick()
         compose.waitUntil(120000) { oldest() < first }
         org.junit.Assert.assertEquals(4L * 86_400_000L, Math.floorMod(oldest(), week))
         captureProviderScreen("tradelab-analysis-weekly-history")
