@@ -43,7 +43,11 @@ class HistDataChartHistoryProvider(
     }
     private val lock = Mutex()
     private val warnings=java.util.concurrent.ConcurrentHashMap<String,String>()
-    fun warning(symbol: String): String? = warnings[symbol]
+    private data class PublicationGap(val requestedUntil: Long,val publishedUntil: Long)
+    private val publicationGaps=java.util.concurrent.ConcurrentHashMap<String,PublicationGap>()
+    fun warning(symbol: String): String? = listOfNotNull(warnings[symbol],publicationGaps[symbol]?.let {
+        "تأخر الأرشيف؛ آخر شموع منشورة حتى ${Instant.ofEpochMilli(it.publishedUntil)}. توجد فجوة في التاريخ الحديث."
+    }).takeIf { it.isNotEmpty() }?.joinToString(" ")
     private data class Period(val year: Int, val month: Int?) {
         val key get() = "$year" + (month?.let { "%02d".format(java.util.Locale.US,it) } ?: "")
         val start get() = LocalDate.of(year,month ?: 1,1).atStartOfDay().toInstant(EST).toEpochMilli()
@@ -76,6 +80,10 @@ class HistDataChartHistoryProvider(
                 check(directory.isDirectory || directory.mkdirs()) { "Historical cache unavailable" }
                 val periods=periods(from,to+interval)
                 val parts=periods.map { cachedPart(symbol,it) ?: download(symbol,it) }
+                if(parts.last().until<to+interval) {
+                    publicationGaps[symbol]=PublicationGap(to+interval,parts.last().until)
+                    throw ChartHistoryPublicationGapException(parts.last().until)
+                }
                 val result=read(symbol,tf,from,to+interval,parts)
                 trim(parts.map { it.file }.toSet())
                 result
@@ -108,10 +116,21 @@ class HistDataChartHistoryProvider(
                     if(!row.moveToFirst() || row.getString(0)!=symbol || row.getString(1)!=p.key) return null
                     val fetched=row.getLong(2)
                     if(fetched<0 || fetched>clock()+60_000L) return null
-                    if(p.end>clock() && clock()-fetched>3_600_000L) return null
+                    // A file fetched mid-period stays provisional even after the
+                    // calendar advances. Never promote that cached prefix to complete.
+                    if(fetched<p.end && clock()-fetched>3_600_000L) return null
                     file.setLastModified(clock())
                     if(row.getInt(3)<0) return null
-                    Part(p,file,minOf(p.end,fetched/60_000L*60_000L),row.getInt(3))
+                    val until=if(fetched>=p.end) p.end else {
+                        fun latest(table: String)=db.rawQuery("SELECT MAX(t) FROM $table",null).use { last ->
+                            if(last.moveToFirst() && !last.isNull(0)) last.getLong(0) else 0L
+                        }
+                        // Download time says nothing about how far the publisher
+                        // has filled the current monthly file. Conflicted originals
+                        // still establish publication, while remaining excluded.
+                        minOf(p.end,fetched/60_000L*60_000L,maxOf(latest("candles"),latest("quarantine"))+60_000L)
+                    }
+                    Part(p,file,until,row.getInt(3))
                 }
             }
         } catch (_: android.database.sqlite.SQLiteException) { file.delete();null }
@@ -237,6 +256,7 @@ class HistDataChartHistoryProvider(
     }
 
     private suspend fun read(symbol: String,tf: Timeframe,from: Long,until: Long,parts: List<Part>): List<Candle> {
+        publicationGaps[symbol]?.let { if(parts.last().until>=it.requestedUntil) publicationGaps.remove(symbol,it) }
         val interval=tf.minutes*60_000L
         val start=maxOf(from,parts.first().period.start)
         val end=minOf(until,parts.last().until)

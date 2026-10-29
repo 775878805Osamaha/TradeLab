@@ -128,4 +128,34 @@ class HistDataChartHistoryProviderTest {
             assertThrows(IllegalArgumentException::class.java) { provider.downloadForm(html,"XAUUSD",2025,null) }
         }
     }
+
+    @Test fun currentFileCoverageEndsAtItsLastPublishedMinuteRatherThanDownloadTime() = runBlocking {
+        val now=Instant.parse("2026-01-20T12:00:00Z").toEpochMilli()
+        val at=Instant.parse("2026-01-06T05:00:00Z").toEpochMilli()
+        val offline=OkHttpClient.Builder().addInterceptor { throw java.io.IOException("Unexpected network") }.build()
+        val provider=HistDataChartHistoryProvider(temp.newFolder(),offline) { now }
+        provider.importZip("XAUUSD",2026,1,file(zip(row("20260106 000000"),2026)))
+        assertEquals(1,provider.cached("XAUUSD",Timeframe.M1,at,at)!!.size)
+        assertNull(provider.cached("XAUUSD",Timeframe.M1,at,at+60_000L))
+        // Returning the one stored row would falsely certify the unpublished tail.
+        try { provider.fetch("XAUUSD",Timeframe.M1,at,at+60_000L);fail("Publication lag is not an empty/complete window") }
+        catch(error: MarketDataRequestException) {
+            assertTrue(error.message!!.contains("تأخر نشر"))
+            assertTrue(error is ChartHistoryPublicationGapException)
+            assertEquals(at+60_000L,(error as ChartHistoryPublicationGapException).publishedUntil)
+        }
+        // Reading the available prefix must retain the notice about the missing tail.
+        assertEquals(1,provider.cached("XAUUSD",Timeframe.M1,at,at)!!.size)
+        assertTrue(provider.warning("XAUUSD")!!.contains("2026-01-06"))
+    }
+
+    @Test fun aPrefixCachedBeforeMonthEndIsNotPromotedToCompleteWhenTheMonthChanges() = runBlocking {
+        var now=Instant.parse("2026-01-20T12:00:00Z").toEpochMilli()
+        val at=Instant.parse("2026-01-06T05:00:00Z").toEpochMilli()
+        val provider=HistDataChartHistoryProvider(temp.newFolder(),clock={now})
+        provider.importZip("XAUUSD",2026,1,file(zip(row("20260106 000000"),2026)))
+        assertNotNull(provider.cached("XAUUSD",Timeframe.M1,at,at))
+        now=Instant.parse("2026-02-01T12:00:00Z").toEpochMilli()
+        assertNull(provider.cached("XAUUSD",Timeframe.M1,at,at))
+    }
 }

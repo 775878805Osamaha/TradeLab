@@ -3,6 +3,8 @@ package com.example.feature.chart.history
 import com.example.core.market.HistoricalCandleIntegrity
 import com.example.core.market.MarketDataRequestException
 import com.example.core.market.NoHistoricalCandlesException
+import com.example.core.market.ChartHistoryPublicationGapException
+import com.example.core.market.HistoricalCandleBoundary
 import com.example.core.model.Candle
 import com.example.core.model.Timeframe
 import kotlinx.coroutines.CancellationException
@@ -19,6 +21,11 @@ object ChartHistoryPaging {
         timeframe: Timeframe,
         oldestOpen: Long,
         fetch: suspend (Long, Long) -> List<Candle>
+    ): List<Candle> = loadBefore(symbol,timeframe,oldestOpen,0,fetch)
+
+    private suspend fun loadBefore(
+        symbol: String, timeframe: Timeframe, oldestOpen: Long, coverageRedirects: Int,
+        fetch: suspend (Long,Long) -> List<Candle>
     ): List<Candle> {
         val interval = timeframe.minutes * 60_000L
         if (oldestOpen < interval) return emptyList()
@@ -39,6 +46,13 @@ object ChartHistoryPaging {
                     fetch(start, end)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
+                } catch (gap: ChartHistoryPublicationGapException) {
+                    // Follow only a verified exclusive publication boundary.
+                    // Align backwards so no partial higher-timeframe bar is accepted.
+                    if(gap.publishedUntil<=0L || coverageRedirects>=2) throw gap
+                    val before=HistoricalCandleBoundary.currentOpen(gap.publishedUntil,interval)
+                    if(before<=0L || before>=oldestOpen) throw gap
+                    return loadBefore(symbol,timeframe,before,coverageRedirects+1,fetch)
                 } catch (_: NoHistoricalCandlesException) {
                     emptyList()
                 } catch (error: IOException) {

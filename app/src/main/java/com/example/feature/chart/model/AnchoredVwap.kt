@@ -4,12 +4,14 @@ import com.example.core.model.Candle
 
 data class VwapPoint(val time: Long, val price: Double)
 object AnchoredVwap {
-    fun calculate(candles: List<Candle>, start: Long): List<VwapPoint> {
+    fun calculate(candles: List<Candle>, start: Long, checkpoint: () -> Unit = {}): List<VwapPoint> {
+        checkpoint()
         if (candles.isEmpty() || candles.first().openTime > start) return emptyList()
         var volume = 0.0
         var weighted = 0.0
         return buildList {
-            candles.forEach { candle ->
+            candles.forEachIndexed { index, candle ->
+                if (index % 1024 == 0) checkpoint()
                 if(candle.openTime >= start && candle.volume.isFinite() && candle.volume > 0 &&
                     candle.high.isFinite() && candle.low.isFinite() && candle.close.isFinite()) {
                     volume += candle.volume

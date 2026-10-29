@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import com.example.feature.chart.history.ChartHistoryPaging
 import com.example.feature.chart.history.ChartHistoryDownload
+import com.example.feature.chart.history.ChartHistoryRetry
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -141,6 +142,23 @@ class ChartViewModel(
         }
     }
 
+    /** Retries only the pending page; already merged bars never enter the retry block. */
+    private suspend fun fetchOlderChartHistory(
+        symbol: String, timeframe: Timeframe, oldest: Long, generation: Long
+    ): List<Candle> = ChartHistoryRetry.run(onRetry = { retry ->
+        _uiState.update { state ->
+            if (historyDownloadGeneration != generation || state.selectedSymbol != symbol ||
+                state.selectedTimeframe != timeframe || !state.isLoadingOlderHistory) state
+            else state.copy(historyDownloadMessage = retry?.let {
+                "انقطع الاتصال مؤقتًا؛ إعادة المحاولة ${it.attempt}/${it.maxAttempts} بعد ${it.delayMillis / 1000} ث. الشموع المحملة باقية."
+            })
+        }
+    }) {
+        ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
+            marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
+        }
+    }
+
     /** Load one verified timestamp page without discarding already loaded history. */
     fun loadOlderChartHistory() {
         val snapshot = _uiState.value
@@ -148,13 +166,12 @@ class ChartViewModel(
         val symbol = snapshot.selectedSymbol
         val timeframe = snapshot.selectedTimeframe
         val oldest = snapshot.candles.first().openTime
+        val generation = ++historyDownloadGeneration
         _uiState.update { it.copy(isLoadingOlderHistory = true, olderHistoryError = null, historyDownloadMessage = null) }
         olderHistoryJob?.cancel()
         olderHistoryJob = viewModelScope.launch {
             try {
-                val confirmed = ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
-                    marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
-                }
+                val confirmed = fetchOlderChartHistory(symbol, timeframe, oldest, generation)
                 val merged = mergeChartCandles(symbol, timeframe, confirmed) ?: return@launch
                 _uiState.update {
                     it.copy(isLoadingOlderHistory = false,
@@ -166,7 +183,8 @@ class ChartViewModel(
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe) {
+                if (historyDownloadGeneration == generation &&
+                    _uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe) {
                     _uiState.update { it.copy(isLoadingOlderHistory = false,
                         olderHistoryError = "تعذر تحميل الأقدم: " + (error.message ?: "حاول مجددًا").take(160)) }
                 }
@@ -189,9 +207,7 @@ class ChartViewModel(
             try {
                 val result = ChartHistoryDownload.run(snapshot.candles,
                     fetchBefore = { oldest ->
-                        ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
-                            marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
-                        }
+                        fetchOlderChartHistory(symbol, timeframe, oldest, generation)
                     }, append = { page ->
                         val merged = mergeChartCandles(symbol, timeframe, page)
                             ?: throw kotlinx.coroutines.CancellationException("Chart changed")
@@ -206,7 +222,8 @@ class ChartViewModel(
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe) {
+                if (historyDownloadGeneration == generation &&
+                    _uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe) {
                     _uiState.update { it.copy(olderHistoryError = "توقف التحميل؛ الشموع محفوظة. أعد المحاولة: " +
                         (error.message ?: "تعذر الاتصال بالمصدر").take(120)) }
                 }
@@ -304,7 +321,11 @@ class ChartViewModel(
     }
 
     fun updateIndicatorSettings(settings: IndicatorSettings) {
-        _uiState.update { it.copy(indicatorSettings = settings) }
+        _uiState.update {
+            if(it.indicatorSettings==settings) it else it.copy(indicatorSettings=settings,
+                smaValues=emptyList(),emaValues=emptyList(),bollingerValues=emptyList(),
+                vwapValues=emptyList(),rsiValues=emptyList(),macdValues=emptyList(),atrValues=emptyList())
+        }
         recalculateIndicators(_uiState.value.candles, settings)
     }
 
@@ -706,14 +727,7 @@ class ChartViewModel(
         val requestedTimeframe = _uiState.value.selectedTimeframe
         indicatorJob?.cancel()
         indicatorJob = viewModelScope.launch(Dispatchers.Default) {
-            val sma = if (settings.isSmaEnabled) TechnicalIndicators.calculateSma(candles, settings.smaPeriod) else emptyList()
-            val ema = if (settings.isEmaEnabled) TechnicalIndicators.calculateEma(candles, settings.emaPeriod) else emptyList()
-            val bb = if (settings.isBollingerEnabled) TechnicalIndicators.calculateBollingerBands(candles, settings.bollingerPeriod, settings.bollingerStdDev) else emptyList()
-            val vwap = if (settings.isVwapEnabled) TechnicalIndicators.calculateVwap(candles) else emptyList()
-
-            val rsi = if (settings.isRsiEnabled) TechnicalIndicators.calculateRsi(candles, settings.rsiPeriod) else emptyList()
-            val macd = if (settings.isMacdEnabled) TechnicalIndicators.calculateMacd(candles, settings.macdFast, settings.macdSlow, settings.macdSignal) else emptyList()
-            val atr = if (settings.isAtrEnabled) TechnicalIndicators.calculateAtr(candles, settings.atrPeriod) else emptyList()
+            val calculated = ChartIndicatorPreparation.calculate(candles, settings)
 
             _uiState.update {
                 // Indicator calculations run off the UI thread and can finish after
@@ -725,13 +739,13 @@ class ChartViewModel(
                     // every asynchronous indicator completion.
                     it.candles !== candles) return@update it
                 it.copy(
-                    smaValues = sma,
-                    emaValues = ema,
-                    bollingerValues = bb,
-                    vwapValues = vwap,
-                    rsiValues = rsi,
-                    macdValues = macd,
-                    atrValues = atr
+                    smaValues = calculated.sma,
+                    emaValues = calculated.ema,
+                    bollingerValues = calculated.bollinger,
+                    vwapValues = calculated.vwap,
+                    rsiValues = calculated.rsi,
+                    macdValues = calculated.macd,
+                    atrValues = calculated.atr
                 )
             }
         }

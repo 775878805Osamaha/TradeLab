@@ -6,6 +6,8 @@ import com.example.core.model.Candle
 import com.example.core.model.Timeframe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.runTest
@@ -77,6 +79,26 @@ class ChartHistoryDownloadTest {
                 ChartHistoryDownload.run(initial,pauseMillis=0,fetchBefore={page},append={fail("Invalid page must not be appended")})
                 fail()
             } catch(_: IllegalArgumentException) { }
+        }
+    }
+
+    @Test fun cancellationAtTerminalCallbacksCannotReportCompletion() = runBlocking {
+        for (cancelAtAppend in listOf(false,true)) {
+            val job=Job()
+            var appended=0
+            try {
+                withContext(job) {
+                    ChartHistoryDownload.run(listOf(bar(Timeframe.M1,600_000)),target=2,pauseMillis=0,
+                        fetchBefore={oldest ->
+                            if(cancelAtAppend) listOf(bar(Timeframe.M1,oldest-60_000))
+                            else { job.cancel(); emptyList() }
+                        },append={appended+=it.size;job.cancel()})
+                    fail("Cancelled download must not return a terminal success or empty-history result")
+                }
+                fail("Cancellation must propagate")
+            } catch (_: CancellationException) {
+                assertEquals(if(cancelAtAppend) 1 else 0,appended)
+            } finally { job.cancel() }
         }
     }
 

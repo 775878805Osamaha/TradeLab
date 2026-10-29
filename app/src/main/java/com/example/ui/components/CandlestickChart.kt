@@ -51,6 +51,9 @@ import kotlin.math.min
 val ChartFirstVisibleIndex = SemanticsPropertyKey<Int>("ChartFirstVisibleIndex")
 val ChartLoadedCandleCount = SemanticsPropertyKey<Int>("ChartLoadedCandleCount")
 val ChartOldestCandleTime = SemanticsPropertyKey<Long>("ChartOldestCandleTime")
+val ChartDisplayReady = SemanticsPropertyKey<Boolean>("ChartDisplayReady")
+val ChartPriceIndexReady = SemanticsPropertyKey<Boolean>("ChartPriceIndexReady")
+val ChartDrawingAnalysisReady = SemanticsPropertyKey<Boolean>("ChartDrawingAnalysisReady")
 
 enum class ChartDisplayStyle(val label: String) {
     CANDLES("شموع"),
@@ -107,25 +110,14 @@ fun CandlestickChart(
         return
     }
 
-    // Convert only when candle data or display style changes, not on each
-    // canvas redraw caused by zoom, pan, crosshair or other UI gestures.
-    val heikinAshiCandles = remember(candles, displayStyle) {
-        if (displayStyle != ChartDisplayStyle.HEIKIN_ASHI) emptyList()
-        else {
-            val converted = ArrayList<Candle>(candles.size)
-            candles.forEachIndexed { index, raw ->
-                val haClose = (raw.open + raw.high + raw.low + raw.close) / 4.0
-                val haOpen = if (index == 0) (raw.open + raw.close) / 2.0
-                    else (converted.last().open + converted.last().close) / 2.0
-                converted.add(raw.copy(
-                    open = haOpen, close = haClose,
-                    high = maxOf(raw.high, haOpen, haClose),
-                    low = minOf(raw.low, haOpen, haClose)
-                ))
-            }
-            converted
-        }
+    val candleIdentity = ChartCandleIdentity(candles)
+    val preparedHeikinAshi by produceState<ChartHeikinAshiSnapshot?>(null, candleIdentity, displayStyle) {
+        value = if (displayStyle == ChartDisplayStyle.HEIKIN_ASHI)
+            ChartHeikinAshiSnapshot.prepare(candles) else null
     }
+    // A previous symbol, frame, prepend or live revision must never be rendered.
+    val heikinAshi = if (displayStyle == ChartDisplayStyle.HEIKIN_ASHI)
+        preparedHeikinAshi?.seriesFor(candles) else null
 
     val selectablePositions by rememberUpdatedState(openPositions)
     val selectPosition by rememberUpdatedState(onSelectPosition)
@@ -152,7 +144,10 @@ fun CandlestickChart(
     // Explicit reset-view still clears the transform below.
     // Avoid creating a new visible OHLC list or scanning the entire history
     // during pan/zoom; range queries are served by the immutable price index.
-    val priceRangeIndex = remember(candles) { ChartPriceRangeIndex(candles) }
+    val preparedPriceRange by produceState<ChartPriceRangeSnapshot?>(null, candleIdentity) {
+        value = ChartPriceRangeSnapshot.prepare(candles)
+    }
+    val priceRangeIndex = preparedPriceRange?.indexFor(candles)
 
     val drawingSelection by rememberUpdatedState(onSelectDrawing)
     val currentDrawings by rememberUpdatedState(drawings)
@@ -175,13 +170,13 @@ fun CandlestickChart(
             }
         }
     }
-    val candleProfiles = remember(candles,drawings) {
-        drawings.filter { it.tool == DrawingTool.VOLUME_PROFILE_FIXED || it.tool == DrawingTool.VOLUME_PROFILE_SESSION }
-            .associate { it.id to CandleVolumeProfile.forDrawing(candles,it) }
+    val drawingAnalysisRequest = ChartDrawingAnalysisRequest(candles,drawings)
+    val preparedDrawingAnalysis by produceState<ChartDrawingAnalysisSnapshot?>(null,drawingAnalysisRequest) {
+        value = ChartDrawingAnalysisSnapshot.prepare(drawingAnalysisRequest)
     }
-    val anchoredVwaps = remember(candles, drawings) {
-        drawings.filter { it.tool == DrawingTool.ANCHORED_VWAP }.associate { it.id to AnchoredVwap.calculate(candles,it.startTime) }
-    }
+    val drawingAnalysis = preparedDrawingAnalysis?.takeIf { it.matches(drawingAnalysisRequest) }
+    val candleProfiles = drawingAnalysis?.profiles.orEmpty()
+    val anchoredVwaps = drawingAnalysis?.vwaps.orEmpty()
     // Drawing Interaction State
     var drawingStartOffset by remember { mutableStateOf<Offset?>(null) }
     var drawingCurrentOffset by remember { mutableStateOf<Offset?>(null) }
@@ -328,6 +323,9 @@ fun CandlestickChart(
                 .semantics {
                     this[ChartLoadedCandleCount] = candles.size
                     this[ChartOldestCandleTime] = candles.first().openTime
+                    this[ChartPriceIndexReady] = priceRangeIndex != null
+                    this[ChartDisplayReady] = displayStyle != ChartDisplayStyle.HEIKIN_ASHI || heikinAshi != null
+                    this[ChartDrawingAnalysisReady] = drawingAnalysisRequest.isEmpty || drawingAnalysis != null
                     this[ChartFirstVisibleIndex] = ChartViewport.window(candles.size,
                         chartViewportWidthPx, candleWidthPx, scrollOffsetPx).startIndex
                 }
@@ -408,7 +406,7 @@ fun CandlestickChart(
                         }
                     )
                 }
-                .pointerInput(candles, activeDrawingTool, isCrosshairActive) {
+                .pointerInput(candleIdentity, activeDrawingTool, isCrosshairActive) {
                     detectTapGestures(
                         onDoubleTap = if(activeDrawingTool.isVariablePath) ({ point ->
                             val t = transformRef[0]
@@ -510,9 +508,13 @@ fun CandlestickChart(
             if (visibleCandles.isEmpty()) return@Canvas
 
             // Calculate min & max prices for visible range
-            val priceRange = priceRangeIndex.query(startIndex, endIndex)
-            var minP = priceRange.first
-            var maxP = priceRange.second
+            // While the new index builds off Main, scan only the visible candles.
+            // Do not apply the previous series' scale to newly loaded prices.
+            val priceRange = priceRangeIndex?.query(startIndex, endIndex)
+                ?: (visibleCandles.minOf { it.low } to visibleCandles.maxOf { it.high })
+            val transformedRange = heikinAshi?.priceIndex?.query(startIndex, endIndex)
+            var minP = minOf(priceRange.first, transformedRange?.first ?: priceRange.first)
+            var maxP = maxOf(priceRange.second, transformedRange?.second ?: priceRange.second)
             if (minP == maxP) {
                 minP *= 0.99
                 maxP *= 1.01
@@ -578,7 +580,7 @@ fun CandlestickChart(
 
             // Display-only Heikin-Ashi; raw market candles still drive trading.
             val displayedCandles = if (displayStyle == ChartDisplayStyle.HEIKIN_ASHI)
-                heikinAshiCandles.subList(startIndex, endIndex)
+                heikinAshi?.candles?.subList(startIndex, endIndex).orEmpty()
             else visibleCandles
 
             // 1. Draw Visible OHLC Candlesticks
@@ -651,7 +653,8 @@ fun CandlestickChart(
             // 2. Draw Volume Bars
             if (isVolumeVisible) {
                 val volTop = mainChartHeight
-                val maxVol = max(1.0, priceRangeIndex.maxVolume(startIndex, endIndex))
+                val maxVol = max(1.0, priceRangeIndex?.maxVolume(startIndex, endIndex)
+                    ?: visibleCandles.maxOf { it.volume.coerceAtLeast(0.0) })
                 visibleCandles.forEachIndexed { i, c ->
                     val x = transform.candleIndexToX(i)
                     val volHeight = (c.volume / maxVol).coerceIn(0.0, 1.0).toFloat() * volumeHeight
@@ -782,6 +785,12 @@ fun CandlestickChart(
                     }
                 }
             }
+        }
+
+        if (displayStyle == ChartDisplayStyle.HEIKIN_ASHI && heikinAshi == null) {
+            Text("جاري حساب شموع هيكن آشي…",
+                modifier = Modifier.align(Alignment.TopCenter).padding(8.dp).testTag("chart_display_preparing"),
+                color = TradingTextSecondary, style = MaterialTheme.typography.bodySmall)
         }
 
         // Chart navigation is gesture-first in the approved full-screen reference.

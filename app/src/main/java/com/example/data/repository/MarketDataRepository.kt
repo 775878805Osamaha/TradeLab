@@ -41,16 +41,22 @@ class MarketDataRepository(
         if (hasTwelveDataKey() || !com.example.core.market.DukascopyChartHistoryProvider.supports(symbol)) {
             return getCandles(symbol, timeframe, from, to)
         }
-        val split = com.example.core.market.ChartHistorySourceWindow.split(timeframe,from,to,System.currentTimeMillis())
+        val now=System.currentTimeMillis()
+        val split = com.example.core.market.ChartHistorySourceWindow.split(timeframe,from,to,now)
         split.recent?.let { recent ->
             // A known unpublished archive tail must be requested from the live-history
             // source, rather than silently jumping over it to an older archive day.
-            val tail = try { getCandles(symbol,timeframe,recent.from,recent.to) }
-                catch (_: com.example.core.market.NoHistoricalCandlesException) { emptyList() }
-            val older = split.archive?.let { getOlderChartCandles(symbol,timeframe,it.from,it.to) } ?: emptyList()
+            val tail = com.example.core.market.ChartRecentHistory.load(timeframe,recent.from,recent.to,now,
+                recent={ getCandles(symbol,timeframe,recent.from,recent.to) },
+                archive={ start,end -> getArchivedChartCandles(symbol,timeframe,start,end) })
+            val older = split.archive?.let { getArchivedChartCandles(symbol,timeframe,it.from,it.to) } ?: emptyList()
             return HistoricalCandleIntegrity.validate(older+tail,from,to+timeframe.minutes*60_000L,
                 expectedSymbol=symbol,expectedTimeframe=timeframe)
         }
+        return getArchivedChartCandles(symbol,timeframe,from,to)
+    }
+
+    private suspend fun getArchivedChartCandles(symbol: String,timeframe: Timeframe,from: Long,to: Long): List<Candle> {
         val cached = withContext(Dispatchers.IO) {
             candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
                 .filter { it.source in setOf(com.example.core.market.DukascopyChartHistoryProvider.SOURCE,
