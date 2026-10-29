@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.example.feature.chart.model.*
 
 @Composable
-internal fun DrawingPropertiesDialog(drawing: ChartDrawing, onDismiss: () -> Unit, onDelete: () -> Unit, onSave: (ChartDrawing) -> Unit) {
+internal fun DrawingPropertiesDialog(drawing: ChartDrawing, onDismiss: () -> Unit, onDelete: () -> Unit, onSave: (ChartDrawing) -> Unit, onCopy: ((ChartDrawing) -> Unit)? = null) {
     var color by remember(drawing.id) { mutableStateOf(drawing.color) }
     var width by remember(drawing.id) { mutableFloatStateOf(drawing.strokeWidth) }
     var text by remember(drawing.id) { mutableStateOf(drawing.text) }
@@ -32,6 +32,7 @@ internal fun DrawingPropertiesDialog(drawing: ChartDrawing, onDismiss: () -> Uni
             Text("سُمك الخط: ${width.toInt()}"); Slider(width,{width=it},valueRange=1f..6f,steps=4)
             if(drawing.tool.isTextTool) OutlinedTextField(text,{text=it},label={Text("النص")})
             prices.forEachIndexed { i,value -> OutlinedTextField(value,{next -> prices=prices.toMutableList().also { it[i]=next }},label={Text("سعر النقطة ${i+1}")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal)) }
+            if(onCopy != null) TextButton(onClick={onCopy(drawing)}) { Text("نسخ الرسم") }
             TextButton(onClick = onDelete) { Text("حذف الرسم", color = Color(0xFFFF3D48)) }
         } },
         confirmButton = { TextButton(enabled=valid,onClick={

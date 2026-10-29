@@ -26,6 +26,24 @@ fun ChartIndicatorsDialog(
     onDismiss: () -> Unit
 ) {
     var settings by remember { mutableStateOf(currentSettings) }
+    val prefs = androidx.compose.ui.platform.LocalContext.current.getSharedPreferences("chart_workspace",0)
+    var periods by remember { mutableStateOf(listOf(currentSettings.smaPeriod,currentSettings.emaPeriod,
+        currentSettings.bollingerPeriod,currentSettings.rsiPeriod,currentSettings.macdFast,currentSettings.macdSlow,
+        currentSettings.macdSignal,currentSettings.atrPeriod).map { it.toString() }) }
+    var deviation by remember { mutableStateOf(currentSettings.bollingerStdDev.toString()) }
+    val values = periods.map { it.toIntOrNull() }
+    val valid = values.all { it != null && it in 2..500 } &&
+        (values[4] ?: 0) < (values[5] ?: 0) && deviation.toDoubleOrNull()?.let { it.isFinite() && it in 0.1..10.0 } == true
+    fun applyPeriods(): IndicatorSettings = settings.copy(smaPeriod=values[0]!!,emaPeriod=values[1]!!,
+        bollingerPeriod=values[2]!!,rsiPeriod=values[3]!!,macdFast=values[4]!!,macdSlow=values[5]!!,
+        macdSignal=values[6]!!,atrPeriod=values[7]!!,bollingerStdDev=deviation.toDouble())
+    fun restore(value: IndicatorSettings) {
+        settings=value
+        periods=listOf(value.smaPeriod,value.emaPeriod,value.bollingerPeriod,value.rsiPeriod,
+            value.macdFast,value.macdSlow,value.macdSignal,value.atrPeriod).map { it.toString() }
+        deviation=value.bollingerStdDev.toString()
+    }
+
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -101,7 +119,7 @@ fun ChartIndicatorsDialog(
                 IndicatorToggleRow(
                     title = "مؤشر الماكد (MACD)",
                     enabled = settings.isMacdEnabled,
-                    paramText = "السريع: 12 • البطيء: 26 • الإشارة: 9",
+                    paramText = "السريع: ${periods[4]} • البطيء: ${periods[5]} • الإشارة: ${periods[6]}",
                     onToggle = { settings = settings.copy(isMacdEnabled = !settings.isMacdEnabled) }
                 )
 
@@ -112,11 +130,26 @@ fun ChartIndicatorsDialog(
                     onToggle = { settings = settings.copy(isAtrEnabled = !settings.isAtrEnabled) }
                 )
 
+                HorizontalDivider()
+                Text("فترات المؤشرات",fontWeight=FontWeight.Bold)
+                listOf("SMA","EMA","Bollinger","RSI","MACD سريع","MACD بطيء","MACD إشارة","ATR").forEachIndexed { index,label ->
+                    OutlinedTextField(periods[index],{ value -> periods=periods.toMutableList().also { it[index]=value } },
+                        label={Text(label)},singleLine=true,isError=values[index]?.let { it in 2..500 } != true,
+                        keyboardOptions=androidx.compose.foundation.text.KeyboardOptions(keyboardType=androidx.compose.ui.text.input.KeyboardType.Number))
+                }
+                OutlinedTextField(deviation,{deviation=it},label={Text("انحراف بولينجر")},singleLine=true)
+                if(!valid) Text("الفترات من 2 إلى 500؛ سريع MACD أقل من البطيء؛ الانحراف من 0.1 إلى 10.",color=MaterialTheme.colorScheme.error)
+                Row {
+                    TextButton(onClick={restore(IndicatorSettings(isEmaEnabled=false))}) { Text("إعادة الضبط") }
+                    TextButton(enabled=valid,onClick={ChartWorkspaceSettings.save(prefs,"indicator_template",applyPeriods())}) { Text("حفظ قالب") }
+                    TextButton(onClick={restore(ChartWorkspaceSettings.load(prefs,"indicator_template"))}) { Text("استعادة قالب") }
+                }
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Button(
+                    enabled = valid,
                     onClick = {
-                        onSaveSettings(settings)
+                        onSaveSettings(applyPeriods())
                         onDismiss()
                     },
                     modifier = Modifier.fillMaxWidth(),
