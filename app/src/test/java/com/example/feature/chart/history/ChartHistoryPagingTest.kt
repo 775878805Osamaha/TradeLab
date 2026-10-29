@@ -2,6 +2,7 @@ package com.example.feature.chart.history
 
 import com.example.core.market.HistoricalCandleBoundary
 import com.example.core.market.MarketDataRequestException
+import com.example.core.market.ChartHistoryPublicationGapException
 import com.example.core.model.Candle
 import com.example.core.model.Timeframe
 import com.example.feature.chart.model.ChartViewport
@@ -16,6 +17,64 @@ class ChartHistoryPagingTest {
         symbol = "XAUUSD", timeframe = tf, openTime = at, closeTime = at + tf.minutes * 60_000L,
         open = 100.0, high = 102.0, low = 99.0, close = close, volume = 1.0,
         source = "TEST_FIXTURE")
+
+    @Test fun aVerifiedPublicationBoundaryLoadsOnlyFullyPublishedOlderBars() = runBlocking {
+        val tf=Timeframe.M3;val interval=tf.minutes*60_000L
+        val oldest=20_000*interval
+        val publishedUntil=oldest-7*86_400_000L+50_000L
+        val before=HistoricalCandleBoundary.currentOpen(publishedUntil,interval)
+        var requests=0
+        val page=ChartHistoryPaging.before("XAUUSD",tf,oldest) { _,to ->
+            if(++requests==1) throw ChartHistoryPublicationGapException(publishedUntil)
+            assertEquals(before-interval,to)
+            listOf(bar(tf,to))
+        }
+        assertEquals(2,requests)
+        assertEquals(1,page.size)
+        assertTrue(page.single().closeTime<=publishedUntil)
+        assertTrue(page.single().openTime<oldest-4*86_400_000L)
+    }
+
+    @Test fun invalidOrRepeatedPublicationRedirectsCannotLoopOrMoveForwards() = runBlocking {
+        val oldest=20_000*60_000L
+        for(boundary in listOf(-1L,0L,oldest,oldest+60_000L)) {
+            val failure=ChartHistoryPublicationGapException(boundary);var requests=0
+            try {
+                ChartHistoryPaging.before("XAUUSD",Timeframe.M1,oldest) { _,_ -> requests++;throw failure }
+                fail()
+            } catch(actual: ChartHistoryPublicationGapException) { assertSame(failure,actual) }
+            assertEquals(1,requests)
+        }
+        var requests=0
+        try {
+            ChartHistoryPaging.before("XAUUSD",Timeframe.M1,oldest) { _,to ->
+                requests++;throw ChartHistoryPublicationGapException(to-600_000L)
+            }
+            fail()
+        } catch(_: ChartHistoryPublicationGapException) { assertEquals(3,requests) }
+    }
+
+    @Test fun aPublicationRedirectNeverMasksQuotaCancellationOrMalformedPrices() = runBlocking {
+        for(failure in listOf(MarketDataRequestException("HTTP 429"),CancellationException("stop"))) {
+            var requests=0
+            try {
+                ChartHistoryPaging.before("XAUUSD",Timeframe.M1,20_000*60_000L) { _,_ ->
+                    if(++requests==1) throw ChartHistoryPublicationGapException(10_000*60_000L)
+                    throw failure
+                }
+                fail()
+            } catch(actual: Exception) { assertSame(failure,actual) }
+            assertEquals(2,requests)
+        }
+        var requests=0
+        try {
+            ChartHistoryPaging.before("XAUUSD",Timeframe.M1,20_000*60_000L) { _,to ->
+                if(++requests==1) throw ChartHistoryPublicationGapException(10_000*60_000L)
+                listOf(bar(Timeframe.M1,to).copy(low=Double.NaN))
+            }
+            fail()
+        } catch(_: IllegalArgumentException) { assertEquals(2,requests) }
+    }
 
     @Test fun timestampPagingPasses100000BarsAndLiveUpdatesRetainThemForEveryTimeframe() = runBlocking {
         for (tf in Timeframe.entries) {

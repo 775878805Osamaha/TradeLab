@@ -139,7 +139,14 @@ class HistDataChartHistoryProviderTest {
         assertNull(provider.cached("XAUUSD",Timeframe.M1,at,at+60_000L))
         // Returning the one stored row would falsely certify the unpublished tail.
         try { provider.fetch("XAUUSD",Timeframe.M1,at,at+60_000L);fail("Publication lag is not an empty/complete window") }
-        catch(error: MarketDataRequestException) { assertTrue(error.message!!.contains("تأخر نشر")) }
+        catch(error: MarketDataRequestException) {
+            assertTrue(error.message!!.contains("تأخر نشر"))
+            assertTrue(error is ChartHistoryPublicationGapException)
+            assertEquals(at+60_000L,(error as ChartHistoryPublicationGapException).publishedUntil)
+        }
+        // Reading the available prefix must retain the notice about the missing tail.
+        assertEquals(1,provider.cached("XAUUSD",Timeframe.M1,at,at)!!.size)
+        assertTrue(provider.warning("XAUUSD")!!.contains("2026-01-06"))
     }
 
     @Test fun aPrefixCachedBeforeMonthEndIsNotPromotedToCompleteWhenTheMonthChanges() = runBlocking {

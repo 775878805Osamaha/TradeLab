@@ -15,4 +15,4 @@ object VerifiedMarketQuote {
     }
 }
 
-class MarketDataRequestException(message: String, cause: Throwable? = null) : java.io.IOException(message, cause)
+open class MarketDataRequestException(message: String, cause: Throwable? = null) : java.io.IOException(message, cause)
