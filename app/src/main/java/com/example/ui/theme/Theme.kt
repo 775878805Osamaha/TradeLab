@@ -5,6 +5,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
@@ -45,7 +46,18 @@ fun TradeLabTheme(
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     val light = mode == "light" || (mode == "system" && !isSystemInDarkTheme())
-    SideEffect { AppPalette.light = light }
+    val view = LocalView.current
+    SideEffect {
+        AppPalette.light = light
+        var host = view.context
+        while(host is android.content.ContextWrapper && host !is android.app.Activity) host = host.baseContext
+        (host as? android.app.Activity)?.window?.let { window ->
+            androidx.core.view.WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = light
+                isAppearanceLightNavigationBars = light
+            }
+        }
+    }
     val scheme = if (light) lightColorScheme(
         primary = TradingAccent, onPrimary = Color.White,
         background = Color(0xFFF4F6FA), onBackground = Color(0xFF192231),
