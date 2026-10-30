@@ -99,6 +99,11 @@ fun CandlestickChart(
     showGrid: Boolean = true,
     showWicks: Boolean = true,
     hollowUp: Boolean = false,
+    lineColor: Color = TradingAccentLight,
+    customGridColor: Color? = null,
+    showLastPrice: Boolean = true,
+    showSourceTime: Boolean = true,
+    axisTextScale: Float = 1f,
     isLoadingOlderHistory: Boolean = false
 ) {
     if (candles.isEmpty()) {
@@ -594,7 +599,10 @@ fun CandlestickChart(
 
             val lightCanvas = chartBackground.luminance() > 0.5f
             val axisColor = if(lightCanvas) Color(0xFF526176) else Color(0xFF9CA3AF)
-            val gridColor = if(lightCanvas) Color(0xFFCBD2DF) else Color(0xFF2A2E39)
+            val gridColor = customGridColor ?: if(lightCanvas) Color(0xFFCBD2DF) else Color(0xFF2A2E39)
+            val axisScale = axisTextScale.takeIf { it.isFinite() }?.coerceIn(.8f, 1.4f) ?: 1f
+            priceAxisPaint.textSize = 23f * axisScale
+            timeAxisPaint.textSize = 21f * axisScale
             priceAxisPaint.color = axisColor.toArgb()
             timeAxisPaint.color = axisColor.toArgb()
             drawRect(chartBackground)
@@ -639,7 +647,7 @@ fun CandlestickChart(
                     val y = transform.priceToY(candle.close)
                     if (i == 0) linePath.moveTo(x, y) else linePath.lineTo(x, y)
                 }
-                drawPath(linePath, color = TradingAccentLight, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f))
+                drawPath(linePath, color = lineColor, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f))
             } else displayedCandles.forEachIndexed { i, c ->
                 val x = transform.candleIndexToX(i)
                 val openY = transform.priceToY(c.open)
@@ -760,11 +768,12 @@ fun CandlestickChart(
             )
 
             // 5. Draw Trading Overlays (Positions, Orders, Historical Trades, Price & Spread)
-            ChartOverlays.drawPriceAndSpread(
+            if(showLastPrice) ChartOverlays.drawPriceAndSpread(
                 this, transform, latestTick,
                 showHistoricalLastPrice = endIndex == candles.size,
                 priceAxisWidth = rightAxisWidth,
-                referenceLayout = referenceLayout
+                referenceLayout = referenceLayout,
+                showSourceTime = showSourceTime
             )
             ChartOverlays.drawOpenPositions(this, transform, openPositions)
             ChartOverlays.drawPendingOrders(this, transform, pendingOrders)

@@ -17,4 +17,10 @@
     <string name="drawing_color">لون الرسم</string>
     <string name="custom_color_hex">لون مخصص HEX مثل 26A69A</string>
     <string name="appearance_apply">تطبيق</string>
+    <string name="chart_line_color">لون الرسم الخطي</string>
+    <string name="chart_grid_color">لون الشبكة</string>
+    <string name="chart_grid_auto">لون الشبكة حسب الخلفية</string>
+    <string name="chart_last_price">إظهار السعر الأخير</string>
+    <string name="chart_source_time">إظهار وقت بيانات السعر</string>
+    <string name="chart_axis_size">حجم نص محاور السعر والوقت</string>
 </resources>

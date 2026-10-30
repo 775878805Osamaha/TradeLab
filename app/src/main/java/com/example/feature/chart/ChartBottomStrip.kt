@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.model.Timeframe
+import com.example.ui.theme.*
 
 /** Reference pixels: 864 x 1536. Bottom chart strip is 96px (44dp at 400dp width). */
 @Composable
@@ -37,7 +38,7 @@ internal fun ChartBottomStrip(
     val context = LocalContext.current
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Row(
-            Modifier.fillMaxWidth().height(44.dp).background(Color(0xFF000D16))
+            Modifier.fillMaxWidth().height(44.dp).background(TradingChartBackground)
                 .testTag("chart_bottom_strip"),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -49,27 +50,27 @@ internal fun ChartBottomStrip(
                 }
                 context.startActivity(Intent.createChooser(send, "مشاركة الشارت"))
             }, modifier = Modifier.size(36.dp).testTag("chart_share")) {
-                Icon(Icons.Default.IosShare, "مشاركة", tint = Color.White, modifier = Modifier.size(23.dp))
+                Icon(Icons.Default.IosShare, "مشاركة", tint = TradingTextPrimary, modifier = Modifier.size(23.dp))
             }
             IconButton(onClick = onMore, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.MoreHoriz, "المزيد", tint = Color.White)
+                Icon(Icons.Default.MoreHoriz, "المزيد", tint = TradingTextPrimary)
             }
             IconButton(onClick = onIndicators, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.MultilineChart, "المؤشرات", tint = Color.White)
+                Icon(Icons.Default.MultilineChart, "المؤشرات", tint = TradingTextPrimary)
             }
             IconButton(onClick = onDrawing, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Edit, "أدوات الرسم", tint = Color.White)
+                Icon(Icons.Default.Edit, "أدوات الرسم", tint = TradingTextPrimary)
             }
             IconButton(onClick = onReplay, modifier = Modifier.size(32.dp).testTag("chart_bottom_replay")) {
                 Icon(Icons.Default.ReplayCircleFilled, if (replayActive) "إنهاء الإعادة" else "إعادة العرض داخل الشارت",
-                    tint = if (replayActive) Color(0xFF2962FF) else Color.White,
+                    tint = if (replayActive) Color(0xFF2962FF) else TradingTextPrimary,
                     modifier = Modifier.size(21.dp))
             }
             Box {
                 Row(Modifier.clickable { expanded = true }.height(44.dp).testTag("chart_bottom_timeframe"),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text(timeframe.arabicLabel(), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Icon(Icons.Default.KeyboardArrowDown, "الفاصل الزمني", tint = Color.White, modifier = Modifier.size(16.dp))
+                    Text(timeframe.arabicLabel(), color = TradingTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.KeyboardArrowDown, "الفاصل الزمني", tint = TradingTextPrimary, modifier = Modifier.size(16.dp))
                 }
                 DropdownMenu(expanded, { expanded = false }) {
                     Timeframe.entries.forEach { tf ->
@@ -80,9 +81,9 @@ internal fun ChartBottomStrip(
             Column(Modifier.clickable(onClick = onSymbol).height(44.dp).padding(horizontal = 4.dp)
                 .testTag("chart_bottom_symbol"), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.End) {
-                Text(symbol, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
+                Text(symbol, color = TradingTextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
                 Text(if (symbol == "XAUUSD") "GOLD" else symbol.removeSuffix("USDT").removeSuffix("USD"),
-                    color = Color(0xFF526075), fontSize = 11.sp, maxLines = 1)
+                    color = TradingTextSecondary, fontSize = 11.sp, maxLines = 1)
             }
         }
     }

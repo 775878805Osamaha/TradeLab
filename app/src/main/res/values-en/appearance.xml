@@ -17,4 +17,10 @@
     <string name="drawing_color">Drawing color</string>
     <string name="custom_color_hex">Custom HEX color, e.g. 26A69A</string>
     <string name="appearance_apply">Apply</string>
+    <string name="chart_line_color">Line chart color</string>
+    <string name="chart_grid_color">Grid color</string>
+    <string name="chart_grid_auto">Automatic grid color</string>
+    <string name="chart_last_price">Show last price</string>
+    <string name="chart_source_time">Show source timestamp</string>
+    <string name="chart_axis_size">Price and time axis text size</string>
 </resources>

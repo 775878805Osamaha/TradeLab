@@ -1,6 +1,8 @@
 package com.example
 
 import androidx.compose.ui.test.*
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
@@ -30,9 +32,14 @@ class ChartAppearanceInteractionTest {
             open()
             compose.onNodeWithText(text(R.string.appearance_light)).performClick()
             compose.waitUntil(5000) { com.example.ui.theme.AppPalette.light }
-            compose.onAllNodes(hasSetTextAction()).onFirst().performScrollTo().performTextReplacement("112233")
+            compose.onAllNodes(hasSetTextAction()).onFirst().performScrollTo().performTextReplacement("-12345")
+            compose.onAllNodesWithText(text(R.string.appearance_apply)).onFirst().assertIsNotEnabled()
+            compose.onAllNodes(hasSetTextAction()).onFirst().performTextReplacement("112233")
             compose.onAllNodesWithText(text(R.string.appearance_apply)).onFirst().performClick()
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
             compose.onNodeWithText(text(R.string.appearance_save)).performClick()
+            compose.waitForIdle()
+            assertTrue(compose.onNodeWithTag("bottom_nav_bar").captureToImage().toPixelMap()[0,0].luminance() > .7f)
             compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
             capture("appearance-light")
             compose.activityRule.scenario.recreate()
@@ -43,6 +50,8 @@ class ChartAppearanceInteractionTest {
             compose.onNodeWithText(text(R.string.appearance_dark)).performClick()
             compose.waitUntil(5000) { !com.example.ui.theme.AppPalette.light }
             compose.onNodeWithText(text(R.string.appearance_save)).performClick()
+            compose.waitForIdle()
+            assertTrue(compose.onNodeWithTag("bottom_nav_bar").captureToImage().toPixelMap()[0,0].luminance() < .1f)
             capture("appearance-dark")
             assertEquals("dark", compose.activity.getSharedPreferences("appearance",0).getString("mode",null))
         } finally {

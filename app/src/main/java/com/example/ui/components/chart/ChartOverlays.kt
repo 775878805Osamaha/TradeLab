@@ -49,7 +49,8 @@ object ChartOverlays {
         latestTick: Tick?,
         showHistoricalLastPrice: Boolean = true,
         priceAxisWidth: Float = 122f,
-        referenceLayout: Boolean = false
+        referenceLayout: Boolean = false,
+        showSourceTime: Boolean = true
     ) {
         // Only verified ticks provide executable bid/ask; historical candles
         // are displayed as a chart price, never masquerading as live quotes.
@@ -98,7 +99,7 @@ object ChartOverlays {
                 if (referenceLayout) {
                     // Actual source timestamp, never a fabricated live countdown for historical OHLC.
                     val sourceTime = latestTick?.timestamp ?: transform.visibleCandles.lastOrNull()?.openTime
-                    if (sourceTime != null) {
+                    if (showSourceTime && sourceTime != null) {
                         textPaint.alpha = 170
                         drawText(badgeTime(sourceTime), transform.chartWidth + 5f,
                             bottom - textPaint.textSize * .25f, textPaint)

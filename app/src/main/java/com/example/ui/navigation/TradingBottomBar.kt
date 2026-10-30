@@ -1,5 +1,6 @@
 package com.example.ui.navigation
 
+import com.example.ui.theme.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -21,17 +22,17 @@ import androidx.compose.ui.unit.sp
 fun TradingBottomBar(currentRoute: String?, onNavigate: (Screen) -> Unit) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val gestureNavigation = WindowInsets.navigationBars.getBottom(density) <= with(density) { 32.dp.roundToPx() }
-    Box(Modifier.fillMaxWidth().background(Color(0xFF000D16))
+    Box(Modifier.fillMaxWidth().background(TradingChartBackground)
         .then(if (currentRoute == Screen.Chart.route && gestureNavigation) Modifier.padding(bottom = 12.dp)
             else Modifier.navigationBarsPadding())
         .padding(horizontal = 7.dp, vertical = 6.dp).testTag("bottom_nav_bar")) {
-        Surface(color = Color(0xFF06131F), shape = RoundedCornerShape(13.dp),
-            border = BorderStroke(1.dp, Color(0xFF1B2B3C))) {
+        Surface(color = if (AppPalette.light) TradingCard else Color(0xFF06131F), shape = RoundedCornerShape(13.dp),
+            border = BorderStroke(1.dp, TradingBorder)) {
             Row(Modifier.fillMaxWidth().height(58.dp)) {
                 // Parent is RTL: first destination is physically on the right.
                 Screen.bottomNavItems.forEach { screen ->
                     val selected = currentRoute == screen.route
-                    val color = if (selected) Color(0xFF2962FF) else Color(0xFF9097A3)
+                    val color = if (selected) Color(0xFF2962FF) else TradingTextSecondary
                     val label = when (screen) {
                         Screen.Market -> "السوق"
                         Screen.Chart -> "الشارت"

@@ -19,11 +19,17 @@ import com.example.ui.theme.AppearanceSettings
 internal data class ChartAppearance(
     val up: Int = 0xFF00B7AA.toInt(), val down: Int = 0xFFFF3D48.toInt(),
     val grid: Boolean = true, val wicks: Boolean = true, val hollow: Boolean = false,
-    val background: Int? = null
+    val background: Int? = null,
+    val line: Int = 0xFF5C85FF.toInt(), val gridColor: Int? = null,
+    val lastPrice: Boolean = true, val sourceTime: Boolean = true,
+    val axisScale: Float = 1f
 ) {
     fun save(prefs: SharedPreferences) {
         prefs.edit().putInt("up", up).putInt("down", down).putBoolean("grid", grid)
-            .putBoolean("wicks", wicks).putBoolean("hollow", hollow).apply {
+            .putBoolean("wicks", wicks).putBoolean("hollow", hollow)
+            .putInt("line", line).putBoolean("last_price", lastPrice).putBoolean("source_time", sourceTime)
+            .putFloat("axis_scale", axisScale.takeIf { it.isFinite() }?.coerceIn(.8f, 1.4f) ?: 1f).apply {
+                if (gridColor == null) remove("grid_color") else putInt("grid_color", gridColor)
                 if (background == null) remove("background") else putInt("background", background)
             }.apply()
     }
@@ -31,7 +37,11 @@ internal data class ChartAppearance(
         fun load(p: SharedPreferences) = ChartAppearance(p.getInt("up", 0xFF00B7AA.toInt()),
             p.getInt("down", 0xFFFF3D48.toInt()), p.getBoolean("grid", true),
             p.getBoolean("wicks", true), p.getBoolean("hollow", false),
-            if(p.contains("background")) p.getInt("background", 0) else null)
+            if(p.contains("background")) p.getInt("background", 0) else null,
+            p.getInt("line", 0xFF5C85FF.toInt()),
+            if(p.contains("grid_color")) p.getInt("grid_color", 0) else null,
+            p.getBoolean("last_price", true), p.getBoolean("source_time", true),
+            p.getFloat("axis_scale", 1f).takeIf { it.isFinite() }?.coerceIn(.8f,1.4f) ?: 1f)
     }
 }
 
@@ -45,6 +55,13 @@ internal fun ChartAppearanceDialog(value: ChartAppearance, onSave: (ChartAppeara
             ChartColorChoices(stringResource(R.string.candle_down), draft.down) { draft = draft.copy(down = it) }
             ChartColorChoices(stringResource(R.string.chart_background), draft.background) { draft = draft.copy(background = it) }
             TextButton(onClick = { draft = draft.copy(background = null) }) { Text(stringResource(R.string.follow_app_theme)) }
+            ChartColorChoices(stringResource(R.string.chart_line_color), draft.line) { draft = draft.copy(line = it) }
+            ChartColorChoices(stringResource(R.string.chart_grid_color), draft.gridColor) { draft = draft.copy(gridColor = it) }
+            TextButton(onClick = { draft = draft.copy(gridColor = null) }) { Text(stringResource(R.string.chart_grid_auto)) }
+            AppearanceToggle(R.string.chart_last_price, draft.lastPrice) { draft = draft.copy(lastPrice = it) }
+            AppearanceToggle(R.string.chart_source_time, draft.sourceTime) { draft = draft.copy(sourceTime = it) }
+            Text(stringResource(R.string.chart_axis_size))
+            Slider(draft.axisScale, { draft = draft.copy(axisScale = it) }, valueRange = .8f..1.4f, steps = 5)
             AppearanceToggle(R.string.chart_grid, draft.grid) { draft = draft.copy(grid = it) }
             AppearanceToggle(R.string.candle_wicks, draft.wicks) { draft = draft.copy(wicks = it) }
             AppearanceToggle(R.string.candle_hollow, draft.hollow) { draft = draft.copy(hollow = it) }
@@ -64,7 +81,7 @@ private fun AppearanceToggle(label: Int, checked: Boolean, onChange: (Boolean) -
 @Composable
 internal fun ChartColorChoices(label: String, selected: Int?, onChange: (Int) -> Unit) {
     var custom by remember(selected) { mutableStateOf(selected?.let { "%06X".format(it and 0xFFFFFF) } ?: "") }
-    val parsed = custom.removePrefix("#").takeIf { it.length == 6 }?.toLongOrNull(16)
+    val parsed = custom.removePrefix("#").takeIf { it.matches(Regex("[0-9a-fA-F]{6}")) }?.toLongOrNull(16)
     Text(label)
     OutlinedTextField(custom, { custom = it.take(7) }, singleLine = true,
         label = { Text(stringResource(R.string.custom_color_hex)) },

@@ -1091,6 +1091,11 @@ fun ChartScreen(
                     showGrid = chartAppearance.grid,
                     showWicks = chartAppearance.wicks,
                     hollowUp = chartAppearance.hollow,
+                    lineColor = Color(chartAppearance.line),
+                    customGridColor = chartAppearance.gridColor?.let { Color(it) },
+                    showLastPrice = chartAppearance.lastPrice,
+                    showSourceTime = chartAppearance.sourceTime,
+                    axisTextScale = chartAppearance.axisScale,
                     isLoadingOlderHistory = uiState.isLoadingOlderHistory
                 )
                 }
