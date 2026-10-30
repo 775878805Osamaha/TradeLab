@@ -30,12 +30,16 @@ class ChartAppearanceInteractionTest {
             open()
             compose.onNodeWithText(text(R.string.appearance_light)).performClick()
             compose.waitUntil(5000) { com.example.ui.theme.AppPalette.light }
+            compose.onAllNodes(hasSetTextAction()).onFirst().performScrollTo().performTextReplacement("112233")
+            compose.onAllNodesWithText(text(R.string.appearance_apply)).onFirst().performClick()
             compose.onNodeWithText(text(R.string.appearance_save)).performClick()
             compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
             capture("appearance-light")
             compose.activityRule.scenario.recreate()
             compose.waitUntil(5000) { com.example.ui.theme.AppPalette.light }
+            assertEquals(0xFF112233.toInt(), compose.activity.getSharedPreferences("chart_appearance",0).getInt("up",0))
             open()
+            compose.onAllNodes(hasSetTextAction()).onFirst().assertTextContains("112233")
             compose.onNodeWithText(text(R.string.appearance_dark)).performClick()
             compose.waitUntil(5000) { !com.example.ui.theme.AppPalette.light }
             compose.onNodeWithText(text(R.string.appearance_save)).performClick()
@@ -43,6 +47,7 @@ class ChartAppearanceInteractionTest {
             assertEquals("dark", compose.activity.getSharedPreferences("appearance",0).getString("mode",null))
         } finally {
             compose.activity.getSharedPreferences("appearance",0).edit().putString("mode","dark").commit()
+            compose.activity.getSharedPreferences("chart_appearance",0).edit().clear().commit()
         }
     }
 }
