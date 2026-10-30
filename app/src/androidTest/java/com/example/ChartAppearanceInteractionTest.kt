@@ -49,6 +49,10 @@ class ChartAppearanceInteractionTest {
                 assertTrue(compose.onNodeWithTag(screen).captureToImage().toPixelMap()[0,0].luminance() > .7f)
                 capture("appearance-light-$route")
             }
+            compose.onNodeWithTag("account_settings").performClick()
+            compose.onNodeWithTag("settings_screen").assertIsDisplayed()
+            compose.onNodeWithText(text(R.string.appearance_title)).assertIsDisplayed()
+            androidx.test.espresso.Espresso.pressBack()
             compose.onNodeWithTag("nav_item_chart").performClick()
             compose.activityRule.scenario.recreate()
             compose.waitUntil(5000) { com.example.ui.theme.AppPalette.light }

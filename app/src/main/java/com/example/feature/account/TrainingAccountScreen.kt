@@ -10,6 +10,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.res.stringResource
+import com.example.R
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -45,7 +49,7 @@ private fun AccountMetric(label: String, value: String, color: Color = TrainingT
 }
 
 @Composable
-fun TrainingAccountScreen(viewModel: ReplayViewModel, onChart: () -> Unit) {
+fun TrainingAccountScreen(viewModel: ReplayViewModel, onChart: () -> Unit, onSettings: () -> Unit = {}) {
     val state by viewModel.uiState.collectAsState()
     var amount by rememberSaveable { mutableStateOf("100") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -60,8 +64,13 @@ fun TrainingAccountScreen(viewModel: ReplayViewModel, onChart: () -> Unit) {
 
     Column(Modifier.fillMaxSize().background(TradingBackground).verticalScroll(rememberScrollState()).padding(12.dp).testTag("account_screen"),
         verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("حساب التدريب", color = TrainingText, style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(vertical = 8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("حساب التدريب", color = TrainingText, style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.weight(1f).padding(vertical = 8.dp))
+            IconButton(onClick = onSettings, modifier = Modifier.testTag("account_settings")) {
+                Icon(Icons.Default.Settings, stringResource(R.string.title_settings), tint = TrainingText)
+            }
+        }
         Text("رصيد واحد • تداول على إعادة الشارت • نتائج محفوظة", color = TrainingMuted, fontSize = 12.sp)
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = TrainingCard), border = BorderStroke(1.dp, TrainingBorder)) {

@@ -40,7 +40,7 @@ fun SettingsScreen(
         modifier = modifier.testTag("settings_screen"),
         topBar = {
             TopAppBar(
-                title = { Text("لوحة جودة واتصال بيانات السوق", fontSize = 17.sp, fontWeight = FontWeight.Bold) },
+                title = { Text(androidx.compose.ui.res.stringResource(com.example.R.string.title_settings), fontSize = 17.sp, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
