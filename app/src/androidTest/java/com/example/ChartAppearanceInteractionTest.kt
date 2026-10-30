@@ -53,6 +53,8 @@ class ChartAppearanceInteractionTest {
             compose.onNodeWithTag("settings_screen").assertIsDisplayed()
             compose.onNodeWithText(text(R.string.appearance_title)).assertIsDisplayed()
             androidx.test.espresso.Espresso.pressBack()
+            compose.waitUntil(5000) { compose.onAllNodesWithTag("account_screen").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("settings_screen").assertDoesNotExist()
             compose.onNodeWithTag("nav_item_chart").performClick()
             compose.activityRule.scenario.recreate()
             compose.waitUntil(5000) { com.example.ui.theme.AppPalette.light }
