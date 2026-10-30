@@ -148,13 +148,13 @@ fun LegacyResultsScreen(
 }
 
 
-private val ResultsCardBackground = Color(0xFF131A24)
-private val ResultsCardBorder = Color(0xFF232C3A)
+private val ResultsCardBackground get() = if (AppPalette.light) TradingCard else Color(0xFF131A24)
+private val ResultsCardBorder get() = if (AppPalette.light) TradingBorder else Color(0xFF232C3A)
 private val ResultsPrimary = Color(0xFF2962FF)
 private val ResultsProfit = Color(0xFF26D9B0)
 private val ResultsLoss = Color(0xFFEF5350)
-private val ResultsText = Color(0xFFE8ECF4)
-private val ResultsMuted = Color(0xFF8F98A8)
+private val ResultsText get() = if (AppPalette.light) TradingTextPrimary else Color(0xFFE8ECF4)
+private val ResultsMuted get() = if (AppPalette.light) TradingTextSecondary else Color(0xFF8F98A8)
 
 private fun money(value: Double, signed: Boolean = false): String {
     if (!value.isFinite()) return "—"
@@ -227,7 +227,7 @@ private fun ResultsOverviewContent(
     val dateFormat = remember { SimpleDateFormat("dd/MM HH:mm", Locale.US) }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Color(0xFF0B0E14)),
+        modifier = Modifier.fillMaxSize().background(TradingBackground),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 28.dp)
     ) {
@@ -290,7 +290,7 @@ private fun ResultsOverviewContent(
                         modifier = Modifier.align(Alignment.CenterHorizontally))
                     Surface(
                         modifier = Modifier.clickable { viewModel.togglePercentageMode() }.testTag("results_percentage_toggle"),
-                        color = Color(0xFF101D2D), shape = RoundedCornerShape(8.dp),
+                        color = TradingElevated, shape = RoundedCornerShape(8.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, ResultsCardBorder)
                     ) {
                         Text(if (uiState.isPercentageMode) "عرض القيمة ($)" else "عرض النسبة (%)",

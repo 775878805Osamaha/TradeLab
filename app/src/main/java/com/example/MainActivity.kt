@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
                         ) {
                             // Primary Tab: Account
                             composable(Screen.Account.route) {
-                                com.example.feature.account.TrainingAccountScreen(replayViewModel,openReplayOnChart)
+                                com.example.feature.account.TrainingAccountScreen(replayViewModel,openReplayOnChart, onSettings = { navController.navigate(Screen.Settings.route) })
                             }
 
                             // Primary Tab: Market

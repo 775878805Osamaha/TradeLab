@@ -1,5 +1,6 @@
 package com.example.feature.chart
 
+import com.example.ui.theme.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -32,12 +33,12 @@ internal fun ChartHeaderControls(symbol: String, replayActive: Boolean,
             HeaderAction(Icons.Default.Fullscreen, "عرض التفاصيل", false, onDetails)
             Box {
                 Surface(Modifier.size(width = 50.dp, height = 30.dp).clickable { quoteInfoExpanded = true },
-                    shape = RoundedCornerShape(4.dp), color = Color(0xFF000D16),
-                    border = BorderStroke(.7.dp, Color(0xFF243544))) {
+                    shape = RoundedCornerShape(4.dp), color = TradingChartBackground,
+                    border = BorderStroke(.7.dp, TradingBorder)) {
                     Row(Modifier.padding(horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(quote, color = Color(0xFFD1D4DC), fontSize = 10.sp)
-                        Icon(Icons.Default.KeyboardArrowDown, "عملة التسعير", tint = Color(0xFF9598A1), modifier = Modifier.size(13.dp))
+                        Text(quote, color = TradingTextPrimary, fontSize = 10.sp)
+                        Icon(Icons.Default.KeyboardArrowDown, "عملة التسعير", tint = TradingTextSecondary, modifier = Modifier.size(13.dp))
                     }
                 }
                 DropdownMenu(quoteInfoExpanded, { quoteInfoExpanded = false }) {
@@ -53,9 +54,9 @@ internal fun ChartHeaderControls(symbol: String, replayActive: Boolean,
 @Composable
 private fun HeaderAction(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
     Surface(Modifier.size(28.dp).clickable(onClick = onClick), shape = RoundedCornerShape(4.dp),
-        color = Color(0xFF000D16), border = BorderStroke(.7.dp, if (active) Color(0xFF2962FF) else Color(0xFF243544))) {
+        color = TradingChartBackground, border = BorderStroke(.7.dp, if (active) Color(0xFF2962FF) else TradingBorder)) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(icon, label, tint = if (active) Color(0xFF2962FF) else Color(0xFFD1D4DC), modifier = Modifier.size(18.dp))
+            Icon(icon, label, tint = if (active) Color(0xFF2962FF) else TradingTextPrimary, modifier = Modifier.size(18.dp))
         }
     }
 }

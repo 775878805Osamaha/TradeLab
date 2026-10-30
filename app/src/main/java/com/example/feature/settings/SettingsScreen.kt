@@ -32,6 +32,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    androidx.activity.compose.BackHandler(onBack = onBack)
     val diag by provider.diagnosticInfo.collectAsState()
     val scope = rememberCoroutineScope()
     val sdf = remember { SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
@@ -40,7 +41,7 @@ fun SettingsScreen(
         modifier = modifier.testTag("settings_screen"),
         topBar = {
             TopAppBar(
-                title = { Text("لوحة جودة واتصال بيانات السوق", fontSize = 17.sp, fontWeight = FontWeight.Bold) },
+                title = { Text(androidx.compose.ui.res.stringResource(com.example.R.string.title_settings), fontSize = 17.sp, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
@@ -58,6 +59,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
+            item { AppearanceSettings() }
             // Live Connectivity & Quality Diagnostic Card (Section 36)
             item {
                 Card(

@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -25,10 +26,7 @@ internal fun DrawingPropertiesDialog(drawing: ChartDrawing, onDismiss: () -> Uni
     val valid = prices.all { it.toDoubleOrNull()?.let { p -> p.isFinite() && p > 0 } == true }
     AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("drawing_properties"), title = { Text(drawing.tool.catalogLabel()) },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("لون الرسم")
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { listOf(Color(0xFF2962FF),Color(0xFF00B7AA),Color(0xFFFF3D48),Color(0xFFF5A623),Color.White).forEach { c ->
-                Box(Modifier.size(30.dp).background(c).clickable { color = c })
-            } }
+            ChartColorChoices(androidx.compose.ui.res.stringResource(com.example.R.string.drawing_color), color.toArgb()) { color = Color(it) }
             Text("سُمك الخط: ${width.toInt()}"); Slider(width,{width=it},valueRange=1f..6f,steps=4)
             if(drawing.tool.isTextTool) OutlinedTextField(text,{text=it},label={Text("النص")})
             prices.forEachIndexed { i,value -> OutlinedTextField(value,{next -> prices=prices.toMutableList().also { it[i]=next }},label={Text("سعر النقطة ${i+1}")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal)) }

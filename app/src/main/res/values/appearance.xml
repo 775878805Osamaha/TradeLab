@@ -1,0 +1,26 @@
+<resources>
+    <string name="appearance_title">مظهر التطبيق — يُطبّق فورًا</string>
+    <string name="appearance_dark">داكن</string>
+    <string name="appearance_light">فاتح</string>
+    <string name="appearance_system">حسب الجهاز</string>
+    <string name="chart_appearance">الألوان والمظهر</string>
+    <string name="candle_up">الشموع الصاعدة</string>
+    <string name="candle_down">الشموع الهابطة</string>
+    <string name="chart_background">خلفية الشارت</string>
+    <string name="follow_app_theme">الخلفية حسب مظهر التطبيق</string>
+    <string name="chart_grid">شبكة الشارت</string>
+    <string name="candle_wicks">ظلال الشموع</string>
+    <string name="candle_hollow">شموع صاعدة مجوّفة</string>
+    <string name="appearance_reset">استعادة ألوان الشارت الافتراضية</string>
+    <string name="appearance_save">حفظ</string>
+    <string name="appearance_cancel">إلغاء</string>
+    <string name="drawing_color">لون الرسم</string>
+    <string name="custom_color_hex">لون مخصص HEX مثل 26A69A</string>
+    <string name="appearance_apply">تطبيق</string>
+    <string name="chart_line_color">لون الرسم الخطي</string>
+    <string name="chart_grid_color">لون الشبكة</string>
+    <string name="chart_grid_auto">لون الشبكة حسب الخلفية</string>
+    <string name="chart_last_price">إظهار السعر الأخير</string>
+    <string name="chart_source_time">إظهار وقت بيانات السعر</string>
+    <string name="chart_axis_size">حجم نص محاور السعر والوقت</string>
+</resources>

@@ -1,5 +1,7 @@
 package com.example.feature.results
 
+import com.example.ui.theme.*
+
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -28,14 +30,14 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.abs
 
-internal val V3Bg=Color(0xFF020D18)
-internal val V3Card=Color(0xFF061725)
-internal val V3Border=Color(0xFF193447)
+internal val V3Bg get() = if (AppPalette.light) TradingBackground else Color(0xFF020D18)
+internal val V3Card get() = if (AppPalette.light) TradingCard else Color(0xFF061725)
+internal val V3Border get() = if (AppPalette.light) TradingBorder else Color(0xFF193447)
 internal val V3Blue=Color(0xFF2962FF)
-internal val V3Profit=Color(0xFF00D5B0)
-internal val V3Loss=Color(0xFFFF4D60)
-internal val V3Text=Color(0xFFF1F5FA)
-internal val V3Muted=Color(0xFF8E9DB1)
+internal val V3Profit get() = if (AppPalette.light) Color(0xFF008575) else Color(0xFF00D5B0)
+internal val V3Loss get() = if (AppPalette.light) Color(0xFFC93046) else Color(0xFFFF4D60)
+internal val V3Text get() = if (AppPalette.light) TradingTextPrimary else Color(0xFFF1F5FA)
+internal val V3Muted get() = if (AppPalette.light) TradingTextSecondary else Color(0xFF8E9DB1)
 internal fun v3Money(v:Double,signed:Boolean=false)=if(!v.isFinite())"—" else (if(v<0)"−" else if(signed&&v>0)"+" else "")+String.format(Locale.US,"$%,.2f",abs(v))
 private fun pct(v:Double)=if(v.isFinite())String.format(Locale.US,"%.2f%%",v) else "—"
 private fun number(v:Double?)=v?.takeIf{it.isFinite()}?.let{String.format(Locale.US,"%.2f",it)}?:"—"
