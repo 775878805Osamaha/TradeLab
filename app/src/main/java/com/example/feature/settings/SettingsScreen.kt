@@ -58,6 +58,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
+            item { AppearanceSettings() }
             // Live Connectivity & Quality Diagnostic Card (Section 36)
             item {
                 Card(

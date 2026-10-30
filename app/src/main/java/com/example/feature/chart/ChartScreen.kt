@@ -110,6 +110,10 @@ fun ChartScreen(
         }
     }
     val workspacePrefs = remember(imageContext) { imageContext.getSharedPreferences("chart_workspace",0) }
+    val appearancePrefs = remember(imageContext) { imageContext.getSharedPreferences("chart_appearance", 0) }
+    var chartAppearance by remember { mutableStateOf(ChartAppearance.load(appearancePrefs)) }
+    var showAppearance by remember { mutableStateOf(false) }
+    if (showAppearance) ChartAppearanceDialog(chartAppearance, { chartAppearance = it; it.save(appearancePrefs) }, { showAppearance = false })
     LaunchedEffect(viewModel) { viewModel.updateIndicatorSettings(ChartWorkspaceSettings.load(workspacePrefs)) }
     var showSymbolSheet by remember { mutableStateOf(false) }
     var symbolSearchQuery by remember { mutableStateOf("") }
@@ -146,13 +150,15 @@ fun ChartScreen(
     var showChartExtras by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var showPriceAlert by remember { mutableStateOf(false) }
-    var hideDrawings by rememberSaveable { mutableStateOf(false) }
+    var hideDrawings by rememberSaveable { mutableStateOf(workspacePrefs.getBoolean("hide_drawings", false)) }
+    LaunchedEffect(hideDrawings) { workspacePrefs.edit().putBoolean("hide_drawings", hideDrawings).apply() }
     var chartDisplayStyle by remember { mutableStateOf(runCatching { ChartDisplayStyle.valueOf(workspacePrefs.getString("display_style","CANDLES")!!) }.getOrDefault(ChartDisplayStyle.CANDLES)) }
     LaunchedEffect(chartDisplayStyle) { workspacePrefs.edit().putString("display_style",chartDisplayStyle.name).apply() }
     var immersiveChart by remember { mutableStateOf(true) }
     var pendingAnnotation by remember { mutableStateOf<com.example.feature.chart.model.ChartDrawing?>(null) }
     var annotationText by remember { mutableStateOf("") }
-    var magnetEnabled by rememberSaveable { mutableStateOf(false) }
+    var magnetEnabled by rememberSaveable { mutableStateOf(workspacePrefs.getBoolean("magnet", false)) }
+    LaunchedEffect(magnetEnabled) { workspacePrefs.edit().putBoolean("magnet", magnetEnabled).apply() }
     var drawingToolbarExpanded by remember { mutableStateOf(false) }
     var drawingPaletteOffsetPx by rememberSaveable { mutableFloatStateOf(0f) }
     var drawingPaletteXOffsetPx by rememberSaveable { mutableFloatStateOf(0f) }
@@ -476,7 +482,8 @@ fun ChartScreen(
 
     ChartPriceAlert(uiState.selectedSymbol,uiState.latestTick,isEmbeddedReplay,showPriceAlert) { showPriceAlert=false }
     if(showChartExtras) AlertDialog(onDismissRequest={showChartExtras=false},title={Text("إعدادات الشارت")},text={
-        Column {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            TextButton(onClick={showChartExtras=false;showAppearance=true}) { Text(androidx.compose.ui.res.stringResource(com.example.R.string.chart_appearance)) }
             ChartDisplayStyle.entries.forEach { style -> TextButton(onClick={chartDisplayStyle=style}) { Text((if(chartDisplayStyle==style) "✓ " else "")+style.label) } }
             TextButton(onClick={viewModel.toggleVolume()}) { Text(if(uiState.isVolumeVisible) "إخفاء الحجم" else "إظهار الحجم") }
             TextButton(onClick={magnetEnabled=!magnetEnabled}) { Text(if(magnetEnabled) "إيقاف المغناطيس" else "تفعيل المغناطيس") }
@@ -569,7 +576,7 @@ fun ChartScreen(
 
     Scaffold(
         modifier = modifier.testTag("chart_screen"),
-        containerColor = Color(0xFF000D16),
+        containerColor = TradingChartBackground,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -1078,8 +1085,12 @@ fun ChartScreen(
                     },
                     onRequestOlderHistory = if (isEmbeddedReplay) null else ({ viewModel.loadOlderChartHistory() }),
                     referenceLayout = true,
-                    bullishColor = Color(0xFF00B7AA),
-                    bearishColor = Color(0xFFFF3D48),
+                    bullishColor = Color(chartAppearance.up),
+                    bearishColor = Color(chartAppearance.down),
+                    chartBackground = chartAppearance.background?.let { Color(it) } ?: TradingChartBackground,
+                    showGrid = chartAppearance.grid,
+                    showWicks = chartAppearance.wicks,
+                    hollowUp = chartAppearance.hollow,
                     isLoadingOlderHistory = uiState.isLoadingOlderHistory
                 )
                 }
@@ -1130,7 +1141,7 @@ fun ChartScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(Modifier.size(width = 40.dp, height = 20.dp)
-                                .clip(RoundedCornerShape(12.dp)).background(Color(0xFF15202A))
+                                .clip(RoundedCornerShape(12.dp)).background(TradingElevated)
                                 .clickable { showToolsMenu = true },
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -1169,7 +1180,7 @@ fun ChartScreen(
                     }
                     Surface(Modifier.align(AbsoluteAlignment.TopLeft).absoluteOffset(x = 52.dp, y = 26.dp)
                         .size(width = 38.dp, height = 22.dp).clickable { showIndicatorsDialog = true },
-                        shape = RoundedCornerShape(3.dp), color = Color(0xFF000D16),
+                        shape = RoundedCornerShape(3.dp), color = TradingChartBackground,
                         border = androidx.compose.foundation.BorderStroke(.7.dp, Color(0xFF243544))) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                             Icon(Icons.Default.KeyboardArrowDown, "المؤشرات النشطة", tint = TradingTextPrimary, modifier = Modifier.size(14.dp))
@@ -1335,7 +1346,7 @@ fun ChartScreen(
                                 .coerceAtLeast(48.dp.toPx()).toDp()
                         })
                         .clip(RoundedCornerShape(24.dp))
-                        .background(Color(0xE6081722))
+                        .background(TradingCard.copy(alpha = .9f))
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 2.dp, vertical = 3.dp)
                         .testTag("chart_reference_floating_tools"),

@@ -1,0 +1,20 @@
+<resources>
+    <string name="appearance_title">App theme — applies immediately</string>
+    <string name="appearance_dark">Dark</string>
+    <string name="appearance_light">Light</string>
+    <string name="appearance_system">System</string>
+    <string name="chart_appearance">Colors and appearance</string>
+    <string name="candle_up">Rising candles</string>
+    <string name="candle_down">Falling candles</string>
+    <string name="chart_background">Chart background</string>
+    <string name="follow_app_theme">Follow app background</string>
+    <string name="chart_grid">Chart grid</string>
+    <string name="candle_wicks">Candle wicks</string>
+    <string name="candle_hollow">Hollow rising candles</string>
+    <string name="appearance_reset">Reset chart appearance</string>
+    <string name="appearance_save">Save</string>
+    <string name="appearance_cancel">Cancel</string>
+    <string name="drawing_color">Drawing color</string>
+    <string name="custom_color_hex">Custom HEX color, e.g. 26A69A</string>
+    <string name="appearance_apply">Apply</string>
+</resources>
