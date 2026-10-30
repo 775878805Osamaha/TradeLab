@@ -1,5 +1,8 @@
 package com.example.feature.account
 
+import com.example.ui.theme.*
+
+import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -21,10 +24,10 @@ import androidx.compose.ui.unit.sp
 import com.example.feature.replay.ReplayViewModel
 import java.util.Locale
 
-private val TrainingCard = Color(0xFF131A24)
-private val TrainingBorder = Color(0xFF232C3A)
-private val TrainingMuted = Color(0xFF8F98A8)
-private val TrainingText = Color(0xFFE8ECF4)
+private val TrainingCard get() = if (AppPalette.light) TradingCard else Color(0xFF131A24)
+private val TrainingBorder get() = if (AppPalette.light) TradingBorder else Color(0xFF232C3A)
+private val TrainingMuted get() = if (AppPalette.light) TradingTextSecondary else Color(0xFF8F98A8)
+private val TrainingText get() = if (AppPalette.light) TradingTextPrimary else Color(0xFFE8ECF4)
 private val TrainingProfit = Color(0xFF26A69A)
 private val TrainingLoss = Color(0xFFEF5350)
 
@@ -55,7 +58,7 @@ fun TrainingAccountScreen(viewModel: ReplayViewModel, onChart: () -> Unit) {
     val losses = state.closedTrades.count { it.netProfitLoss < 0 }
     val winRate = if (state.closedTrades.isEmpty()) "—" else String.format(Locale.US, "%.1f%%", wins * 100.0 / state.closedTrades.size)
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp).testTag("account_screen"),
+    Column(Modifier.fillMaxSize().background(TradingBackground).verticalScroll(rememberScrollState()).padding(12.dp).testTag("account_screen"),
         verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("حساب التدريب", color = TrainingText, style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.padding(vertical = 8.dp))

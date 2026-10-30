@@ -42,6 +42,14 @@ class ChartAppearanceInteractionTest {
             assertTrue(compose.onNodeWithTag("bottom_nav_bar").captureToImage().toPixelMap()[0,0].luminance() > .7f)
             compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
             capture("appearance-light")
+            for ((route, screen) in listOf("market" to "market_screen", "results" to "results_screen", "account" to "account_screen")) {
+                compose.onNodeWithTag("nav_item_$route").performClick()
+                compose.onNodeWithTag(screen).assertIsDisplayed()
+                compose.waitForIdle()
+                assertTrue(compose.onNodeWithTag(screen).captureToImage().toPixelMap()[0,0].luminance() > .7f)
+                capture("appearance-light-$route")
+            }
+            compose.onNodeWithTag("nav_item_chart").performClick()
             compose.activityRule.scenario.recreate()
             compose.waitUntil(5000) { com.example.ui.theme.AppPalette.light }
             assertEquals(0xFF112233.toInt(), compose.activity.getSharedPreferences("chart_appearance",0).getInt("up",0))

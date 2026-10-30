@@ -1,5 +1,7 @@
 package com.example.feature.market
 
+import com.example.ui.theme.*
+
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,12 +25,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
 
-private val Navy=Color(0xFF03131D)
-private val CardNavy=Color(0xFF0B1B27)
-private val Edge=Color(0xFF213545)
-private val Muted=Color(0xFF8B9BAE)
-private val Teal=Color(0xFF00C7AD)
-private val Red=Color(0xFFFF3558)
+private val Navy get() = if (AppPalette.light) TradingBackground else Color(0xFF03131D)
+private val CardNavy get() = if (AppPalette.light) TradingCard else Color(0xFF0B1B27)
+private val Edge get() = if (AppPalette.light) TradingBorder else Color(0xFF213545)
+private val Muted get() = if (AppPalette.light) TradingTextSecondary else Color(0xFF8B9BAE)
+private val Teal get() = if (AppPalette.light) Color(0xFF008575) else Color(0xFF00C7AD)
+private val Red get() = if (AppPalette.light) Color(0xFFC93046) else Color(0xFFFF3558)
 private val Blue=Color(0xFF126BFF)
 
 @Composable
@@ -38,7 +40,7 @@ fun MarketScreen(viewModel:MarketViewModel,onSelectSymbol:(String)->Unit,modifie
     var details by remember{mutableStateOf<MarketQuoteSnapshot?>(null)}
     Column(modifier.fillMaxSize().background(Navy).padding(horizontal=8.dp).testTag("market_screen")) {
         Row(Modifier.fillMaxWidth().height(55.dp).padding(horizontal=5.dp),verticalAlignment=Alignment.CenterVertically) {
-            Text("السوق",color=Color.White,fontSize=22.sp,lineHeight=24.sp,fontWeight=FontWeight.Bold)
+            Text("السوق",color=TradingTextPrimary,fontSize=22.sp,lineHeight=24.sp,fontWeight=FontWeight.Bold)
             Spacer(Modifier.width(12.dp))
             val live=state.rows.isNotEmpty() && state.rows.all{it.freshness==MarketQuoteSnapshot.Freshness.LIVE}
             Text(if(live)"LIVE DATA ●" else if(state.loading)"جارٍ الاتصال" else "بيانات جزئية / متأخرة",color=if(live)Teal else Muted,fontSize=10.sp,lineHeight=12.sp,
@@ -47,12 +49,12 @@ fun MarketScreen(viewModel:MarketViewModel,onSelectSymbol:(String)->Unit,modifie
         }
         OutlinedTextField(state.searchQuery,viewModel::updateSearchQuery,modifier=Modifier.fillMaxWidth().height(49.dp).testTag("market_search_input"),
             placeholder={Text("ابحث عن رمز أو اسم الأصل...",fontSize=12.sp,lineHeight=14.sp)},leadingIcon={Icon(Icons.Default.Search,null,tint=Muted)},singleLine=true,
-            shape=RoundedCornerShape(9.dp),textStyle=TextStyle(fontSize=13.sp,lineHeight=15.sp,color=Color.White),
+            shape=RoundedCornerShape(9.dp),textStyle=TextStyle(fontSize=13.sp,lineHeight=15.sp,color=TradingTextPrimary),
             colors=OutlinedTextFieldDefaults.colors(unfocusedContainerColor=CardNavy,focusedContainerColor=CardNavy,unfocusedBorderColor=Edge,focusedBorderColor=Blue))
         Row(Modifier.padding(vertical=9.dp).horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
             MarketCategory.entries.forEach{c->Column(Modifier.border(1.dp,if(state.category==c)Blue else Edge,RoundedCornerShape(6.dp)).background(if(state.category==c)Blue.copy(alpha=.12f) else CardNavy).clickable{viewModel.selectCategory(c)}.padding(horizontal=10.dp,vertical=7.dp).testTag("market_category_${c.name}"),horizontalAlignment=Alignment.CenterHorizontally){
                 Icon(when(c){MarketCategory.FAVORITES->Icons.Default.StarBorder;MarketCategory.CRYPTO->Icons.Default.CurrencyBitcoin;MarketCategory.FOREX->Icons.Default.CurrencyExchange;MarketCategory.STOCKS->Icons.Default.Business;MarketCategory.INDICES->Icons.Default.BarChart;MarketCategory.METALS->Icons.Default.Diamond;else->Icons.Default.Dashboard},null,tint=if(state.category==c)Blue else Muted,modifier=Modifier.size(19.dp))
-                Text(c.label,color=Color.White,fontSize=9.sp,lineHeight=11.sp)
+                Text(c.label,color=TradingTextPrimary,fontSize=9.sp,lineHeight=11.sp)
             }}
         }
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
@@ -86,14 +88,14 @@ private fun MarketAssetRow(row:MarketQuoteSnapshot,compact:Boolean,open:()->Unit
             Box(Modifier.size(24.dp).background(tint.copy(alpha=.16f),androidx.compose.foundation.shape.CircleShape),contentAlignment=Alignment.Center){Icon(icon,null,tint=tint,modifier=Modifier.size(18.dp))}
             Spacer(Modifier.width(5.dp))
             Column(Modifier.weight(1f)){
-            Text(row.symbol.symbol,color=Color.White,fontSize=11.sp,lineHeight=13.sp,fontWeight=FontWeight.Bold,style=TextStyle(textDirection=TextDirection.Ltr),maxLines=1)
+            Text(row.symbol.symbol,color=TradingTextPrimary,fontSize=11.sp,lineHeight=13.sp,fontWeight=FontWeight.Bold,style=TextStyle(textDirection=TextDirection.Ltr),maxLines=1)
             Text(row.symbol.category,color=Muted,fontSize=9.sp,lineHeight=11.sp)
             Text(row.provider,color=if(row.freshness==MarketQuoteSnapshot.Freshness.LIVE)Teal else Muted,fontSize=8.sp,lineHeight=10.sp,maxLines=1)
             if(row.freshness!=MarketQuoteSnapshot.Freshness.LIVE)Text(if(row.freshness==MarketQuoteSnapshot.Freshness.STALE)"سعر متأخر" else "البيانات غير متاحة حاليًا",color=Muted,fontSize=8.sp,lineHeight=10.sp)
         }
         }
         Column(Modifier.weight(1.15f),horizontalAlignment=Alignment.CenterHorizontally){
-            Text(price(row.last),color=Color.White,fontWeight=FontWeight.Bold,fontSize=12.sp,lineHeight=14.sp,style=TextStyle(textDirection=TextDirection.Ltr),maxLines=1)
+            Text(price(row.last),color=TradingTextPrimary,fontWeight=FontWeight.Bold,fontSize=12.sp,lineHeight=14.sp,style=TextStyle(textDirection=TextDirection.Ltr),maxLines=1)
             Text("${price(row.bid)} / ${price(row.ask)}",color=Muted,fontSize=7.sp,lineHeight=9.sp,style=TextStyle(textDirection=TextDirection.Ltr),maxLines=1)
         }
         Column(Modifier.weight(.75f),horizontalAlignment=Alignment.CenterHorizontally){

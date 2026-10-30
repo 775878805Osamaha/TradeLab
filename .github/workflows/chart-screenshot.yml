@@ -61,6 +61,9 @@ jobs:
             mkdir -p screenshots
             adb pull /sdcard/Download/appearance-light.png screenshots/appearance-light.png
             adb pull /sdcard/Download/appearance-dark.png screenshots/appearance-dark.png
+            adb pull /sdcard/Download/appearance-light-market.png screenshots/appearance-light-market.png
+            adb pull /sdcard/Download/appearance-light-results.png screenshots/appearance-light-results.png
+            adb pull /sdcard/Download/appearance-light-account.png screenshots/appearance-light-account.png
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.aistudio.tradelab.vzqrpk
             adb shell settings put system accelerometer_rotation 0
