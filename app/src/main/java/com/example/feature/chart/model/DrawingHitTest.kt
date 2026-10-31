@@ -31,6 +31,7 @@ object DrawingHitTest {
                 val closed=d.tool in setOf(DrawingTool.TRIANGLE,DrawingTool.ROTATED_RECTANGLE)
                 val points=if(closed && anchors.size>2)anchors+anchors.first() else anchors
                 if(points.size>1)points.zipWithNext().minOf{segment(it.first,it.second)}
+                else if(points.size==1) (point-points.first()).getDistance()
                 else if(d.tool.isSinglePoint) (point-a).getDistance() else segment(a,b)
             }
         }
