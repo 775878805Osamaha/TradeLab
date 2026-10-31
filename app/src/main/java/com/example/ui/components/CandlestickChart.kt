@@ -421,7 +421,7 @@ fun CandlestickChart(
                         },
                         onDragEnd = {
                             anchorPreview?.let { preview ->
-                                if (currentDrawings.any { it == editingAnchor?.first }) updateDrawing?.invoke(preview)
+                                if (currentDrawings.any { it.id == preview.id && it.id != 0L }) updateDrawing?.invoke(preview)
                             }
                             editingAnchor = null
                             anchorPreview = null
