@@ -77,4 +77,19 @@ class DrawingAnchorEditingTest {
         assertEquals(2015.0,moved.endPrice!!,0.0)
     }
 
+    @Test fun timestampOverflowCannotWrapDrawingAcrossTimeline() {
+        val original=ChartDrawing(id=100,tool=DrawingTool.TRENDLINE,symbol="XAUUSD",timeframe="M5",
+            startTime=Long.MAX_VALUE-10,startPrice=100.0,
+            endTime=Long.MAX_VALUE-1,endPrice=101.0)
+        assertSame(original,DrawingAnchorEditing.translate(original,20,1.0))
+    }
+
+    @Test fun wholeDrawingTranslationDoesNotMutateOriginalAnchors() {
+        val original=drawing()
+        val shifted=DrawingAnchorEditing.translate(original,20,3.0)
+        assertEquals(DrawingAnchor(100,10.0),original.anchors.first())
+        assertEquals(DrawingAnchor(120,13.0),shifted.anchors.first())
+        assertEquals(3,shifted.anchors.size)
+    }
+
 }
