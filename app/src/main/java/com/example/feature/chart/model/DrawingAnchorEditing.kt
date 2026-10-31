@@ -24,9 +24,13 @@ internal object DrawingAnchorEditing {
         else if(index==0) d.copy(startTime=target.time,startPrice=target.price)
         else d.copy(endTime=target.time,endPrice=target.price)
     }
+    /** Translate an entire stroke, including freehand paths that have no draggable handles. */
+    fun canTranslate(d: ChartDrawing): Boolean =
+        (d.tool.isFreehand && d.anchors.isNotEmpty()) || points(d).isNotEmpty()
+
     /** Translate every editable anchor together, preserving the drawing's geometry. */
     fun translate(d: ChartDrawing, timeDelta: Long, priceDelta: Double): ChartDrawing {
-        val original = points(d)
+        val original = if (d.tool.isFreehand) d.anchors else points(d)
         if (original.isEmpty() || !priceDelta.isFinite()) return d
         val shifted = original.map { anchor ->
             // Exact arithmetic prevents overflow from wrapping a timestamp into
