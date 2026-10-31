@@ -47,4 +47,34 @@ class DrawingAnchorEditingTest {
         assertSame(original,DrawingAnchorEditing.move(original,0,DrawingAnchor(120,Double.POSITIVE_INFINITY)))
     }
 
+    @Test fun draggingWholeDrawingPreservesRelativeAnchorGeometry() {
+        val original=drawing()
+        val shifted=DrawingAnchorEditing.translate(original,50,7.5)
+        assertEquals(listOf(DrawingAnchor(150,17.5),DrawingAnchor(250,27.5),
+            DrawingAnchor(350,37.5)),shifted.anchors)
+        assertEquals(150L,shifted.startTime)
+        assertEquals(350L,shifted.endTime)
+        assertEquals(17.5,shifted.startPrice,0.0)
+        assertEquals(37.5,shifted.endPrice!!,0.0)
+        assertEquals(original.anchors.first(),drawing().anchors.first())
+    }
+
+    @Test fun wholeDrawingTranslationRejectsNegativePricesAndTimes() {
+        val original=drawing()
+        assertSame(original,DrawingAnchorEditing.translate(original,-101,0.0))
+        assertSame(original,DrawingAnchorEditing.translate(original,0,-10.0))
+        assertSame(original,DrawingAnchorEditing.translate(original,0,Double.NaN))
+    }
+
+    @Test fun legacyLineTranslationKeepsLegacyStorageFormat() {
+        val original=ChartDrawing(id=99,tool=DrawingTool.TRENDLINE,symbol="XAUUSD",timeframe="M5",
+            startTime=100,startPrice=2000.0,endTime=200,endPrice=2010.0)
+        val moved=DrawingAnchorEditing.translate(original,10,5.0)
+        assertTrue(moved.anchors.isEmpty())
+        assertEquals(110L,moved.startTime)
+        assertEquals(210L,moved.endTime)
+        assertEquals(2005.0,moved.startPrice,0.0)
+        assertEquals(2015.0,moved.endPrice!!,0.0)
+    }
+
 }
