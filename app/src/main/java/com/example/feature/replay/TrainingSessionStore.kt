@@ -75,7 +75,8 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
                 else require(snapshot.state.openPositions.isEmpty() && snapshot.state.pendingOrders.isEmpty())
                 require(stored.executions.size == snapshot.state.closedTrades.size)
                 require(snapshot.state.closedTrades.all { trade ->
-                    trade.netProfitLoss.isFinite() && trade.commission.isFinite() && trade.volume.isFinite()
+                    trade.netProfitLoss.isFinite() && trade.commission.isFinite() &&
+                        trade.volume.isFinite() && trade.volume > 0.0
                 })
                 require(stored.executions.map { it.ordinal }.sorted() ==
                     snapshot.state.closedTrades.indices.toList())
