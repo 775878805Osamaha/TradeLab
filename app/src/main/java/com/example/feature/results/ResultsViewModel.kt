@@ -78,7 +78,12 @@ class ResultsViewModel(
         ) else
             base.copy(analytics=a,isReplayReport=true,openPositionsCount=report.positions.size,openPositions=report.positions,
                 initialBalance=a.opening,currentBalance=a.closing,metrics=a.metrics,equityPoints=a.curve,
-                trades=a.trades,dailySummaries=prepared.days,isLoading=false)
+                trades=a.trades,dailySummaries=prepared.days,
+                // A previously opened trade detail must not show a trade that
+                // disappeared after Replay rewind, account reset or filtering.
+                selectedTradeForDetail=base.selectedTradeForDetail?.takeIf { selected ->
+                    a.trades.any { it == selected }
+                },isLoading=false)
     }.stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),ResultsUiState(isLoading=true))
 
     fun setCustomRange(start:Long,end:Long) { if(start<=end && start<=System.currentTimeMillis())_uiState.update { it.copy(selectedPeriod=ResultsPeriod.CUSTOM,customStart=start,customEnd=end) } }
