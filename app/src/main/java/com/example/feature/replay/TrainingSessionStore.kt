@@ -68,6 +68,8 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
                 require(snapshot.candles.size <= 5000)
                 if(snapshot.candles.isNotEmpty()) require(snapshot.state.currentIndex in snapshot.candles.indices)
                 require(stored.executions.size == snapshot.state.closedTrades.size)
+                require(stored.executions.map { it.ordinal }.sorted() ==
+                    snapshot.state.closedTrades.indices.toList())
                 snapshot
             }.getOrElse { error ->
                 android.util.Log.e("TrainingSession","Room checkpoint unavailable",error)
