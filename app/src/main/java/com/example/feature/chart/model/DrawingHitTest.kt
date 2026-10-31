@@ -17,8 +17,9 @@ object DrawingHitTest {
             val delta=end-start;val len=delta.getDistanceSquared()
             if (!len.isFinite()) return Float.MAX_VALUE
             val raw=if(len>0) ((point-start).x*delta.x+(point-start).y*delta.y)/len else 0f
+            if (!raw.isFinite()) return Float.MAX_VALUE
             val f=when(mode){1->raw;2->raw.coerceAtLeast(0f);else->raw.coerceIn(0f,1f)}
-            return (point-(start+delta*f)).getDistance()
+            return (point-(start+delta*f)).getDistance().takeIf { it.isFinite() } ?: Float.MAX_VALUE
         }
         return when(d.tool) {
             DrawingTool.HORIZONTAL_LINE -> abs(point.y-a.y)
@@ -33,7 +34,12 @@ object DrawingHitTest {
                 else if(radiusX<1f||radiusY<1f)segment(a,b) else abs(sqrt(((point.x-center.x)/radiusX).pow(2)+((point.y-center.y)/radiusY).pow(2))-1f)*min(radiusX,radiusY)
             }
             else -> {
-                val anchors=d.anchors.mapNotNull { p -> t.timeToX(p.time)?.let{Offset(it,t.priceToY(p.price))} }
+                val anchors=d.anchors.mapNotNull { p ->
+                    t.timeToX(p.time)?.let { x ->
+                        val y=t.priceToY(p.price)
+                        if(x.isFinite() && y.isFinite()) Offset(x,y) else null
+                    }
+                }
                 val closed=d.tool in setOf(DrawingTool.TRIANGLE,DrawingTool.ROTATED_RECTANGLE)
                 val points=if(closed && anchors.size>2)anchors+anchors.first() else anchors
                 if(points.size>1)points.zipWithNext().minOf{segment(it.first,it.second)}
