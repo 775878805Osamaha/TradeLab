@@ -19,8 +19,26 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
     fun newOwner():Long=owner.incrementAndGet()
     fun clear() { owner.incrementAndGet();synchronized(lock){file.delete();database?.let { runBlocking(Dispatchers.IO) { it.trainingDao().clear() } }} }
     fun observeReports():kotlinx.coroutines.flow.Flow<com.example.core.model.ReplayReport?> =
-        database?.trainingDao()?.observe()?.map { bundle -> bundle?.let { TrainingReportMapper.report(decode(it.checkpoint.payload), it.executions.sortedBy { row -> row.ordinal }.map { row -> row.recordedAt }, it.checkpoint.fundedAt) } }
-            ?: kotlinx.coroutines.flow.flowOf(null)
+        database?.trainingDao()?.observe()?.map { bundle ->
+            if (bundle == null) null else runCatching {
+                val snapshot = decode(bundle.checkpoint.payload)
+                val executions = bundle.executions.sortedBy { it.ordinal }
+                // A checkpoint and its executions are written in one Room transaction.
+                // Reject inconsistent/corrupted snapshots rather than displaying a
+                // partial journal with incorrect timestamps or account totals.
+                require(executions.size == snapshot.state.closedTrades.size) {
+                    "Training journal count does not match checkpoint"
+                }
+                require(executions.indices.all { executions[it].ordinal == it }) {
+                    "Training journal ordinals are not contiguous"
+                }
+                TrainingReportMapper.report(snapshot, executions.map { it.recordedAt },
+                    bundle.checkpoint.fundedAt)
+            }.getOrElse { error ->
+                android.util.Log.e("TrainingSession", "Cannot decode training report", error)
+                null
+            }
+        } ?: kotlinx.coroutines.flow.flowOf(null)
 
     private val writes=Channel<Pair<Long,TrainingSessionSnapshot>>(Channel.CONFLATED)
     init { CoroutineScope(SupervisorJob()+Dispatchers.IO).launch { for((token,snapshot) in writes) { synchronized(lock) {
