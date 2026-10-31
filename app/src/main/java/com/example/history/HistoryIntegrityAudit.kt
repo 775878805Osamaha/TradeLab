@@ -61,7 +61,7 @@ object HistoryIntegrityAudit {
                 findings += Finding(index, Problem.FUTURE_BAR)
                 return@forEachIndexed
             }
-            if (completedOnly && (bar.openTimeMillis > Long.MAX_VALUE - intervalMillis ||
+            if (completedOnly && (bar.openTimeMillis < 0L || bar.openTimeMillis > Long.MAX_VALUE - intervalMillis ||
                         bar.openTimeMillis + intervalMillis > nowMillis)) {
                 findings += Finding(index, Problem.INCOMPLETE_BAR)
                 return@forEachIndexed
@@ -77,6 +77,10 @@ object HistoryIntegrityAudit {
                     return@forEachIndexed
                 }
                 val delta = bar.openTimeMillis - previous
+                if (delta <= 0L) {
+                    findings += Finding(index, Problem.OUT_OF_ORDER)
+                    return@forEachIndexed
+                }
                 if (delta > intervalMillis) {
                     val count = (delta - 1) / intervalMillis
                     missing = if (Long.MAX_VALUE - missing < count) Long.MAX_VALUE else missing + count
