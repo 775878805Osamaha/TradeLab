@@ -92,4 +92,37 @@ class DrawingAnchorEditingTest {
         assertEquals(3,shifted.anchors.size)
     }
 
+    @Test fun freehandStrokeMovesAsOneShapeWithoutIndividualHandles() {
+        val original=ChartDrawing(id=201,tool=DrawingTool.BRUSH,symbol="XAUUSD",timeframe="M15",
+            startTime=100,startPrice=10.0,endTime=300,endPrice=30.0,
+            anchors=listOf(DrawingAnchor(100,10.0),DrawingAnchor(170,15.0),DrawingAnchor(300,30.0)))
+        assertTrue(DrawingAnchorEditing.points(original).isEmpty())
+        assertTrue(DrawingAnchorEditing.canTranslate(original))
+        val moved=DrawingAnchorEditing.translate(original,40,2.5)
+        assertEquals(listOf(DrawingAnchor(140,12.5),DrawingAnchor(210,17.5),
+            DrawingAnchor(340,32.5)),moved.anchors)
+        assertEquals(140L,moved.startTime)
+        assertEquals(340L,moved.endTime)
+        assertEquals(12.5,moved.startPrice,0.0)
+        assertEquals(32.5,moved.endPrice!!,0.0)
+        assertEquals(100L,original.startTime)
+    }
+
+    @Test fun invalidFreehandTranslationDoesNotPartiallyMoveStroke() {
+        val original=ChartDrawing(id=202,tool=DrawingTool.BRUSH,symbol="XAUUSD",timeframe="M15",
+            startTime=100,startPrice=10.0,endTime=300,endPrice=30.0,
+            anchors=listOf(DrawingAnchor(100,10.0),DrawingAnchor(300,30.0)))
+        assertSame(original,DrawingAnchorEditing.translate(original,-101,1.0))
+        assertSame(original,DrawingAnchorEditing.translate(original,0,-11.0))
+        assertSame(original,DrawingAnchorEditing.translate(original,0,Double.NaN))
+        assertSame(original,DrawingAnchorEditing.translate(original,Long.MAX_VALUE,1.0))
+    }
+
+    @Test fun emptyFreehandStrokeCannotBeTranslated() {
+        val original=ChartDrawing(id=203,tool=DrawingTool.BRUSH,symbol="XAUUSD",timeframe="M15",
+            startTime=100,startPrice=10.0)
+        assertFalse(DrawingAnchorEditing.canTranslate(original))
+        assertSame(original,DrawingAnchorEditing.translate(original,20,1.0))
+    }
+
 }
