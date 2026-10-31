@@ -45,4 +45,28 @@ class TrainingReportMapperTest {
         TrainingReportMapper.report(TrainingSessionSnapshot(state,emptyList(),1),listOf(1000L),1000)
     }
 
+    @Test(expected=IllegalArgumentException::class)
+    fun nonFiniteEquitySampleCannotReachResultsChart() {
+        val state=ReplayUiState(initialBalance=100.0,currentBalance=100.0,currentEquity=100.0,
+            equitySamples=listOf(ReplayEquitySample(1,100.0,Double.NaN,1000)))
+        TrainingReportMapper.report(TrainingSessionSnapshot(state,emptyList(),1),emptyList(),500)
+    }
+
+    @Test(expected=IllegalArgumentException::class)
+    fun nonChronologicalEquityHistoryCannotReachResultsChart() {
+        val state=ReplayUiState(initialBalance=100.0,currentBalance=100.0,currentEquity=100.0,
+            equitySamples=listOf(ReplayEquitySample(1,100.0,110.0,2000),
+                ReplayEquitySample(2,100.0,105.0,1000)))
+        TrainingReportMapper.report(TrainingSessionSnapshot(state,emptyList(),1),emptyList(),500)
+    }
+
+    @Test fun repeatedTimestampCanRepresentMultipleTradesInSameCandle() {
+        val state=ReplayUiState(initialBalance=100.0,currentBalance=110.0,currentEquity=110.0,
+            equitySamples=listOf(ReplayEquitySample(1,105.0,105.0,1000),
+                ReplayEquitySample(2,110.0,110.0,1000)))
+        val report=TrainingReportMapper.report(TrainingSessionSnapshot(state,emptyList(),1),emptyList(),500)
+        assertEquals(3,report.curve.size)
+        assertEquals(110.0,report.curve.last().equity,0.0)
+    }
+
 }
