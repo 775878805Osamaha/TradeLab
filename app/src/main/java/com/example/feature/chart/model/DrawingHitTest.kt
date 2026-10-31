@@ -12,7 +12,10 @@ object DrawingHitTest {
             !a.x.isFinite() || !a.y.isFinite() ||
             !b.x.isFinite() || !b.y.isFinite()) return Float.MAX_VALUE
         fun segment(start:Offset,end:Offset, mode:Int=0):Float {
+            if (!start.x.isFinite() || !start.y.isFinite() ||
+                !end.x.isFinite() || !end.y.isFinite()) return Float.MAX_VALUE
             val delta=end-start;val len=delta.getDistanceSquared()
+            if (!len.isFinite()) return Float.MAX_VALUE
             val raw=if(len>0) ((point-start).x*delta.x+(point-start).y*delta.y)/len else 0f
             val f=when(mode){1->raw;2->raw.coerceAtLeast(0f);else->raw.coerceIn(0f,1f)}
             return (point-(start+delta*f)).getDistance()
