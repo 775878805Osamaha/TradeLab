@@ -81,15 +81,15 @@ object HistoryIntegrityAudit {
                     findings += Finding(index, Problem.OUT_OF_ORDER)
                     return@forEachIndexed
                 }
+                if (delta % intervalMillis != 0L) {
+                    findings += Finding(index, Problem.MISALIGNED_INTERVAL)
+                    return@forEachIndexed
+                }
                 if (delta > intervalMillis) {
                     val count = (delta - 1) / intervalMillis
                     missing = if (Long.MAX_VALUE - missing < count) Long.MAX_VALUE else missing + count
                     findings += Finding(index, Problem.MISSING_INTERVAL, count)
                 }
-            }
-            if (previous != null && (bar.openTimeMillis - previous) % intervalMillis != 0L) {
-                findings += Finding(index, Problem.MISALIGNED_INTERVAL)
-                return@forEachIndexed
             }
             accepted += bar
             lastTime = bar.openTimeMillis
