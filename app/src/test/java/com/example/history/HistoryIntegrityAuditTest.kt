@@ -29,4 +29,17 @@ class HistoryIntegrityAuditTest {
         val report = HistoryIntegrityAudit.inspect(listOf(bar(120000)), 60000, 90000)
         assertEquals(0, report.accepted.size)
     }
+    @Test fun misalignedIntervalIsRejectedWithoutFalseGapCount() {
+        val report = HistoryIntegrityAudit.inspect(listOf(bar(0), bar(90000)), 60000, 180000)
+        assertEquals(1, report.accepted.size)
+        assertEquals(0L, report.missingIntervals)
+        assertEquals(HistoryIntegrityAudit.Problem.MISALIGNED_INTERVAL, report.findings.single().problem)
+    }
+
+    @Test fun negativeTimeIsRejectedEvenWhenIncompleteBarsAllowed() {
+        val report = HistoryIntegrityAudit.inspect(listOf(bar(-60000)), 60000, 180000, completedOnly = false)
+        assertEquals(0, report.accepted.size)
+        assertEquals(HistoryIntegrityAudit.Problem.FUTURE_BAR, report.findings.single().problem)
+    }
+
 }
