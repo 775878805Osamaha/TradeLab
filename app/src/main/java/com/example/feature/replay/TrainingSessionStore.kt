@@ -76,7 +76,15 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
         val old=previous?.executions?.associateBy { it.ordinal }.orEmpty()
         val now=System.currentTimeMillis()
         val rows=snapshot.state.closedTrades.mapIndexed { index,t ->
-            val at=old[index]?.takeIf { it.symbol==t.symbol && it.marketCloseTime==t.closeTime && it.netAmount==java.math.BigDecimal.valueOf(t.netProfitLoss).toPlainString() }?.recordedAt ?: now
+            // Preserve a trade's original journal timestamp across balance/viewport
+            // checkpoint updates, but never reuse it for a different execution.
+            val at=old[index]?.takeIf {
+                it.symbol==t.symbol &&
+                    it.marketCloseTime==t.closeTime &&
+                    it.netAmount==java.math.BigDecimal.valueOf(t.netProfitLoss).toPlainString() &&
+                    it.commissionAmount==java.math.BigDecimal.valueOf(t.commission).toPlainString() &&
+                    it.volume==java.math.BigDecimal.valueOf(t.volume).toPlainString()
+            }?.recordedAt ?: now
             com.example.data.local.entity.TrainingExecutionEntity(ordinal=index,symbol=t.symbol,marketCloseTime=t.closeTime,recordedAt=at,
                 netAmount=java.math.BigDecimal.valueOf(t.netProfitLoss).toPlainString(),commissionAmount=java.math.BigDecimal.valueOf(t.commission).toPlainString(),volume=java.math.BigDecimal.valueOf(t.volume).toPlainString())
         }
