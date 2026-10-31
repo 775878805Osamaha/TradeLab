@@ -387,6 +387,20 @@ fun CandlestickChart(
                                         }
                                     }.minByOrNull { it.third }?.let { it.first to it.second }
                             }
+                            if (editingAnchor == null && activeDrawingTool == DrawingTool.NONE &&
+                                !isCrosshairActive && updateDrawing != null && transform != null) {
+                                // Drag the stroke itself to translate the complete drawing.
+                                val selected = currentDrawings.asReversed().firstOrNull { drawing ->
+                                    drawing.id != 0L && DrawingAnchorEditing.points(drawing).isNotEmpty() &&
+                                        DrawingHitTest.distance(drawing, transform, offset).let {
+                                            it.isFinite() && it <= anchorRadius
+                                        }
+                                }
+                                if (selected != null) {
+                                    editingAnchor = selected to -1
+                                    drawingStartOffset = offset
+                                }
+                            }
                             if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingStartOffset = offset
                                 drawingCurrentOffset = offset
@@ -404,7 +418,15 @@ fun CandlestickChart(
                                 val t = anchorTransform
                                 if (t != null) {
                                     val point = t.snapDrawingPoint(Offset(change.position.x.coerceIn(0f,t.chartWidth),change.position.y.coerceIn(0f,t.chartHeight)), snapEnabled)
-                                    anchorPreview = DrawingAnchorEditing.move(original,anchorIndex,
+                                    anchorPreview = if (anchorIndex == -1) {
+                                        val start = drawingStartOffset
+                                        if (start != null) {
+                                            val startPoint = t.snapDrawingPoint(start, snapEnabled)
+                                            DrawingAnchorEditing.translate(original,
+                                                t.xToTime(point.x) - t.xToTime(startPoint.x),
+                                                t.yToPrice(point.y) - t.yToPrice(startPoint.y))
+                                        } else null
+                                    } else DrawingAnchorEditing.move(original,anchorIndex,
                                         DrawingAnchor(t.xToTime(point.x),t.yToPrice(point.y)))
                                 }
                             } else if (activeDrawingTool != DrawingTool.NONE) {
