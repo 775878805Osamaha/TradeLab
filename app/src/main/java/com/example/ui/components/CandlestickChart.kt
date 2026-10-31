@@ -142,6 +142,7 @@ fun CandlestickChart(
     // Viewport State
     var candleWidthPx by remember { mutableFloatStateOf(12f) }
     var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
+    var chartViewportWidthPx by remember { mutableFloatStateOf(0f) }
     var manualPriceScale by remember { mutableFloatStateOf(1f) }
     // Vertical viewport translation in screen pixels, independent of candle zoom.
     var pricePanPx by remember { mutableFloatStateOf(0f) }
@@ -277,7 +278,7 @@ fun CandlestickChart(
 
     // Wait for the real measured width before applying initial candle fit.
     // A guessed 600px width can mis-size early Replay candles on narrow phones.
-    var chartViewportWidthPx by remember { mutableFloatStateOf(0f) }
+
     // Trigger historical backfill near the oldest visible candle. Keep the
     // gesture callback fresh without restarting the active pointer detector.
     val requestOlderHistory by rememberUpdatedState(onRequestOlderHistory)
