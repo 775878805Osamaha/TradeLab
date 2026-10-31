@@ -16,6 +16,7 @@ internal object DrawingAnchorEditing {
     fun move(d: ChartDrawing,index: Int,target: DrawingAnchor): ChartDrawing {
         val points=points(d)
         if(index !in points.indices || target.time<0 || !target.price.isFinite() || target.price<=0) return d
+        if(points[index] == target) return d
         val changed=points.toMutableList().apply { this[index]=target }
         return if(d.anchors.isNotEmpty()) d.copy(anchors=changed,
             startTime=changed.first().time,startPrice=changed.first().price,
@@ -32,6 +33,7 @@ internal object DrawingAnchorEditing {
     fun translate(d: ChartDrawing, timeDelta: Long, priceDelta: Double): ChartDrawing {
         val original = if (d.tool.isFreehand) d.anchors else points(d)
         if (original.isEmpty() || !priceDelta.isFinite()) return d
+        if (timeDelta == 0L && priceDelta == 0.0) return d
         val shifted = original.map { anchor ->
             // Exact arithmetic prevents overflow from wrapping a timestamp into
             // another valid-looking point when the user drags near time bounds.
