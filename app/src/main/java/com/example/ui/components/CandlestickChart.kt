@@ -517,7 +517,8 @@ fun CandlestickChart(
                             val tappedDrawing = if (insidePlot && transform != null &&
                                 activeDrawingTool == DrawingTool.NONE && !isCrosshairActive)
                                 currentDrawings.asReversed().firstOrNull { drawing ->
-                                    DrawingHitTest.distance(drawing, transform, offset) <= positionHitRadius
+                                    val distance = DrawingHitTest.distance(drawing, transform, offset)
+                                    distance.isFinite() && distance <= positionHitRadius
                                 } else null
                             if (hit != null && selectPosition != null) {
                                 selectPosition?.invoke(hit)
