@@ -71,7 +71,11 @@ class ResultsViewModel(
     val uiState: StateFlow<ResultsUiState> = combine(_uiState,prepared) { base,prepared ->
         val report=prepared.report
         val a=prepared.analytics
-        if(report==null || a==null) base.copy(isReplayReport=true,isLoading=false) else
+        if(report==null || a==null) base.copy(
+            analytics=null,isReplayReport=true,openPositionsCount=0,openPositions=emptyList(),
+            metrics=null,equityPoints=emptyList(),trades=emptyList(),dailySummaries=emptyList(),
+            initialBalance=100.0,currentBalance=100.0,selectedTradeForDetail=null,isLoading=false
+        ) else
             base.copy(analytics=a,isReplayReport=true,openPositionsCount=report.positions.size,openPositions=report.positions,
                 initialBalance=a.opening,currentBalance=a.closing,metrics=a.metrics,equityPoints=a.curve,
                 trades=a.trades,dailySummaries=prepared.days,isLoading=false)
