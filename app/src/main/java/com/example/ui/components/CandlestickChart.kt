@@ -425,6 +425,7 @@ fun CandlestickChart(
                             }
                             editingAnchor = null
                             anchorPreview = null
+                            anchorTransform = null
                             if (dragStartedInPlot && activeDrawingTool != DrawingTool.NONE && drawingStartOffset != null && drawingCurrentOffset != null) {
                                 val transformForSnap = transformRef[0]
                                 val start = transformForSnap?.snapDrawingPoint(drawingStartOffset!!, snapEnabled) ?: drawingStartOffset!!
@@ -454,6 +455,7 @@ fun CandlestickChart(
                         onDragCancel = {
                             editingAnchor = null
                             anchorPreview = null
+                            anchorTransform = null
                             drawingStartOffset = null
                             drawingCurrentOffset = null
                             dragStartedInPlot = false
