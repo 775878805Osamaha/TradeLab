@@ -8,6 +8,9 @@ object DrawingHitTest {
         val a = if(d.tool==DrawingTool.ANCHORED_TEXT && d.screenX!=null && d.screenY!=null) Offset(d.screenX*t.chartWidth,d.screenY*t.chartHeight)
             else Offset(t.timeToX(d.startTime)?:return Float.MAX_VALUE,t.priceToY(d.startPrice))
         val b = Offset(d.endTime?.let{t.timeToX(it)}?:a.x,d.endPrice?.let{t.priceToY(it)}?:a.y)
+        if (!point.x.isFinite() || !point.y.isFinite() ||
+            !a.x.isFinite() || !a.y.isFinite() ||
+            !b.x.isFinite() || !b.y.isFinite()) return Float.MAX_VALUE
         fun segment(start:Offset,end:Offset, mode:Int=0):Float {
             val delta=end-start;val len=delta.getDistanceSquared()
             val raw=if(len>0) ((point-start).x*delta.x+(point-start).y*delta.y)/len else 0f
