@@ -29,4 +29,100 @@ class DrawingAnchorEditingTest {
         assertSame(original,DrawingAnchorEditing.move(original,1,DrawingAnchor(-1,10.0)))
         assertTrue(DrawingAnchorEditing.points(original.copy(tool=DrawingTool.BRUSH)).isEmpty())
     }
+    @Test fun legacyTrendlineEndpointDragUpdatesOnlyRequestedHandle() {
+        val original=ChartDrawing(id=17,tool=DrawingTool.TRENDLINE,symbol="XAUUSD",timeframe="M5",
+            startTime=100,startPrice=2000.0,endTime=200,endPrice=2010.0)
+        assertEquals(2,DrawingAnchorEditing.points(original).size)
+        val changed=DrawingAnchorEditing.move(original,1,DrawingAnchor(250,2020.0))
+        assertEquals(100L,changed.startTime)
+        assertEquals(2000.0,changed.startPrice,0.0)
+        assertEquals(250L,changed.endTime)
+        assertEquals(2020.0,changed.endPrice!!,0.0)
+        assertTrue(changed.anchors.isEmpty())
+    }
+
+    @Test fun invalidPriceDoesNotModifyExistingDrawing() {
+        val original=drawing()
+        assertSame(original,DrawingAnchorEditing.move(original,0,DrawingAnchor(120,0.0)))
+        assertSame(original,DrawingAnchorEditing.move(original,0,DrawingAnchor(120,Double.POSITIVE_INFINITY)))
+    }
+
+    @Test fun draggingWholeDrawingPreservesRelativeAnchorGeometry() {
+        val original=drawing()
+        val shifted=DrawingAnchorEditing.translate(original,50,7.5)
+        assertEquals(listOf(DrawingAnchor(150,17.5),DrawingAnchor(250,27.5),
+            DrawingAnchor(350,37.5)),shifted.anchors)
+        assertEquals(150L,shifted.startTime)
+        assertEquals(350L,shifted.endTime)
+        assertEquals(17.5,shifted.startPrice,0.0)
+        assertEquals(37.5,shifted.endPrice!!,0.0)
+        assertEquals(original.anchors.first(),drawing().anchors.first())
+    }
+
+    @Test fun wholeDrawingTranslationRejectsNegativePricesAndTimes() {
+        val original=drawing()
+        assertSame(original,DrawingAnchorEditing.translate(original,-101,0.0))
+        assertSame(original,DrawingAnchorEditing.translate(original,0,-10.0))
+        assertSame(original,DrawingAnchorEditing.translate(original,0,Double.NaN))
+    }
+
+    @Test fun legacyLineTranslationKeepsLegacyStorageFormat() {
+        val original=ChartDrawing(id=99,tool=DrawingTool.TRENDLINE,symbol="XAUUSD",timeframe="M5",
+            startTime=100,startPrice=2000.0,endTime=200,endPrice=2010.0)
+        val moved=DrawingAnchorEditing.translate(original,10,5.0)
+        assertTrue(moved.anchors.isEmpty())
+        assertEquals(110L,moved.startTime)
+        assertEquals(210L,moved.endTime)
+        assertEquals(2005.0,moved.startPrice,0.0)
+        assertEquals(2015.0,moved.endPrice!!,0.0)
+    }
+
+    @Test fun timestampOverflowCannotWrapDrawingAcrossTimeline() {
+        val original=ChartDrawing(id=100,tool=DrawingTool.TRENDLINE,symbol="XAUUSD",timeframe="M5",
+            startTime=Long.MAX_VALUE-10,startPrice=100.0,
+            endTime=Long.MAX_VALUE-1,endPrice=101.0)
+        assertSame(original,DrawingAnchorEditing.translate(original,20,1.0))
+    }
+
+    @Test fun wholeDrawingTranslationDoesNotMutateOriginalAnchors() {
+        val original=drawing()
+        val shifted=DrawingAnchorEditing.translate(original,20,3.0)
+        assertEquals(DrawingAnchor(100,10.0),original.anchors.first())
+        assertEquals(DrawingAnchor(120,13.0),shifted.anchors.first())
+        assertEquals(3,shifted.anchors.size)
+    }
+
+    @Test fun freehandStrokeMovesAsOneShapeWithoutIndividualHandles() {
+        val original=ChartDrawing(id=201,tool=DrawingTool.BRUSH,symbol="XAUUSD",timeframe="M15",
+            startTime=100,startPrice=10.0,endTime=300,endPrice=30.0,
+            anchors=listOf(DrawingAnchor(100,10.0),DrawingAnchor(170,15.0),DrawingAnchor(300,30.0)))
+        assertTrue(DrawingAnchorEditing.points(original).isEmpty())
+        assertTrue(DrawingAnchorEditing.canTranslate(original))
+        val moved=DrawingAnchorEditing.translate(original,40,2.5)
+        assertEquals(listOf(DrawingAnchor(140,12.5),DrawingAnchor(210,17.5),
+            DrawingAnchor(340,32.5)),moved.anchors)
+        assertEquals(140L,moved.startTime)
+        assertEquals(340L,moved.endTime)
+        assertEquals(12.5,moved.startPrice,0.0)
+        assertEquals(32.5,moved.endPrice!!,0.0)
+        assertEquals(100L,original.startTime)
+    }
+
+    @Test fun invalidFreehandTranslationDoesNotPartiallyMoveStroke() {
+        val original=ChartDrawing(id=202,tool=DrawingTool.BRUSH,symbol="XAUUSD",timeframe="M15",
+            startTime=100,startPrice=10.0,endTime=300,endPrice=30.0,
+            anchors=listOf(DrawingAnchor(100,10.0),DrawingAnchor(300,30.0)))
+        assertSame(original,DrawingAnchorEditing.translate(original,-101,1.0))
+        assertSame(original,DrawingAnchorEditing.translate(original,0,-11.0))
+        assertSame(original,DrawingAnchorEditing.translate(original,0,Double.NaN))
+        assertSame(original,DrawingAnchorEditing.translate(original,Long.MAX_VALUE,1.0))
+    }
+
+    @Test fun emptyFreehandStrokeCannotBeTranslated() {
+        val original=ChartDrawing(id=203,tool=DrawingTool.BRUSH,symbol="XAUUSD",timeframe="M15",
+            startTime=100,startPrice=10.0)
+        assertFalse(DrawingAnchorEditing.canTranslate(original))
+        assertSame(original,DrawingAnchorEditing.translate(original,20,1.0))
+    }
+
 }

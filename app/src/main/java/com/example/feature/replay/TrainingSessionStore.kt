@@ -19,8 +19,26 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
     fun newOwner():Long=owner.incrementAndGet()
     fun clear() { owner.incrementAndGet();synchronized(lock){file.delete();database?.let { runBlocking(Dispatchers.IO) { it.trainingDao().clear() } }} }
     fun observeReports():kotlinx.coroutines.flow.Flow<com.example.core.model.ReplayReport?> =
-        database?.trainingDao()?.observe()?.map { bundle -> bundle?.let { TrainingReportMapper.report(decode(it.checkpoint.payload), it.executions.sortedBy { row -> row.ordinal }.map { row -> row.recordedAt }, it.checkpoint.fundedAt) } }
-            ?: kotlinx.coroutines.flow.flowOf(null)
+        database?.trainingDao()?.observe()?.map { bundle ->
+            if (bundle == null) null else runCatching {
+                val snapshot = decode(bundle.checkpoint.payload)
+                val executions = bundle.executions.sortedBy { it.ordinal }
+                // A checkpoint and its executions are written in one Room transaction.
+                // Reject inconsistent/corrupted snapshots rather than displaying a
+                // partial journal with incorrect timestamps or account totals.
+                require(executions.size == snapshot.state.closedTrades.size) {
+                    "Training journal count does not match checkpoint"
+                }
+                require(executions.indices.all { executions[it].ordinal == it }) {
+                    "Training journal ordinals are not contiguous"
+                }
+                TrainingReportMapper.report(snapshot, executions.map { it.recordedAt },
+                    bundle.checkpoint.fundedAt)
+            }.getOrElse { error ->
+                android.util.Log.e("TrainingSession", "Cannot decode training report", error)
+                null
+            }
+        } ?: kotlinx.coroutines.flow.flowOf(null)
 
     private val writes=Channel<Pair<Long,TrainingSessionSnapshot>>(Channel.CONFLATED)
     init { CoroutineScope(SupervisorJob()+Dispatchers.IO).launch { for((token,snapshot) in writes) { synchronized(lock) {
@@ -42,8 +60,31 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
     }
     fun read():TrainingSessionSnapshot? {
         database?.let { db ->
-            val stored=runBlocking(Dispatchers.IO){db.trainingDao().read()}
-            if(stored!=null) return decode(stored.checkpoint.payload)
+            val stored=runCatching {
+                runBlocking(Dispatchers.IO){db.trainingDao().read()}
+            }.getOrElse { error ->
+                android.util.Log.e("TrainingSession","Room read failed",error)
+                return null
+            }
+            if(stored!=null) return runCatching {
+                val snapshot=decode(stored.checkpoint.payload)
+                require(snapshot.state.initialBalance.isFinite() && snapshot.state.initialBalance>0.0)
+                require(snapshot.state.currentBalance.isFinite() && snapshot.state.currentEquity.isFinite())
+                require(snapshot.candles.size <= 5000)
+                if(snapshot.candles.isNotEmpty()) require(snapshot.state.currentIndex in snapshot.candles.indices)
+                else require(snapshot.state.openPositions.isEmpty() && snapshot.state.pendingOrders.isEmpty())
+                require(stored.executions.size == snapshot.state.closedTrades.size)
+                require(snapshot.state.closedTrades.all { trade ->
+                    trade.netProfitLoss.isFinite() && trade.commission.isFinite() &&
+                        trade.volume.isFinite() && trade.volume > 0.0
+                })
+                require(stored.executions.map { it.ordinal }.sorted() ==
+                    snapshot.state.closedTrades.indices.toList())
+                snapshot
+            }.getOrElse { error ->
+                android.util.Log.e("TrainingSession","Room checkpoint unavailable",error)
+                null
+            }
         }
         if(!file.baseFile.exists()) return null
         return try {
@@ -76,7 +117,15 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
         val old=previous?.executions?.associateBy { it.ordinal }.orEmpty()
         val now=System.currentTimeMillis()
         val rows=snapshot.state.closedTrades.mapIndexed { index,t ->
-            val at=old[index]?.takeIf { it.symbol==t.symbol && it.marketCloseTime==t.closeTime && it.netAmount==java.math.BigDecimal.valueOf(t.netProfitLoss).toPlainString() }?.recordedAt ?: now
+            // Preserve a trade's original journal timestamp across balance/viewport
+            // checkpoint updates, but never reuse it for a different execution.
+            val at=old[index]?.takeIf {
+                it.symbol==t.symbol &&
+                    it.marketCloseTime==t.closeTime &&
+                    it.netAmount==java.math.BigDecimal.valueOf(t.netProfitLoss).toPlainString() &&
+                    it.commissionAmount==java.math.BigDecimal.valueOf(t.commission).toPlainString() &&
+                    it.volume==java.math.BigDecimal.valueOf(t.volume).toPlainString()
+            }?.recordedAt ?: now
             com.example.data.local.entity.TrainingExecutionEntity(ordinal=index,symbol=t.symbol,marketCloseTime=t.closeTime,recordedAt=at,
                 netAmount=java.math.BigDecimal.valueOf(t.netProfitLoss).toPlainString(),commissionAmount=java.math.BigDecimal.valueOf(t.commission).toPlainString(),volume=java.math.BigDecimal.valueOf(t.volume).toPlainString())
         }
