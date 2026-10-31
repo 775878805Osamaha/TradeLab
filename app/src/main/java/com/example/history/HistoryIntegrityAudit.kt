@@ -14,7 +14,7 @@ object HistoryIntegrityAudit {
         val volume: Double
     )
 
-    enum class Problem { INVALID_PRICE, INVALID_VOLUME, DUPLICATE_TIME, OUT_OF_ORDER, MISSING_INTERVAL, FUTURE_BAR, INCOMPLETE_BAR }
+    enum class Problem { INVALID_PRICE, INVALID_VOLUME, DUPLICATE_TIME, OUT_OF_ORDER, MISSING_INTERVAL, MISALIGNED_INTERVAL, FUTURE_BAR, INCOMPLETE_BAR }
 
     data class Finding(val index: Int, val problem: Problem, val missingBars: Long = 0)
 
@@ -57,11 +57,11 @@ object HistoryIntegrityAudit {
                 findings += Finding(index, Problem.INVALID_VOLUME)
                 return@forEachIndexed
             }
-            if (bar.openTimeMillis > nowMillis) {
+            if (bar.openTimeMillis < 0L || bar.openTimeMillis > nowMillis) {
                 findings += Finding(index, Problem.FUTURE_BAR)
                 return@forEachIndexed
             }
-            if (completedOnly && (bar.openTimeMillis < 0L || bar.openTimeMillis > Long.MAX_VALUE - intervalMillis ||
+            if (completedOnly && (bar.openTimeMillis > Long.MAX_VALUE - intervalMillis ||
                         bar.openTimeMillis + intervalMillis > nowMillis)) {
                 findings += Finding(index, Problem.INCOMPLETE_BAR)
                 return@forEachIndexed
@@ -86,6 +86,10 @@ object HistoryIntegrityAudit {
                     missing = if (Long.MAX_VALUE - missing < count) Long.MAX_VALUE else missing + count
                     findings += Finding(index, Problem.MISSING_INTERVAL, count)
                 }
+            }
+            if (previous != null && (bar.openTimeMillis - previous) % intervalMillis != 0L) {
+                findings += Finding(index, Problem.MISALIGNED_INTERVAL)
+                return@forEachIndexed
             }
             accepted += bar
             lastTime = bar.openTimeMillis
