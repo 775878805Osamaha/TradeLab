@@ -407,10 +407,16 @@ fun CandlestickChart(
                                     )
                                 }
                             } else {
-                                scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, dragAmount.x)
+                                if (dragAmount.x.isFinite()) {
+                                    val next = ChartNavigation.drag(scrollOffsetPx, dragAmount.x)
+                                    if (next.isFinite()) scrollOffsetPx = next.coerceAtLeast(0f)
+                                }
                                 // Let a single diagonal gesture pan both time and price axes.
                                 // The visual direction follows the finger; reset view restores auto-fit.
-                                pricePanPx = (pricePanPx + dragAmount.y).coerceIn(-6000f, 6000f)
+                                if (dragAmount.y.isFinite()) {
+                                    val next = pricePanPx + dragAmount.y
+                                    if (next.isFinite()) pricePanPx = next.coerceIn(-6000f, 6000f)
+                                }
                             }
                         },
                         onDragEnd = {
