@@ -462,6 +462,7 @@ fun CandlestickChart(
                             editingAnchor = null
                             anchorPreview = null
                             anchorTransform = null
+                            drawingStartOffset = if (activeDrawingTool == DrawingTool.NONE) null else drawingStartOffset
                             if (dragStartedInPlot && activeDrawingTool != DrawingTool.NONE && drawingStartOffset != null && drawingCurrentOffset != null) {
                                 val transformForSnap = transformRef[0]
                                 val start = transformForSnap?.snapDrawingPoint(drawingStartOffset!!, snapEnabled) ?: drawingStartOffset!!
