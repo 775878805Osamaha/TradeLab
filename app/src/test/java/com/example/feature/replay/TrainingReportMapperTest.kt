@@ -33,4 +33,16 @@ class TrainingReportMapperTest {
         assertEquals(30.0,report.curve[2].drawdown,0.0)
     }
 
+    @Test(expected=IllegalArgumentException::class)
+    fun invalidReplayBalanceCannotBecomeResultsReport() {
+        val state=ReplayUiState(initialBalance=100.0,currentBalance=Double.NaN,currentEquity=100.0)
+        TrainingReportMapper.report(TrainingSessionSnapshot(state,emptyList(),1),emptyList(),1000)
+    }
+
+    @Test(expected=IllegalArgumentException::class)
+    fun unexpectedExecutionTimestampCannotBecomeResultsReport() {
+        val state=ReplayUiState(initialBalance=100.0,currentBalance=100.0,currentEquity=100.0)
+        TrainingReportMapper.report(TrainingSessionSnapshot(state,emptyList(),1),listOf(1000L),1000)
+    }
+
 }
