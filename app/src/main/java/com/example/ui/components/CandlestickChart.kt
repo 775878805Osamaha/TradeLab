@@ -498,8 +498,15 @@ fun CandlestickChart(
                                     listOfNotNull(pos.entryPrice, pos.stopLoss, pos.takeProfit)
                                         .any { kotlin.math.abs(transform.priceToY(it) - offset.y) <= positionHitRadius }
                                 } else null
+                            val tappedDrawing = if (insidePlot && transform != null &&
+                                activeDrawingTool == DrawingTool.NONE && !isCrosshairActive)
+                                currentDrawings.asReversed().firstOrNull { drawing ->
+                                    DrawingHitTest.distance(drawing, transform, offset) <= positionHitRadius
+                                } else null
                             if (hit != null && selectPosition != null) {
                                 selectPosition?.invoke(hit)
+                            } else if (tappedDrawing != null && drawingSelection != null) {
+                                drawingSelection?.invoke(tappedDrawing)
                             } else if (insidePlot && transform != null && onAddDrawing != null &&
                                 activeDrawingTool.isSinglePoint) {
                                 onAddDrawing(
