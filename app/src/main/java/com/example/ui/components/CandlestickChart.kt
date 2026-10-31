@@ -373,14 +373,19 @@ fun CandlestickChart(
                             anchorPreview = null
                             anchorTransform = transform
                             if (activeDrawingTool == DrawingTool.NONE && !isCrosshairActive && updateDrawing != null && transform != null) {
-                                editingAnchor = currentDrawings.asReversed().filter { it.id != 0L && DrawingAnchorEditing.points(it).isNotEmpty() }.firstNotNullOfOrNull { d ->
-                                    fun near(time: Long?, price: Double?): Boolean = time != null && price != null &&
-                                        (transform.timeToX(time)?.let { Offset(it,transform.priceToY(price)) - offset }?.getDistance() ?: Float.MAX_VALUE) <= anchorRadius
-                                    DrawingAnchorEditing.points(d).indices.reversed().firstOrNull { index ->
-                                        val anchor=DrawingAnchorEditing.points(d)[index]
-                                        near(anchor.time,anchor.price)
-                                    }?.let { d to it }
-                                }
+                                // Select the nearest visible handle rather than the first
+                                // overlapping drawing, so densely annotated charts remain editable.
+                                editingAnchor = currentDrawings.asReversed()
+                                    .filter { it.id != 0L }
+                                    .flatMap { drawing ->
+                                        DrawingAnchorEditing.points(drawing).mapIndexedNotNull { index, anchor ->
+                                            val x = transform.timeToX(anchor.time) ?: return@mapIndexedNotNull null
+                                            val y = transform.priceToY(anchor.price)
+                                            val distance = (Offset(x, y) - offset).getDistance()
+                                            if (distance.isFinite() && distance <= anchorRadius)
+                                                Triple(drawing, index, distance) else null
+                                        }
+                                    }.minByOrNull { it.third }?.let { it.first to it.second }
                             }
                             if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingStartOffset = offset
