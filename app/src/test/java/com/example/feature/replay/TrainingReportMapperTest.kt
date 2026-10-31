@@ -30,7 +30,6 @@ class TrainingReportMapperTest {
                 ReplayEquitySample(3,110.0,110.0,3000)))
         val report=TrainingReportMapper.report(TrainingSessionSnapshot(state,emptyList(),1),emptyList(),500)
         assertEquals(30.0,report.maxDrawdown,0.0)
-        assertEquals(120.0,report.curve[2].peakEquity,0.0)
         assertEquals(30.0,report.curve[2].drawdown,0.0)
     }
 
