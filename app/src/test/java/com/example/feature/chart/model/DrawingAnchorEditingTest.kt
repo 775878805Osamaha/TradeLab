@@ -125,4 +125,16 @@ class DrawingAnchorEditingTest {
         assertSame(original,DrawingAnchorEditing.translate(original,20,1.0))
     }
 
+    @Test fun noOpHandleEditPreservesObjectIdentity() {
+        val original=drawing()
+        assertSame(original,DrawingAnchorEditing.move(original,1,original.anchors[1]))
+    }
+
+    @Test fun zeroDeltaWholeStrokeDoesNotTriggerPersistence() {
+        val original=drawing()
+        assertSame(original,DrawingAnchorEditing.translate(original,0L,0.0))
+        val freehand=original.copy(tool=DrawingTool.BRUSH)
+        assertSame(freehand,DrawingAnchorEditing.translate(freehand,0L,0.0))
+    }
+
 }
