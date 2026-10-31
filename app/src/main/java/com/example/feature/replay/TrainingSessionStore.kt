@@ -61,7 +61,18 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
     fun read():TrainingSessionSnapshot? {
         database?.let { db ->
             val stored=runBlocking(Dispatchers.IO){db.trainingDao().read()}
-            if(stored!=null) return decode(stored.checkpoint.payload)
+            if(stored!=null) return runCatching {
+                val snapshot=decode(stored.checkpoint.payload)
+                require(snapshot.state.initialBalance.isFinite() && snapshot.state.initialBalance>0.0)
+                require(snapshot.state.currentBalance.isFinite() && snapshot.state.currentEquity.isFinite())
+                require(snapshot.candles.size <= 5000)
+                if(snapshot.candles.isNotEmpty()) require(snapshot.state.currentIndex in snapshot.candles.indices)
+                require(stored.executions.size == snapshot.state.closedTrades.size)
+                snapshot
+            }.getOrElse { error ->
+                android.util.Log.e("TrainingSession","Room checkpoint unavailable",error)
+                null
+            }
         }
         if(!file.baseFile.exists()) return null
         return try {
