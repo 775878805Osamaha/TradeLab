@@ -492,7 +492,8 @@ fun CandlestickChart(
                             val hit = if (insidePlot && transform != null && activeDrawingTool == DrawingTool.NONE)
                                 selectablePositions.minByOrNull { pos ->
                                     listOfNotNull(pos.entryPrice, pos.stopLoss, pos.takeProfit)
-                                        .minOf { kotlin.math.abs(transform.priceToY(it) - offset.y) }
+                                        .map { kotlin.math.abs(transform.priceToY(it) - offset.y) }
+                                        .minOrNull() ?: Float.POSITIVE_INFINITY
                                 }?.takeIf { pos ->
                                     listOfNotNull(pos.entryPrice, pos.stopLoss, pos.takeProfit)
                                         .any { kotlin.math.abs(transform.priceToY(it) - offset.y) <= positionHitRadius }
