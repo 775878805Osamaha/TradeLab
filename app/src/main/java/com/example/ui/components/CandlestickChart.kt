@@ -235,10 +235,12 @@ fun CandlestickChart(
         // below handles one-finger dragging. Apply two-finger translation as
         // well so the chart does not freeze while users pinch and reposition.
         if (panChange.x.isFinite() && panChange.x != 0f) {
-            scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, panChange.x)
+            val next = ChartNavigation.drag(scrollOffsetPx, panChange.x)
+            if (next.isFinite()) scrollOffsetPx = next.coerceAtLeast(0f)
         }
         if (panChange.y.isFinite() && panChange.y != 0f) {
-            pricePanPx = (pricePanPx + panChange.y).coerceIn(-6000f, 6000f)
+            val next = pricePanPx + panChange.y
+            if (next.isFinite()) pricePanPx = next.coerceIn(-6000f, 6000f)
         }
     }
 
