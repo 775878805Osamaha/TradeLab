@@ -29,4 +29,22 @@ class DrawingAnchorEditingTest {
         assertSame(original,DrawingAnchorEditing.move(original,1,DrawingAnchor(-1,10.0)))
         assertTrue(DrawingAnchorEditing.points(original.copy(tool=DrawingTool.BRUSH)).isEmpty())
     }
+    @Test fun legacyTrendlineEndpointDragUpdatesOnlyRequestedHandle() {
+        val original=ChartDrawing(id=17,tool=DrawingTool.TRENDLINE,symbol="XAUUSD",timeframe="M5",
+            startTime=100,startPrice=2000.0,endTime=200,endPrice=2010.0)
+        assertEquals(2,DrawingAnchorEditing.points(original).size)
+        val changed=DrawingAnchorEditing.move(original,1,DrawingAnchor(250,2020.0))
+        assertEquals(100L,changed.startTime)
+        assertEquals(2000.0,changed.startPrice,0.0)
+        assertEquals(250L,changed.endTime)
+        assertEquals(2020.0,changed.endPrice!!,0.0)
+        assertTrue(changed.anchors.isEmpty())
+    }
+
+    @Test fun invalidPriceDoesNotModifyExistingDrawing() {
+        val original=drawing()
+        assertSame(original,DrawingAnchorEditing.move(original,0,DrawingAnchor(120,0.0)))
+        assertSame(original,DrawingAnchorEditing.move(original,0,DrawingAnchor(120,Double.POSITIVE_INFINITY)))
+    }
+
 }
