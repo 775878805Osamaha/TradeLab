@@ -223,9 +223,17 @@ fun CandlestickChart(
         }
 
     // Switching drawing tools must cancel unfinished drag previews.
-    LaunchedEffect(activeDrawingTool) {
+    LaunchedEffect(activeDrawingTool, candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe) {
+        // A partially drawn path or a selected anchor belongs to the previous
+        // tool/instrument. Never finish it against a different chart transform.
         drawingStartOffset = null
         drawingCurrentOffset = null
+        editingAnchor = null
+        anchorPreview = null
+        anchorTransform = null
+        dragStartedInPlot = false
+        pendingAnchors = emptyList()
+        freehandPoints = emptyList()
     }
 
     val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
