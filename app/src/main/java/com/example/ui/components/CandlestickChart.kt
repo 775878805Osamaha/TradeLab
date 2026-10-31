@@ -236,7 +236,7 @@ fun CandlestickChart(
         // well so the chart does not freeze while users pinch and reposition.
         if (panChange.x.isFinite() && panChange.x != 0f) {
             val next = ChartNavigation.drag(scrollOffsetPx, panChange.x)
-            if (next.isFinite()) scrollOffsetPx = next.coerceAtLeast(0f)
+            if (next.isFinite()) scrollOffsetPx = next.coerceAtLeast(if (referenceLayout) -chartViewportWidthPx * 0.5f else 0f)
         }
         if (panChange.y.isFinite() && panChange.y != 0f) {
             val next = pricePanPx + panChange.y
@@ -409,7 +409,7 @@ fun CandlestickChart(
                             } else {
                                 if (dragAmount.x.isFinite()) {
                                     val next = ChartNavigation.drag(scrollOffsetPx, dragAmount.x)
-                                    if (next.isFinite()) scrollOffsetPx = next.coerceAtLeast(0f)
+                                    if (next.isFinite()) scrollOffsetPx = next.coerceAtLeast(if (referenceLayout) -chartViewportWidthPx * 0.5f else 0f)
                                 }
                                 // Let a single diagonal gesture pan both time and price axes.
                                 // The visual direction follows the finger; reset view restores auto-fit.
