@@ -29,11 +29,15 @@ internal object DrawingAnchorEditing {
         val original = points(d)
         if (original.isEmpty() || !priceDelta.isFinite()) return d
         val shifted = original.map { anchor ->
-            val time = anchor.time + timeDelta
+            // Exact arithmetic prevents overflow from wrapping a timestamp into
+            // another valid-looking point when the user drags near time bounds.
+            val time = try {
+                java.lang.Math.addExact(anchor.time, timeDelta)
+            } catch (_: ArithmeticException) {
+                return d
+            }
             val price = anchor.price + priceDelta
-            if ((timeDelta > 0 && time < anchor.time) ||
-                (timeDelta < 0 && time > anchor.time) ||
-                time < 0 || !price.isFinite() || price <= 0.0) return d
+            if (time < 0 || !price.isFinite() || price <= 0.0) return d
             DrawingAnchor(time, price)
         }
         return if (d.anchors.isNotEmpty()) d.copy(
