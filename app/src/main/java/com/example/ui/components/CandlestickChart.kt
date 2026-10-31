@@ -390,12 +390,14 @@ fun CandlestickChart(
                             if (editingAnchor == null && activeDrawingTool == DrawingTool.NONE &&
                                 !isCrosshairActive && updateDrawing != null && transform != null) {
                                 // Drag the stroke itself to translate the complete drawing.
-                                val selected = currentDrawings.asReversed().firstOrNull { drawing ->
-                                    drawing.id != 0L && DrawingAnchorEditing.canTranslate(drawing) &&
-                                        DrawingHitTest.distance(drawing, transform, offset).let {
-                                            it.isFinite() && it <= anchorRadius
-                                        }
-                                }
+                                val selected = currentDrawings.asReversed()
+                                    .mapNotNull { drawing ->
+                                        if (drawing.id == 0L || !DrawingAnchorEditing.canTranslate(drawing)) null
+                                        else DrawingHitTest.distance(drawing, transform, offset)
+                                            .takeIf { it.isFinite() && it <= anchorRadius }
+                                            ?.let { drawing to it }
+                                    }
+                                    .minByOrNull { it.second }?.first
                                 if (selected != null) {
                                     editingAnchor = selected to -1
                                     drawingStartOffset = offset
@@ -457,7 +459,8 @@ fun CandlestickChart(
                         },
                         onDragEnd = {
                             anchorPreview?.let { preview ->
-                                if (currentDrawings.any { it.id == preview.id && it.id != 0L }) updateDrawing?.invoke(preview)
+                                if (currentDrawings.any { it.id == preview.id && it.id != 0L && it != preview })
+                                    updateDrawing?.invoke(preview)
                             }
                             editingAnchor = null
                             anchorPreview = null
