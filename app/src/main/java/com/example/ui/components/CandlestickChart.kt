@@ -391,7 +391,7 @@ fun CandlestickChart(
                                 !isCrosshairActive && updateDrawing != null && transform != null) {
                                 // Drag the stroke itself to translate the complete drawing.
                                 val selected = currentDrawings.asReversed().firstOrNull { drawing ->
-                                    drawing.id != 0L && DrawingAnchorEditing.points(drawing).isNotEmpty() &&
+                                    drawing.id != 0L && DrawingAnchorEditing.canTranslate(drawing) &&
                                         DrawingHitTest.distance(drawing, transform, offset).let {
                                             it.isFinite() && it <= anchorRadius
                                         }
