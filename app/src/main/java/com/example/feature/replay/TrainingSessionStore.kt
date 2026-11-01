@@ -112,6 +112,19 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
     }
 
     private fun commitRoom(snapshot:TrainingSessionSnapshot) {
+        val state = snapshot.state
+        require(state.initialBalance.isFinite() && state.initialBalance > 0.0)
+        require(state.currentBalance.isFinite() && state.currentEquity.isFinite())
+        require(snapshot.candles.size <= 5000)
+        require(snapshot.candles.isEmpty() || state.currentIndex in snapshot.candles.indices)
+        require(snapshot.candles.isNotEmpty() ||
+            (state.openPositions.isEmpty() && state.pendingOrders.isEmpty()))
+        require(state.closedTrades.all { trade ->
+            trade.netProfitLoss.isFinite() && trade.commission.isFinite() &&
+                trade.volume.isFinite() && trade.volume > 0.0
+        })
+        require(state.equitySamples.all { it.balance.isFinite() && it.equity.isFinite() })
+        require(state.equitySamples.zipWithNext().all { (a,b) -> b.timestamp >= a.timestamp })
         val dao=database!!.trainingDao()
         val previous=dao.read()
         val old=previous?.executions?.associateBy { it.ordinal }.orEmpty()
