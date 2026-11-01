@@ -106,6 +106,12 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
             if(value.candles.isNotEmpty()) require(value.state.currentIndex in value.candles.indices)
             else require(value.state.openPositions.isEmpty() && value.state.pendingOrders.isEmpty())
             require(value.state.initialBalance.isFinite() && value.state.initialBalance>0 && value.state.currentBalance.isFinite() && value.state.currentEquity.isFinite())
+            require(value.state.closedTrades.all {
+                it.netProfitLoss.isFinite() && it.commission.isFinite() &&
+                    it.volume.isFinite() && it.volume > 0.0
+            })
+            require(value.state.equitySamples.all { it.balance.isFinite() && it.equity.isFinite() })
+            require(value.state.equitySamples.zipWithNext().all { (a,b) -> b.timestamp >= a.timestamp })
             if(value.candles.isNotEmpty()) require(DataIntegrityValidator.validateHistoricalSeries(value.candles).isValid)
             database?.let { runBlocking(Dispatchers.IO){commitRoom(value)} }
             value
