@@ -145,8 +145,8 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
                         "com.example.feature.replay.ReplayUiState",
                         "com.example.feature.replay.ReplayEquitySample",
                         "com.example.feature.replay.ReplayInteractionMode",
-                        "java.util.ArrayList","java.util.Arrays\\$ArrayList",
-                        "java.util.Collections\\$SingletonList","java.util.Collections\\$EmptyList",
+                        "java.util.ArrayList","java.util.Arrays\$ArrayList",
+                        "java.util.Collections\$SingletonList","java.util.Collections\$EmptyList",
                         "kotlin.collections.EmptyList","java.lang.Enum","java.lang.Number",
                         "java.lang.Integer","java.lang.Long","java.lang.Double","java.lang.Float") ||
                     n.startsWith("[Lcom.example.core.model.") || n=="[Ljava.lang.Object;")
