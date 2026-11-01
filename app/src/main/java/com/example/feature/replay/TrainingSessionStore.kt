@@ -118,9 +118,41 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
         } catch(error:Exception){android.util.Log.e("TrainingSession","Checkpoint unavailable",error);null}
     }
     private fun decode(bytes:ByteArray):TrainingSessionSnapshot {
+        require(bytes.size in 1..20_000_000) { "Invalid Replay checkpoint size" }
         val raw=ByteArrayInputStream(bytes)
-        val input=if(bytes.size>2 && bytes[0]==0x1f.toByte() && bytes[1]==0x8b.toByte())java.util.zip.GZIPInputStream(raw) else raw
-        return ObjectInputStream(input).use { it.readObject() as TrainingSessionSnapshot }
+        val input=if(bytes.size>2 && bytes[0]==0x1f.toByte() && bytes[1]==0x8b.toByte())
+            java.util.zip.GZIPInputStream(raw) else raw
+        // Room stores compressed snapshots. Bound the expanded stream too, so a
+        // malformed checkpoint cannot exhaust memory when Results observes it.
+        val bounded=object:java.io.FilterInputStream(input) {
+            private var consumed=0L
+            override fun read():Int {
+                val value=super.read()
+                if(value>=0) { consumed++; require(consumed<=20_000_000) }
+                return value
+            }
+            override fun read(buffer:ByteArray,offset:Int,length:Int):Int {
+                val count=super.read(buffer,offset,length)
+                if(count>0) { consumed+=count; require(consumed<=20_000_000) }
+                return count
+            }
+        }
+        return object:ObjectInputStream(bounded) {
+            override fun resolveClass(desc:ObjectStreamClass):Class<*> {
+                val n=desc.name
+                require(n.startsWith("com.example.core.model.") ||
+                    n in setOf("com.example.feature.replay.TrainingSessionSnapshot",
+                        "com.example.feature.replay.ReplayUiState",
+                        "com.example.feature.replay.ReplayEquitySample",
+                        "com.example.feature.replay.ReplayInteractionMode",
+                        "java.util.ArrayList","java.util.Arrays\\$ArrayList",
+                        "java.util.Collections\\$SingletonList","java.util.Collections\\$EmptyList",
+                        "kotlin.collections.EmptyList","java.lang.Enum","java.lang.Number",
+                        "java.lang.Integer","java.lang.Long","java.lang.Double","java.lang.Float") ||
+                    n.startsWith("[Lcom.example.core.model.") || n=="[Ljava.lang.Object;")
+                return super.resolveClass(desc)
+            }
+        }.use { it.readObject() as TrainingSessionSnapshot }
     }
 
     private fun commitRoom(snapshot:TrainingSessionSnapshot) {
