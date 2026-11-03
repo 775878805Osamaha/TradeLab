@@ -175,10 +175,19 @@ class ReplayViewModel(
                 } else {
                     chartOlderSearchAnchor = null
                     chartLookbackExhausted = false
-                    _chartLookback.value = ReplayChartLookback.prepend(
-                        _chartLookback.value, page, dataset.first().openTime,
-                        symbol, tf
-                    )
+                    val previous = _chartLookback.value
+                    val merged = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                        ReplayChartLookback.prepend(previous, page,
+                            dataset.first().openTime, symbol, tf)
+                    }
+                    // Validation/merge of a 100k-bar lookback happens off Main;
+                    // re-check the broker/session after the asynchronous merge.
+                    if (!brokerChangedDuringReplay &&
+                        _uiState.value.datasetId == datasetId &&
+                        _uiState.value.symbol == symbol &&
+                        _uiState.value.timeframe == tf &&
+                        replayEngine.snapshotCandles().firstOrNull()?.openTime == dataset.first().openTime)
+                        _chartLookback.value = merged
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
