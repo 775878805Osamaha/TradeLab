@@ -44,7 +44,7 @@ class MarketViewModel(private val marketDataRepository: MarketDataRepository):Vi
         combine(
             marketDataRepository.symbols.map{it.map{symbol->symbol.symbol}.toSet()}.distinctUntilChanged(),
             marketDataRepository.cTraderAccount
-        ) { symbols, account -> symbols to account }.collectLatest { (symbols, account) ->
+        ) { symbols, account -> symbols to account }.collectLatest { (symbols, _) ->
             // Remove quotes and history from the previously selected broker immediately.
             ticks.update { it.filterKeys { symbol -> symbol !in VerifiedMarketQuote.forexSymbols } }
             histories.update { it.filterKeys { symbol -> symbol !in VerifiedMarketQuote.forexSymbols } }
