@@ -32,6 +32,11 @@ internal class ReplayHistoricalPages private constructor(
         size=total.toInt()
     }
 
+    // Snapshot identity: StateFlow/Compose should not compare all 100k bars
+    // structurally each time a new historical page or Replay tick arrives.
+    override fun equals(other:Any?):Boolean=this===other
+    override fun hashCode():Int=System.identityHashCode(this)
+
     override fun get(index:Int):Candle {
         if(index<0 || index>=size)throw IndexOutOfBoundsException("index=$index size=$size")
         var left=0
