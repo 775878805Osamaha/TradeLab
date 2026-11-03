@@ -304,13 +304,6 @@ class ReplayViewModel(
         }
     }
 
-    fun configureHistoricalApiKey(key: String) {
-        marketDataRepository.configureTwelveDataKey(key)
-        _uiState.update { it.copy(message = if (key.isBlank()) "تم إلغاء مفتاح Twelve Data" else "تم ضبط مفتاح Twelve Data في الذاكرة لهذه الجلسة") }
-    }
-
-    fun hasHistoricalApiKey(): Boolean = marketDataRepository.hasTwelveDataKey()
-
     fun canChangeDataset(): Boolean {
         val allowed=openPositions.isEmpty() && pendingOrders.isEmpty()
         if(!allowed) _uiState.update { it.copy(message="أغلق الصفقات والأوامر قبل تغيير بيانات التدريب") }
