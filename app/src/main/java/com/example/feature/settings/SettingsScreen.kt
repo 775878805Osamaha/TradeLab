@@ -41,8 +41,6 @@ fun SettingsScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val cTrader = com.example.feature.ctrader.CTraderAuthorization
     val activeCTraderAccount by repository.cTraderAccount.collectAsState()
-    var enablingCTrader by remember { mutableStateOf(false) }
-    var sourceChangeMessage by remember { mutableStateOf<String?>(null) }
     var accountStatus by remember { mutableStateOf<String?>(null) }
     var goldCheckStatus by remember { mutableStateOf<String?>(null) }
     var goldCheckRunning by remember { mutableStateOf(false) }
@@ -144,42 +142,16 @@ fun SettingsScreen(
                             }
                             if(goldCheckStatus!=null)Text(goldCheckStatus!!,fontSize=12.sp,color=TradingTextSecondary)
                         }
-                        if (cTrader.isLinked(context)) {
-                            if(activeCTraderAccount == null) {
-                                Button(
-                                    modifier=Modifier.fillMaxWidth().testTag("ctrader_enable_chart"),
-                                    enabled=!enablingCTrader && gatewayCheck?.authEnabled==true,
-                                    onClick={
-                                        enablingCTrader=true
-                                        sourceChangeMessage=null
-                                        scope.launch {
-                                            sourceChangeMessage=try {
-                                                repository.enableCTraderGold()
-                                            } catch(e:kotlinx.coroutines.CancellationException) {
-                                                throw e
-                                            } catch(e:Exception) {
-                                                "لم يتغير المصدر: "+(e.message ?: "تعذر التحقق من سعر الذهب والشموع")
-                                            }
-                                            enablingCTrader=false
-                                        }
-                                    }
-                                ) { Text(if(enablingCTrader) "جارٍ فحص السعر والشموع..." else "اعتماد cTrader للشارت والريبلاي") }
-                                Text("لا يتغير مصدر الذهب والفوركس قبل فحص سعر Bid/Ask حديث وشموع حقيقية مغلقة من الوسيط.",
-                                    fontSize=11.sp,color=TradingTextSecondary)
-                            } else {
-                                Text("مصدر الذهب والفوركس المحدد: cTrader — حساب "+activeCTraderAccount,
-                                    fontSize=12.sp,color=TradingCyan)
-                                OutlinedButton(
-                                    modifier=Modifier.fillMaxWidth().testTag("ctrader_disable_chart"),
-                                    onClick={
-                                        repository.disableCTrader()
-                                        sourceChangeMessage="تم الرجوع لمصدر الذهب والفوركس السابق"
-                                    }
-                                ) { Text("الرجوع إلى المصدر السابق") }
-                            }
-                        }
-                        sourceChangeMessage?.let {
-                            Text(it,fontSize=12.sp,color=TradingGold)
+                        Text("مصدر الذهب والفوركس الوحيد: cTrader. لا توجد مصادر بديلة أو أسعار وهمية.",
+                            fontSize=12.sp,color=TradingCyan)
+                        if(cTrader.isLinked(context)) {
+                            Text(if(activeCTraderAccount==null)
+                                "تم تسجيل الدخول. سيجلب TradeLab الحساب والبيانات تلقائيًا؛ فشل 503 يعني انقطاع بوابة cTrader، وليس إذنًا باستخدام مصدر آخر."
+                                else "حساب cTrader للبيانات: "+activeCTraderAccount,
+                                fontSize=12.sp,color=TradingTextSecondary)
+                        } else {
+                            Text("اربط حساب cTrader لعرض أسعار الفوركس والذهب.",
+                                fontSize=12.sp,color=TradingGold)
                         }
                     }
                 }
@@ -199,15 +171,13 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "حالة مزود Binance / Biquote", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text(text = "حالة Binance للكريبتو", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                             DataSourceBadge(sourceType = diag.dataSourceType)
                         }
 
                         HorizontalDivider(color = TradingBorder)
 
-                        Text(if(activeCTraderAccount!=null)
-                            "الشارت للذهب والفوركس يستخدم cTrader؛ مؤشرات الاتصال التالية تخص Binance/Biquote فقط."
-                            else "مصدر الشارت الأساسي Binance/Biquote؛ cTrader لا يصبح المصدر قبل اعتماده.",
+                        Text("المؤشرات التالية تخص Binance للكريبتو فقط. الفوركس والذهب لهما اتصال cTrader مستقل.",
                             fontSize=11.sp,color=TradingTextSecondary)
                         DiagnosticRow("اسم المزود", diag.providerName)
                         DiagnosticRow("حالة الاتصال", diag.connectionStatus.displayName, isStatus = true, status = diag.connectionStatus)
@@ -240,7 +210,6 @@ fun SettingsScreen(
                 }
             }
 
-            item { HistorySettingsCard() }
 
             // Architecture & Compliance Card
             item {
@@ -259,10 +228,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "• BTCUSDT و ETHUSDT متصلان مباشرة ببيانات السوق اللحظية عبر Binance Public WebSocket.\n" +
-                                    (if(activeCTraderAccount != null)
-                                        "• الذهب والفوركس يعرضان أسعار cTrader الموثقة من حسابك فقط، ولا يتم دمجها بمصادر أخرى.\n"
-                                    else
-                                        "• الذهب والفوركس يستخدمان المصدر السابق؛ تسجيل دخول cTrader وحده لا يبدّل الشارت.\n") +
+                                    "• الذهب والفوركس عبر cTrader فقط؛ عند انقطاعه تظهر البيانات غير متاحة، دون الرجوع إلى مزود سابق.\n" + +
                                     "• اتصال cTrader بصلاحية القراءة فقط. كل الأوامر والصفقات داخل TradeLab افتراضية 100%.",
                             fontSize = 12.sp,
                             color = TradingTextSecondary,
@@ -272,31 +238,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Custom Provider / API Keys Documentation Card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = TradingCard),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Key, contentDescription = null, tint = TradingGold)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "ربط مزود بيانات خاص (API)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "تم بناء معمارية التطبيق خلف الواجهة المجردة MarketDataProvider و HistoricalDataProvider.\n" +
-                                    "تم تجهيز ربط cTrader عبر خدمة HTTPS آمنة. مفتاح Client Secret يبقى على الخادم ولا يُحفظ في APK؛ ويمكن استخدام Twelve Data يدويًا لمصدر تاريخي بديل.",
-                            fontSize = 12.sp,
-                            color = TradingTextSecondary,
-                            lineHeight = 18.sp
-                        )
-                    }
-                }
-            }
         }
     }
 }
