@@ -1,6 +1,9 @@
 package com.example
 
 import android.os.Bundle
+import android.content.Intent
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -45,6 +48,26 @@ import com.example.ui.theme.TradingBorder
 import com.example.ui.theme.TradingCard
 
 class MainActivity : ComponentActivity() {
+    private fun handleCTraderCallback(intent: Intent?) {
+        val app = application as TradeLabApplication
+        val data = intent?.data ?: return
+        if (!app.cTrader.isCallback(data)) return
+        lifecycleScope.launch {
+            try {
+                app.cTrader.completeAuthorization(data)
+                app.marketDataProvider.invalidateForexQuotes()
+            } catch (error: Exception) {
+                app.cTrader.reportError(error.message ?: "فشل التفويض")
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCTraderCallback(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -54,6 +77,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val app = LocalContext.current.applicationContext as TradeLabApplication
+            LaunchedEffect(Unit) {
+                if (app.cTrader.isLinked()) runCatching { app.cTrader.refreshAccounts() }
+            }
 
             // ViewModels scoped cleanly with dependencies
             val accountViewModel by remember { lazy { AccountViewModel(app.tradingRepository) } }
@@ -222,5 +248,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        handleCTraderCallback(intent)
     }
 }

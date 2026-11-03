@@ -10,10 +10,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 class DefaultMarketDataProvider(
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    private val cTrader: CTraderGatewayClient? = null
 ) : MarketDataProvider, HistoricalDataProvider, StreamingMarketDataProvider {
 
-    override val providerName: String = "TradeLab Binance Spot + Biquote MT5 verified market data"
+    override val providerName: String = "TradeLab Binance (crypto) + cTrader (forex/metals)"
 
     private val _isConnected = MutableStateFlow(false)
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -67,7 +68,6 @@ class DefaultMarketDataProvider(
         .readTimeout(6, TimeUnit.SECONDS)
         .build()
 
-    private val forexQuotes = BiquoteQuoteProvider()
     private val forexQuoteJobs = ConcurrentHashMap<String, Job>()
     private var benchmarkJob: Job? = null
     private var healthCheckJob: Job? = null
@@ -182,17 +182,18 @@ class DefaultMarketDataProvider(
                 var failures = 0
                 while (isActive && sym in subscribedSymbols) {
                     try {
-                        val tick = forexQuotes.fetch(sym)
+                        val gateway = cTrader ?: throw java.io.IOException("اربط حساب cTrader في الإعدادات")
+                        val tick = gateway.spot(sym)
                         emitTick(tick)
                         failures = 0
                         _dataSourceType.value = DataSourceType.LIVE_DATA
                         _connectionStatus.value = ProviderConnectionStatus.CONNECTED
-                        _lastHttpDiagnostic.value = "Biquote $sym • verified broker bid/ask"
+                        _lastHttpDiagnostic.value = "cTrader $sym • verified broker bid/ask"
                         updateDiagnostics()
                     } catch (cancelled: CancellationException) { throw cancelled }
                     catch (error: Exception) {
                         failures++
-                        _lastHttpDiagnostic.value = "Biquote $sym • ${error.message?.take(180)}"
+                        _lastHttpDiagnostic.value = "cTrader $sym • ${error.message?.take(180)}"
                         updateDiagnostics()
                     }
                     // Bounded foreground subscriptions; no polling from redraws/gestures.
@@ -206,6 +207,15 @@ class DefaultMarketDataProvider(
         val sym = normalizeSymbol(symbol)
         subscribedSymbols.remove(sym)
         forexQuoteJobs.remove(sym)?.cancel()
+    }
+
+    /** Discard quotes from the prior cTrader account before switching or signing out. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    fun invalidateForexQuotes() {
+        VerifiedMarketQuote.forexSymbols.forEach { symbol ->
+            latestTicks.remove(symbol)
+            tickFlows[symbol]?.resetReplayCache()
+        }
     }
 
     override suspend fun getLatestTick(symbol: String): Tick? {
@@ -428,9 +438,13 @@ class DefaultMarketDataProvider(
             }
             return@withContext DataIntegrityValidator.sanitizeCandles(results)
         }
-        // Forex and XAUUSD require a separate licensed/verified data provider.
-        // Never generate synthetic candles in production market mode.
-        throw java.io.IOException("No verified live market feed configured for $sym")
+        // Only read-only cTrader is allowed for forex and metals, including direct
+        // historical callers. Never retry through an old fallback provider.
+        if (sym in VerifiedMarketQuote.forexSymbols) {
+            return@withContext cTrader?.candles(sym, timeframe, fromTimestamp, toTimestamp)
+                ?: throw java.io.IOException("Connect cTrader to load $sym history")
+        }
+        throw java.io.IOException("Unsupported market symbol: $sym")
 
     }
 

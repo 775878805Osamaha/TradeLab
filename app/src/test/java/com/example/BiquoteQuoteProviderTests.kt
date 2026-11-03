@@ -24,7 +24,8 @@ class BiquoteQuoteProviderTests {
         assertEquals(4000.0, tick.bid, .00001)
         assertEquals(4000.2, tick.ask, .00001)
         assertEquals("BIQUOTE_REST", tick.source)
-        assertTrue(VerifiedMarketQuote.isVerified(tick, "XAUUSD", now))
+        // Legacy parser remains testable, but is no longer an approved TradeLab quote.
+        assertFalse(VerifiedMarketQuote.isVerified(tick, "XAUUSD", now))
     }
     @Test fun staleAndClosedQuotesCannotUnlockPaperOrders() {
         for (payload in listOf(body(stale = true), body(state = "closed"),
@@ -52,7 +53,7 @@ class BiquoteQuoteProviderTests {
         assertFalse(VerifiedMarketQuote.isVerified(tick, "ETHUSDT", now))
     }
     @Test fun marketSpreadUsesTheRealGoldQuoteAndRejectsAnotherSource() {
-        val tick = Tick("XAUUSD", 4000.0, 4000.2, timestamp = System.currentTimeMillis(), source = "BIQUOTE_REST")
+        val tick = Tick("XAUUSD", 4000.0, 4000.2, timestamp = System.currentTimeMillis(), source = "CTRADER_GATEWAY")
         val symbol = com.example.core.market.DefaultSymbols.getSymbol("XAUUSD")
         val row = com.example.feature.market.MarketQuoteSnapshot.from(symbol, tick, emptyList(), System.currentTimeMillis())
         assertEquals(20.0, row.spread!! / symbol.pipSize, .00001)

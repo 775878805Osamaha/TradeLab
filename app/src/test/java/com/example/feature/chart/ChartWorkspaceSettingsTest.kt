@@ -33,7 +33,7 @@ class ChartWorkspaceSettingsTest {
     }
     @Test fun alertsUseVerifiedFreshBidAndInclusiveThreshold() {
         val now=1_800_000_000_000L
-        val tick=Tick("XAUUSD",2000.0,2001.0,timestamp=now,source="BIQUOTE_REST")
+        val tick=Tick("XAUUSD",2000.0,2001.0,timestamp=now,source="CTRADER_GATEWAY")
         assertTrue(ChartPriceAlertRule.reached(tick,"XAUUSD",2000.0,true,false,now))
         assertTrue(ChartPriceAlertRule.reached(tick,"XAUUSD",2000.0,false,false,now))
         assertFalse(ChartPriceAlertRule.reached(tick,"XAUUSD",2000.5,true,false,now))
@@ -41,7 +41,7 @@ class ChartWorkspaceSettingsTest {
     }
     @Test fun alertsRejectReplayStaleWrongSymbolAndUnverifiedQuotes() {
         val now=1_800_000_000_000L
-        val tick=Tick("XAUUSD",2000.0,2001.0,timestamp=now,source="BIQUOTE_REST")
+        val tick=Tick("XAUUSD",2000.0,2001.0,timestamp=now,source="CTRADER_GATEWAY")
         assertFalse(ChartPriceAlertRule.reached(tick,"XAUUSD",1999.0,true,true,now))
         assertFalse(ChartPriceAlertRule.reached(tick,"XAUUSD",1999.0,true,false,now+16000))
         assertFalse(ChartPriceAlertRule.reached(tick,"EURUSD",1.0,true,false,now))

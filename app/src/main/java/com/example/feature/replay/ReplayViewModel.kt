@@ -363,7 +363,7 @@ class ReplayViewModel(
             }
             return
         }
-        // Gold and forex use the verified keyless historical provider.
+        // Gold and forex use only the selected read-only cTrader account.
         replayLoadJob = viewModelScope.launch {
             try {
                 val now = System.currentTimeMillis()
