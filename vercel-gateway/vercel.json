@@ -3,8 +3,16 @@
   "framework": null,
   "rewrites": [
     {
-      "source": "/:path*",
-      "destination": "/api/index?path=:path*"
+      "source": "/healthz",
+      "destination": "/api/index?path=healthz"
+    },
+    {
+      "source": "/auth/ctrader/:path*",
+      "destination": "/api/index?path=auth/ctrader/:path*"
+    },
+    {
+      "source": "/v1/:path*",
+      "destination": "/api/index?path=v1/:path*"
     }
   ],
   "functions": {
