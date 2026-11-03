@@ -403,6 +403,7 @@ fun ReplayScreen(
             ) {
                 CandlestickChart(
                     candles = chartBars,
+                    isReplayHistory = true,
                     latestTick = uiState.latestTick,
                     openPositions = uiState.openPositions,
                     pendingOrders = uiState.pendingOrders,
