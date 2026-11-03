@@ -97,6 +97,39 @@ class HistoricalReplayEngine(
     }
 
     /**
+     * Expand a verified Replay dataset backwards without changing the replay timestamp,
+     * account state, fills or revealing any future candle. This is history navigation,
+     * never an execution step. Index-based checkpoints are shifted to the same bar.
+     */
+    fun prependHistoricalCandles(older: List<Candle>): Int {
+        if (older.isEmpty()) return 0
+        require(allCandles.isNotEmpty()) { "Replay must be initialized before backfilling" }
+        val first = allCandles.first()
+        require(older.all { it.symbol == first.symbol &&
+            it.timeframe == first.timeframe && it.source == first.source }) {
+            "Replay history provider mismatch"
+        }
+        require(older.last().openTime < first.openTime) { "Older replay history overlaps current data" }
+        require(DataIntegrityValidator.validateHistoricalSeries(older).isValid) {
+            "Invalid historical backfill"
+        }
+        pause()
+        val shift = older.size
+        // Preserve every old candle and every current chronological execution position.
+        allCandles = older + allCandles
+        val shifted = checkpoints.values.map { cp ->
+            cp.copy(candleIndex = cp.candleIndex + shift)
+        }
+        checkpoints.clear()
+        shifted.forEach { checkpoints[it.candleIndex] = it }
+        _totalCandles.value = allCandles.size
+        _currentIndex.value += shift
+        // ReplayClock and the currently revealed candle remain the SAME timestamp.
+        updateVisibleState(evaluateTrades = false)
+        return shift
+    }
+
+    /**
      * Provides strict ReplayDataView. Any call attempting to access future candles throws ReplayBoundaryViolation.
      */
     fun getReplayDataView(): ReplayDataView {
