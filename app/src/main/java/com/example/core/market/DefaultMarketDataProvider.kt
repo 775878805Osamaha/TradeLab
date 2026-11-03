@@ -13,7 +13,7 @@ class DefaultMarketDataProvider(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) : MarketDataProvider, HistoricalDataProvider, StreamingMarketDataProvider {
 
-    override val providerName: String = "TradeLab Binance Spot + Biquote MT5 verified market data"
+    override val providerName: String = "Binance Spot · Crypto Only"
 
     private val _isConnected = MutableStateFlow(false)
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -67,8 +67,6 @@ class DefaultMarketDataProvider(
         .readTimeout(6, TimeUnit.SECONDS)
         .build()
 
-    private val forexQuotes = BiquoteQuoteProvider()
-    private val forexQuoteJobs = ConcurrentHashMap<String, Job>()
     private var benchmarkJob: Job? = null
     private var healthCheckJob: Job? = null
     private var binanceWsClient: BinanceWebSocketClient? = null
@@ -145,7 +143,6 @@ class DefaultMarketDataProvider(
     }
 
     override suspend fun startStreaming(symbols: List<String>) {
-        symbols.filter { it in VerifiedMarketQuote.forexSymbols }.forEach { subscribe(it) }
         benchmarkJob?.cancel()
         benchmarkJob = scope.launch {
             // Each symbol polls independently: a blocked ETH request must not
@@ -164,53 +161,27 @@ class DefaultMarketDataProvider(
     override suspend fun stopStreaming() {
         benchmarkJob?.cancel()
         benchmarkJob = null
-        forexQuoteJobs.values.forEach { it.cancel() }
-        forexQuoteJobs.clear()
     }
 
     override fun observeRawStream(): Flow<String> = rawStreamFlow.asSharedFlow()
 
     override suspend fun subscribe(symbol: String) {
         val sym = normalizeSymbol(symbol)
+        // Binance subscriptions only. Forex and metals MUST use the separate
+        // read-only cTrader gateway and must never fall back to Biquote.
+        if (sym !in setOf("BTCUSDT", "ETHUSDT")) return
         subscribedSymbols.add(sym)
-        if (!_isConnected.value) {
-            connect()
-        }
-        if (sym in VerifiedMarketQuote.forexSymbols) synchronized(forexQuoteJobs) {
-            if (forexQuoteJobs[sym]?.isActive == true) return@synchronized
-            forexQuoteJobs[sym] = scope.launch {
-                var failures = 0
-                while (isActive && sym in subscribedSymbols) {
-                    try {
-                        val tick = forexQuotes.fetch(sym)
-                        emitTick(tick)
-                        failures = 0
-                        _dataSourceType.value = DataSourceType.LIVE_DATA
-                        _connectionStatus.value = ProviderConnectionStatus.CONNECTED
-                        _lastHttpDiagnostic.value = "Biquote $sym • verified broker bid/ask"
-                        updateDiagnostics()
-                    } catch (cancelled: CancellationException) { throw cancelled }
-                    catch (error: Exception) {
-                        failures++
-                        _lastHttpDiagnostic.value = "Biquote $sym • ${error.message?.take(180)}"
-                        updateDiagnostics()
-                    }
-                    // Bounded foreground subscriptions; no polling from redraws/gestures.
-                    delay(if (failures == 0) 5_000L else minOf(30_000L, 5_000L * failures))
-                }
-            }
-        }
+        if (!_isConnected.value) connect()
     }
 
     override suspend fun unsubscribe(symbol: String) {
-        val sym = normalizeSymbol(symbol)
-        subscribedSymbols.remove(sym)
-        forexQuoteJobs.remove(sym)?.cancel()
+        subscribedSymbols.remove(normalizeSymbol(symbol))
     }
 
     override suspend fun getLatestTick(symbol: String): Tick? {
         val sym = normalizeSymbol(symbol)
-        return latestTicks[sym]
+        if (sym !in setOf("BTCUSDT", "ETHUSDT")) return null
+        return latestTicks[sym]?.takeIf { VerifiedMarketQuote.isVerified(it,sym) }
     }
 
     override fun observeTicks(symbol: String): Flow<Tick> {
@@ -237,6 +208,9 @@ class DefaultMarketDataProvider(
 
     fun emitTick(tick: Tick) {
         val sym = normalizeSymbol(tick.symbol)
+        // Reject all forex/metals and any non-Binance quote at the crypto provider boundary.
+        if (sym !in setOf("BTCUSDT", "ETHUSDT") ||
+            tick.source !in setOf("BINANCE_WEBSOCKET","BINANCE_REST_POLL")) return
         val normalizedTick = tick.copy(symbol = sym)
         val validation = DataIntegrityValidator.validateTick(normalizedTick)
         if (!validation.isValid) {
