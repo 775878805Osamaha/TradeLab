@@ -240,6 +240,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Settings.route) {
                                 SettingsScreen(
                                     provider = app.marketDataProvider,
+                                    repository = app.marketDataRepository,
                                     cTraderCallbackStatus = cTraderCallbackStatus,
                                     onBack = { navController.popBackStack() }
                                 )
