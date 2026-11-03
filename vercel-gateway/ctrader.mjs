@@ -6,6 +6,10 @@ import { hash as tokenHash } from './session.mjs';
 const REQUEST_RESPONSE = new Map([[2100,2101],[2149,2150],[2102,2103],[2114,2115],[2137,2138],[2127,2128],[2129,2130]]);
 const HOSTS = { demo: 'wss://demo.ctraderapi.com:5036', live: 'wss://live.ctraderapi.com:5036' };
 export const PERIODS = Object.freeze({M1:1,M2:2,M3:3,M4:4,M5:5,M10:6,M15:7,M30:8,H1:9,H4:10,H12:11,D1:12,W1:13,MN1:14});
+export function isReadOnlyScope(scope) {
+  // cTrader marks scope optional in the response. Explicit trade scope is denied.
+  return scope == null || scope === 0 || scope === '0' || scope === 'SCOPE_VIEW';
+}
 export function normalizeBar(raw) {
   const low = Number(raw.low) / 100000;
   return {
@@ -162,13 +166,22 @@ export class CTraderGateway {
     this.channels={live:new Channel('live',clientId,clientSecret),demo:new Channel('demo',clientId,clientSecret)};
   }
   async accounts(accessToken) {
-    // The account-list request is valid after app auth, before individual account auth.
-    const result=await this.channels.demo.request(2149,{accessToken});
-    // Optional by protocol. SCOPE_TRADE must never be accepted as a view-only grant.
-    // The gateway still exposes no order endpoints even for a broker that omits scope.
-    if (result.permissionScope != null &&
-        result.permissionScope !== 0 && result.permissionScope !== '0' &&
-        result.permissionScope !== 'SCOPE_VIEW')
+    // Some cTrader environments authorize live-only versus demo-only users.
+    // Try the secondary environment only if the first returned no account or failed.
+    let result, firstFailure;
+    try {
+      result=await this.channels.demo.request(2149,{accessToken});
+    } catch(error) { firstFailure=error; }
+    if(!result || !(result.ctidTraderAccount||[]).length) {
+      try {
+        const live=await this.channels.live.request(2149,{accessToken});
+        if((live.ctidTraderAccount||[]).length)result=live;
+        else if(!result)result=live;
+      } catch(error) {
+        if(!result)throw firstFailure||error;
+      }
+    }
+    if(!result || !isReadOnlyScope(result.permissionScope))
       throw new Error('ctrader_view_only_required');
     return (result.ctidTraderAccount||[]).map(a=>({
       accountId:String(a.ctidTraderAccountId),
