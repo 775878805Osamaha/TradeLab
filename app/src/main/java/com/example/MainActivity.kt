@@ -45,8 +45,17 @@ import com.example.ui.theme.TradingBorder
 import com.example.ui.theme.TradingCard
 
 class MainActivity : ComponentActivity() {
+    private var cTraderCallbackStatus by mutableStateOf<String?>(null)
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        cTraderCallbackStatus = com.example.feature.ctrader.CTraderAuthorization.callbackStatus(intent.data)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        cTraderCallbackStatus = com.example.feature.ctrader.CTraderAuthorization.callbackStatus(intent?.data)
         enableEdgeToEdge(
             statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.rgb(0, 13, 22))
@@ -214,6 +223,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Settings.route) {
                                 SettingsScreen(
                                     provider = app.marketDataProvider,
+                                    cTraderCallbackStatus = cTraderCallbackStatus,
                                     onBack = { navController.popBackStack() }
                                 )
                             }
