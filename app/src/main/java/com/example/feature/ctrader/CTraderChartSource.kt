@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Account-scoped, opt-in broker history & quotes. Never mixes Biquote with cTrader. */
 class CTraderChartSource(context: Context) {
@@ -29,9 +31,27 @@ class CTraderChartSource(context: Context) {
     )
     val selectedAccount: StateFlow<String?> = _account.asStateFlow()
     private val symbolCache=ConcurrentHashMap<String,CTraderReadOnlyMarketApi.BrokerSymbol>()
+    private val accountMutex = Mutex()
 
-    fun isSelectedFor(symbol:String):Boolean =
-        _account.value != null && symbol in VerifiedMarketQuote.forexSymbols
+    /** cTrader owns ALL forex/metals, even when offline or not yet authorized. */
+    fun isSelectedFor(symbol:String):Boolean = symbol in VerifiedMarketQuote.forexSymbols
+
+    /** Read the user's own granted account once; never select a legacy market source. */
+    private suspend fun authorizedAccount():String {
+        if(!CTraderAuthorization.isLinked(appContext))
+            throw IOException("يلزم تسجيل الدخول إلى cTrader للحصول على أسعار الفوركس")
+        _account.value?.let { return it }
+        return accountMutex.withLock {
+            _account.value?.let { return@withLock it }
+            val accounts=api.accounts()
+            val account=accounts.firstOrNull()
+                ?: throw IOException("لا يوجد حساب مرخص في cTrader")
+            if(!prefs.edit().putString("account_id",account.accountId).commit())
+                throw IOException("تعذر حفظ حساب cTrader")
+            _account.value=account.accountId
+            account.accountId
+        }
+    }
 
     fun disable() {
         check(prefs.edit().remove("account_id").commit())
@@ -61,7 +81,7 @@ class CTraderChartSource(context: Context) {
         return tick
     }
 
-    /** Switch only after one authorized broker supplies fresh gold Bid/Ask AND closed OHLC. */
+    /** A diagnostic validation only; cTrader is always the exclusive forex source. */
     suspend fun validateAndEnableGold():String {
         if(!CTraderAuthorization.isLinked(appContext))throw IOException("اربط حساب cTrader أولًا")
         val accounts=api.accounts()
@@ -90,7 +110,7 @@ class CTraderChartSource(context: Context) {
     }
 
     suspend fun latestTick(symbol:String):Tick {
-        val account=_account.value ?: throw IOException("مصدر cTrader غير مفعل")
+        val account=authorizedAccount()
         val broker=resolveSymbol(account,symbol)
         return api.spot(account,broker.symbolId).toTick(symbol,System.currentTimeMillis())
     }
@@ -104,7 +124,7 @@ class CTraderChartSource(context: Context) {
     }
 
     suspend fun candles(symbol:String,timeframe:Timeframe,from:Long,to:Long):List<Candle> {
-        val account=_account.value ?: throw IOException("مصدر cTrader غير مفعل")
+        val account=authorizedAccount()
         require(from>=0&&to>=from)
         return fetchFor(account,symbol,timeframe,from,to,20_000)
     }
