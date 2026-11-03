@@ -1,6 +1,8 @@
 package com.example
 
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -47,15 +49,23 @@ import com.example.ui.theme.TradingCard
 class MainActivity : ComponentActivity() {
     private var cTraderCallbackStatus by mutableStateOf<String?>(null)
 
+    private fun handleCTraderReturn(uri: android.net.Uri?) {
+        if (!com.example.feature.ctrader.CTraderAuthorization.isCallback(uri)) return
+        cTraderCallbackStatus = "جارٍ التحقق من ربط cTrader..."
+        lifecycleScope.launch {
+            cTraderCallbackStatus = com.example.feature.ctrader.CTraderAuthorization.redeem(applicationContext, uri)
+        }
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        cTraderCallbackStatus = com.example.feature.ctrader.CTraderAuthorization.callbackStatus(intent.data)
+        handleCTraderReturn(intent.data)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        cTraderCallbackStatus = com.example.feature.ctrader.CTraderAuthorization.callbackStatus(intent?.data)
+        handleCTraderReturn(intent?.data)
         enableEdgeToEdge(
             statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.rgb(0, 13, 22))
@@ -81,6 +91,13 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
+                    LaunchedEffect(cTraderCallbackStatus) {
+                        val status = cTraderCallbackStatus
+                        if (status != null && status != "جارٍ التحقق من ربط cTrader..." &&
+                            navController.currentDestination?.route != Screen.Settings.route) {
+                            navController.navigate(Screen.Settings.route) { launchSingleTop = true }
+                        }
+                    }
                     var embeddedReplayLaunchRequest by remember { mutableIntStateOf(0) }
                     val openReplayOnChart = {
                         embeddedReplayLaunchRequest++
