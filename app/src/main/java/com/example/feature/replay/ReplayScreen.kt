@@ -53,6 +53,7 @@ fun ReplayScreen(
     val clipboardManager = LocalClipboardManager.current
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
     var showJumpDialog by remember { mutableStateOf(false) }
+    var customJumpDate by remember { mutableStateOf("") }
     var showAdvanceDialog by remember { mutableStateOf(false) }
     var advanceCount by remember { mutableStateOf("25") }
     var chartFocusMode by remember { mutableStateOf(false) }
@@ -439,11 +440,22 @@ fun ReplayScreen(
                     onRequestOlderHistory = { viewModel.loadOlderReplayChartHistory() },
                     isLoadingOlderHistory = chartLookbackLoading
                 )
-                if (chartLookbackError != null) {
-                    Text(chartLookbackError!!,
+                if (chartLookbackLoading) {
+                    Text("تحميل شموع أقدم من cTrader / Binance...",
                         modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
-                            .testTag("replay_history_paging_error"),
-                        fontSize = 10.sp,color = TradingGold)
+                            .testTag("replay_history_backfill_progress"),
+                        fontSize = 10.sp,color = TradingCyan)
+                }
+                if (chartLookbackError != null) {
+                    Column(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
+                        Text(chartLookbackError!!,fontSize=10.sp,color=TradingGold,
+                            modifier=Modifier.testTag("replay_history_paging_error"))
+                        TextButton(
+                            enabled = !chartLookbackLoading,
+                            onClick = { viewModel.loadOlderReplayChartHistory(searchEarlier = true) },
+                            modifier = Modifier.testTag("replay_history_search_earlier")
+                        ) { Text("البحث أقدم لدى الوسيط",fontSize=11.sp) }
+                    }
                 }
             }
 
@@ -1259,16 +1271,42 @@ fun ReplayScreen(
             title = { Text("القفز إلى موضع زمني") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text = "اختر موضع القفز السريع في بيانات الشموع:", fontSize = 12.sp, color = TradingTextSecondary)
+                    Text(text = "يمكنك الرجوع إلى أي تاريخ متاح لدى cTrader، دون تبديل فريم الذهب.", fontSize = 12.sp, color = TradingTextSecondary)
+                    TextButton(onClick = {
+                        viewModel.jumpOneYearBack()
+                        showJumpDialog = false
+                    }, modifier = Modifier.testTag("replay_jump_one_year_same_frame")) {
+                        Text("الرجوع سنة بنفس الفريم")
+                    }
+                    OutlinedTextField(
+                        value = customJumpDate,
+                        onValueChange = { customJumpDate = it.take(10) },
+                        label = { Text("الانتقال إلى تاريخ UTC: YYYY-MM-DD") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("replay_jump_custom_date")
+                    )
+                    val jumpMillis = remember(customJumpDate) {
+                        runCatching {
+                            java.time.LocalDate.parse(customJumpDate)
+                                .atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+                        }.getOrNull()
+                    }
+                    TextButton(
+                        enabled = jumpMillis != null && jumpMillis in 0L..System.currentTimeMillis(),
+                        onClick = {
+                            jumpMillis?.let { viewModel.jumpToTimestamp(it) }
+                            showJumpDialog = false
+                        },modifier=Modifier.testTag("replay_jump_custom_date_confirm")
+                    ) { Text("تحميل التاريخ من cTrader / Binance") }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
-                                uiState.visibleCandles.firstOrNull()?.let { viewModel.jumpToTimestamp(it.openTime) }
+                                chartBars.firstOrNull()?.let { viewModel.jumpToTimestamp(it.openTime) }
                                 showJumpDialog = false
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("أول شمعة ظاهرة")
+                            Text("أقدم شمعة محمّلة")
                         }
                         Button(
                             onClick = {
