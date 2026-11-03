@@ -29,7 +29,7 @@ data class MarketQuoteSnapshot(
                     it.bid > 0 && it.ask >= it.bid && it.timestamp <= now &&
                     ((symbol.category == "Crypto" && it.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL")) ||
                         (symbol.symbol in VerifiedMarketQuote.forexSymbols &&
-                            it.source in setOf("BIQUOTE_REST","CTRADER_REST")))
+                            it.source == "CTRADER_REST"))
             }
             val fresh = VerifiedMarketQuote.isVerified(valid, symbol.symbol, now)
             val history = candles.filter { it.symbol == symbol.symbol && it.closeTime <= now &&
@@ -44,7 +44,7 @@ data class MarketQuoteSnapshot(
                 when {
                     valid?.source == "CTRADER_REST" ||
                         (valid == null && history.any { it.source == "CTRADER_HISTORICAL" }) -> "cTrader"
-                    symbol.symbol in VerifiedMarketQuote.forexSymbols -> "Biquote MT5"
+                    symbol.symbol in VerifiedMarketQuote.forexSymbols -> "cTrader"
                     symbol.category == "Crypto" -> "Binance Spot"
                     else -> "غير مدعوم"
                 },
