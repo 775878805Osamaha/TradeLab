@@ -7,10 +7,11 @@ import { CTraderGateway, PERIODS } from './ctrader.mjs';
 
 // An always-on HTTPS service behind a trusted TLS reverse proxy (e.g. Render/Railway).
 // All cTrader credentials and tokens remain on this backend, never in Android.
-const required=['PUBLIC_BASE_URL','DATABASE_URL','CTRADER_CLIENT_ID','CTRADER_CLIENT_SECRET','TOKEN_ENCRYPTION_KEY'];
+const required=['DATABASE_URL','CTRADER_CLIENT_ID','CTRADER_CLIENT_SECRET','TOKEN_ENCRYPTION_KEY'];
 for(const key of required)if(!process.env[key])throw new Error('Missing required environment variable: '+key);
-const publicBase=process.env.PUBLIC_BASE_URL.replace(/\/$/,'');
-if(new URL(publicBase).protocol!=='https:' || new URL(publicBase).pathname!=='/')
+// Render provides its managed HTTPS origin automatically; a manual HTTPS override also works.
+const publicBase=(process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/,'');
+if(!publicBase || new URL(publicBase).protocol!=='https:' || new URL(publicBase).pathname!=='/')
   throw new Error('PUBLIC_BASE_URL must be an HTTPS origin with no path');
 const redirectUri=publicBase+'/auth/ctrader/callback';
 const cipher=makeCipher(process.env.TOKEN_ENCRYPTION_KEY);
