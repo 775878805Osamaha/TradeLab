@@ -5,6 +5,7 @@ import com.example.core.market.HistoricalCandleIntegrity
 import com.example.core.market.HistoricalCandleBoundary
 import com.example.core.market.HistoricalCandleCoverage
 import com.example.core.market.CTraderGatewayClient
+import com.example.core.market.ReplayHistoricalSourceGate
 import com.example.core.market.VerifiedMarketQuote
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.core.market.DefaultSymbols
@@ -39,6 +40,18 @@ class MarketDataRepository(
 
     fun supportsHistoricalSymbol(symbol: String): Boolean =
         VerifiedMarketQuote.supports(symbol)
+
+    /** A restored Replay dataset must still belong to the authorized broker account. */
+    fun isTrustedReplayDataset(symbol: String, timeframe: Timeframe, candles: List<Candle>): Boolean =
+        ReplayHistoricalSourceGate.isTrusted(symbol, timeframe, candles, activeCTraderSource(symbol))
+
+    fun isCurrentReplaySource(symbol: String, source: String?): Boolean =
+        ReplayHistoricalSourceGate.isCurrent(symbol, source, activeCTraderSource(symbol))
+
+    private fun activeCTraderSource(symbol: String): String? =
+        if (symbol in VerifiedMarketQuote.forexSymbols)
+            runCatching { cTrader?.sourceKey(symbol) }.getOrNull()
+        else null
 
     val symbols: Flow<List<SymbolInfo>> = symbolDao.getAllSymbols().map { list ->
         if (list.isEmpty()) {
@@ -123,6 +136,8 @@ class MarketDataRepository(
                 candles, from, to + intervalMillis, expectedSource = source,
                 expectedSymbol = symbol, expectedTimeframe = timeframe
             )
+            // A broker/account switch during the request invalidates the entire page.
+            require(gateway.sourceKey(symbol) == source) { "cTrader account changed during historical download" }
             currentCoroutineContext().ensureActive()
             candleDao.insertCandles(verified.map { it.toEntity() })
             return@withContext verified

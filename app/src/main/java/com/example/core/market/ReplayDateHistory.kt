@@ -15,7 +15,8 @@ object ReplayDateHistory {
             val candidate = try {
                 fetch(window.from, window.to)
             } catch (empty: NoHistoricalCandlesException) {
-                if (target == null) throw empty
+                // A confirmed empty FX weekend page can be followed by a
+                // bounded earlier window; transport exceptions still escape.
                 emptyList()
             }
             require(candidate.all { it.openTime in window.from..window.to }) {
@@ -24,7 +25,8 @@ object ReplayDateHistory {
             if (candidate.size >= 2 && (target == null || candidate.any { it.openTime >= target })) {
                 return Loaded(window, candidate)
             }
-            if (target == null) break
+            // The caller decides the bounded scan order. For a latest-session
+            // scan these are earlier, never fabricated, trading windows.
         }
         return null
     }
