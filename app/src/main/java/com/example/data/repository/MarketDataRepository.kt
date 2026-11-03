@@ -8,6 +8,8 @@ import com.example.core.market.TwelveDataHistoricalProvider
 import com.example.core.market.BiquoteHistoricalProvider
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.core.market.DefaultSymbols
+import com.example.core.market.VerifiedMarketQuote
+import com.example.feature.ctrader.CTraderChartSource
 import com.example.core.market.MarketDataDiagnostic
 import com.example.core.model.*
 import com.example.data.local.dao.CandleDao
@@ -27,17 +29,36 @@ class MarketDataRepository(
     val provider: DefaultMarketDataProvider,
     private val candleDao: CandleDao,
     private val symbolDao: SymbolDao,
-    archiveDirectory: java.io.File? = null
+    archiveDirectory: java.io.File? = null,
+    private val ctrader: CTraderChartSource? = null
 ) {
 
     private val chartArchive = com.example.core.market.DukascopyChartHistoryProvider(archiveDirectory = archiveDirectory)
     private val freeFileArchive = archiveDirectory?.let {
         com.example.core.market.HistDataChartHistoryProvider(java.io.File(it.parentFile,"histdata-history-v1"))
     }
-    fun freeChartHistoryWarning(symbol: String): String? = freeFileArchive?.warning(symbol)
+    fun freeChartHistoryWarning(symbol: String): String? =
+        if (isCTraderSelectedFor(symbol)) null else freeFileArchive?.warning(symbol)
+
+    val cTraderAccount: StateFlow<String?> =
+        ctrader?.selectedAccount ?: kotlinx.coroutines.flow.MutableStateFlow(null)
+
+    fun isCTraderSelectedFor(symbol:String):Boolean = ctrader?.isSelectedFor(symbol) == true
+
+    suspend fun enableCTraderGold():String =
+        ctrader?.validateAndEnableGold() ?: throw java.io.IOException("cTrader is not configured")
+
+    fun disableCTrader() = ctrader?.disable() ?: Unit
+
+    suspend fun subscribeQuotes(symbol:String) {
+        if (!isCTraderSelectedFor(symbol)) provider.subscribe(symbol)
+    }
 
     /** Deep analysis history is an attributed BID archive, separate from live quotes. */
     suspend fun getOlderChartCandles(symbol: String, timeframe: Timeframe, from: Long, to: Long): List<Candle> {
+        // An explicitly selected broker must also supply the old chart history.
+        // Never substitute the unrelated Dukascopy archive silently.
+        if (isCTraderSelectedFor(symbol)) return getCandles(symbol,timeframe,from,to)
         if (hasTwelveDataKey() || !com.example.core.market.DukascopyChartHistoryProvider.supports(symbol)) {
             return getCandles(symbol, timeframe, from, to)
         }
@@ -175,6 +196,11 @@ class MarketDataRepository(
             "Historical range exceeds 20000 candles. Request a shorter range."
         }
         val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
+        if (isCTraderSelectedFor(symbol)) {
+            // Isolate broker-specific OHLC from the shared Room candle cache.
+            // No fallback to TwelveData, Biquote or another cTrader account.
+            return@withContext ctrader!!.candles(symbol,timeframe,from,to)
+        }
         if (!isCrypto) {
             if (!twelveData.supports(symbol)) {
                 throw java.io.IOException("No configured historical provider for $symbol")
@@ -433,7 +459,12 @@ class MarketDataRepository(
         candleDao.deleteCandles(symbol, timeframe.code)
     }
 
-    fun observeTicks(symbol: String): Flow<Tick> = provider.observeTicks(symbol)
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    fun observeTicks(symbol: String): Flow<Tick> = cTraderAccount.flatMapLatest { selected ->
+        if (selected != null && symbol in VerifiedMarketQuote.forexSymbols && ctrader != null)
+            ctrader.observeTicks(symbol)
+        else provider.observeTicks(symbol)
+    }
 
     private fun SymbolEntity.toDomain(): SymbolInfo = SymbolInfo(
         symbol = symbol,
