@@ -19,6 +19,10 @@ android {
     versionCode = 1
     versionName = "1.0"
 
+    // Public HTTPS origin of the trusted gateway; never put cTrader secrets in BuildConfig.
+    val configuredGateway = (System.getenv("CTRADER_GATEWAY_URL") ?: "https://tradelab-vercel-gateway.vercel.app").trimEnd('/')
+    buildConfigField("String", "CTRADER_GATEWAY_URL", "\"${configuredGateway}\"")
+
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 

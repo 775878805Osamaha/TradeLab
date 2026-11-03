@@ -104,7 +104,11 @@ fun CandlestickChart(
     showLastPrice: Boolean = true,
     showSourceTime: Boolean = true,
     axisTextScale: Float = 1f,
-    isLoadingOlderHistory: Boolean = false
+    isLoadingOlderHistory: Boolean = false,
+    // Replay can expose 100k+ real historical candles. Only the visible
+    // viewport needs price scanning; do not rebuild 100k segment trees on
+    // every revealed replay tick. Standard analysis charts keep their index.
+    isReplayHistory: Boolean = false
 ) {
     if (candles.isEmpty()) {
         Box(
@@ -142,6 +146,7 @@ fun CandlestickChart(
     // Viewport State
     var candleWidthPx by remember { mutableFloatStateOf(12f) }
     var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
+    var chartViewportWidthPx by remember { mutableFloatStateOf(0f) }
     var manualPriceScale by remember { mutableFloatStateOf(1f) }
     // Vertical viewport translation in screen pixels, independent of candle zoom.
     var pricePanPx by remember { mutableFloatStateOf(0f) }
@@ -156,8 +161,10 @@ fun CandlestickChart(
     // Explicit reset-view still clears the transform below.
     // Avoid creating a new visible OHLC list or scanning the entire history
     // during pan/zoom; range queries are served by the immutable price index.
-    val preparedPriceRange by produceState<ChartPriceRangeSnapshot?>(null, candleIdentity) {
-        value = ChartPriceRangeSnapshot.prepare(candles)
+    val preparedPriceRange by produceState<ChartPriceRangeSnapshot?>(
+        null, candleIdentity, isReplayHistory
+    ) {
+        value = if (isReplayHistory) null else ChartPriceRangeSnapshot.prepare(candles)
     }
     val priceRangeIndex = preparedPriceRange?.indexFor(candles)
 
@@ -222,9 +229,17 @@ fun CandlestickChart(
         }
 
     // Switching drawing tools must cancel unfinished drag previews.
-    LaunchedEffect(activeDrawingTool) {
+    LaunchedEffect(activeDrawingTool, candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe) {
+        // A partially drawn path or a selected anchor belongs to the previous
+        // tool/instrument. Never finish it against a different chart transform.
         drawingStartOffset = null
         drawingCurrentOffset = null
+        editingAnchor = null
+        anchorPreview = null
+        anchorTransform = null
+        dragStartedInPlot = false
+        pendingAnchors = emptyList()
+        freehandPoints = emptyList()
     }
 
     val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
@@ -235,10 +250,12 @@ fun CandlestickChart(
         // below handles one-finger dragging. Apply two-finger translation as
         // well so the chart does not freeze while users pinch and reposition.
         if (panChange.x.isFinite() && panChange.x != 0f) {
-            scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, panChange.x)
+            val next = ChartNavigation.drag(scrollOffsetPx, panChange.x)
+            if (next.isFinite()) scrollOffsetPx = next.coerceAtLeast(if (referenceLayout) -chartViewportWidthPx * 0.5f else 0f)
         }
         if (panChange.y.isFinite() && panChange.y != 0f) {
-            pricePanPx = (pricePanPx + panChange.y).coerceIn(-6000f, 6000f)
+            val next = pricePanPx + panChange.y
+            if (next.isFinite()) pricePanPx = next.coerceIn(-6000f, 6000f)
         }
     }
 
@@ -275,7 +292,7 @@ fun CandlestickChart(
 
     // Wait for the real measured width before applying initial candle fit.
     // A guessed 600px width can mis-size early Replay candles on narrow phones.
-    var chartViewportWidthPx by remember { mutableFloatStateOf(0f) }
+
     // Trigger historical backfill near the oldest visible candle. Keep the
     // gesture callback fresh without restarting the active pointer detector.
     val requestOlderHistory by rememberUpdatedState(onRequestOlderHistory)
@@ -341,7 +358,7 @@ fun CandlestickChart(
                 .semantics {
                     this[ChartLoadedCandleCount] = candles.size
                     this[ChartOldestCandleTime] = candles.first().openTime
-                    this[ChartPriceIndexReady] = priceRangeIndex != null
+                    this[ChartPriceIndexReady] = isReplayHistory || priceRangeIndex != null
                     this[ChartDisplayReady] = displayStyle != ChartDisplayStyle.HEIKIN_ASHI || heikinAshi != null
                     this[ChartDrawingAnalysisReady] = drawingAnalysisRequest.isEmpty || drawingAnalysis != null
                     this[ChartFirstVisibleIndex] = ChartViewport.window(candles.size,
@@ -362,13 +379,34 @@ fun CandlestickChart(
                             anchorPreview = null
                             anchorTransform = transform
                             if (activeDrawingTool == DrawingTool.NONE && !isCrosshairActive && updateDrawing != null && transform != null) {
-                                editingAnchor = currentDrawings.asReversed().filter { it.id != 0L && DrawingAnchorEditing.points(it).isNotEmpty() }.firstNotNullOfOrNull { d ->
-                                    fun near(time: Long?, price: Double?): Boolean = time != null && price != null &&
-                                        (transform.timeToX(time)?.let { Offset(it,transform.priceToY(price)) - offset }?.getDistance() ?: Float.MAX_VALUE) <= anchorRadius
-                                    DrawingAnchorEditing.points(d).indices.reversed().firstOrNull { index ->
-                                        val anchor=DrawingAnchorEditing.points(d)[index]
-                                        near(anchor.time,anchor.price)
-                                    }?.let { d to it }
+                                // Select the nearest visible handle rather than the first
+                                // overlapping drawing, so densely annotated charts remain editable.
+                                editingAnchor = currentDrawings.asReversed()
+                                    .filter { it.id != 0L }
+                                    .flatMap { drawing ->
+                                        DrawingAnchorEditing.points(drawing).mapIndexedNotNull { index, anchor ->
+                                            val x = transform.timeToX(anchor.time) ?: return@mapIndexedNotNull null
+                                            val y = transform.priceToY(anchor.price)
+                                            val distance = (Offset(x, y) - offset).getDistance()
+                                            if (distance.isFinite() && distance <= anchorRadius)
+                                                Triple(drawing, index, distance) else null
+                                        }
+                                    }.minByOrNull { it.third }?.let { it.first to it.second }
+                            }
+                            if (editingAnchor == null && activeDrawingTool == DrawingTool.NONE &&
+                                !isCrosshairActive && updateDrawing != null && transform != null) {
+                                // Drag the stroke itself to translate the complete drawing.
+                                val selected = currentDrawings.asReversed()
+                                    .mapNotNull { drawing ->
+                                        if (drawing.id == 0L || !DrawingAnchorEditing.canTranslate(drawing)) null
+                                        else DrawingHitTest.distance(drawing, transform, offset)
+                                            .takeIf { it.isFinite() && it <= anchorRadius }
+                                            ?.let { drawing to it }
+                                    }
+                                    .minByOrNull { it.second }?.first
+                                if (selected != null) {
+                                    editingAnchor = selected to -1
+                                    drawingStartOffset = offset
                                 }
                             }
                             if (activeDrawingTool != DrawingTool.NONE) {
@@ -388,7 +426,15 @@ fun CandlestickChart(
                                 val t = anchorTransform
                                 if (t != null) {
                                     val point = t.snapDrawingPoint(Offset(change.position.x.coerceIn(0f,t.chartWidth),change.position.y.coerceIn(0f,t.chartHeight)), snapEnabled)
-                                    anchorPreview = DrawingAnchorEditing.move(original,anchorIndex,
+                                    anchorPreview = if (anchorIndex == -1) {
+                                        val start = drawingStartOffset
+                                        if (start != null) {
+                                            val startPoint = t.snapDrawingPoint(start, snapEnabled)
+                                            DrawingAnchorEditing.translate(original,
+                                                t.xToTime(point.x) - t.xToTime(startPoint.x),
+                                                t.yToPrice(point.y) - t.yToPrice(startPoint.y))
+                                        } else null
+                                    } else DrawingAnchorEditing.move(original,anchorIndex,
                                         DrawingAnchor(t.xToTime(point.x),t.yToPrice(point.y)))
                                 }
                             } else if (activeDrawingTool != DrawingTool.NONE) {
@@ -405,18 +451,27 @@ fun CandlestickChart(
                                     )
                                 }
                             } else {
-                                scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, dragAmount.x)
+                                if (dragAmount.x.isFinite()) {
+                                    val next = ChartNavigation.drag(scrollOffsetPx, dragAmount.x)
+                                    if (next.isFinite()) scrollOffsetPx = next.coerceAtLeast(if (referenceLayout) -chartViewportWidthPx * 0.5f else 0f)
+                                }
                                 // Let a single diagonal gesture pan both time and price axes.
                                 // The visual direction follows the finger; reset view restores auto-fit.
-                                pricePanPx = (pricePanPx + dragAmount.y).coerceIn(-6000f, 6000f)
+                                if (dragAmount.y.isFinite()) {
+                                    val next = pricePanPx + dragAmount.y
+                                    if (next.isFinite()) pricePanPx = next.coerceIn(-6000f, 6000f)
+                                }
                             }
                         },
                         onDragEnd = {
                             anchorPreview?.let { preview ->
-                                if (currentDrawings.any { it == editingAnchor?.first }) updateDrawing?.invoke(preview)
+                                if (currentDrawings.any { it.id == preview.id && it.id != 0L && it != preview })
+                                    updateDrawing?.invoke(preview)
                             }
                             editingAnchor = null
                             anchorPreview = null
+                            anchorTransform = null
+                            drawingStartOffset = if (activeDrawingTool == DrawingTool.NONE) null else drawingStartOffset
                             if (dragStartedInPlot && activeDrawingTool != DrawingTool.NONE && drawingStartOffset != null && drawingCurrentOffset != null) {
                                 val transformForSnap = transformRef[0]
                                 val start = transformForSnap?.snapDrawingPoint(drawingStartOffset!!, snapEnabled) ?: drawingStartOffset!!
@@ -446,6 +501,7 @@ fun CandlestickChart(
                         onDragCancel = {
                             editingAnchor = null
                             anchorPreview = null
+                            anchorTransform = null
                             drawingStartOffset = null
                             drawingCurrentOffset = null
                             dragStartedInPlot = false
@@ -484,13 +540,22 @@ fun CandlestickChart(
                             val hit = if (insidePlot && transform != null && activeDrawingTool == DrawingTool.NONE)
                                 selectablePositions.minByOrNull { pos ->
                                     listOfNotNull(pos.entryPrice, pos.stopLoss, pos.takeProfit)
-                                        .minOf { kotlin.math.abs(transform.priceToY(it) - offset.y) }
+                                        .map { kotlin.math.abs(transform.priceToY(it) - offset.y) }
+                                        .minOrNull() ?: Float.POSITIVE_INFINITY
                                 }?.takeIf { pos ->
                                     listOfNotNull(pos.entryPrice, pos.stopLoss, pos.takeProfit)
                                         .any { kotlin.math.abs(transform.priceToY(it) - offset.y) <= positionHitRadius }
                                 } else null
+                            val tappedDrawing = if (insidePlot && transform != null &&
+                                activeDrawingTool == DrawingTool.NONE && !isCrosshairActive)
+                                currentDrawings.asReversed().firstOrNull { drawing ->
+                                    val distance = DrawingHitTest.distance(drawing, transform, offset)
+                                    distance.isFinite() && distance <= positionHitRadius
+                                } else null
                             if (hit != null && selectPosition != null) {
                                 selectPosition?.invoke(hit)
+                            } else if (tappedDrawing != null && drawingSelection != null) {
+                                drawingSelection?.invoke(tappedDrawing)
                             } else if (insidePlot && transform != null && onAddDrawing != null &&
                                 activeDrawingTool.isSinglePoint) {
                                 onAddDrawing(

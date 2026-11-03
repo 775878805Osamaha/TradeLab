@@ -85,6 +85,121 @@ class ReplayViewModel(
     private val closedTrades = mutableListOf<TradeJournalEntry>()
     private var nextId = 1L
     private var replayLoadJob: Job? = null
+    // A restored/active replay must never append history from a newly linked
+    // cTrader account, even if the symbol name happens to be identical.
+    private var brokerChangedDuringReplay = false
+
+    // Read-only chart inspection history, deliberately outside the replay engine and
+    // saved account snapshot: no future candles and no shifting financial checkpoints.
+    private val _chartLookback = MutableStateFlow<List<Candle>>(emptyList())
+    val chartLookback: StateFlow<List<Candle>> = _chartLookback.asStateFlow()
+    private val _chartLookbackLoading = MutableStateFlow(false)
+    val chartLookbackLoading: StateFlow<Boolean> = _chartLookbackLoading.asStateFlow()
+    private val _chartLookbackError = MutableStateFlow<String?>(null)
+    val chartLookbackError: StateFlow<String?> = _chartLookbackError.asStateFlow()
+    private var chartLookbackJob: Job? = null
+    private var chartLookbackExhausted = false
+    private var chartOlderSearchAnchor: Long? = null
+
+    private fun clearChartLookback() {
+        chartLookbackJob?.cancel()
+        chartLookbackJob = null
+        chartLookbackExhausted = false
+        chartOlderSearchAnchor = null
+        _chartLookbackLoading.value = false
+        _chartLookback.value = emptyList()
+        _chartLookbackError.value = null
+    }
+
+    /**
+     * Backfill only candles that precede the REPLAY DATASET'S first candle.
+     * These bars can be plotted and scrolled, but are never added to the
+     * execution engine, indicator strategy data view or trade/account checkpoints.
+     * The engine's existing cursor (and hidden future bars) remain untouched.
+     */
+    fun loadOlderReplayChartHistory(searchEarlier: Boolean = false) {
+        if (brokerChangedDuringReplay) {
+            _chartLookbackError.value =
+                "تغير حساب cTrader أثناء الجلسة؛ أعد تحميل Replay قبل طلب شموع أقدم."
+            return
+        }
+        if (_uiState.value.isLoading || _chartLookbackLoading.value ||
+            (chartLookbackExhausted && !searchEarlier)) return
+        if (searchEarlier) chartLookbackExhausted = false
+        val dataset = replayEngine.snapshotCandles()
+        if (dataset.isEmpty()) return
+        val marketSource = if (_uiState.value.symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
+            setOf("CTRADER_HISTORICAL")
+        else setOf("BINANCE_HISTORICAL","BINANCE_HISTORICAL_CACHED")
+        if(dataset.any { it.source !in marketSource }) {
+            _chartLookbackError.value =
+                "هذه جلسة بيانات مستوردة؛ لا يجوز دمجها بشموع مزود سوق مختلف."
+            return
+        }
+        val symbol = _uiState.value.symbol
+        val tf = _uiState.value.timeframe
+        val datasetId = _uiState.value.datasetId
+        val earliestLoaded = _chartLookback.value.firstOrNull()?.openTime ?: dataset.first().openTime
+        val oldest = minOf(earliestLoaded, chartOlderSearchAnchor ?: earliestLoaded)
+        if (oldest <= tf.minutes * 60_000L) {
+            chartLookbackExhausted = true
+            return
+        }
+        _chartLookbackLoading.value = true
+        _chartLookbackError.value = null
+        chartLookbackJob = viewModelScope.launch {
+            try {
+                val page = if (symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
+                    marketDataRepository.getOlderBrokerChartCandles(symbol, tf, oldest)
+                else com.example.feature.chart.history.ChartHistoryPaging.before(
+                    symbol, tf, oldest
+                ) { from, to ->
+                    marketDataRepository.getOlderChartCandles(symbol, tf, from, to)
+                }
+                // Never attach results from a previous dataset, timeframe, broker or symbol.
+                if (_uiState.value.datasetId != datasetId ||
+                    _uiState.value.symbol != symbol || _uiState.value.timeframe != tf ||
+                    replayEngine.snapshotCandles().firstOrNull()?.openTime != dataset.first().openTime)
+                    return@launch
+                if (page.isEmpty()) {
+                    // An empty bounded date window is NOT proof that a broker
+                    // has no older history. Allow explicit earlier date scans.
+                    val searchedSpan = if (symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
+                        com.example.feature.ctrader.CTraderHistoryPaging.windowSpan(tf) * 8L
+                    else 5L * 86_400_000L
+                    chartOlderSearchAnchor = (oldest - searchedSpan).coerceAtLeast(0L)
+                    chartLookbackExhausted = chartOlderSearchAnchor == 0L
+                    _chartLookbackError.value = if (chartLookbackExhausted)
+                        "لا توجد شموع أقدم متاحة في هذه النافذة."
+                    else "لا توجد شموع أقدم في النافذة الحالية؛ اضغط «البحث أقدم» لمتابعة الرجوع."
+                } else {
+                    chartOlderSearchAnchor = null
+                    chartLookbackExhausted = false
+                    val previous = _chartLookback.value
+                    val merged = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                        ReplayChartLookback.prepend(previous, page,
+                            dataset.first().openTime, symbol, tf)
+                    }
+                    // Validation/merge of a 100k-bar lookback happens off Main;
+                    // re-check the broker/session after the asynchronous merge.
+                    if (!brokerChangedDuringReplay &&
+                        _uiState.value.datasetId == datasetId &&
+                        _uiState.value.symbol == symbol &&
+                        _uiState.value.timeframe == tf &&
+                        replayEngine.snapshotCandles().firstOrNull()?.openTime == dataset.first().openTime)
+                        _chartLookback.value = merged
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                if (_uiState.value.datasetId == datasetId)
+                    _chartLookbackError.value = "تعذر تحميل تاريخ أقدم من مزود السوق: " +
+                        (error.message ?: "تحقق من الاتصال").take(150)
+            } finally {
+                if (_uiState.value.datasetId == datasetId) _chartLookbackLoading.value = false
+            }
+        }
+    }
+
     private var batchAdvanceJob: Job? = null
     private var batchAdvanceGeneration: Long = 0L
     private fun cancelBatchAdvance() {
@@ -195,8 +310,38 @@ class ReplayViewModel(
     init {
         setupReplayEngineCallbacks()
         viewModelScope.launch {
+            marketDataRepository.cTraderAccount.drop(1).collect {
+                val state = _uiState.value
+                if (state.symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols &&
+                    replayEngine.totalCandles.value > 0 && !state.isLoading) {
+                    // Pause but do not erase a virtual account or its trade journal.
+                    // Existing historical candles may be reviewed; requesting new
+                    // broker bars is forbidden until the user starts a new session.
+                    cancelBatchAdvance()
+                    replayEngine.pause()
+                    clearChartLookback()
+                    brokerChangedDuringReplay = true
+                    _uiState.update { old ->
+                        old.copy(isPlaying=false,
+                            message="تغير حساب cTrader. جمدت تحميل التاريخ لحماية Replay من خلط بيانات وسيطين؛ أعد بدء جلسة التدريب.")
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
             val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sessionStore?.read() }
-            if (saved != null) {
+            val savedAllowed = saved?.let { snapshot ->
+                snapshot.candles.isEmpty() ||
+                    snapshot.candles.all { candle ->
+                        candle.symbol == snapshot.state.symbol &&
+                        candle.timeframe == snapshot.state.timeframe &&
+                        (if (snapshot.state.symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
+                            candle.source == "CTRADER_HISTORICAL"
+                        else candle.source in setOf("BINANCE_HISTORICAL","BINANCE_HISTORICAL_CACHED"))
+                    }
+            } == true
+            if (saved != null && savedAllowed) {
+                clearChartLookback()
                 _uiState.value=saved.state.copy(isPlaying=false,isLoading=false)
                 if (saved.candles.isNotEmpty() && saved.state.historyEndOffsetBars == 0) {
                     _historyTargetTime.value = saved.candles.getOrNull(saved.state.currentIndex)?.openTime
@@ -207,7 +352,10 @@ class ReplayViewModel(
                 hasPublishedReport=true
                 saveAccountSnapshot()
                 if(saved.candles.isEmpty())loadReplayData(saved.state.symbol,saved.state.timeframe)
-            } else loadReplayData("XAUUSD")
+            } else {
+                // A checkpoint from retired providers must never be displayed as cTrader.
+                loadReplayData("XAUUSD")
+            }
         }
     }
 
@@ -271,6 +419,7 @@ class ReplayViewModel(
         _historyTargetTime.value = null
         cancelBatchAdvance()
         replayLoadJob?.cancel()
+        clearChartLookback()
         replayEngine.pause()
         replayEngine.clear()
         resetReplayAccount()
@@ -304,13 +453,6 @@ class ReplayViewModel(
         }
     }
 
-    fun configureHistoricalApiKey(key: String) {
-        marketDataRepository.configureTwelveDataKey(key)
-        _uiState.update { it.copy(message = if (key.isBlank()) "تم إلغاء مفتاح Twelve Data" else "تم ضبط مفتاح Twelve Data في الذاكرة لهذه الجلسة") }
-    }
-
-    fun hasHistoricalApiKey(): Boolean = marketDataRepository.hasTwelveDataKey()
-
     fun canChangeDataset(): Boolean {
         val allowed=openPositions.isEmpty() && pendingOrders.isEmpty()
         if(!allowed) _uiState.update { it.copy(message="أغلق الصفقات والأوامر قبل تغيير بيانات التدريب") }
@@ -328,7 +470,8 @@ class ReplayViewModel(
         if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty()) {
             _uiState.update { it.copy(message="أغلق الصفقات والأوامر قبل تغيير بيانات التدريب") };return
         }
-        require(endOffsetBars in 0..100_000) { "Historical offset must be 0 to 100000 bars" }
+        // Date/time paging is bounded per request, not by an arbitrary total 100k-bar ceiling.
+        require(endOffsetBars >= 0) { "Historical offset must not be negative" }
         require(historyBars in 50..5_000) { "Replay history must contain 50 to 5000 bars" }
         if (targetTime != null && (targetTime < 0L || targetTime > System.currentTimeMillis() - tf.minutes * 60_000L)) {
             _uiState.update { it.copy(message = "اختر تاريخًا تاريخيًا مكتملًا") }; return
@@ -336,6 +479,10 @@ class ReplayViewModel(
         _historyTargetTime.value = targetTime
         cancelBatchAdvance()
         replayLoadJob?.cancel()
+        // A fresh Replay dataset MUST discard all older-page history and cursor
+        // from the previous symbol, timeframe, account or historical date.
+        // Otherwise an older broker page can be merged against the wrong session.
+        clearChartLookback()
         replayEngine.pause()
         // Immediately invalidate the previous engine quote as well as UI flows:
         // executeOrder reads the engine directly and must never trade old data.
@@ -363,7 +510,7 @@ class ReplayViewModel(
             }
             return
         }
-        // Gold and forex use the verified keyless historical provider.
+        // Gold/forex: only cTrader. Crypto: only Binance. Never fall back to old caches.
         replayLoadJob = viewModelScope.launch {
             try {
                 val now = System.currentTimeMillis()
@@ -417,6 +564,7 @@ class ReplayViewModel(
                 val startIndex = if (targetTime == null) minOf(20, candles.lastIndex)
                     else candles.indexOfFirst { it.openTime >= targetTime }.coerceAtLeast(0)
                 replayEngine.initialize(candles, startIndex = startIndex)
+                brokerChangedDuringReplay = false
                 // Publish the exact initialized cursor before saving. Flow collectors may
                 // otherwise still contain the cleared engine's previous cursor.
                 _uiState.update { it.copy(isLoading = false,
@@ -437,7 +585,9 @@ class ReplayViewModel(
                         state.historyEndOffsetBars == endOffsetBars && _historyTargetTime.value == targetTime) {
                         state.copy(
                             isLoading = false,
-                            message = "تعذر تحميل بيانات إعادة العرض لهذا الرمز. تحقق من الاتصال وتوفر الشموع المكتملة."
+                            message = "تعذر تحميل تاريخ " +
+                                (if (symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) "cTrader" else "Binance") +
+                                ": " + (error.message ?: "تحقق من الحساب والاتصال").take(160)
                         )
                     } else state
                 }
@@ -581,10 +731,9 @@ class ReplayViewModel(
     }
 
     fun jumpOneYearBack() {
-        // The keyless metals/FX source retains daily history, not year-old minute bars.
-        // The action's label explicitly announces the daily timeframe.
-        val timeframe = if (_uiState.value.symbol in setOf("BTCUSDT", "ETHUSDT"))
-            _uiState.value.timeframe else Timeframe.D1
+        // Retain the user's selected timeframe; never silently change gold M1 to D1.
+        // Only the linked cTrader broker determines actual historical availability.
+        val timeframe = _uiState.value.timeframe
         val target = com.example.core.market.ReplayDateWindow.oneYearBefore(System.currentTimeMillis())
         jumpToTimestamp(com.example.core.market.HistoricalCandleBoundary.currentOpen(
             target, timeframe.minutes * 60_000L), timeframe)

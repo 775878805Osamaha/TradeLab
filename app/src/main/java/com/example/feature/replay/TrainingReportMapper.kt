@@ -5,6 +5,27 @@ import com.example.core.model.*
 object TrainingReportMapper {
     fun report(saved:TrainingSessionSnapshot, recordedAt:List<Long>, fundedAt:Long):ReplayReport {
         val s=saved.state
+        require(recordedAt.size == s.closedTrades.size) {
+            "Each closed Replay trade must have exactly one recorded journal timestamp"
+        }
+        require(s.initialBalance.isFinite() && s.initialBalance > 0.0 &&
+            s.currentBalance.isFinite() && s.currentEquity.isFinite()) {
+            "Replay account contains invalid balances"
+        }
+        require(s.equitySamples.all { it.balance.isFinite() && it.equity.isFinite() }) {
+            "Replay equity history contains invalid values"
+        }
+        require(s.equitySamples.zipWithNext().all { (previous, next) ->
+            next.timestamp >= previous.timestamp
+        }) {
+            "Replay equity history is not chronological"
+        }
+        require(s.closedTrades.all { trade ->
+            trade.netProfitLoss.isFinite() && trade.commission.isFinite() &&
+                trade.volume.isFinite() && trade.volume > 0.0
+        }) {
+            "Replay journal contains invalid executions"
+        }
         var peak=s.initialBalance
         val samples=s.equitySamples.map { sample ->
             peak=maxOf(peak,sample.equity)

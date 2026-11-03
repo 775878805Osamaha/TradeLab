@@ -53,6 +53,7 @@ fun ReplayScreen(
     val clipboardManager = LocalClipboardManager.current
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
     var showJumpDialog by remember { mutableStateOf(false) }
+    var customJumpDate by remember { mutableStateOf("") }
     var showAdvanceDialog by remember { mutableStateOf(false) }
     var advanceCount by remember { mutableStateOf("25") }
     var chartFocusMode by remember { mutableStateOf(false) }
@@ -60,11 +61,16 @@ fun ReplayScreen(
     var showDrawingTools by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showMarketDialog by remember { mutableStateOf(false) }
-    var twelveDataKeyInput by remember { mutableStateOf("") }
-    var showCsvImportDialog by remember { mutableStateOf(false) }
-    var csvImportSymbol by remember { mutableStateOf("XAUUSD") }
-    var csvImportSource by remember { mutableStateOf("broker-export") }
-    var csvImportText by remember { mutableStateOf("") }
+    val chartLookback by viewModel.chartLookback.collectAsState()
+    val chartLookbackLoading by viewModel.chartLookbackLoading.collectAsState()
+    val chartLookbackError by viewModel.chartLookbackError.collectAsState()
+    val chartBars = remember(chartLookback, uiState.visibleCandles) {
+        ReplayChartSeries(chartLookback, uiState.visibleCandles)
+    }
+    LaunchedEffect(uiState.datasetId, uiState.isLoading) {
+        if (!uiState.isLoading && uiState.visibleCandles.isNotEmpty())
+            viewModel.loadOlderReplayChartHistory()
+    }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var indicatorSettings by remember { mutableStateOf(IndicatorSettings()) }
     // Heavy calculations run off the Compose/UI thread. produceState cancels
@@ -72,11 +78,11 @@ fun ReplayScreen(
     // Null results hide stale indicator lines until the matching set is ready.
     val indicatorSnapshot by produceState<ReplayIndicatorSnapshot?>(
         initialValue = null,
-        key1 = uiState.visibleCandles,
+        key1 = chartBars,
         key2 = indicatorSettings
     ) {
         value = null
-        val revealed = uiState.visibleCandles
+        val revealed = chartBars
         val selected = indicatorSettings
         value = withContext(Dispatchers.Default) {
             ReplayIndicatorSnapshot.calculate(revealed, selected)
@@ -396,7 +402,8 @@ fun ReplayScreen(
                     .fillMaxWidth()
             ) {
                 CandlestickChart(
-                    candles = uiState.visibleCandles,
+                    candles = chartBars,
+                    isReplayHistory = true,
                     latestTick = uiState.latestTick,
                     openPositions = uiState.openPositions,
                     pendingOrders = uiState.pendingOrders,
@@ -426,8 +433,27 @@ fun ReplayScreen(
                     vwapValues = indicatorSnapshot?.vwap ?: emptyList(),
                     rsiValues = indicatorSnapshot?.rsi ?: emptyList(),
                     macdValues = indicatorSnapshot?.macd ?: emptyList(),
-                    atrValues = indicatorSnapshot?.atr ?: emptyList()
+                    atrValues = indicatorSnapshot?.atr ?: emptyList(),
+                    onRequestOlderHistory = { viewModel.loadOlderReplayChartHistory() },
+                    isLoadingOlderHistory = chartLookbackLoading
                 )
+                if (chartLookbackLoading) {
+                    Text("تحميل شموع أقدم من cTrader / Binance...",
+                        modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
+                            .testTag("replay_history_backfill_progress"),
+                        fontSize = 10.sp,color = TradingCyan)
+                }
+                if (chartLookbackError != null) {
+                    Column(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
+                        Text(chartLookbackError!!,fontSize=10.sp,color=TradingGold,
+                            modifier=Modifier.testTag("replay_history_paging_error"))
+                        TextButton(
+                            enabled = !chartLookbackLoading,
+                            onClick = { viewModel.loadOlderReplayChartHistory(searchEarlier = true) },
+                            modifier = Modifier.testTag("replay_history_search_earlier")
+                        ) { Text("البحث أقدم لدى الوسيط",fontSize=11.sp) }
+                    }
+                }
             }
 
             if (uiState.isBatchAdvancing) {
@@ -1001,60 +1027,6 @@ fun ReplayScreen(
 
     // Change instrument/timeframe without leaving the chart. Only instruments
     // backed by verified historical market data are offered for execution.
-    if (showCsvImportDialog) {
-        AlertDialog(
-            onDismissRequest = { showCsvImportDialog = false },
-            title = { Text("استيراد شموع تاريخية CSV") },
-            text = {
-                Column(
-                    modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("الصق بيانات حقيقية صادرة من الوسيط. يجب أن يكون الوقت UTC بالميلي ثانية.",
-                        fontSize = 12.sp, color = TradingTextSecondary)
-                    Text("timestamp_ms,open,high,low,close,volume", fontSize = 11.sp)
-                    OutlinedTextField(
-                        value = csvImportSymbol,
-                        onValueChange = { csvImportSymbol = it.uppercase(Locale.US) },
-                        label = { Text("الرمز (مثال XAUUSD)") },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = csvImportSource,
-                        onValueChange = { csvImportSource = it },
-                        label = { Text("اسم مصدر البيانات / الوسيط") },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = csvImportText,
-                        onValueChange = { csvImportText = it },
-                        label = { Text("محتوى CSV") },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp).testTag("replay_csv_input"),
-                        maxLines = 10
-                    )
-                    Text("الإطار المستخدم: ${uiState.timeframe.displayName}. استيراد الملف يبدأ جلسة جديدة ويمسح صفقاتها السابقة.",
-                        fontSize = 11.sp, color = TradingTextSecondary)
-                    Text("البيانات المستوردة غير موثقة من TradeLab؛ تحقق من الوسيط قبل استخدامها.",
-                        fontSize = 11.sp, color = TradingTextSecondary)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = csvImportText.isNotBlank() && csvImportSource.isNotBlank(),
-                    onClick = {
-                        viewModel.loadImportedCsv(
-                            csvImportText, csvImportSymbol, uiState.timeframe, csvImportSource
-                        )
-                        csvImportText = ""
-                        showCsvImportDialog = false
-                    },
-                    modifier = Modifier.testTag("replay_csv_import_confirm")
-                ) { Text("استيراد وبدء Replay") }
-            },
-            dismissButton = { TextButton(onClick = { showCsvImportDialog = false }) { Text("إلغاء") } }
-        )
-    }
-
     if (showMarketDialog) {
         AlertDialog(
             onDismissRequest = { showMarketDialog = false },
@@ -1078,7 +1050,7 @@ fun ReplayScreen(
                             )
                         }
                     }
-                    Text("الذهب والفوركس • Twelve Data", fontSize = 12.sp, color = TradingTextSecondary)
+                    Text("الذهب والفوركس • cTrader فقط", fontSize = 12.sp, color = TradingTextSecondary)
                     listOf(
                         listOf("XAUUSD", "XAGUSD", "EURUSD"),
                         listOf("GBPUSD", "USDJPY", "USDCHF"),
@@ -1098,24 +1070,9 @@ fun ReplayScreen(
                             }
                         }
                     }
-                    OutlinedTextField(
-                        value = twelveDataKeyInput,
-                        onValueChange = { twelveDataKeyInput = it },
-                        label = { Text("Twelve Data API Key") },
-                        singleLine = true,
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth().testTag("replay_twelvedata_key")
-                    )
-                    TextButton(onClick = {
-                        viewModel.configureHistoricalApiKey(twelveDataKeyInput)
-                        twelveDataKeyInput = ""
-                    }) { Text(if (viewModel.hasHistoricalApiKey()) "تحديث المفتاح" else "تفعيل مصدر الذهب والفوركس") }
-                    Text("المفتاح يُحفظ في الذاكرة فقط. توفر البيانات والفترات يعتمد على اشتراك المزود. أسعار الوسط قد تختلف عن MT5.",
+                    Text("بيانات الفوركس والذهب تأتي فقط من حساب cTrader المرتبط. عند الانقطاع لا يتم استخدام مصدر آخر.",
                         color = TradingTextSecondary, fontSize = 11.sp)
-                    TextButton(onClick = {
-                        showMarketDialog = false
-                        showCsvImportDialog = true
-                    }) { Text("استيراد تاريخ حقيقي من ملف CSV") }
+
                     Text("الإطار الزمني", fontWeight = FontWeight.Bold)
                     Column(
                         modifier = Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())
@@ -1254,16 +1211,42 @@ fun ReplayScreen(
             title = { Text("القفز إلى موضع زمني") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text = "اختر موضع القفز السريع في بيانات الشموع:", fontSize = 12.sp, color = TradingTextSecondary)
+                    Text(text = "يمكنك الرجوع إلى أي تاريخ متاح لدى cTrader، دون تبديل فريم الذهب.", fontSize = 12.sp, color = TradingTextSecondary)
+                    TextButton(onClick = {
+                        viewModel.jumpOneYearBack()
+                        showJumpDialog = false
+                    }, modifier = Modifier.testTag("replay_jump_one_year_same_frame")) {
+                        Text("الرجوع سنة بنفس الفريم")
+                    }
+                    OutlinedTextField(
+                        value = customJumpDate,
+                        onValueChange = { customJumpDate = it.take(10) },
+                        label = { Text("الانتقال إلى تاريخ UTC: YYYY-MM-DD") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("replay_jump_custom_date")
+                    )
+                    val jumpMillis = remember(customJumpDate) {
+                        runCatching {
+                            java.time.LocalDate.parse(customJumpDate)
+                                .atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+                        }.getOrNull()
+                    }
+                    TextButton(
+                        enabled = jumpMillis != null && jumpMillis in 0L..System.currentTimeMillis(),
+                        onClick = {
+                            jumpMillis?.let { viewModel.jumpToTimestamp(it) }
+                            showJumpDialog = false
+                        },modifier=Modifier.testTag("replay_jump_custom_date_confirm")
+                    ) { Text("تحميل التاريخ من cTrader / Binance") }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
-                                uiState.visibleCandles.firstOrNull()?.let { viewModel.jumpToTimestamp(it.openTime) }
+                                chartBars.firstOrNull()?.let { viewModel.jumpToTimestamp(it.openTime) }
                                 showJumpDialog = false
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("أول شمعة ظاهرة")
+                            Text("أقدم شمعة محمّلة")
                         }
                         Button(
                             onClick = {

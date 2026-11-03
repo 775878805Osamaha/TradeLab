@@ -71,10 +71,19 @@ class ResultsViewModel(
     val uiState: StateFlow<ResultsUiState> = combine(_uiState,prepared) { base,prepared ->
         val report=prepared.report
         val a=prepared.analytics
-        if(report==null || a==null) base.copy(isReplayReport=true,isLoading=false) else
+        if(report==null || a==null) base.copy(
+            analytics=null,isReplayReport=true,openPositionsCount=0,openPositions=emptyList(),
+            metrics=null,equityPoints=emptyList(),trades=emptyList(),dailySummaries=emptyList(),
+            initialBalance=100.0,currentBalance=100.0,selectedTradeForDetail=null,isLoading=false
+        ) else
             base.copy(analytics=a,isReplayReport=true,openPositionsCount=report.positions.size,openPositions=report.positions,
                 initialBalance=a.opening,currentBalance=a.closing,metrics=a.metrics,equityPoints=a.curve,
-                trades=a.trades,dailySummaries=prepared.days,isLoading=false)
+                trades=a.trades,dailySummaries=prepared.days,
+                // A previously opened trade detail must not show a trade that
+                // disappeared after Replay rewind, account reset or filtering.
+                selectedTradeForDetail=base.selectedTradeForDetail?.takeIf { selected ->
+                    a.trades.any { it == selected }
+                },isLoading=false)
     }.stateIn(viewModelScope,SharingStarted.WhileSubscribed(5000),ResultsUiState(isLoading=true))
 
     fun setCustomRange(start:Long,end:Long) { if(start<=end && start<=System.currentTimeMillis())_uiState.update { it.copy(selectedPeriod=ResultsPeriod.CUSTOM,customStart=start,customEnd=end) } }

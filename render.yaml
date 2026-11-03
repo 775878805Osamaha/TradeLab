@@ -1,0 +1,22 @@
+# Free testing stack: Render web service + external Neon Free PostgreSQL.
+# Render's free web services spin down when idle and are NOT suitable for always-on production feeds.
+services:
+  - type: web
+    name: tradelab-ctrader-gateway
+    runtime: docker
+    rootDir: backend
+    branch: feat/chart-gesture-stability-20261031
+    plan: free
+    autoDeployTrigger: commit
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: CTRADER_CLIENT_ID
+        sync: false
+      - key: CTRADER_CLIENT_SECRET
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        generateValue: true

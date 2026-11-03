@@ -62,6 +62,18 @@ class TradeViewModel(
     init {
         observeAccountAndPositions()
         selectSymbol(_uiState.value.selectedSymbol)
+        viewModelScope.launch {
+            marketDataRepository.cTraderAccount.drop(1).collect {
+                val symbol=_uiState.value.selectedSymbol
+                if(symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
+                    tickJob?.cancel()
+                    candleLoadJob?.cancel()
+                    _uiState.update { state -> state.copy(latestTick=null,candles=emptyList()) }
+                    subscribeToSymbolTicks(symbol)
+                    loadCandles(symbol)
+                }
+            }
+        }
     }
 
     private fun observeAccountAndPositions() {
@@ -289,7 +301,8 @@ class TradeViewModel(
         // Stale Market Data Protection
         val isStale = marketDataRepository.provider.dataSourceType.value == DataSourceType.STALE_DATA
         val isDisconnected = marketDataRepository.provider.connectionStatus.value == ProviderConnectionStatus.DISCONNECTED
-        if (state.orderType == OrderType.MARKET && (isStale || isDisconnected)) {
+        if (state.orderType == OrderType.MARKET &&
+            !marketDataRepository.isCTraderSelectedFor(state.selectedSymbol) && (isStale || isDisconnected)) {
             _uiState.update { it.copy(message = "بيانات السوق متأخرة أو غير متصلة (STALE DATA). تم إيقاف التنفيذ لحماية الحساب الافتراضي.") }
             return
         }
@@ -489,13 +502,6 @@ class TradeViewModel(
         loadCandles(_uiState.value.selectedSymbol)
     }
 
-    fun configureHistoricalProviderKey(key: String) {
-        marketDataRepository.configureTwelveDataKey(key)
-        loadCandles(_uiState.value.selectedSymbol)
-    }
-
-    fun hasHistoricalProviderKey(): Boolean = marketDataRepository.hasTwelveDataKey()
-
     private fun loadCandles(symbol: String) {
         candleLoadJob?.cancel()
         _uiState.update { state ->
@@ -528,7 +534,7 @@ class TradeViewModel(
             // Observing the local tick flow alone does not connect Binance.
             // Explicitly subscribe so the trade screen can receive verified
             // quotes even when the chart screen has never been opened.
-            marketDataRepository.provider.subscribe(symbol)
+            marketDataRepository.subscribeQuotes(symbol)
             marketDataRepository.observeTicks(symbol).collect { tick ->
                 if (_uiState.value.selectedSymbol != symbol ||
                     !com.example.core.market.VerifiedMarketQuote.isVerified(tick, symbol)) return@collect

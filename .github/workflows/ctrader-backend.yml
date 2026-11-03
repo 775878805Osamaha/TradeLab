@@ -1,0 +1,31 @@
+name: cTrader Gateway Verification
+
+on:
+  push:
+    branches:
+      - feat/chart-gesture-stability-20261031
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/ctrader-backend.yml"
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install gateway dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify JavaScript source
+        run: npm run check
+      - name: Run unit tests
+        run: npm test

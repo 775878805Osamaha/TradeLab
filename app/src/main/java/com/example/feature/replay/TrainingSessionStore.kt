@@ -19,8 +19,26 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
     fun newOwner():Long=owner.incrementAndGet()
     fun clear() { owner.incrementAndGet();synchronized(lock){file.delete();database?.let { runBlocking(Dispatchers.IO) { it.trainingDao().clear() } }} }
     fun observeReports():kotlinx.coroutines.flow.Flow<com.example.core.model.ReplayReport?> =
-        database?.trainingDao()?.observe()?.map { bundle -> bundle?.let { TrainingReportMapper.report(decode(it.checkpoint.payload), it.executions.sortedBy { row -> row.ordinal }.map { row -> row.recordedAt }, it.checkpoint.fundedAt) } }
-            ?: kotlinx.coroutines.flow.flowOf(null)
+        database?.trainingDao()?.observe()?.map { bundle ->
+            if (bundle == null) null else runCatching {
+                val snapshot = decode(bundle.checkpoint.payload)
+                val executions = bundle.executions.sortedBy { it.ordinal }
+                // A checkpoint and its executions are written in one Room transaction.
+                // Reject inconsistent/corrupted snapshots rather than displaying a
+                // partial journal with incorrect timestamps or account totals.
+                require(executions.size == snapshot.state.closedTrades.size) {
+                    "Training journal count does not match checkpoint"
+                }
+                require(executions.indices.all { executions[it].ordinal == it }) {
+                    "Training journal ordinals are not contiguous"
+                }
+                TrainingReportMapper.report(snapshot, executions.map { it.recordedAt },
+                    bundle.checkpoint.fundedAt)
+            }.getOrElse { error ->
+                android.util.Log.e("TrainingSession", "Cannot decode training report", error)
+                null
+            }
+        } ?: kotlinx.coroutines.flow.flowOf(null)
 
     private val writes=Channel<Pair<Long,TrainingSessionSnapshot>>(Channel.CONFLATED)
     init { CoroutineScope(SupervisorJob()+Dispatchers.IO).launch { for((token,snapshot) in writes) { synchronized(lock) {
@@ -42,8 +60,37 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
     }
     fun read():TrainingSessionSnapshot? {
         database?.let { db ->
-            val stored=runBlocking(Dispatchers.IO){db.trainingDao().read()}
-            if(stored!=null) return decode(stored.checkpoint.payload)
+            val stored=runCatching {
+                runBlocking(Dispatchers.IO){db.trainingDao().read()}
+            }.getOrElse { error ->
+                android.util.Log.e("TrainingSession","Room read failed",error)
+                return null
+            }
+            if(stored!=null) return runCatching {
+                val snapshot=decode(stored.checkpoint.payload)
+                require(snapshot.state.initialBalance.isFinite() && snapshot.state.initialBalance>0.0)
+                require(snapshot.state.currentBalance.isFinite() && snapshot.state.currentEquity.isFinite())
+                require(snapshot.candles.size <= 5000)
+                if(snapshot.candles.isNotEmpty()) require(snapshot.state.currentIndex in snapshot.candles.indices)
+                else require(snapshot.state.openPositions.isEmpty() && snapshot.state.pendingOrders.isEmpty())
+                require(stored.executions.size == snapshot.state.closedTrades.size)
+                require(snapshot.state.closedTrades.all { trade ->
+                    trade.netProfitLoss.isFinite() && trade.commission.isFinite() &&
+                        trade.volume.isFinite() && trade.volume > 0.0
+                })
+                require(stored.executions.map { it.ordinal }.sorted() ==
+                    snapshot.state.closedTrades.indices.toList())
+                require(snapshot.state.equitySamples.all {
+                    it.balance.isFinite() && it.equity.isFinite()
+                })
+                require(snapshot.state.equitySamples.zipWithNext().all { (a,b) ->
+                    b.timestamp >= a.timestamp
+                })
+                snapshot
+            }.getOrElse { error ->
+                android.util.Log.e("TrainingSession","Room checkpoint unavailable",error)
+                null
+            }
         }
         if(!file.baseFile.exists()) return null
         return try {
@@ -59,24 +106,83 @@ class TrainingSessionStore(context: Context, private val database:com.example.da
             if(value.candles.isNotEmpty()) require(value.state.currentIndex in value.candles.indices)
             else require(value.state.openPositions.isEmpty() && value.state.pendingOrders.isEmpty())
             require(value.state.initialBalance.isFinite() && value.state.initialBalance>0 && value.state.currentBalance.isFinite() && value.state.currentEquity.isFinite())
+            require(value.state.closedTrades.all {
+                it.netProfitLoss.isFinite() && it.commission.isFinite() &&
+                    it.volume.isFinite() && it.volume > 0.0
+            })
+            require(value.state.equitySamples.all { it.balance.isFinite() && it.equity.isFinite() })
+            require(value.state.equitySamples.zipWithNext().all { (a,b) -> b.timestamp >= a.timestamp })
             if(value.candles.isNotEmpty()) require(DataIntegrityValidator.validateHistoricalSeries(value.candles).isValid)
             database?.let { runBlocking(Dispatchers.IO){commitRoom(value)} }
             value
         } catch(error:Exception){android.util.Log.e("TrainingSession","Checkpoint unavailable",error);null}
     }
     private fun decode(bytes:ByteArray):TrainingSessionSnapshot {
+        require(bytes.size in 1..20_000_000) { "Invalid Replay checkpoint size" }
         val raw=ByteArrayInputStream(bytes)
-        val input=if(bytes.size>2 && bytes[0]==0x1f.toByte() && bytes[1]==0x8b.toByte())java.util.zip.GZIPInputStream(raw) else raw
-        return ObjectInputStream(input).use { it.readObject() as TrainingSessionSnapshot }
+        val input=if(bytes.size>2 && bytes[0]==0x1f.toByte() && bytes[1]==0x8b.toByte())
+            java.util.zip.GZIPInputStream(raw) else raw
+        // Room stores compressed snapshots. Bound the expanded stream too, so a
+        // malformed checkpoint cannot exhaust memory when Results observes it.
+        val bounded=object:java.io.FilterInputStream(input) {
+            private var consumed=0L
+            override fun read():Int {
+                val value=super.read()
+                if(value>=0) { consumed++; require(consumed<=20_000_000) }
+                return value
+            }
+            override fun read(buffer:ByteArray,offset:Int,length:Int):Int {
+                val count=super.read(buffer,offset,length)
+                if(count>0) { consumed+=count; require(consumed<=20_000_000) }
+                return count
+            }
+        }
+        return object:ObjectInputStream(bounded) {
+            override fun resolveClass(desc:ObjectStreamClass):Class<*> {
+                val n=desc.name
+                require(n.startsWith("com.example.core.model.") ||
+                    n in setOf("com.example.feature.replay.TrainingSessionSnapshot",
+                        "com.example.feature.replay.ReplayUiState",
+                        "com.example.feature.replay.ReplayEquitySample",
+                        "com.example.feature.replay.ReplayInteractionMode",
+                        "java.util.ArrayList","java.util.Arrays\$ArrayList",
+                        "java.util.Collections\$SingletonList","java.util.Collections\$EmptyList",
+                        "kotlin.collections.EmptyList","java.lang.Enum","java.lang.Number",
+                        "java.lang.Integer","java.lang.Long","java.lang.Double","java.lang.Float") ||
+                    n.startsWith("[Lcom.example.core.model.") || n=="[Ljava.lang.Object;")
+                return super.resolveClass(desc)
+            }
+        }.use { it.readObject() as TrainingSessionSnapshot }
     }
 
     private fun commitRoom(snapshot:TrainingSessionSnapshot) {
+        val state = snapshot.state
+        require(state.initialBalance.isFinite() && state.initialBalance > 0.0)
+        require(state.currentBalance.isFinite() && state.currentEquity.isFinite())
+        require(snapshot.candles.size <= 5000)
+        require(snapshot.candles.isEmpty() || state.currentIndex in snapshot.candles.indices)
+        require(snapshot.candles.isNotEmpty() ||
+            (state.openPositions.isEmpty() && state.pendingOrders.isEmpty()))
+        require(state.closedTrades.all { trade ->
+            trade.netProfitLoss.isFinite() && trade.commission.isFinite() &&
+                trade.volume.isFinite() && trade.volume > 0.0
+        })
+        require(state.equitySamples.all { it.balance.isFinite() && it.equity.isFinite() })
+        require(state.equitySamples.zipWithNext().all { (a,b) -> b.timestamp >= a.timestamp })
         val dao=database!!.trainingDao()
         val previous=dao.read()
         val old=previous?.executions?.associateBy { it.ordinal }.orEmpty()
         val now=System.currentTimeMillis()
         val rows=snapshot.state.closedTrades.mapIndexed { index,t ->
-            val at=old[index]?.takeIf { it.symbol==t.symbol && it.marketCloseTime==t.closeTime && it.netAmount==java.math.BigDecimal.valueOf(t.netProfitLoss).toPlainString() }?.recordedAt ?: now
+            // Preserve a trade's original journal timestamp across balance/viewport
+            // checkpoint updates, but never reuse it for a different execution.
+            val at=old[index]?.takeIf {
+                it.symbol==t.symbol &&
+                    it.marketCloseTime==t.closeTime &&
+                    it.netAmount==java.math.BigDecimal.valueOf(t.netProfitLoss).toPlainString() &&
+                    it.commissionAmount==java.math.BigDecimal.valueOf(t.commission).toPlainString() &&
+                    it.volume==java.math.BigDecimal.valueOf(t.volume).toPlainString()
+            }?.recordedAt ?: now
             com.example.data.local.entity.TrainingExecutionEntity(ordinal=index,symbol=t.symbol,marketCloseTime=t.closeTime,recordedAt=at,
                 netAmount=java.math.BigDecimal.valueOf(t.netProfitLoss).toPlainString(),commissionAmount=java.math.BigDecimal.valueOf(t.commission).toPlainString(),volume=java.math.BigDecimal.valueOf(t.volume).toPlainString())
         }

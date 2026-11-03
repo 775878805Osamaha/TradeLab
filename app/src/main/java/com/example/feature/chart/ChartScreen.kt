@@ -58,6 +58,27 @@ fun ChartScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val replayState by replayViewModel.uiState.collectAsState()
+    val replayChartLookback by replayViewModel.chartLookback.collectAsState()
+    val replayLookbackLoading by replayViewModel.chartLookbackLoading.collectAsState()
+    val replayLookbackError by replayViewModel.chartLookbackError.collectAsState()
+    var showReplayHistoryDetails by remember { mutableStateOf(false) }
+    if(showReplayHistoryDetails && replayLookbackError!=null) {
+        AlertDialog(
+            onDismissRequest={ showReplayHistoryDetails=false },
+            title={ Text("تفاصيل تحميل تاريخ Replay") },
+            text={ Text(replayLookbackError!!,
+                color=TradingTextSecondary,fontSize=13.sp) },
+            confirmButton={
+                TextButton(onClick={showReplayHistoryDetails=false}) {
+                    Text("إغلاق")
+                }
+            }
+        )
+    }
+    // Read-only prehistory precedes the Replay engine's first bar; future bars remain hidden.
+    val replayChartBars = remember(replayChartLookback, replayState.visibleCandles) {
+        com.example.feature.replay.ReplayChartSeries(replayChartLookback, replayState.visibleCandles)
+    }
     val historyTargetTime by replayViewModel.historyTargetTime.collectAsState()
     val orderKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     // A restored training account must not activate Replay on chart entry.
@@ -69,6 +90,12 @@ fun ChartScreen(
     LaunchedEffect(isEmbeddedReplay, replayState.symbol, replayState.timeframe, replayState.isLoading) {
         if (isEmbeddedReplay) viewModel.stopDeepChartHistory()
         if (isEmbeddedReplay && !replayState.isLoading) { viewModel.selectSymbol(replayState.symbol);viewModel.selectTimeframe(replayState.timeframe) }
+    }
+    // Prefetch actual historical candles before the replay cursor so the user
+    // can drag backwards immediately even when only 21 replay bars are revealed.
+    LaunchedEffect(isEmbeddedReplay, replayState.datasetId, replayState.isLoading) {
+        if (isEmbeddedReplay && !replayState.isLoading && replayState.visibleCandles.isNotEmpty())
+            replayViewModel.loadOlderReplayChartHistory()
     }
     var selectedPositionId by remember { mutableStateOf<Long?>(null) }
     var selectedPositionReplay by remember { mutableStateOf(false) }
@@ -197,8 +224,6 @@ fun ChartScreen(
     var riskPercentInput by remember { mutableStateOf("1") }
     var orderTpInput by remember { mutableStateOf("") }
     var showReplayDatePicker by remember { mutableStateOf(false) }
-    var showHistoricalSourceDialog by remember { mutableStateOf(false) }
-    var historicalApiKeyInput by remember { mutableStateOf("") }
 
     // Refresh the freshness indicator even when the market stream stops emitting.
     var quoteClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -446,40 +471,6 @@ fun ChartScreen(
         TradeDetailDialog(trade = trade, onDismiss = { viewModel.selectTradeForDetail(null) })
     }
 
-    if (showHistoricalSourceDialog) {
-        AlertDialog(
-            onDismissRequest = { showHistoricalSourceDialog = false },
-            title = { Text("مصدر شموع الذهب والفوركس") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Twelve Data — بيانات تاريخية حقيقية بمفتاح API خاص بك. ليست أسعارًا مباشرة للتنفيذ.",
-                        fontSize = 12.sp, color = TradingTextSecondary)
-                    OutlinedTextField(
-                        value = historicalApiKeyInput,
-                        onValueChange = { historicalApiKeyInput = it },
-                        label = { Text("Twelve Data API Key") },
-                        singleLine = true,
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth().testTag("chart_historical_provider_key")
-                    )
-                    Text("المفتاح يبقى في الذاكرة ولا يُحفظ في ملفات التطبيق.",
-                        fontSize = 11.sp, color = TradingTextSecondary)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = historicalApiKeyInput.isNotBlank(),
-                    onClick = {
-                        viewModel.configureHistoricalProviderKey(historicalApiKeyInput)
-                        historicalApiKeyInput = ""
-                        showHistoricalSourceDialog = false
-                    }
-                ) { Text("تفعيل وتحميل") }
-            },
-            dismissButton = { TextButton(onClick = { showHistoricalSourceDialog = false }) { Text("إلغاء") } }
-        )
-    }
-
     ChartPriceAlert(uiState.selectedSymbol,uiState.latestTick,isEmbeddedReplay,showPriceAlert) { showPriceAlert=false }
     if(showChartExtras) AlertDialog(onDismissRequest={showChartExtras=false},title={Text("إعدادات الشارت")},text={
         Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -535,8 +526,8 @@ fun ChartScreen(
                                 modifier = Modifier.widthIn(max = 240.dp).padding(6.dp).testTag("chart_history_download_message"))
                         }
                         val sourceLabel = when(uiState.candles.firstOrNull()?.source) {
-                            com.example.core.market.DukascopyChartHistoryProvider.SOURCE -> "Dukascopy · BID"
-                            com.example.core.market.HistDataChartHistoryProvider.SOURCE -> "HistData · BID · الحجم غير متاح"
+                            "CTRADER_HISTORICAL" -> "cTrader · شموع الوسيط"
+                            "BINANCE_HISTORICAL", "BINANCE_HISTORICAL_CACHED" -> "Binance Spot · شموع فعلية"
                             else -> null
                         }
                         if (sourceLabel!=null) {
@@ -601,7 +592,12 @@ fun ChartScreen(
                         Spacer(modifier = Modifier.width(4.dp))
                         if (!immersiveChart) {
                             if (headerQuoteVerified) {
-                                DataSourceBadge(sourceType = uiState.dataSourceType)
+                                if(headerTick?.source == "CTRADER_REST") {
+                                    Text("cTrader · LIVE",fontSize=10.sp,color=TradingCyan,
+                                        modifier=Modifier.testTag("chart_source_mode"))
+                                } else {
+                                    DataSourceBadge(sourceType = uiState.dataSourceType)
+                                }
                             } else {
                                 Text(
                                     text = when {
@@ -1006,7 +1002,7 @@ fun ChartScreen(
             }
 
             // Only revealed candles enter the worker; rewinds invalidate its snapshot.
-            val replayBars = replayState.visibleCandles
+            val replayBars = replayChartBars
             val replaySettings = uiState.indicatorSettings
             val replayPrepared by produceState<Triple<List<com.example.core.model.Candle>,com.example.feature.chart.model.IndicatorSettings,PreparedChartIndicators>?>(
                 null,isEmbeddedReplay,com.example.ui.components.ChartCandleIdentity(replayBars),replaySettings) {
@@ -1041,7 +1037,8 @@ fun ChartScreen(
                 // Do not key on candle data: incoming prices must not jump the viewport.
                 key(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay, if (isEmbeddedReplay) replayState.datasetId else 0L) {
                 CandlestickChart(
-                    candles = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles,
+                    candles = if (isEmbeddedReplay) replayChartBars else uiState.candles,
+                    isReplayHistory = isEmbeddedReplay,
                     latestTick = (if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick)
                         ?.takeIf { it.symbol == uiState.selectedSymbol },
                     openPositions = if (isEmbeddedReplay) replayState.openPositions else uiState.openPositions,
@@ -1083,7 +1080,9 @@ fun ChartScreen(
                         selectedPositionReplay = isEmbeddedReplay
                         selectedPositionId = it.id
                     },
-                    onRequestOlderHistory = if (isEmbeddedReplay) null else ({ viewModel.loadOlderChartHistory() }),
+                    onRequestOlderHistory = if (isEmbeddedReplay)
+                        ({ replayViewModel.loadOlderReplayChartHistory() })
+                        else ({ viewModel.loadOlderChartHistory() }),
                     referenceLayout = true,
                     bullishColor = Color(chartAppearance.up),
                     bearishColor = Color(chartAppearance.down),
@@ -1096,7 +1095,8 @@ fun ChartScreen(
                     showLastPrice = chartAppearance.lastPrice,
                     showSourceTime = chartAppearance.sourceTime,
                     axisTextScale = chartAppearance.axisScale,
-                    isLoadingOlderHistory = uiState.isLoadingOlderHistory
+                    isLoadingOlderHistory = if (isEmbeddedReplay)
+                        replayLookbackLoading else uiState.isLoadingOlderHistory
                 )
                 }
 
@@ -1260,17 +1260,41 @@ fun ChartScreen(
                             color = TradingAccent,
                             trackColor = TradingBorder
                         )
-                        Text(
-                            "${replayState.currentIndex.coerceAtLeast(0) + 1} / ${replayState.totalCandles}",
-                            fontSize = 10.sp, color = TradingTextSecondary,
-                            modifier = Modifier.testTag("chart_replay_position")
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "${replayState.currentIndex.coerceAtLeast(0) + 1} / ${replayState.totalCandles}",
+                                fontSize = 10.sp, color = TradingTextSecondary,
+                                modifier = Modifier.testTag("chart_replay_position")
+                            )
+                            TextButton(
+                                onClick = { replayViewModel.loadOlderReplayChartHistory(searchEarlier = true) },
+                                enabled = !replayLookbackLoading && !replayState.isLoading,
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                modifier = Modifier.height(28.dp).testTag("replay_load_older_ctrader")
+                            ) {
+                                Text(if(replayLookbackLoading) "تحميل..." else "شموع أقدم",
+                                    color = TradingAccentLight,fontSize = 10.sp)
+                            }
+                        }
+                        if(replayChartLookback.isNotEmpty())
+                            Text("سجل إضافي: ${replayChartLookback.size} شمعة",
+                                fontSize=10.sp,color=TradingTextSecondary,
+                                modifier=Modifier.testTag("replay_older_candles_count"))
+                        if(replayLookbackError!=null)
+                            Text(
+                                "تنبيه تاريخ الشموع • عرض التفاصيل",
+                                fontSize=10.sp,color=TradingGold,
+                                maxLines=1,
+                                modifier=Modifier.clickable { showReplayHistoryDetails=true }
+                                    .testTag("replay_older_history_error")
+                            )
                     }
                 }
 
                 // Minimal source label: historical bars must remain distinguishable
                 // from live quotes without covering price candles or indicators.
-                val chartBars = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
+                val chartBars = if (isEmbeddedReplay) replayChartBars else uiState.candles
                 if (!immersiveChart && chartBars.isNotEmpty()) {
                     Surface(
                         color = TradingBackground.copy(alpha = 0.80f),
@@ -1280,7 +1304,13 @@ fun ChartScreen(
                             .testTag("chart_history_provenance")
                     ) {
                         Text(
-                            text = if (isEmbeddedReplay) "REPLAY · ${chartBars.size}"
+                            text = if (isEmbeddedReplay)
+                                "REPLAY · " + when(replayState.visibleCandles.firstOrNull()?.source) {
+                                    "CTRADER_HISTORICAL" -> "cTrader"
+                                    "BINANCE_HISTORICAL", "BINANCE_HISTORICAL_CACHED" -> "Binance"
+                                    "USER_IMPORTED" -> "ملف مستورد"
+                                    else -> "غير موثق"
+                                } + " · ${chartBars.size}"
                                 else "HISTORICAL · ${chartBars.size}",
                             fontSize = 9.sp,
                             color = TradingTextSecondary,

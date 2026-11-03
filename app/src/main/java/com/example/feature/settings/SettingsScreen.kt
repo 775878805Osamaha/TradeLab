@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.market.DefaultMarketDataProvider
+import com.example.data.repository.MarketDataRepository
 import com.example.core.model.ProviderConnectionStatus
 import com.example.ui.components.DataSourceBadge
 import com.example.ui.theme.*
@@ -29,12 +30,29 @@ import java.util.*
 @Composable
 fun SettingsScreen(
     provider: DefaultMarketDataProvider,
+    repository: MarketDataRepository,
     onBack: () -> Unit,
+    cTraderCallbackStatus: String? = null,
     modifier: Modifier = Modifier
 ) {
     androidx.activity.compose.BackHandler(onBack = onBack)
     val diag by provider.diagnosticInfo.collectAsState()
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val cTrader = com.example.feature.ctrader.CTraderAuthorization
+    val activeCTraderAccount by repository.cTraderAccount.collectAsState()
+    var accountStatus by remember { mutableStateOf<String?>(null) }
+    var goldCheckStatus by remember { mutableStateOf<String?>(null) }
+    var goldCheckRunning by remember { mutableStateOf(false) }
+    var gatewayCheck by remember { mutableStateOf<com.example.feature.ctrader.CTraderAuthorization.GatewayCheck?>(null) }
+    var gatewayChecking by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        gatewayCheck = cTrader.checkGateway()
+        gatewayChecking = false
+    }
+    LaunchedEffect(cTraderCallbackStatus) {
+        accountStatus = if (cTrader.isLinked(context)) cTrader.accountSummary(context) else null
+    }
     val sdf = remember { SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
 
     Scaffold(
@@ -60,6 +78,87 @@ fun SettingsScreen(
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item { AppearanceSettings() }
+            // Keep normal TradeLab use completely independent of hosting and cTrader login.
+            // Display this optional integration only when a tested HTTPS gateway is configured.
+            if (cTrader.isConfigured) item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().testTag("ctrader_oauth_card"),
+                    colors = CardDefaults.cardColors(containerColor = TradingCard)
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("ربط cTrader — قراءة فقط", fontWeight = FontWeight.Bold)
+                        Text("سيفتح تسجيل الدخول في متصفح الهاتف. لا يمكن لـ TradeLab تنفيذ صفقات حقيقية بهذه الصلاحية.",
+                            fontSize = 12.sp, color = TradingTextSecondary)
+                        Button(
+                            modifier = Modifier.fillMaxWidth().testTag("ctrader_browser_login"),
+                            enabled = gatewayCheck?.authEnabled == true,
+                            onClick = {
+                                val url = cTrader.authorizationUrl(context)
+                                if (url != null) {
+                                    context.startActivity(android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW, url
+                                    ).addCategory(android.content.Intent.CATEGORY_BROWSABLE))
+                                }
+                            }
+                        ) { Text("تسجيل الدخول إلى cTrader") }
+                        OutlinedButton(
+                            modifier = Modifier.fillMaxWidth().testTag("ctrader_gateway_health_check"),
+                            enabled = !gatewayChecking,
+                            onClick = {
+                                gatewayChecking = true
+                                scope.launch {
+                                    gatewayCheck = cTrader.checkGateway()
+                                    gatewayChecking = false
+                                }
+                            }
+                        ) { Text(if(gatewayChecking) "جارٍ فحص اتصال الخدمة..." else "فحص اتصال خدمة cTrader") }
+                        gatewayCheck?.let { state ->
+                            Text(state.message, fontSize = 12.sp,
+                                color = if(state.reachable) TradingTextSecondary else TradingGold)
+                        }
+                        if(cTraderCallbackStatus != null) {
+                            Text(cTraderCallbackStatus, fontSize = 12.sp, color = TradingGold)
+                        }
+                        if (accountStatus != null) {
+                            Text(accountStatus!!, fontSize = 12.sp, color = TradingCyan)
+                        }
+                        if (cTrader.isLinked(context) && cTrader.isConfigured) {
+                            OutlinedButton(
+                                enabled = !goldCheckRunning,
+                                modifier = Modifier.fillMaxWidth().testTag("ctrader_gold_smoke_test"),
+                                onClick = {
+                                    goldCheckRunning = true
+                                    scope.launch {
+                                        goldCheckStatus = try {
+                                            com.example.feature.ctrader.CTraderReadOnlyMarketApi(context).goldCheck()
+                                        } catch (e: kotlinx.coroutines.CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            "تعذر قراءة الذهب من cTrader: " + (e.message ?: "خدمة غير متاحة").take(180)
+                                        }
+                                        goldCheckRunning = false
+                                    }
+                                }
+                            ) {
+                                Text(if (goldCheckRunning) "جارٍ اختبار بيانات الذهب…" else "اختبار السعر الحقيقي للذهب XAUUSD")
+                            }
+                            if(goldCheckStatus!=null)Text(goldCheckStatus!!,fontSize=12.sp,color=TradingTextSecondary)
+                        }
+                        Text("مصدر الذهب والفوركس الوحيد: cTrader. لا توجد مصادر بديلة أو أسعار وهمية.",
+                            fontSize=12.sp,color=TradingCyan)
+                        if(cTrader.isLinked(context)) {
+                            Text(if(activeCTraderAccount==null)
+                                "تم تسجيل الدخول. سيجلب TradeLab الحساب والبيانات تلقائيًا؛ فشل 503 يعني انقطاع بوابة cTrader، وليس إذنًا باستخدام مصدر آخر."
+                                else "حساب cTrader للبيانات: "+activeCTraderAccount,
+                                fontSize=12.sp,color=TradingTextSecondary)
+                        } else {
+                            Text("اربط حساب cTrader لعرض أسعار الفوركس والذهب.",
+                                fontSize=12.sp,color=TradingGold)
+                        }
+                    }
+                }
+            }
+
             // Live Connectivity & Quality Diagnostic Card (Section 36)
             item {
                 Card(
@@ -74,12 +173,14 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "حالة اتصال مزود البيانات", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text(text = "حالة Binance للكريبتو", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                             DataSourceBadge(sourceType = diag.dataSourceType)
                         }
 
                         HorizontalDivider(color = TradingBorder)
 
+                        Text("المؤشرات التالية تخص Binance للكريبتو فقط. الفوركس والذهب لهما اتصال cTrader مستقل.",
+                            fontSize=11.sp,color=TradingTextSecondary)
                         DiagnosticRow("اسم المزود", diag.providerName)
                         DiagnosticRow("حالة الاتصال", diag.connectionStatus.displayName, isStatus = true, status = diag.connectionStatus)
                         DiagnosticRow("آخر تحديث (UTC)", sdf.format(Date(diag.lastUpdateTimestamp)))
@@ -111,7 +212,6 @@ fun SettingsScreen(
                 }
             }
 
-            item { HistorySettingsCard() }
 
             // Architecture & Compliance Card
             item {
@@ -130,8 +230,8 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "• BTCUSDT و ETHUSDT متصلان مباشرة ببيانات السوق اللحظية عبر Binance Public WebSocket.\n" +
-                                    "• XAUUSD وأزواج الفوركس لا تملك حاليًا مصدر أسعار موثوقًا؛ لا تُعرض أسعار وهمية على أنها مباشرة.\n" +
-                                    "• التطبيق لا يتصل بأي وسيط مالي، ولا يدعم التداول بأموال حقيقية نهائياً. كل الأوامر افتراضية 100%.",
+                                    "• الذهب والفوركس عبر cTrader فقط؛ عند انقطاعه تظهر البيانات غير متاحة، دون الرجوع إلى مزود سابق.\n" +
+                                    "• اتصال cTrader بصلاحية القراءة فقط. كل الأوامر والصفقات داخل TradeLab افتراضية 100%.",
                             fontSize = 12.sp,
                             color = TradingTextSecondary,
                             lineHeight = 18.sp
@@ -140,31 +240,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Custom Provider / API Keys Documentation Card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = TradingCard),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Key, contentDescription = null, tint = TradingGold)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "ربط مزود بيانات خاص (API)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "تم بناء معمارية التطبيق خلف الواجهة المجردة MarketDataProvider و HistoricalDataProvider.\n" +
-                                    "لإضافة مفاتيح مزود مدفوع مثل TwelveData أو Polygon أو Interactive Brokers، يتم إدخال المفاتيح بشكل آمن عبر لوحة الأسرار (Secrets panel) أو ملف .env دون تضمينها في الكود.",
-                            fontSize = 12.sp,
-                            color = TradingTextSecondary,
-                            lineHeight = 18.sp
-                        )
-                    }
-                }
-            }
         }
     }
 }

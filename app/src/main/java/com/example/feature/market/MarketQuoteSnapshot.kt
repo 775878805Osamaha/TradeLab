@@ -28,7 +28,8 @@ data class MarketQuoteSnapshot(
                 it.symbol == symbol.symbol && it.bid.isFinite() && it.ask.isFinite() &&
                     it.bid > 0 && it.ask >= it.bid && it.timestamp <= now &&
                     ((symbol.category == "Crypto" && it.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL")) ||
-                        (symbol.symbol in VerifiedMarketQuote.forexSymbols && it.source == "BIQUOTE_REST"))
+                        (symbol.symbol in VerifiedMarketQuote.forexSymbols &&
+                            it.source == "CTRADER_REST"))
             }
             val fresh = VerifiedMarketQuote.isVerified(valid, symbol.symbol, now)
             val history = candles.filter { it.symbol == symbol.symbol && it.closeTime <= now &&
@@ -40,7 +41,13 @@ data class MarketQuoteSnapshot(
             val last = valid?.let { (it.bid / 2) + (it.ask / 2) }
             val change = if (fresh && last != null && reference != null) last - reference else null
             return MarketQuoteSnapshot(symbol, valid?.bid, valid?.ask, last,
-                if (symbol.symbol in VerifiedMarketQuote.forexSymbols) "Biquote MT5" else if (symbol.category == "Crypto") "Binance Spot" else "غير مدعوم",
+                when {
+                    valid?.source == "CTRADER_REST" ||
+                        (valid == null && history.any { it.source == "CTRADER_HISTORICAL" }) -> "cTrader"
+                    symbol.symbol in VerifiedMarketQuote.forexSymbols -> "cTrader"
+                    symbol.category == "Crypto" -> "Binance Spot"
+                    else -> "غير مدعوم"
+                },
                 valid?.timestamp, if (fresh) Freshness.LIVE else if(valid != null) Freshness.STALE else Freshness.UNAVAILABLE,
                 reference, change, change?.let { it / reference!! * 100 }?.takeIf { it.isFinite() }, history)
         }

@@ -1,7 +1,6 @@
 package com.example
 
 import android.app.Application
-import com.example.core.history.HistoryKeyStore
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.data.local.AppDatabase
 import com.example.data.repository.MarketDataRepository
@@ -11,7 +10,6 @@ class TradeLabApplication : Application() {
 
     val trainingSessionStore by lazy { com.example.feature.replay.TrainingSessionStore(this, database) }
 
-    val historyKeyStore: HistoryKeyStore by lazy { HistoryKeyStore(this) }
 
 
     val database: AppDatabase by lazy {
@@ -22,16 +20,16 @@ class TradeLabApplication : Application() {
         DefaultMarketDataProvider()
     }
 
+    val cTraderChartSource by lazy { com.example.feature.ctrader.CTraderChartSource(this) }
+
     val marketDataRepository: MarketDataRepository by lazy {
         MarketDataRepository(
             provider = marketDataProvider,
             candleDao = database.candleDao(),
             symbolDao = database.symbolDao(),
-            archiveDirectory = java.io.File(cacheDir, "chart-archives-v1")
-        ).also { repository ->
-            // Restore the user-provided key after process recreation.
-            repository.configureTwelveDataKey(historyKeyStore.read())
-        }
+            archiveDirectory = java.io.File(cacheDir, "chart-archives-v1"),
+            ctrader = cTraderChartSource
+        )
     }
 
     val tradingRepository: TradingRepository by lazy {

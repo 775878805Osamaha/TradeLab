@@ -1,0 +1,18 @@
+{
+  "name": "tradelab-ctrader-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test",
+    "check": "node --check server.mjs && node --check ctrader.mjs && node --check security.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.3",
+    "ws": "^8.18.0"
+  }
+}

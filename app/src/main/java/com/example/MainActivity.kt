@@ -1,6 +1,8 @@
 package com.example
 
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -45,8 +47,38 @@ import com.example.ui.theme.TradingBorder
 import com.example.ui.theme.TradingCard
 
 class MainActivity : ComponentActivity() {
+    private var cTraderCallbackStatus by mutableStateOf<String?>(null)
+
+    private fun handleCTraderReturn(uri: android.net.Uri?) {
+        if (!com.example.feature.ctrader.CTraderAuthorization.isCallback(uri)) return
+        cTraderCallbackStatus = "جارٍ التحقق من ربط cTrader..."
+        lifecycleScope.launch {
+            val result = com.example.feature.ctrader.CTraderAuthorization.redeem(applicationContext, uri)
+            cTraderCallbackStatus = result
+            if (com.example.feature.ctrader.CTraderAuthorization.isLinked(applicationContext)) {
+                // Trigger the same cTrader account state observed by chart, market and Replay.
+                // A broker failure never enables a legacy forex data source.
+                try {
+                    (application as TradeLabApplication).cTraderChartSource.onSessionReauthorized()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (e: Exception) {
+                    cTraderCallbackStatus = result + " بيانات cTrader لم تصل بعد: " +
+                        (e.message ?: "انقطاع الاتصال").take(120)
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCTraderReturn(intent.data)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleCTraderReturn(intent?.data)
         enableEdgeToEdge(
             statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.rgb(0, 13, 22))
@@ -72,6 +104,13 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
+                    LaunchedEffect(cTraderCallbackStatus) {
+                        val status = cTraderCallbackStatus
+                        if (status != null && status != "جارٍ التحقق من ربط cTrader..." &&
+                            navController.currentDestination?.route != Screen.Settings.route) {
+                            navController.navigate(Screen.Settings.route) { launchSingleTop = true }
+                        }
+                    }
                     var embeddedReplayLaunchRequest by remember { mutableIntStateOf(0) }
                     val openReplayOnChart = {
                         embeddedReplayLaunchRequest++
@@ -214,6 +253,8 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Settings.route) {
                                 SettingsScreen(
                                     provider = app.marketDataProvider,
+                                    repository = app.marketDataRepository,
+                                    cTraderCallbackStatus = cTraderCallbackStatus,
                                     onBack = { navController.popBackStack() }
                                 )
                             }

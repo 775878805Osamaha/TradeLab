@@ -84,24 +84,40 @@ class ChartViewModel(
         observeDataSourceType()
         observeConnectionDiagnostics()
         observeDrawings()
+        observeSelectedBroker()
+    }
+
+    private fun observeSelectedBroker() {
+        viewModelScope.launch {
+            marketDataRepository.cTraderAccount.drop(1).collect {
+                val symbol = _uiState.value.selectedSymbol
+                if (symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
+                    // Never show Biquote candles/tick after switching to another broker.
+                    tickJob?.cancel()
+                    klineRefreshJob?.cancel()
+                    _uiState.update { state ->
+                        state.copy(candles = emptyList(), latestTick = null, isLoading = true,
+                            candleLoadError = null, olderHistoryError = null,
+                            connectionDiagnostic = if(marketDataRepository.isCTraderSelectedFor(symbol))
+                                "cTrader: طلب أسعار وشموع الحساب المحدد" else
+                                "مزود الذهب والفوركس الأصلي")
+                    }
+                    loadCandlesForCurrentSymbol()
+                }
+            }
+        }
     }
 
     private fun observeConnectionDiagnostics() {
         viewModelScope.launch {
             marketDataRepository.providerDiagnostics.collect { diagnostic ->
-                _uiState.update { it.copy(connectionDiagnostic = diagnostic.lastHttpDiagnostic) }
+                _uiState.update { state ->
+                    state.copy(connectionDiagnostic = if(marketDataRepository.isCTraderSelectedFor(state.selectedSymbol))
+                        "cTrader: حساب المستخدم للقراءة فقط" else diagnostic.lastHttpDiagnostic)
+                }
             }
         }
     }
-
-    fun configureHistoricalProviderKey(key: String) {
-        marketDataRepository.configureTwelveDataKey(key)
-        if (_uiState.value.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
-            loadCandlesForCurrentSymbol()
-        }
-    }
-
-    fun hasHistoricalProviderKey(): Boolean = marketDataRepository.hasTwelveDataKey()
 
     /** Adjust the real OHLC history depth without changing the current instrument. */
     fun setChartHistoryBars(bars: Int) {
@@ -154,7 +170,9 @@ class ChartViewModel(
             })
         }
     }) {
-        ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
+        if(symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
+            marketDataRepository.getOlderBrokerChartCandles(symbol, timeframe, oldest)
+        else ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
             marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
         }
     }
@@ -754,7 +772,7 @@ class ChartViewModel(
     private fun subscribeToTicks(symbol: String) {
         tickJob?.cancel()
         tickJob = viewModelScope.launch {
-            marketDataRepository.provider.subscribe(symbol)
+            marketDataRepository.subscribeQuotes(symbol)
             marketDataRepository.observeTicks(symbol).collect { tick ->
                 if (_uiState.value.selectedSymbol != symbol) return@collect
                 // A bad or mismatched quote must not overwrite the last trusted bid/ask,

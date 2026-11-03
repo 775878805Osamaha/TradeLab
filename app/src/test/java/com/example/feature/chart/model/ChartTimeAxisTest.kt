@@ -16,6 +16,14 @@ class ChartTimeAxisTest {
         assertEquals("01/02 00:00", ChartTimeAxis.label(86_400_000L, 86_340_000L))
     }
 
+    @Test fun historicalReplayAcrossNewYearDisplaysTheYearExplicitly() {
+        assertEquals("71/01/01 00:00",
+            ChartTimeAxis.label(365L*86_400_000L,364L*86_400_000L))
+        assertEquals("MM/DD labels are insufficient for two years",
+            "71/01/01 00:00",
+            ChartTimeAxis.label(365L*86_400_000L, 0L))
+    }
+
     @Test fun labelsRemainUtc() {
         assertEquals("01/01 00:00", ChartTimeAxis.label(0L, null))
     }
