@@ -8,26 +8,22 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class CTraderAuthorizationTest {
-    @Test fun browserAuthorizationRequestsReadOnlyScope() {
-        val url=CTraderAuthorization.authorizationUrl()
-        assertEquals("https",url.scheme)
-        assertEquals("id.ctrader.com",url.host)
-        assertEquals("46509",url.getQueryParameter("client_id"))
-        assertEquals("accounts",url.getQueryParameter("scope"))
-        assertEquals(CTraderAuthorization.REDIRECT_URI,url.getQueryParameter("redirect_uri"))
-        assertNull(url.getQueryParameter("client_secret"))
+    @Test fun callbackOnlyAcceptsRegisteredNativeTicketLink() {
+        assertTrue(CTraderAuthorization.isCallback(Uri.parse("tradelab://oauth/ctrader?ticket=example")))
+        assertFalse(CTraderAuthorization.isCallback(Uri.parse("https://oauth/ctrader?ticket=example")))
+        assertFalse(CTraderAuthorization.isCallback(Uri.parse("tradelab://other/ctrader?ticket=example")))
+        assertNull(CTraderAuthorization.callbackStatus(Uri.parse("tradelab://other/ctrader?ticket=example")))
     }
 
-    @Test fun callbackOnlyAcceptsRegisteredAndroidDeepLink() {
-        assertTrue(CTraderAuthorization.isCallback(Uri.parse("tradelab://oauth/ctrader?code=example")))
-        assertFalse(CTraderAuthorization.isCallback(Uri.parse("https://oauth/ctrader?code=example")))
-        assertFalse(CTraderAuthorization.isCallback(Uri.parse("tradelab://other/ctrader?code=example")))
-        assertNull(CTraderAuthorization.callbackStatus(Uri.parse("tradelab://other/ctrader?code=example")))
-    }
-
-    @Test fun callbackDoesNotClaimMarketDataConnected() {
-        val message=CTraderAuthorization.callbackStatus(Uri.parse("tradelab://oauth/ctrader?code=example"))
+    @Test fun callbackNeverClaimsBrokerConnectedBeforeTicketRedeemed() {
+        val message=CTraderAuthorization.callbackStatus(Uri.parse("tradelab://oauth/ctrader?ticket=example"))
         assertNotNull(message)
-        assertTrue(message!!.contains("لم يتم تفعيل الأسعار"))
+        assertTrue(message!!.contains("جارٍ إكمال"))
+        assertFalse(message.contains("تم ربط"))
+    }
+
+    @Test fun unsupportedDirectCodeCallbackCannotSignIn() {
+        val message=CTraderAuthorization.callbackStatus(Uri.parse("tradelab://oauth/ctrader?code=example"))
+        assertTrue(message!!.contains("لم يصل تأكيد"))
     }
 }
