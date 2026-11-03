@@ -5,14 +5,13 @@ services:
     name: tradelab-ctrader-gateway
     runtime: docker
     rootDir: backend
+    branch: feat/chart-gesture-stability-20261031
     plan: free
     autoDeployTrigger: commit
     healthCheckPath: /healthz
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PUBLIC_BASE_URL
-        sync: false
       - key: DATABASE_URL
         sync: false
       - key: CTRADER_CLIENT_ID
