@@ -73,9 +73,16 @@ object ReplayChartLookback {
         // Validate the whole page before merging; a partial failure is not
         // treated as an empty market session or a reason to use a second source.
         incoming.forEach { checkIdentity(it,symbol,timeframe,sources,replayFirstOpen) }
-        existing.forEach { checkIdentity(it,symbol,timeframe,sources,replayFirstOpen) }
-        if(existing.zipWithNext().any { (a,b) -> a.openTime>=b.openTime })
-            throw InvalidPage(Reason.UNORDERED_EXISTING,"تاريخ Replay المحفوظ غير مرتب؛ أعد فتح الجلسة.")
+        if(existing is ReplayHistoricalPages) {
+            if(!existing.belongsTo(symbol,timeframe,replayFirstOpen))
+                throw InvalidPage(Reason.SOURCE,
+                    "تاريخ Replay يخص جلسة أو فريمًا سابقًا؛ تمت حماية البيانات من الخلط.")
+        } else {
+            existing.forEach { checkIdentity(it,symbol,timeframe,sources,replayFirstOpen) }
+            if(existing.zipWithNext().any { (a,b) -> a.openTime>=b.openTime })
+                throw InvalidPage(Reason.UNORDERED_EXISTING,
+                    "تاريخ Replay المحفوظ غير مرتب؛ أعد فتح الجلسة.")
+        }
 
         val page=incoming.sortedBy { it.openTime }
         val distinct=ArrayList<Candle>(page.size)
@@ -100,6 +107,17 @@ object ReplayChartLookback {
                 "بيانات الشموع الأقدم غير مكتملة أو غير متوافقة مع توقيت الفريم.")
         }
 
+        // Normal pagination is STRICTLY older than the already displayed
+        // history. Preserve existing immutable chunks instead of rechecking
+        // and copying 100k bars on every new 500-bar broker page.
+        if(existing.isEmpty())
+            return ReplayHistoricalPages.verified(distinct,symbol,timeframe,replayFirstOpen)
+        if(distinct.last().openTime < existing.first().openTime) {
+            val verified=if(existing is ReplayHistoricalPages)existing
+                else ReplayHistoricalPages.verified(existing,symbol,timeframe,replayFirstOpen)
+            return verified.prependVerified(distinct)
+        }
+
         // A provider's inclusive timestamp may repeat one or more candles
         // already loaded. Only strictly identical OHLC rows may overlap.
         var i=0
@@ -116,6 +134,7 @@ object ReplayChartLookback {
                 }
             }
         }
-        return ChartHistoryPaging.merge(existing,distinct)
+        val merged=ChartHistoryPaging.merge(existing,distinct)
+        return ReplayHistoricalPages.verified(merged,symbol,timeframe,replayFirstOpen)
     }
 }
