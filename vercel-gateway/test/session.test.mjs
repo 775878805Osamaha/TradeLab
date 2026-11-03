@@ -10,7 +10,7 @@ test('client verifier challenge is URL safe and 256-bit',()=>{
   assert.notEqual(hash(token),token);
 });
 test('server-side AES-GCM seals tokens; tampering fails closed',()=>{
-  const codec=sealedCodec(randomBytes(32).toString('base64'));
+  const codec=sealedCodec(randomBytes(32).toString('base64'),'private-ctrader-client-secret-example-strong');
   const s=codec.seal({type:'session',access:'ctrader-secret-value',scope:'accounts'});
   assert.equal(s.includes('ctrader-secret-value'),false);
   assert.equal(codec.open(s).access,'ctrader-secret-value');
@@ -22,8 +22,16 @@ test('handoff verifier must match SHA-256 challenge',()=>{
   assert.ok(constantTimeMatch(challenge,hash(verifier)));
   assert.equal(constantTimeMatch(challenge,hash(randomToken())),false);
 });
+test('publicly exposed salt cannot decrypt sessions without the private broker secret',()=>{
+  const salt=randomBytes(32).toString('base64');
+  const c1=sealedCodec(salt,'private-ctrader-client-secret-example-strong');
+  const c2=sealedCodec(salt,'completely-different-broker-client-secret');
+  const serialized=c1.seal({access:'private-access-token'});
+  assert.throws(()=>c2.open(serialized));
+  assert.throws(()=>sealedCodec(salt,''),/Private cTrader/);
+});
 test('key mismatch and malformed ciphertext rejected',()=>{
-  assert.throws(()=>sealedCodec('incorrect'),/32 bytes/);
-  const codec=sealedCodec(randomBytes(32).toString('base64'));
+  assert.throws(()=>sealedCodec('incorrect','private-ctrader-client-secret-example-strong'),/32 bytes/);
+  const codec=sealedCodec(randomBytes(32).toString('base64'),'private-ctrader-client-secret-example-strong');
   assert.throws(()=>codec.open('not.a.sealed.token'));
 });
