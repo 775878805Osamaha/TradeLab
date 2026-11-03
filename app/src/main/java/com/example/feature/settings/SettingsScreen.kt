@@ -37,6 +37,11 @@ fun SettingsScreen(
     val diag by provider.diagnosticInfo.collectAsState()
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val cTrader = com.example.feature.ctrader.CTraderAuthorization
+    var accountStatus by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(cTraderCallbackStatus) {
+        accountStatus = if (cTrader.isLinked(context)) cTrader.accountSummary(context) else null
+    }
     val sdf = remember { SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
 
     Scaffold(
@@ -73,18 +78,29 @@ fun SettingsScreen(
                             fontSize = 12.sp, color = TradingTextSecondary)
                         Button(
                             modifier = Modifier.fillMaxWidth().testTag("ctrader_browser_login"),
+                            enabled = cTrader.isConfigured,
                             onClick = {
-                                val url = com.example.feature.ctrader.CTraderAuthorization.authorizationUrl()
-                                context.startActivity(android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW, url
-                                ).addCategory(android.content.Intent.CATEGORY_BROWSABLE))
+                                val url = cTrader.authorizationUrl(context)
+                                if (url != null) {
+                                    context.startActivity(android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW, url
+                                    ).addCategory(android.content.Intent.CATEGORY_BROWSABLE))
+                                }
                             }
                         ) { Text("تسجيل الدخول إلى cTrader") }
                         if(cTraderCallbackStatus != null) {
                             Text(cTraderCallbackStatus, fontSize = 12.sp, color = TradingGold)
                         }
-                        Text("مرحلة تجريبية: يجب تسجيل رابط العودة في بوابة cTrader وإضافة تبادل آمن لرمز التفويض قبل تفعيل الأسعار.",
-                            fontSize = 11.sp, color = TradingTextSecondary)
+                        if (accountStatus != null) {
+                            Text(accountStatus!!, fontSize = 12.sp, color = TradingCyan)
+                        }
+                        if (!cTrader.isConfigured) {
+                            Text("زر الربط غير مفعّل حتى نشر خدمة OAuth الآمنة وتعيين CTRADER_GATEWAY_URL أثناء بناء APK.",
+                                fontSize = 12.sp, color = TradingGold)
+                        } else {
+                            Text("الاتصال بصلاحية القراءة فقط؛ الأسعار على الشارت لا تتغير إلى cTrader إلا بعد اختبار ربط المزود.",
+                                fontSize = 11.sp, color = TradingTextSecondary)
+                        }
                     }
                 }
             }
