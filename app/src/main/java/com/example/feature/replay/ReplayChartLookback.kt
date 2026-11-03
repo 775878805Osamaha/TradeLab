@@ -19,16 +19,17 @@ object ReplayChartLookback {
         timeframe: Timeframe
     ): List<Candle> {
         if (incoming.isEmpty()) return existing
-        val expectedSource = if (symbol in VerifiedMarketQuote.forexSymbols)
-            "CTRADER_HISTORICAL" else "BINANCE_HISTORICAL"
+        val allowedSources = if (symbol in VerifiedMarketQuote.forexSymbols)
+            setOf("CTRADER_HISTORICAL") else
+            setOf("BINANCE_HISTORICAL", "BINANCE_HISTORICAL_CACHED")
         if (incoming.any { bar ->
                 bar.symbol != symbol || bar.timeframe != timeframe ||
-                    bar.source != expectedSource || bar.openTime >= replayFirstOpen
+                    bar.source !in allowedSources || bar.openTime >= replayFirstOpen
             } || incoming.zipWithNext().any { (a,b) -> a.openTime >= b.openTime }) {
             throw IOException("مصدر الشموع الأقدم غير صحيح أو تجاوز حد Replay الآمن")
         }
         if (existing.any { it.symbol!=symbol || it.timeframe!=timeframe ||
-                it.source!=expectedSource || it.openTime>=replayFirstOpen }) {
+                it.source !in allowedSources || it.openTime>=replayFirstOpen }) {
             throw IOException("تاريخ الشارت المحلي لا يطابق حساب Replay")
         }
         val merged = ChartHistoryPaging.merge(existing,incoming)
