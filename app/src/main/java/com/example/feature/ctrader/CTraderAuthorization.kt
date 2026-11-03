@@ -89,7 +89,7 @@ object CTraderAuthorization {
                 if (!response.isSuccessful) return@withContext "تعذر تأكيد الربط. أعد المحاولة."
                 val data = JSONObject(response.body?.string().orEmpty())
                 val sessionToken = data.optString("sessionToken")
-                if (!Regex("^[a-zA-Z0-9_-]{43}$").matches(sessionToken)) {
+                if (!isSealedGatewaySession(sessionToken)) {
                     return@withContext "استجابة جلسة غير صالحة."
                 }
                 saveSession(context, sessionToken)
@@ -101,9 +101,17 @@ object CTraderAuthorization {
         }
     }
 
+    private fun isSealedGatewaySession(value: String): Boolean =
+        value.length in 100..6144 &&
+            Regex("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$").matches(value)
+
     fun isLinked(context: Context): Boolean = !readSession(context).isNullOrEmpty()
 
     internal fun sessionForReadOnlyRequests(context: Context): String? = readSession(context)
+
+    internal fun rotateSession(context: Context, token: String) {
+        if (isSealedGatewaySession(token)) saveSession(context, token)
+    }
 
     suspend fun accountSummary(context: Context): String = withContext(Dispatchers.IO) {
         val sessionToken = readSession(context) ?: return@withContext "لم يتم ربط حساب cTrader بعد."
@@ -112,6 +120,7 @@ object CTraderAuthorization {
             val request = Request.Builder().url(gatewayBase + "/v1/accounts")
                 .header("Authorization", "Bearer $sessionToken").build()
             client.newCall(request).execute().use { response ->
+                response.header("X-TradeLab-Session")?.let { rotateSession(context, it) }
                 if (response.code == 401) return@withContext "انتهت صلاحية جلسة TradeLab؛ سجل الدخول مجددًا."
                 if (!response.isSuccessful) return@withContext "تعذر استرجاع حسابات cTrader الآن."
                 val accounts = JSONObject(response.body?.string().orEmpty()).optJSONArray("accounts")
