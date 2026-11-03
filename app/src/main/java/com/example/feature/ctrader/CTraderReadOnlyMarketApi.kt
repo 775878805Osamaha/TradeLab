@@ -36,6 +36,7 @@ class CTraderReadOnlyMarketApi(private val context: Context) {
                 .header("Authorization","Bearer $token")
                 .header("Accept","application/json").build()
             http.newCall(request).execute().use { response ->
+                response.header("X-TradeLab-Session")?.let { CTraderAuthorization.rotateSession(context, it) }
                 if(!response.isSuccessful)throw IllegalStateException("cTrader gateway unavailable: ${response.code}")
                 JSONObject(response.body?.string().orEmpty())
             }
