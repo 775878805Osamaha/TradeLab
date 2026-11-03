@@ -69,7 +69,9 @@ fun SettingsScreen(
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item { AppearanceSettings() }
-            item {
+            // Keep normal TradeLab use completely independent of hosting and cTrader login.
+            // Display this optional integration only when a tested HTTPS gateway is configured.
+            if (cTrader.isConfigured) item {
                 Card(
                     modifier = Modifier.fillMaxWidth().testTag("ctrader_oauth_card"),
                     colors = CardDefaults.cardColors(containerColor = TradingCard)
