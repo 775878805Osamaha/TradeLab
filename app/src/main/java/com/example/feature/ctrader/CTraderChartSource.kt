@@ -37,7 +37,21 @@ class CTraderChartSource(context: Context) {
     fun isSelectedFor(symbol:String):Boolean = symbol in VerifiedMarketQuote.forexSymbols
 
     /** Read the user's own granted account once; never select a legacy market source. */
-    suspend fun refreshAuthorizedAccount():String = authorizedAccount()
+    suspend fun refreshAuthorizedAccount():String = accountMutex.withLock {
+        if (!CTraderAuthorization.isLinked(appContext))
+            throw IOException("يلزم تسجيل الدخول إلى cTrader")
+        val accounts=api.accounts()
+        val selected=accounts.firstOrNull { it.accountId==_account.value }
+            ?: accounts.firstOrNull()
+            ?: throw IOException("لم يظهر حساب مصرح به في cTrader")
+        if(_account.value!=selected.accountId) {
+            if(!prefs.edit().putString("account_id",selected.accountId).commit())
+                throw IOException("تعذر حفظ حساب cTrader")
+            symbolCache.clear()
+            _account.value=selected.accountId
+        }
+        selected.accountId
+    }
 
     /** A new OAuth grant may belong to a different broker account.
      * Invalidate all account-scoped symbols and quotes BEFORE discovering it.
