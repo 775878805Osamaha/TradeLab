@@ -85,6 +85,9 @@ class ReplayViewModel(
     private val closedTrades = mutableListOf<TradeJournalEntry>()
     private var nextId = 1L
     private var replayLoadJob: Job? = null
+    // A restored/active replay must never append history from a newly linked
+    // cTrader account, even if the symbol name happens to be identical.
+    private var brokerChangedDuringReplay = false
 
     // Read-only chart inspection history, deliberately outside the replay engine and
     // saved account snapshot: no future candles and no shifting financial checkpoints.
@@ -115,6 +118,11 @@ class ReplayViewModel(
      * The engine's existing cursor (and hidden future bars) remain untouched.
      */
     fun loadOlderReplayChartHistory(searchEarlier: Boolean = false) {
+        if (brokerChangedDuringReplay) {
+            _chartLookbackError.value =
+                "تغير حساب cTrader أثناء الجلسة؛ أعد تحميل Replay قبل طلب شموع أقدم."
+            return
+        }
         if (_uiState.value.isLoading || _chartLookbackLoading.value ||
             (chartLookbackExhausted && !searchEarlier)) return
         if (searchEarlier) chartLookbackExhausted = false
@@ -292,6 +300,25 @@ class ReplayViewModel(
 
     init {
         setupReplayEngineCallbacks()
+        viewModelScope.launch {
+            marketDataRepository.cTraderAccount.drop(1).collect {
+                val state = _uiState.value
+                if (state.symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols &&
+                    replayEngine.totalCandles.value > 0 && !state.isLoading) {
+                    // Pause but do not erase a virtual account or its trade journal.
+                    // Existing historical candles may be reviewed; requesting new
+                    // broker bars is forbidden until the user starts a new session.
+                    cancelBatchAdvance()
+                    replayEngine.pause()
+                    clearChartLookback()
+                    brokerChangedDuringReplay = true
+                    _uiState.update { old ->
+                        old.copy(isPlaying=false,
+                            message="تغير حساب cTrader. جمدت تحميل التاريخ لحماية Replay من خلط بيانات وسيطين؛ أعد بدء جلسة التدريب.")
+                    }
+                }
+            }
+        }
         viewModelScope.launch {
             val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sessionStore?.read() }
             val savedAllowed = saved?.let { snapshot ->
@@ -523,6 +550,7 @@ class ReplayViewModel(
                 val startIndex = if (targetTime == null) minOf(20, candles.lastIndex)
                     else candles.indexOfFirst { it.openTime >= targetTime }.coerceAtLeast(0)
                 replayEngine.initialize(candles, startIndex = startIndex)
+                brokerChangedDuringReplay = false
                 // Publish the exact initialized cursor before saving. Flow collectors may
                 // otherwise still contain the cleared engine's previous cursor.
                 _uiState.update { it.copy(isLoading = false,
