@@ -41,9 +41,15 @@ class MarketViewModel(private val marketDataRepository: MarketDataRepository):Vi
     init { viewModelScope.launch {
         marketDataRepository.initializeSymbolsIfNeeded()
         val permits=Semaphore(3)
-        marketDataRepository.symbols.map{it.map{symbol->symbol.symbol}.toSet()}.distinctUntilChanged().collectLatest { symbols->
+        combine(
+            marketDataRepository.symbols.map{it.map{symbol->symbol.symbol}.toSet()}.distinctUntilChanged(),
+            marketDataRepository.cTraderAccount
+        ) { symbols, account -> symbols to account }.collectLatest { (symbols, account) ->
+            // Remove quotes and history from the previously selected broker immediately.
+            ticks.update { it.filterKeys { symbol -> symbol !in VerifiedMarketQuote.forexSymbols } }
+            histories.update { it.filterKeys { symbol -> symbol !in VerifiedMarketQuote.forexSymbols } }
             coroutineScope { symbols.filter{VerifiedMarketQuote.supports(it)}.forEach { symbol->
-                launch { marketDataRepository.provider.subscribe(symbol);marketDataRepository.observeTicks(symbol).collect{tick->if(tick.symbol==symbol)ticks.update{it+(symbol to tick)}} }
+                launch { marketDataRepository.subscribeQuotes(symbol);marketDataRepository.observeTicks(symbol).collect{tick->if(tick.symbol==symbol)ticks.update{it+(symbol to tick)}} }
                 launch(Dispatchers.IO) { while(isActive) {
                     try { permits.withPermit {
                         val interval=900000L;val to=System.currentTimeMillis()/interval*interval-interval
