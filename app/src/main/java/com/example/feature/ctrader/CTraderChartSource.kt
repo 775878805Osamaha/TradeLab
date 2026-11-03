@@ -31,6 +31,7 @@ class CTraderChartSource(context: Context) {
     )
     val selectedAccount: StateFlow<String?> = _account.asStateFlow()
     private val symbolCache=ConcurrentHashMap<String,CTraderReadOnlyMarketApi.BrokerSymbol>()
+    private val pageCache=CTraderHistoricalPageCache(maxPages=48)
     private val accountMutex = Mutex()
 
     /** cTrader owns ALL forex/metals, even when offline or not yet authorized. */
@@ -48,6 +49,7 @@ class CTraderChartSource(context: Context) {
             if(!prefs.edit().putString("account_id",selected.accountId).commit())
                 throw IOException("تعذر حفظ حساب cTrader")
             symbolCache.clear()
+            pageCache.clear()
             _account.value=selected.accountId
         }
         selected.accountId
@@ -59,6 +61,7 @@ class CTraderChartSource(context: Context) {
     suspend fun onSessionReauthorized():String = accountMutex.withLock {
         _account.value = null
         symbolCache.clear()
+        pageCache.clear()
         if(!prefs.edit().remove("account_id").commit())throw IOException("تعذر مسح بيانات الحساب السابق")
         if(!CTraderAuthorization.isLinked(appContext))throw IOException("لم يتم تسجيل الدخول إلى cTrader")
         val newAccount = api.accounts().firstOrNull()
@@ -89,6 +92,7 @@ class CTraderChartSource(context: Context) {
         check(prefs.edit().remove("account_id").commit())
         _account.value=null
         symbolCache.clear()
+        pageCache.clear()
     }
 
     private suspend fun resolveSymbol(account:String,symbol:String):CTraderReadOnlyMarketApi.BrokerSymbol {
@@ -161,6 +165,24 @@ class CTraderChartSource(context: Context) {
         return fetchFor(account,symbol,timeframe,from,to,20_000)
     }
 
+    private suspend fun historyPage(
+        accountId:String,
+        symbolId:Long,
+        period:String,
+        from:Long,
+        to:Long,
+        count:Int
+    ):List<CTraderReadOnlyMarketApi.BrokerCandle> {
+        val key=CTraderHistoricalPageCache.Key(accountId,symbolId,period,from,to,count)
+        pageCache.get(key)?.let { return it }
+        val bars=api.candles(accountId,symbolId,period,from,to,count)
+        // Cache only fully closed ranges; otherwise a forming candle could
+        // become permanently pinned to a stale in-memory snapshot.
+        val interval=com.example.core.model.Timeframe.fromCode(period).minutes*60_000L
+        if(to<=System.currentTimeMillis()-interval)pageCache.put(key,bars)
+        return bars
+    }
+
     /**
      * Request historical bars backwards using the Open API's count limit, without
      * downloading every empty calendar slot.  Each call is bounded by a
@@ -186,7 +208,7 @@ class CTraderChartSource(context: Context) {
             // Count and calendar span must represent the SAME continuous slot
             // interval. The prior implementation could skip entire trading days
             // whenever the date range contained more candles than count.
-            val fetched=api.candles(account,broker.symbolId,
+            val fetched=historyPage(account,broker.symbolId,
                 window.sourcePeriod,start,end,window.count)
             val verifiedRaw=fetched.sortedBy { it.timestampMs }
             if(verifiedRaw.zipWithNext().any { (a,b) -> a.timestampMs==b.timestampMs })
@@ -231,7 +253,7 @@ class CTraderChartSource(context: Context) {
             currentCoroutineContext().ensureActive()
             if(++pages>48)throw IOException("التاريخ المطلوب كبير؛ حمّله على دفعات")
             val end=minOf(upper,cursor+(pageSize-1L)*sourceInterval)
-            raw.addAll(api.candles(account,broker.symbolId,period,cursor,end,pageSize.toInt()))
+            raw.addAll(historyPage(account,broker.symbolId,period,cursor,end,pageSize.toInt()))
             if(raw.size>maxBars*(if(h2)2 else 1)+10)throw IOException("عدد شموع غير متوقع")
             cursor=end+sourceInterval
         }
