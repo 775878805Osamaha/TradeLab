@@ -89,7 +89,7 @@ class ChartViewModel(
 
     private fun observeSelectedBroker() {
         viewModelScope.launch {
-            marketDataRepository.cTraderAccount.distinctUntilChanged().drop(1).collect {
+            marketDataRepository.cTraderAccount.drop(1).collect {
                 val symbol = _uiState.value.selectedSymbol
                 if (symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
                     // Never show Biquote candles/tick after switching to another broker.
