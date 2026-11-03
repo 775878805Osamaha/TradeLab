@@ -28,6 +28,8 @@ class Channel {
     this.authorized=new Set();
     this.connecting=null;
     this.heartbeat=null;
+    this.historyQueue=Promise.resolve();
+    this.nextHistoryAt=0;
   }
   async connect() {
     if (this.socket?.readyState === WebSocket.OPEN) return;
@@ -123,8 +125,16 @@ class Channel {
   }
   async history(accountId,accessToken,symbolId,period,from,to,count) {
     await this.account(accountId,accessToken);
-    const result=await this.send(2137,{ctidTraderAccountId:accountId,symbolId,period,
-      fromTimestamp:from,toTimestamp:to,count});
+    // cTrader permits only 5 historical requests/s per connection. Queue at <=4/s.
+    const job=this.historyQueue.then(async()=>{
+      const wait=Math.max(0,this.nextHistoryAt-Date.now());
+      if(wait) await new Promise(resolve=>setTimeout(resolve,wait));
+      this.nextHistoryAt=Date.now()+250;
+      return this.send(2137,{ctidTraderAccountId:accountId,symbolId,period,
+        fromTimestamp:from,toTimestamp:to,count});
+    });
+    this.historyQueue=job.then(()=>undefined,()=>undefined);
+    const result=await job;
     return {candles:(result.trendbar||[]).map(normalizeBar).sort((a,b)=>a.timestamp-b.timestamp),hasMore:result.hasMore===true};
   }
   async subscribe(accountId,accessToken,symbolId,cb) {
