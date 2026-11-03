@@ -51,7 +51,11 @@ object ReplayChartLookback {
         a.openTime==b.openTime && a.closeTime==b.closeTime &&
         a.open==b.open && a.high==b.high && a.low==b.low &&
         a.close==b.close && a.volume==b.volume &&
-        a.source==b.source
+        // Binance disk cache and fresh REST bars identify the SAME Binance
+        // market feed; do not reject equal OHLC merely because cache tags differ.
+        (a.source==b.source ||
+            (a.source in setOf("BINANCE_HISTORICAL","BINANCE_HISTORICAL_CACHED") &&
+             b.source in setOf("BINANCE_HISTORICAL","BINANCE_HISTORICAL_CACHED")))
 
     fun prepend(
         existing:List<Candle>,
