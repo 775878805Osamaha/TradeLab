@@ -37,6 +37,8 @@ class CTraderChartSource(context: Context) {
     fun isSelectedFor(symbol:String):Boolean = symbol in VerifiedMarketQuote.forexSymbols
 
     /** Read the user's own granted account once; never select a legacy market source. */
+    suspend fun refreshAuthorizedAccount():String = authorizedAccount()
+
     private suspend fun authorizedAccount():String {
         if(!CTraderAuthorization.isLinked(appContext))
             throw IOException("يلزم تسجيل الدخول إلى cTrader للحصول على أسعار الفوركس")
