@@ -63,7 +63,7 @@ fun ChartScreen(
     val replayLookbackError by replayViewModel.chartLookbackError.collectAsState()
     // Read-only prehistory precedes the Replay engine's first bar; future bars remain hidden.
     val replayChartBars = remember(replayChartLookback, replayState.visibleCandles) {
-        replayChartLookback + replayState.visibleCandles
+        com.example.feature.replay.ReplayChartSeries(replayChartLookback, replayState.visibleCandles)
     }
     val historyTargetTime by replayViewModel.historyTargetTime.collectAsState()
     val orderKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
