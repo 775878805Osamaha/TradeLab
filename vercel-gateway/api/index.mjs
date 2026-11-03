@@ -15,6 +15,9 @@ const securityHeaders = {
   'Access-Control-Allow-Origin':'null',
 };
 const validToken = v => typeof v==='string' && /^[A-Za-z0-9_-]{43}$/.test(v);
+// OAuth remains disabled by default for safe, credential-free integration tests.
+// Enable only after server encryption keys are securely rotated and smoke-tested.
+const oauthEnabled = process.env.CTRADER_AUTH_ENABLED === 'true';
 function publicOrigin(req) {
   const configured = process.env.PUBLIC_BASE_URL ||
     (process.env.VERCEL_PROJECT_PRODUCTION_URL ? 'https://'+process.env.VERCEL_PROJECT_PRODUCTION_URL : null);
@@ -150,8 +153,10 @@ async function handler(req,res){
   const {path,url}=route(req);
   if(req.method==='GET' && path==='/healthz')return reply(res,200,{
     status:'ok',service:'TradeLab cTrader OAuth gateway',
-    configured:!!(process.env.CTRADER_CLIENT_ID&&process.env.CTRADER_CLIENT_SECRET&&process.env.SESSION_ENCRYPTION_KEY)
+    configured:!!(process.env.CTRADER_CLIENT_ID&&process.env.CTRADER_CLIENT_SECRET&&process.env.SESSION_ENCRYPTION_KEY),
+    authEnabled:oauthEnabled
   });
+  if(!oauthEnabled)return fail(res,503,'authentication_paused_for_security');
   const {codec,base}=getRuntime(req);
   const callback=base+'/auth/ctrader/callback';
   if(req.method==='GET' && path==='/auth/ctrader/start'){
