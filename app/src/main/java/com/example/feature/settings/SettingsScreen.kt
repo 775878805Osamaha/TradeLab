@@ -39,6 +39,8 @@ fun SettingsScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val cTrader = com.example.feature.ctrader.CTraderAuthorization
     var accountStatus by remember { mutableStateOf<String?>(null) }
+    var goldCheckStatus by remember { mutableStateOf<String?>(null) }
+    var goldCheckRunning by remember { mutableStateOf(false) }
     LaunchedEffect(cTraderCallbackStatus) {
         accountStatus = if (cTrader.isLinked(context)) cTrader.accountSummary(context) else null
     }
@@ -93,6 +95,26 @@ fun SettingsScreen(
                         }
                         if (accountStatus != null) {
                             Text(accountStatus!!, fontSize = 12.sp, color = TradingCyan)
+                        }
+                        if (cTrader.isLinked(context) && cTrader.isConfigured) {
+                            OutlinedButton(
+                                enabled = !goldCheckRunning,
+                                modifier = Modifier.fillMaxWidth().testTag("ctrader_gold_smoke_test"),
+                                onClick = {
+                                    goldCheckRunning = true
+                                    scope.launch {
+                                        goldCheckStatus = try {
+                                            com.example.feature.ctrader.CTraderReadOnlyMarketApi(context).goldCheck()
+                                        } catch (_: Exception) {
+                                            "لم تصل بيانات ذهب موثوقة من cTrader الآن. تحقق من حساب الوسيط والاتصال."
+                                        }
+                                        goldCheckRunning = false
+                                    }
+                                }
+                            ) {
+                                Text(if (goldCheckRunning) "جارٍ اختبار بيانات الذهب…" else "اختبار السعر الحقيقي للذهب XAUUSD")
+                            }
+                            if(goldCheckStatus!=null)Text(goldCheckStatus!!,fontSize=12.sp,color=TradingTextSecondary)
                         }
                         if (!cTrader.isConfigured) {
                             Text("زر الربط غير مفعّل حتى نشر خدمة OAuth الآمنة وتعيين CTRADER_GATEWAY_URL أثناء بناء APK.",
