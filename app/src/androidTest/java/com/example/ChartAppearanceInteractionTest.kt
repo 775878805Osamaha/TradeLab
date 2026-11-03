@@ -40,7 +40,13 @@ class ChartAppearanceInteractionTest {
             compose.onNodeWithText(text(R.string.appearance_save)).performClick()
             compose.waitForIdle()
             assertTrue(compose.onNodeWithTag("bottom_nav_bar").captureToImage().toPixelMap()[0,0].luminance() > .7f)
-            compose.waitUntil(90000) { compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() }
+            // No synthetic/legacy gold quotes are permitted. The chart can
+            // legitimately be empty on an emulator without a linked cTrader account.
+            // Theme navigation must still work in both broker-connected/offline modes.
+            compose.waitUntil(15000) {
+                compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() ||
+                    compose.onAllNodesWithTag("candlestick_chart_empty").fetchSemanticsNodes().isNotEmpty()
+            }
             capture("appearance-light")
             for ((route, screen) in listOf("market" to "market_screen", "results" to "results_screen", "account" to "account_screen")) {
                 compose.onNodeWithTag("nav_item_$route").performClick()
