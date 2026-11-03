@@ -500,8 +500,7 @@ fun ChartScreen(
                         }
                         val sourceLabel = when(uiState.candles.firstOrNull()?.source) {
                             "CTRADER_HISTORICAL" -> "cTrader · شموع الوسيط"
-                            com.example.core.market.DukascopyChartHistoryProvider.SOURCE -> "Dukascopy · BID"
-                            com.example.core.market.HistDataChartHistoryProvider.SOURCE -> "HistData · BID · الحجم غير متاح"
+                            "BINANCE_HISTORICAL", "BINANCE_HISTORICAL_CACHED" -> "Binance Spot · شموع فعلية"
                             else -> null
                         }
                         if (sourceLabel!=null) {
