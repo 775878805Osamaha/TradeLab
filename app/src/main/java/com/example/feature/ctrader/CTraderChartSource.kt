@@ -131,6 +131,55 @@ class CTraderChartSource(context: Context) {
         return fetchFor(account,symbol,timeframe,from,to,20_000)
     }
 
+    /**
+     * Request historical bars backwards using the Open API's count limit, without
+     * downloading every empty calendar slot.  Each call is bounded by a
+     * timeframe-appropriate maximum time span.  Weekend/holiday gaps do not
+     * manufacture OHLC bars.  A call that fails must not be treated as empty.
+     */
+    suspend fun candlesBefore(symbol:String,timeframe:Timeframe,oldestOpen:Long):List<Candle> {
+        val account=authorizedAccount()
+        val broker=resolveSymbol(account,symbol)
+        val h2=timeframe==Timeframe.H2
+        val sourceTimeframe=if(h2)Timeframe.H1 else timeframe
+        val sourceInterval=sourceTimeframe.minutes*60_000L
+        val outputInterval=timeframe.minutes*60_000L
+        if(oldestOpen<outputInterval) return emptyList()
+        var end=oldestOpen-sourceInterval
+        val period=sourceTimeframe.code
+        val batchCount=if(h2)1000 else 500
+        for(attempt in 0 until 8) {
+            currentCoroutineContext().ensureActive()
+            if(end<0L)break
+            val span=CTraderHistoryPaging.windowSpan(timeframe)
+            val start=(end-span+sourceInterval).coerceAtLeast(0L)
+            // Broker's count is a backwards-facing ceiling relative to toTimestamp.
+            // Avoid huge chronological downloads to scan closed market sessions.
+            val fetched=api.candles(account,broker.symbolId,period,start,end,batchCount)
+            val verifiedRaw=fetched.sortedBy { it.timestampMs }
+            if(verifiedRaw.zipWithNext().any { (a,b) -> a.timestampMs==b.timestampMs })
+                throw IOException("شموع cTrader التاريخية مكررة")
+            val converted=if(h2)CTraderBarConversion.aggregateH2(symbol,verifiedRaw) else
+                verifiedRaw.map {
+                    Candle(symbol,timeframe,it.timestampMs,it.timestampMs+outputInterval,
+                        it.open,it.high,it.low,it.close,it.volume.toDouble(),"CTRADER_HISTORICAL")
+                }
+            val now=System.currentTimeMillis()
+            val closed=converted.filter { bar ->
+                bar.openTime>=start && bar.openTime<oldestOpen &&
+                    bar.closeTime<=now && bar.openTime+outputInterval<=oldestOpen
+            }
+            if(closed.isNotEmpty())return HistoricalCandleIntegrity.validate(
+                closed.takeLast(500),start,oldestOpen,
+                expectedSource="CTRADER_HISTORICAL",
+                expectedSymbol=symbol,expectedTimeframe=timeframe
+            )
+            if(start<=0L)break
+            end=start-sourceInterval
+        }
+        return emptyList()
+    }
+
     private suspend fun fetchFor(account:String,symbol:String,timeframe:Timeframe,
         from:Long,to:Long,maxBars:Int):List<Candle> {
         val broker=resolveSymbol(account,symbol)
