@@ -120,6 +120,14 @@ class ReplayViewModel(
         if (searchEarlier) chartLookbackExhausted = false
         val dataset = replayEngine.snapshotCandles()
         if (dataset.isEmpty()) return
+        val marketSource = if (_uiState.value.symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
+            setOf("CTRADER_HISTORICAL")
+        else setOf("BINANCE_HISTORICAL","BINANCE_HISTORICAL_CACHED")
+        if(dataset.any { it.source !in marketSource }) {
+            _chartLookbackError.value =
+                "هذه جلسة بيانات مستوردة؛ لا يجوز دمجها بشموع مزود سوق مختلف."
+            return
+        }
         val symbol = _uiState.value.symbol
         val tf = _uiState.value.timeframe
         val datasetId = _uiState.value.datasetId
