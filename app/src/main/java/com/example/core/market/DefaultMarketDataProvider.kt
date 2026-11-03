@@ -218,6 +218,10 @@ class DefaultMarketDataProvider(
         }
     }
 
+    fun isVerifiedQuote(tick: Tick?, symbol: String, now: Long = System.currentTimeMillis()): Boolean =
+        VerifiedMarketQuote.isVerified(tick, symbol, now) &&
+            (symbol !in VerifiedMarketQuote.forexSymbols || (tick != null && cTrader?.isCurrentQuote(tick) == true))
+
     override suspend fun getLatestTick(symbol: String): Tick? {
         val sym = normalizeSymbol(symbol)
         return latestTicks[sym]
@@ -449,7 +453,7 @@ class DefaultMarketDataProvider(
     }
 
     private fun hasFreshVerifiedQuote(now: Long = System.currentTimeMillis()): Boolean =
-        latestTicks.values.any { VerifiedMarketQuote.isVerified(it, it.symbol, now) }
+        latestTicks.values.any { isVerifiedQuote(it, it.symbol, now) }
 
     private fun startHealthCheck() {
         healthCheckJob?.cancel()

@@ -55,6 +55,14 @@ class MarketViewModel(private val marketDataRepository: MarketDataRepository):Vi
             } }
         }
     } }
+    init {
+        marketDataRepository.cTrader?.let { client ->
+            viewModelScope.launch { client.accountGeneration.drop(1).collect {
+                ticks.update { rows -> rows.filterKeys { symbol -> symbol !in VerifiedMarketQuote.forexSymbols } }
+                histories.update { rows -> rows.filterKeys { symbol -> symbol !in VerifiedMarketQuote.forexSymbols } }
+            } }
+        }
+    }
     fun updateSearchQuery(value:String){query.value=value}
     fun selectCategory(value:MarketCategory){category.value=value}
     fun setSortOption(value:MarketSort){sort.value=value}

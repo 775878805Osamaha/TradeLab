@@ -211,7 +211,7 @@ fun ChartScreen(
         }
     }
     val headerTick = uiState.latestTick
-    val headerQuoteVerified = com.example.core.market.VerifiedMarketQuote.isVerified(headerTick, uiState.selectedSymbol, quoteClock)
+    val headerQuoteVerified = viewModel.isVerifiedQuote(headerTick, uiState.selectedSymbol, quoteClock)
 
     LaunchedEffect(pendingOrderSide) {
         if (pendingOrderSide != null) {
@@ -915,7 +915,7 @@ fun ChartScreen(
             }
 
             val marketTick = uiState.latestTick
-            val marketTickIsLive = com.example.core.market.VerifiedMarketQuote.isVerified(marketTick, uiState.selectedSymbol, quoteClock)
+            val marketTickIsLive = viewModel.isVerifiedQuote(marketTick, uiState.selectedSymbol, quoteClock)
             val verifiedBinancePair = uiState.selectedSymbol in setOf("BTCUSDT", "ETHUSDT")
             if (!immersiveChart && !isEmbeddedReplay && verifiedBinancePair && !marketTickIsLive) {
                 Text(

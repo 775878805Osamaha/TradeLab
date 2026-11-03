@@ -84,7 +84,18 @@ class ChartViewModel(
         observeDataSourceType()
         observeConnectionDiagnostics()
         observeDrawings()
+        marketDataRepository.cTrader?.let { client ->
+            viewModelScope.launch { client.accountGeneration.drop(1).collect {
+                if (_uiState.value.selectedSymbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
+                    _uiState.update { it.copy(latestTick = null, candles = emptyList(), isLoading = true) }
+                    loadCandlesForCurrentSymbol()
+                }
+            } }
+        }
     }
+
+    fun isVerifiedQuote(tick: Tick?, symbol: String, now: Long = System.currentTimeMillis()) =
+        marketDataRepository.provider.isVerifiedQuote(tick, symbol, now)
 
     private fun observeConnectionDiagnostics() {
         viewModelScope.launch {
@@ -423,7 +434,7 @@ class ChartViewModel(
         val state = _uiState.value
         val position = state.openPositions.firstOrNull { it.id == positionId } ?: return
         val tick = state.latestTick
-        if (tick == null || !com.example.core.market.VerifiedMarketQuote.isVerified(tick, position.symbol, System.currentTimeMillis())) {
+        if (tick == null || !isVerifiedQuote(tick, position.symbol, System.currentTimeMillis())) {
             _uiState.update { it.copy(message = "يلزم سعر حديث وموثوق لإغلاق الصفقة") }
             return
         }
@@ -457,7 +468,7 @@ class ChartViewModel(
         }
         val state = _uiState.value
         val tick = state.latestTick
-        if (tick == null || !com.example.core.market.VerifiedMarketQuote.isVerified(tick, state.selectedSymbol)) {
+        if (tick == null || !isVerifiedQuote(tick, state.selectedSymbol)) {
             _uiState.update { it.copy(message = "لا يمكن تنفيذ أمر بسعر غير متصل أو قديم") }
             return
         }
@@ -759,7 +770,7 @@ class ChartViewModel(
                 if (_uiState.value.selectedSymbol != symbol) return@collect
                 // A bad or mismatched quote must not overwrite the last trusted bid/ask,
                 // or trigger fills and stop-loss evaluation in the trading engine.
-                if (!com.example.core.market.VerifiedMarketQuote.isVerified(tick, symbol)) return@collect
+                if (!isVerifiedQuote(tick, symbol)) return@collect
                 val accepted = _uiState.value.latestTick
                 if (accepted != null && tick.timestamp < accepted.timestamp) return@collect
                 _uiState.update { state ->

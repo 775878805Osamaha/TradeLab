@@ -48,7 +48,7 @@ fun TradeScreen(
             quoteClock = System.currentTimeMillis()
         }
     }
-    val quoteIsVerified = com.example.core.market.VerifiedMarketQuote.isVerified(tick, uiState.selectedSymbol, quoteClock)
+    val quoteIsVerified = viewModel.isVerifiedQuote(tick, uiState.selectedSymbol, quoteClock)
     val verifiedTick = tick?.takeIf { quoteIsVerified }
     val symInfo = remember(uiState.selectedSymbol) { DefaultSymbols.getSymbol(uiState.selectedSymbol) }
 

@@ -39,6 +39,9 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
     private var session = secureStore.read().optString("session")
     private var selectedId = secureStore.read().optString("account")
     private var pendingVerifier: String? = null
+    @Volatile private var quoteNotBefore = System.currentTimeMillis()
+    private val _accountGeneration = MutableStateFlow(0L)
+    val accountGeneration: StateFlow<Long> = _accountGeneration
     private val symbolIds = HashMap<String, Long>()
 
     private val _status = MutableStateFlow(if (session.isBlank()) "غير مرتبط بـ cTrader" else "جارٍ التحقق من cTrader")
@@ -121,8 +124,10 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             selectedId = accountId
             symbolIds.clear()
             symbolIds.putAll(ids)
+            quoteNotBefore = System.currentTimeMillis()
             persist()
         }
+        _accountGeneration.value += 1L
         _selectedAccount.value = accountId
         _status.value = if (ids.isEmpty()) "مرتبط، لكن الوسيط لا يعرض رموز الفوركس المطلوبة" else
             "متصل بـ cTrader للقراءة فقط (${ids.size} رموز)"
@@ -131,8 +136,10 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
     fun logout() {
         synchronized(lock) {
             session = ""; selectedId = ""; pendingVerifier = null
+            quoteNotBefore = System.currentTimeMillis()
             symbolIds.clear(); persist()
         }
+        _accountGeneration.value += 1L
         _accounts.value = emptyList(); _selectedAccount.value = ""
         _status.value = "غير مرتبط بـ cTrader"
     }
@@ -140,6 +147,12 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
     fun sourceKey(symbol: String): String {
         val (account, id) = resolve(symbol)
         return sourceName(account, id)
+    }
+
+    /** Reject quotes from a prior broker account even during their 15-second freshness window. */
+    fun isCurrentQuote(tick: Tick): Boolean = synchronized(lock) {
+        session.isNotBlank() && selectedId.isNotBlank() &&
+            symbolIds.containsKey(tick.symbol) && tick.timestamp >= quoteNotBefore
     }
 
     private fun sourceName(account: String, id: Long): String {
