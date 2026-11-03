@@ -1281,9 +1281,12 @@ fun ChartScreen(
                     ) {
                         Text(
                             text = if (isEmbeddedReplay)
-                                "REPLAY · " +
-                                    (if (replayState.symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
-                                        "cTrader" else "Binance") + " · ${chartBars.size}"
+                                "REPLAY · " + when(replayState.visibleCandles.firstOrNull()?.source) {
+                                    "CTRADER_HISTORICAL" -> "cTrader"
+                                    "BINANCE_HISTORICAL", "BINANCE_HISTORICAL_CACHED" -> "Binance"
+                                    "USER_IMPORTED" -> "ملف مستورد"
+                                    else -> "غير موثق"
+                                } + " · ${chartBars.size}"
                                 else "HISTORICAL · ${chartBars.size}",
                             fontSize = 9.sp,
                             color = TradingTextSecondary,
