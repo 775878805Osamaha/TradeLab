@@ -53,7 +53,20 @@ class MainActivity : ComponentActivity() {
         if (!com.example.feature.ctrader.CTraderAuthorization.isCallback(uri)) return
         cTraderCallbackStatus = "جارٍ التحقق من ربط cTrader..."
         lifecycleScope.launch {
-            cTraderCallbackStatus = com.example.feature.ctrader.CTraderAuthorization.redeem(applicationContext, uri)
+            val result = com.example.feature.ctrader.CTraderAuthorization.redeem(applicationContext, uri)
+            cTraderCallbackStatus = result
+            if (com.example.feature.ctrader.CTraderAuthorization.isLinked(applicationContext)) {
+                // Trigger the same cTrader account state observed by chart, market and Replay.
+                // A broker failure never enables a legacy forex data source.
+                try {
+                    (application as TradeLabApplication).cTraderChartSource.refreshAuthorizedAccount()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (e: Exception) {
+                    cTraderCallbackStatus = result + " بيانات cTrader لم تصل بعد: " +
+                        (e.message ?: "انقطاع الاتصال").take(120)
+                }
+            }
         }
     }
 
