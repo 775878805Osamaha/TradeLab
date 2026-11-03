@@ -37,7 +37,21 @@ class CTraderReadOnlyMarketApi(private val context: Context) {
                 .header("Accept","application/json").build()
             http.newCall(request).execute().use { response ->
                 response.header("X-TradeLab-Session")?.let { CTraderAuthorization.rotateSession(context, it) }
-                if(!response.isSuccessful)throw IllegalStateException("cTrader gateway unavailable: ${response.code}")
+                if(!response.isSuccessful) {
+                    val body=response.body?.string().orEmpty()
+                    val error=runCatching { JSONObject(body).optString("error") }.getOrDefault("")
+                    val message=when(error) {
+                        "ctrader_connection_failed" -> "خادم Vercel لا يستطيع الاتصال بخوادم cTrader الآن (503)."
+                        "ctrader_response_timeout" -> "انتهت مهلة استجابة cTrader. حاول فحص الاتصال مجددًا."
+                        "ctrader_broker_rejected_request" -> "رفض وسيط cTrader طلب قراءة البيانات لهذا الحساب."
+                        "ctrader_view_only_required" -> "صلاحية cTrader ليست للقراءة فقط؛ أعد التفويض."
+                        "ctrader_token_exchange_failed" -> "تعذر تحديث إذن cTrader. سجّل الدخول مجددًا."
+                        "session_expired" -> "انتهت جلسة cTrader. سجّل الدخول مجددًا."
+                        "authentication_paused_for_security" -> "خدمة cTrader متوقفة مؤقتًا."
+                        else -> "خدمة cTrader غير متاحة الآن (HTTP ${response.code})."
+                    }
+                    throw java.io.IOException(message)
+                }
                 JSONObject(response.body?.string().orEmpty())
             }
         }
