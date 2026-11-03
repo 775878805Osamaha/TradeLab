@@ -197,8 +197,6 @@ fun ChartScreen(
     var riskPercentInput by remember { mutableStateOf("1") }
     var orderTpInput by remember { mutableStateOf("") }
     var showReplayDatePicker by remember { mutableStateOf(false) }
-    var showHistoricalSourceDialog by remember { mutableStateOf(false) }
-    var historicalApiKeyInput by remember { mutableStateOf("") }
 
     // Refresh the freshness indicator even when the market stream stops emitting.
     var quoteClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -444,40 +442,6 @@ fun ChartScreen(
     // Trade detail dialog when tapping a marker on chart
     uiState.selectedTradeForDetail?.let { trade ->
         TradeDetailDialog(trade = trade, onDismiss = { viewModel.selectTradeForDetail(null) })
-    }
-
-    if (showHistoricalSourceDialog) {
-        AlertDialog(
-            onDismissRequest = { showHistoricalSourceDialog = false },
-            title = { Text("مصدر شموع الذهب والفوركس") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Twelve Data — بيانات تاريخية حقيقية بمفتاح API خاص بك. ليست أسعارًا مباشرة للتنفيذ.",
-                        fontSize = 12.sp, color = TradingTextSecondary)
-                    OutlinedTextField(
-                        value = historicalApiKeyInput,
-                        onValueChange = { historicalApiKeyInput = it },
-                        label = { Text("Twelve Data API Key") },
-                        singleLine = true,
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth().testTag("chart_historical_provider_key")
-                    )
-                    Text("المفتاح يبقى في الذاكرة ولا يُحفظ في ملفات التطبيق.",
-                        fontSize = 11.sp, color = TradingTextSecondary)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = historicalApiKeyInput.isNotBlank(),
-                    onClick = {
-                        viewModel.configureHistoricalProviderKey(historicalApiKeyInput)
-                        historicalApiKeyInput = ""
-                        showHistoricalSourceDialog = false
-                    }
-                ) { Text("تفعيل وتحميل") }
-            },
-            dismissButton = { TextButton(onClick = { showHistoricalSourceDialog = false }) { Text("إلغاء") } }
-        )
     }
 
     ChartPriceAlert(uiState.selectedSymbol,uiState.latestTick,isEmbeddedReplay,showPriceAlert) { showPriceAlert=false }
