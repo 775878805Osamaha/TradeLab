@@ -8,6 +8,15 @@ Unlike the earlier `backend/` design, this gateway does **not** require Railway,
 
 Vercel made WebSocket Functions generally available on October 20, 2026. However, **Vercel Hobby limits still apply**: live streams can disconnect at maximum function duration, quota caps and restarts. The Android app must reconnect; no free service can guarantee uninterrupted 24/7 quotes. No provider redistribution rights are implied.
 
+## Current testing mode: safe health-only validation
+
+The production gateway exposes `GET /healthz` even when authentication is not enabled. It returns
+`{ "status": "ok", "configured": true, "authEnabled": false }` if credentials are present but the OAuth security gate is closed.
+
+**OAuth, market data requests, and upstream WebSocket subscriptions are deliberately disabled by default.** No real cTrader account should be connected using the encryption key previously shared in a conversation. `CTRADER_AUTH_ENABLED=true` must only be set by the operator after rotating to a fresh, undisclosed 32-byte `SESSION_ENCRYPTION_KEY` and re-testing the release. Until then the Android Settings screen can safely probe the HTTPS gateway, but keeps its login action disabled.
+
+The Android app's existing market data, Replay, Backtest and paper trading are unaffected. A success response from `/healthz` alone does **not** prove cTrader account authorization or real prices.
+
 ## Required one-time configuration
 
 Create a **Vercel Hobby project** from the existing GitHub repository `775878805Osamaha/TradeLab`; its **Root Directory** is `vercel-gateway` and **Framework Preset** is Other/Node.js.
