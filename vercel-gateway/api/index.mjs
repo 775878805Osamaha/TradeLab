@@ -267,7 +267,18 @@ const server=createServer((req,res)=>{
       return fail(res,401,'session_expired');
     if(error.message.startsWith('invalid_')||error.message==='account_not_authorized')
       return fail(res,400,'invalid_request');
-    return fail(res,503,'broker_temporarily_unavailable');
+    if(error.message==='ctrader_view_only_required')return fail(res,403,'ctrader_view_only_required');
+    // Public, bounded error categories: never disclose tokens, credentials or upstream URLs.
+    if(error.message==='ctrader_socket_connection_failed' ||
+       error.message==='cTrader connection closed')
+      return fail(res,503,'ctrader_connection_failed');
+    if(error.message==='ctrader_request_timeout' || error.message==='quote_timeout')
+      return fail(res,503,'ctrader_response_timeout');
+    if(error.message==='ctrader_read_request_rejected')
+      return fail(res,503,'ctrader_broker_rejected_request');
+    if(error.message==='broker_exchange_failed')
+      return fail(res,503,'ctrader_token_exchange_failed');
+    return fail(res,503,'ctrader_broker_unavailable');
   });
 });
 const wss=new WebSocketServer({noServer:true,maxPayload:8192});
