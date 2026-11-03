@@ -258,6 +258,7 @@ const server=createServer((req,res)=>{
 });
 const wss=new WebSocketServer({noServer:true,maxPayload:8192});
 server.on('upgrade',(req,socket,head)=>{
+  if(!oauthEnabled)return socket.destroy();
   const {path}=route(req);
   if(path!=='/v1/stream')return socket.destroy();
   wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws,req));
