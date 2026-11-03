@@ -27,7 +27,6 @@ class MarketDataRepository(
     val provider: DefaultMarketDataProvider,
     private val candleDao: CandleDao,
     private val symbolDao: SymbolDao,
-    archiveDirectory: java.io.File? = null,
     val cTrader: CTraderGatewayClient? = null
 ) {
     /** Chart, Replay and Backtest must use the exact same provider and account. */
@@ -37,10 +36,6 @@ class MarketDataRepository(
     fun freeChartHistoryWarning(symbol: String): String? = null
 
     val providerDiagnostics: StateFlow<MarketDataDiagnostic> = provider.diagnosticInfo
-
-    /** Kept as a no-op for old UI call sites; paid/legacy sources are disabled. */
-    fun configureTwelveDataKey(key: String) = Unit
-    fun hasTwelveDataKey(): Boolean = false
 
     fun supportsHistoricalSymbol(symbol: String): Boolean =
         VerifiedMarketQuote.supports(symbol)

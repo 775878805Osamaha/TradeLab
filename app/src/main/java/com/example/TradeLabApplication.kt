@@ -1,7 +1,6 @@
 package com.example
 
 import android.app.Application
-import com.example.core.history.HistoryKeyStore
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.core.market.CTraderGatewayClient
 import com.example.data.local.AppDatabase
@@ -13,9 +12,6 @@ class TradeLabApplication : Application() {
     val cTrader: CTraderGatewayClient by lazy { CTraderGatewayClient(this) }
 
     val trainingSessionStore by lazy { com.example.feature.replay.TrainingSessionStore(this, database) }
-
-    val historyKeyStore: HistoryKeyStore by lazy { HistoryKeyStore(this) }
-
 
     val database: AppDatabase by lazy {
         AppDatabase.getInstance(this)
@@ -30,7 +26,6 @@ class TradeLabApplication : Application() {
             provider = marketDataProvider,
             candleDao = database.candleDao(),
             symbolDao = database.symbolDao(),
-            archiveDirectory = null,
             cTrader = cTrader
         )
     }

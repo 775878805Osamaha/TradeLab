@@ -105,15 +105,6 @@ class ChartViewModel(
         }
     }
 
-    fun configureHistoricalProviderKey(key: String) {
-        marketDataRepository.configureTwelveDataKey(key)
-        if (_uiState.value.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
-            loadCandlesForCurrentSymbol()
-        }
-    }
-
-    fun hasHistoricalProviderKey(): Boolean = marketDataRepository.hasTwelveDataKey()
-
     /** Adjust the real OHLC history depth without changing the current instrument. */
     fun setChartHistoryBars(bars: Int) {
         require(bars in setOf(100, 250, 500, 750)) { "Unsupported chart history depth" }
