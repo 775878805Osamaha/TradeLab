@@ -21,7 +21,7 @@ android {
 
     // Public HTTPS origin of the trusted gateway; never put cTrader secrets in BuildConfig.
     val configuredGateway = (System.getenv("CTRADER_GATEWAY_URL") ?: "").trimEnd('/')
-    buildConfigField("String", "CTRADER_GATEWAY_URL", "\\\"${configuredGateway}\\\"")
+    buildConfigField("String", "CTRADER_GATEWAY_URL", "\"${configuredGateway}\"")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
