@@ -21,9 +21,15 @@ class CTraderReadOnlyMarketApi(private val context: Context) {
     )
     data class BrokerQuote(val bid: Double?, val ask: Double?, val timestamp: Long?)
 
+    // A cold cTrader gateway must first open a JSON WebSocket, authenticate
+    // the application and then authenticate the user's broker account. Its
+    // first historical request can therefore take longer than a warm request.
+    // Keep the UI asynchronous; do not mistake the first 18 seconds for a 503.
     private val http=OkHttpClient.Builder()
-        .connectTimeout(8,TimeUnit.SECONDS)
-        .readTimeout(18,TimeUnit.SECONDS).build()
+        .connectTimeout(10,TimeUnit.SECONDS)
+        .readTimeout(55,TimeUnit.SECONDS)
+        .callTimeout(60,TimeUnit.SECONDS)
+        .build()
 
     private suspend fun fetch(path: String, query: Map<String,String> = emptyMap()): JSONObject =
         withContext(Dispatchers.IO) {
@@ -35,7 +41,12 @@ class CTraderReadOnlyMarketApi(private val context: Context) {
             val request=Request.Builder().url(uri.build().toString())
                 .header("Authorization","Bearer $token")
                 .header("Accept","application/json").build()
-            http.newCall(request).execute().use { response ->
+            val response=try {
+                http.newCall(request).execute()
+            } catch(timeout: java.net.SocketTimeoutException) {
+                throw java.io.IOException("انتهت مهلة الاتصال مع cTrader بعد انتظار استجابة الوسيط؛ أعد المحاولة.", timeout)
+            }
+            response.use { response ->
                 response.header("X-TradeLab-Session")?.let { CTraderAuthorization.rotateSession(context, it) }
                 if(!response.isSuccessful) {
                     val body=response.body?.string().orEmpty()
