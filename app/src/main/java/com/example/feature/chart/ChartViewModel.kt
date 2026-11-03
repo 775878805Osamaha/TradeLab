@@ -170,7 +170,9 @@ class ChartViewModel(
             })
         }
     }) {
-        ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
+        if(symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
+            marketDataRepository.getOlderBrokerChartCandles(symbol, timeframe, oldest)
+        else ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
             marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
         }
     }
