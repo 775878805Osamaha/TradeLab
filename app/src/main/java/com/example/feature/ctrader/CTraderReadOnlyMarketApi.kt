@@ -76,13 +76,14 @@ class CTraderReadOnlyMarketApi(private val context: Context) {
         return (0 until array.length()).mapNotNull { index ->
             val item=array.optJSONObject(index) ?: return@mapNotNull null
             if(listOf("timestamp","open","high","low","close","volume").any { !item.has(it) })
-                return@mapNotNull null
+                throw java.io.IOException("cTrader returned incomplete candle fields")
             val bar=BrokerCandle(item.getLong("timestamp"),item.getDouble("open"),
                 item.getDouble("high"),item.getDouble("low"),item.getDouble("close"),
                 item.getLong("volume"))
             if(!listOf(bar.open,bar.high,bar.low,bar.close).all(Double::isFinite) ||
-                bar.low>bar.high || bar.open !in bar.low..bar.high ||
-                bar.close !in bar.low..bar.high) return@mapNotNull null
+                bar.low<=0 || bar.low>bar.high || bar.open !in bar.low..bar.high ||
+                bar.close !in bar.low..bar.high || bar.volume<0 || bar.timestampMs<=0)
+                throw java.io.IOException("cTrader returned invalid OHLC candle")
             bar
         }.sortedBy{it.timestampMs}
     }
