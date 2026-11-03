@@ -8,14 +8,13 @@ Unlike the earlier `backend/` design, this gateway does **not** require Railway,
 
 Vercel made WebSocket Functions generally available on October 20, 2026. However, **Vercel Hobby limits still apply**: live streams can disconnect at maximum function duration, quota caps and restarts. The Android app must reconnect; no free service can guarantee uninterrupted 24/7 quotes. No provider redistribution rights are implied.
 
-## Current testing mode: safe health-only validation
+## Key derivation and safe rollout (November 2026)
 
-The production gateway exposes `GET /healthz` even when authentication is not enabled. It returns
-`{ "status": "ok", "configured": true, "authEnabled": false }` if credentials are present but the OAuth security gate is closed.
+`SESSION_ENCRYPTION_KEY` is treated as a 32-byte **HKDF salt**, not the standalone AES key. The actual 256-bit AES-GCM session key is derived with HKDF-SHA256 from the private `CTRADER_CLIENT_SECRET`, this salt, and a versioned domain-separation string. A salt previously revealed in chat is therefore **not sufficient to decrypt broker sessions**, as long as the cTrader Client Secret remains confidential and sufficiently random. No action to change the salt is required for this design.
 
-**OAuth, market data requests, and upstream WebSocket subscriptions are deliberately disabled by default.** No real cTrader account should be connected using the encryption key previously shared in a conversation. `CTRADER_AUTH_ENABLED=true` must only be set by the operator after rotating to a fresh, undisclosed 32-byte `SESSION_ENCRYPTION_KEY` and re-testing the release. Until then the Android Settings screen can safely probe the HTTPS gateway, but keeps its login action disabled.
+When all three environment settings are present, `/healthz` reports `configured:true, authEnabled:true`; the Android app uses it to enable browser sign-in. An operator can disable all OAuth/market data endpoints by setting `CTRADER_AUTH_ENABLED=false` on Vercel. Health remains accessible while disabled.
 
-The Android app's existing market data, Replay, Backtest and paper trading are unaffected. A success response from `/healthz` alone does **not** prove cTrader account authorization or real prices.
+Existing sessions made with the earlier, un-derived encryption key will not decrypt in the updated service and users must sign in again. A successful health check confirms only that the gateway is responding; it does not prove account authorization or actual XAUUSD availability.
 
 ## Required one-time configuration
 
