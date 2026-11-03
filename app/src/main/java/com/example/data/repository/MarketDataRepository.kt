@@ -224,7 +224,7 @@ class MarketDataRepository(
         val combined = DataIntegrityValidator.sanitizeCandles(
             (validCached + sanitized).associateBy { it.openTime }.values.toList()
         )
-        if (combined.isEmpty() && isCrypto) {
+        if (combined.isEmpty()) {
             throw java.io.IOException("No verified Binance historical candles available for $symbol")
         }
         if (!HistoricalCandleCoverage.isComplete(combined, from, to, intervalMillis)) {
