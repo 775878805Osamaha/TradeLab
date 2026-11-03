@@ -341,6 +341,7 @@ class ReplayViewModel(
                     }
             } == true
             if (saved != null && savedAllowed) {
+                clearChartLookback()
                 _uiState.value=saved.state.copy(isPlaying=false,isLoading=false)
                 if (saved.candles.isNotEmpty() && saved.state.historyEndOffsetBars == 0) {
                     _historyTargetTime.value = saved.candles.getOrNull(saved.state.currentIndex)?.openTime
@@ -478,6 +479,10 @@ class ReplayViewModel(
         _historyTargetTime.value = targetTime
         cancelBatchAdvance()
         replayLoadJob?.cancel()
+        // A fresh Replay dataset MUST discard all older-page history and cursor
+        // from the previous symbol, timeframe, account or historical date.
+        // Otherwise an older broker page can be merged against the wrong session.
+        clearChartLookback()
         replayEngine.pause()
         // Immediately invalidate the previous engine quote as well as UI flows:
         // executeOrder reads the engine directly and must never trade old data.
