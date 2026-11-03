@@ -1280,7 +1280,10 @@ fun ChartScreen(
                             .testTag("chart_history_provenance")
                     ) {
                         Text(
-                            text = if (isEmbeddedReplay) "REPLAY · ${chartBars.size}"
+                            text = if (isEmbeddedReplay)
+                                "REPLAY · " +
+                                    (if (replayState.symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
+                                        "cTrader" else "Binance") + " · ${chartBars.size}"
                                 else "HISTORICAL · ${chartBars.size}",
                             fontSize = 9.sp,
                             color = TradingTextSecondary,
