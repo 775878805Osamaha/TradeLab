@@ -96,11 +96,13 @@ class ReplayViewModel(
     val chartLookbackError: StateFlow<String?> = _chartLookbackError.asStateFlow()
     private var chartLookbackJob: Job? = null
     private var chartLookbackExhausted = false
+    private var chartOlderSearchAnchor: Long? = null
 
     private fun clearChartLookback() {
         chartLookbackJob?.cancel()
         chartLookbackJob = null
         chartLookbackExhausted = false
+        chartOlderSearchAnchor = null
         _chartLookbackLoading.value = false
         _chartLookback.value = emptyList()
         _chartLookbackError.value = null
@@ -112,14 +114,17 @@ class ReplayViewModel(
      * execution engine, indicator strategy data view or trade/account checkpoints.
      * The engine's existing cursor (and hidden future bars) remain untouched.
      */
-    fun loadOlderReplayChartHistory() {
-        if (_uiState.value.isLoading || _chartLookbackLoading.value || chartLookbackExhausted) return
+    fun loadOlderReplayChartHistory(searchEarlier: Boolean = false) {
+        if (_uiState.value.isLoading || _chartLookbackLoading.value ||
+            (chartLookbackExhausted && !searchEarlier)) return
+        if (searchEarlier) chartLookbackExhausted = false
         val dataset = replayEngine.snapshotCandles()
         if (dataset.isEmpty()) return
         val symbol = _uiState.value.symbol
         val tf = _uiState.value.timeframe
         val datasetId = _uiState.value.datasetId
-        val oldest = _chartLookback.value.firstOrNull()?.openTime ?: dataset.first().openTime
+        val earliestLoaded = _chartLookback.value.firstOrNull()?.openTime ?: dataset.first().openTime
+        val oldest = minOf(earliestLoaded, chartOlderSearchAnchor ?: earliestLoaded)
         if (oldest <= tf.minutes * 60_000L) {
             chartLookbackExhausted = true
             return
@@ -139,9 +144,16 @@ class ReplayViewModel(
                     replayEngine.snapshotCandles().firstOrNull()?.openTime != dataset.first().openTime)
                     return@launch
                 if (page.isEmpty()) {
-                    chartLookbackExhausted = true
-                    _chartLookbackError.value = "وصلت إلى أقدم شموع متاحة لدى مزود السوق لهذه الفترة."
+                    // An empty bounded date window is NOT proof that a broker
+                    // has no older history. Allow explicit earlier date scans.
+                    chartOlderSearchAnchor = (oldest - 5L * 86_400_000L).coerceAtLeast(0L)
+                    chartLookbackExhausted = chartOlderSearchAnchor == 0L
+                    _chartLookbackError.value = if (chartLookbackExhausted)
+                        "لا توجد شموع أقدم متاحة في هذه النافذة."
+                    else "لا توجد شموع أقدم في النافذة الحالية؛ اضغط «البحث أقدم» لمتابعة الرجوع."
                 } else {
+                    chartOlderSearchAnchor = null
+                    chartLookbackExhausted = false
                     _chartLookback.value = ReplayChartLookback.prepend(
                         _chartLookback.value, page, dataset.first().openTime,
                         symbol, tf
@@ -408,7 +420,8 @@ class ReplayViewModel(
         if (openPositions.isNotEmpty() || pendingOrders.isNotEmpty()) {
             _uiState.update { it.copy(message="أغلق الصفقات والأوامر قبل تغيير بيانات التدريب") };return
         }
-        require(endOffsetBars in 0..100_000) { "Historical offset must be 0 to 100000 bars" }
+        // Date/time paging is bounded per request, not by an arbitrary total 100k-bar ceiling.
+        require(endOffsetBars >= 0) { "Historical offset must not be negative" }
         require(historyBars in 50..5_000) { "Replay history must contain 50 to 5000 bars" }
         if (targetTime != null && (targetTime < 0L || targetTime > System.currentTimeMillis() - tf.minutes * 60_000L)) {
             _uiState.update { it.copy(message = "اختر تاريخًا تاريخيًا مكتملًا") }; return
@@ -517,7 +530,9 @@ class ReplayViewModel(
                         state.historyEndOffsetBars == endOffsetBars && _historyTargetTime.value == targetTime) {
                         state.copy(
                             isLoading = false,
-                            message = "تعذر تحميل بيانات إعادة العرض لهذا الرمز. تحقق من الاتصال وتوفر الشموع المكتملة."
+                            message = "تعذر تحميل تاريخ " +
+                                (if (symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) "cTrader" else "Binance") +
+                                ": " + (error.message ?: "تحقق من الحساب والاتصال").take(160)
                         )
                     } else state
                 }
@@ -661,10 +676,9 @@ class ReplayViewModel(
     }
 
     fun jumpOneYearBack() {
-        // The keyless metals/FX source retains daily history, not year-old minute bars.
-        // The action's label explicitly announces the daily timeframe.
-        val timeframe = if (_uiState.value.symbol in setOf("BTCUSDT", "ETHUSDT"))
-            _uiState.value.timeframe else Timeframe.D1
+        // Retain the user's selected timeframe; never silently change gold M1 to D1.
+        // Only the linked cTrader broker determines actual historical availability.
+        val timeframe = _uiState.value.timeframe
         val target = com.example.core.market.ReplayDateWindow.oneYearBefore(System.currentTimeMillis())
         jumpToTimestamp(com.example.core.market.HistoricalCandleBoundary.currentOpen(
             target, timeframe.minutes * 60_000L), timeframe)
