@@ -535,6 +535,7 @@ fun ChartScreen(
                                 modifier = Modifier.widthIn(max = 240.dp).padding(6.dp).testTag("chart_history_download_message"))
                         }
                         val sourceLabel = when(uiState.candles.firstOrNull()?.source) {
+                            "CTRADER_HISTORICAL" -> "cTrader · شموع الوسيط"
                             com.example.core.market.DukascopyChartHistoryProvider.SOURCE -> "Dukascopy · BID"
                             com.example.core.market.HistDataChartHistoryProvider.SOURCE -> "HistData · BID · الحجم غير متاح"
                             else -> null
@@ -601,7 +602,12 @@ fun ChartScreen(
                         Spacer(modifier = Modifier.width(4.dp))
                         if (!immersiveChart) {
                             if (headerQuoteVerified) {
-                                DataSourceBadge(sourceType = uiState.dataSourceType)
+                                if(headerTick?.source == "CTRADER_REST") {
+                                    Text("cTrader · LIVE",fontSize=10.sp,color=TradingCyan,
+                                        modifier=Modifier.testTag("chart_source_mode"))
+                                } else {
+                                    DataSourceBadge(sourceType = uiState.dataSourceType)
+                                }
                             } else {
                                 Text(
                                     text = when {
