@@ -502,6 +502,31 @@ class TradeViewModel(
         loadCandles(_uiState.value.selectedSymbol)
     }
 
+    private fun loadCandles(symbol: String) {
+        candleLoadJob?.cancel()
+        _uiState.update { state ->
+            if (state.selectedSymbol == symbol) state.copy(isLoading = true, message = null)
+            else state
+        }
+        candleLoadJob = viewModelScope.launch {
+            val result = loadTradeCandles(symbol) {
+                val now = System.currentTimeMillis()
+                val interval = Timeframe.M15.minutes * 60_000L
+                // The repository requires closed, interval-aligned candles.
+                // Passing 'now' always violates its historical boundary guard.
+                val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
+                    .currentOpen(now, interval) - interval
+                val from = (lastClosedOpen - interval * 95L).coerceAtLeast(0L)
+                marketDataRepository.getCandles(symbol, Timeframe.M15, from, lastClosedOpen)
+            }
+            _uiState.update { state ->
+                if (state.selectedSymbol == symbol) {
+                    state.copy(candles = result.candles, message = result.message, isLoading = false)
+                } else state
+            }
+        }
+    }
+
     private fun subscribeToSymbolTicks(symbol: String) {
         if (!com.example.core.market.VerifiedMarketQuote.supports(symbol)) return
         tickJob?.cancel()
