@@ -2,7 +2,6 @@ package com.example.feature.ctrader
 
 import android.content.Context
 import android.net.Uri
-import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -148,7 +147,8 @@ object CTraderAuthorization {
         check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(SESSION, packed).commit())
     }
 
-    private fun readSession(context: Context): String? = try {
+    private fun readSession(context: Context): String? {
+        return try {
         val packed = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(SESSION, null)
             ?: return null
         val parts = packed.split(':')
@@ -157,5 +157,6 @@ object CTraderAuthorization {
             init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, Base64.decode(parts[0], Base64.NO_WRAP)))
         }
         String(cipher.doFinal(Base64.decode(parts[1], Base64.NO_WRAP)), Charsets.UTF_8)
-    } catch (_: Exception) { null }
+        } catch (_: Exception) { null }
+    }
 }
