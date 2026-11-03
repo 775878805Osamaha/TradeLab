@@ -31,6 +31,8 @@ class MarketDataRepository(
     private val ctrader: CTraderChartSource? = null
 ) {
 
+    private val retiredArchiveRoot = archiveDirectory
+
     /** Exactly two market families: cTrader for forex/metals and Binance Spot for crypto. */
     val providerDiagnostics: StateFlow<MarketDataDiagnostic> = provider.diagnosticInfo
     val cTraderAccount: StateFlow<String?> =
@@ -74,6 +76,12 @@ class MarketDataRepository(
     }
 
     suspend fun initializeSymbolsIfNeeded() = withContext(Dispatchers.IO) {
+        // Retired source caches must not remain as an alternate Replay data source.
+        // This only removes historic forex/metals candles and downloaded broker
+        // archives, not user accounts, paper positions, trade journals or Binance.
+        candleDao.deleteCandlesForSymbols(VerifiedMarketQuote.forexSymbols.toList())
+        retiredArchiveRoot?.deleteRecursively()
+        retiredArchiveRoot?.parentFile?.resolve("histdata-history-v1")?.deleteRecursively()
         DefaultSymbols.TERMINAL_FOREX.forEach { symbol ->
             if (symbolDao.getSymbol(symbol.symbol) == null) symbolDao.insertSymbols(listOf(symbol.toEntity()))
         }
