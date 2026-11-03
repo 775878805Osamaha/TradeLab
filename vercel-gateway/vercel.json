@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/healthz",
+      "destination": "/api"
+    },
+    {
+      "source": "/auth/ctrader/:path*",
+      "destination": "/api"
+    },
+    {
+      "source": "/v1/:path*",
+      "destination": "/api"
+    }
+  ],
+  "functions": {
+    "api/index.mjs": {
+      "maxDuration": 300
+    }
+  }
+}
