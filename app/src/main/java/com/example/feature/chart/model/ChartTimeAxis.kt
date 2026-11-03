@@ -15,8 +15,19 @@ object ChartTimeAxis {
     fun dayKey(epochMillis: Long): Long = Math.floorDiv(epochMillis, 86_400_000L)
 
     fun label(epochMillis: Long, previousDisplayedMillis: Long?): String {
-        val format = if (previousDisplayedMillis == null ||
-            dayKey(previousDisplayedMillis) != dayKey(epochMillis)) "MM/dd HH:mm" else "HH:mm"
+        val yearChanged = previousDisplayedMillis?.let {
+            val calendar=java.util.GregorianCalendar(utc)
+            calendar.timeInMillis=it
+            val firstYear=calendar.get(java.util.Calendar.YEAR)
+            calendar.timeInMillis=epochMillis
+            firstYear!=calendar.get(java.util.Calendar.YEAR)
+        } ?: false
+        val format=when {
+            yearChanged -> "yy/MM/dd HH:mm"
+            previousDisplayedMillis == null ||
+                dayKey(previousDisplayedMillis) != dayKey(epochMillis) -> "MM/dd HH:mm"
+            else -> "HH:mm"
+        }
         return SimpleDateFormat(format, Locale.US).apply { timeZone = utc }
             .format(Date(epochMillis))
     }
