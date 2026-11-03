@@ -61,6 +61,20 @@ fun ChartScreen(
     val replayChartLookback by replayViewModel.chartLookback.collectAsState()
     val replayLookbackLoading by replayViewModel.chartLookbackLoading.collectAsState()
     val replayLookbackError by replayViewModel.chartLookbackError.collectAsState()
+    var showReplayHistoryDetails by remember { mutableStateOf(false) }
+    if(showReplayHistoryDetails && replayLookbackError!=null) {
+        AlertDialog(
+            onDismissRequest={ showReplayHistoryDetails=false },
+            title={ Text("تفاصيل تحميل تاريخ Replay") },
+            text={ Text(replayLookbackError!!,
+                color=TradingTextSecondary,fontSize=13.sp) },
+            confirmButton={
+                TextButton(onClick={showReplayHistoryDetails=false}) {
+                    Text("إغلاق")
+                }
+            }
+        )
+    }
     // Read-only prehistory precedes the Replay engine's first bar; future bars remain hidden.
     val replayChartBars = remember(replayChartLookback, replayState.visibleCandles) {
         com.example.feature.replay.ReplayChartSeries(replayChartLookback, replayState.visibleCandles)
@@ -1263,9 +1277,18 @@ fun ChartScreen(
                                     color = TradingAccentLight,fontSize = 10.sp)
                             }
                         }
-                        if(replayLookbackError != null)
-                            Text(replayLookbackError!!,fontSize=10.sp,color=TradingGold,
-                                modifier=Modifier.testTag("replay_older_history_error"))
+                        if(replayChartLookback.isNotEmpty())
+                            Text("سجل إضافي: ${replayChartLookback.size} شمعة",
+                                fontSize=10.sp,color=TradingTextSecondary,
+                                modifier=Modifier.testTag("replay_older_candles_count"))
+                        if(replayLookbackError!=null)
+                            Text(
+                                "تنبيه تاريخ الشموع • عرض التفاصيل",
+                                fontSize=10.sp,color=TradingGold,
+                                maxLines=1,
+                                modifier=Modifier.clickable { showReplayHistoryDetails=true }
+                                    .testTag("replay_older_history_error")
+                            )
                     }
                 }
 
