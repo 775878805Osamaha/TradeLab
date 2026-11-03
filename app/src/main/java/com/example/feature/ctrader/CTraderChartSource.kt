@@ -39,6 +39,22 @@ class CTraderChartSource(context: Context) {
     /** Read the user's own granted account once; never select a legacy market source. */
     suspend fun refreshAuthorizedAccount():String = authorizedAccount()
 
+    /** A new OAuth grant may belong to a different broker account.
+     * Invalidate all account-scoped symbols and quotes BEFORE discovering it.
+     */
+    suspend fun onSessionReauthorized():String = accountMutex.withLock {
+        _account.value = null
+        symbolCache.clear()
+        if(!prefs.edit().remove("account_id").commit())throw IOException("تعذر مسح بيانات الحساب السابق")
+        if(!CTraderAuthorization.isLinked(appContext))throw IOException("لم يتم تسجيل الدخول إلى cTrader")
+        val newAccount = api.accounts().firstOrNull()
+            ?: throw IOException("لم يتم العثور على حساب وسيط مرخص")
+        if(!prefs.edit().putString("account_id",newAccount.accountId).commit())
+            throw IOException("تعذر حفظ حساب cTrader الجديد")
+        _account.value = newAccount.accountId
+        newAccount.accountId
+    }
+
     private suspend fun authorizedAccount():String {
         if(!CTraderAuthorization.isLinked(appContext))
             throw IOException("يلزم تسجيل الدخول إلى cTrader للحصول على أسعار الفوركس")
