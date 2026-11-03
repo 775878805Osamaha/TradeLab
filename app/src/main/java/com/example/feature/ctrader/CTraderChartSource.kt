@@ -175,17 +175,19 @@ class CTraderChartSource(context: Context) {
         val sourceInterval=sourceTimeframe.minutes*60_000L
         val outputInterval=timeframe.minutes*60_000L
         if(oldestOpen<outputInterval) return emptyList()
-        var end=oldestOpen-sourceInterval
-        val period=sourceTimeframe.code
+        var cursorExclusive=oldestOpen
         val batchCount=if(h2)1000 else 500
         for(attempt in 0 until 8) {
             currentCoroutineContext().ensureActive()
-            if(end<0L)break
-            val span=CTraderHistoryPaging.windowSpan(timeframe)
-            val start=(end-span+sourceInterval).coerceAtLeast(0L)
-            // Broker's count is a backwards-facing ceiling relative to toTimestamp.
-            // Avoid huge chronological downloads to scan closed market sessions.
-            val fetched=api.candles(account,broker.symbolId,period,start,end,batchCount)
+            val window=CTraderHistoryPaging.before(timeframe,cursorExclusive,batchCount)
+                ?: break
+            val start=window.from
+            val end=window.to
+            // Count and calendar span must represent the SAME continuous slot
+            // interval. The prior implementation could skip entire trading days
+            // whenever the date range contained more candles than count.
+            val fetched=api.candles(account,broker.symbolId,
+                window.sourcePeriod,start,end,window.count)
             val verifiedRaw=fetched.sortedBy { it.timestampMs }
             if(verifiedRaw.zipWithNext().any { (a,b) -> a.timestampMs==b.timestampMs })
                 throw IOException("شموع cTrader التاريخية مكررة")
@@ -205,7 +207,9 @@ class CTraderChartSource(context: Context) {
                 expectedSymbol=symbol,expectedTimeframe=timeframe
             )
             if(start<=0L)break
-            end=start-sourceInterval
+            // Next request ends at precisely the bar before this window.
+            // An empty weekend does not authorize jumping ahead several days.
+            cursorExclusive=window.earlierExclusive()
         }
         return emptyList()
     }
@@ -218,7 +222,8 @@ class CTraderChartSource(context: Context) {
         val sourceInterval=(if(h2)Timeframe.H1.minutes else timeframe.minutes)*60_000L
         val outputInterval=timeframe.minutes*60_000L
         val upper=if(h2)to+sourceInterval else to
-        val pageSize=minOf(900L,(89L*86_400_000L/sourceInterval).coerceAtLeast(1L))
+        val pageSize=minOf(500L,
+            (CTraderHistoryPaging.windowSpan(timeframe)/sourceInterval).coerceAtLeast(1L))
         val raw=ArrayList<CTraderReadOnlyMarketApi.BrokerCandle>()
         var cursor=from
         var pages=0
