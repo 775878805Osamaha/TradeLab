@@ -85,6 +85,79 @@ class ReplayViewModel(
     private val closedTrades = mutableListOf<TradeJournalEntry>()
     private var nextId = 1L
     private var replayLoadJob: Job? = null
+
+    // Read-only chart inspection history, deliberately outside the replay engine and
+    // saved account snapshot: no future candles and no shifting financial checkpoints.
+    private val _chartLookback = MutableStateFlow<List<Candle>>(emptyList())
+    val chartLookback: StateFlow<List<Candle>> = _chartLookback.asStateFlow()
+    private val _chartLookbackLoading = MutableStateFlow(false)
+    val chartLookbackLoading: StateFlow<Boolean> = _chartLookbackLoading.asStateFlow()
+    private val _chartLookbackError = MutableStateFlow<String?>(null)
+    val chartLookbackError: StateFlow<String?> = _chartLookbackError.asStateFlow()
+    private var chartLookbackJob: Job? = null
+    private var chartLookbackExhausted = false
+
+    private fun clearChartLookback() {
+        chartLookbackJob?.cancel()
+        chartLookbackJob = null
+        chartLookbackExhausted = false
+        _chartLookbackLoading.value = false
+        _chartLookback.value = emptyList()
+        _chartLookbackError.value = null
+    }
+
+    /**
+     * Backfill only candles that precede the REPLAY DATASET'S first candle.
+     * These bars can be plotted and scrolled, but are never added to the
+     * execution engine, indicator strategy data view or trade/account checkpoints.
+     * The engine's existing cursor (and hidden future bars) remain untouched.
+     */
+    fun loadOlderReplayChartHistory() {
+        if (_uiState.value.isLoading || _chartLookbackLoading.value || chartLookbackExhausted) return
+        val dataset = replayEngine.snapshotCandles()
+        if (dataset.isEmpty()) return
+        val symbol = _uiState.value.symbol
+        val tf = _uiState.value.timeframe
+        val datasetId = _uiState.value.datasetId
+        val oldest = _chartLookback.value.firstOrNull()?.openTime ?: dataset.first().openTime
+        if (oldest <= tf.minutes * 60_000L) {
+            chartLookbackExhausted = true
+            return
+        }
+        _chartLookbackLoading.value = true
+        _chartLookbackError.value = null
+        chartLookbackJob = viewModelScope.launch {
+            try {
+                val page = com.example.feature.chart.history.ChartHistoryPaging.before(
+                    symbol, tf, oldest
+                ) { from, to ->
+                    marketDataRepository.getOlderChartCandles(symbol, tf, from, to)
+                }
+                // Never attach results from a previous dataset, timeframe, broker or symbol.
+                if (_uiState.value.datasetId != datasetId ||
+                    _uiState.value.symbol != symbol || _uiState.value.timeframe != tf ||
+                    replayEngine.snapshotCandles().firstOrNull()?.openTime != dataset.first().openTime)
+                    return@launch
+                if (page.isEmpty()) {
+                    chartLookbackExhausted = true
+                    _chartLookbackError.value = "وصلت إلى أقدم شموع متاحة لدى مزود السوق لهذه الفترة."
+                } else {
+                    _chartLookback.value = ReplayChartLookback.prepend(
+                        _chartLookback.value, page, dataset.first().openTime,
+                        symbol, tf
+                    )
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                if (_uiState.value.datasetId == datasetId)
+                    _chartLookbackError.value = "تعذر تحميل تاريخ أقدم من مزود السوق: " +
+                        (error.message ?: "تحقق من الاتصال").take(150)
+            } finally {
+                if (_uiState.value.datasetId == datasetId) _chartLookbackLoading.value = false
+            }
+        }
+    }
+
     private var batchAdvanceJob: Job? = null
     private var batchAdvanceGeneration: Long = 0L
     private fun cancelBatchAdvance() {
@@ -196,7 +269,17 @@ class ReplayViewModel(
         setupReplayEngineCallbacks()
         viewModelScope.launch {
             val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sessionStore?.read() }
-            if (saved != null) {
+            val savedAllowed = saved?.let { snapshot ->
+                snapshot.candles.isEmpty() ||
+                    snapshot.candles.all { candle ->
+                        candle.symbol == snapshot.state.symbol &&
+                        candle.timeframe == snapshot.state.timeframe &&
+                        (if (snapshot.state.symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
+                            candle.source == "CTRADER_HISTORICAL"
+                        else candle.source in setOf("BINANCE_HISTORICAL","BINANCE_HISTORICAL_CACHED"))
+                    }
+            } == true
+            if (saved != null && savedAllowed) {
                 _uiState.value=saved.state.copy(isPlaying=false,isLoading=false)
                 if (saved.candles.isNotEmpty() && saved.state.historyEndOffsetBars == 0) {
                     _historyTargetTime.value = saved.candles.getOrNull(saved.state.currentIndex)?.openTime
@@ -207,7 +290,10 @@ class ReplayViewModel(
                 hasPublishedReport=true
                 saveAccountSnapshot()
                 if(saved.candles.isEmpty())loadReplayData(saved.state.symbol,saved.state.timeframe)
-            } else loadReplayData("XAUUSD")
+            } else {
+                // A checkpoint from retired providers must never be displayed as cTrader.
+                loadReplayData("XAUUSD")
+            }
         }
     }
 
@@ -271,6 +357,7 @@ class ReplayViewModel(
         _historyTargetTime.value = null
         cancelBatchAdvance()
         replayLoadJob?.cancel()
+        clearChartLookback()
         replayEngine.pause()
         replayEngine.clear()
         resetReplayAccount()
@@ -356,7 +443,7 @@ class ReplayViewModel(
             }
             return
         }
-        // Gold and forex use the verified keyless historical provider.
+        // Gold/forex: only cTrader. Crypto: only Binance. Never fall back to old caches.
         replayLoadJob = viewModelScope.launch {
             try {
                 val now = System.currentTimeMillis()
