@@ -17,7 +17,9 @@ const securityHeaders = {
 const validToken = v => typeof v==='string' && /^[A-Za-z0-9_-]{43}$/.test(v);
 // OAuth remains disabled by default for safe, credential-free integration tests.
 // Enable only after server encryption keys are securely rotated and smoke-tested.
-const oauthEnabled = process.env.CTRADER_AUTH_ENABLED === 'true';
+const oauthEnabled = process.env.CTRADER_AUTH_ENABLED !== 'false' &&
+  !!(process.env.CTRADER_CLIENT_ID && process.env.CTRADER_CLIENT_SECRET &&
+    process.env.SESSION_ENCRYPTION_KEY);
 function publicOrigin(req) {
   const configured = process.env.PUBLIC_BASE_URL ||
     (process.env.VERCEL_PROJECT_PRODUCTION_URL ? 'https://'+process.env.VERCEL_PROJECT_PRODUCTION_URL : null);
@@ -30,7 +32,7 @@ function publicOrigin(req) {
 function getRuntime(req) {
   if(!process.env.CTRADER_CLIENT_ID||!process.env.CTRADER_CLIENT_SECRET||
       !process.env.SESSION_ENCRYPTION_KEY)throw Error('unconfigured_gateway');
-  return { codec:sealedCodec(process.env.SESSION_ENCRYPTION_KEY),
+  return { codec:sealedCodec(process.env.SESSION_ENCRYPTION_KEY, process.env.CTRADER_CLIENT_SECRET),
     base:publicOrigin(req) };
 }
 function route(req) {
