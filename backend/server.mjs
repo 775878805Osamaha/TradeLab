@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { randomToken, tokenHash, constantTimeEqual, makeCipher } from './security.mjs';
@@ -266,6 +267,8 @@ const server=http.createServer((req,res)=>{
   });
 });
 const port=Number(process.env.PORT||8080);
+// Fail closed until encrypted session tables exist; free Render has no interactive shell.
+await pool.query(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
 server.listen(port,()=>console.info(`TradeLab cTrader gateway listening on port ${port}`));
 setInterval(()=>pool.query("DELETE FROM oauth_flows WHERE expires_at<now();").catch(()=>{}),3600000).unref();
 setInterval(()=>pool.query("DELETE FROM oauth_handoffs WHERE expires_at<now();").catch(()=>{}),3600000).unref();
