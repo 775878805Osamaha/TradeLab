@@ -65,7 +65,7 @@ fun ReplayScreen(
     val chartLookbackLoading by viewModel.chartLookbackLoading.collectAsState()
     val chartLookbackError by viewModel.chartLookbackError.collectAsState()
     val chartBars = remember(chartLookback, uiState.visibleCandles) {
-        chartLookback + uiState.visibleCandles
+        ReplayChartSeries(chartLookback, uiState.visibleCandles)
     }
     LaunchedEffect(uiState.datasetId, uiState.isLoading) {
         if (!uiState.isLoading && uiState.visibleCandles.isNotEmpty())
