@@ -104,6 +104,12 @@ class CTraderReadOnlyMarketApi(private val context: Context) {
             normalized.startsWith("XAUUSD") || normalized=="GOLD"
         } ?: return "لم يعرض وسيط هذا الحساب رمز الذهب XAUUSD."
         val quote=spot(account.accountId,gold.symbolId)
-        return "سعر cTrader الفعلي (${gold.name}): Bid=${quote.bid ?: "—"} / Ask=${quote.ask ?: "—"}"
+        val bid=quote.bid ?: throw IllegalStateException("لم يصل Bid من cTrader")
+        val ask=quote.ask ?: throw IllegalStateException("لم يصل Ask من cTrader")
+        val time=quote.timestamp ?: throw IllegalStateException("لم يصل توقيت سعر الوسيط")
+        val tick=com.example.core.model.Tick("XAUUSD",bid,ask,(bid+ask)/2.0,time,"CTRADER_REST")
+        if(!com.example.core.market.VerifiedMarketQuote.isVerified(tick,"XAUUSD"))
+            throw IllegalStateException("السعر قديم أو السوق مغلق")
+        return "سعر cTrader المؤكد ("+gold.name+"): Bid="+bid+" / Ask="+ask
     }
 }
