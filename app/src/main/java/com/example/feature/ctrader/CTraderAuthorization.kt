@@ -103,6 +103,8 @@ object CTraderAuthorization {
 
     fun isLinked(context: Context): Boolean = !readSession(context).isNullOrEmpty()
 
+    internal fun sessionForReadOnlyRequests(context: Context): String? = readSession(context)
+
     suspend fun accountSummary(context: Context): String = withContext(Dispatchers.IO) {
         val sessionToken = readSession(context) ?: return@withContext "لم يتم ربط حساب cTrader بعد."
         if (!isConfigured) return@withContext "خادم cTrader غير مهيأ."
