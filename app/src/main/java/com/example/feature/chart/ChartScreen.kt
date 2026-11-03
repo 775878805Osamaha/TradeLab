@@ -1024,6 +1024,7 @@ fun ChartScreen(
                 key(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay, if (isEmbeddedReplay) replayState.datasetId else 0L) {
                 CandlestickChart(
                     candles = if (isEmbeddedReplay) replayChartBars else uiState.candles,
+                    isReplayHistory = isEmbeddedReplay,
                     latestTick = (if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick)
                         ?.takeIf { it.symbol == uiState.selectedSymbol },
                     openPositions = if (isEmbeddedReplay) replayState.openPositions else uiState.openPositions,
