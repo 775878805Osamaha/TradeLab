@@ -55,6 +55,13 @@ class MarketDataRepository(
     suspend fun getOlderChartCandles(symbol: String,timeframe: Timeframe,from: Long,to: Long): List<Candle> =
         getCandles(symbol,timeframe,from,to)
 
+    /** Gold/forex backward chart pages are read directly from this user's cTrader account. */
+    suspend fun getOlderBrokerChartCandles(symbol:String,timeframe:Timeframe,oldestOpen:Long):List<Candle> {
+        require(symbol in VerifiedMarketQuote.forexSymbols) { "Not a cTrader forex/metal" }
+        return (ctrader ?: throw java.io.IOException("خدمة cTrader غير مهيأة"))
+            .candlesBefore(symbol,timeframe,oldestOpen)
+    }
+
     fun supportsHistoricalSymbol(symbol: String): Boolean =
         symbol in VerifiedMarketQuote.forexSymbols || symbol in setOf("BTCUSDT","ETHUSDT")
 
