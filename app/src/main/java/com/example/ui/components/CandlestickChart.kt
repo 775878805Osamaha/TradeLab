@@ -104,7 +104,11 @@ fun CandlestickChart(
     showLastPrice: Boolean = true,
     showSourceTime: Boolean = true,
     axisTextScale: Float = 1f,
-    isLoadingOlderHistory: Boolean = false
+    isLoadingOlderHistory: Boolean = false,
+    // Replay can expose 100k+ real historical candles. Only the visible
+    // viewport needs price scanning; do not rebuild 100k segment trees on
+    // every revealed replay tick. Standard analysis charts keep their index.
+    isReplayHistory: Boolean = false
 ) {
     if (candles.isEmpty()) {
         Box(
@@ -157,8 +161,10 @@ fun CandlestickChart(
     // Explicit reset-view still clears the transform below.
     // Avoid creating a new visible OHLC list or scanning the entire history
     // during pan/zoom; range queries are served by the immutable price index.
-    val preparedPriceRange by produceState<ChartPriceRangeSnapshot?>(null, candleIdentity) {
-        value = ChartPriceRangeSnapshot.prepare(candles)
+    val preparedPriceRange by produceState<ChartPriceRangeSnapshot?>(
+        null, candleIdentity, isReplayHistory
+    ) {
+        value = if (isReplayHistory) null else ChartPriceRangeSnapshot.prepare(candles)
     }
     val priceRangeIndex = preparedPriceRange?.indexFor(candles)
 
@@ -352,7 +358,7 @@ fun CandlestickChart(
                 .semantics {
                     this[ChartLoadedCandleCount] = candles.size
                     this[ChartOldestCandleTime] = candles.first().openTime
-                    this[ChartPriceIndexReady] = priceRangeIndex != null
+                    this[ChartPriceIndexReady] = isReplayHistory || priceRangeIndex != null
                     this[ChartDisplayReady] = displayStyle != ChartDisplayStyle.HEIKIN_ASHI || heikinAshi != null
                     this[ChartDrawingAnalysisReady] = drawingAnalysisRequest.isEmpty || drawingAnalysis != null
                     this[ChartFirstVisibleIndex] = ChartViewport.window(candles.size,
