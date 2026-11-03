@@ -64,6 +64,16 @@ fun ReplayScreen(
     var csvImportSymbol by remember { mutableStateOf("XAUUSD") }
     var csvImportSource by remember { mutableStateOf("broker-export") }
     var csvImportText by remember { mutableStateOf("") }
+    val chartLookback by viewModel.chartLookback.collectAsState()
+    val chartLookbackLoading by viewModel.chartLookbackLoading.collectAsState()
+    val chartLookbackError by viewModel.chartLookbackError.collectAsState()
+    val chartBars = remember(chartLookback, uiState.visibleCandles) {
+        chartLookback + uiState.visibleCandles
+    }
+    LaunchedEffect(uiState.datasetId, uiState.isLoading) {
+        if (!uiState.isLoading && uiState.visibleCandles.isNotEmpty())
+            viewModel.loadOlderReplayChartHistory()
+    }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var indicatorSettings by remember { mutableStateOf(IndicatorSettings()) }
     // Heavy calculations run off the Compose/UI thread. produceState cancels
@@ -71,11 +81,11 @@ fun ReplayScreen(
     // Null results hide stale indicator lines until the matching set is ready.
     val indicatorSnapshot by produceState<ReplayIndicatorSnapshot?>(
         initialValue = null,
-        key1 = uiState.visibleCandles,
+        key1 = chartBars,
         key2 = indicatorSettings
     ) {
         value = null
-        val revealed = uiState.visibleCandles
+        val revealed = chartBars
         val selected = indicatorSettings
         value = withContext(Dispatchers.Default) {
             ReplayIndicatorSnapshot.calculate(revealed, selected)
@@ -395,7 +405,7 @@ fun ReplayScreen(
                     .fillMaxWidth()
             ) {
                 CandlestickChart(
-                    candles = uiState.visibleCandles,
+                    candles = chartBars,
                     latestTick = uiState.latestTick,
                     openPositions = uiState.openPositions,
                     pendingOrders = uiState.pendingOrders,
@@ -425,8 +435,16 @@ fun ReplayScreen(
                     vwapValues = indicatorSnapshot?.vwap ?: emptyList(),
                     rsiValues = indicatorSnapshot?.rsi ?: emptyList(),
                     macdValues = indicatorSnapshot?.macd ?: emptyList(),
-                    atrValues = indicatorSnapshot?.atr ?: emptyList()
+                    atrValues = indicatorSnapshot?.atr ?: emptyList(),
+                    onRequestOlderHistory = { viewModel.loadOlderReplayChartHistory() },
+                    isLoadingOlderHistory = chartLookbackLoading
                 )
+                if (chartLookbackError != null) {
+                    Text(chartLookbackError!!,
+                        modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
+                            .testTag("replay_history_paging_error"),
+                        fontSize = 10.sp,color = TradingGold)
+                }
             }
 
             if (uiState.isBatchAdvancing) {
