@@ -10,7 +10,7 @@ object VerifiedMarketQuote {
     fun isVerified(tick: Tick?, symbol: String, now: Long = System.currentTimeMillis()): Boolean {
         if (tick == null || tick.symbol != symbol || !DataIntegrityValidator.validateTick(tick).isValid ||
             now - tick.timestamp !in 0L..15_000L) return false
-        return if (symbol in forexSymbols) tick.source == "BIQUOTE_REST" || tick.source == "CTRADER_REST"
+        return if (symbol in forexSymbols) tick.source == "CTRADER_REST"
         else symbol in setOf("BTCUSDT", "ETHUSDT") && tick.source in setOf("BINANCE_WEBSOCKET", "BINANCE_REST_POLL")
     }
 }
