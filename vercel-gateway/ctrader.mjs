@@ -10,6 +10,26 @@ export function isReadOnlyScope(scope) {
   // cTrader marks scope optional in the response. Explicit trade scope is denied.
   return scope == null || scope === 0 || scope === '0' || scope === 'SCOPE_VIEW';
 }
+/**
+ * Some brokers expose demo and live accounts through different hosts. Merge
+ * only read-only grants; never select a trading-scope token or invent accounts.
+ */
+export function mergeReadOnlyAccountLists(results) {
+  const accounts=new Map();
+  for(const result of results) {
+    if(!isReadOnlyScope(result.permissionScope))throw new Error('ctrader_view_only_required');
+    for(const a of result.ctidTraderAccount||[]) {
+      const accountId=String(a.ctidTraderAccountId||'');
+      if(!/^[1-9][0-9]*$/.test(accountId))continue;
+      const isLive=a.isLive===true;
+      accounts.set(accountId,{
+        accountId,isLive,broker:a.brokerTitleShort||'',
+        login:a.traderLogin==null?null:String(a.traderLogin)
+      });
+    }
+  }
+  return [...accounts.values()];
+}
 export function normalizeBar(raw) {
   const low = Number(raw.low) / 100000;
   return {
@@ -164,31 +184,24 @@ class Channel {
 export class CTraderGateway {
   constructor(clientId,clientSecret) {
     this.channels={live:new Channel('live',clientId,clientSecret),demo:new Channel('demo',clientId,clientSecret)};
+    // Only read-only account metadata; scoped by hash of the OAuth token.
+    // Avoid two Open API account-list requests on every history/spot page.
+    this.accountCache=new Map();
   }
   async accounts(accessToken) {
-    // Some cTrader environments authorize live-only versus demo-only users.
-    // Try the secondary environment only if the first returned no account or failed.
-    let result, firstFailure;
-    try {
-      result=await this.channels.demo.request(2149,{accessToken});
-    } catch(error) { firstFailure=error; }
-    if(!result || !(result.ctidTraderAccount||[]).length) {
-      try {
-        const live=await this.channels.live.request(2149,{accessToken});
-        if((live.ctidTraderAccount||[]).length)result=live;
-        else if(!result)result=live;
-      } catch(error) {
-        if(!result)throw firstFailure||error;
-      }
-    }
-    if(!result || !isReadOnlyScope(result.permissionScope))
-      throw new Error('ctrader_view_only_required');
-    return (result.ctidTraderAccount||[]).map(a=>({
-      accountId:String(a.ctidTraderAccountId),
-      isLive:a.isLive===true,
-      broker:a.brokerTitleShort||'',
-      login:a.traderLogin==null?null:String(a.traderLogin)
-    }));
+    const key=tokenHash(accessToken);
+    const cached=this.accountCache.get(key);
+    if(cached && cached.until>Date.now())return cached.accounts;
+    const results=await Promise.allSettled([
+      this.channels.demo.request(2149,{accessToken}),
+      this.channels.live.request(2149,{accessToken})
+    ]);
+    const fulfilled=results.filter(r=>r.status==='fulfilled').map(r=>r.value);
+    if(!fulfilled.length)throw results[0].reason;
+    const accounts=mergeReadOnlyAccountLists(fulfilled);
+    if(this.accountCache.size>=256)this.accountCache.clear();
+    this.accountCache.set(key,{accounts,until:Date.now()+20000});
+    return accounts;
   }
   channel(isLive){return this.channels[isLive?'live':'demo'];}
 }
