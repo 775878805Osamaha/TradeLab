@@ -74,7 +74,7 @@ class CTraderChartSource(context: Context) {
             currentCoroutineContext().ensureActive()
             try {
                 val broker=resolveSymbol(acc.accountId,"XAUUSD")
-                val tick=api.spot(acc.accountId,broker.symbolId).toTick("XAUUSD",now)
+                val tick=api.spot(acc.accountId,broker.symbolId).toTick("XAUUSD",System.currentTimeMillis())
                 val bars=fetchFor(acc.accountId,"XAUUSD",Timeframe.M15,
                     (lastClosed-48L*3_600_000L).coerceAtLeast(0L),lastClosed,300)
                 if(bars.isEmpty())throw IOException("لا تتوفر شموع ذهب مغلقة من cTrader")
