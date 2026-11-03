@@ -48,6 +48,33 @@ object CTraderAuthorization {
                 uri.query == null && uri.fragment == null && uri.userInfo == null
         }
 
+    data class GatewayCheck(val reachable: Boolean, val authEnabled: Boolean, val message: String)
+
+    /** Public non-credential probe; safe to use before anybody signs into cTrader. */
+    suspend fun checkGateway(): GatewayCheck = withContext(Dispatchers.IO) {
+        if (!isConfigured) return@withContext GatewayCheck(false, false, "رابط خدمة cTrader غير مهيأ.")
+        try {
+            val request = Request.Builder().url(gatewayBase + "/healthz")
+                .header("Accept", "application/json").build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext GatewayCheck(false,false,
+                    "خدمة cTrader لا تستجيب حاليًا (HTTP ${response.code}).")
+                val result = JSONObject(response.body?.string().orEmpty())
+                if(result.optString("status") != "ok" ||
+                   result.optString("service") != "TradeLab cTrader OAuth gateway")
+                    return@withContext GatewayCheck(false,false,"استجابة خدمة غير متوقعة.")
+                if(!result.optBoolean("configured",false))
+                    return@withContext GatewayCheck(true,false,"الخدمة تعمل ولكن إعدادات cTrader غير مكتملة.")
+                if(!result.optBoolean("authEnabled",false))
+                    return@withContext GatewayCheck(true,false,
+                        "خادم TradeLab يعمل بنجاح. تسجيل دخول cTrader متوقف مؤقتًا لحماية الجلسات.")
+                GatewayCheck(true,true,"الخادم يستجيب ومهيأ لتسجيل الدخول بصلاحية القراءة فقط.")
+            }
+        } catch (_: Exception) {
+            GatewayCheck(false,false,"تعذر الاتصال بخدمة cTrader، تحقق من الإنترنت.")
+        }
+    }
+
     // The browser sets its own HttpOnly flow cookie; no OAuth code is handled by Android.
     fun authorizationUrl(context: Context): Uri? {
         if (!isConfigured) return null
