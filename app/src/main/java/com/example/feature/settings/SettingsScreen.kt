@@ -41,6 +41,12 @@ fun SettingsScreen(
     var accountStatus by remember { mutableStateOf<String?>(null) }
     var goldCheckStatus by remember { mutableStateOf<String?>(null) }
     var goldCheckRunning by remember { mutableStateOf(false) }
+    var gatewayCheck by remember { mutableStateOf<com.example.feature.ctrader.CTraderAuthorization.GatewayCheck?>(null) }
+    var gatewayChecking by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        gatewayCheck = cTrader.checkGateway()
+        gatewayChecking = false
+    }
     LaunchedEffect(cTraderCallbackStatus) {
         accountStatus = if (cTrader.isLinked(context)) cTrader.accountSummary(context) else null
     }
@@ -82,7 +88,7 @@ fun SettingsScreen(
                             fontSize = 12.sp, color = TradingTextSecondary)
                         Button(
                             modifier = Modifier.fillMaxWidth().testTag("ctrader_browser_login"),
-                            enabled = cTrader.isConfigured,
+                            enabled = gatewayCheck?.authEnabled == true,
                             onClick = {
                                 val url = cTrader.authorizationUrl(context)
                                 if (url != null) {
@@ -92,6 +98,21 @@ fun SettingsScreen(
                                 }
                             }
                         ) { Text("تسجيل الدخول إلى cTrader") }
+                        OutlinedButton(
+                            modifier = Modifier.fillMaxWidth().testTag("ctrader_gateway_health_check"),
+                            enabled = !gatewayChecking,
+                            onClick = {
+                                gatewayChecking = true
+                                scope.launch {
+                                    gatewayCheck = cTrader.checkGateway()
+                                    gatewayChecking = false
+                                }
+                            }
+                        ) { Text(if(gatewayChecking) "جارٍ فحص اتصال الخدمة..." else "فحص اتصال خدمة cTrader") }
+                        gatewayCheck?.let { state ->
+                            Text(state.message, fontSize = 12.sp,
+                                color = if(state.reachable) TradingTextSecondary else TradingGold)
+                        }
                         if(cTraderCallbackStatus != null) {
                             Text(cTraderCallbackStatus, fontSize = 12.sp, color = TradingGold)
                         }
