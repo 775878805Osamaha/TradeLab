@@ -1253,7 +1253,7 @@ fun ChartScreen(
                                 modifier = Modifier.testTag("chart_replay_position")
                             )
                             TextButton(
-                                onClick = { replayViewModel.loadOlderReplayChartHistory() },
+                                onClick = { replayViewModel.loadOlderReplayChartHistory(searchEarlier = true) },
                                 enabled = !replayLookbackLoading && !replayState.isLoading,
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                                 modifier = Modifier.height(28.dp).testTag("replay_load_older_ctrader")
