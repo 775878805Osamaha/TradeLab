@@ -76,7 +76,13 @@ class Channel {
         const request=this.pending.get(packet.clientMsgId);
         if (!request) return;
         if(packet.payloadType===2142 || packet.payloadType===50) {
-          request.reject(new Error('ctrader_read_request_rejected'));
+          const failure=new Error('ctrader_read_request_rejected');
+          // Only an enum-like code is safe for operational logs. Never log
+          // the upstream description: it may contain broker account details.
+          const brokerCode=String(packet.payload?.errorCode??'');
+          failure.brokerCode=/^[A-Z0-9_]{1,64}$/.test(brokerCode)?brokerCode:'UNSPECIFIED';
+          failure.operation=request.operation;
+          request.reject(failure);
         } else if(packet.payloadType===request.expected) {
           request.resolve(packet.payload||{});
         } else return;
@@ -121,7 +127,7 @@ class Channel {
         this.pending.delete(clientMsgId);
         reject(new Error('ctrader_request_timeout'));
       },15000);
-      this.pending.set(clientMsgId,{resolve,reject,timer,expected});
+      this.pending.set(clientMsgId,{resolve,reject,timer,expected,operation:type});
       this.socket.send(JSON.stringify({clientMsgId,payloadType:type,payload}),err=>{
         if(err) {
           clearTimeout(timer);

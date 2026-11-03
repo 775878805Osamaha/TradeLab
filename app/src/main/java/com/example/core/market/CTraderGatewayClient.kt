@@ -53,13 +53,16 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
 
     fun isLinked(): Boolean = synchronized(lock) { session.isNotBlank() }
 
-    fun reportError(reason: String) { _status.value = "تعذر ربط cTrader: ${reason.take(100)}" }
+    fun reportError(reason: String) { _status.value = "تعذر ربط cTrader: ${reason.take(200)}" }
 
     /** The challenge is SHA-256(verifier); the verifier never enters the browser URL. */
     fun beginAuthorization(): String {
         val bytes = ByteArray(32).also(SecureRandom()::nextBytes)
         val verifier = Base64.encodeToString(bytes, Base64.NO_PADDING or Base64.NO_WRAP or Base64.URL_SAFE)
         synchronized(lock) { pendingVerifier = verifier }
+        // An old account badge is not evidence of a successful new login.
+        _accounts.value = emptyList()
+        _selectedAccount.value = ""
         val challenge = Base64.encodeToString(MessageDigest.getInstance("SHA-256")
             .digest(verifier.toByteArray(Charsets.UTF_8)), Base64.NO_PADDING or Base64.NO_WRAP or Base64.URL_SAFE)
         _status.value = "أكمل تفويض القراءة فقط عبر المتصفح"
@@ -82,7 +85,14 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         require(response.optString("permission") == "read_only") { "cTrader did not grant read-only access" }
         val token = response.optString("sessionToken")
         require(token.isNotBlank() && token.length <= 6144) { "Invalid cTrader session" }
-        synchronized(lock) { session = token; selectedId = ""; symbolIds.clear(); persist() }
+        synchronized(lock) {
+            session = token; selectedId = ""; symbolIds.clear()
+            quoteNotBefore = System.currentTimeMillis()
+            persist()
+        }
+        _accounts.value = emptyList()
+        _selectedAccount.value = ""
+        _accountGeneration.value += 1L
         refreshAccounts()
     }
 
@@ -98,17 +108,27 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
                     id, account.optBoolean("isLive"), account.optString("broker"))
             }
             if (list.isEmpty()) throw IOException("لم يظهر حساب cTrader مخوّل للقراءة")
-            _accounts.value = list
             val next = synchronized(lock) { selectedId }.takeIf { id -> list.any { it.id == id } } ?: list.first().id
-            selectAccount(next)
+            // Fetch symbol permissions before claiming the account is ready.
+            val ids = fetchSymbols(next)
+            commitSelection(next, ids, list)
         } catch (error: Exception) {
-            _status.value = "تعذر الاتصال بـ cTrader: ${error.message?.take(90)}"
+            synchronized(lock) { selectedId = ""; symbolIds.clear(); persist() }
+            _accounts.value = emptyList()
+            _selectedAccount.value = ""
+            _accountGeneration.value += 1L
+            _status.value = "تعذر الاتصال بـ cTrader: ${error.message?.take(180)}"
             throw error
         }
     }
 
     suspend fun selectAccount(accountId: String) {
         require(accounts.value.any { it.id == accountId }) { "Unauthorized cTrader account" }
+        val ids = fetchSymbols(accountId)
+        commitSelection(accountId, ids, accounts.value)
+    }
+
+    private suspend fun fetchSymbols(accountId: String): HashMap<String, Long> {
         val json = request("/v1/symbols?accountId=$accountId")
         val array = json.getJSONArray("symbols")
         val ids = HashMap<String, Long>()
@@ -120,6 +140,10 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             if (name in VerifiedMarketQuote.forexSymbols && id > 0L && !symbol.optBoolean("archived", false))
                 ids[name] = id
         }
+        return ids
+    }
+
+    private fun commitSelection(accountId: String, ids: Map<String, Long>, allowed: List<Account>) {
         synchronized(lock) {
             selectedId = accountId
             symbolIds.clear()
@@ -127,6 +151,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             quoteNotBefore = System.currentTimeMillis()
             persist()
         }
+        _accounts.value = allowed
         _accountGeneration.value += 1L
         _selectedAccount.value = accountId
         _status.value = if (ids.isEmpty()) "مرتبط، لكن الوسيط لا يعرض رموز الفوركس المطلوبة" else
@@ -238,7 +263,11 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         }
         if (post != null) builder.post(post.toString().toRequestBody("application/json".toMediaType()))
         client.newCall(builder.build()).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("cTrader gateway HTTP ${response.code}")
+            if (!response.isSuccessful) {
+                val body = response.body?.string()?.take(2048).orEmpty()
+                val code = runCatching { JSONObject(body).optString("error") }.getOrNull()
+                throw CTraderGatewayException(response.code, code)
+            }
             val content = response.body?.string() ?: throw IOException("Empty cTrader response")
             if (content.length > 2_000_000) throw IOException("Oversized cTrader response")
             val json = JSONObject(content)
