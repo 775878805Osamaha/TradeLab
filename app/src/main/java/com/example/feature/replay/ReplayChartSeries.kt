@@ -16,6 +16,11 @@ class ReplayChartSeries(
     private val revealed: List<Candle>
 ) : AbstractList<Candle>(), java.util.RandomAccess {
     override val size: Int get() = older.size + revealed.size
+    // Snapshot identity: StateFlow/Compose should not compare all 100k bars
+    // structurally each time a new historical page or Replay tick arrives.
+    override fun equals(other:Any?):Boolean=this===other
+    override fun hashCode():Int=System.identityHashCode(this)
+
     override fun get(index: Int): Candle {
         if (index !in 0 until size) throw IndexOutOfBoundsException("index=$index size=$size")
         return if (index < older.size) older[index] else revealed[index - older.size]
