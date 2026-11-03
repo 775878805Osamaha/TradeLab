@@ -126,14 +126,26 @@ function intArg(url,key,min,max){
   return n;
 }
 async function getSpot(channel,id,access,symbol){
-  let unsub=()=>{};
+  let unsub=()=>{}, finished=false;
   try {
     return await new Promise(async(resolve,reject)=>{
-      const timer=setTimeout(()=>reject(Error('quote_timeout')),16000);
-      const callback=p=>{clearTimeout(timer);resolve(p);};
-      try {
-        unsub=await channel.subscribe(id,access,symbol,callback);
-      } catch(e){clearTimeout(timer);reject(e);}
+      const timer=setTimeout(()=>{finished=true;reject(Error('quote_timeout'));},16000);
+      let bid=null,ask=null,lastTimestamp=null;
+      const callback=p=>{
+        if(finished)return;
+        if(p.bid!=null)bid=Number(p.bid);
+        if(p.ask!=null)ask=Number(p.ask);
+        if(p.timestamp!=null)lastTimestamp=Number(p.timestamp);
+        // Never substitute the server's clock for a missing broker timestamp.
+        // A single-sided spot event is insufficient to price a paper trade.
+        if(Number.isFinite(bid)&&Number.isFinite(ask)&&bid>0&&ask>=bid&&
+          Number.isSafeInteger(lastTimestamp)&&lastTimestamp>0){
+          finished=true;clearTimeout(timer);
+          resolve({bid,ask,timestamp:lastTimestamp});
+        }
+      };
+      try {unsub=await channel.subscribe(id,access,symbol,callback);}
+      catch(e){clearTimeout(timer);finished=true;reject(e);}
     });
   } finally {unsub();}
 }
@@ -236,7 +248,7 @@ async function handler(req,res){
       const {id,entry}=await accountAccess(session,url);
       const symbolId=intArg(url,'symbolId',1,Number.MAX_SAFE_INTEGER);
       const quote=await getSpot(upstream.channel(entry.isLive),id,session.access,symbolId);
-      return reply(res,200,{symbolId:String(symbolId),timestamp:Number(quote.timestamp||Date.now()),
+      return reply(res,200,{symbolId:String(symbolId),timestamp:Number(quote.timestamp),
         source:'ctrader',...(quote.bid==null?{}:{bid:Number(quote.bid)/1e5}),
         ...(quote.ask==null?{}:{ask:Number(quote.ask)/1e5})},sessionHeader);
     }
@@ -291,7 +303,7 @@ wss.on('connection',(client,req)=>{
       unsubscribe=await upstream.channel(entry.isLive).subscribe(id,liveSession.access,symbolId,spot=>{
         if(client.readyState===1)
           client.send(JSON.stringify({type:'spot',symbolId:String(symbolId),
-            source:'ctrader',timestamp:Number(spot.timestamp||Date.now()),
+            source:'ctrader',timestamp:spot.timestamp==null?null:Number(spot.timestamp),
             ...(spot.bid==null?{}:{bid:Number(spot.bid)/1e5}),
             ...(spot.ask==null?{}:{ask:Number(spot.ask)/1e5})}));
       });
