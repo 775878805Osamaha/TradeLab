@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
 import { tokenHash } from './security.mjs';
 
-const REQUEST_RESPONSE = new Map([[2100,2101],[2149,2150],[2102,2103],[2114,2115],[2137,2138],[2127,2128]]);
+const REQUEST_RESPONSE = new Map([[2100,2101],[2149,2150],[2102,2103],[2114,2115],[2137,2138],[2127,2128],[2129,2130]]);
 const HOSTS = { demo: 'wss://demo.ctraderapi.com:5036', live: 'wss://live.ctraderapi.com:5036' };
 export const PERIODS = Object.freeze({M1:1,M2:2,M3:3,M4:4,M5:5,M10:6,M15:7,M30:8,H1:9,H4:10,H12:11,D1:12,W1:13,MN1:14});
 export function normalizeBar(raw) {
@@ -147,7 +147,14 @@ class Channel {
     try {
       if(first)await this.send(2127,{ctidTraderAccountId:accountId,symbolId:[symbolId],subscribeToSpotTimestamp:true});
     } catch(e){listeners.delete(cb);if(!listeners.size)this.listeners.delete(key);throw e;}
-    return ()=>{listeners.delete(cb);if(!listeners.size)this.listeners.delete(key);};
+    return ()=>{
+      listeners.delete(cb);
+      if(!listeners.size) {
+        this.listeners.delete(key);
+        if(this.socket?.readyState===WebSocket.OPEN)
+          this.send(2129,{ctidTraderAccountId:accountId,symbolId:[symbolId]}).catch(()=>{});
+      }
+    };
   }
 }
 export class CTraderGateway {
