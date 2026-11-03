@@ -131,8 +131,10 @@ fun SettingsScreen(
                                     scope.launch {
                                         goldCheckStatus = try {
                                             com.example.feature.ctrader.CTraderReadOnlyMarketApi(context).goldCheck()
-                                        } catch (_: Exception) {
-                                            "لم تصل بيانات ذهب موثوقة من cTrader الآن. تحقق من حساب الوسيط والاتصال."
+                                        } catch (e: kotlinx.coroutines.CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            "تعذر قراءة الذهب من cTrader: " + (e.message ?: "خدمة غير متاحة").take(180)
                                         }
                                         goldCheckRunning = false
                                     }
