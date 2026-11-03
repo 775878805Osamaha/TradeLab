@@ -30,11 +30,13 @@ import java.util.*
 fun SettingsScreen(
     provider: DefaultMarketDataProvider,
     onBack: () -> Unit,
+    cTraderCallbackStatus: String? = null,
     modifier: Modifier = Modifier
 ) {
     androidx.activity.compose.BackHandler(onBack = onBack)
     val diag by provider.diagnosticInfo.collectAsState()
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val sdf = remember { SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
 
     Scaffold(
@@ -60,6 +62,33 @@ fun SettingsScreen(
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item { AppearanceSettings() }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().testTag("ctrader_oauth_card"),
+                    colors = CardDefaults.cardColors(containerColor = TradingCard)
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("ربط cTrader — قراءة فقط", fontWeight = FontWeight.Bold)
+                        Text("سيفتح تسجيل الدخول في متصفح الهاتف. لا يمكن لـ TradeLab تنفيذ صفقات حقيقية بهذه الصلاحية.",
+                            fontSize = 12.sp, color = TradingTextSecondary)
+                        Button(
+                            modifier = Modifier.fillMaxWidth().testTag("ctrader_browser_login"),
+                            onClick = {
+                                val url = com.example.feature.ctrader.CTraderAuthorization.authorizationUrl()
+                                context.startActivity(android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW, url
+                                ).addCategory(android.content.Intent.CATEGORY_BROWSABLE))
+                            }
+                        ) { Text("تسجيل الدخول إلى cTrader") }
+                        if(cTraderCallbackStatus != null) {
+                            Text(cTraderCallbackStatus, fontSize = 12.sp, color = TradingGold)
+                        }
+                        Text("مرحلة تجريبية: يجب تسجيل رابط العودة في بوابة cTrader وإضافة تبادل آمن لرمز التفويض قبل تفعيل الأسعار.",
+                            fontSize = 11.sp, color = TradingTextSecondary)
+                    }
+                }
+            }
+
             // Live Connectivity & Quality Diagnostic Card (Section 36)
             item {
                 Card(
