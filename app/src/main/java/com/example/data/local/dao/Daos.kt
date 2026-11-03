@@ -68,6 +68,9 @@ interface CandleDao {
 
     @Query("DELETE FROM candles WHERE symbol = :symbol AND timeframe = :timeframe")
     suspend fun deleteCandles(symbol: String, timeframe: String)
+    @Query("DELETE FROM candles WHERE symbol IN (:symbols)")
+    suspend fun deleteCandlesForSymbols(symbols: List<String>): Int
+
 }
 
 @Dao
