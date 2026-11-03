@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
                 // Trigger the same cTrader account state observed by chart, market and Replay.
                 // A broker failure never enables a legacy forex data source.
                 try {
-                    (application as TradeLabApplication).cTraderChartSource.refreshAuthorizedAccount()
+                    (application as TradeLabApplication).cTraderChartSource.onSessionReauthorized()
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                     throw cancelled
                 } catch (e: Exception) {
