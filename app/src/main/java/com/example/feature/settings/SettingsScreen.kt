@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.market.DefaultMarketDataProvider
+import com.example.data.repository.MarketDataRepository
 import com.example.core.model.ProviderConnectionStatus
 import com.example.ui.components.DataSourceBadge
 import com.example.ui.theme.*
@@ -29,6 +30,7 @@ import java.util.*
 @Composable
 fun SettingsScreen(
     provider: DefaultMarketDataProvider,
+    repository: MarketDataRepository,
     onBack: () -> Unit,
     cTraderCallbackStatus: String? = null,
     modifier: Modifier = Modifier
@@ -38,6 +40,9 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val cTrader = com.example.feature.ctrader.CTraderAuthorization
+    val activeCTraderAccount by repository.cTraderAccount.collectAsState()
+    var enablingCTrader by remember { mutableStateOf(false) }
+    var sourceChangeMessage by remember { mutableStateOf<String?>(null) }
     var accountStatus by remember { mutableStateOf<String?>(null) }
     var goldCheckStatus by remember { mutableStateOf<String?>(null) }
     var goldCheckRunning by remember { mutableStateOf(false) }
@@ -139,12 +144,42 @@ fun SettingsScreen(
                             }
                             if(goldCheckStatus!=null)Text(goldCheckStatus!!,fontSize=12.sp,color=TradingTextSecondary)
                         }
-                        if (!cTrader.isConfigured) {
-                            Text("زر الربط غير مفعّل حتى نشر خدمة OAuth الآمنة وتعيين CTRADER_GATEWAY_URL أثناء بناء APK.",
-                                fontSize = 12.sp, color = TradingGold)
-                        } else {
-                            Text("الاتصال بصلاحية القراءة فقط؛ الأسعار على الشارت لا تتغير إلى cTrader إلا بعد اختبار ربط المزود.",
-                                fontSize = 11.sp, color = TradingTextSecondary)
+                        if (cTrader.isLinked(context)) {
+                            if(activeCTraderAccount == null) {
+                                Button(
+                                    modifier=Modifier.fillMaxWidth().testTag("ctrader_enable_chart"),
+                                    enabled=!enablingCTrader && gatewayCheck?.authEnabled==true,
+                                    onClick={
+                                        enablingCTrader=true
+                                        sourceChangeMessage=null
+                                        scope.launch {
+                                            sourceChangeMessage=try {
+                                                repository.enableCTraderGold()
+                                            } catch(e:kotlinx.coroutines.CancellationException) {
+                                                throw e
+                                            } catch(e:Exception) {
+                                                "لم يتغير المصدر: "+(e.message ?: "تعذر التحقق من سعر الذهب والشموع")
+                                            }
+                                            enablingCTrader=false
+                                        }
+                                    }
+                                ) { Text(if(enablingCTrader) "جارٍ فحص السعر والشموع..." else "اعتماد cTrader للشارت والريبلاي") }
+                                Text("لا يتغير مصدر الذهب والفوركس قبل فحص سعر Bid/Ask حديث وشموع حقيقية مغلقة من الوسيط.",
+                                    fontSize=11.sp,color=TradingTextSecondary)
+                            } else {
+                                Text("مصدر الذهب والفوركس المحدد: cTrader — حساب "+activeCTraderAccount,
+                                    fontSize=12.sp,color=TradingCyan)
+                                OutlinedButton(
+                                    modifier=Modifier.fillMaxWidth().testTag("ctrader_disable_chart"),
+                                    onClick={
+                                        repository.disableCTrader()
+                                        sourceChangeMessage="تم الرجوع لمصدر الذهب والفوركس السابق"
+                                    }
+                                ) { Text("الرجوع إلى المصدر السابق") }
+                            }
+                        }
+                        sourceChangeMessage?.let {
+                            Text(it,fontSize=12.sp,color=TradingGold)
                         }
                     }
                 }
@@ -164,12 +199,16 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "حالة اتصال مزود البيانات", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text(text = "حالة مزود Binance / Biquote", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                             DataSourceBadge(sourceType = diag.dataSourceType)
                         }
 
                         HorizontalDivider(color = TradingBorder)
 
+                        Text(if(activeCTraderAccount!=null)
+                            "الشارت للذهب والفوركس يستخدم cTrader؛ مؤشرات الاتصال التالية تخص Binance/Biquote فقط."
+                            else "مصدر الشارت الأساسي Binance/Biquote؛ cTrader لا يصبح المصدر قبل اعتماده.",
+                            fontSize=11.sp,color=TradingTextSecondary)
                         DiagnosticRow("اسم المزود", diag.providerName)
                         DiagnosticRow("حالة الاتصال", diag.connectionStatus.displayName, isStatus = true, status = diag.connectionStatus)
                         DiagnosticRow("آخر تحديث (UTC)", sdf.format(Date(diag.lastUpdateTimestamp)))
@@ -220,8 +259,11 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "• BTCUSDT و ETHUSDT متصلان مباشرة ببيانات السوق اللحظية عبر Binance Public WebSocket.\n" +
-                                    "• XAUUSD وأزواج الفوركس لا تملك حاليًا مصدر أسعار موثوقًا؛ لا تُعرض أسعار وهمية على أنها مباشرة.\n" +
-                                    "• التطبيق لا يتصل بأي وسيط مالي، ولا يدعم التداول بأموال حقيقية نهائياً. كل الأوامر افتراضية 100%.",
+                                    (if(activeCTraderAccount != null)
+                                        "• الذهب والفوركس يعرضان أسعار cTrader الموثقة من حسابك فقط، ولا يتم دمجها بمصادر أخرى.\n"
+                                    else
+                                        "• الذهب والفوركس يستخدمان المصدر السابق؛ تسجيل دخول cTrader وحده لا يبدّل الشارت.\n") +
+                                    "• اتصال cTrader بصلاحية القراءة فقط. كل الأوامر والصفقات داخل TradeLab افتراضية 100%.",
                             fontSize = 12.sp,
                             color = TradingTextSecondary,
                             lineHeight = 18.sp
@@ -247,7 +289,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "تم بناء معمارية التطبيق خلف الواجهة المجردة MarketDataProvider و HistoricalDataProvider.\n" +
-                                    "لإضافة مفاتيح مزود مدفوع مثل TwelveData أو Polygon أو Interactive Brokers، يتم إدخال المفاتيح بشكل آمن عبر لوحة الأسرار (Secrets panel) أو ملف .env دون تضمينها في الكود.",
+                                    "تم تجهيز ربط cTrader عبر خدمة HTTPS آمنة. مفتاح Client Secret يبقى على الخادم ولا يُحفظ في APK؛ ويمكن استخدام Twelve Data يدويًا لمصدر تاريخي بديل.",
                             fontSize = 12.sp,
                             color = TradingTextSecondary,
                             lineHeight = 18.sp
