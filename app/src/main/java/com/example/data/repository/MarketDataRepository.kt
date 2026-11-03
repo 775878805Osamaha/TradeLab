@@ -55,14 +55,6 @@ class MarketDataRepository(
     suspend fun getOlderChartCandles(symbol: String,timeframe: Timeframe,from: Long,to: Long): List<Candle> =
         getCandles(symbol,timeframe,from,to)
 
-    /** Legacy UI interfaces retained for binary compatibility; never used as providers. */
-    private var retiredTwelveDataKey = ""
-    fun configureTwelveDataKey(key: String) {
-        require(key.length <= 256) { "API key is too long" }
-        retiredTwelveDataKey = key.trim()
-    }
-    fun hasTwelveDataKey(): Boolean = false
-
     fun supportsHistoricalSymbol(symbol: String): Boolean =
         symbol in VerifiedMarketQuote.forexSymbols || symbol in setOf("BTCUSDT","ETHUSDT")
 
