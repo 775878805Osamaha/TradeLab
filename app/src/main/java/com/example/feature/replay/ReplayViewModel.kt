@@ -133,7 +133,9 @@ class ReplayViewModel(
         _chartLookbackError.value = null
         chartLookbackJob = viewModelScope.launch {
             try {
-                val page = com.example.feature.chart.history.ChartHistoryPaging.before(
+                val page = if (symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
+                    marketDataRepository.getOlderBrokerChartCandles(symbol, tf, oldest)
+                else com.example.feature.chart.history.ChartHistoryPaging.before(
                     symbol, tf, oldest
                 ) { from, to ->
                     marketDataRepository.getOlderChartCandles(symbol, tf, from, to)
