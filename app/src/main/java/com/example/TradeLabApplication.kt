@@ -22,12 +22,15 @@ class TradeLabApplication : Application() {
         DefaultMarketDataProvider()
     }
 
+    val cTraderChartSource by lazy { com.example.feature.ctrader.CTraderChartSource(this) }
+
     val marketDataRepository: MarketDataRepository by lazy {
         MarketDataRepository(
             provider = marketDataProvider,
             candleDao = database.candleDao(),
             symbolDao = database.symbolDao(),
-            archiveDirectory = java.io.File(cacheDir, "chart-archives-v1")
+            archiveDirectory = java.io.File(cacheDir, "chart-archives-v1"),
+            ctrader = cTraderChartSource
         ).also { repository ->
             // Restore the user-provided key after process recreation.
             repository.configureTwelveDataKey(historyKeyStore.read())
