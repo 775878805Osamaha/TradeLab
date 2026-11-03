@@ -228,7 +228,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "• BTCUSDT و ETHUSDT متصلان مباشرة ببيانات السوق اللحظية عبر Binance Public WebSocket.\n" +
-                                    "• الذهب والفوركس عبر cTrader فقط؛ عند انقطاعه تظهر البيانات غير متاحة، دون الرجوع إلى مزود سابق.\n" + +
+                                    "• الذهب والفوركس عبر cTrader فقط؛ عند انقطاعه تظهر البيانات غير متاحة، دون الرجوع إلى مزود سابق.\n" +
                                     "• اتصال cTrader بصلاحية القراءة فقط. كل الأوامر والصفقات داخل TradeLab افتراضية 100%.",
                             fontSize = 12.sp,
                             color = TradingTextSecondary,
