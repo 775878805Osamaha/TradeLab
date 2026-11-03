@@ -148,7 +148,10 @@ class ReplayViewModel(
                 if (page.isEmpty()) {
                     // An empty bounded date window is NOT proof that a broker
                     // has no older history. Allow explicit earlier date scans.
-                    chartOlderSearchAnchor = (oldest - 5L * 86_400_000L).coerceAtLeast(0L)
+                    val searchedSpan = if (symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
+                        com.example.feature.ctrader.CTraderHistoryPaging.windowSpan(tf) * 8L
+                    else 5L * 86_400_000L
+                    chartOlderSearchAnchor = (oldest - searchedSpan).coerceAtLeast(0L)
                     chartLookbackExhausted = chartOlderSearchAnchor == 0L
                     _chartLookbackError.value = if (chartLookbackExhausted)
                         "لا توجد شموع أقدم متاحة في هذه النافذة."
