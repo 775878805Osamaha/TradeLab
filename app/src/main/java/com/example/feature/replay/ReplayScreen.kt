@@ -60,7 +60,6 @@ fun ReplayScreen(
     var showDrawingTools by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showMarketDialog by remember { mutableStateOf(false) }
-    var twelveDataKeyInput by remember { mutableStateOf("") }
     var showCsvImportDialog by remember { mutableStateOf(false) }
     var csvImportSymbol by remember { mutableStateOf("XAUUSD") }
     var csvImportSource by remember { mutableStateOf("broker-export") }
@@ -1078,7 +1077,7 @@ fun ReplayScreen(
                             )
                         }
                     }
-                    Text("الذهب والفوركس • Twelve Data", fontSize = 12.sp, color = TradingTextSecondary)
+                    Text("الذهب والفوركس • cTrader فقط", fontSize = 12.sp, color = TradingTextSecondary)
                     listOf(
                         listOf("XAUUSD", "XAGUSD", "EURUSD"),
                         listOf("GBPUSD", "USDJPY", "USDCHF"),
@@ -1098,19 +1097,7 @@ fun ReplayScreen(
                             }
                         }
                     }
-                    OutlinedTextField(
-                        value = twelveDataKeyInput,
-                        onValueChange = { twelveDataKeyInput = it },
-                        label = { Text("Twelve Data API Key") },
-                        singleLine = true,
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth().testTag("replay_twelvedata_key")
-                    )
-                    TextButton(onClick = {
-                        viewModel.configureHistoricalApiKey(twelveDataKeyInput)
-                        twelveDataKeyInput = ""
-                    }) { Text(if (viewModel.hasHistoricalApiKey()) "تحديث المفتاح" else "تفعيل مصدر الذهب والفوركس") }
-                    Text("المفتاح يُحفظ في الذاكرة فقط. توفر البيانات والفترات يعتمد على اشتراك المزود. أسعار الوسط قد تختلف عن MT5.",
+                    Text("بيانات الفوركس والذهب تأتي فقط من حساب cTrader المرتبط. عند الانقطاع لا يتم استخدام مصدر آخر.",
                         color = TradingTextSecondary, fontSize = 11.sp)
                     TextButton(onClick = {
                         showMarketDialog = false
