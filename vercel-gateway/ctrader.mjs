@@ -38,7 +38,7 @@ class Channel {
       const socket = await new Promise((resolve,reject)=>{
         const ws = new WebSocket(HOSTS[this.mode],{handshakeTimeout:10000,maxPayload:4*1024*1024});
         ws.once('open',()=>resolve(ws));
-        ws.once('error',reject);
+        ws.once('error',()=>reject(new Error('ctrader_socket_connection_failed')));
       });
       this.socket=socket;
       socket.on('message', data=>{
@@ -52,7 +52,7 @@ class Channel {
         const request=this.pending.get(packet.clientMsgId);
         if (!request) return;
         if(packet.payloadType===2142 || packet.payloadType===50) {
-          request.reject(new Error('cTrader rejected an Open API read request'));
+          request.reject(new Error('ctrader_read_request_rejected'));
         } else if(packet.payloadType===request.expected) {
           request.resolve(packet.payload||{});
         } else return;
@@ -95,7 +95,7 @@ class Channel {
     return new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{
         this.pending.delete(clientMsgId);
-        reject(new Error('cTrader request timed out'));
+        reject(new Error('ctrader_request_timeout'));
       },15000);
       this.pending.set(clientMsgId,{resolve,reject,timer,expected});
       this.socket.send(JSON.stringify({clientMsgId,payloadType:type,payload}),err=>{
@@ -164,8 +164,12 @@ export class CTraderGateway {
   async accounts(accessToken) {
     // The account-list request is valid after app auth, before individual account auth.
     const result=await this.channels.demo.request(2149,{accessToken});
-    if (result.permissionScope!==0 && result.permissionScope!=='SCOPE_VIEW')
-      throw new Error('cTrader did not grant view-only access');
+    // Optional by protocol. SCOPE_TRADE must never be accepted as a view-only grant.
+    // The gateway still exposes no order endpoints even for a broker that omits scope.
+    if (result.permissionScope != null &&
+        result.permissionScope !== 0 && result.permissionScope !== '0' &&
+        result.permissionScope !== 'SCOPE_VIEW')
+      throw new Error('ctrader_view_only_required');
     return (result.ctidTraderAccount||[]).map(a=>({
       accountId:String(a.ctidTraderAccountId),
       isLive:a.isLive===true,
