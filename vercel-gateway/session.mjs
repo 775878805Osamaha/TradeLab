@@ -1,4 +1,4 @@
-import { randomBytes, createHash, createCipheriv, createDecipheriv, timingSafeEqual } from 'node:crypto';
+import { randomBytes, createHash, createCipheriv, createDecipheriv, timingSafeEqual, hkdfSync } from 'node:crypto';
 
 export const randomToken = () => randomBytes(32).toString('base64url');
 export const hash = value => createHash('sha256').update(value).digest('base64url');
@@ -7,9 +7,17 @@ export function constantTimeMatch(left,right) {
   const a=Buffer.from(left),b=Buffer.from(right);
   return a.length===b.length && timingSafeEqual(a,b);
 }
-export function sealedCodec(base64Key) {
-  const key=Buffer.from(base64Key||'','base64');
-  if(key.length!==32)throw new Error('SESSION_ENCRYPTION_KEY must decode to exactly 32 bytes');
+export function sealedCodec(base64Key, brokerClientSecret) {
+  const salt=Buffer.from(base64Key||'','base64');
+  if(salt.length!==32)throw new Error('SESSION_ENCRYPTION_KEY must decode to exactly 32 bytes');
+  if(typeof brokerClientSecret!=='string' || brokerClientSecret.length<16)
+    throw new Error('Private cTrader client secret is required for session encryption');
+  // Derive an independent AES key using a private high-entropy broker secret.
+  // Even if the legacy SESSION_ENCRYPTION_KEY was accidentally published,
+  // it is only an HKDF salt; the AES key cannot be recovered from it alone.
+  const key=Buffer.from(hkdfSync('sha256',
+    Buffer.from(brokerClientSecret,'utf8'),salt,
+    Buffer.from('tradelab.ctrader.session.v2','utf8'),32));
   return {
     seal(data) {
       const iv=randomBytes(12);
