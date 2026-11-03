@@ -85,7 +85,7 @@ class ChartViewModel(
         observeConnectionDiagnostics()
         observeDrawings()
         marketDataRepository.cTrader?.let { client ->
-            viewModelScope.launch { client.accountGeneration.drop(1).collect {
+            viewModelScope.launch { client.accountGeneration.collect {
                 if (_uiState.value.selectedSymbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
                     _uiState.update { it.copy(latestTick = null, candles = emptyList(), isLoading = true) }
                     loadCandlesForCurrentSymbol()

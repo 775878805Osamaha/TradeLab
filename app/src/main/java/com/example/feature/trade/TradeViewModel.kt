@@ -66,7 +66,7 @@ class TradeViewModel(
         observeAccountAndPositions()
         selectSymbol(_uiState.value.selectedSymbol)
         marketDataRepository.cTrader?.let { client ->
-            viewModelScope.launch { client.accountGeneration.drop(1).collect {
+            viewModelScope.launch { client.accountGeneration.collect {
                 _uiState.update { it.copy(latestTick = null, candles = emptyList(), riskAnalysis = null) }
             } }
         }
