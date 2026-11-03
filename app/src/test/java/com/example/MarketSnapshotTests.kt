@@ -24,10 +24,11 @@ class MarketSnapshotTests {
         assertNull(late.spread)
     }
     @Test fun expiredQuoteNeverHasLiveSpreadOrChange() {
-        val tick=Tick("XAUUSD",2000.0,2001.0,timestamp=100000,source="BIQUOTE_REST")
+        val tick=Tick("XAUUSD",2000.0,2001.0,timestamp=100000,source="CTRADER_REST")
         val stale=MarketQuoteSnapshot.from(gold,tick,emptyList(),120000)
         assertEquals(MarketQuoteSnapshot.Freshness.STALE,stale.freshness)
         assertNull(stale.spread);assertNull(stale.changePercent)
         assertEquals(1.0,MarketQuoteSnapshot.from(gold,tick,emptyList(),100001).spread!!,0.0)
+        assertNull(MarketQuoteSnapshot.from(gold,tick.copy(source="BIQUOTE_REST"),emptyList(),100001).last)
     }
 }
