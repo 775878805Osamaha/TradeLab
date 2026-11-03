@@ -18,14 +18,11 @@ class BiquoteQuoteProviderTests {
     private fun body(symbol: String = "XAUUSD", bid: Double = 4000.0, ask: Double = 4000.2,
         timestamp: String = "2026-01-05T12:00:00Z", stale: Boolean = false, state: String = "open") =
         """{"symbol":"$symbol","bid":$bid,"ask":$ask,"last":0,"timestamp":"$timestamp","stale":$stale,"quoteAgeSeconds":0,"marketState":"$state","source":"MetaTrader 5 (Broker 1)"}"""
-    @Test fun realBidAskSuppliesMidWhenFxLastIsZero() {
-        val tick = BiquoteQuoteProvider().parse(body(), "XAUUSD", now)
-        assertEquals(4000.1, tick.last, .00001)
-        assertEquals(4000.0, tick.bid, .00001)
-        assertEquals(4000.2, tick.ask, .00001)
-        assertEquals("BIQUOTE_REST", tick.source)
-        // Legacy parser remains testable, but is no longer an approved TradeLab quote.
-        assertFalse(VerifiedMarketQuote.isVerified(tick, "XAUUSD", now))
+    @Test fun deprecatedBiquoteCannotProduceAnApprovedTradeLabQuote() {
+        try {
+            BiquoteQuoteProvider().parse(body(), "XAUUSD", now)
+            fail("Legacy Biquote quote must be rejected")
+        } catch (_: IOException) { }
     }
     @Test fun staleAndClosedQuotesCannotUnlockPaperOrders() {
         for (payload in listOf(body(stale = true), body(state = "closed"),

@@ -139,7 +139,12 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
 
     fun sourceKey(symbol: String): String {
         val (account, id) = resolve(symbol)
-        return "ctrader:$account:$id"
+        return sourceName(account, id)
+    }
+
+    private fun sourceName(account: String, id: Long): String {
+        val environment = if (accounts.value.firstOrNull { it.id == account }?.isLive == true) "live" else "demo"
+        return "ctrader:$environment:$account:$id"
     }
 
     suspend fun spot(symbol: String): Tick {
@@ -181,7 +186,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
                 val openTime = bar.getLong("timestamp")
                 val candle = Candle(symbol, period, openTime, openTime + interval,
                     bar.getDouble("open"), bar.getDouble("high"), bar.getDouble("low"),
-                    bar.getDouble("close"), bar.getDouble("volume"), "ctrader:$account:$id")
+                    bar.getDouble("close"), bar.getDouble("volume"), sourceName(account, id))
                 if (openTime in start..end && candle.closeTime <= System.currentTimeMillis()) {
                     require(DataIntegrityValidator.validateCandle(candle).isValid) { "Corrupt cTrader candle" }
                     result.add(candle)
@@ -199,7 +204,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
                 bars[0].openTime % 7_200_000L != 0L) null
             else Candle(symbol, Timeframe.H2, bars[0].openTime, bars[1].closeTime,
                 bars[0].open, maxOf(bars[0].high, bars[1].high), minOf(bars[0].low, bars[1].low),
-                bars[1].close, bars.sumOf { it.volume }, "ctrader:$account:$id")
+                bars[1].close, bars.sumOf { it.volume }, sourceName(account, id))
         }
     }
 
