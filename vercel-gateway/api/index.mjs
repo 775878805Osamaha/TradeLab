@@ -168,6 +168,7 @@ async function handler(req,res){
   if(req.method==='GET' && path==='/healthz')return reply(res,200,{
     status:'ok',service:'TradeLab cTrader OAuth gateway',
     transportRevision:'auth-and-spot-barriers-2026-11-04',
+    brokerErrorDetails:true,
     configured:!!(process.env.CTRADER_CLIENT_ID&&process.env.CTRADER_CLIENT_SECRET&&process.env.SESSION_ENCRYPTION_KEY),
     authEnabled:oauthEnabled
   });
@@ -272,6 +273,25 @@ function safeDiagnostic(error){
     operation:Number.isInteger(error?.operation)?error.operation:undefined
   };
 }
+// Public protocol enums only. Never forward arbitrary upstream text.
+const publicBrokerCodes=new Set([
+  'OA_AUTH_TOKEN_EXPIRED','ACCOUNT_NOT_AUTHORIZED','RET_NO_SUCH_LOGIN',
+  'ALREADY_LOGGED_IN','INCORRECT_BOUNDARIES','RET_ACCOUNT_DISABLED',
+  'CONNECTIONS_LIMIT_EXCEEDED','CH_CLIENT_AUTH_FAILURE','CH_CLIENT_NOT_AUTHENTICATED',
+  'CH_CLIENT_ALREADY_AUTHENTICATED','CH_ACCESS_TOKEN_INVALID','CH_SERVER_NOT_REACHABLE',
+  'CH_CTID_TRADER_ACCOUNT_NOT_FOUND','CH_OA_CLIENT_NOT_FOUND','REQUEST_FREQUENCY_EXCEEDED',
+  'SERVER_IS_UNDER_MAINTENANCE','CHANNEL_IS_BLOCKED','ALREADY_SUBSCRIBED',
+  'SYMBOL_NOT_FOUND','UNKNOWN_SYMBOL',
+]);
+export function brokerRejection(error) {
+  const {stage,brokerCode,operation}=safeDiagnostic(error);
+  return {
+    error:'ctrader_broker_rejected_request',
+    stage,
+    brokerCode:publicBrokerCodes.has(brokerCode)?brokerCode:undefined,
+    operation:[2100,2149,2102,2114,2137,2127].includes(operation)?operation:undefined,
+  };
+}
 const server=createServer((req,res)=>{
   Promise.resolve(handler(req,res)).catch(error=>{
     // No tokens, account IDs, request URLs or upstream error descriptions.
@@ -291,7 +311,7 @@ const server=createServer((req,res)=>{
     if(error.message==='ctrader_request_timeout' || error.message==='quote_timeout')
       return fail(res,503,'ctrader_response_timeout');
     if(error.message==='ctrader_read_request_rejected')
-      return fail(res,503,'ctrader_broker_rejected_request');
+      return reply(res,503,brokerRejection(error));
     if(error.message==='broker_exchange_failed')
       return fail(res,503,'ctrader_token_exchange_failed');
     return fail(res,503,'ctrader_broker_unavailable');
