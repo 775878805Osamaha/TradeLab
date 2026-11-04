@@ -1224,6 +1224,7 @@ fun ChartScreen(
                         Text(
                             "${replayState.currentIndex.coerceAtLeast(0) + 1} / ${replayState.totalCandles}",
                             fontSize = 10.sp, color = TradingTextSecondary,
+                            style = TextStyle(textDirection = TextDirection.Ltr),
                             modifier = Modifier.testTag("chart_replay_position")
                         )
                     }
