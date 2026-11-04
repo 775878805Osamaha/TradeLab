@@ -5,11 +5,12 @@ import { CTraderGateway } from '../ctrader.mjs';
 
 /** In-memory cTrader proxy that refuses account-list requests before app auth. */
 class FakeBrokerSocket extends EventEmitter {
-  constructor() {
+  constructor({rejectSubscribe=false}={}) {
     super();
     this.readyState=0;
     this.appAuthed=false;
     this.packets=[];
+    this.rejectSubscribe=rejectSubscribe;
     queueMicrotask(()=>{this.readyState=1;this.emit('open');});
   }
   send(data,cb=()=>{}) {
@@ -28,6 +29,12 @@ class FakeBrokerSocket extends EventEmitter {
       });
     } else if(packet.payloadType===2102) {
       setTimeout(()=>respond(2103,{ctidTraderAccountId:packet.payload.ctidTraderAccountId}),15);
+    } else if(packet.payloadType===2127) {
+      setTimeout(()=>this.rejectSubscribe
+        ?respond(2142,{errorCode:'SUBSCRIPTION_REJECTED'})
+        :respond(2128),25);
+    } else if(packet.payloadType===2129) {
+      queueMicrotask(()=>respond(2130));
     }
   }
   close() { if(this.readyState!==3){this.readyState=3;this.emit('close');} }
@@ -64,5 +71,48 @@ test('parallel symbol and quote requests share one in-flight account authorizati
       channel.account(12345,'read-only-test-token')
     ]);
     assert.equal(sockets[0].packets.filter(type=>type===2102).length,1);
+  } finally {sockets.forEach(s=>s.close());}
+});
+
+test('parallel spot listeners both fail when cTrader rejects the initial subscription',async()=>{
+  const sockets=[];
+  const gateway=new CTraderGateway('test-client','test-secret',{
+    socketFactory:()=>{
+      const socket=new FakeBrokerSocket({rejectSubscribe:true});
+      sockets.push(socket);return socket;
+    }
+  });
+  try {
+    const channel=gateway.channels.demo;
+    const attempts=await Promise.allSettled([
+      channel.subscribe(12345,'read-only-test-token',987,()=>{}),
+      channel.subscribe(12345,'read-only-test-token',987,()=>{})
+    ]);
+    assert.deepEqual(attempts.map(a=>a.status),['rejected','rejected']);
+    assert.equal(channel.listeners.size,0);
+    assert.equal(sockets[0].packets.filter(type=>type===2127).length,1);
+    // A subsequent attempt can recover without a ghost listener or old promise.
+    sockets[0].rejectSubscribe=false;
+    const stop=await channel.subscribe(12345,'read-only-test-token',987,()=>{});
+    assert.equal(sockets[0].packets.filter(type=>type===2127).length,2);
+    stop();
+  } finally {sockets.forEach(s=>s.close());}
+});
+
+test('parallel spot listeners both wait for a single accepted subscription',async()=>{
+  const sockets=[];
+  const gateway=new CTraderGateway('test-client','test-secret',{
+    socketFactory:()=>{const socket=new FakeBrokerSocket();sockets.push(socket);return socket;}
+  });
+  try {
+    const channel=gateway.channels.demo;
+    const pending=[
+      channel.subscribe(12345,'read-only-test-token',987,()=>{}),
+      channel.subscribe(12345,'read-only-test-token',987,()=>{})
+    ];
+    const unsubscribers=await Promise.all(pending);
+    assert.equal(sockets[0].packets.filter(type=>type===2127).length,1);
+    unsubscribers.forEach(stop=>stop());
+    assert.equal(sockets[0].packets.filter(type=>type===2129).length,1);
   } finally {sockets.forEach(s=>s.close());}
 });
