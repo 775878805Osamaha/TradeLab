@@ -167,7 +167,7 @@ async function handler(req,res){
   const {path,url}=route(req);
   if(req.method==='GET' && path==='/healthz')return reply(res,200,{
     status:'ok',service:'TradeLab cTrader OAuth gateway',
-    transportRevision:'auth-barrier-2026-11-04',
+    transportRevision:'auth-and-spot-barriers-2026-11-04',
     configured:!!(process.env.CTRADER_CLIENT_ID&&process.env.CTRADER_CLIENT_SECRET&&process.env.SESSION_ENCRYPTION_KEY),
     authEnabled:oauthEnabled
   });
