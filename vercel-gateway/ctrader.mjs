@@ -42,25 +42,30 @@ export function normalizeBar(raw) {
   };
 }
 class Channel {
-  constructor(mode, id, secret) {
+  constructor(mode, id, secret, socketFactory=(url,options)=>new WebSocket(url,options)) {
     this.mode=mode;
     this.id=id;
     this.secret=secret;
+    this.socketFactory=socketFactory;
     this.socket=null;
     this.pending=new Map();
     this.listeners=new Map();
+    this.subscribing=new Map();
     this.authorized=new Set();
+    this.authorizing=new Map();
     this.connecting=null;
     this.heartbeat=null;
     this.historyQueue=Promise.resolve();
     this.nextHistoryAt=0;
   }
   async connect() {
-    if (this.socket?.readyState === WebSocket.OPEN) return;
+    // An OPEN socket is not yet an authenticated cTrader application. All
+    // concurrent callers must await the app-auth response (2101) first.
     if (this.connecting) return this.connecting;
+    if (this.socket?.readyState === WebSocket.OPEN) return;
     this.connecting=(async()=>{
       const socket = await new Promise((resolve,reject)=>{
-        const ws = new WebSocket(HOSTS[this.mode],{handshakeTimeout:10000,maxPayload:4*1024*1024});
+        const ws = this.socketFactory(HOSTS[this.mode],{handshakeTimeout:10000,maxPayload:4*1024*1024});
         ws.once('open',()=>resolve(ws));
         ws.once('error',()=>reject(new Error('ctrader_socket_connection_failed')));
       });
@@ -76,7 +81,13 @@ class Channel {
         const request=this.pending.get(packet.clientMsgId);
         if (!request) return;
         if(packet.payloadType===2142 || packet.payloadType===50) {
-          request.reject(new Error('ctrader_read_request_rejected'));
+          const failure=new Error('ctrader_read_request_rejected');
+          // Only an enum-like code is safe for operational logs. Never log
+          // the upstream description: it may contain broker account details.
+          const brokerCode=String(packet.payload?.errorCode??'');
+          failure.brokerCode=/^[A-Z0-9_]{1,64}$/.test(brokerCode)?brokerCode:'UNSPECIFIED';
+          failure.operation=request.operation;
+          request.reject(failure);
         } else if(packet.payloadType===request.expected) {
           request.resolve(packet.payload||{});
         } else return;
@@ -87,6 +98,8 @@ class Channel {
         if(this.socket!==socket)return;
         this.socket=null;
         this.authorized.clear();
+        this.authorizing.clear();
+        this.subscribing.clear();
         if(this.heartbeat)clearInterval(this.heartbeat);
         this.heartbeat=null;
         for (const [key,p] of this.pending) {
@@ -121,7 +134,7 @@ class Channel {
         this.pending.delete(clientMsgId);
         reject(new Error('ctrader_request_timeout'));
       },15000);
-      this.pending.set(clientMsgId,{resolve,reject,timer,expected});
+      this.pending.set(clientMsgId,{resolve,reject,timer,expected,operation:type});
       this.socket.send(JSON.stringify({clientMsgId,payloadType:type,payload}),err=>{
         if(err) {
           clearTimeout(timer);
@@ -139,9 +152,17 @@ class Channel {
     await this.connect();
     const key=`${accountId}:${tokenHash(accessToken)}`;
     if(this.authorized.has(key))return;
-    const response=await this.send(2102,{ctidTraderAccountId:accountId,accessToken});
-    if(String(response.ctidTraderAccountId)!==String(accountId))throw new Error('Account mismatch');
-    this.authorized.add(key);
+    // Chart, Market and Replay can request the same account concurrently.
+    // One acknowledged account-auth message is sufficient for that token.
+    const inflight=this.authorizing.get(key);
+    if(inflight)return inflight;
+    const job=(async()=>{
+      const response=await this.send(2102,{ctidTraderAccountId:accountId,accessToken});
+      if(String(response.ctidTraderAccountId)!==String(accountId))throw new Error('Account mismatch');
+      this.authorized.add(key);
+    })();
+    this.authorizing.set(key,job);
+    try {await job;} finally {if(this.authorizing.get(key)===job)this.authorizing.delete(key);}
   }
   async symbols(accountId,accessToken) {
     await this.account(accountId,accessToken);
@@ -165,13 +186,27 @@ class Channel {
     await this.account(accountId,accessToken);
     const key=`${accountId}:${symbolId}`;
     let listeners=this.listeners.get(key);
-    if(!listeners){listeners=new Set();this.listeners.set(key,listeners);}
-    const first=listeners.size===0;
+    if(!listeners){
+      listeners=new Set();
+      this.listeners.set(key,listeners);
+      // All callers share the broker's acknowledgement. If the first subscribe
+      // is rejected, no second caller may silently report success.
+      const awaiting=this.send(2127,{ctidTraderAccountId:accountId,symbolId:[symbolId],subscribeToSpotTimestamp:true})
+        .catch(error=>{
+          if(this.listeners.get(key)===listeners)this.listeners.delete(key);
+          throw error;
+        }).finally(()=>{
+          if(this.subscribing.get(key)===awaiting)this.subscribing.delete(key);
+        });
+      this.subscribing.set(key,awaiting);
+    }
+    const awaiting=this.subscribing.get(key);
     listeners.add(cb);
     try {
-      if(first)await this.send(2127,{ctidTraderAccountId:accountId,symbolId:[symbolId],subscribeToSpotTimestamp:true});
-    } catch(e){listeners.delete(cb);if(!listeners.size)this.listeners.delete(key);throw e;}
+      if(awaiting)await awaiting;
+    } catch(e){listeners.delete(cb);if(!listeners.size&&this.listeners.get(key)===listeners)this.listeners.delete(key);throw e;}
     return ()=>{
+      if(this.listeners.get(key)!==listeners)return;
       listeners.delete(cb);
       if(!listeners.size) {
         this.listeners.delete(key);
@@ -182,8 +217,9 @@ class Channel {
   }
 }
 export class CTraderGateway {
-  constructor(clientId,clientSecret) {
-    this.channels={live:new Channel('live',clientId,clientSecret),demo:new Channel('demo',clientId,clientSecret)};
+  constructor(clientId,clientSecret,{socketFactory}={}) {
+    this.channels={live:new Channel('live',clientId,clientSecret,socketFactory),
+      demo:new Channel('demo',clientId,clientSecret,socketFactory)};
     // Only read-only account metadata; scoped by hash of the OAuth token.
     // Avoid two Open API account-list requests on every history/spot page.
     this.accountCache=new Map();
