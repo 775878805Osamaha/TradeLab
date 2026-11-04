@@ -54,6 +54,8 @@ jobs:
           script: |
             chmod +x gradlew
             ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.DrawingAnchorInteractionTest,com.example.DrawingContextToolbarTest --stacktrace
+            mkdir -p drawing-captures
+            adb pull /sdcard/Download/drawing-context-native-test.png drawing-captures/drawing-context-native-test.png
       - name: Preserve Android test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -62,4 +64,5 @@ jobs:
           path: |
             app/build/outputs/androidTest-results/
             app/build/reports/androidTests/
+            drawing-captures/
           if-no-files-found: warn
