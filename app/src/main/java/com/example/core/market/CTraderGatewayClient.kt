@@ -244,7 +244,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             // A truncated response still carries real historical bars.
             CTraderHistoryPaging.Page(candles, hasMore = json.optBoolean("hasMore"))
         }.let { candles ->
-            HistoricalCandleIntegrity.validate(candles, from, sourceTo + interval,
+            HistoricalCandleIntegrity.validate(CTraderTrendbars.closeAtNextBrokerOpen(candles), from, sourceTo + interval,
                 expectedSource = source, expectedSymbol = symbol, expectedTimeframe = period)
         }
         if (timeframe != Timeframe.H2) return verified
