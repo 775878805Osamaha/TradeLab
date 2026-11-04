@@ -12,7 +12,7 @@ if "تاريخ الإعادة" in labels and "تقدم شمعة" in labels:
 candidates = []
 for node in root.iter("node"):
     label = (node.attrib.get("text", "") + " " + node.attrib.get("content-desc", "")).strip()
-    if label == "Replay" or "إعادة العرض داخل الشارت" in label:
+    if label == "Replay" or "Replay داخل الشارت" in label or "إعادة العرض داخل الشارت" in label:
         match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
         if match:
             x1, y1, x2, y2 = map(int, match.groups())
@@ -20,5 +20,5 @@ for node in root.iter("node"):
 if not candidates:
     raise SystemExit("Replay control not found in real accessibility tree")
 label, x, y = candidates[0]
-print("Opening embedded Replay:", label, x, y, flush=True)
+print("Opening Replay controls on the current chart:", label, x, y, flush=True)
 subprocess.run(["adb", "shell", "input", "tap", str(x), str(y)], check=True)
