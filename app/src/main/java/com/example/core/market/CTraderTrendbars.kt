@@ -7,6 +7,21 @@ import java.math.RoundingMode
 
 /** Transport-independent Open API decoder. Never supplies credentials or executes orders. */
 object CTraderTrendbars {
+    /**
+     * Bound a bar's nominal close by the next real broker opening when
+     * a session shifts (for example at daylight-saving transitions).
+     * OHLC values are never fabricated or interpolated.
+     */
+    internal fun closeAtNextBrokerOpen(candles: List<Candle>): List<Candle> {
+        val ordered = candles.sortedBy { it.openTime }
+        return ordered.mapIndexed { index, candle ->
+            val nextOpen = ordered.getOrNull(index + 1)?.openTime
+            if (nextOpen != null && nextOpen > candle.openTime && nextOpen < candle.closeTime) {
+                candle.copy(closeTime = nextOpen)
+            } else candle
+        }
+    }
+
     data class Bar(
         val utcTimestampInMinutes: Long,
         val low: Long,
@@ -60,7 +75,8 @@ object CTraderTrendbars {
                 bar.volume.toDouble(), source)
         }
         // Exact boundary filtering is necessary: API responses may include the live bar.
-        val closed = candles.filter { it.openTime >= from && it.closeTime <= closedUntil }
+        val closed = closeAtNextBrokerOpen(candles)
+            .filter { it.openTime >= from && it.closeTime <= closedUntil }
         if (closed.isEmpty()) return emptyList()
         return HistoricalCandleIntegrity.validate(closed, from, closedUntil, source, symbol, timeframe)
     }
