@@ -32,6 +32,11 @@ object ChartDrawingsRenderer {
             val startY = transform.priceToY(d.startPrice)
             val endX = d.endTime?.let { transform.timeToX(it) }
             val endY = d.endPrice?.let { transform.priceToY(it) }
+            val lineEffect = when (d.lineStyle) {
+                DrawingLineStyle.SOLID -> null
+                DrawingLineStyle.DASHED -> PathEffect.dashPathEffect(floatArrayOf(10f, 6f))
+                DrawingLineStyle.DOTTED -> PathEffect.dashPathEffect(floatArrayOf(2f, 6f))
+            }
 
             when (d.tool) {
                 DrawingTool.HORIZONTAL_LINE -> {
@@ -40,7 +45,7 @@ object ChartDrawingsRenderer {
                         start = Offset(0f, startY),
                         end = Offset(transform.chartWidth, startY),
                         strokeWidth = d.strokeWidth,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f), 0f)
+                        pathEffect = lineEffect
                     )
                     // Price tag on right edge
                     scope.drawContext.canvas.nativeCanvas.apply {
@@ -50,6 +55,8 @@ object ChartDrawingsRenderer {
                             isAntiAlias = true
                         }
                         drawText(QuotePriceFormatter.forSymbol(d.startPrice,transform.visibleCandles.firstOrNull()?.symbol), transform.chartWidth - 65f, startY - 4f, paint)
+                        if (d.text != "تعليق" && d.text.isNotBlank())
+                            drawText(d.text.take(48), transform.chartWidth / 2f, startY - 8f, paint)
                     }
                 }
                 DrawingTool.VERTICAL_LINE -> {
@@ -58,7 +65,7 @@ object ChartDrawingsRenderer {
                         start = Offset(startX, 0f),
                         end = Offset(startX, transform.chartHeight),
                         strokeWidth = d.strokeWidth,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+                        pathEffect = lineEffect
                     )
                 }
                 DrawingTool.TRENDLINE -> {
@@ -67,8 +74,13 @@ object ChartDrawingsRenderer {
                             color = d.color,
                             start = Offset(startX, startY),
                             end = Offset(endX, endY),
-                            strokeWidth = d.strokeWidth
+                            strokeWidth = d.strokeWidth,
+                            pathEffect = lineEffect
                         )
+                        if (d.text != "تعليق" && d.text.isNotBlank()) {
+                            scope.drawContext.canvas.nativeCanvas.drawText(d.text.take(48), endX, endY - 10f,
+                                android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = d.color.toArgb(); textSize = 20f })
+                        }
                     }
                 }
                 DrawingTool.ANNOTATION -> {

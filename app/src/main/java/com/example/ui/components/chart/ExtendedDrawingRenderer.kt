@@ -18,7 +18,12 @@ internal object ExtendedDrawingRenderer {
         val points = if(d.anchors.isEmpty()) listOf(first,last) else d.anchors.mapNotNull { a -> t.timeToX(a.time)?.let { Offset(it,t.priceToY(a.price)) } }
         if(points.isEmpty()) return@with
         val c = d.color; val w = d.strokeWidth
-        fun line(a:Offset,b:Offset,color:Color=c) = drawLine(color,a,b,w)
+        val lineEffect = when (d.lineStyle) {
+            DrawingLineStyle.SOLID -> null
+            DrawingLineStyle.DASHED -> PathEffect.dashPathEffect(floatArrayOf(10f,6f))
+            DrawingLineStyle.DOTTED -> PathEffect.dashPathEffect(floatArrayOf(2f,6f))
+        }
+        fun line(a:Offset,b:Offset,color:Color=c) = drawLine(color,a,b,w,pathEffect=lineEffect)
         fun text(value:String, at:Offset,color:Color=c) {
             drawContext.canvas.nativeCanvas.drawText(value, at.x, at.y, android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { this.color=color.toArgb();textSize=11f*density })
         }
@@ -31,7 +36,7 @@ internal object ExtendedDrawingRenderer {
             val path=Path().apply {moveTo(p[0].x,p[0].y);p.drop(1).forEach{lineTo(it.x,it.y)};if(close)this.close()}
             if(fill)drawPath(path,c.copy(alpha=.12f))
             drawPath(path,if(d.tool==DrawingTool.HIGHLIGHTER)c.copy(alpha=.35f) else c,
-                style=Stroke(if(d.tool==DrawingTool.HIGHLIGHTER) 12*density else w, cap=StrokeCap.Round, join=StrokeJoin.Round))
+                style=Stroke(if(d.tool==DrawingTool.HIGHLIGHTER) 12*density else w, cap=StrokeCap.Round, join=StrokeJoin.Round, pathEffect=lineEffect))
         }
         when(d.tool) {
             DrawingTool.HORIZONTAL_RAY -> line(first,Offset(t.chartWidth,first.y))
@@ -110,7 +115,8 @@ internal object ExtendedDrawingRenderer {
                 val entry=points[0];val target=points[1];val stop=points[2]
                 val right=maxOf(entry.x,target.x,stop.x,entry.x+80*density)
                 fun zone(at:Offset,color:Color){drawRect(color.copy(alpha=.18f),Offset(entry.x,min(entry.y,at.y)),Size(right-entry.x,abs(entry.y-at.y)));line(Offset(entry.x,at.y),Offset(right,at.y),color)}
-                zone(target,Color(0xFF00B7AA));zone(stop,Color(0xFFFF3D48));line(entry,Offset(right,entry.y))
+                zone(target,if(c==com.example.ui.theme.TradingGold) Color(0xFF2962FF) else c)
+                zone(stop,d.secondaryColor);line(entry,Offset(right,entry.y))
                 val targetPrice=d.anchors.getOrNull(1)?.price?:return@with;val stopPrice=d.anchors.getOrNull(2)?.price?:return@with
                 val risk=abs(d.startPrice-stopPrice);val reward=abs(targetPrice-d.startPrice)
                 val valid=if(d.tool==DrawingTool.LONG_POSITION) targetPrice>d.startPrice && stopPrice<d.startPrice else targetPrice<d.startPrice && stopPrice>d.startPrice

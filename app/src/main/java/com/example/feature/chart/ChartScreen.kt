@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.KeyboardOptions
@@ -44,6 +45,7 @@ import com.example.ui.components.ChartDisplayStyle
 import com.example.ui.components.DataSourceBadge
 import com.example.ui.theme.*
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,7 +63,8 @@ fun ChartScreen(
     val orderKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     // A restored training account must not activate Replay on chart entry.
     var isEmbeddedReplay by remember { mutableStateOf(false) }
-    // Opening Replay keeps the current market candles visible until a start is chosen.
+    // Opening Replay reveals the transport on the existing live chart first.
+    // History replaces live candles only after the user starts or chooses a date.
     var isReplayToolbarOpen by remember { mutableStateOf(false) }
     val startReplayOnChart: () -> Unit = {
         replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
@@ -154,8 +157,10 @@ fun ChartScreen(
     var drawingFavorites by remember { mutableStateOf(drawingPrefs.getStringSet("favorites", defaultDrawingFavorites)?.toSet() ?: defaultDrawingFavorites) }
     var drawingFavoritesVisible by remember { mutableStateOf(drawingPrefs.getBoolean("show_favorites", false)) }
     var editingDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
+    var selectedDrawingId by remember { mutableStateOf<Long?>(null) }
+    var selectedDrawingTouch by remember { mutableStateOf(Offset.Zero) }
     editingDrawing?.let { drawing ->
-        DrawingPropertiesDialog(drawing, onDismiss = { editingDrawing = null }, onDelete = { viewModel.deleteDrawing(drawing.id); editingDrawing = null },
+        DrawingPropertiesDialog(drawing, onDismiss = { editingDrawing = null }, onDelete = { viewModel.deleteDrawing(drawing.id); selectedDrawingId = null; editingDrawing = null },
             onSave = { viewModel.updateDrawing(it); editingDrawing = null },
             onCopy = { viewModel.addDrawing(it.copy(id=0)); editingDrawing = null })
     }
@@ -167,6 +172,10 @@ fun ChartScreen(
     var showPriceAlert by remember { mutableStateOf(false) }
     var hideDrawings by rememberSaveable { mutableStateOf(workspacePrefs.getBoolean("hide_drawings", false)) }
     LaunchedEffect(hideDrawings) { workspacePrefs.edit().putBoolean("hide_drawings", hideDrawings).apply() }
+    // A selection belongs to the currently visible instrument and canvas only.
+    LaunchedEffect(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay, hideDrawings, uiState.activeDrawingTool) {
+        selectedDrawingId = null
+    }
     var chartDisplayStyle by remember { mutableStateOf(runCatching { ChartDisplayStyle.valueOf(workspacePrefs.getString("display_style","CANDLES")!!) }.getOrDefault(ChartDisplayStyle.CANDLES)) }
     LaunchedEffect(chartDisplayStyle) { workspacePrefs.edit().putString("display_style",chartDisplayStyle.name).apply() }
     var immersiveChart by remember { mutableStateOf(true) }
@@ -1034,6 +1043,7 @@ fun ChartScreen(
                     activeDrawingTool = uiState.activeDrawingTool,
                     magnetEnabled = magnetEnabled,
                     drawings = displayedDrawings,
+                    selectedDrawingId = selectedDrawingId,
                     indicatorSettings = uiState.indicatorSettings,
                     smaValues = if (isEmbeddedReplay) replaySma else uiState.smaValues,
                     emaValues = if (isEmbeddedReplay) replayEma else uiState.emaValues,
@@ -1060,7 +1070,11 @@ fun ChartScreen(
                         } else viewModel.addDrawing(it)
                     },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) },
-                    onSelectDrawing = { editingDrawing = it },
+                    onSelectDrawing = { drawing, touch ->
+                        selectedDrawingId = drawing.id
+                        selectedDrawingTouch = touch
+                    },
+                    onClearDrawingSelection = { selectedDrawingId = null },
                     onUpdateDrawing = { viewModel.updateDrawing(it) },
                     onSelectPosition = {
                         if (isEmbeddedReplay) replayViewModel.pause()
@@ -1082,6 +1096,28 @@ fun ChartScreen(
                     axisTextScale = chartAppearance.axisScale,
                     isLoadingOlderHistory = uiState.isLoadingOlderHistory
                 )
+                }
+
+                // Keep selection, resize handles and quick edits in the SAME
+                // chart layer; no secondary editor page or blocking dialog.
+                val selectedDrawing = displayedDrawings.firstOrNull { it.id == selectedDrawingId }
+                if (selectedDrawing != null && uiState.activeDrawingTool == DrawingTool.NONE && !uiState.isCrosshairActive) {
+                    val topInset = with(paletteDensity) { 110.dp.toPx() }
+                    val toolbarHeight = with(paletteDensity) { 58.dp.toPx() }
+                    val distanceFromTouch = with(paletteDensity) { 20.dp.toPx() }
+                    val beforeTouch = selectedDrawingTouch.y - toolbarHeight - distanceFromTouch
+                    val desiredY = if (beforeTouch < topInset) selectedDrawingTouch.y + distanceFromTouch else beforeTouch
+                    val safeTop = desiredY.coerceIn(topInset, (chartPaletteContainerHeightPx - toolbarHeight - topInset).coerceAtLeast(topInset))
+                    Box(Modifier.align(Alignment.TopCenter).offset { IntOffset(0, safeTop.roundToInt()) }) {
+                        DrawingContextToolbar(
+                            drawing = selectedDrawing,
+                            onUpdate = { viewModel.updateDrawing(it) },
+                            onDelete = { viewModel.deleteDrawing(selectedDrawing.id); selectedDrawingId = null },
+                            onCopy = { viewModel.addDrawing(selectedDrawing.copy(id = 0)); selectedDrawingId = null },
+                            onProperties = { editingDrawing = selectedDrawing },
+                            onDismiss = { selectedDrawingId = null }
+                        )
+                    }
                 }
 
                 if (uiState.activeDrawingTool != DrawingTool.NONE) {
@@ -1166,8 +1202,9 @@ fun ChartScreen(
                     }
                 }
 
-                // Replay starts as a small transport on the existing live chart.
-                // Only Play or date selection activates historical candles.
+                // Keep the original chart in place when Replay is first tapped.
+                // The small transport floats near the bottom rather than taking
+                // over the top of the candle viewport as a separate-looking page.
                 if (isReplayToolbarOpen && immersiveChart) {
                     Column(
                         modifier = Modifier
