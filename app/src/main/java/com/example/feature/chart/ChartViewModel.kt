@@ -85,10 +85,7 @@ class ChartViewModel(
         observeConnectionDiagnostics()
         observeDrawings()
         marketDataRepository.cTrader?.let { client ->
-            var generation = client.accountGeneration.value
-            viewModelScope.launch { client.accountGeneration.collect { updated ->
-                if (updated == generation) return@collect
-                generation = updated
+            viewModelScope.launch { client.accountGeneration.collect {
                 if (_uiState.value.selectedSymbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
                     _uiState.update { it.copy(latestTick = null, candles = emptyList(), isLoading = true) }
                     loadCandlesForCurrentSymbol()
@@ -159,9 +156,7 @@ class ChartViewModel(
             })
         }
     }) {
-        ChartHistoryPaging.before(symbol, timeframe, oldest,
-            pageBars = if (timeframe == com.example.core.model.Timeframe.W1) 40 else ChartHistoryPaging.PAGE_BARS
-        ) { from, to ->
+        ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
             marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
         }
     }
@@ -520,11 +515,12 @@ class ChartViewModel(
             }
             val now = System.currentTimeMillis()
             val interval = tf.minutes * 60_000L
-            // The repository intentionally rejects an unfinished Binance bar.
-            // Request only fully closed candle OPEN timestamps, aligned to UTC
-            // (including Monday UTC alignment for weekly bars).
+            // Binance follows UTC exchange opens; cTrader uses real broker
+            // open-tick timestamps, which may shift on H4/D1/W1. A source-aware
+            // upper bound prevents omitting the latest completed broker bar.
             val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
-                .currentOpen(now, interval) - interval
+                .latestClosedRequestTo(now, interval,
+                    symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
             val from = (lastClosedOpen - interval * (requestedBars - 1L)).coerceAtLeast(0L)
 
             try {
@@ -540,27 +536,12 @@ class ChartViewModel(
                 // Use bounded requests to avoid downloading huge empty ranges.
                 val initialDepths = listOf(requestedBars, 100, 40, 10, 1)
                     .distinct().filter { it in 1..requestedBars }
-                val brokerHistory = symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols
-                // Weekly requests for hundreds of bars span many years and
-                // dozens of broker pages. Draw recent real weeks first; older
-                // pages remain available via the existing back-scroll loader.
-                val weeklyBrokerHistory = brokerHistory && tf == com.example.core.model.Timeframe.W1
-                val firstPageBars = if (weeklyBrokerHistory) minOf(requestedBars, 40) else requestedBars
-                val olderPageBars = if (weeklyBrokerHistory) 40L else 100L
-                val scanWindows = if (weeklyBrokerHistory)
-                    (1L + (requestedBars + 39L) / 40L).coerceAtMost(20L)
-                else if (brokerHistory) 1L + historicalScanWindows(tf) else 1L
+                val scanWindows = if (symbol in setOf("BTCUSDT", "ETHUSDT")) 1L
+                    else historicalScanWindows(tf)
                 for (window in 0L until scanWindows) {
-                    val skippedBars = if (window == 0L) 0L
-                        else firstPageBars + (window - 1L) * olderPageBars
-                    val end = lastClosedOpen - skippedBars * interval
+                    val end = lastClosedOpen - window * interval * 100L
                     if (end < 0L) break
-                    val depths = when {
-                        !brokerHistory -> initialDepths
-                        window == 0L -> listOf(firstPageBars)
-                        else -> listOf(olderPageBars.toInt())
-                    }
-                    for (depth in depths) {
+                    for (depth in if (window == 0L) initialDepths else listOf(100, 40, 10, 1).filter { it <= requestedBars }) {
                         val attemptFrom = (end - interval * (depth - 1L)).coerceAtLeast(0L)
                         try {
                             val fetched = marketDataRepository.getCandles(
@@ -579,10 +560,6 @@ class ChartViewModel(
                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                             throw cancelled
                         } catch (error: Exception) {
-                            if (brokerHistory) {
-                                if (error is com.example.core.market.NoHistoricalCandlesException) continue
-                                throw error
-                            }
                             // A DNS/HTTP outage is not an empty trading session.
                             // Do not issue dozens of older-window retries for it.
                             if (generateSequence<Throwable>(error) { it.cause }.any {
