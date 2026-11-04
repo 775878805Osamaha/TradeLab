@@ -60,8 +60,8 @@ test('parallel symbol and quote requests share one in-flight account authorizati
   try {
     const channel=gateway.channels.demo;
     await Promise.all([
-      channel.account(47474173,'read-only-test-token'),
-      channel.account(47474173,'read-only-test-token')
+      channel.account(12345,'read-only-test-token'),
+      channel.account(12345,'read-only-test-token')
     ]);
     assert.equal(sockets[0].packets.filter(type=>type===2102).length,1);
   } finally {sockets.forEach(s=>s.close());}
