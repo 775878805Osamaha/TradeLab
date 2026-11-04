@@ -2,12 +2,14 @@ package com.example
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.feature.chart.DrawingContextToolbar
@@ -110,7 +112,7 @@ class DrawingContextToolbarTest {
                     CandlestickChart(bars, modifier = Modifier.fillMaxSize(),
                         selectedDrawingId = selected.id, drawings = listOf(selected),
                         chartBackground = Color(0xFF030910), onUpdateDrawing = {})
-                    Box(Modifier.align(Alignment.Center)) {
+                    Box(Modifier.align(Alignment.TopCenter).padding(top = 105.dp)) {
                         DrawingContextToolbar(selected, onUpdate = {}, onDelete = {},
                             onCopy = {}, onProperties = {}, onDismiss = {})
                     }
