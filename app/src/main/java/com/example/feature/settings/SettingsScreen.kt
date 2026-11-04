@@ -25,6 +25,8 @@ import com.example.TradeLabApplication
 import com.example.core.model.ProviderConnectionStatus
 import com.example.ui.components.DataSourceBadge
 import com.example.ui.theme.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -34,6 +36,7 @@ import java.util.*
 fun SettingsScreen(
     provider: DefaultMarketDataProvider,
     onBack: () -> Unit,
+    cTraderScope: CoroutineScope,
     modifier: Modifier = Modifier
 ) {
     androidx.activity.compose.BackHandler(onBack = onBack)
@@ -89,10 +92,15 @@ fun SettingsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = TradingAccent)
                         ) { Text(if (cTrader.isLinked()) "إعادة ربط cTrader" else "ربط حساب cTrader") }
                         if (cTrader.isLinked()) {
-                            TextButton(onClick = { scope.launch {
+                            TextButton(onClick = { cTraderScope.launch {
                                 linking = true
-                                try { cTrader.refreshAccounts() } catch (_: Exception) { }
-                                finally { linking = false }
+                                try {
+                                    cTrader.refreshAccounts()
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    // The gateway client has already published the failure.
+                                } finally { linking = false }
                             } }, enabled = !linking) { Text("تحديث الحسابات والرموز") }
                             if (cTraderAccounts.isNotEmpty()) {
                                 var expanded by remember { mutableStateOf(false) }
@@ -107,11 +115,13 @@ fun SettingsScreen(
                                                 Text("${account.id} • ${if (account.isLive) "Live" else "Demo"} • ${account.broker}")
                                             }, onClick = {
                                                 expanded = false
-                                                scope.launch {
+                                                cTraderScope.launch {
                                                     selectingAccount = true
                                                     try {
                                                         cTrader.selectAccount(account.id)
                                                         provider.invalidateForexQuotes()
+                                                    } catch (cancelled: CancellationException) {
+                                                        throw cancelled
                                                     } catch (error: Exception) {
                                                         cTrader.reportError(error.message ?: "فشل اختيار الحساب")
                                                     } finally { selectingAccount = false }

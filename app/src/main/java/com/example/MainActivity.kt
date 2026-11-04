@@ -3,6 +3,7 @@ package com.example
 import android.os.Bundle
 import android.content.Intent
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -56,6 +56,8 @@ class MainActivity : ComponentActivity() {
             try {
                 app.cTrader.completeAuthorization(data)
                 app.marketDataProvider.invalidateForexQuotes()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 app.cTrader.reportError(error.message ?: "فشل التفويض")
             }
@@ -75,11 +77,21 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.rgb(0, 13, 22))
         )
 
-        setContent {
-            val app = LocalContext.current.applicationContext as TradeLabApplication
-            LaunchedEffect(Unit) {
-                if (app.cTrader.isLinked()) runCatching { app.cTrader.refreshAccounts() }
+        val app = application as TradeLabApplication
+        val isCTraderCallback = intent?.data?.let(app.cTrader::isCallback) == true
+        if (!isCTraderCallback && app.cTrader.isLinked()) {
+            lifecycleScope.launch {
+                try {
+                    app.cTrader.refreshAccounts()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // The gateway client has already published the failure.
+                }
             }
+        }
+
+        setContent {
 
             // ViewModels scoped cleanly with dependencies
             val accountViewModel by remember { lazy { AccountViewModel(app.tradingRepository) } }
@@ -240,6 +252,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Settings.route) {
                                 SettingsScreen(
                                     provider = app.marketDataProvider,
+                                    cTraderScope = lifecycleScope,
                                     onBack = { navController.popBackStack() }
                                 )
                             }
