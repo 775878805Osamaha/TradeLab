@@ -19,14 +19,16 @@ internal object CTraderHistoryPaging {
         // One millisecond is reserved for the broker's exclusive upper bound.
         val slotsPerWindow = minOf(1000L, (90L * 86_400_000L - 1L) / interval + 1L)
         require(slotsPerWindow > 0L) { "Unsupported cTrader history period" }
+        // Continuous windows preserve broker bars shifted off fixed UTC boundaries.
+        val maxWindowSpan = minOf(90L * 86_400_000L - 1L, slotsPerWindow * interval - 1L)
         val results = ArrayList<T>()
         var windowStart = from
         while (windowStart <= to) {
-            val slots = minOf(slotsPerWindow, (to - windowStart) / interval + 1L)
-            val windowEnd = windowStart + (slots - 1L) * interval
+            val windowEnd = windowStart + minOf(maxWindowSpan, to - windowStart)
             var cursorEnd = windowEnd
             while (cursorEnd >= windowStart) {
-                val count = ((cursorEnd - windowStart) / interval + 1L).toInt()
+                // Allow a shifted broker-open bar without exceeding 1000 bars.
+                val count = minOf(1000L, (cursorEnd - windowStart) / interval + 2L).toInt()
                 var page = fetch(windowStart, cursorEnd, count)
                 if (page.hasMore && page.items.isEmpty() && count < 1000) {
                     // A broker may mark a sparse closed-market range as having
@@ -55,11 +57,12 @@ internal object CTraderHistoryPaging {
                 }
                 val oldest = timeOf(ordered.first())
                 if (oldest <= windowStart) break
-                val nextEnd = oldest - interval
+                // The next request must include every timestamp before oldest.
+                val nextEnd = oldest - 1L
                 require(nextEnd < cursorEnd) { "Non-advancing cTrader history page" }
                 cursorEnd = nextEnd
             }
-            windowStart = windowEnd + interval
+            windowStart = windowEnd + 1L
         }
         return results.sortedBy(timeOf)
     }
