@@ -48,7 +48,7 @@ class CTraderHistoryPagingTest {
     }
 
     @Test
-    fun anEmptyTruncatedPageFailsInsteadOfClaimingCompleteHistory() = runBlocking {
+    fun anEmptyTruncatedPageFailsInsteadOfClaimingCompleteHistory(): Unit = runBlocking {
         assertThrows(IOException::class.java) {
             runBlocking {
                 CTraderHistoryPaging.load(0L, 900_000L, 300_000L, timeOf = { it }) { _, _, _ ->
@@ -59,7 +59,7 @@ class CTraderHistoryPagingTest {
     }
 
     @Test
-    fun aReturnedBarOutsideTheRequestedPageIsRejected() = runBlocking {
+    fun aReturnedBarOutsideTheRequestedPageIsRejected(): Unit = runBlocking {
         assertThrows(IllegalArgumentException::class.java) {
             runBlocking {
                 CTraderHistoryPaging.load(0L, 300_000L, 300_000L, timeOf = { it }) { _, _, _ ->
