@@ -55,4 +55,17 @@ class CTraderTrendbarsTest {
             CTraderTrendbars.decode(emptyList(), "XAUUSD", Timeframe.H2, 2, "demo/a/42", 0, 300_000, 300_000)
         }
     }
+    @Test fun dailyDstSessionShiftUsesObservedNextOpenWithoutFakeCandles() {
+        val day = 86_400_000L
+        val before = com.example.core.model.Candle("XAUUSD", Timeframe.D1,
+            22L * 3_600_000L, 22L * 3_600_000L + day,
+            4000.0, 4002.0, 3999.0, 4001.0, 12.0, "ctrader:demo:a:42")
+        val after = before.copy(openTime = before.openTime + day - 3_600_000L,
+            closeTime = before.openTime + 2L * day - 3_600_000L)
+        val corrected = CTraderTrendbars.closeAtNextBrokerOpen(listOf(after, before))
+        assertEquals(after.openTime, corrected.first().closeTime)
+        assertEquals(2, corrected.size)
+        assertTrue(DataIntegrityValidator.validateHistoricalSeries(corrected).isValid)
+    }
+
 }
