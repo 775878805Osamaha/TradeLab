@@ -139,4 +139,28 @@ class ReplayDateHistoryTest {
         assertEquals(1, attempts)
         assertEquals(1, ReplayDateWindow.recentWindows(sunday, minute, 300, 0).size)
     }
+
+    @Test fun cTraderRecentWindowsIncludeBrokerOpensAfterThePreviousUtcDailyBoundary() {
+        val today = time("2026-11-04T23:30:00Z")
+        val day = 86_400_000L
+        val previousBrokerOpen = time("2026-11-03T22:00:00Z")
+        val broker = ReplayDateWindow.recentWindows(today, day, 50, 0,
+            brokerTimed = true)
+        val exchange = ReplayDateWindow.recentWindows(today, day, 50, 0)
+        assertTrue(previousBrokerOpen in broker.first().from..broker.first().to)
+        assertFalse(previousBrokerOpen in exchange.first().from..exchange.first().to)
+        assertEquals(time("2026-11-03T23:30:00Z"), broker.first().to)
+    }
+
+    @Test fun cTraderDatePickerKeepsTheActualBrokerSessionMinute() {
+        val now = time("2026-11-04T23:30:00Z")
+        val targetAtBrokerOpen = time("2025-10-26T22:01:00Z")
+        val interval = 4L * 3_600_000L
+        val windows = ReplayDateWindow.windows(targetAtBrokerOpen, now, interval, 50,
+            brokerTimed = true)
+        assertTrue(windows.first().from % 60_000L == 0L)
+        assertEquals(Math.floorMod(targetAtBrokerOpen, interval),
+            Math.floorMod(windows.first().from, interval))
+        assertTrue(windows.zipWithNext().all { (a, b) -> a.to + interval == b.from })
+    }
 }
