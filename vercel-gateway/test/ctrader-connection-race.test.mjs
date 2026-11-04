@@ -5,12 +5,13 @@ import { CTraderGateway } from '../ctrader.mjs';
 
 /** In-memory cTrader proxy that refuses account-list requests before app auth. */
 class FakeBrokerSocket extends EventEmitter {
-  constructor({rejectSubscribe=false}={}) {
+  constructor({rejectSubscribe=false,accountAuthError}={}) {
     super();
     this.readyState=0;
     this.appAuthed=false;
     this.packets=[];
     this.rejectSubscribe=rejectSubscribe;
+    this.accountAuthError=accountAuthError;
     queueMicrotask(()=>{this.readyState=1;this.emit('open');});
   }
   send(data,cb=()=>{}) {
@@ -28,7 +29,13 @@ class FakeBrokerSocket extends EventEmitter {
         else respond(2150,{permissionScope:0,ctidTraderAccount:[]});
       });
     } else if(packet.payloadType===2102) {
-      setTimeout(()=>respond(2103,{ctidTraderAccountId:packet.payload.ctidTraderAccountId}),15);
+      setTimeout(()=>this.accountAuthError
+        ?respond(2142,{errorCode:this.accountAuthError})
+        :respond(2103,{ctidTraderAccountId:packet.payload.ctidTraderAccountId}),15);
+    } else if(packet.payloadType===2114) {
+      queueMicrotask(()=>respond(2115,{symbol:[{symbolName:'XAUUSD',symbolId:987}]}));
+    } else if(packet.payloadType===2137) {
+      queueMicrotask(()=>respond(2138,{trendbar:[{utcTimestampInMinutes:300,low:400000000}]}));
     } else if(packet.payloadType===2127) {
       setTimeout(()=>this.rejectSubscribe
         ?respond(2142,{errorCode:'SUBSCRIPTION_REJECTED'})
@@ -115,4 +122,30 @@ test('parallel spot listeners both wait for a single accepted subscription',asyn
     unsubscribers.forEach(stop=>stop());
     assert.equal(sockets[0].packets.filter(type=>type===2129).length,1);
   } finally {sockets.forEach(s=>s.close());}
+});
+
+
+test('an already logged-in account can load symbols and candles after token refresh',async()=>{
+  const socket=new FakeBrokerSocket();
+  const gateway=new CTraderGateway('test-client','test-secret',{socketFactory:()=>socket});
+  try {
+    const channel=gateway.channel(false);
+    await channel.account(12345,'previous-test-token');
+    socket.accountAuthError='ALREADY_LOGGED_IN';
+    const symbols=await channel.symbols(12345,'refreshed-test-token');
+    assert.deepEqual(symbols,[{symbolName:'XAUUSD',symbolId:987}]);
+    const history=await channel.history(12345,'refreshed-test-token',987,3,0,18000000,1);
+    assert.equal(history.candles[0].close,4000);
+    assert.deepEqual(socket.packets,[2100,2102,2102,2114,2137]);
+  } finally {socket.close();}
+});
+
+test('account authorization failures still block downstream reads',async()=>{
+  const socket=new FakeBrokerSocket({accountAuthError:'ACCOUNT_NOT_AUTHORIZED'});
+  const gateway=new CTraderGateway('test-client','test-secret',{socketFactory:()=>socket});
+  try {
+    await assert.rejects(gateway.channel(false).symbols(12345,'unauthorized-test-token'),
+      {brokerCode:'ACCOUNT_NOT_AUTHORIZED'});
+    assert.deepEqual(socket.packets,[2100,2102]);
+  } finally {socket.close();}
 });

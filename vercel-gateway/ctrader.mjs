@@ -157,8 +157,17 @@ class Channel {
     const inflight=this.authorizing.get(key);
     if(inflight)return inflight;
     const job=(async()=>{
-      const response=await this.send(2102,{ctidTraderAccountId:accountId,accessToken});
-      if(String(response.ctidTraderAccountId)!==String(accountId))throw new Error('Account mismatch');
+      const socket=this.socket;
+      try {
+        const response=await this.send(2102,{ctidTraderAccountId:accountId,accessToken});
+        if(String(response.ctidTraderAccountId)!==String(accountId))throw new Error('Account mismatch');
+      } catch(error) {
+        // HTTP and WS callers already verify this exact token's read-only account grant.
+        // The broker can retain account authorization on the socket across token refreshes.
+        if(error.operation!==2102 || error.brokerCode!=='ALREADY_LOGGED_IN')throw error;
+      }
+      if(this.socket!==socket || socket.readyState!==WebSocket.OPEN)
+        throw new Error('cTrader connection closed');
       this.authorized.add(key);
     })();
     this.authorizing.set(key,job);
