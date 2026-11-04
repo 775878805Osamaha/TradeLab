@@ -219,7 +219,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         val interval = period.minutes * 60_000L
         val sourceTo = if (timeframe == Timeframe.H2) to + 3_600_000L else to
         val source = sourceName(account, id)
-        val verified = CTraderHistoryPaging.load(from, sourceTo, interval) { start, end, count ->
+        val verified = CTraderHistoryPaging.load(from, sourceTo, interval, timeOf = { it.openTime }) { start, end, count ->
             val url = "/v1/candles?accountId=$account&symbolId=$id&period=${period.code}" +
                 "&from=$start&to=${end + 1}&count=$count"
             val json = request(url)
@@ -228,24 +228,21 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             }
             require(json.optString("source") == "ctrader" && json.optString("symbolId") == id.toString() &&
                 json.optString("period") == period.code) { "Wrong cTrader history source" }
-            if (json.optBoolean("hasMore")) {
-                CTraderHistoryPaging.Page(emptyList(), hasMore = true)
-            } else {
-                val array = json.getJSONArray("candles")
-                val candles = buildList {
-                    for (i in 0 until array.length()) {
-                        val bar = array.getJSONObject(i)
-                        val openTime = bar.getLong("timestamp")
-                        if (openTime !in start..end || openTime + interval > System.currentTimeMillis()) continue
-                        val candle = Candle(symbol, period, openTime, openTime + interval,
-                            bar.getDouble("open"), bar.getDouble("high"), bar.getDouble("low"),
-                            bar.getDouble("close"), bar.getDouble("volume"), source)
-                        require(DataIntegrityValidator.validateCandle(candle).isValid) { "Corrupt cTrader candle" }
-                        add(candle)
-                    }
+            val array = json.getJSONArray("candles")
+            val candles = buildList {
+                for (i in 0 until array.length()) {
+                    val bar = array.getJSONObject(i)
+                    val openTime = bar.getLong("timestamp")
+                    if (openTime !in start..end || openTime + interval > System.currentTimeMillis()) continue
+                    val candle = Candle(symbol, period, openTime, openTime + interval,
+                        bar.getDouble("open"), bar.getDouble("high"), bar.getDouble("low"),
+                        bar.getDouble("close"), bar.getDouble("volume"), source)
+                    require(DataIntegrityValidator.validateCandle(candle).isValid) { "Corrupt cTrader candle" }
+                    add(candle)
                 }
-                CTraderHistoryPaging.Page(candles, hasMore = false)
             }
+            // A truncated response still carries real historical bars.
+            CTraderHistoryPaging.Page(candles, hasMore = json.optBoolean("hasMore"))
         }.let { candles ->
             HistoricalCandleIntegrity.validate(candles, from, sourceTo + interval,
                 expectedSource = source, expectedSymbol = symbol, expectedTimeframe = period)
