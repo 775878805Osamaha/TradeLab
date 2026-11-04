@@ -54,9 +54,11 @@ class DrawingContextToolbarTest {
         val bars = List(90) { i ->
             val base = 3920.0 + i * 0.11 + kotlin.math.sin(i * 0.8) * 1.5
             val close = base + if (i % 3 == 0) -1.3 else 0.8
-            Candle("XAUUSD", Timeframe.M15, 1_730_000_000_000L + i * 900_000L,
-                base, maxOf(base,close)+0.6, minOf(base,close)-0.6,
-                close, volume=(i % 13 + 2).toDouble(), source="UI_TEST_FIXTURE")
+            Candle(symbol = "XAUUSD", timeframe = Timeframe.M15,
+                openTime = 1_730_000_000_000L + i * 900_000L,
+                open = base, high = maxOf(base, close) + 0.6,
+                low = minOf(base, close) - 0.6, close = close,
+                volume = (i % 13 + 2).toDouble(), source = "UI_TEST_FIXTURE")
         }
         val selected = ChartDrawing(id=77,tool=DrawingTool.HORIZONTAL_LINE,
             symbol="XAUUSD",timeframe="M15",startTime=bars.last().openTime,
