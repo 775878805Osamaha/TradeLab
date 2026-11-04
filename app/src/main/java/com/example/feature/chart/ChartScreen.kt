@@ -50,7 +50,6 @@ import java.util.Locale
 fun ChartScreen(
     viewModel: ChartViewModel,
     replayViewModel: ReplayViewModel,
-    onNavigateToReplay: () -> Unit,
     embeddedReplayLaunchRequest: Int = 0,
     onEmbeddedReplayLaunchConsumed: () -> Unit = {},
     onImmersiveChanged: (Boolean) -> Unit = {},
@@ -61,7 +60,19 @@ fun ChartScreen(
     val historyTargetTime by replayViewModel.historyTargetTime.collectAsState()
     val orderKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     // A restored training account must not activate Replay on chart entry.
-    var isEmbeddedReplay by rememberSaveable { mutableStateOf(false) }
+    var isEmbeddedReplay by remember { mutableStateOf(false) }
+    val startReplayOnChart: () -> Unit = {
+        replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
+        isEmbeddedReplay = true
+    }
+    val toggleReplayOnChart: () -> Unit = {
+        if (isEmbeddedReplay) {
+            replayViewModel.pause()
+            isEmbeddedReplay = false
+        } else {
+            startReplayOnChart()
+        }
+    }
     androidx.activity.compose.BackHandler(enabled = isEmbeddedReplay) {
         replayViewModel.pause()
         isEmbeddedReplay = false
@@ -93,8 +104,7 @@ fun ChartScreen(
     }
     LaunchedEffect(embeddedReplayLaunchRequest) {
         if (embeddedReplayLaunchRequest > 0) {
-            replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
-            isEmbeddedReplay = true
+            startReplayOnChart()
             onEmbeddedReplayLaunchConsumed()
         }
     }
@@ -1075,9 +1085,8 @@ fun ChartScreen(
                 if (!immersiveChart && !isEmbeddedReplay && uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
                 Button(
                     onClick = {
-                        replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
-                        isEmbeddedReplay = true
-                                immersiveChart = true
+                        startReplayOnChart()
+                        immersiveChart = true
                     },
                     modifier = Modifier
                         // Absolute alignment keeps the control on the physical right
@@ -1128,15 +1137,7 @@ fun ChartScreen(
                             symbol = uiState.selectedSymbol,
                             replayActive = isEmbeddedReplay,
                             onReset = { viewModel.triggerResetView() },
-                            onReplay = {
-                                if (isEmbeddedReplay) {
-                                    replayViewModel.pause()
-                                    isEmbeddedReplay = false
-                                } else {
-                                    replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
-                                    isEmbeddedReplay = true
-                                }
-                            },
+                            onReplay = toggleReplayOnChart,
                             onDetails = { immersiveChart = false }
                         )
                     }
@@ -1449,15 +1450,7 @@ fun ChartScreen(
                             }
                         }
                     },
-                    onReplay = {
-                        if (isEmbeddedReplay) {
-                            replayViewModel.pause()
-                            isEmbeddedReplay = false
-                        } else {
-                            replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
-                            isEmbeddedReplay = true
-                        }
-                    },
+                    onReplay = toggleReplayOnChart,
                     onIndicators = { showIndicatorsDialog = true },
                     onDrawing = { showToolsMenu = true },
                     onMore = { showChartExtras = true }
