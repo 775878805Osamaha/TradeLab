@@ -37,10 +37,20 @@ object ReplaySessionAudit {
                 candle.high < maxOf(candle.open, candle.close) ||
                 candle.low > minOf(candle.open, candle.close)) invalidRanges++
             if (!candle.volume.isFinite() || candle.volume < 0.0) volumeAnomalies++
-            if (candle.openTime < 0L || candle.openTime % interval != 0L) duplicate++
+            // cTrader timestamps represent the minute of the broker's first
+            // opening tick. H4/D1/W1 bars are not guaranteed to open on a
+            // Binance-style UTC epoch grid. Binance weekly bars, meanwhile,
+            // start Monday 00:00 UTC rather than Thursday (Unix epoch zero).
+            val brokerTimed = candle.source.startsWith("ctrader:", ignoreCase = true)
+            val weeklyOffset = if (!brokerTimed && intervalMinutes == 10_080) 4L * 86_400_000L else 0L
+            val aligned = if (brokerTimed) Math.floorMod(candle.openTime, 60_000L) == 0L
+                else Math.floorMod(candle.openTime - weeklyOffset, interval) == 0L
+            if (candle.openTime < 0L || !aligned) duplicate++
             previous?.let { prev ->
                 val delta = candle.openTime - prev.openTime
-                if (delta <= 0L || delta % interval != 0L) duplicate++
+                if (candle.source != prev.source || candle.symbol != prev.symbol ||
+                    candle.timeframe != prev.timeframe) duplicate++
+                if (delta <= 0L || (!brokerTimed && Math.floorMod(delta, interval) != 0L)) duplicate++
                 else if (delta > interval) {
                     gaps++
                     missing += delta / interval - 1L

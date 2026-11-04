@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import com.example.feature.chart.history.ChartHistoryPaging
 import com.example.feature.chart.history.ChartHistoryDownload
 import com.example.feature.chart.history.ChartHistoryRetry
+import com.example.feature.chart.history.ChartHistoryRetryPolicy
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -566,11 +567,10 @@ class ChartViewModel(
                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                             throw cancelled
                         } catch (error: Exception) {
-                            // A DNS/HTTP outage is not an empty trading session.
-                            // Do not issue dozens of older-window retries for it.
-                            if (generateSequence<Throwable>(error) { it.cause }.any {
-                                it is com.example.core.market.MarketDataRequestException
-                            }) throw error
+                            // Only a verified empty broker response warrants
+                            // looking in prior closed sessions. Authentication,
+                            // network and OHLC-integrity errors must fail fast.
+                            if (!ChartHistoryRetryPolicy.shouldSearchOlderSession(error)) throw error
                             lastHistoryError = error
                         }
                     }
