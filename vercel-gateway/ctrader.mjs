@@ -50,6 +50,7 @@ class Channel {
     this.socket=null;
     this.pending=new Map();
     this.listeners=new Map();
+    this.subscribing=new Map();
     this.authorized=new Set();
     this.authorizing=new Map();
     this.connecting=null;
@@ -98,6 +99,7 @@ class Channel {
         this.socket=null;
         this.authorized.clear();
         this.authorizing.clear();
+        this.subscribing.clear();
         if(this.heartbeat)clearInterval(this.heartbeat);
         this.heartbeat=null;
         for (const [key,p] of this.pending) {
@@ -184,13 +186,27 @@ class Channel {
     await this.account(accountId,accessToken);
     const key=`${accountId}:${symbolId}`;
     let listeners=this.listeners.get(key);
-    if(!listeners){listeners=new Set();this.listeners.set(key,listeners);}
-    const first=listeners.size===0;
+    if(!listeners){
+      listeners=new Set();
+      this.listeners.set(key,listeners);
+      // All callers share the broker's acknowledgement. If the first subscribe
+      // is rejected, no second caller may silently report success.
+      const awaiting=this.send(2127,{ctidTraderAccountId:accountId,symbolId:[symbolId],subscribeToSpotTimestamp:true})
+        .catch(error=>{
+          if(this.listeners.get(key)===listeners)this.listeners.delete(key);
+          throw error;
+        }).finally(()=>{
+          if(this.subscribing.get(key)===awaiting)this.subscribing.delete(key);
+        });
+      this.subscribing.set(key,awaiting);
+    }
+    const awaiting=this.subscribing.get(key);
     listeners.add(cb);
     try {
-      if(first)await this.send(2127,{ctidTraderAccountId:accountId,symbolId:[symbolId],subscribeToSpotTimestamp:true});
-    } catch(e){listeners.delete(cb);if(!listeners.size)this.listeners.delete(key);throw e;}
+      if(awaiting)await awaiting;
+    } catch(e){listeners.delete(cb);if(!listeners.size&&this.listeners.get(key)===listeners)this.listeners.delete(key);throw e;}
     return ()=>{
+      if(this.listeners.get(key)!==listeners)return;
       listeners.delete(cb);
       if(!listeners.size) {
         this.listeners.delete(key);
