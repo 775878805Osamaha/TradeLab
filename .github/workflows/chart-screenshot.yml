@@ -57,16 +57,11 @@ jobs:
             adb shell wm size 864x1536
             adb shell wm density 346
             adb shell cmd overlay enable --user 0 com.android.internal.systemui.navbar.gestural
-            # Preserve actual device screenshots even if a disconnected broker
-            # makes a UI test fail; report the failed test after diagnostics.
-            set +e
-            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.ReplayEntryInteractionTest,com.example.ChartAppearanceInteractionTest,com.example.DrawingAnchorInteractionTest --stacktrace
-            ANDROID_TEST_EXIT=$?
-            set -e
+            # This runner executes script lines in separate shells. Keep each
+            # guarded command on one line so screenshot capture still runs.
+            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.ReplayEntryInteractionTest,com.example.ChartAppearanceInteractionTest,com.example.DrawingAnchorInteractionTest --stacktrace || echo "::warning::Instrumentation failed; preserve emulator evidence"
             mkdir -p screenshots
-            for capture in appearance-light appearance-dark appearance-light-market appearance-light-results appearance-light-account; do
-              adb pull "/sdcard/Download/$capture.png" "screenshots/$capture.png" || true
-            done
+            for capture in appearance-light appearance-dark appearance-light-market appearance-light-results appearance-light-account; do adb pull "/sdcard/Download/$capture.png" "screenshots/$capture.png" || true; done
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.aistudio.tradelab.vzqrpk
             adb shell settings put system accelerometer_rotation 0
@@ -106,10 +101,27 @@ jobs:
               adb pull /sdcard/tradelab-replay-ui.xml screenshots/tradelab-replay-ui.xml
             python3 scripts/run_chart_tests.py
             python3 scripts/extract_chart_frame_metrics.py
-            if [ "$ANDROID_TEST_EXIT" -ne 0 ]; then
-              echo "::error::Emulator UI tests failed; diagnostics and real captures are retained."
-              exit "$ANDROID_TEST_EXIT"
-            fi
+      - name: Enforce instrumented UI test results after screenshots are preserved
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          files = list(Path('app/build/outputs/androidTest-results').rglob('*.xml'))
+          if not files:
+              raise SystemExit('Android instrumentation test reports were not generated')
+          failures = 0
+          for path in files:
+              try:
+                  root = ET.parse(path).getroot()
+              except ET.ParseError:
+                  continue
+              for case in root.iter('testcase'):
+                  failures += len(case.findall('failure')) + len(case.findall('error'))
+          print(f'Instrumented test XML reports: {len(files)}, failing test cases: {failures}')
+          if failures:
+              raise SystemExit(f'{failures} Android UI test failures; view artifacts for logs')
+          PY
       - name: Install screenshot analysis dependency
         run: python3 -m pip install --user Pillow
       - name: Compare actual screenshot with supplied reference
