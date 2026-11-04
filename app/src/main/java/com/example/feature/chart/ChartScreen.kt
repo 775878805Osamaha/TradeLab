@@ -61,21 +61,26 @@ fun ChartScreen(
     val orderKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     // A restored training account must not activate Replay on chart entry.
     var isEmbeddedReplay by remember { mutableStateOf(false) }
+    // Opening Replay keeps the current market candles visible until a start is chosen.
+    var isReplayToolbarOpen by remember { mutableStateOf(false) }
     val startReplayOnChart: () -> Unit = {
         replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
         isEmbeddedReplay = true
+        isReplayToolbarOpen = true
     }
     val toggleReplayOnChart: () -> Unit = {
-        if (isEmbeddedReplay) {
+        if (isReplayToolbarOpen) {
             replayViewModel.pause()
             isEmbeddedReplay = false
+            isReplayToolbarOpen = false
         } else {
-            startReplayOnChart()
+            isReplayToolbarOpen = true
         }
     }
-    androidx.activity.compose.BackHandler(enabled = isEmbeddedReplay) {
+    androidx.activity.compose.BackHandler(enabled = isReplayToolbarOpen) {
         replayViewModel.pause()
         isEmbeddedReplay = false
+        isReplayToolbarOpen = false
     }
     LaunchedEffect(isEmbeddedReplay, replayState.symbol, replayState.timeframe, replayState.isLoading) {
         if (isEmbeddedReplay) viewModel.stopDeepChartHistory()
@@ -178,7 +183,7 @@ fun ChartScreen(
     var chartPaletteContainerHeightPx by remember { mutableIntStateOf(0) }
     var drawingPaletteHeightPx by remember { mutableIntStateOf(0) }
     val paletteDensity = LocalDensity.current
-    val chartPaletteTopInsetPx = with(paletteDensity) { (if (isEmbeddedReplay) 148.dp else 52.dp).toPx() }
+    val chartPaletteTopInsetPx = with(paletteDensity) { 52.dp.toPx() }
     val chartPaletteMaxYOffsetPx = (chartPaletteContainerHeightPx - drawingPaletteHeightPx - chartPaletteTopInsetPx).coerceAtLeast(0f)
     val chartPaletteMaxXOffsetPx = (chartPaletteContainerWidthPx - drawingPaletteWidthPx - with(paletteDensity) { 80.dp.toPx() }).coerceAtLeast(0f)
     LaunchedEffect(chartPaletteContainerHeightPx, drawingPaletteHeightPx, chartPaletteContainerWidthPx, drawingPaletteWidthPx, isEmbeddedReplay) {
@@ -410,14 +415,22 @@ fun ChartScreen(
     }
 
     if (showReplayDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = historyTargetTime ?: replayState.currentCandle?.openTime)
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis =
+            if (isEmbeddedReplay) historyTargetTime ?: replayState.currentCandle?.openTime
+            else uiState.candles.lastOrNull()?.openTime)
         DatePickerDialog(
             onDismissRequest = { showReplayDatePicker = false },
             confirmButton = {
                 TextButton(
                     onClick = {
                         datePickerState.selectedDateMillis?.let { selected ->
-                            replayViewModel.jumpToTimestamp(selected)
+                            if (isEmbeddedReplay) replayViewModel.jumpToTimestamp(selected)
+                            else {
+                                replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe,
+                                    targetTime = selected)
+                                isEmbeddedReplay = true
+                                isReplayToolbarOpen = true
+                            }
                         }
                         showReplayDatePicker = false
                     },
@@ -427,9 +440,18 @@ fun ChartScreen(
             dismissButton = {
                 Row {
                     TextButton(onClick = {
-                        replayViewModel.jumpOneYearBack()
+                        if (isEmbeddedReplay) replayViewModel.jumpOneYearBack()
+                        else {
+                            val tf = uiState.selectedTimeframe
+                            val target = com.example.core.market.ReplayDateWindow.oneYearBefore(System.currentTimeMillis())
+                            val aligned = com.example.core.market.HistoricalCandleBoundary.currentOpen(
+                                target, tf.minutes * 60_000L)
+                            replayViewModel.loadReplayData(uiState.selectedSymbol, tf, targetTime = aligned)
+                            isEmbeddedReplay = true
+                            isReplayToolbarOpen = true
+                        }
                         showReplayDatePicker = false
-                    }, enabled = !replayState.isLoading && !replayState.isBatchAdvancing,
+                    }, enabled = !isEmbeddedReplay || (!replayState.isLoading && !replayState.isBatchAdvancing),
                         modifier = Modifier.testTag("chart_replay_one_year_back")) {
                         Text(androidx.compose.ui.res.stringResource(
                             if (replayState.symbol in setOf("BTCUSDT", "ETHUSDT")) com.example.R.string.chart_one_year_back
@@ -631,19 +653,10 @@ fun ChartScreen(
                     }
                     // Replay shortcut remains available from the chart header.
                     IconButton(
-                        onClick = {
-                            if (isEmbeddedReplay) {
-                                replayViewModel.pause()
-                                isEmbeddedReplay = false
-                            } else {
-                                replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
-                                isEmbeddedReplay = true
-                                immersiveChart = true
-                            }
-                        },
+                        onClick = toggleReplayOnChart,
                         modifier = Modifier.testTag("chart_to_replay_btn")
                     ) {
-                        Icon(Icons.Default.PlayCircle, contentDescription = if (isEmbeddedReplay) "إنهاء الإعادة" else "إعادة العرض داخل الشارت", tint = TradingAccentLight)
+                        Icon(Icons.Default.PlayCircle, contentDescription = if (isReplayToolbarOpen) "إغلاق أدوات الإعادة" else "إظهار Replay داخل الشارت", tint = TradingAccentLight)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = TradingBackground)
@@ -1082,12 +1095,9 @@ fun ChartScreen(
                 // Overlay the entry control on the chart instead of reserving a
                 // separate row below the candle viewport. Historical prices
                 // remain replay-only and never execute as live orders.
-                if (!immersiveChart && !isEmbeddedReplay && uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
+                if (!immersiveChart && !isReplayToolbarOpen && uiState.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
                 Button(
-                    onClick = {
-                        startReplayOnChart()
-                        immersiveChart = true
-                    },
+                    onClick = toggleReplayOnChart,
                     modifier = Modifier
                         // Absolute alignment keeps the control on the physical right
                         // in RTL Arabic layouts (BottomEnd resolves to the left).
@@ -1135,7 +1145,7 @@ fun ChartScreen(
                     Box(Modifier.align(AbsoluteAlignment.TopRight).padding(8.dp)) {
                         ChartHeaderControls(
                             symbol = uiState.selectedSymbol,
-                            replayActive = isEmbeddedReplay,
+                            replayActive = isReplayToolbarOpen,
                             onReset = { viewModel.triggerResetView() },
                             onReplay = toggleReplayOnChart,
                             onDetails = { immersiveChart = false }
@@ -1156,17 +1166,17 @@ fun ChartScreen(
                     }
                 }
 
-                // Reference replay transport: compact floating panel with a real timeline.
-                if (isEmbeddedReplay && immersiveChart) {
+                // Replay starts as a small transport on the existing live chart.
+                // Only Play or date selection activates historical candles.
+                if (isReplayToolbarOpen && immersiveChart) {
                     Column(
                         modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            // Keep transport above candles and clear of the left tool rail.
-                            .padding(top = 58.dp, start = 76.dp, end = 12.dp)
+                            .align(Alignment.BottomCenter)
+                            .absolutePadding(bottom = 52.dp, left = 76.dp, right = 10.dp)
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(TradingCard.copy(alpha = 0.90f))
-                            .padding(horizontal = 5.dp, vertical = 3.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(TradingCard.copy(alpha = 0.94f))
+                            .padding(horizontal = 3.dp, vertical = 2.dp)
                             .testTag("chart_embedded_replay_controls"),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -1179,18 +1189,21 @@ fun ChartScreen(
                                 Icon(Icons.Default.History, contentDescription = "تاريخ الإعادة", tint = TradingAccent)
                             }
                             IconButton(onClick = { replayViewModel.stepBackward() },
-                                enabled = !replayState.isLoading && replayState.currentIndex > 0,
+                                enabled = isEmbeddedReplay && !replayState.isLoading && replayState.currentIndex > 0,
                                 modifier = Modifier.size(34.dp).testTag("chart_replay_step_back")) {
                                 Icon(Icons.Default.SkipPrevious, contentDescription = "رجوع شمعة", tint = TradingTextPrimary)
                             }
-                            IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
-                                enabled = !replayState.isLoading && replayState.totalCandles > 0,
+                            IconButton(onClick = {
+                                if (!isEmbeddedReplay) startReplayOnChart()
+                                else if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play()
+                            },
+                                enabled = !isEmbeddedReplay || (!replayState.isLoading && replayState.totalCandles > 0),
                                 modifier = Modifier.size(34.dp).testTag("chart_replay_play_pause")) {
                                 Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = "تشغيل أو إيقاف", tint = TradingAccent)
                             }
                             IconButton(onClick = { replayViewModel.stepForward() },
-                                enabled = !replayState.isLoading && replayState.currentIndex < replayState.totalCandles - 1,
+                                enabled = isEmbeddedReplay && !replayState.isLoading && replayState.currentIndex < replayState.totalCandles - 1,
                                 modifier = Modifier.size(34.dp).testTag("chart_replay_step_next")) {
                                 Icon(Icons.Default.SkipNext, contentDescription = "تقدم شمعة", tint = TradingTextPrimary)
                             }
@@ -1207,7 +1220,11 @@ fun ChartScreen(
                                     }
                                 }
                             }
-                            IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false },
+                            IconButton(onClick = {
+                                replayViewModel.pause()
+                                isEmbeddedReplay = false
+                                isReplayToolbarOpen = false
+                            },
                                 modifier = Modifier.size(32.dp).testTag("chart_replay_close")) {
                                 Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextSecondary)
                             }
@@ -1215,15 +1232,16 @@ fun ChartScreen(
                         val progress = if (replayState.totalCandles > 1)
                             replayState.currentIndex.toFloat().coerceAtLeast(0f) / (replayState.totalCandles - 1)
                         else 0f
-                        LinearProgressIndicator(
+                        if (isEmbeddedReplay) LinearProgressIndicator(
                             progress = { progress.coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth().height(4.dp)
+                            modifier = Modifier.fillMaxWidth().height(2.dp)
                                 .testTag("chart_replay_timeline"),
                             color = TradingAccent,
                             trackColor = TradingBorder
                         )
                         Text(
-                            "${replayState.currentIndex.coerceAtLeast(0) + 1} / ${replayState.totalCandles}",
+                            if (isEmbeddedReplay) "${replayState.currentIndex.coerceAtLeast(0) + 1} / ${replayState.totalCandles}"
+                            else "اختر تاريخ البداية أو اضغط تشغيل",
                             fontSize = 10.sp, color = TradingTextSecondary,
                             style = TextStyle(textDirection = TextDirection.Ltr),
                             modifier = Modifier.testTag("chart_replay_position")
@@ -1439,7 +1457,7 @@ fun ChartScreen(
                 ChartBottomStrip(
                     symbol = uiState.selectedSymbol,
                     timeframe = uiState.selectedTimeframe,
-                    replayActive = isEmbeddedReplay,
+                    replayActive = isReplayToolbarOpen,
                     onSymbol = { if (!isEmbeddedReplay || replayViewModel.canChangeDataset()) showSymbolSheet = true },
                     onTimeframe = { tf ->
                         if (tf != uiState.selectedTimeframe && (!isEmbeddedReplay || replayViewModel.canChangeDataset())) {
@@ -1457,7 +1475,7 @@ fun ChartScreen(
                 )
             }
 
-            if (isEmbeddedReplay && !immersiveChart) {
+            if (isReplayToolbarOpen && !immersiveChart) {
                 Row(
                     modifier = Modifier.fillMaxWidth().height(if (immersiveChart) 44.dp else 52.dp)
                         .background(TradingBackground)
@@ -1470,18 +1488,21 @@ fun ChartScreen(
                         Text(" ${replayState.currentIndex + 1}", fontSize = 11.sp, color = TradingTextPrimary)
                     }
                     IconButton(onClick = { replayViewModel.stepBackward() },
-                        enabled = !replayState.isLoading && replayState.currentIndex > 0,
+                        enabled = isEmbeddedReplay && !replayState.isLoading && replayState.currentIndex > 0,
                         modifier = Modifier.testTag("chart_replay_step_back")) {
                         Icon(Icons.Default.SkipPrevious, contentDescription = "رجوع شمعة", tint = TradingTextPrimary)
                     }
-                    IconButton(onClick = { if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play() },
-                        enabled = !replayState.isLoading && replayState.totalCandles > 0,
+                    IconButton(onClick = {
+                        if (!isEmbeddedReplay) startReplayOnChart()
+                        else if (replayState.isPlaying) replayViewModel.pause() else replayViewModel.play()
+                    },
+                        enabled = !isEmbeddedReplay || (!replayState.isLoading && replayState.totalCandles > 0),
                         modifier = Modifier.testTag("chart_replay_play_pause")) {
                         Icon(if (replayState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = "تشغيل أو إيقاف", tint = TradingAccent)
                     }
                     IconButton(onClick = { replayViewModel.stepForward() },
-                        enabled = !replayState.isLoading && replayState.currentIndex < replayState.totalCandles - 1,
+                        enabled = isEmbeddedReplay && !replayState.isLoading && replayState.currentIndex < replayState.totalCandles - 1,
                         modifier = Modifier.testTag("chart_replay_step_next")) {
                         Icon(Icons.Default.SkipNext, contentDescription = "تقدم شمعة", tint = TradingTextPrimary)
                     }
@@ -1498,7 +1519,11 @@ fun ChartScreen(
                             }
                         }
                     }
-                    IconButton(onClick = { replayViewModel.pause(); isEmbeddedReplay = false },
+                    IconButton(onClick = {
+                        replayViewModel.pause()
+                        isEmbeddedReplay = false
+                        isReplayToolbarOpen = false
+                    },
                         modifier = Modifier.testTag("chart_replay_close")) {
                         Icon(Icons.Default.Close, contentDescription = "إغلاق الإعادة", tint = TradingTextPrimary)
                     }
