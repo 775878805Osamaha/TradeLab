@@ -16,7 +16,7 @@ class ChartHistoryPagingTest {
     private fun bar(tf: Timeframe, at: Long, close: Double = 100.0) = Candle(
         symbol = "XAUUSD", timeframe = tf, openTime = at, closeTime = at + tf.minutes * 60_000L,
         open = 100.0, high = 102.0, low = 99.0, close = close, volume = 1.0,
-        source = "TEST_FIXTURE")
+        source = "ctrader:demo:test:42")
 
     @Test fun weeklyBackScrollUsesFortyRealBarSlotsWithoutSkippingAnOlderWeek() = runBlocking {
         val tf = Timeframe.W1
@@ -29,7 +29,7 @@ class ChartHistoryPagingTest {
             listOf(bar(tf, from), bar(tf, to))
         }
         assertEquals(1, requested.size)
-        assertEquals(oldest - interval, requested.single().second)
+        assertEquals(oldest - 60_000L, requested.single().second)
         assertEquals(2, page.size)
         assertTrue(page.all { it.openTime < oldest })
     }
@@ -42,8 +42,8 @@ class ChartHistoryPagingTest {
         var requests=0
         val page=ChartHistoryPaging.before("XAUUSD",tf,oldest) { _,to ->
             if(++requests==1) throw ChartHistoryPublicationGapException(publishedUntil)
-            assertEquals(before-interval,to)
-            listOf(bar(tf,to))
+            assertEquals(before-60_000L,to)
+            listOf(bar(tf,before-interval))
         }
         assertEquals(2,requests)
         assertEquals(1,page.size)
@@ -131,7 +131,7 @@ class ChartHistoryPagingTest {
             if (ranges.size < 6) emptyList() else listOf(bar(tf, to))
         }
         assertEquals(6, ranges.size)
-        assertTrue(ranges.zipWithNext().all { (newer, older) -> older.second + interval == newer.first })
+        assertTrue(ranges.zipWithNext().all { (newer, older) -> older.second + 60_000L == newer.first })
         assertEquals(1, page.size)
     }
 
@@ -154,6 +154,34 @@ class ChartHistoryPagingTest {
             fail("Malformed prices must fail")
         } catch (_: IllegalArgumentException) { }
         assertEquals(1, requests)
+    }
+
+    @Test fun brokerBackScrollKeepsARealPreviousBarShiftedByOneHour() = runBlocking {
+        val tf = Timeframe.H4
+        val duration = tf.minutes * 60_000L
+        val oldest = 100L * duration + 3_600_000L
+        val realPrevious = oldest - duration + 3_600_000L
+        val result = ChartHistoryPaging.before("XAUUSD", tf, oldest, pageBars = 40) { from, to ->
+            assertTrue(realPrevious in from..to)
+            listOf(bar(tf, realPrevious).copy(source = "ctrader:demo:test:42"))
+        }
+        assertEquals(listOf(realPrevious), result.map { it.openTime })
+        assertEquals(oldest, result.single().closeTime)
+    }
+
+    @Test fun binanceBackScrollRetainsStrictExchangeGrid() = runBlocking {
+        val duration = Timeframe.M15.minutes * 60_000L
+        val oldest = 100L * duration
+        var first = true
+        ChartHistoryPaging.before("BTCUSDT", Timeframe.M15, oldest, pageBars = 40) { from, to ->
+            if (first) {
+                assertEquals(oldest - duration, to)
+                assertEquals(40L * duration, oldest - from)
+                first = false
+            }
+            emptyList()
+        }
+        assertFalse(first)
     }
 
     @Test fun partialProviderRetriesDoNotJumpOverUnverifiedWindows() = runBlocking {
