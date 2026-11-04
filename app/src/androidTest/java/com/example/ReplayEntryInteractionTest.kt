@@ -30,11 +30,16 @@ class ReplayEntryInteractionTest {
         compose.onNodeWithTag("chart_bottom_replay").assertTextContains("Replay", substring = true)
         compose.onNodeWithTag("chart_bottom_replay").performClick()
         compose.onNodeWithTag("chart_embedded_replay_controls").assertIsDisplayed()
+        // Opening the toolbar must not replace the current live candlesticks.
+        compose.onNodeWithTag("chart_replay_trading_bar").assertDoesNotExist()
         compose.onNodeWithTag("nav_item_chart").assertIsSelected()
         compose.onNodeWithTag("chart_bottom_replay").performClick()
         assertAnalysis()
         compose.onNodeWithTag("nav_item_chart").assertIsSelected()
         compose.onNodeWithTag("chart_bottom_replay").performClick()
+        compose.onNodeWithTag("chart_replay_play_pause").performClick()
+        compose.onNodeWithTag("chart_replay_trading_bar").assertExists()
+        compose.onNodeWithTag("nav_item_chart").assertIsSelected()
         compose.onNodeWithTag("chart_replay_close").performClick()
         assertAnalysis()
     }
