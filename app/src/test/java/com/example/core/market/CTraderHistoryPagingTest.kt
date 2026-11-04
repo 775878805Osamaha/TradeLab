@@ -5,7 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.IOException
 
 class CTraderHistoryPagingTest {
     @Test
@@ -48,14 +47,24 @@ class CTraderHistoryPagingTest {
     }
 
     @Test
-    fun anEmptyTruncatedPageFailsInsteadOfClaimingCompleteHistory(): Unit = runBlocking {
-        assertThrows(IOException::class.java) {
-            runBlocking {
-                CTraderHistoryPaging.load(0L, 900_000L, 300_000L, timeOf = { it }) { _, _, _ ->
-                    CTraderHistoryPaging.Page(emptyList<Long>(), hasMore = true)
-                }
-            }
+    fun anEmptyTruncatedPageProbesFullCountAndDoesNotInventCandles() = runBlocking {
+        val counts = mutableListOf<Int>()
+        val result = CTraderHistoryPaging.load(0L, 900_000L, 300_000L, timeOf = { it }) { _, _, count ->
+            counts.add(count)
+            CTraderHistoryPaging.Page(emptyList<Long>(), hasMore = true)
         }
+        assertEquals(emptyList<Long>(), result)
+        assertEquals(listOf(4, 1000), counts)
+    }
+
+    @Test
+    fun aFullCountProbeRecoversRealBarsFromAReportedEmptyPage() = runBlocking {
+        val interval = 300_000L
+        val actual = CTraderHistoryPaging.load(0L, 2L * interval, interval, timeOf = { it }) { _, _, count ->
+            if (count < 1000) CTraderHistoryPaging.Page(emptyList<Long>(), hasMore = true)
+            else CTraderHistoryPaging.Page(listOf(0L, interval, 2L * interval), hasMore = false)
+        }
+        assertEquals(listOf(0L, interval, 2L * interval), actual)
     }
 
     @Test
