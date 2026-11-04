@@ -57,6 +57,14 @@ jobs:
             adb shell wm size 864x1536
             adb shell wm density 346
             adb shell cmd overlay enable --user 0 com.android.internal.systemui.navbar.gestural
+            # Save the clean-launch Chart even when the candle assertion fails.
+            mkdir -p screenshots
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n com.aistudio.tradelab.vzqrpk/com.example.MainActivity
+            sleep 8
+            adb exec-out screencap -p > screenshots/chart-clean-launch.png
+            adb shell uiautomator dump /sdcard/chart-clean-launch.xml
+            adb pull /sdcard/chart-clean-launch.xml screenshots/chart-clean-launch.xml
             ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.ReplayEntryInteractionTest,com.example.ChartAppearanceInteractionTest,com.example.DrawingAnchorInteractionTest --stacktrace
             mkdir -p screenshots
             adb pull /sdcard/Download/appearance-light.png screenshots/appearance-light.png
