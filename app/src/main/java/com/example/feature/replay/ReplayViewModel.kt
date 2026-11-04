@@ -228,7 +228,7 @@ class ReplayViewModel(
                     if (activeHistorySource != null && !activeDatasetIsTrusted()) {
                         invalidateBrokerReplay()
                     }
-                    if (activeHistorySource == null && !_uiState.value.isLoading) {
+                    if (activeHistorySource == null && gateway.selectedAccount.value.isNotBlank()) {
                         val state = _uiState.value
                         loadReplayData(state.symbol, state.timeframe, state.requestedHistoryBars,
                             state.historyEndOffsetBars, _historyTargetTime.value)
@@ -498,7 +498,7 @@ class ReplayViewModel(
                         state.copy(
                             isLoading = false,
                             message = if (symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
-                                "تعذر تحميل Replay من cTrader: ${(error.message ?: "تحقق من حساب الوسيط والشموع المكتملة").take(100)}"
+                                "تعذر تحميل Replay من cTrader: ${(error.message ?: "تحقق من حساب الوسيط والشموع المكتملة").take(220)}"
                             else "تعذر تحميل Replay من Binance: ${(error.message ?: "تحقق من الاتصال").take(100)}"
                         )
                     } else state

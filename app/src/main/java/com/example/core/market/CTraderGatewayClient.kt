@@ -165,10 +165,10 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             persist()
         }
         _accounts.value = allowed
-        _accountGeneration.value += 1L
         _selectedAccount.value = accountId
         _status.value = if (ids.isEmpty()) "مرتبط، لكن الوسيط لا يعرض رموز الفوركس المطلوبة" else
             "متصل بـ cTrader للقراءة فقط (${ids.size} رموز)"
+        _accountGeneration.value += 1L
     }
 
     fun logout() {
@@ -218,36 +218,38 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         require(from >= 0L && to >= from && to <= System.currentTimeMillis()) { "Invalid closed candle range" }
         val interval = period.minutes * 60_000L
         val sourceTo = if (timeframe == Timeframe.H2) to + 3_600_000L else to
-        // The gateway supports up to 1,000 bars and 90 days per request.
-        val maxWindow = minOf(999L * interval, 90L * 24 * 60 * 60_000L)
-        val result = ArrayList<Candle>()
-        var start = from
-        while (start <= sourceTo) {
-            val end = minOf(sourceTo, start + maxWindow)
+        val source = sourceName(account, id)
+        val verified = CTraderHistoryPaging.load(from, sourceTo, interval) { start, end, count ->
             val url = "/v1/candles?accountId=$account&symbolId=$id&period=${period.code}" +
-                "&from=$start&to=$end&count=1000"
+                "&from=$start&to=${end + 1}&count=$count"
             val json = request(url)
-            if (resolve(symbol) != (account to id)) throw IOException("cTrader account changed during history request")
+            if (resolve(symbol) != (account to id) || sourceName(account, id) != source) {
+                throw IOException("cTrader account changed during history request")
+            }
             require(json.optString("source") == "ctrader" && json.optString("symbolId") == id.toString() &&
                 json.optString("period") == period.code) { "Wrong cTrader history source" }
-            if (json.optBoolean("hasMore")) throw IOException("Incomplete cTrader history page")
-            val array = json.getJSONArray("candles")
-            for (i in 0 until array.length()) {
-                val bar = array.getJSONObject(i)
-                val openTime = bar.getLong("timestamp")
-                val candle = Candle(symbol, period, openTime, openTime + interval,
-                    bar.getDouble("open"), bar.getDouble("high"), bar.getDouble("low"),
-                    bar.getDouble("close"), bar.getDouble("volume"), sourceName(account, id))
-                if (openTime in start..end && candle.closeTime <= System.currentTimeMillis()) {
-                    require(DataIntegrityValidator.validateCandle(candle).isValid) { "Corrupt cTrader candle" }
-                    result.add(candle)
+            if (json.optBoolean("hasMore")) {
+                CTraderHistoryPaging.Page(emptyList(), hasMore = true)
+            } else {
+                val array = json.getJSONArray("candles")
+                val candles = buildList {
+                    for (i in 0 until array.length()) {
+                        val bar = array.getJSONObject(i)
+                        val openTime = bar.getLong("timestamp")
+                        if (openTime !in start..end || openTime + interval > System.currentTimeMillis()) continue
+                        val candle = Candle(symbol, period, openTime, openTime + interval,
+                            bar.getDouble("open"), bar.getDouble("high"), bar.getDouble("low"),
+                            bar.getDouble("close"), bar.getDouble("volume"), source)
+                        require(DataIntegrityValidator.validateCandle(candle).isValid) { "Corrupt cTrader candle" }
+                        add(candle)
+                    }
                 }
+                CTraderHistoryPaging.Page(candles, hasMore = false)
             }
-            if (end == sourceTo) break
-            start = end + interval
+        }.let { candles ->
+            HistoricalCandleIntegrity.validate(candles, from, sourceTo + interval,
+                expectedSource = source, expectedSymbol = symbol, expectedTimeframe = period)
         }
-        val verified = HistoricalCandleIntegrity.validate(result.sortedBy { it.openTime },
-            from, sourceTo + interval, expectedSymbol = symbol, expectedTimeframe = period)
         if (timeframe != Timeframe.H2) return verified
         // H2 isn't native on cTrader. Only fully paired, consecutive H1 bars form an H2 candle.
         return verified.groupBy { it.openTime / 7_200_000L }.values.mapNotNull { bars ->

@@ -85,7 +85,10 @@ class ChartViewModel(
         observeConnectionDiagnostics()
         observeDrawings()
         marketDataRepository.cTrader?.let { client ->
-            viewModelScope.launch { client.accountGeneration.collect {
+            var generation = client.accountGeneration.value
+            viewModelScope.launch { client.accountGeneration.collect { updated ->
+                if (updated == generation) return@collect
+                generation = updated
                 if (_uiState.value.selectedSymbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
                     _uiState.update { it.copy(latestTick = null, candles = emptyList(), isLoading = true) }
                     loadCandlesForCurrentSymbol()
@@ -535,12 +538,18 @@ class ChartViewModel(
                 // Use bounded requests to avoid downloading huge empty ranges.
                 val initialDepths = listOf(requestedBars, 100, 40, 10, 1)
                     .distinct().filter { it in 1..requestedBars }
-                val scanWindows = if (symbol in setOf("BTCUSDT", "ETHUSDT")) 1L
-                    else historicalScanWindows(tf)
+                val brokerHistory = symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols
+                val scanWindows = if (brokerHistory) 1L + historicalScanWindows(tf) else 1L
                 for (window in 0L until scanWindows) {
-                    val end = lastClosedOpen - window * interval * 100L
+                    val skippedBars = if (window == 0L) 0L else requestedBars + (window - 1) * 100L
+                    val end = lastClosedOpen - skippedBars * interval
                     if (end < 0L) break
-                    for (depth in if (window == 0L) initialDepths else listOf(100, 40, 10, 1).filter { it <= requestedBars }) {
+                    val depths = when {
+                        !brokerHistory -> initialDepths
+                        window == 0L -> listOf(requestedBars)
+                        else -> listOf(100)
+                    }
+                    for (depth in depths) {
                         val attemptFrom = (end - interval * (depth - 1L)).coerceAtLeast(0L)
                         try {
                             val fetched = marketDataRepository.getCandles(
@@ -559,6 +568,10 @@ class ChartViewModel(
                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                             throw cancelled
                         } catch (error: Exception) {
+                            if (brokerHistory) {
+                                if (error is com.example.core.market.NoHistoricalCandlesException) continue
+                                throw error
+                            }
                             // A DNS/HTTP outage is not an empty trading session.
                             // Do not issue dozens of older-window retries for it.
                             if (generateSequence<Throwable>(error) { it.cause }.any {
