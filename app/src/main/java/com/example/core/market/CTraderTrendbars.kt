@@ -8,9 +8,35 @@ import java.math.RoundingMode
 /** Transport-independent Open API decoder. Never supplies credentials or executes orders. */
 object CTraderTrendbars {
     /**
-     * Bound a bar's nominal close by the next real broker opening when
-     * a session shifts (for example at daylight-saving transitions).
-     * OHLC values are never fabricated or interpolated.
+     * cTrader has no native H2 period. Combine only genuine consecutive H1
+     * broker bars in the same UTC two-hour bucket; a missing hour yields no
+     * H2 candle. Open-tick minutes can differ between consecutive H1 bars.
+     */
+    internal fun aggregateVerifiedH2(hourly: List<Candle>): List<Candle> {
+        if (hourly.isEmpty()) return emptyList()
+        val ordered = closeAtNextBrokerOpen(hourly)
+        require(ordered.all { it.timeframe == Timeframe.H1 &&
+            it.symbol == ordered.first().symbol && it.source == ordered.first().source &&
+            DataIntegrityValidator.validateCandle(it).isValid }) { "Invalid H1 source bars for H2" }
+        return ordered.groupBy { Math.floorDiv(it.openTime, 7_200_000L) }
+            .values.mapNotNull { pair ->
+                if (pair.size != 2) return@mapNotNull null
+                val (first, second) = pair
+                val firstHour = Math.floorDiv(first.openTime, 3_600_000L)
+                if (Math.floorMod(firstHour, 2L) != 0L ||
+                    Math.floorDiv(second.openTime, 3_600_000L) != firstHour + 1L ||
+                    first.closeTime > second.openTime ||
+                    second.closeTime - first.openTime > 7_200_000L) return@mapNotNull null
+                Candle(first.symbol, Timeframe.H2, first.openTime, second.closeTime,
+                    first.open, maxOf(first.high, second.high), minOf(first.low, second.low),
+                    second.close, first.volume + second.volume, first.source)
+            }
+    }
+
+    /**
+     * A broker's next bar may open before the preceding nominal UTC duration
+     * ends (e.g. the DST transition of a daily bar). Bound the prior close by
+     * that *observed* next open. Never create or interpolate missing prices.
      */
     internal fun closeAtNextBrokerOpen(candles: List<Candle>): List<Candle> {
         val ordered = candles.sortedBy { it.openTime }
