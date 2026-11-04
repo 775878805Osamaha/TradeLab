@@ -16,6 +16,16 @@ When all three environment settings are present, `/healthz` reports `configured:
 
 Existing sessions made with the earlier, un-derived encryption key will not decrypt in the updated service and users must sign in again. A successful health check confirms only that the gateway is responding; it does not prove account authorization or actual XAUUSD availability.
 
+### Broker authorization concurrency fix
+
+The `auth-and-spot-barriers-2026-11-04` transport revision fixes three independently reproducible races:
+
+1. A second HTTP request arriving after the broker WebSocket opened could send an account-list request **before** the broker acknowledged application authorization (`2101`). Concurrent requests now await that acknowledgment.
+2. Simultaneous symbol/quote/history requests for the same account and read-only access token could send duplicate account-authorization requests (`2102`). They now share a single in-flight authorization.
+3. **Concurrent spot subscriptions**: while the first quote subscription is awaiting cTrader acknowledgement, another chart/market listener formerly returned success immediately. If the broker rejected the first subscription, the second listener was left falsely marked as active. Both callers now await one shared subscription acknowledgement and fail together if it is rejected; subsequent retries can recover.
+
+The in-memory fake-broker tests reproduce all three errors before their respective patches and pass after them; they do **not** prove that the user's live gateway has been redeployed. After production deployment, confirm that `GET /healthz` includes `"transportRevision":"auth-and-spot-barriers-2026-11-04"`. If that field is absent, production still runs an older transport. Only the owner of the actual Vercel project can promote/deploy that build. The broker Client ID, Client Secret, and encryption key do not need to be changed to apply this fix.
+
 ## Required one-time configuration
 
 Create a **Vercel Hobby project** from the existing GitHub repository `775878805Osamaha/TradeLab`; its **Root Directory** is `vercel-gateway` and **Framework Preset** is Other/Node.js.
@@ -34,11 +44,14 @@ Add this exact cTrader redirect in the Open API portal:
 
 **Do not add** `tradelab://` as the cTrader portal redirect. cTrader sends the short-lived code to the Vercel HTTPS callback; the HTML completion page then deep-links back to Android.
 
-Finally, build the Android APK with the public origin:
-
-`CTRADER_GATEWAY_URL=https://ACTUAL-VERCEL-PRODUCTION-HOST ./gradlew :app:assembleDebug`
-
-The existing TradeLab Android activity already knows how to receive `tradelab://oauth/ctrader?ticket=...`. Users see "ربط cTrader" in Settings only once `CTRADER_GATEWAY_URL` is configured.
+The Android application currently uses the public HTTPS origin
+`https://tradelab-vercel-gateway.vercel.app` (never a broker secret). Build with
+`./gradlew :app:assembleDebug`; ensure the deployed gateway's OAuth callback is registered in cTrader.
+The Android activity receives `tradelab://oauth/ctrader?ticket=...`, redeems the
+verifier-bound ticket, encrypts the session at rest, and lets each user choose an
+authorized demo/live account in Settings. Gold/forex Chart, Replay and Backtest
+are routed through cTrader; BTC/ETH remain Binance-only. No fallback market feed
+is used if cTrader is unavailable.
 
 ## API
 
@@ -58,6 +71,10 @@ All sessions are authenticated-encrypted on the server, and encrypted again at r
 - No persistent server-side revocation: a sealed session may be replayed within its validity window if stolen. Use TLS; never print URLs, headers, tickets or tokens in logs, and rotate server key if compromised.
 - Market availability, symbol IDs, XAUUSD naming, historical gaps and bid/ask precision are broker-specific. All quotes must be validated on-device; no fictitious prices.
 - **Free-tier budgets:** Set Vercel's spend controls/alerts; use conservative historical request limits. Very high-traffic live services may require a paid architecture.
-- **Release gate:** Test on a demo cTrader account, test both live/demo endpoint separation, check re-auth and refresh, then opt-in to changing the chart data source. Existing TradeLab chart provider is NOT replaced automatically.
+- **Release gate:** The Android routing is implemented but must still be tested with a
+  real authorized demo account: browser callback, broker symbols, XAUUSD trendbars,
+  historical paging/Replay, reconnects, session refresh and account-switch safety.
+  Gateway health alone does not prove broker data availability. Keep PR #403 unmerged
+  until these checks and Android CI pass.
 
 Development checks: `npm install && npm run check && npm test` from `vercel-gateway/`.

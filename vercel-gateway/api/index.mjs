@@ -167,6 +167,7 @@ async function handler(req,res){
   const {path,url}=route(req);
   if(req.method==='GET' && path==='/healthz')return reply(res,200,{
     status:'ok',service:'TradeLab cTrader OAuth gateway',
+    transportRevision:'auth-and-spot-barriers-2026-11-04',
     configured:!!(process.env.CTRADER_CLIENT_ID&&process.env.CTRADER_CLIENT_SECRET&&process.env.SESSION_ENCRYPTION_KEY),
     authEnabled:oauthEnabled
   });
@@ -225,14 +226,14 @@ async function handler(req,res){
     const session=await getSession(req,codec);
     const sessionHeader=session.tokenUpdate?{'X-TradeLab-Session':session.tokenUpdate}:{};
     if(path==='/v1/session')return reply(res,200,{linked:true,scope:'accounts'},sessionHeader);
-    if(path==='/v1/accounts')return reply(res,200,{accounts:await upstream.accounts(session.access)},sessionHeader);
+    if(path==='/v1/accounts')return reply(res,200,{accounts:await stage('accounts',()=>upstream.accounts(session.access))},sessionHeader);
     if(path==='/v1/symbols'){
-      const {id,entry}=await accountAccess(session,url);
-      const symbols=await upstream.channel(entry.isLive).symbols(id,session.access);
+      const {id,entry}=await stage('symbols',()=>accountAccess(session,url));
+      const symbols=await stage('symbols',()=>upstream.channel(entry.isLive).symbols(id,session.access));
       return reply(res,200,{accountId:String(id),symbols},sessionHeader);
     }
     if(path==='/v1/candles'){
-      const {id,entry}=await accountAccess(session,url);
+      const {id,entry}=await stage('candles',()=>accountAccess(session,url));
       const symbolId=intArg(url,'symbolId',1,Number.MAX_SAFE_INTEGER);
       const periodName=url.searchParams.get('period');
       const period=PERIODS[periodName];
@@ -241,13 +242,13 @@ async function handler(req,res){
             to=intArg(url,'to',from,2147483646000),
             count=intArg(url,'count',1,1000);
       if(to-from>90*86400000)return fail(res,400,'date_window_too_wide');
-      const data=await upstream.channel(entry.isLive).history(id,session.access,symbolId,period,from,to,count);
+      const data=await stage('candles',()=>upstream.channel(entry.isLive).history(id,session.access,symbolId,period,from,to,count));
       return reply(res,200,{symbolId:String(symbolId),period:periodName,source:'ctrader',...data},sessionHeader);
     }
     if(path==='/v1/spot'){
-      const {id,entry}=await accountAccess(session,url);
+      const {id,entry}=await stage('spot',()=>accountAccess(session,url));
       const symbolId=intArg(url,'symbolId',1,Number.MAX_SAFE_INTEGER);
-      const quote=await getSpot(upstream.channel(entry.isLive),id,session.access,symbolId);
+      const quote=await stage('spot',()=>getSpot(upstream.channel(entry.isLive),id,session.access,symbolId));
       return reply(res,200,{symbolId:String(symbolId),timestamp:Number(quote.timestamp),
         source:'ctrader',...(quote.bid==null?{}:{bid:Number(quote.bid)/1e5}),
         ...(quote.ask==null?{}:{ask:Number(quote.ask)/1e5})},sessionHeader);
@@ -258,8 +259,23 @@ async function handler(req,res){
       note:'Clear the Android session and revoke app access in cTrader portal if needed.'});
   return fail(res,404,'not_found');
 }
+async function stage(name,fn){
+  try{return await fn();}catch(error){error.stage=name;throw error;}
+}
+function safeDiagnostic(error){
+  const category=String(error?.message||'');
+  return {
+    stage:['accounts','symbols','candles','spot'].includes(error?.stage)?error.stage:'other',
+    category:/^(ctrader_[a-z_]+|cTrader connection closed|not_authenticated|invalid_session|account_not_authorized|broker_exchange_failed)$/.test(category)
+      ?category:'unclassified',
+    brokerCode:/^[A-Z0-9_]{1,64}$/.test(error?.brokerCode||'')?error.brokerCode:undefined,
+    operation:Number.isInteger(error?.operation)?error.operation:undefined
+  };
+}
 const server=createServer((req,res)=>{
   Promise.resolve(handler(req,res)).catch(error=>{
+    // No tokens, account IDs, request URLs or upstream error descriptions.
+    console.error('tradelab_ctrader_gateway',JSON.stringify(safeDiagnostic(error)));
     // Never send upstream URLs, tokens, stack traces, or encrypted credentials to clients.
     if(res.headersSent){res.end();return;}
     if(error.message==='unconfigured_gateway')return fail(res,503,'gateway_not_configured');
