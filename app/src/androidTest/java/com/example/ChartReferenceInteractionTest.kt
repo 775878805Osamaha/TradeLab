@@ -113,13 +113,14 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_bottom_timeframe").performClick()
         compose.onNodeWithText("1m").performClick()
         compose.onNodeWithTag("chart_bottom_replay").performClick()
+        compose.onNodeWithTag("chart_replay_trading_bar").assertDoesNotExist()
+        compose.onNodeWithTag("chart_replay_date_picker").performClick()
+        compose.onNodeWithTag("chart_replay_one_year_back").assertIsDisplayed().performClick()
         compose.waitUntil(90000) {
             compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
                 compose.onAllNodesWithTag("chart_replay_buy").fetchSemanticsNodes().firstOrNull()
                     ?.config?.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null
         }
-        compose.onNodeWithTag("chart_replay_date_picker").performClick()
-        compose.onNodeWithTag("chart_replay_one_year_back").assertIsDisplayed().performClick()
         var saved: com.example.feature.replay.TrainingSessionSnapshot? = null
         val cutoff = System.currentTimeMillis() - 300L * 86_400_000L
         compose.waitUntil(120000) {
@@ -423,6 +424,7 @@ class ChartReferenceInteractionTest {
             compose.onNodeWithTag("chart_bottom_timeframe").performClick()
             compose.onNodeWithText("15m").performClick()
             compose.onNodeWithTag("chart_bottom_replay").performClick()
+            compose.onNodeWithTag("chart_replay_play_pause").performClick()
             compose.waitUntil(90000) {
                 compose.onAllNodesWithTag("candlestick_canvas").fetchSemanticsNodes().isNotEmpty() &&
                 compose.onAllNodesWithTag("chart_replay_buy").fetchSemanticsNodes().firstOrNull()
