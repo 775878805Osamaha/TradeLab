@@ -5,6 +5,7 @@ import com.example.core.market.MarketDataRequestException
 import com.example.core.market.NoHistoricalCandlesException
 import com.example.core.market.ChartHistoryPublicationGapException
 import com.example.core.market.HistoricalCandleBoundary
+import com.example.core.market.VerifiedMarketQuote
 import com.example.core.model.Candle
 import com.example.core.model.Timeframe
 import kotlinx.coroutines.CancellationException
@@ -33,18 +34,24 @@ object ChartHistoryPaging {
     ): List<Candle> {
         val interval = timeframe.minutes * 60_000L
         if (oldestOpen < interval) return emptyList()
+        val brokerTimed = symbol in VerifiedMarketQuote.forexSymbols
         // Scan contiguous windows spanning at least a long closed FX weekend.
         val windowSpan = interval * pageBars
         val windows = ((4L * 86_400_000L + windowSpan - 1L) / windowSpan).coerceAtLeast(1L)
         for (window in 0L until windows) {
             currentCoroutineContext().ensureActive()
-            val end = oldestOpen - interval - window * windowSpan
+            // A broker's immediately previous bar may have opened less than
+            // one nominal interval before the oldest (DST/session changes).
+            // Stop one minute before the oldest real open, not one whole bar.
+            val end = oldestOpen - (if (brokerTimed) 60_000L else interval) - window * windowSpan
             if (end < 0L) break
             var failure: IOException? = null
             var confirmedEmpty = false
             for (bars in listOf(pageBars, 100, 40, 1).distinct().filter { it <= pageBars }) {
-                // Keep weekly requests aligned to Monday even near Unix epoch.
-                val start = end - (bars - 1L) * interval
+                // Source-specific windows cover all minutes without skipping
+                // shifted broker opens. Binance remains UTC-grid aligned.
+                val start = end - (bars - 1L) * interval -
+                    (if (brokerTimed) interval - 60_000L else 0L)
                 if (start < 0L) continue
                 val raw = try {
                     fetch(start, end)
@@ -73,7 +80,16 @@ object ChartHistoryPaging {
                     continue
                 }
                 // Validation failures propagate; they must not hide missing bars.
-                return HistoricalCandleIntegrity.validate(raw, start, end + interval,
+                // The next bar's timestamp is already known from the visible
+                // chart. At a shortened broker session, clamp the older bar's
+                // nominal close to that REAL next open before merging history.
+                val bounded = if (brokerTimed) raw.map { candle ->
+                    if (candle.source.startsWith("ctrader:", ignoreCase = true) &&
+                        candle.closeTime > oldestOpen && candle.openTime < oldestOpen) {
+                        candle.copy(closeTime = oldestOpen)
+                    } else candle
+                } else raw
+                return HistoricalCandleIntegrity.validate(bounded, start, end + interval,
                     expectedSymbol = symbol, expectedTimeframe = timeframe)
             }
             if (!confirmedEmpty) throw (failure ?: IOException("تعذر التحقق من الشموع الأقدم"))
