@@ -7,7 +7,7 @@ object CTraderGatewayErrors {
     private val messages = mapOf(
         "ctrader_connection_failed" to "فشل اتصال بوابة Vercel بخادم cTrader",
         "ctrader_response_timeout" to "انتهت مهلة استجابة خادم cTrader",
-        "ctrader_broker_rejected_request" to "رفض خادم cTrader طلب القراءة؛ يلزم فحص سبب الرفض في سجلات البوابة",
+        "ctrader_broker_rejected_request" to "رفض خادم cTrader طلب القراءة",
         "ctrader_broker_unavailable" to "فشل الطلب داخل بوابة cTrader؛ يلزم فحص سجلات Vercel",
         "ctrader_token_exchange_failed" to "فشل تجديد أو تبادل رمز تفويض cTrader",
         "ctrader_view_only_required" to "صلاحية التفويض ليست للقراءة فقط؛ أعد التفويض بصلاحية accounts",
@@ -25,5 +25,20 @@ object CTraderGatewayErrors {
     }
 }
 
-class CTraderGatewayException(val statusCode: Int, val errorCode: String?) :
-    IOException(CTraderGatewayErrors.explain(statusCode, errorCode))
+class CTraderGatewayException(
+    val statusCode: Int,
+    val errorCode: String?,
+    stage: String? = null,
+    brokerCode: String? = null,
+    operation: Int? = null,
+) : IOException(buildString {
+    append(CTraderGatewayErrors.explain(statusCode, errorCode))
+    if (errorCode == "ctrader_broker_rejected_request") {
+        val details = listOfNotNull(
+            stage?.takeIf { it in setOf("accounts", "symbols", "candles", "spot") },
+            operation?.takeIf { it in setOf(2100, 2149, 2102, 2114, 2137, 2127) }?.toString(),
+            brokerCode?.takeIf { it.matches(Regex("[A-Z][A-Z0-9_]{1,63}")) },
+        )
+        if (details.isNotEmpty()) append(details.joinToString(" / ", prefix = " [", postfix = "]"))
+    }
+})
