@@ -169,7 +169,6 @@ class MainActivity : ComponentActivity() {
                                     replayViewModel = replayViewModel,
                                     embeddedReplayLaunchRequest = embeddedReplayLaunchRequest,
                                     onEmbeddedReplayLaunchConsumed = { embeddedReplayLaunchRequest = 0 },
-                                    onNavigateToReplay = openReplayOnChart,
                                     onImmersiveChanged = { chartImmersive = it }
                                 )
                             }
