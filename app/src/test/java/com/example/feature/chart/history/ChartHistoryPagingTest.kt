@@ -171,7 +171,8 @@ class ChartHistoryPagingTest {
 
     @Test fun binanceBackScrollRetainsStrictExchangeGrid() = runBlocking {
         val duration = Timeframe.M15.minutes * 60_000L
-        val oldest = 100L * duration
+        // All four-day scan windows need to remain after Unix epoch.
+        val oldest = 1000L * duration
         var first = true
         ChartHistoryPaging.before("BTCUSDT", Timeframe.M15, oldest, pageBars = 40) { from, to ->
             if (first) {
