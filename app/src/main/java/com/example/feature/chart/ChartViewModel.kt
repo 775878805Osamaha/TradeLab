@@ -15,6 +15,7 @@ import com.example.feature.chart.history.ChartHistoryPaging
 import com.example.feature.chart.history.ChartHistoryDownload
 import com.example.feature.chart.history.ChartHistoryRetry
 import com.example.feature.chart.history.ChartHistoryRetryPolicy
+import com.example.feature.chart.history.ChartClosedBarRefresh
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -663,52 +664,48 @@ class ChartViewModel(
     }
 
     /**
-     * Refresh genuine exchange OHLCV candles independently of bookTicker quotes.
-     * Binance REST klines include actual trade volume; bid/ask events do not.
-     * This is polling, not a WebSocket kline feed.
+     * Poll completed, source-verified OHLCV bars independently of bid/ask quotes.
+     * Binance uses exact UTC candle-open boundaries; cTrader bars can open on
+     * the broker's first tick, so use a narrow historical window instead.
      */
     private fun startKlineRefresh(symbol: String, timeframe: Timeframe) {
         klineRefreshJob?.cancel()
         if (!com.example.core.market.VerifiedMarketQuote.supports(symbol)) return
         klineRefreshJob = viewModelScope.launch {
+            val brokerTimed = symbol !in setOf("BTCUSDT", "ETHUSDT")
             var lastSuccessfullyRefreshedOpen = _uiState.value.candles.lastOrNull()?.openTime ?: Long.MIN_VALUE
-            var lastAttemptOpen = Long.MIN_VALUE
-            var attemptsForOpen = 0
+            var lastAttemptKey = Long.MIN_VALUE
+            var attemptsForKey = 0
             while (isActive) {
                 delay(10_000L)
                 if (_uiState.value.selectedSymbol != symbol ||
                     _uiState.value.selectedTimeframe != timeframe) break
                 try {
                     val now = System.currentTimeMillis()
-                    val interval = timeframe.minutes * 60_000L
-                    // Poll the last completed bar only. Binance also returns
-                    // the forming bar when endTime is 'now', which is not a
-                    // verified closed candle and can repaint the chart.
-                    val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
-                        .currentOpen(now, interval) - interval
-                    // One successful fetch per completed candle is sufficient.
-                    // Repeating the same historical request every 10 seconds
-                    // wastes bandwidth and risks exchange rate limits.
-                    if (lastClosedOpen == lastSuccessfullyRefreshedOpen) continue
-                    if (lastClosedOpen != lastAttemptOpen) {
-                        lastAttemptOpen = lastClosedOpen
-                        attemptsForOpen = 0
+                    val window = ChartClosedBarRefresh.window(now, timeframe, brokerTimed)
+                    // Fixed-grid Binance has exactly one last completed open;
+                    // broker opens are not required to be UTC-grid aligned.
+                    if (!brokerTimed && window.to == lastSuccessfullyRefreshedOpen) continue
+                    if (window.attemptKey != lastAttemptKey) {
+                        lastAttemptKey = window.attemptKey
+                        attemptsForKey = 0
                     }
-                    // Closed sessions and outages must not trigger an endless
-                    // 10-second retry loop for the same unavailable candle.
-                    if (attemptsForOpen >= 3) continue
-                    attemptsForOpen++
-                    val fresh = if (symbol in setOf("BTCUSDT", "ETHUSDT")) {
-                        marketDataRepository.provider.getHistoricalCandles(symbol, timeframe, lastClosedOpen, lastClosedOpen)
+                    // Closed broker sessions and outages cannot trigger an
+                    // unbounded request every ten seconds.
+                    if (attemptsForKey >= 3) continue
+                    attemptsForKey++
+                    val fetched = if (!brokerTimed) {
+                        marketDataRepository.provider.getHistoricalCandles(symbol, timeframe, window.from, window.to)
                     } else {
-                        marketDataRepository.getCandles(symbol, timeframe, lastClosedOpen, lastClosedOpen)
+                        marketDataRepository.getCandles(symbol, timeframe, window.from, window.to)
                     }
-                    if (fresh.isEmpty()) continue
-                    // A refresh must not introduce an unfinished, mismatched or
-                    // malformed exchange candle into the chart.
-                    if (fresh.any { candle ->
+                    if (fetched.isEmpty()) continue
+                    // The only acceptable update is a closed, valid bar from
+                    // the selected instrument, timeframe and verified provider.
+                    if (fetched.any { candle ->
                         candle.symbol != symbol || candle.timeframe != timeframe ||
-                        candle.openTime != lastClosedOpen ||
+                        candle.openTime !in window.from..window.to ||
+                        (!brokerTimed && candle.openTime != window.to) ||
                         !candle.open.isFinite() || !candle.high.isFinite() ||
                         !candle.low.isFinite() || !candle.close.isFinite() ||
                         candle.low <= 0.0 || candle.high < candle.low ||
@@ -716,10 +713,16 @@ class ChartViewModel(
                         candle.close !in candle.low..candle.high ||
                         !candle.volume.isFinite() || candle.volume < 0.0
                     }) continue
-                    lastSuccessfullyRefreshedOpen = lastClosedOpen
+                    // Do not repaint historical candles or repeatedly merge
+                    // the same cTrader bars when the broker market is closed.
+                    val fresh = if (brokerTimed) fetched.filter {
+                        it.openTime > lastSuccessfullyRefreshedOpen
+                    } else fetched
+                    if (fresh.isEmpty()) continue
                     if (_uiState.value.selectedSymbol != symbol ||
                         _uiState.value.selectedTimeframe != timeframe) break
                     val merged = mergeChartCandles(symbol, timeframe, fresh) ?: break
+                    lastSuccessfullyRefreshedOpen = fresh.maxOf { it.openTime }
                     recalculateIndicators(merged, _uiState.value.indicatorSettings)
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                     // Cancellation of the screen or symbol must stop polling promptly.
