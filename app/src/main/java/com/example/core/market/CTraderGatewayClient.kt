@@ -8,6 +8,7 @@ import android.util.Base64
 import com.example.core.model.Candle
 import com.example.core.model.Tick
 import com.example.core.model.Timeframe
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -98,6 +99,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
 
     suspend fun refreshAccounts() {
         if (!isLinked()) { _status.value = "اربط حساب cTrader أولاً"; return }
+        val generation = accountGeneration.value
         try {
             val json = request("/v1/accounts")
             val array = json.getJSONArray("accounts")
@@ -111,8 +113,11 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             val next = synchronized(lock) { selectedId }.takeIf { id -> list.any { it.id == id } } ?: list.first().id
             // Fetch symbol permissions before claiming the account is ready.
             val ids = fetchSymbols(next)
-            commitSelection(next, ids, list)
+            if (accountGeneration.value == generation) commitSelection(next, ids, list)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
+            if (accountGeneration.value != generation) return
             synchronized(lock) { selectedId = ""; symbolIds.clear(); persist() }
             _accounts.value = emptyList()
             _selectedAccount.value = ""
@@ -124,8 +129,9 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
 
     suspend fun selectAccount(accountId: String) {
         require(accounts.value.any { it.id == accountId }) { "Unauthorized cTrader account" }
+        val generation = accountGeneration.value
         val ids = fetchSymbols(accountId)
-        commitSelection(accountId, ids, accounts.value)
+        if (accountGeneration.value == generation) commitSelection(accountId, ids, accounts.value)
     }
 
     private suspend fun fetchSymbols(accountId: String): HashMap<String, Long> {
