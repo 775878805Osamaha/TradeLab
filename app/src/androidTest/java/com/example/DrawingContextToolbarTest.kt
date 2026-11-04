@@ -12,6 +12,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.feature.chart.DrawingContextToolbar
 import com.example.feature.chart.model.ChartDrawing
+import com.example.feature.chart.model.DrawingAnchor
 import com.example.feature.chart.model.DrawingLineStyle
 import com.example.feature.chart.model.DrawingTool
 import com.example.core.model.Candle
@@ -81,6 +82,47 @@ class DrawingContextToolbarTest {
         val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
         android.os.ParcelFileDescriptor.AutoCloseInputStream(
             automation.executeShellCommand("screencap -p /sdcard/Download/drawing-context-native-test.png")
+        ).use { it.readBytes() }
+    }
+
+    @Test fun captureSelectedLongPositionWithTargetStopAndQuickEditBar() {
+        val bars = List(90) { i ->
+            val open = 3920.0 + i * 0.11 + kotlin.math.sin(i * 0.8) * 1.5
+            val close = open + if (i % 3 == 0) -1.3 else 0.8
+            Candle(symbol = "XAUUSD", timeframe = Timeframe.M15,
+                openTime = 1_730_000_000_000L + i * 900_000L,
+                open = open, high = maxOf(open, close) + 0.6,
+                low = minOf(open, close) - 0.6, close = close,
+                volume = (i % 13 + 2).toDouble(), source = "UI_TEST_FIXTURE")
+        }
+        val selected = ChartDrawing(id = 78, tool = DrawingTool.LONG_POSITION,
+            symbol = "XAUUSD", timeframe = "M15",
+            startTime = bars[45].openTime, startPrice = 3926.0,
+            color = Color(0xFF2962FF),
+            anchors = listOf(
+                DrawingAnchor(bars[45].openTime, 3926.0),
+                DrawingAnchor(bars[65].openTime, 3928.7),
+                DrawingAnchor(bars[65].openTime, 3924.8)
+            ))
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                Box(Modifier.fillMaxSize()) {
+                    CandlestickChart(bars, modifier = Modifier.fillMaxSize(),
+                        selectedDrawingId = selected.id, drawings = listOf(selected),
+                        chartBackground = Color(0xFF030910), onUpdateDrawing = {})
+                    Box(Modifier.align(Alignment.Center)) {
+                        DrawingContextToolbar(selected, onUpdate = {}, onDelete = {},
+                            onCopy = {}, onProperties = {}, onDismiss = {})
+                    }
+                }
+            }
+        }
+        compose.onNodeWithTag("drawing_edit_stop_color").assertExists()
+        compose.onNodeWithTag("candlestick_canvas").assertExists()
+        compose.waitForIdle()
+        val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(
+            automation.executeShellCommand("screencap -p /sdcard/Download/drawing-position-native-test.png")
         ).use { it.readBytes() }
     }
 }

@@ -2,6 +2,7 @@ package com.example.ui.components.chart
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.*
 import com.example.feature.chart.model.*
@@ -115,12 +116,39 @@ internal object ExtendedDrawingRenderer {
                 val entry=points[0];val target=points[1];val stop=points[2]
                 val right=maxOf(entry.x,target.x,stop.x,entry.x+80*density)
                 fun zone(at:Offset,color:Color){drawRect(color.copy(alpha=.18f),Offset(entry.x,min(entry.y,at.y)),Size(right-entry.x,abs(entry.y-at.y)));line(Offset(entry.x,at.y),Offset(right,at.y),color)}
-                zone(target,if(c==com.example.ui.theme.TradingGold) Color(0xFF2962FF) else c)
+                val profitColor=if(c==com.example.ui.theme.TradingGold) Color(0xFF2962FF) else c
+                zone(target,profitColor)
                 zone(stop,d.secondaryColor);line(entry,Offset(right,entry.y))
                 val targetPrice=d.anchors.getOrNull(1)?.price?:return@with;val stopPrice=d.anchors.getOrNull(2)?.price?:return@with
                 val risk=abs(d.startPrice-stopPrice);val reward=abs(targetPrice-d.startPrice)
                 val valid=if(d.tool==DrawingTool.LONG_POSITION) targetPrice>d.startPrice && stopPrice<d.startPrice else targetPrice<d.startPrice && stopPrice>d.startPrice
-                text(if(valid && risk>0)"R:R ${String.format(Locale.US,"%.2f",reward/risk)} · SL ${price(stopPrice)} · TP ${price(targetPrice)}" else "SL / TP: اتجاه غير صالح",Offset(entry.x, min(target.y,stop.y)-6*density))
+                if(valid && risk>0 && d.startPrice!=0.0) {
+                    // Price and risk labels stay attached to the drawing while it is
+                    // resized or the chart is panned, just like the selected tool.
+                    fun pill(label:String, atY:Float, fill:Color) {
+                        val paint=android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                            color=Color.White.toArgb()
+                            textSize=10.5f*density
+                            textAlign=android.graphics.Paint.Align.CENTER
+                            typeface=android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.BOLD)
+                        }
+                        val labelWidth=(paint.measureText(label)+16f*density).coerceAtMost(t.chartWidth*.8f)
+                        val labelHeight=21f*density
+                        val centerX=((entry.x+right)/2f).coerceIn(labelWidth/2f+4*density,
+                            (t.chartWidth-labelWidth/2f-4*density).coerceAtLeast(labelWidth/2f+4*density))
+                        val centerY=atY.coerceIn(labelHeight/2f+2*density,
+                            (t.chartHeight-labelHeight/2f-2*density).coerceAtLeast(labelHeight/2f+2*density))
+                        drawRoundRect(fill,Offset(centerX-labelWidth/2f,centerY-labelHeight/2f),
+                            Size(labelWidth,labelHeight),CornerRadius(5*density))
+                        drawContext.canvas.nativeCanvas.drawText(label,centerX,centerY+3.7f*density,paint)
+                    }
+                    val targetPct=reward/abs(d.startPrice)*100
+                    val stopPct=risk/abs(d.startPrice)*100
+                    pill(String.format(Locale.US,"TP +%.2f (%.3f%%)",reward,targetPct),target.y,profitColor)
+                    pill(String.format(Locale.US,"SL -%.2f (%.3f%%)",risk,stopPct),stop.y,d.secondaryColor)
+                    pill(String.format(Locale.US,"R:R 1:%.2f",reward/risk),
+                        (entry.y+target.y)/2f,Color(0xFF2962FF))
+                } else text("SL / TP: اتجاه غير صالح",Offset(entry.x,min(target.y,stop.y)-6*density))
             }
             DrawingTool.PRICE_RANGE,DrawingTool.DATE_RANGE,DrawingTool.DATE_PRICE_RANGE -> {
                 drawRect(c.copy(alpha=.12f),Offset(min(first.x,last.x),min(first.y,last.y)),Size(abs(last.x-first.x),abs(last.y-first.y)))
