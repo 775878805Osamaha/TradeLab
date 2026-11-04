@@ -4,7 +4,8 @@ import androidx.compose.ui.geometry.Offset
 import kotlin.math.*
 
 object DrawingHitTest {
-    fun distance(d: ChartDrawing, t: ChartTransform, point: Offset): Float {
+    /** The risk/reward rectangles are drawn in dp; hit testing must use the same canvas density. */
+    fun distance(d: ChartDrawing, t: ChartTransform, point: Offset, canvasDensity: Float = 1f): Float {
         val a = if(d.tool==DrawingTool.ANCHORED_TEXT && d.screenX!=null && d.screenY!=null) Offset(d.screenX*t.chartWidth,d.screenY*t.chartHeight)
             else Offset(t.timeToX(d.startTime)?:return Float.MAX_VALUE,t.priceToY(d.startPrice))
         val b = Offset(d.endTime?.let{t.timeToX(it)}?:a.x,d.endPrice?.let{t.priceToY(it)}?:a.y)
@@ -28,7 +29,7 @@ object DrawingHitTest {
                 val anchors = d.anchors.mapNotNull { p -> t.timeToX(p.time)?.let { Offset(it, t.priceToY(p.price)) } }
                 if (anchors.size < 3) segment(a,b) else {
                     val entry = anchors[0]; val target = anchors[1]; val stop = anchors[2]
-                    val right = maxOf(entry.x, target.x, stop.x, entry.x + 80f)
+                    val right = maxOf(entry.x, target.x, stop.x, entry.x + 80f * canvasDensity)
                     val top = minOf(entry.y, target.y, stop.y)
                     val bottom = maxOf(entry.y, target.y, stop.y)
                     if (point.x in entry.x..right && point.y in top..bottom) 0f

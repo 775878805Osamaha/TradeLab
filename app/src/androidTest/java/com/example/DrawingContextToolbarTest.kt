@@ -27,6 +27,28 @@ import org.junit.Test
 class DrawingContextToolbarTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun longPositionTargetAndStopColorsCanBeChangedIndependently() {
+        val drawing = mutableStateOf(ChartDrawing(id = 99, tool = DrawingTool.LONG_POSITION,
+            symbol = "XAUUSD", timeframe = "M15", startPrice = 3926.0,
+            startTime = 1_730_000_000_000L, color = Color(0xFF2962FF)))
+        compose.setContent { MaterialTheme {
+            DrawingContextToolbar(drawing.value, onUpdate = { drawing.value = it },
+                onDelete = {}, onCopy = {}, onProperties = {}, onDismiss = {})
+        } }
+        compose.onNodeWithTag("drawing_edit_stop_color").performClick()
+        compose.onNodeWithText("برتقالي").performClick()
+        compose.runOnIdle {
+            assertEquals(Color(0xFFFF9800), drawing.value.secondaryColor)
+            assertEquals(Color(0xFF2962FF), drawing.value.color)
+        }
+        compose.onNodeWithTag("drawing_edit_color").performClick()
+        compose.onNodeWithText("أخضر").performClick()
+        compose.runOnIdle {
+            assertEquals(Color(0xFFFF9800), drawing.value.secondaryColor)
+            assertEquals(Color(0xFF4CAF50), drawing.value.color)
+        }
+    }
+
     @Test fun quickEditsPersistInDrawingAndDeletionWorksWithoutDialog() {
         val drawing = mutableStateOf(ChartDrawing(id = 42, tool = DrawingTool.HORIZONTAL_LINE,
             symbol = "XAUUSD", timeframe = "M15", startPrice = 3925.14, startTime = 1_730_000_000_000L))

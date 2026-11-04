@@ -381,7 +381,7 @@ fun CandlestickChart(
                                 }
                                 if (editingAnchor == null) {
                                     movingDrawing = currentDrawings.firstOrNull { it.id == selectedDrawingIdNow &&
-                                        it.tool != DrawingTool.ANCHORED_TEXT && DrawingHitTest.distance(it, transform, offset) <= positionHitRadius }
+                                        it.tool != DrawingTool.ANCHORED_TEXT && DrawingHitTest.distance(it, transform, offset, chartDensity.density) <= positionHitRadius }
                                     if (movingDrawing != null) movingDrawingStart = offset
                                 }
                             }
@@ -500,7 +500,7 @@ fun CandlestickChart(
                                         val x=t.timeToX(d.startTime)?:0f;val y=t.priceToY(d.startPrice)
                                         val width=positionHitRadius/18f*100f
                                         point.x in x..(x+width) && point.y in y..(y+width*bitmap.height/bitmap.width)
-                                    } else DrawingHitTest.distance(d,t,point) < positionHitRadius
+                                    } else DrawingHitTest.distance(d,t,point,chartDensity.density) < positionHitRadius
                                 }?.let { drawingSelection?.invoke(it, point) }
                             }
                         },
@@ -517,7 +517,7 @@ fun CandlestickChart(
                                         val y = transform.priceToY(d.startPrice)
                                         val width = 100.dp.toPx()
                                         offset.x in x..(x + width) && offset.y in y..(y + width * bitmap.height / bitmap.width)
-                                    } else DrawingHitTest.distance(d, transform, offset) <= positionHitRadius
+                                    } else DrawingHitTest.distance(d, transform, offset, chartDensity.density) <= positionHitRadius
                                 } else null
                             val hit = if (insidePlot && transform != null && activeDrawingTool == DrawingTool.NONE)
                                 selectablePositions.minByOrNull { pos ->
