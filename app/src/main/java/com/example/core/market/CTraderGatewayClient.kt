@@ -8,7 +8,6 @@ import android.util.Base64
 import com.example.core.model.Candle
 import com.example.core.model.Tick
 import com.example.core.model.Timeframe
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,7 +39,6 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
     private var session = secureStore.read().optString("session")
     private var selectedId = secureStore.read().optString("account")
     private var pendingVerifier: String? = null
-    private var accountLoadFailure: IOException? = null
     @Volatile private var quoteNotBefore = System.currentTimeMillis()
     private val _accountGeneration = MutableStateFlow(0L)
     val accountGeneration: StateFlow<Long> = _accountGeneration
@@ -88,7 +86,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         val token = response.optString("sessionToken")
         require(token.isNotBlank() && token.length <= 6144) { "Invalid cTrader session" }
         synchronized(lock) {
-            session = token; selectedId = ""; symbolIds.clear(); accountLoadFailure = null
+            session = token; selectedId = ""; symbolIds.clear()
             quoteNotBefore = System.currentTimeMillis()
             persist()
         }
@@ -100,7 +98,6 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
 
     suspend fun refreshAccounts() {
         if (!isLinked()) { _status.value = "اربط حساب cTrader أولاً"; return }
-        val generation = accountGeneration.value
         try {
             val json = request("/v1/accounts")
             val array = json.getJSONArray("accounts")
@@ -114,17 +111,9 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             val next = synchronized(lock) { selectedId }.takeIf { id -> list.any { it.id == id } } ?: list.first().id
             // Fetch symbol permissions before claiming the account is ready.
             val ids = fetchSymbols(next)
-            if (accountGeneration.value == generation) commitSelection(next, ids, list)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
+            commitSelection(next, ids, list)
         } catch (error: Exception) {
-            if (accountGeneration.value != generation) return
-            synchronized(lock) {
-                selectedId = ""
-                symbolIds.clear()
-                accountLoadFailure = error as? IOException
-                persist()
-            }
+            synchronized(lock) { selectedId = ""; symbolIds.clear(); persist() }
             _accounts.value = emptyList()
             _selectedAccount.value = ""
             _accountGeneration.value += 1L
@@ -135,9 +124,8 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
 
     suspend fun selectAccount(accountId: String) {
         require(accounts.value.any { it.id == accountId }) { "Unauthorized cTrader account" }
-        val generation = accountGeneration.value
         val ids = fetchSymbols(accountId)
-        if (accountGeneration.value == generation) commitSelection(accountId, ids, accounts.value)
+        commitSelection(accountId, ids, accounts.value)
     }
 
     private suspend fun fetchSymbols(accountId: String): HashMap<String, Long> {
@@ -158,22 +146,21 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
     private fun commitSelection(accountId: String, ids: Map<String, Long>, allowed: List<Account>) {
         synchronized(lock) {
             selectedId = accountId
-            accountLoadFailure = null
             symbolIds.clear()
             symbolIds.putAll(ids)
             quoteNotBefore = System.currentTimeMillis()
             persist()
         }
         _accounts.value = allowed
+        _accountGeneration.value += 1L
         _selectedAccount.value = accountId
         _status.value = if (ids.isEmpty()) "مرتبط، لكن الوسيط لا يعرض رموز الفوركس المطلوبة" else
             "متصل بـ cTrader للقراءة فقط (${ids.size} رموز)"
-        _accountGeneration.value += 1L
     }
 
     fun logout() {
         synchronized(lock) {
-            session = ""; selectedId = ""; pendingVerifier = null; accountLoadFailure = null
+            session = ""; selectedId = ""; pendingVerifier = null
             quoteNotBefore = System.currentTimeMillis()
             symbolIds.clear(); persist()
         }
@@ -241,28 +228,25 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
                     add(candle)
                 }
             }
-            // A truncated response still carries real historical bars.
+            // A truncated response still contains real bars. Preserve them and
+            // fetch older pages using the earliest returned timestamp.
             CTraderHistoryPaging.Page(candles, hasMore = json.optBoolean("hasMore"))
         }.let { candles ->
             HistoricalCandleIntegrity.validate(CTraderTrendbars.closeAtNextBrokerOpen(candles), from, sourceTo + interval,
                 expectedSource = source, expectedSymbol = symbol, expectedTimeframe = period)
         }
         if (timeframe != Timeframe.H2) return verified
-        // H2 isn't native on cTrader. Only fully paired, consecutive H1 bars form an H2 candle.
-        return verified.groupBy { it.openTime / 7_200_000L }.values.mapNotNull { bars ->
-            if (bars.size != 2 || bars[1].openTime - bars[0].openTime != 3_600_000L ||
-                bars[0].openTime % 7_200_000L != 0L) null
-            else Candle(symbol, Timeframe.H2, bars[0].openTime, bars[1].closeTime,
-                bars[0].open, maxOf(bars[0].high, bars[1].high), minOf(bars[0].low, bars[1].low),
-                bars[1].close, bars.sumOf { it.volume }, sourceName(account, id))
-        }
+        // H2 is not a native cTrader period. Derive it only from real, fully
+        // closed H1 pairs, allowing the broker's minute-level open-tick shifts.
+        val paired = CTraderTrendbars.aggregateVerifiedH2(verified)
+            .filter { it.openTime in from..to }
+        return HistoricalCandleIntegrity.validate(paired, from, to + 7_200_000L,
+            expectedSource = source, expectedSymbol = symbol, expectedTimeframe = Timeframe.H2)
     }
 
     private fun resolve(symbol: String): Pair<String, Long> = synchronized(lock) {
         require(symbol in VerifiedMarketQuote.forexSymbols) { "Not a cTrader forex/metal symbol" }
-        if (session.isBlank()) throw IOException("اربط حساب cTrader في الإعدادات")
-        if (selectedId.isBlank()) throw accountLoadFailure
-            ?: IOException("حدّث الحسابات والرموز من إعدادات cTrader")
+        if (session.isBlank() || selectedId.isBlank()) throw IOException("اربط حساب cTrader في الإعدادات")
         val id = symbolIds[symbol] ?: throw IOException("الرمز $symbol غير متاح لدى وسيط cTrader")
         selectedId to id
     }
@@ -279,11 +263,8 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         client.newCall(builder.build()).execute().use { response ->
             if (!response.isSuccessful) {
                 val body = response.body?.string()?.take(2048).orEmpty()
-                val error = runCatching { JSONObject(body) }.getOrNull()
-                throw CTraderGatewayException(
-                    response.code, error?.optString("error"), error?.optString("stage"),
-                    error?.optString("brokerCode"), error?.optInt("operation"),
-                )
+                val code = runCatching { JSONObject(body).optString("error") }.getOrNull()
+                throw CTraderGatewayException(response.code, code)
             }
             val content = response.body?.string() ?: throw IOException("Empty cTrader response")
             if (content.length > 2_000_000) throw IOException("Oversized cTrader response")
