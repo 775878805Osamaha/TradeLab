@@ -539,15 +539,24 @@ class ChartViewModel(
                 val initialDepths = listOf(requestedBars, 100, 40, 10, 1)
                     .distinct().filter { it in 1..requestedBars }
                 val brokerHistory = symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols
-                val scanWindows = if (brokerHistory) 1L + historicalScanWindows(tf) else 1L
+                // Weekly requests for hundreds of bars span many years and
+                // dozens of broker pages. Draw recent real weeks first; older
+                // pages remain available via the existing back-scroll loader.
+                val weeklyBrokerHistory = brokerHistory && tf == com.example.core.model.Timeframe.W1
+                val firstPageBars = if (weeklyBrokerHistory) minOf(requestedBars, 40) else requestedBars
+                val olderPageBars = if (weeklyBrokerHistory) 40L else 100L
+                val scanWindows = if (weeklyBrokerHistory)
+                    (1L + (requestedBars + 39L) / 40L).coerceAtMost(20L)
+                else if (brokerHistory) 1L + historicalScanWindows(tf) else 1L
                 for (window in 0L until scanWindows) {
-                    val skippedBars = if (window == 0L) 0L else requestedBars + (window - 1) * 100L
+                    val skippedBars = if (window == 0L) 0L
+                        else firstPageBars + (window - 1L) * olderPageBars
                     val end = lastClosedOpen - skippedBars * interval
                     if (end < 0L) break
                     val depths = when {
                         !brokerHistory -> initialDepths
-                        window == 0L -> listOf(requestedBars)
-                        else -> listOf(100)
+                        window == 0L -> listOf(firstPageBars)
+                        else -> listOf(olderPageBars.toInt())
                     }
                     for (depth in depths) {
                         val attemptFrom = (end - interval * (depth - 1L)).coerceAtLeast(0L)
