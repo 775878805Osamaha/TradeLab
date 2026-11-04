@@ -18,12 +18,13 @@ Existing sessions made with the earlier, un-derived encryption key will not decr
 
 ### Broker authorization concurrency fix
 
-The `auth-barrier-2026-11-04` transport revision fixes two independently reproducible races:
+The `auth-and-spot-barriers-2026-11-04` transport revision fixes three independently reproducible races:
 
 1. A second HTTP request arriving after the broker WebSocket opened could send an account-list request **before** the broker acknowledged application authorization (`2101`). Concurrent requests now await that acknowledgment.
 2. Simultaneous symbol/quote/history requests for the same account and read-only access token could send duplicate account-authorization requests (`2102`). They now share a single in-flight authorization.
+3. **Concurrent spot subscriptions**: while the first quote subscription is awaiting cTrader acknowledgement, another chart/market listener formerly returned success immediately. If the broker rejected the first subscription, the second listener was left falsely marked as active. Both callers now await one shared subscription acknowledgement and fail together if it is rejected; subsequent retries can recover.
 
-The in-memory fake-broker tests reproduce both errors before the patch and pass after it; they do **not** prove that the user's live gateway has been redeployed. After production deployment, confirm that `GET /healthz` includes `"transportRevision":"auth-barrier-2026-11-04"`. If that field is absent, production still runs the older transport. Only the owner of the actual Vercel project can promote/deploy that build. The broker Client ID, Client Secret, and encryption key do not need to be changed to apply this fix.
+The in-memory fake-broker tests reproduce all three errors before their respective patches and pass after them; they do **not** prove that the user's live gateway has been redeployed. After production deployment, confirm that `GET /healthz` includes `"transportRevision":"auth-and-spot-barriers-2026-11-04"`. If that field is absent, production still runs an older transport. Only the owner of the actual Vercel project can promote/deploy that build. The broker Client ID, Client Secret, and encryption key do not need to be changed to apply this fix.
 
 ## Required one-time configuration
 
