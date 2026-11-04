@@ -159,7 +159,9 @@ class ChartViewModel(
             })
         }
     }) {
-        ChartHistoryPaging.before(symbol, timeframe, oldest) { from, to ->
+        ChartHistoryPaging.before(symbol, timeframe, oldest,
+            pageBars = if (timeframe == com.example.core.model.Timeframe.W1) 40 else ChartHistoryPaging.PAGE_BARS
+        ) { from, to ->
             marketDataRepository.getOlderChartCandles(symbol, timeframe, from, to)
         }
     }
