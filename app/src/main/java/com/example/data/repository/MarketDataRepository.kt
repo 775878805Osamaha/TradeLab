@@ -96,25 +96,30 @@ class MarketDataRepository(
         require(pageSize in 1..1000) { "pageSize must be between 1 and 1000" }
         val intervalMillis = timeframe.minutes * 60_000L
         require(intervalMillis > 0L) { "Invalid timeframe interval" }
+        val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
         // Exclude the currently forming candle by its exchange open time,
-        // not by subtracting an interval from now (which rejects valid history).
-        require(HistoricalCandleBoundary.isClosedRange(
-            to, System.currentTimeMillis(), intervalMillis
+        // using the source's opening-time convention. cTrader bars can open
+        // off the UTC grid; their latest safe open is now minus one duration.
+        require(to <= HistoricalCandleBoundary.latestClosedRequestTo(
+            System.currentTimeMillis(), intervalMillis, brokerTimed = !isCrypto
         )) { "Historical range includes an unfinished candle" }
         // Bound replay memory while fetching and validating one network page at a time.
         // Both boundaries are candle-open timestamps; reject partial windows.
         val weeklyInterval = 7L * 24 * 60 * 60 * 1000
         val weeklyOffset = 4L * 24 * 60 * 60 * 1000
         val offset = if (intervalMillis == weeklyInterval) weeklyOffset else 0L
-        require(Math.floorMod(from - offset, intervalMillis) == 0L &&
-            Math.floorMod(to - offset, intervalMillis) == 0L) {
+        require(if (isCrypto) {
+            Math.floorMod(from - offset, intervalMillis) == 0L &&
+                Math.floorMod(to - offset, intervalMillis) == 0L
+        } else {
+            Math.floorMod(from, 60_000L) == 0L && Math.floorMod(to, 60_000L) == 0L
+        }) {
             "Historical candle range must align to timeframe boundaries"
         }
         val requestedBars = (to - from) / intervalMillis + 1L
         require(requestedBars <= 20_000L) {
             "Historical range exceeds 20000 candles. Request a shorter range."
         }
-        val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
         if (!isCrypto) {
             require(symbol in VerifiedMarketQuote.forexSymbols) { "Unsupported cTrader instrument: $symbol" }
             val gateway = cTrader ?: throw java.io.IOException("cTrader gateway is not configured")
