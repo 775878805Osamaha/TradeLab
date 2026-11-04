@@ -18,6 +18,22 @@ class ChartHistoryPagingTest {
         open = 100.0, high = 102.0, low = 99.0, close = close, volume = 1.0,
         source = "TEST_FIXTURE")
 
+    @Test fun weeklyBackScrollUsesFortyRealBarSlotsWithoutSkippingAnOlderWeek() = runBlocking {
+        val tf = Timeframe.W1
+        val interval = tf.minutes * 60_000L
+        val oldest = 4L * 86_400_000L + 200L * interval
+        val requested = mutableListOf<Pair<Long, Long>>()
+        val page = ChartHistoryPaging.before("XAUUSD", tf, oldest, pageBars = 40) { from, to ->
+            requested.add(from to to)
+            assertEquals(40L, (to - from) / interval + 1L)
+            listOf(bar(tf, from), bar(tf, to))
+        }
+        assertEquals(1, requested.size)
+        assertEquals(oldest - interval, requested.single().second)
+        assertEquals(2, page.size)
+        assertTrue(page.all { it.openTime < oldest })
+    }
+
     @Test fun aVerifiedPublicationBoundaryLoadsOnlyFullyPublishedOlderBars() = runBlocking {
         val tf=Timeframe.M3;val interval=tf.minutes*60_000L
         val oldest=20_000*interval
