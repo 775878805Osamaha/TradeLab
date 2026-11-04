@@ -1,7 +1,5 @@
 package com.example.core.market
 
-import java.io.IOException
-
 /**
  * cTrader returns historical bars newest-first under a count limit. A response
  * may still contain valid bars when hasMore=true; never discard those bars or
@@ -29,7 +27,13 @@ internal object CTraderHistoryPaging {
             var cursorEnd = windowEnd
             while (cursorEnd >= windowStart) {
                 val count = ((cursorEnd - windowStart) / interval + 1L).toInt()
-                val page = fetch(windowStart, cursorEnd, count)
+                var page = fetch(windowStart, cursorEnd, count)
+                if (page.hasMore && page.items.isEmpty() && count < 1000) {
+                    // A broker may mark a sparse closed-market range as having
+                    // more older records. Probe once at the maximum count before
+                    // treating this particular window as containing no bars.
+                    page = fetch(windowStart, cursorEnd, 1000)
+                }
                 val ordered = page.items.sortedBy(timeOf)
                 var previous = Long.MIN_VALUE
                 for (item in ordered) {
@@ -44,9 +48,10 @@ internal object CTraderHistoryPaging {
 
                 if (!page.hasMore) break
                 if (ordered.isEmpty()) {
-                    // The broker claimed more records but provided no cursor:
-                    // a retry cannot advance safely without fabricating bars.
-                    throw IOException("cTrader returned a truncated empty history page")
+                    // No actual candle timestamp exists to continue backwards.
+                    // Keep other verified windows usable instead of failing the
+                    // whole chart. No blank timeframe is filled with fake bars.
+                    break
                 }
                 val oldest = timeOf(ordered.first())
                 if (oldest <= windowStart) break
