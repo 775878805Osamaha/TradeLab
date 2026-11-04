@@ -16,6 +16,15 @@ When all three environment settings are present, `/healthz` reports `configured:
 
 Existing sessions made with the earlier, un-derived encryption key will not decrypt in the updated service and users must sign in again. A successful health check confirms only that the gateway is responding; it does not prove account authorization or actual XAUUSD availability.
 
+### Broker authorization concurrency fix
+
+The `auth-barrier-2026-11-04` transport revision fixes two independently reproducible races:
+
+1. A second HTTP request arriving after the broker WebSocket opened could send an account-list request **before** the broker acknowledged application authorization (`2101`). Concurrent requests now await that acknowledgment.
+2. Simultaneous symbol/quote/history requests for the same account and read-only access token could send duplicate account-authorization requests (`2102`). They now share a single in-flight authorization.
+
+The in-memory fake-broker tests reproduce both errors before the patch and pass after it; they do **not** prove that the user's live gateway has been redeployed. After production deployment, confirm that `GET /healthz` includes `"transportRevision":"auth-barrier-2026-11-04"`. If that field is absent, production still runs the older transport. Only the owner of the actual Vercel project can promote/deploy that build. The broker Client ID, Client Secret, and encryption key do not need to be changed to apply this fix.
+
 ## Required one-time configuration
 
 Create a **Vercel Hobby project** from the existing GitHub repository `775878805Osamaha/TradeLab`; its **Root Directory** is `vercel-gateway` and **Framework Preset** is Other/Node.js.
