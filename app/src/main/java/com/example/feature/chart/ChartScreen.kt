@@ -162,7 +162,7 @@ fun ChartScreen(
     editingDrawing?.let { drawing ->
         DrawingPropertiesDialog(drawing, onDismiss = { editingDrawing = null }, onDelete = { viewModel.deleteDrawing(drawing.id); selectedDrawingId = null; editingDrawing = null },
             onSave = { viewModel.updateDrawing(it); editingDrawing = null },
-            onCopy = { viewModel.addDrawing(it.copy(id=0)); editingDrawing = null })
+            onCopy = { viewModel.addDrawing(it.copy(id=0)) { id -> selectedDrawingId = id }; editingDrawing = null })
     }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
@@ -173,8 +173,11 @@ fun ChartScreen(
     var hideDrawings by rememberSaveable { mutableStateOf(workspacePrefs.getBoolean("hide_drawings", false)) }
     LaunchedEffect(hideDrawings) { workspacePrefs.edit().putBoolean("hide_drawings", hideDrawings).apply() }
     // A selection belongs to the currently visible instrument and canvas only.
-    LaunchedEffect(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay, hideDrawings, uiState.activeDrawingTool) {
+    LaunchedEffect(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay, hideDrawings) {
         selectedDrawingId = null
+    }
+    LaunchedEffect(uiState.activeDrawingTool) {
+        if (uiState.activeDrawingTool != DrawingTool.NONE) selectedDrawingId = null
     }
     var chartDisplayStyle by remember { mutableStateOf(runCatching { ChartDisplayStyle.valueOf(workspacePrefs.getString("display_style","CANDLES")!!) }.getOrDefault(ChartDisplayStyle.CANDLES)) }
     LaunchedEffect(chartDisplayStyle) { workspacePrefs.edit().putString("display_style",chartDisplayStyle.name).apply() }
@@ -1067,7 +1070,15 @@ fun ChartScreen(
                         } else if (it.tool.isTextTool) {
                             annotationText = ""
                             pendingAnnotation = it
-                        } else viewModel.addDrawing(it)
+                        } else viewModel.addDrawing(it) { createdId ->
+                            // Newly placed drawings are immediately editable: the
+                            // selected shape and quick toolbar stay on this chart.
+                            selectedDrawingId = createdId
+                            selectedDrawingTouch = Offset(
+                                chartPaletteContainerWidthPx * .5f,
+                                chartPaletteContainerHeightPx * .5f
+                            )
+                        }
                     },
                     onSelectTrade = { viewModel.selectTradeForDetail(it) },
                     onSelectDrawing = { drawing, touch ->
@@ -1113,7 +1124,10 @@ fun ChartScreen(
                             drawing = selectedDrawing,
                             onUpdate = { viewModel.updateDrawing(it) },
                             onDelete = { viewModel.deleteDrawing(selectedDrawing.id); selectedDrawingId = null },
-                            onCopy = { viewModel.addDrawing(selectedDrawing.copy(id = 0)); selectedDrawingId = null },
+                            onCopy = {
+                                viewModel.addDrawing(selectedDrawing.copy(id = 0)) { id -> selectedDrawingId = id }
+                                selectedDrawingId = null
+                            },
                             onProperties = { editingDrawing = selectedDrawing },
                             onDismiss = { selectedDrawingId = null }
                         )

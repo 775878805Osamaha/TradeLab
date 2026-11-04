@@ -1,6 +1,7 @@
 package com.example
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -66,5 +67,30 @@ class DrawingAnchorInteractionTest {
         assertEquals(1,writes)
         assertTrue(drawings.value.single().startPrice>original.startPrice)
         assertEquals(first,canvas.fetchSemanticsNode().config[ChartFirstVisibleIndex])
+    }
+
+    @Test fun newDrawingCanBeSelectedAsSoonAsPlacementCompletes() {
+        val bars=List(80) { i -> Candle("XAUUSD",Timeframe.M1,1_700_000_040_000L+i*60_000L,
+            open=2000.0,high=2005.0,low=1995.0,close=2001.0,volume=1.0,source="TEST_FIXTURE") }
+        val drawings=mutableStateOf<List<ChartDrawing>>(emptyList())
+        val selected=mutableStateOf<Long?>(null)
+        val tool=mutableStateOf(DrawingTool.HORIZONTAL_LINE)
+        compose.setContent { MaterialTheme {
+            Box {
+                CandlestickChart(bars,drawings=drawings.value,selectedDrawingId=selected.value,
+                    activeDrawingTool=tool.value,modifier=Modifier.fillMaxSize(),
+                    onAddDrawing={ drawing ->
+                        val stored=drawing.copy(id=33L,symbol="XAUUSD",timeframe="M1")
+                        drawings.value=listOf(stored)
+                        tool.value=DrawingTool.NONE
+                        selected.value=stored.id
+                    },onUpdateDrawing={})
+            }
+        } }
+        compose.onNodeWithTag("candlestick_canvas").performTouchInput { click(center) }
+        compose.waitForIdle()
+        assertEquals(DrawingTool.NONE,tool.value)
+        assertEquals(33L,selected.value)
+        assertEquals(1,drawings.value.size)
     }
 }

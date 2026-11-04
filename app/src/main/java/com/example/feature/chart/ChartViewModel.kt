@@ -356,22 +356,28 @@ class ChartViewModel(
         }
     }
 
-    fun addDrawing(drawing: ChartDrawing) {
+    fun addDrawing(drawing: ChartDrawing, onCreated: (Long) -> Unit = {}) {
         val sym = _uiState.value.selectedSymbol
         val tf = _uiState.value.selectedTimeframe.code
         val drawingWithMeta = drawing.copy(symbol = sym, timeframe = tf)
 
         viewModelScope.launch {
             if (drawingDao != null) {
-                withContext(Dispatchers.IO) {
+                val insertedId = withContext(Dispatchers.IO) {
                     drawingDao.insertDrawing(drawingWithMeta.toEntity())
                 }
+                if (insertedId > 0L && _uiState.value.selectedSymbol == sym &&
+                    _uiState.value.selectedTimeframe.code == tf) onCreated(insertedId)
             } else {
+                var createdId: Long? = null
                 _uiState.update { state ->
                     if (state.selectedSymbol == sym && state.selectedTimeframe.code == tf) {
-                        state.copy(drawings = state.drawings + drawingWithMeta)
+                        val nextId = (state.drawings.maxOfOrNull { it.id } ?: 0L) + 1L
+                        createdId = nextId
+                        state.copy(drawings = state.drawings + drawingWithMeta.copy(id = nextId))
                     } else state
                 }
+                createdId?.let(onCreated)
             }
         }
         _uiState.update { it.copy(activeDrawingTool = DrawingTool.NONE) }
