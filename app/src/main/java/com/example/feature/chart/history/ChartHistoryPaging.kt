@@ -20,17 +20,21 @@ object ChartHistoryPaging {
         symbol: String,
         timeframe: Timeframe,
         oldestOpen: Long,
+        pageBars: Int = PAGE_BARS,
         fetch: suspend (Long, Long) -> List<Candle>
-    ): List<Candle> = loadBefore(symbol,timeframe,oldestOpen,0,fetch)
+    ): List<Candle> {
+        require(pageBars in 1..PAGE_BARS) { "Invalid chart history page size" }
+        return loadBefore(symbol,timeframe,oldestOpen,0,pageBars,fetch)
+    }
 
     private suspend fun loadBefore(
-        symbol: String, timeframe: Timeframe, oldestOpen: Long, coverageRedirects: Int,
+        symbol: String, timeframe: Timeframe, oldestOpen: Long, coverageRedirects: Int, pageBars: Int,
         fetch: suspend (Long,Long) -> List<Candle>
     ): List<Candle> {
         val interval = timeframe.minutes * 60_000L
         if (oldestOpen < interval) return emptyList()
         // Scan contiguous windows spanning at least a long closed FX weekend.
-        val windowSpan = interval * PAGE_BARS
+        val windowSpan = interval * pageBars
         val windows = ((4L * 86_400_000L + windowSpan - 1L) / windowSpan).coerceAtLeast(1L)
         for (window in 0L until windows) {
             currentCoroutineContext().ensureActive()
@@ -38,7 +42,7 @@ object ChartHistoryPaging {
             if (end < 0L) break
             var failure: IOException? = null
             var confirmedEmpty = false
-            for (bars in listOf(PAGE_BARS, 100, 40, 1)) {
+            for (bars in listOf(pageBars, 100, 40, 1).distinct().filter { it <= pageBars }) {
                 // Keep weekly requests aligned to Monday even near Unix epoch.
                 val start = end - (bars - 1L) * interval
                 if (start < 0L) continue
@@ -52,7 +56,7 @@ object ChartHistoryPaging {
                     if(gap.publishedUntil<=0L || coverageRedirects>=2) throw gap
                     val before=HistoricalCandleBoundary.currentOpen(gap.publishedUntil,interval)
                     if(before<=0L || before>=oldestOpen) throw gap
-                    return loadBefore(symbol,timeframe,before,coverageRedirects+1,fetch)
+                    return loadBefore(symbol,timeframe,before,coverageRedirects+1,pageBars,fetch)
                 } catch (_: NoHistoricalCandlesException) {
                     emptyList()
                 } catch (error: IOException) {
@@ -64,7 +68,7 @@ object ChartHistoryPaging {
                 }
                 if (raw.isEmpty()) {
                     // Only a verified EMPTY full window allows advancing across it.
-                    if (bars == PAGE_BARS) confirmedEmpty = true
+                    if (bars == pageBars) confirmedEmpty = true
                     if (confirmedEmpty) break
                     continue
                 }
