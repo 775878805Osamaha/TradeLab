@@ -40,6 +40,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
     private var session = secureStore.read().optString("session")
     private var selectedId = secureStore.read().optString("account")
     private var pendingVerifier: String? = null
+    private var accountLoadFailure: IOException? = null
     @Volatile private var quoteNotBefore = System.currentTimeMillis()
     private val _accountGeneration = MutableStateFlow(0L)
     val accountGeneration: StateFlow<Long> = _accountGeneration
@@ -87,7 +88,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         val token = response.optString("sessionToken")
         require(token.isNotBlank() && token.length <= 6144) { "Invalid cTrader session" }
         synchronized(lock) {
-            session = token; selectedId = ""; symbolIds.clear()
+            session = token; selectedId = ""; symbolIds.clear(); accountLoadFailure = null
             quoteNotBefore = System.currentTimeMillis()
             persist()
         }
@@ -118,7 +119,12 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             throw cancelled
         } catch (error: Exception) {
             if (accountGeneration.value != generation) return
-            synchronized(lock) { selectedId = ""; symbolIds.clear(); persist() }
+            synchronized(lock) {
+                selectedId = ""
+                symbolIds.clear()
+                accountLoadFailure = error as? IOException
+                persist()
+            }
             _accounts.value = emptyList()
             _selectedAccount.value = ""
             _accountGeneration.value += 1L
@@ -152,6 +158,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
     private fun commitSelection(accountId: String, ids: Map<String, Long>, allowed: List<Account>) {
         synchronized(lock) {
             selectedId = accountId
+            accountLoadFailure = null
             symbolIds.clear()
             symbolIds.putAll(ids)
             quoteNotBefore = System.currentTimeMillis()
@@ -166,7 +173,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
 
     fun logout() {
         synchronized(lock) {
-            session = ""; selectedId = ""; pendingVerifier = null
+            session = ""; selectedId = ""; pendingVerifier = null; accountLoadFailure = null
             quoteNotBefore = System.currentTimeMillis()
             symbolIds.clear(); persist()
         }
@@ -254,7 +261,9 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
 
     private fun resolve(symbol: String): Pair<String, Long> = synchronized(lock) {
         require(symbol in VerifiedMarketQuote.forexSymbols) { "Not a cTrader forex/metal symbol" }
-        if (session.isBlank() || selectedId.isBlank()) throw IOException("اربط حساب cTrader في الإعدادات")
+        if (session.isBlank()) throw IOException("اربط حساب cTrader في الإعدادات")
+        if (selectedId.isBlank()) throw accountLoadFailure
+            ?: IOException("حدّث الحسابات والرموز من إعدادات cTrader")
         val id = symbolIds[symbol] ?: throw IOException("الرمز $symbol غير متاح لدى وسيط cTrader")
         selectedId to id
     }
@@ -271,8 +280,11 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         client.newCall(builder.build()).execute().use { response ->
             if (!response.isSuccessful) {
                 val body = response.body?.string()?.take(2048).orEmpty()
-                val code = runCatching { JSONObject(body).optString("error") }.getOrNull()
-                throw CTraderGatewayException(response.code, code)
+                val error = runCatching { JSONObject(body) }.getOrNull()
+                throw CTraderGatewayException(
+                    response.code, error?.optString("error"), error?.optString("stage"),
+                    error?.optString("brokerCode"), error?.optInt("operation"),
+                )
             }
             val content = response.body?.string() ?: throw IOException("Empty cTrader response")
             if (content.length > 2_000_000) throw IOException("Oversized cTrader response")
