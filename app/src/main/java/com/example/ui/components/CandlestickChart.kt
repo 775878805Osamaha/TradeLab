@@ -170,6 +170,8 @@ fun CandlestickChart(
     val updateDrawing by rememberUpdatedState(onUpdateDrawing)
     var anchorTransform by remember { mutableStateOf<ChartTransform?>(null) }
     var editingAnchor by remember { mutableStateOf<Pair<ChartDrawing, Int>?>(null) }
+    var movingDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
+    var movingDrawingStart by remember { mutableStateOf<Offset?>(null) }
     var anchorPreview by remember { mutableStateOf<ChartDrawing?>(null) }
     val anchorRadius = with(androidx.compose.ui.platform.LocalDensity.current) { 18.dp.toPx() }
 
@@ -364,6 +366,8 @@ fun CandlestickChart(
                                 offset.y in 0f..transform.chartHeight
                             if (!dragStartedInPlot) return@detectDragGestures
                             editingAnchor = null
+                            movingDrawing = null
+                            movingDrawingStart = null
                             anchorPreview = null
                             anchorTransform = transform
                             if (activeDrawingTool == DrawingTool.NONE && !isCrosshairActive && updateDrawing != null && transform != null) {
@@ -374,6 +378,11 @@ fun CandlestickChart(
                                         val anchor=DrawingAnchorEditing.points(d)[index]
                                         near(anchor.time,anchor.price)
                                     }?.let { d to it }
+                                }
+                                if (editingAnchor == null) {
+                                    movingDrawing = currentDrawings.firstOrNull { it.id == selectedDrawingIdNow &&
+                                        it.tool != DrawingTool.ANCHORED_TEXT && DrawingHitTest.distance(it, transform, offset) <= positionHitRadius }
+                                    if (movingDrawing != null) movingDrawingStart = offset
                                 }
                             }
                             if (activeDrawingTool != DrawingTool.NONE) {
@@ -395,6 +404,16 @@ fun CandlestickChart(
                                     val point = t.snapDrawingPoint(Offset(change.position.x.coerceIn(0f,t.chartWidth),change.position.y.coerceIn(0f,t.chartHeight)), snapEnabled)
                                     anchorPreview = DrawingAnchorEditing.move(original,anchorIndex,
                                         DrawingAnchor(t.xToTime(point.x),t.yToPrice(point.y)))
+                                }
+                            } else if (movingDrawing != null) {
+                                val original = movingDrawing!!
+                                val start = movingDrawingStart
+                                val t = anchorTransform
+                                if (start != null && t != null) {
+                                    val from = Offset(start.x.coerceIn(0f,t.chartWidth),start.y.coerceIn(0f,t.chartHeight))
+                                    val to = Offset(change.position.x.coerceIn(0f,t.chartWidth),change.position.y.coerceIn(0f,t.chartHeight))
+                                    anchorPreview = DrawingAnchorEditing.translate(original,
+                                        t.xToTime(to.x) - t.xToTime(from.x),t.yToPrice(to.y) - t.yToPrice(from.y))
                                 }
                             } else if (activeDrawingTool != DrawingTool.NONE) {
                                 drawingCurrentOffset = change.position
@@ -418,9 +437,11 @@ fun CandlestickChart(
                         },
                         onDragEnd = {
                             anchorPreview?.let { preview ->
-                                if (currentDrawings.any { it == editingAnchor?.first }) updateDrawing?.invoke(preview)
+                                if (currentDrawings.any { it.id == (editingAnchor?.first?.id ?: movingDrawing?.id) }) updateDrawing?.invoke(preview)
                             }
                             editingAnchor = null
+                            movingDrawing = null
+                            movingDrawingStart = null
                             anchorPreview = null
                             if (dragStartedInPlot && activeDrawingTool != DrawingTool.NONE && drawingStartOffset != null && drawingCurrentOffset != null) {
                                 val transformForSnap = transformRef[0]
@@ -450,6 +471,8 @@ fun CandlestickChart(
                         },
                         onDragCancel = {
                             editingAnchor = null
+                            movingDrawing = null
+                            movingDrawingStart = null
                             anchorPreview = null
                             drawingStartOffset = null
                             drawingCurrentOffset = null

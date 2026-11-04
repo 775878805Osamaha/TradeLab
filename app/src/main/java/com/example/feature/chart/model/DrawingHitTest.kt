@@ -20,7 +20,10 @@ object DrawingHitTest {
             DrawingTool.VERTICAL_LINE -> abs(point.x-a.x)
             DrawingTool.EXTENDED_LINE -> segment(a,b,1)
             DrawingTool.RAY -> segment(a,b,2)
-            DrawingTool.RECTANGLE -> listOf(a,Offset(b.x,a.y),b,Offset(a.x,b.y),a).zipWithNext().minOf{segment(it.first,it.second)}
+            DrawingTool.RECTANGLE -> {
+                if (point.x in min(a.x,b.x)..max(a.x,b.x) && point.y in min(a.y,b.y)..max(a.y,b.y)) 0f
+                else listOf(a,Offset(b.x,a.y),b,Offset(a.x,b.y),a).zipWithNext().minOf{segment(it.first,it.second)}
+            }
             DrawingTool.LONG_POSITION, DrawingTool.SHORT_POSITION -> {
                 val anchors = d.anchors.mapNotNull { p -> t.timeToX(p.time)?.let { Offset(it, t.priceToY(p.price)) } }
                 if (anchors.size < 3) segment(a,b) else {

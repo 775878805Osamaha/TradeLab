@@ -56,6 +56,19 @@ class DrawingCatalogMathTests {
         assertEquals(0f,DrawingHitTest.distance(text,t,androidx.compose.ui.geometry.Offset(75f,375f)),.001f)
     }
 
+    @Test fun tappingInsideRiskRewardBoxOrFilledRectangleSelectsTheDrawing() {
+        val all=listOf(candle(900000,4000.0),candle(1800000,4001.0),candle(2700000,4002.0))
+        val t=ChartTransform(all,3900.0,4100.0,300f,500f,40f)
+        val anchors=listOf(DrawingAnchor(900000,4000.0),DrawingAnchor(1800000,4050.0),DrawingAnchor(2700000,3950.0))
+        val position=ChartDrawing(tool=DrawingTool.LONG_POSITION,symbol="XAUUSD",timeframe="M15",
+            startTime=anchors[0].time,startPrice=anchors[0].price,anchors=anchors)
+        val inner=androidx.compose.ui.geometry.Offset(t.timeToX(900000)!!+12f,t.priceToY(4020.0))
+        assertEquals(0f,DrawingHitTest.distance(position,t,inner),.001f)
+        val rectangle=position.copy(tool=DrawingTool.RECTANGLE,anchors=emptyList(),
+            endTime=2700000,endPrice=4050.0)
+        assertEquals(0f,DrawingHitTest.distance(rectangle,t,inner),.001f)
+    }
+
     @Test fun volumeProfileConservesOnlyActualInRangePositiveVolume() {
         val bars=listOf(candle(900000,10.0,2.0),candle(1800000,20.0,6.0),candle(2700000,30.0,12.0))
         val bins=CandleVolumeProfile.calculate(bars,900000,1800000,4)
