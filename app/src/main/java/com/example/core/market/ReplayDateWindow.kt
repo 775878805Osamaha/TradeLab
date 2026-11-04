@@ -14,11 +14,12 @@ object ReplayDateWindow {
      */
     fun recentWindows(
         now: Long, interval: Long, bars: Int, endOffsetBars: Int,
-        closedSessionLookbackHours: Int = 0
+        closedSessionLookbackHours: Int = 0,
+        brokerTimed: Boolean = false
     ): List<Window> {
         require(interval in 60_000L..604_800_000L && bars in 50..5_000)
         require(endOffsetBars in 0..100_000 && closedSessionLookbackHours in 0..96)
-        val latest = HistoricalCandleBoundary.currentOpen(now, interval) - interval -
+        val latest = HistoricalCandleBoundary.latestClosedRequestTo(now, interval, brokerTimed) -
             interval * endOffsetBars.toLong()
         require(latest >= interval * (bars - 1L)) { "Replay range predates available timestamps" }
         val width = interval * bars.toLong()
@@ -33,11 +34,12 @@ object ReplayDateWindow {
     fun oneYearBefore(now: Long): Long = Instant.ofEpochMilli(now)
         .atZone(ZoneOffset.UTC).minusYears(1).toInstant().toEpochMilli()
 
-    fun windows(target: Long, now: Long, interval: Long, bars: Int): List<Window> {
+    fun windows(target: Long, now: Long, interval: Long, bars: Int, brokerTimed: Boolean = false): List<Window> {
         require(interval in 60_000L..604_800_000L && bars in 50..5_000)
-        val latest = HistoricalCandleBoundary.currentOpen(now, interval) - interval
+        val latest = HistoricalCandleBoundary.latestClosedRequestTo(now, interval, brokerTimed)
         require(target >= 0L && target <= latest) { "Choose a completed historical date" }
-        val aligned = HistoricalCandleBoundary.currentOpen(target, interval).coerceAtLeast(0L)
+        val aligned = if (brokerTimed) target - Math.floorMod(target, 60_000L)
+            else HistoricalCandleBoundary.currentOpen(target, interval)
         val first = (aligned - 20L * interval).coerceAtLeast(0L)
         // Search contiguous windows over closed sessions, never retry transport errors.
         val searchUntil = minOf(latest, aligned + 7L * 86_400_000L)
