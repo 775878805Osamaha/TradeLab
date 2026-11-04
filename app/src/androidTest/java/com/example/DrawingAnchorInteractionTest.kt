@@ -28,6 +28,7 @@ class DrawingAnchorInteractionTest {
             startTime=bars.last().openTime,startPrice=2000.0)
         compose.setContent { MaterialTheme {
             CandlestickChart(bars,drawings=listOf(line),selectedDrawingId=selected.value,
+                isVolumeVisible=false,
                 modifier=Modifier.fillMaxSize(),onSelectDrawing={drawing,_->selected.value=drawing.id},
                 onClearDrawingSelection={selected.value=null},onUpdateDrawing={})
         } }
