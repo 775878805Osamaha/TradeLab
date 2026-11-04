@@ -15,8 +15,8 @@ class CTraderHistoryPagingTest {
 
         val actual = CTraderHistoryPaging.load(first, expected.last(), week, timeOf = { it }) { start, end, count ->
             assertTrue(end + 1 - start <= 90L * 86_400_000L)
-            val times = (start..end step week).toList()
-            assertEquals(times.size, count)
+            val times = expected.filter { it in start..end }
+            assertTrue(count >= times.size)
             CTraderHistoryPaging.Page(times, hasMore = false)
         }
 
@@ -54,7 +54,7 @@ class CTraderHistoryPagingTest {
             CTraderHistoryPaging.Page(emptyList<Long>(), hasMore = true)
         }
         assertEquals(emptyList<Long>(), result)
-        assertEquals(listOf(4, 1000), counts)
+        assertEquals(listOf(5, 1000), counts)
     }
 
     @Test
@@ -77,4 +77,25 @@ class CTraderHistoryPagingTest {
             }
         }
     }
+    @Test fun brokerShiftedDailyBarsAreNotLostBetweenDateWindows() = runBlocking {
+        val day = 86_400_000L
+        val hour = 3_600_000L
+        val expected = listOf(89L * day + hour, 90L * day + hour)
+        val actual = CTraderHistoryPaging.load(0L, 91L * day, day, timeOf = { it }) { from, to, _ ->
+            CTraderHistoryPaging.Page(expected.filter { it in from..to }, false)
+        }
+        assertEquals(expected, actual)
+    }
+
+    @Test fun backwardCursorDoesNotSkipShiftedBarLessThanOneIntervalAway() = runBlocking {
+        val h4 = 4L * 3_600_000L
+        val expected = listOf(0L, h4, 2L * h4 - 600_000L)
+        val actual = CTraderHistoryPaging.load(0L, 2L * h4, h4, timeOf = { it }) { from, to, _ ->
+            val available = expected.filter { it in from..to }
+            CTraderHistoryPaging.Page(available.takeLast(1), hasMore = available.size > 1)
+        }
+        assertEquals(expected, actual)
+    }
+
+
 }
