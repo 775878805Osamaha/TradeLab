@@ -228,7 +228,7 @@ class ReplayViewModel(
                     if (activeHistorySource != null && !activeDatasetIsTrusted()) {
                         invalidateBrokerReplay()
                     }
-                    if (activeHistorySource == null && gateway.selectedAccount.value.isNotBlank()) {
+                    if (activeHistorySource == null && !_uiState.value.isLoading) {
                         val state = _uiState.value
                         loadReplayData(state.symbol, state.timeframe, state.requestedHistoryBars,
                             state.historyEndOffsetBars, _historyTargetTime.value)
@@ -428,15 +428,17 @@ class ReplayViewModel(
             try {
                 val now = System.currentTimeMillis()
                 val interval = tf.minutes * 60_000L
+                val brokerTimed = symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols
                 // Every requested window contains only fully closed candle
                 // opening times; incomplete live candles never enter Replay.
                 val windows = if (targetTime != null) {
-                    com.example.core.market.ReplayDateWindow.windows(targetTime, now, interval, historyBars)
+                    com.example.core.market.ReplayDateWindow.windows(targetTime, now, interval, historyBars,
+                        brokerTimed = brokerTimed)
                 } else {
                     com.example.core.market.ReplayDateWindow.recentWindows(
                         now, interval, historyBars, endOffsetBars,
-                        closedSessionLookbackHours = if (symbol in
-                            com.example.core.market.VerifiedMarketQuote.forexSymbols) 72 else 0
+                        closedSessionLookbackHours = if (brokerTimed) 72 else 0,
+                        brokerTimed = brokerTimed
                     )
                 }
                 val loaded = com.example.core.market.ReplayDateHistory.load(windows, targetTime) { from, to ->
@@ -498,7 +500,7 @@ class ReplayViewModel(
                         state.copy(
                             isLoading = false,
                             message = if (symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
-                                "تعذر تحميل Replay من cTrader: ${(error.message ?: "تحقق من حساب الوسيط والشموع المكتملة").take(220)}"
+                                "تعذر تحميل Replay من cTrader: ${(error.message ?: "تحقق من حساب الوسيط والشموع المكتملة").take(100)}"
                             else "تعذر تحميل Replay من Binance: ${(error.message ?: "تحقق من الاتصال").take(100)}"
                         )
                     } else state
