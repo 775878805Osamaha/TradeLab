@@ -25,12 +25,15 @@ class ReplayEntryInteractionTest {
         assertAnalysis()
     }
 
-    @Test fun replayIconTogglesControlsAndCloseReturnsToAnalysis() {
+    @Test fun replayButtonOpensInlineAndCloseReturnsToAnalysis() {
         assertAnalysis()
+        compose.onNodeWithTag("chart_bottom_replay").assertTextContains("Replay", substring = true)
         compose.onNodeWithTag("chart_bottom_replay").performClick()
         compose.onNodeWithTag("chart_embedded_replay_controls").assertIsDisplayed()
+        compose.onNodeWithTag("nav_item_chart").assertIsSelected()
         compose.onNodeWithTag("chart_bottom_replay").performClick()
         assertAnalysis()
+        compose.onNodeWithTag("nav_item_chart").assertIsSelected()
         compose.onNodeWithTag("chart_bottom_replay").performClick()
         compose.onNodeWithTag("chart_replay_close").performClick()
         assertAnalysis()
