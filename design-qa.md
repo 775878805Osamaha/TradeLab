@@ -56,3 +56,34 @@
 - Typography may vary slightly with actual phone system fonts and font scaling.
 
 **final result: passed** — no remaining P0, P1, or P2 issues in the native Analysis Hub sheet and newly added utility sheets. This result does not verify a broker-authenticated cTrader candle stream or assert literal pixel-by-pixel TradingView ownership assets.
+
+---
+
+# Fibonacci retracement settings — Android design QA, 2026-11-05
+
+**Scope:** native `FibonacciSettingsScreen` opened by editing a FIBONACCI drawing on the existing chart, with three RTL tabs: `نمط` / `إحداثيات` / `الظهور`. This is a separate review from the Analysis Hub above.
+
+## Reference and actual Android evidence
+
+- Source screenshots supplied by the user: `../upload/06-1002878932.jpg` (Style first viewport), `../upload/05-1002878934.jpg` (Style levels scrolled), `../upload/04-1002878937.jpg` (Style appearance controls), `../upload/03-1002878940.jpg` (Coordinates), `../upload/02-1002878947.jpg` (Visibility top), and `../upload/01-1002878948.jpg` (Visibility bottom), each **691 × 1536** physical pixels.
+- Android emulator screenshots: `../fibonacci_review_20261105/refined/tradelab-fibonacci-style.png`, `../fibonacci_review_20261105/refined/tradelab-fibonacci-coordinates.png`, and `../fibonacci_review_20261105/refined/tradelab-fibonacci-visibility.png`, each **1080 × 2400** physical pixels.
+- Reference normalization: screenshot resized proportionally from 691 × 1536 to 1080 × 2400 for side-by-side comparison; `../fibonacci_review_20261105/coordinates-side-by-side.png` illustrates the common viewport geometry. Device status/navigation bars differ by Android OS version and are not app-owned.
+- The capture mounts the **real Kotlin/Jetpack Compose component on an Android emulator**, not a generated mockup. The test uses known sample XAUUSD candles for coordinate fields; it is **not evidence of authenticated live cTrader candles**.
+- Production integration: the editor lives in the existing `ChartScreen` scaffold; chart data providers, Replay logic, and main navigation were not replaced.
+
+## Focused comparison and fixes
+
+1. **Header/tabs:** the white editor, right-aligned Arabic title, close and pencil icons, three RTL tabs, selected dark underline and thin divider match the reference structure. Source and emulator fonts have small system-dependent weight differences (P3).
+2. **Style:** line options, extension selector, level-colored swatches, editable numeric inputs, dark checked boxes, and disabled/unchecked levels follow the source ordering. The first iteration used Material text-field outlines; replaced level fields with the same lighter rounded text input geometry as the screenshot (P2 fixed). A two-color diagonal square replaced an approximate palette icon (P3 fixed). The individual line-style controls remain grouped differently from TradingView (P3 visual divergence).
+3. **Coordinates:** verified two editable price/bar rows with RTL labels, and matched source fixture numbers `4204.64` / `305`, `4169.28` / `302`; controlled field borders and order are visibly close in the side-by-side comparison (P2 fixed).
+4. **Visibility:** verifies all referenced groups — ticks, seconds, minutes, hours, days, weeks, months and Ranges — with independent checks and editable minimum/maximum bounds. The scrollable body keeps its own state per tab. The test now asserts that `موافق` and `إلغاء` remain displayed after switching tabs (P2 fixed).
+5. **Footer:** fixed action row with `موافق`, `إلغاء`, and ellipsis; verified by screenshots and Compose interaction tests. The test fixture excludes the production application's separate four-destination bottom navigation; this is a fixture difference, not an intentionally removed app navigation bar.
+6. **Persistence/behavior:** each level/color/range is saved with the individual drawing. Disabled levels are not drawn, reverse/log levels and fill opacity change rendering, coordinates update actual anchors, visibility is evaluated against the currently viewed timeframe, and cancel does not write. Legacy drawings without a Fibonacci payload are read through a compatibility default.
+
+## Remaining differences and acceptance
+
+- Exact proprietary TradingView controls and system glyphs are not copied; native Compose primitives are used. A literal pixel-perfect replica is therefore **not claimed**.
+- The line preview currently shares a common line-style setting between trend and levels whereas the reference exposes them as separate controls (P3). The first-line swatch adopts the saved drawing color, which may differ from the particular source screenshot's gray swatch.
+- This review does not assert that the active broker is authenticated. A real live-feed screenshot requires sign-in separately.
+
+**Fibonacci result: passed for native UI interaction and persistence**, with the above P3 visual differences explicitly tracked. Debug APK compilation and unit tests completed successfully in workflow `42076410959`; native screenshot and instrumented interaction verification: `42076009735` (the prior commit's identical UI). Final current-commit instrumented verification: `42076410957`.
