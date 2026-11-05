@@ -8,6 +8,8 @@ on:
       - 'app/src/main/java/com/example/feature/chart/**'
       - 'app/src/main/java/com/example/ui/components/**'
       - 'app/src/androidTest/java/com/example/Drawing*'
+      - 'app/src/androidTest/java/com/example/ChartObjectTreeSheetTest.kt'
+      - 'app/src/androidTest/java/com/example/IndicatorTemplatesSheetTest.kt'
   workflow_dispatch:
 
 jobs:
@@ -53,12 +55,14 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -accel on -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
             chmod +x gradlew
-            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.DrawingAnchorInteractionTest,com.example.DrawingContextToolbarTest,com.example.ChartTypeSheetTest,com.example.AnalysisHubSheetTest --stacktrace
+            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.DrawingAnchorInteractionTest,com.example.DrawingContextToolbarTest,com.example.ChartTypeSheetTest,com.example.AnalysisHubSheetTest,com.example.ChartObjectTreeSheetTest,com.example.IndicatorTemplatesSheetTest --stacktrace
             mkdir -p drawing-captures
             adb pull /sdcard/Download/drawing-context-native-test.png drawing-captures/drawing-context-native-test.png
             adb pull /sdcard/Download/drawing-position-native-test.png drawing-captures/drawing-position-native-test.png
             adb pull /sdcard/Download/tradelab-chart-type-sheet.png drawing-captures/tradelab-chart-type-sheet.png
             adb pull /sdcard/Download/tradelab-analysis-hub.png drawing-captures/tradelab-analysis-hub.png
+            adb pull /sdcard/Download/tradelab-object-tree.png drawing-captures/tradelab-object-tree.png
+            adb pull /sdcard/Download/tradelab-indicator-templates.png drawing-captures/tradelab-indicator-templates.png
       - name: Preserve Android test reports
         if: always()
         uses: actions/upload-artifact@v4

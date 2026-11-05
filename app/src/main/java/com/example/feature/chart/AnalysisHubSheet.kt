@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -35,25 +36,25 @@ internal data class AnalysisHubItem(
 /** RTL order, matching the phone-size Arabic TradingView Analysis Hub reference. */
 internal object AnalysisHubCatalog {
     val toolsWide = listOf(
-        AnalysisHubItem("indicators", "مؤشرات", Icons.Default.InsertChartOutlined),
-        AnalysisHubItem("compare", "قارن", Icons.Default.AddCircleOutline),
-        AnalysisHubItem("alerts", "تنبيهات", Icons.Default.Alarm),
-        AnalysisHubItem("bar_replay", "إعادة تشغيل الأعمدة", Icons.Default.FastRewind)
+        AnalysisHubItem("indicators", "مؤشرات", Icons.Outlined.Insights),
+        AnalysisHubItem("compare", "قارن", Icons.Outlined.AddCircleOutline),
+        AnalysisHubItem("alerts", "تنبيهات", Icons.Outlined.Alarm),
+        AnalysisHubItem("bar_replay", "إعادة تشغيل الأعمدة", Icons.Outlined.FastRewind)
     )
     val toolsCompact = listOf(
-        AnalysisHubItem("indicator_templates", "قوالب المؤشر", Icons.Default.GridView),
+        AnalysisHubItem("indicator_templates", "قوالب المؤشر", Icons.Outlined.GridView),
         AnalysisHubItem("chart_type", "نوع الرسم البياني", chartGlyph = true),
-        AnalysisHubItem("object_tree", "شجرة الكائنات", Icons.Default.Layers)
+        AnalysisHubItem("object_tree", "شجرة الكائنات", Icons.Outlined.Layers)
     )
     val information = listOf(
-        AnalysisHubItem("symbol_info", "معلومات الرمز", Icons.Default.Info),
-        AnalysisHubItem("financial_data", "البيانات المالية", Icons.Default.BarChart, enabled = false),
-        AnalysisHubItem("forecasts", "التوقعات", Icons.Default.TrendingUp, enabled = false),
-        AnalysisHubItem("technical_analysis", "تحليلات فنية", Icons.Default.Speed)
+        AnalysisHubItem("symbol_info", "معلومات الرمز", Icons.Outlined.Info),
+        AnalysisHubItem("financial_data", "البيانات المالية", Icons.Outlined.BarChart, enabled = false),
+        AnalysisHubItem("forecasts", "التوقعات", Icons.Outlined.TrendingUp, enabled = false),
+        AnalysisHubItem("technical_analysis", "تحليلات فنية", Icons.Outlined.Speed)
     )
     val more = listOf(
-        AnalysisHubItem("publish", "نشر التحليل", Icons.Default.Lightbulb),
-        AnalysisHubItem("pine_editor", "Pine Editor", Icons.Default.Code)
+        AnalysisHubItem("publish", "نشر التحليل", Icons.Outlined.Lightbulb),
+        AnalysisHubItem("pine_editor", "Pine Editor", Icons.Outlined.Terrain)
     )
 }
 

@@ -169,6 +169,12 @@ fun ChartScreen(
     var showHistoryDetails by remember { mutableStateOf(false) }
     var showChartExtras by remember { mutableStateOf(false) }
     var showChartTypeSheet by remember { mutableStateOf(false) }
+    var showObjectTree by remember { mutableStateOf(false) }
+    var showIndicatorTemplates by remember { mutableStateOf(false) }
+    var savedIndicatorTemplate by remember { mutableStateOf(
+        if (workspacePrefs.contains("indicators_user_template"))
+            ChartWorkspaceSettings.load(workspacePrefs, "indicators_user_template") else null
+    ) }
     var showLegacyChartSettings by remember { mutableStateOf(false) }
     var showAnalysisHelp by remember { mutableStateOf(false) }
     var showAnalysisSymbolInfo by remember { mutableStateOf(false) }
@@ -513,6 +519,8 @@ fun ChartScreen(
         onAction = { action ->
             when (action) {
                 "chart_type" -> { showChartExtras = false; showChartTypeSheet = true }
+                "object_tree" -> { showChartExtras = false; showObjectTree = true }
+                "indicator_templates" -> { showChartExtras = false; showIndicatorTemplates = true }
                 "indicators", "technical_analysis" -> { showChartExtras = false; showIndicatorsDialog = true }
                 "alerts" -> { showChartExtras = false; showPriceAlert = true }
                 "bar_replay" -> { showChartExtras = false; toggleReplayOnChart() }
@@ -522,6 +530,44 @@ fun ChartScreen(
                     "هذه الأداة غير متاحة بعد في TradeLab", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
+    )
+
+    if (showObjectTree) {
+        // Replay must not reveal a drawing anchored in unrevealed future candles.
+        val revealedTime = replayState.visibleCandles.lastOrNull()?.openTime
+        val availableDrawings = remember(uiState.drawings, uiState.selectedSymbol,
+            uiState.selectedTimeframe, isEmbeddedReplay, revealedTime) {
+            val scoped = uiState.drawings.filter { drawing ->
+                drawing.symbol.equals(uiState.selectedSymbol, ignoreCase = true) &&
+                    drawing.timeframe == uiState.selectedTimeframe.code
+            }
+            if (isEmbeddedReplay) com.example.feature.replay.visibleReplayDrawings(scoped, revealedTime)
+            else scoped
+        }
+        ChartObjectTreeSheet(
+            symbol = uiState.selectedSymbol,
+            drawings = availableDrawings,
+            drawingsHidden = hideDrawings,
+            onDismiss = { showObjectTree = false },
+            onEdit = { drawing -> showObjectTree = false; editingDrawing = drawing },
+            onDelete = { drawing -> viewModel.deleteDrawing(drawing.id); if (selectedDrawingId == drawing.id) selectedDrawingId = null },
+            onShowDrawings = { hideDrawings = false }
+        )
+    }
+    if (showIndicatorTemplates) IndicatorTemplatesSheet(
+        current = uiState.indicatorSettings,
+        savedTemplate = savedIndicatorTemplate,
+        onApply = { settings ->
+            ChartWorkspaceSettings.save(workspacePrefs, "indicators", settings)
+            viewModel.updateIndicatorSettings(settings)
+            showIndicatorTemplates = false
+        },
+        onSaveCurrent = {
+            val settings = uiState.indicatorSettings
+            ChartWorkspaceSettings.save(workspacePrefs, "indicators_user_template", settings)
+            savedIndicatorTemplate = settings
+        },
+        onDismiss = { showIndicatorTemplates = false }
     )
 
     if (showAnalysisSymbolInfo) AlertDialog(
