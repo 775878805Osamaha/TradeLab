@@ -120,7 +120,7 @@ internal fun AnalysisHubSheet(onDismiss: () -> Unit, onAction: (String) -> Unit)
         }
     ) {
         Column(
-            Modifier.fillMaxWidth().fillMaxHeight(0.99f)
+            Modifier.fillMaxWidth().fillMaxHeight(0.965f)
                 .background(Color.White)
                 .verticalScroll(rememberScrollState())
                 .testTag("analysis_hub_sheet")
@@ -128,11 +128,11 @@ internal fun AnalysisHubSheet(onDismiss: () -> Unit, onAction: (String) -> Unit)
             Text(
                 "محور التحليل", color = Color.Black, fontSize = 26.sp,
                 fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Right,
-                modifier = Modifier.fillMaxWidth().padding(end = 17.dp, top = 14.dp, bottom = 9.dp)
+                modifier = Modifier.fillMaxWidth().padding(end = 17.dp, top = 22.dp, bottom = 9.dp)
                     .testTag("analysis_hub_title")
             )
             HorizontalDivider(thickness = 1.dp, color = Color(0xFFF0F0F0))
-            AnalysisHubSectionTitle("أدوات", 8.dp)
+            AnalysisHubSectionTitle("أدوات", 0.dp)
             AnalysisHubRow(AnalysisHubCatalog.toolsWide.take(2), onAction)
             Spacer(Modifier.height(8.dp))
             AnalysisHubRow(AnalysisHubCatalog.toolsWide.drop(2), onAction)
@@ -144,7 +144,7 @@ internal fun AnalysisHubSheet(onDismiss: () -> Unit, onAction: (String) -> Unit)
             AnalysisHubRow(AnalysisHubCatalog.information.drop(2), onAction)
             AnalysisHubSectionTitle("المزيد", 11.dp)
             AnalysisHubRow(AnalysisHubCatalog.more, onAction)
-            Spacer(Modifier.height(19.dp))
+            Spacer(Modifier.height(25.dp))
             HorizontalDivider(thickness = 1.dp, color = Color(0xFFF0F0F0))
             Spacer(Modifier.height(20.dp))
             Row(
