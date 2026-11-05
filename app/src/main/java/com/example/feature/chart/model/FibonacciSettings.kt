@@ -137,8 +137,8 @@ data class FibonacciSettings(
                 val fontSize = p[13].toInt()
                 require(opacity.isFinite() && opacity in 0f..1f && fontSize in 8..32)
                 val trendColor = if (isV2) p[16].takeUnless { it == "null" }?.toInt()?.let { Color(it) } else null
-                val trendStyle = if (isV2) p[17].takeUnless { it == "null" }?.let(DrawingLineStyle::valueOf) else null
-                val levelStyle = if (isV2) p[18].takeUnless { it == "null" }?.let(DrawingLineStyle::valueOf) else null
+                val trendStyle = if (isV2) p[17].takeUnless { it == "null" }?.let { DrawingLineStyle.valueOf(it) } else null
+                val levelStyle = if (isV2) p[18].takeUnless { it == "null" }?.let { DrawingLineStyle.valueOf(it) } else null
                 val levelWidth = if (isV2) p[19].takeUnless { it == "null" }?.toFloat() else null
                 require(levelWidth == null || (levelWidth.isFinite() && levelWidth in 0.5f..8f))
                 FibonacciSettings(levels, bit(p[2]), FibExtension.valueOf(p[3]), bit(p[4]),

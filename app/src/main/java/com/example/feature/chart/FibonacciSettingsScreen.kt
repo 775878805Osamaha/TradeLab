@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -213,7 +214,8 @@ internal fun FibonacciSettingsScreen(
         val colors = listOf(Color(0xFFF53649), Color.White, Color(0xFFFFF37D), Color(0xFF4CAF50),
             Color(0xFF00A18F), Color(0xFF8CA8F8), Color(0xFFEA8EA2), Color(0xFFC38DCE),
             Color(0xFFFFA000), Color(0xFF737373), Color.Black, Color(0xFF40B9CF))
-        AlertDialog(onDismissRequest = { colorTarget = -1 }, title = { Text("لون المستوى") },
+        AlertDialog(onDismissRequest = { colorTarget = -1 },
+            title = { Text(if (colorTarget == -3) "لون خط الاتجاه" else "لون المستوى") },
             text = {
                 Column {
                     colors.chunked(6).forEach { row ->
@@ -286,6 +288,9 @@ private fun FibonacciStyleTab(
                 OutlinedButton(onClick = { extensionExpanded = true },
                     modifier = Modifier.width(165.dp).height(42.dp).testTag("fib_extension"),
                     shape = RoundedCornerShape(7.dp), contentPadding = PaddingValues(horizontal = 6.dp)) {
+                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null,
+                        tint = Color(0xFF666666), modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text(when (settings.extension) {
                         FibExtension.NONE -> "لا تقم بالتمديد"; FibExtension.LEFT -> "لليسار"
                         FibExtension.RIGHT -> "لليمين"; FibExtension.BOTH -> "في الاتجاهين"
@@ -324,8 +329,8 @@ private fun FibonacciStyleTab(
             Box(Modifier.size(36.dp).border(1.dp, fibBorder, RoundedCornerShape(8.dp))
                 .clickable { onColor(-2) }.padding(5.dp).clip(RoundedCornerShape(4.dp))) {
                 Canvas(Modifier.fillMaxSize()) {
-                    drawRect(Color(0xFF1DA18E))
-                    drawPath(Path().apply {
+                    drawRect(if (settings.singleColor) lineColor else Color(0xFF1DA18E))
+                    if (!settings.singleColor) drawPath(Path().apply {
                         moveTo(size.width, 0f)
                         lineTo(size.width, size.height)
                         lineTo(0f, size.height)
@@ -357,7 +362,11 @@ private fun FibonacciStyleTab(
                     }, color = fibInk)
                 }
                 DropdownMenu(expanded = positionExpanded, onDismissRequest = { positionExpanded = false }) {
-                    FibLabelPosition.entries.forEach { pos -> DropdownMenuItem(text = { Text(pos.name) }, onClick = {
+                    FibLabelPosition.entries.forEach { pos -> DropdownMenuItem(text = { Text(when(pos) {
+                        FibLabelPosition.LEFT -> "يسار"
+                        FibLabelPosition.CENTER -> "وسط"
+                        FibLabelPosition.RIGHT -> "يمين"
+                    }) }, onClick = {
                         onSettings(settings.copy(labelPosition = pos)); positionExpanded = false
                     }) }
                 }
