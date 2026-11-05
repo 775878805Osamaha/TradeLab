@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -48,7 +49,9 @@ internal fun FibonacciSettingsScreen(
     onCopy: ((ChartDrawing) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val focusManager = LocalFocusManager.current
     var tab by remember(drawing.id) { mutableIntStateOf(0) }
+    LaunchedEffect(tab) { focusManager.clearFocus(force = true) }
     var settings by remember(drawing.id) { mutableStateOf(drawing.fibonacci) }
     var levelsRaw by remember(drawing.id) { mutableStateOf(drawing.fibonacci.levels.map { fibNumber(it.value) }) }
     var ruleInputs by remember(drawing.id) { mutableStateOf(drawing.fibonacci.timeRules.associate { rule ->
@@ -99,7 +102,10 @@ internal fun FibonacciSettingsScreen(
             horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             listOf("الظهور", "إحداثيات", "نمط").forEachIndexed { i, label ->
                 val selected = tab == 2 - i
-                Column(Modifier.width(80.dp).fillMaxHeight().clickable { tab = 2 - i }
+                Column(Modifier.width(80.dp).fillMaxHeight().clickable {
+                    focusManager.clearFocus(force = true)
+                    tab = 2 - i
+                }
                     .testTag("fib_tab_${2 - i}"), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Bottom) {
                     Text(label, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = fibInk)
@@ -294,13 +300,9 @@ private fun FibonacciStyleTab(
                     .border(1.dp, fibBorder, RoundedCornerShape(6.dp))
                     .clickable { onColor(index) }.testTag("fib_level_color_$index"))
                 Spacer(Modifier.width(9.dp))
-                OutlinedTextField(value = levelsRaw.getOrElse(index) { fibNumber(level.value) },
-                    onValueChange = { onRawLevel(index, it) },
-                    singleLine = true, textStyle = TextStyle(fontSize = 15.sp, textAlign = TextAlign.End,
-                        textDirection = TextDirection.Ltr, color = fibInk),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.width(105.dp).height(48.dp).testTag("fib_level_value_$index"))
+                FibNumberField(levelsRaw.getOrElse(index) { fibNumber(level.value) },
+                    { onRawLevel(index, it) }, Modifier.width(105.dp)
+                        .testTag("fib_level_value_$index"))
                 Spacer(Modifier.width(6.dp))
                 FibChecked(level.enabled, { enabled ->
                     onSettings(settings.copy(levels = settings.levels.toMutableList().also {
