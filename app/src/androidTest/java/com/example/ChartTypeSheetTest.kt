@@ -13,6 +13,7 @@ import com.example.feature.chart.ChartTypeCatalog
 import com.example.feature.chart.ChartTypeSheet
 import com.example.ui.components.ChartDisplayStyle
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -58,8 +59,28 @@ class ChartTypeSheetTest {
             }
         }
         compose.onNodeWithTag("chart_type_grid").assertExists()
+        compose.waitUntil(timeoutMillis = 7_000) {
+            runCatching {
+                compose.onNodeWithTag("chart_type_sheet_title").assertIsDisplayed()
+            }.isSuccess
+        }
         compose.waitForIdle()
+        // ModalBottomSheet's presentation animation can continue after semantics become visible.
+        // Screenshot timing must be deterministic on slow CI emulator renderers.
+        Thread.sleep(900)
         val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        val screenshot = requireNotNull(automation.takeScreenshot())
+        var darkContentPixels = 0
+        for (y in screenshot.height / 6 until screenshot.height * 5 / 6 step 16) {
+            for (x in screenshot.width / 8 until screenshot.width * 7 / 8 step 16) {
+                val pixel = screenshot.getPixel(x, y)
+                if (android.graphics.Color.red(pixel) < 110 &&
+                    android.graphics.Color.green(pixel) < 110 &&
+                    android.graphics.Color.blue(pixel) < 110
+                ) darkContentPixels++
+            }
+        }
+        assertTrue("Chart type title and icons must be visible in the native capture", darkContentPixels > 30)
         android.os.ParcelFileDescriptor.AutoCloseInputStream(
             automation.executeShellCommand("screencap -p /sdcard/Download/tradelab-chart-type-sheet.png")
         ).use { it.readBytes() }
