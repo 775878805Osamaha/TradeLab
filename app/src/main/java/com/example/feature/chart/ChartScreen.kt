@@ -1113,13 +1113,17 @@ fun ChartScreen(
                 // chart layer; no secondary editor page or blocking dialog.
                 val selectedDrawing = displayedDrawings.firstOrNull { it.id == selectedDrawingId }
                 if (selectedDrawing != null && uiState.activeDrawingTool == DrawingTool.NONE && !uiState.isCrosshairActive) {
-                    val topInset = with(paletteDensity) { 110.dp.toPx() }
-                    val toolbarHeight = with(paletteDensity) { 58.dp.toPx() }
-                    val distanceFromTouch = with(paletteDensity) { 20.dp.toPx() }
-                    val beforeTouch = selectedDrawingTouch.y - toolbarHeight - distanceFromTouch
-                    val desiredY = if (beforeTouch < topInset) selectedDrawingTouch.y + distanceFromTouch else beforeTouch
-                    val safeTop = desiredY.coerceIn(topInset, (chartPaletteContainerHeightPx - toolbarHeight - topInset).coerceAtLeast(topInset))
-                    Box(Modifier.align(Alignment.TopCenter).offset { IntOffset(0, safeTop.roundToInt()) }) {
+                    val floatingWidthPx = (chartPaletteContainerWidthPx * .86f).roundToInt()
+                    val placement = DrawingToolbarPlacement.nearSelection(
+                        selectedDrawingTouch.x, selectedDrawingTouch.y,
+                        chartPaletteContainerWidthPx, chartPaletteContainerHeightPx,
+                        floatingWidthPx, with(paletteDensity) { 58.dp.roundToPx() },
+                        with(paletteDensity) { 110.dp.roundToPx() },
+                        with(paletteDensity) { 20.dp.roundToPx() }
+                    )
+                    Box(Modifier.align(Alignment.TopStart).offset {
+                        IntOffset(placement.x, placement.y)
+                    }) {
                         DrawingContextToolbar(
                             drawing = selectedDrawing,
                             onUpdate = { viewModel.updateDrawing(it) },

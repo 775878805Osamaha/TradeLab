@@ -43,7 +43,10 @@ internal fun DrawingContextToolbar(
     val dark = Color(0xFF202229)
     val blue = Color(0xFF3479FF)
     Surface(
-        modifier = Modifier.fillMaxWidth(0.94f).testTag("drawing_context_toolbar"),
+        // Leave breathing room around the selection like TradingView's
+        // floating editing palette. Secondary actions remain horizontally
+        // scrollable on a narrow mobile display.
+        modifier = Modifier.fillMaxWidth(0.86f).testTag("drawing_context_toolbar"),
         color = dark,
         shape = RoundedCornerShape(13.dp),
         shadowElevation = 12.dp
