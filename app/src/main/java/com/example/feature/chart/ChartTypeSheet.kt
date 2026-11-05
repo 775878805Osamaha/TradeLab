@@ -88,21 +88,21 @@ internal fun ChartTypeSheet(
                 text = "نوع الرسم البياني",
                 color = Color(0xFF101010), fontSize = 26.sp,
                 fontWeight = FontWeight.Bold, textAlign = TextAlign.Right,
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 18.dp, top = 20.dp, bottom = 26.dp)
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 18.dp, top = 20.dp, bottom = 30.dp)
                     .testTag("chart_type_sheet_title")
             )
             androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(13.dp),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
                     modifier = Modifier.fillMaxWidth().weight(1f).testTag("chart_type_grid")
                 ) {
                     items(ChartTypeCatalog.options, key = { it.key }) { option ->
                         val active = option.style == current && option.style != null
                         Column(
-                            modifier = Modifier.fillMaxWidth().height(79.dp)
+                            modifier = Modifier.fillMaxWidth().height(83.dp)
                                 .background(if (active) selected else tile, RoundedCornerShape(13.dp))
                                 .clickable {
                                     if (option.style != null) onSelect(option.style)
