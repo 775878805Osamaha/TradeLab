@@ -57,14 +57,19 @@ class FibonacciSettingsScreenTest {
         capture("tradelab-fibonacci-style-levels.png")
         compose.onNodeWithTag("fib_log_scale").performScrollTo()
         capture("tradelab-fibonacci-style-appearance.png")
-        compose.onNodeWithTag("fib_level_value_0").performScrollTo()
+        // Return the corresponding menu anchor fully into view after capturing the
+        // long scrolled style states. Off-screen dropdown anchors cannot reliably
+        // show a popup on the Android emulator.
+        compose.onNodeWithTag("fib_level_line_style").performScrollTo()
 
         compose.onNodeWithTag("fib_level_line_style").performClick()
         compose.onNodeWithText("خط متقطع").performClick()
         compose.onNodeWithTag("fib_level_line_width").performClick()
         compose.onNodeWithText("3.0px").performClick()
+        compose.onNodeWithTag("fib_trend_line_style").performScrollTo()
         compose.onNodeWithTag("fib_trend_line_style").performClick()
         compose.onNodeWithText("خط منقط").performClick()
+        compose.onNodeWithTag("fib_level_enabled_1").performScrollTo()
         compose.onNodeWithTag("fib_level_enabled_1").performClick()
         compose.onNodeWithTag("fib_level_value_1").assertIsEnabled()
         compose.onNodeWithTag("fib_tab_1").performClick()
