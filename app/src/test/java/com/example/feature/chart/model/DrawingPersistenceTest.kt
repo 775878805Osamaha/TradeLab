@@ -47,6 +47,8 @@ class DrawingPersistenceTest {
             ),
             background = true, backgroundOpacity = .45f, extension = FibExtension.RIGHT,
             showPrices = false, reverse = true, logarithmic = true,
+            trendLineColor = Color(0xFF808080), trendLineStyle = DrawingLineStyle.DASHED,
+            levelLineStyle = DrawingLineStyle.DOTTED, levelLineWidth = 3f,
             timeRules = FibTimeUnit.entries.map { unit ->
                 FibTimeRule(unit, enabled = unit != FibTimeUnit.MINUTES, from = 1, to = unit.upperBound)
             }
@@ -60,6 +62,19 @@ class DrawingPersistenceTest {
         assertEquals(config, restored!!.fibonacci)
         assertFalse(restored.fibonacci.isVisibleAt("M5"))
         assertEquals(4204.64, restored.startPrice, .001)
+        assertEquals(DrawingLineStyle.DOTTED, restored.fibonacci.levelLineStyle)
+        assertEquals(3f, restored.fibonacci.levelLineWidth!!, 0f)
+    }
+
+    @Test fun fibonacciVersionOnePayloadKeepsItsPreviousSharedDrawingLineAppearance() {
+        val current = FibonacciSettings().encode().split('|')
+        val oldVersion = (listOf("1") + current.subList(1, 16)).joinToString("|")
+        val decoded = FibonacciSettings.decode(oldVersion)
+        assertEquals(FibonacciSettings.defaultLevels(), decoded.levels)
+        assertNull(decoded.trendLineColor)
+        assertNull(decoded.trendLineStyle)
+        assertNull(decoded.levelLineStyle)
+        assertNull(decoded.levelLineWidth)
     }
 
     @Test fun oldFibonacciDrawingsKeepTheirPreviousLevels() {
@@ -71,5 +86,6 @@ class DrawingPersistenceTest {
         assertEquals(FibonacciCalculator.DEFAULT_LEVELS,
             restored!!.fibonacci.levels.map { it.value })
         assertEquals(FibExtension.BOTH, restored.fibonacci.extension)
+        assertEquals(DrawingLineStyle.DASHED, restored.fibonacci.levelLineStyle)
     }
 }

@@ -10,6 +10,7 @@ import com.example.core.model.Candle
 import com.example.core.model.Timeframe
 import com.example.feature.chart.FibonacciSettingsScreen
 import com.example.feature.chart.model.ChartDrawing
+import com.example.feature.chart.model.DrawingLineStyle
 import com.example.feature.chart.model.DrawingTool
 import com.example.feature.chart.model.FibTimeUnit
 import org.junit.Assert.*
@@ -48,9 +49,15 @@ class FibonacciSettingsScreenTest {
         }
         compose.onNodeWithTag("fib_title").assertTextEquals("تصحيح فيبوناتشي")
         compose.onNodeWithTag("fib_level_value_0").assertIsDisplayed()
+        compose.onNodeWithTag("fib_level_value_1").assertIsNotEnabled()
         capture("tradelab-fibonacci-style.png")
 
+        compose.onNodeWithTag("fib_level_line_style").performClick()
+        compose.onNodeWithText("خط متقطع").performClick()
+        compose.onNodeWithTag("fib_level_line_width").performClick()
+        compose.onNodeWithText("3.0px").performClick()
         compose.onNodeWithTag("fib_level_enabled_1").performClick()
+        compose.onNodeWithTag("fib_level_value_1").assertIsEnabled()
         compose.onNodeWithTag("fib_tab_1").performClick()
         compose.onNodeWithTag("fib_price_0").assertIsDisplayed()
         compose.onNodeWithTag("fib_confirm").assertIsDisplayed()
@@ -70,6 +77,8 @@ class FibonacciSettingsScreenTest {
             assertNotNull(saved)
             assertEquals(4199.0, saved!!.startPrice, .0001)
             assertTrue(saved!!.fibonacci.levels[1].enabled)
+            assertEquals(DrawingLineStyle.DASHED, saved!!.fibonacci.levelLineStyle)
+            assertEquals(3f, saved!!.fibonacci.levelLineWidth!!, 0f)
             assertFalse(saved!!.fibonacci.timeRules.first { it.unit == FibTimeUnit.MINUTES }.enabled)
             assertEquals(candles[304].openTime, saved!!.startTime)
         }

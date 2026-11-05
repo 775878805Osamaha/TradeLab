@@ -43,7 +43,12 @@ data class FibonacciSettings(
     val labelPosition: FibLabelPosition = FibLabelPosition.LEFT,
     val textSize: Int = 12,
     val logarithmic: Boolean = false,
-    val timeRules: List<FibTimeRule> = FibTimeUnit.entries.map { FibTimeRule(it) }
+    val timeRules: List<FibTimeRule> = FibTimeUnit.entries.map { FibTimeRule(it) },
+    /** Null keeps a pre-v2 drawing's earlier shared drawing line appearance. */
+    val trendLineColor: Color? = Color(0xFF858585),
+    val trendLineStyle: DrawingLineStyle? = DrawingLineStyle.DASHED,
+    val levelLineStyle: DrawingLineStyle? = DrawingLineStyle.SOLID,
+    val levelLineWidth: Float? = 1.8f
 ) {
     fun isVisibleAt(timeframeCode: String): Boolean {
         val tf = Timeframe.fromCode(timeframeCode)
@@ -59,14 +64,18 @@ data class FibonacciSettings(
 
     /** Delimited versioned payload. The caller wraps this in Base64 inside DrawingEntity JSON. */
     fun encode(): String = listOf(
-        "1",
+        "2",
         levels.take(64).joinToString(";") { "${it.value},${it.enabled.asFlag()},${it.color.toArgb()}" },
         trendLine.asFlag().toString(), extension.name, singleColor.asFlag().toString(),
         background.asFlag().toString(), backgroundOpacity.toString(), reverse.asFlag().toString(),
         showPrices.asFlag().toString(), showLevels.asFlag().toString(), showText.asFlag().toString(),
         labelsAsPercents.asFlag().toString(), labelPosition.name, textSize.toString(),
         logarithmic.asFlag().toString(),
-        timeRules.joinToString(";") { "${it.unit.name},${it.enabled.asFlag()},${it.from},${it.to}" }
+        timeRules.joinToString(";") { "${it.unit.name},${it.enabled.asFlag()},${it.from},${it.to}" },
+        trendLineColor?.toArgb()?.toString() ?: "null",
+        trendLineStyle?.name ?: "null",
+        levelLineStyle?.name ?: "null",
+        levelLineWidth?.toString() ?: "null"
     ).joinToString("|")
 
     companion object {
@@ -74,7 +83,8 @@ data class FibonacciSettings(
         fun legacy(): FibonacciSettings = FibonacciSettings(
             levels = FibonacciCalculator.DEFAULT_LEVELS.map { FibonacciLevel(it, Color.White) },
             trendLine = false, extension = FibExtension.BOTH, singleColor = true,
-            labelsAsPercents = true
+            labelsAsPercents = true, trendLineColor = null, trendLineStyle = null,
+            levelLineStyle = DrawingLineStyle.DASHED, levelLineWidth = null
         )
 
         fun defaultLevels(): List<FibonacciLevel> = listOf(
@@ -105,7 +115,8 @@ data class FibonacciSettings(
             if (value.isNullOrBlank()) return FibonacciSettings()
             return runCatching {
                 val p = value.split('|')
-                require(p.size == 16 && p[0] == "1")
+                val isV2 = p.size == 20 && p[0] == "2"
+                require(isV2 || (p.size == 16 && p[0] == "1"))
                 fun bit(raw: String): Boolean { require(raw == "0" || raw == "1"); return raw == "1" }
                 val levels = p[1].split(';').map { item ->
                     val fields = item.split(','); require(fields.size == 3)
@@ -125,9 +136,15 @@ data class FibonacciSettings(
                 val opacity = p[6].toFloat()
                 val fontSize = p[13].toInt()
                 require(opacity.isFinite() && opacity in 0f..1f && fontSize in 8..32)
+                val trendColor = if (isV2) p[16].takeUnless { it == "null" }?.toInt()?.let { Color(it) } else null
+                val trendStyle = if (isV2) p[17].takeUnless { it == "null" }?.let(DrawingLineStyle::valueOf) else null
+                val levelStyle = if (isV2) p[18].takeUnless { it == "null" }?.let(DrawingLineStyle::valueOf) else null
+                val levelWidth = if (isV2) p[19].takeUnless { it == "null" }?.toFloat() else null
+                require(levelWidth == null || (levelWidth.isFinite() && levelWidth in 0.5f..8f))
                 FibonacciSettings(levels, bit(p[2]), FibExtension.valueOf(p[3]), bit(p[4]),
                     bit(p[5]), opacity, bit(p[7]), bit(p[8]), bit(p[9]), bit(p[10]),
-                    bit(p[11]), FibLabelPosition.valueOf(p[12]), fontSize, bit(p[14]), rules)
+                    bit(p[11]), FibLabelPosition.valueOf(p[12]), fontSize, bit(p[14]), rules,
+                    trendColor, trendStyle, levelStyle, levelWidth)
             }.getOrDefault(FibonacciSettings())
         }
     }

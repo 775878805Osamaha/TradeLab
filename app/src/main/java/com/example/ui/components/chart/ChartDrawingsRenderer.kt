@@ -120,6 +120,16 @@ object ChartDrawingsRenderer {
                 }
                 DrawingTool.FIBONACCI -> {
                     val fib = d.fibonacci
+                    val trendEffect = when (fib.trendLineStyle ?: d.lineStyle) {
+                        DrawingLineStyle.SOLID -> null
+                        DrawingLineStyle.DASHED -> PathEffect.dashPathEffect(floatArrayOf(9f, 6f))
+                        DrawingLineStyle.DOTTED -> PathEffect.dashPathEffect(floatArrayOf(2f, 6f))
+                    }
+                    val levelsEffect = when (fib.levelLineStyle ?: d.lineStyle) {
+                        DrawingLineStyle.SOLID -> null
+                        DrawingLineStyle.DASHED -> PathEffect.dashPathEffect(floatArrayOf(6f, 4f))
+                        DrawingLineStyle.DOTTED -> PathEffect.dashPathEffect(floatArrayOf(2f, 6f))
+                    }
                     // Timeframe visibility belongs to the chart the user is viewing, not
                     // the timeframe on which this drawing was first created.
                     val currentTimeframe = transform.visibleCandles.firstOrNull()?.timeframe?.code ?: d.timeframe
@@ -129,8 +139,8 @@ object ChartDrawingsRenderer {
                         val x1 = if (fib.extension == FibExtension.LEFT || fib.extension == FibExtension.BOTH) 0f else firstX
                         val x2 = if (fib.extension == FibExtension.RIGHT || fib.extension == FibExtension.BOTH) transform.chartWidth else lastX
                         if (fib.trendLine && endX != null && endY != null) {
-                            scope.drawLine(d.color, Offset(startX, startY), Offset(endX, endY),
-                                strokeWidth = d.strokeWidth, pathEffect = lineEffect)
+                            scope.drawLine(fib.trendLineColor ?: d.color, Offset(startX, startY), Offset(endX, endY),
+                                strokeWidth = d.strokeWidth, pathEffect = trendEffect)
                         }
                         val active = fib.levels.filter { it.enabled && it.value.isFinite() }
                             .map { level ->
@@ -153,7 +163,7 @@ object ChartDrawingsRenderer {
                         for ((level, price, y) in active) {
                             val levelColor = if (fib.singleColor) d.color else level.color
                             scope.drawLine(levelColor, Offset(x1, y), Offset(x2, y),
-                                strokeWidth = d.strokeWidth, pathEffect = lineEffect)
+                                strokeWidth = fib.levelLineWidth ?: d.strokeWidth, pathEffect = levelsEffect)
                             if (fib.showText && (fib.showLevels || fib.showPrices)) {
                                 val levelLabel = if (fib.labelsAsPercents)
                                     String.format(Locale.US, "%.1f%%", level.value * 100.0)

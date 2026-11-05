@@ -64,7 +64,7 @@ internal fun FibonacciSettingsScreen(
     var firstBar by remember(drawing.id, firstIndex) { mutableStateOf(firstIndex?.toString() ?: "") }
     var secondBar by remember(drawing.id, secondIndex) { mutableStateOf(secondIndex?.toString() ?: "") }
     var lineColor by remember(drawing.id) { mutableStateOf(drawing.color) }
-    var lineStyle by remember(drawing.id) { mutableStateOf(drawing.lineStyle) }
+    val lineStyle = drawing.lineStyle
     var lineWidth by remember(drawing.id) { mutableFloatStateOf(drawing.strokeWidth) }
     var title by remember(drawing.id) { mutableStateOf(drawing.text.takeUnless { it == "تعليق" } ?: "تصحيح فيبوناتشي") }
     var renaming by remember { mutableStateOf(false) }
@@ -121,7 +121,7 @@ internal fun FibonacciSettingsScreen(
                 0 -> FibonacciStyleTab(settings, levelsRaw, lineColor, lineStyle, lineWidth,
                     onSettings = { settings = it }, onRawLevel = { index, next ->
                         levelsRaw = levelsRaw.toMutableList().also { it[index] = next }
-                    }, onColor = { colorTarget = it }, onLineStyle = { lineStyle = it },
+                    }, onColor = { colorTarget = it },
                     onLineWidth = { lineWidth = it })
                 1 -> FibonacciCoordinatesTab(firstPrice, secondPrice, firstBar, secondBar, candles.isNotEmpty(),
                     onFirstPrice = { firstPrice = it }, onSecondPrice = { secondPrice = it },
@@ -222,10 +222,13 @@ internal fun FibonacciSettingsScreen(
                                 Box(Modifier.size(34.dp).border(1.dp, fibBorder, RoundedCornerShape(6.dp))
                                     .background(c, RoundedCornerShape(6.dp))
                                     .clickable {
-                                        if (colorTarget == -2) lineColor = c
-                                        else settings = settings.copy(levels = settings.levels.toMutableList().also {
-                                            it[colorTarget] = it[colorTarget].copy(color = c)
-                                        })
+                                        when (colorTarget) {
+                                            -2 -> lineColor = c
+                                            -3 -> settings = settings.copy(trendLineColor = c)
+                                            else -> settings = settings.copy(levels = settings.levels.toMutableList().also {
+                                                it[colorTarget] = it[colorTarget].copy(color = c)
+                                            })
+                                        }
                                         colorTarget = -1
                                     }.testTag("fib_color_${c.value}"))
                             }
@@ -258,7 +261,6 @@ private fun FibonacciStyleTab(
     onSettings: (FibonacciSettings) -> Unit,
     onRawLevel: (Int, String) -> Unit,
     onColor: (Int) -> Unit,
-    onLineStyle: (DrawingLineStyle) -> Unit,
     onLineWidth: (Float) -> Unit
 ) {
     var extensionExpanded by remember { mutableStateOf(false) }
@@ -268,10 +270,15 @@ private fun FibonacciStyleTab(
         .padding(top = 10.dp, bottom = 14.dp).testTag("fib_style_content")) {
         FibSettingsRow("خط الاتجاه", settings.trendLine,
             { onSettings(settings.copy(trendLine = it)) }, "fib_trend_line") {
-            FibLinePreview(lineColor, lineStyle, lineWidth, { onColor(-2) }, onLineStyle, onLineWidth)
+            FibLinePreview(settings.trendLineColor ?: lineColor,
+                settings.trendLineStyle ?: lineStyle, lineWidth, { onColor(-3) },
+                { onSettings(settings.copy(trendLineStyle = it)) }, onLineWidth)
         }
         FibSettingsRow("خط المستويات", true, {}, "fib_level_line", withCheck = false) {
-            FibLinePreview(lineColor, lineStyle, lineWidth, { onColor(-2) }, onLineStyle, onLineWidth)
+            FibLevelLinePreview(settings.levelLineStyle ?: lineStyle,
+                settings.levelLineWidth ?: lineWidth,
+                { onSettings(settings.copy(levelLineStyle = it)) },
+                { onSettings(settings.copy(levelLineWidth = it)) })
         }
         Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 20.dp),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -302,7 +309,7 @@ private fun FibonacciStyleTab(
                 Spacer(Modifier.width(9.dp))
                 FibNumberField(levelsRaw.getOrElse(index) { fibNumber(level.value) },
                     { onRawLevel(index, it) }, Modifier.width(105.dp)
-                        .testTag("fib_level_value_$index"))
+                        .testTag("fib_level_value_$index"), enabled = level.enabled)
                 Spacer(Modifier.width(6.dp))
                 FibChecked(level.enabled, { enabled ->
                     onSettings(settings.copy(levels = settings.levels.toMutableList().also {
@@ -315,7 +322,7 @@ private fun FibonacciStyleTab(
         FibSettingsRow("استخدم لون واحد", settings.singleColor,
             { onSettings(settings.copy(singleColor = it)) }, "fib_single_color", withCheck = false) {
             Box(Modifier.size(36.dp).border(1.dp, fibBorder, RoundedCornerShape(8.dp))
-                .padding(5.dp).clip(RoundedCornerShape(4.dp))) {
+                .clickable { onColor(-2) }.padding(5.dp).clip(RoundedCornerShape(4.dp))) {
                 Canvas(Modifier.fillMaxSize()) {
                     drawRect(Color(0xFF1DA18E))
                     drawPath(Path().apply {
@@ -380,13 +387,10 @@ private fun FibLinePreview(color: Color, style: DrawingLineStyle, width: Float,
                            onWidth: (Float) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(27.dp).background(color, RoundedCornerShape(4.dp))
-            .border(1.dp, fibBorder, RoundedCornerShape(4.dp)).clickable(onClick = onColor)
-            .testTag("fib_line_color"))
-        Spacer(Modifier.width(5.dp))
         Box {
             OutlinedButton(onClick = { expanded = true }, shape = RoundedCornerShape(7.dp),
-                modifier = Modifier.height(35.dp).testTag("fib_line_style"),
+                border = androidx.compose.foundation.BorderStroke(1.dp, fibBorder),
+                modifier = Modifier.height(35.dp).width(78.dp).testTag("fib_trend_line_style"),
                 contentPadding = PaddingValues(horizontal = 8.dp)) {
                 Text(when (style) {
                     DrawingLineStyle.SOLID -> "━━━━"; DrawingLineStyle.DASHED -> "━ ━ ━"
@@ -405,6 +409,61 @@ private fun FibLinePreview(color: Color, style: DrawingLineStyle, width: Float,
                     DropdownMenuItem(text = { Text("سُمك ${size.toInt()} px") }, onClick = {
                         onWidth(size); expanded = false
                     })
+                }
+            }
+        }
+        Spacer(Modifier.width(7.dp))
+        Box(Modifier.size(32.dp).background(color, RoundedCornerShape(4.dp))
+            .border(1.dp, fibBorder, RoundedCornerShape(4.dp)).clickable(onClick = onColor)
+            .testTag("fib_trend_line_color"))
+    }
+}
+
+/** TradingView-style independent width and stroke controls for the Fibonacci levels. */
+@Composable
+private fun FibLevelLinePreview(style: DrawingLineStyle, width: Float,
+                                onStyle: (DrawingLineStyle) -> Unit,
+                                onWidth: (Float) -> Unit) {
+    var widthExpanded by remember { mutableStateOf(false) }
+    var styleExpanded by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Box {
+            OutlinedButton(onClick = { widthExpanded = true },
+                modifier = Modifier.width(35.dp).height(35.dp).testTag("fib_level_line_width"),
+                shape = RoundedCornerShape(7.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, fibBorder),
+                contentPadding = PaddingValues(0.dp)) {
+                Text(if (width <= 2f) "−" else "${width.toInt()}",
+                    color = fibInk, fontSize = 17.sp)
+            }
+            DropdownMenu(expanded = widthExpanded, onDismissRequest = { widthExpanded = false }) {
+                listOf(1f, 1.5f, 2f, 3f, 4f, 5f).forEach { value ->
+                    DropdownMenuItem(text = { Text("${value}px") }, onClick = {
+                        onWidth(value); widthExpanded = false
+                    })
+                }
+            }
+        }
+        Box {
+            OutlinedButton(onClick = { styleExpanded = true },
+                modifier = Modifier.width(88.dp).height(35.dp).testTag("fib_level_line_style"),
+                shape = RoundedCornerShape(7.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, fibBorder),
+                contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text(when (style) {
+                    DrawingLineStyle.SOLID -> "━━━━"
+                    DrawingLineStyle.DASHED -> "━ ━ ━"
+                    DrawingLineStyle.DOTTED -> "••••••"
+                }, fontSize = 14.sp, color = fibInk)
+            }
+            DropdownMenu(expanded = styleExpanded, onDismissRequest = { styleExpanded = false }) {
+                DrawingLineStyle.entries.forEach { value ->
+                    DropdownMenuItem(text = { Text(when (value) {
+                        DrawingLineStyle.SOLID -> "خط متصل"
+                        DrawingLineStyle.DASHED -> "خط متقطع"
+                        DrawingLineStyle.DOTTED -> "خط منقط"
+                    }) }, onClick = { onStyle(value); styleExpanded = false })
                 }
             }
         }
@@ -464,6 +523,7 @@ private fun FibNumberField(value: String, onChange: (String) -> Unit, modifier: 
                            enabled: Boolean = true) {
     BasicTextField(value = value, onValueChange = onChange,
         modifier = modifier.height(38.dp)
+            .background(if (enabled) Color.White else Color(0xFFF2F2F2), RoundedCornerShape(9.dp))
             .border(1.dp, fibBorder, RoundedCornerShape(9.dp))
             .padding(horizontal = 9.dp, vertical = 8.dp),
         singleLine = true, enabled = enabled, textStyle = TextStyle(fontSize = 15.sp,
