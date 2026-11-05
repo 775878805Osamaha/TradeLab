@@ -169,6 +169,9 @@ fun ChartScreen(
     var showHistoryDetails by remember { mutableStateOf(false) }
     var showChartExtras by remember { mutableStateOf(false) }
     var showChartTypeSheet by remember { mutableStateOf(false) }
+    var showLegacyChartSettings by remember { mutableStateOf(false) }
+    var showAnalysisHelp by remember { mutableStateOf(false) }
+    var showAnalysisSymbolInfo by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var showPriceAlert by remember { mutableStateOf(false) }
     var hideDrawings by rememberSaveable { mutableStateOf(workspacePrefs.getBoolean("hide_drawings", false)) }
@@ -505,22 +508,52 @@ fun ChartScreen(
             onDismiss = { showChartTypeSheet = false }
         )
     }
-    if(showChartExtras) AlertDialog(onDismissRequest={showChartExtras=false},title={Text("إعدادات الشارت")},text={
+    if (showChartExtras) AnalysisHubSheet(
+        onDismiss = { showChartExtras = false },
+        onAction = { action ->
+            when (action) {
+                "chart_type" -> { showChartExtras = false; showChartTypeSheet = true }
+                "indicators", "technical_analysis" -> { showChartExtras = false; showIndicatorsDialog = true }
+                "alerts" -> { showChartExtras = false; showPriceAlert = true }
+                "bar_replay" -> { showChartExtras = false; toggleReplayOnChart() }
+                "symbol_info" -> { showChartExtras = false; showAnalysisSymbolInfo = true }
+                "help" -> { showChartExtras = false; showAnalysisHelp = true }
+                else -> android.widget.Toast.makeText(imageContext,
+                    "هذه الأداة غير متاحة بعد في TradeLab", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
+
+    if (showAnalysisSymbolInfo) AlertDialog(
+        onDismissRequest = { showAnalysisSymbolInfo = false },
+        title = { Text("معلومات الرمز") },
+        text = { Text("الرمز الحالي: ${uiState.selectedSymbol}\nالفريم: ${uiState.selectedTimeframe.displayName}") },
+        confirmButton = { TextButton(onClick = { showAnalysisSymbolInfo = false }) { Text("إغلاق") } }
+    )
+    if (showAnalysisHelp) AlertDialog(
+        onDismissRequest = { showAnalysisHelp = false },
+        title = { Text("مركز المساعدة") },
+        text = { Text("اختر المؤشرات أو التنبيهات أو نوع الرسم البياني من محور التحليل. يمكنك أيضًا فتح إعدادات الشارت المتقدمة للتحكم في الألوان والحجم والمغناطيس والرسومات.") },
+        dismissButton = { TextButton(onClick = { showAnalysisHelp = false }) { Text("إغلاق") } },
+        confirmButton = { TextButton(onClick = { showAnalysisHelp = false; showLegacyChartSettings = true }) { Text("الإعدادات المتقدمة") } }
+    )
+
+    if(showLegacyChartSettings) AlertDialog(onDismissRequest={showLegacyChartSettings=false},title={Text("إعدادات الشارت")},text={
         Column(Modifier.verticalScroll(rememberScrollState())) {
-            TextButton(onClick={showChartExtras=false;showChartTypeSheet=true},
+            TextButton(onClick={showLegacyChartSettings=false;showChartTypeSheet=true},
                 modifier = Modifier.testTag("open_chart_type_sheet")) {
                 Icon(Icons.Default.CandlestickChart, contentDescription = null)
                 Text("  نوع الرسم البياني")
             }
-            TextButton(onClick={showChartExtras=false;showAppearance=true}) { Text(androidx.compose.ui.res.stringResource(com.example.R.string.chart_appearance)) }
+            TextButton(onClick={showLegacyChartSettings=false;showAppearance=true}) { Text(androidx.compose.ui.res.stringResource(com.example.R.string.chart_appearance)) }
             TextButton(onClick={viewModel.toggleVolume()}) { Text(if(uiState.isVolumeVisible) "إخفاء الحجم" else "إظهار الحجم") }
             TextButton(onClick={magnetEnabled=!magnetEnabled}) { Text(if(magnetEnabled) "إيقاف المغناطيس" else "تفعيل المغناطيس") }
             TextButton(onClick={hideDrawings=!hideDrawings}) { Text(if(hideDrawings) "إظهار الرسومات" else "إخفاء الرسومات") }
-            TextButton(onClick={viewModel.triggerResetView();showChartExtras=false}) { Text("إعادة ضبط العرض") }
-            TextButton(onClick={showHistoryDetails=true;showChartExtras=false}) { Text("إدارة بيانات الشارت") }
-            TextButton(onClick={showPriceAlert=true;showChartExtras=false}) { Text("تنبيه سعر أثناء فتح الشارت") }
+            TextButton(onClick={viewModel.triggerResetView();showLegacyChartSettings=false}) { Text("إعادة ضبط العرض") }
+            TextButton(onClick={showHistoryDetails=true;showLegacyChartSettings=false}) { Text("إدارة بيانات الشارت") }
+            TextButton(onClick={showPriceAlert=true;showLegacyChartSettings=false}) { Text("تنبيه سعر أثناء فتح الشارت") }
         }
-    },confirmButton={TextButton(onClick={showChartExtras=false}) {Text("إغلاق")}})
+    },confirmButton={TextButton(onClick={showLegacyChartSettings=false}) {Text("إغلاق")}})
 
     if(showHistoryDetails && !isEmbeddedReplay && uiState.candles.isNotEmpty()) {
         AlertDialog(onDismissRequest={showHistoryDetails=false},title={Text("إدارة بيانات الشارت")},
