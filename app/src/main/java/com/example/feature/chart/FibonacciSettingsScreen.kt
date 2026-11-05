@@ -2,6 +2,7 @@ package com.example.feature.chart
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -12,12 +13,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -167,6 +169,14 @@ internal fun FibonacciSettingsScreen(
                     Icon(Icons.Outlined.MoreHoriz, contentDescription = "المزيد", tint = fibInk)
                 }
                 DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                    DropdownMenuItem(text = { Text("إضافة مستوى") }, onClick = {
+                        if (settings.levels.size < 64) {
+                            settings = settings.copy(levels = settings.levels +
+                                FibonacciLevel(0.0, Color(0xFF4CAF50)))
+                            levelsRaw = levelsRaw + "0"
+                        }
+                        showMore = false
+                    })
                     DropdownMenuItem(text = { Text("إعادة تعيين الإعدادات") }, onClick = {
                         settings = FibonacciSettings(); levelsRaw = settings.levels.map { fibNumber(it.value) }
                         ruleInputs = settings.timeRules.associate { it.unit to (it.from.toString() to it.to.toString()) }
@@ -302,7 +312,18 @@ private fun FibonacciStyleTab(
         }
         FibSettingsRow("استخدم لون واحد", settings.singleColor,
             { onSettings(settings.copy(singleColor = it)) }, "fib_single_color", withCheck = false) {
-            Icon(Icons.Outlined.Palette, contentDescription = null, tint = Color(0xFF1A9D8C))
+            Box(Modifier.size(36.dp).border(1.dp, fibBorder, RoundedCornerShape(8.dp))
+                .padding(5.dp).clip(RoundedCornerShape(4.dp))) {
+                Canvas(Modifier.fillMaxSize()) {
+                    drawRect(Color(0xFF1DA18E))
+                    drawPath(Path().apply {
+                        moveTo(size.width, 0f)
+                        lineTo(size.width, size.height)
+                        lineTo(0f, size.height)
+                        close()
+                    }, Color(0xFFF44866))
+                }
+            }
         }
         FibSettingsRow("الخلفية", settings.background,
             { onSettings(settings.copy(background = it)) }, "fib_background") {
@@ -392,7 +413,11 @@ private fun FibLinePreview(color: Color, style: DrawingLineStyle, width: Float,
 private fun FibSettingsRow(label: String, checked: Boolean, onChecked: (Boolean) -> Unit,
                            tag: String, withCheck: Boolean = true,
                            leftContent: @Composable () -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 46.dp).padding(horizontal = 16.dp),
+    val rowModifier = Modifier.fillMaxWidth().heightIn(min = 46.dp)
+        .then(if (tag == "fib_single_color") Modifier.clickable { onChecked(!checked) }
+            else Modifier)
+        .padding(horizontal = 16.dp)
+    Row(rowModifier,
         verticalAlignment = Alignment.CenterVertically) {
         leftContent()
         Spacer(Modifier.weight(1f))
