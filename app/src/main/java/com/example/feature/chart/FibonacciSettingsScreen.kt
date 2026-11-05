@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -345,8 +346,14 @@ private fun FibonacciStyleTab(
             { onSettings(settings.copy(background = it)) }, "fib_background") {
             Slider(value = settings.backgroundOpacity, onValueChange = {
                 onSettings(settings.copy(backgroundOpacity = it))
-            }, colors = SliderDefaults.colors(thumbColor = Color(0xFF777777),
-                activeTrackColor = Color(0xFF8CA8F8)), modifier = Modifier.width(155.dp))
+            }, colors = SliderDefaults.colors(
+                activeTrackColor = Color(0xFF8CA8F8),
+                inactiveTrackColor = Color(0xFF8CA8F8)),
+                thumb = {
+                    Box(Modifier.size(17.dp)
+                        .background(Color.White, CircleShape)
+                        .border(2.dp, Color(0xFF7B7B7B), CircleShape))
+                }, modifier = Modifier.width(155.dp).testTag("fib_background_opacity"))
         }
         FibSettingsRow("انعكاس", settings.reverse, { onSettings(settings.copy(reverse = it)) }, "fib_reverse")
         FibSettingsRow("أسعار", settings.showPrices, { onSettings(settings.copy(showPrices = it)) }, "fib_prices")
@@ -521,15 +528,19 @@ private fun FibLevelLinePreview(style: DrawingLineStyle, width: Float,
 private fun FibSettingsRow(label: String, checked: Boolean, onChecked: (Boolean) -> Unit,
                            tag: String, withCheck: Boolean = true,
                            leftContent: @Composable () -> Unit = {}) {
-    val rowModifier = Modifier.fillMaxWidth().heightIn(min = 46.dp)
+    val appearanceRows = setOf("fib_single_color", "fib_background", "fib_reverse", "fib_prices",
+        "fib_levels", "fib_titles", "fib_text", "fib_text_size", "fib_log_scale")
+    val stacked = tag == "fib_titles" || tag == "fib_text"
+    val rowModifier = Modifier.fillMaxWidth().heightIn(min = if (tag in appearanceRows) 60.dp else 46.dp)
         .then(if (tag == "fib_single_color") Modifier.clickable { onChecked(!checked) }
             else Modifier)
         .padding(horizontal = 16.dp)
     Row(rowModifier,
-        verticalAlignment = Alignment.CenterVertically) {
+        verticalAlignment = if (stacked) Alignment.Top else Alignment.CenterVertically) {
         leftContent()
         Spacer(Modifier.weight(1f))
-        Text(label, textAlign = TextAlign.Right, fontSize = 14.sp, color = fibInk)
+        Text(label, textAlign = TextAlign.Right, fontSize = 14.sp, color = fibInk,
+            modifier = if (stacked) Modifier.padding(top = 9.dp) else Modifier)
         Spacer(Modifier.width(5.dp))
         if (withCheck) FibChecked(checked, onChecked, tag)
         else Spacer(Modifier.width(42.dp))
