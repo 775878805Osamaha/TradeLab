@@ -54,8 +54,13 @@ class FibonacciSettingsScreenTest {
 
         // Cover the two additional scroll states supplied in the TradingView references.
         compose.onNodeWithTag("fib_level_enabled_18").performScrollTo()
+        compose.onNodeWithTag("fib_level_enabled_18").assertIsDisplayed()
         capture("tradelab-fibonacci-style-levels.png")
         compose.onNodeWithTag("fib_log_scale").performScrollTo()
+        // An explicit swipe also checks that users can reach the bottom controls
+        // by touch, instead of merely finding an off-screen semantics node.
+        compose.onNodeWithTag("fib_style_content").performTouchInput { swipeUp() }
+        compose.onNodeWithTag("fib_log_scale").assertIsDisplayed()
         capture("tradelab-fibonacci-style-appearance.png")
         // Return the corresponding menu anchor fully into view after capturing the
         // long scrolled style states. Off-screen dropdown anchors cannot reliably
@@ -84,6 +89,10 @@ class FibonacciSettingsScreenTest {
         compose.onNodeWithTag("fib_confirm").assertIsDisplayed()
         compose.onNodeWithTag("fib_cancel").assertIsDisplayed()
         capture("tradelab-fibonacci-visibility.png")
+        compose.onNodeWithTag("fib_visible_RANGES").performScrollTo()
+        compose.onNodeWithTag("fib_visible_RANGES").assertIsDisplayed()
+        capture("tradelab-fibonacci-visibility-bottom.png")
+        compose.onNodeWithTag("fib_visible_MINUTES").performScrollTo()
         compose.onNodeWithTag("fib_visible_MINUTES").performClick()
         compose.onNodeWithTag("fib_confirm").performClick()
 
