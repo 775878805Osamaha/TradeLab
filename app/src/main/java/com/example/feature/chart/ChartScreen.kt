@@ -168,6 +168,7 @@ fun ChartScreen(
     var showReplayDetails by remember { mutableStateOf(false) }
     var showHistoryDetails by remember { mutableStateOf(false) }
     var showChartExtras by remember { mutableStateOf(false) }
+    var showChartTypeSheet by remember { mutableStateOf(false) }
     var showIndicatorsDialog by remember { mutableStateOf(false) }
     var showPriceAlert by remember { mutableStateOf(false) }
     var hideDrawings by rememberSaveable { mutableStateOf(workspacePrefs.getBoolean("hide_drawings", false)) }
@@ -489,10 +490,29 @@ fun ChartScreen(
     }
 
     ChartPriceAlert(uiState.selectedSymbol,uiState.latestTick,isEmbeddedReplay,showPriceAlert) { showPriceAlert=false }
+    if (showChartTypeSheet) {
+        ChartTypeSheet(
+            current = chartDisplayStyle,
+            onSelect = { chosen ->
+                chartDisplayStyle = chosen
+                showChartTypeSheet = false
+            },
+            onUnavailable = { name ->
+                android.widget.Toast.makeText(imageContext,
+                    "${name}: يتطلب بيانات أو حسابات سوق إضافية غير متوفرة من شموع OHLC وحدها",
+                    android.widget.Toast.LENGTH_LONG).show()
+            },
+            onDismiss = { showChartTypeSheet = false }
+        )
+    }
     if(showChartExtras) AlertDialog(onDismissRequest={showChartExtras=false},title={Text("إعدادات الشارت")},text={
         Column(Modifier.verticalScroll(rememberScrollState())) {
+            TextButton(onClick={showChartExtras=false;showChartTypeSheet=true},
+                modifier = Modifier.testTag("open_chart_type_sheet")) {
+                Icon(Icons.Default.CandlestickChart, contentDescription = null)
+                Text("  نوع الرسم البياني")
+            }
             TextButton(onClick={showChartExtras=false;showAppearance=true}) { Text(androidx.compose.ui.res.stringResource(com.example.R.string.chart_appearance)) }
-            ChartDisplayStyle.entries.forEach { style -> TextButton(onClick={chartDisplayStyle=style}) { Text((if(chartDisplayStyle==style) "✓ " else "")+style.label) } }
             TextButton(onClick={viewModel.toggleVolume()}) { Text(if(uiState.isVolumeVisible) "إخفاء الحجم" else "إظهار الحجم") }
             TextButton(onClick={magnetEnabled=!magnetEnabled}) { Text(if(magnetEnabled) "إيقاف المغناطيس" else "تفعيل المغناطيس") }
             TextButton(onClick={hideDrawings=!hideDrawings}) { Text(if(hideDrawings) "إظهار الرسومات" else "إخفاء الرسومات") }

@@ -58,8 +58,18 @@ val ChartPriceIndexReady = SemanticsPropertyKey<Boolean>("ChartPriceIndexReady")
 val ChartDrawingAnalysisReady = SemanticsPropertyKey<Boolean>("ChartDrawingAnalysisReady")
 
 enum class ChartDisplayStyle(val label: String) {
+    BARS("أعمدة"),
     CANDLES("شموع"),
-    LINE("خطي"),
+    HOLLOW_CANDLES("الشموع المجوفة"),
+    VOLUME_CANDLES("شموع الحجم"),
+    LINE("خط"),
+    LINE_MARKERS("خط بعلامات"),
+    STEP_LINE("خط متدرج"),
+    AREA("مساحة"),
+    HLC_AREA("منطقة HLC"),
+    BASELINE("خط الأساس"),
+    COLUMNS("الأعمدة"),
+    HIGH_LOW("أعلى-أدنى"),
     HEIKIN_ASHI("هيكين آشي")
 }
 
@@ -680,16 +690,74 @@ fun CandlestickChart(
                 heikinAshi?.candles?.subList(startIndex, endIndex).orEmpty()
             else visibleCandles
 
-            // 1. Draw Visible OHLC Candlesticks
+            // Display-only chart styles. These paths derive exclusively from
+            // real, already-revealed OHLC bars; trades and replay still use
+            // the untouched broker/exchange series.
             val bodyWidth = (candleWidthPx * 0.78f).coerceAtLeast(1.5f)
-            if (displayStyle == ChartDisplayStyle.LINE) {
+            val visiblePeakVolume = if (displayStyle == ChartDisplayStyle.VOLUME_CANDLES)
+                visibleCandles.maxOf { it.volume.coerceAtLeast(0.0) }.coerceAtLeast(1.0) else 1.0
+            if (displayStyle in setOf(ChartDisplayStyle.LINE, ChartDisplayStyle.LINE_MARKERS,
+                    ChartDisplayStyle.STEP_LINE, ChartDisplayStyle.AREA,
+                    ChartDisplayStyle.HLC_AREA, ChartDisplayStyle.BASELINE)) {
                 val linePath = Path()
                 visibleCandles.forEachIndexed { i, candle ->
                     val x = transform.candleIndexToX(i)
                     val y = transform.priceToY(candle.close)
-                    if (i == 0) linePath.moveTo(x, y) else linePath.lineTo(x, y)
+                    if (i == 0) linePath.moveTo(x, y)
+                    else if (displayStyle == ChartDisplayStyle.STEP_LINE) {
+                        val previousY = transform.priceToY(visibleCandles[i - 1].close)
+                        linePath.lineTo(x, previousY)
+                        linePath.lineTo(x, y)
+                    } else linePath.lineTo(x, y)
                 }
+                if (displayStyle == ChartDisplayStyle.AREA) {
+                    val fill = Path().apply {
+                        moveTo(transform.candleIndexToX(0), mainChartHeight)
+                        visibleCandles.forEachIndexed { i, c ->
+                            lineTo(transform.candleIndexToX(i), transform.priceToY(c.close))
+                        }
+                        lineTo(transform.candleIndexToX(visibleCandles.lastIndex), mainChartHeight)
+                        close()
+                    }
+                    drawPath(fill, color = lineColor.copy(alpha = 0.18f))
+                }
+                if (displayStyle == ChartDisplayStyle.HLC_AREA) {
+                    val band = Path().apply {
+                        visibleCandles.forEachIndexed { i, c ->
+                            val x = transform.candleIndexToX(i)
+                            val y = transform.priceToY(c.high)
+                            if (i == 0) moveTo(x, y) else lineTo(x, y)
+                        }
+                        for (i in visibleCandles.indices.reversed()) {
+                            val c = visibleCandles[i]
+                            lineTo(transform.candleIndexToX(i), transform.priceToY(c.low))
+                        }
+                        close()
+                    }
+                    drawPath(band, color = lineColor.copy(alpha = 0.18f))
+                }
+                if (displayStyle == ChartDisplayStyle.BASELINE) {
+                    val baseline = (visibleCandles.minOf { it.close } + visibleCandles.maxOf { it.close }) / 2.0
+                    val baseY = transform.priceToY(baseline)
+                    drawLine(color = lineColor.copy(alpha = 0.5f), start = Offset(0f, baseY),
+                        end = Offset(chartWidth, baseY), strokeWidth = 1f)
+                    for (i in 1 until visibleCandles.size) {
+                        val prior = visibleCandles[i - 1]
+                        val bar = visibleCandles[i]
+                        drawLine(color = if (bar.close >= baseline) bullishColor else bearishColor,
+                            start = Offset(transform.candleIndexToX(i - 1), transform.priceToY(prior.close)),
+                            end = Offset(transform.candleIndexToX(i), transform.priceToY(bar.close)),
+                            strokeWidth = 2.5f)
+                    }
+                } else {
                 drawPath(linePath, color = lineColor, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f))
+                }
+                if (displayStyle == ChartDisplayStyle.LINE_MARKERS) {
+                    visibleCandles.forEachIndexed { i, c ->
+                        drawCircle(lineColor, radius = 3.2.dp.toPx(),
+                            center = Offset(transform.candleIndexToX(i), transform.priceToY(c.close)))
+                    }
+                }
             } else displayedCandles.forEachIndexed { i, c ->
                 val x = transform.candleIndexToX(i)
                 val openY = transform.priceToY(c.open)
@@ -700,6 +768,22 @@ fun CandlestickChart(
                 val isBullish = c.close >= c.open
                 val candleColor = if (isBullish) bullishColor else bearishColor
 
+                if (displayStyle == ChartDisplayStyle.COLUMNS) {
+                    drawRect(color = candleColor.copy(alpha = 0.9f),
+                        topLeft = Offset(x - bodyWidth / 2f, min(closeY, mainChartHeight)),
+                        size = Size(bodyWidth, abs(mainChartHeight - closeY).coerceAtLeast(1.5f)))
+                    return@forEachIndexed
+                }
+                if (displayStyle == ChartDisplayStyle.BARS || displayStyle == ChartDisplayStyle.HIGH_LOW) {
+                    drawLine(candleColor, Offset(x, highY), Offset(x, lowY), strokeWidth = 1.6f)
+                    if (displayStyle == ChartDisplayStyle.BARS) {
+                        val halfTick = bodyWidth * 0.46f
+                        drawLine(candleColor, Offset(x - halfTick, openY), Offset(x, openY), strokeWidth = 1.6f)
+                        drawLine(candleColor, Offset(x, closeY), Offset(x + halfTick, closeY), strokeWidth = 1.6f)
+                    }
+                    return@forEachIndexed
+                }
+
                 // Wick line
                 if (showWicks) drawLine(
                     color = candleColor,
@@ -709,13 +793,19 @@ fun CandlestickChart(
                 )
 
                 // Body rect
+                val volumeRatio = if (displayStyle == ChartDisplayStyle.VOLUME_CANDLES) {
+                    (c.volume.coerceAtLeast(0.0) / visiblePeakVolume).toFloat().coerceIn(0.22f, 1f)
+                } else 1f
+                val adjustedWidth = bodyWidth * volumeRatio
                 val bodyTop = min(openY, closeY)
                 val bodyHeight = abs(closeY - openY).coerceAtLeast(1.5f)
                 drawRect(
                     color = candleColor,
-                    topLeft = Offset(x - (bodyWidth / 2f), bodyTop),
-                    size = Size(bodyWidth, bodyHeight),
-                    style = if(hollowUp && isBullish) androidx.compose.ui.graphics.drawscope.Stroke(width = 1.4f) else androidx.compose.ui.graphics.drawscope.Fill
+                    topLeft = Offset(x - (adjustedWidth / 2f), bodyTop),
+                    size = Size(adjustedWidth, bodyHeight),
+                    style = if((hollowUp || displayStyle == ChartDisplayStyle.HOLLOW_CANDLES) && isBullish)
+                        androidx.compose.ui.graphics.drawscope.Stroke(width = 1.4f)
+                        else androidx.compose.ui.graphics.drawscope.Fill
                 )
 
 

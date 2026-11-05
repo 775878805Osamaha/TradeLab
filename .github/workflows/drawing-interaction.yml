@@ -53,10 +53,11 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -accel on -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
             chmod +x gradlew
-            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.DrawingAnchorInteractionTest,com.example.DrawingContextToolbarTest --stacktrace
+            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.DrawingAnchorInteractionTest,com.example.DrawingContextToolbarTest,com.example.ChartTypeSheetTest --stacktrace
             mkdir -p drawing-captures
             adb pull /sdcard/Download/drawing-context-native-test.png drawing-captures/drawing-context-native-test.png
             adb pull /sdcard/Download/drawing-position-native-test.png drawing-captures/drawing-position-native-test.png
+            adb pull /sdcard/Download/tradelab-chart-type-sheet.png drawing-captures/tradelab-chart-type-sheet.png
       - name: Preserve Android test reports
         if: always()
         uses: actions/upload-artifact@v4
