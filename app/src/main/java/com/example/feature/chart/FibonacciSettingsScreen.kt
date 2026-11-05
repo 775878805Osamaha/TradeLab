@@ -255,6 +255,7 @@ private fun FibChecked(checked: Boolean, onChange: (Boolean) -> Unit, tag: Strin
         modifier = Modifier.size(42.dp).testTag(tag))
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FibonacciStyleTab(
     settings: FibonacciSettings,
