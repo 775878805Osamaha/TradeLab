@@ -120,7 +120,10 @@ object ChartDrawingsRenderer {
                 }
                 DrawingTool.FIBONACCI -> {
                     val fib = d.fibonacci
-                    if (d.endPrice != null && fib.isVisibleAt(d.timeframe)) {
+                    // Timeframe visibility belongs to the chart the user is viewing, not
+                    // the timeframe on which this drawing was first created.
+                    val currentTimeframe = transform.visibleCandles.firstOrNull()?.timeframe?.code ?: d.timeframe
+                    if (d.endPrice != null && fib.isVisibleAt(currentTimeframe)) {
                         val firstX = min(startX, endX ?: startX)
                         val lastX = max(startX, endX ?: startX)
                         val x1 = if (fib.extension == FibExtension.LEFT || fib.extension == FibExtension.BOTH) 0f else firstX
