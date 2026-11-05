@@ -7,14 +7,11 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -28,33 +25,32 @@ import com.example.ui.components.ChartDisplayStyle
 internal data class ChartTypeOption(
     val key: String,
     val title: String,
-    val icon: ImageVector,
     val style: ChartDisplayStyle?
 )
 
 internal object ChartTypeCatalog {
     val options = listOf(
-        ChartTypeOption("bars", "أعمدة", Icons.Default.BarChart, ChartDisplayStyle.BARS),
-        ChartTypeOption("candles", "شموع", Icons.Default.CandlestickChart, ChartDisplayStyle.CANDLES),
-        ChartTypeOption("hollow", "الشموع المجوفة", Icons.Default.CandlestickChart, ChartDisplayStyle.HOLLOW_CANDLES),
-        ChartTypeOption("volume_candles", "شموع الحجم", Icons.Default.CandlestickChart, ChartDisplayStyle.VOLUME_CANDLES),
-        ChartTypeOption("line", "خط", Icons.Default.ShowChart, ChartDisplayStyle.LINE),
-        ChartTypeOption("line_markers", "خط بعلامات", Icons.Default.Timeline, ChartDisplayStyle.LINE_MARKERS),
-        ChartTypeOption("step", "خط متدرج", Icons.Default.Stairs, ChartDisplayStyle.STEP_LINE),
-        ChartTypeOption("area", "مساحة", Icons.Default.AreaChart, ChartDisplayStyle.AREA),
-        ChartTypeOption("hlc_area", "منطقة HLC", Icons.Default.StackedLineChart, ChartDisplayStyle.HLC_AREA),
-        ChartTypeOption("baseline", "خط الأساس", Icons.Default.ShowChart, ChartDisplayStyle.BASELINE),
-        ChartTypeOption("columns", "الأعمدة", Icons.Default.BarChart, ChartDisplayStyle.COLUMNS),
-        ChartTypeOption("high_low", "أعلى-أدنى", Icons.Default.ViewWeek, ChartDisplayStyle.HIGH_LOW),
-        ChartTypeOption("footprint", "بصمة الحجم", Icons.Default.ViewList, null),
-        ChartTypeOption("time_price", "فرصة السعر الزمني", Icons.Default.TableChart, null),
-        ChartTypeOption("session_volume", "بروفايل أحجام التداول للجلسة", Icons.Default.StackedBarChart, null),
-        ChartTypeOption("heikin", "هايكين آشي", Icons.Default.CandlestickChart, ChartDisplayStyle.HEIKIN_ASHI),
-        ChartTypeOption("renko", "رينكو", Icons.Default.GridView, null),
-        ChartTypeOption("line_break", "كسر الخط", Icons.Default.ViewColumn, null),
-        ChartTypeOption("kagi", "كاجي", Icons.Default.ShowChart, null),
-        ChartTypeOption("point_figure", "النقطة والرقم", Icons.Default.Grain, null),
-        ChartTypeOption("range", "مدى", Icons.Default.MultilineChart, null)
+        ChartTypeOption("bars", "أعمدة", ChartDisplayStyle.BARS),
+        ChartTypeOption("candles", "شموع", ChartDisplayStyle.CANDLES),
+        ChartTypeOption("hollow", "الشموع المجوفة", ChartDisplayStyle.HOLLOW_CANDLES),
+        ChartTypeOption("volume_candles", "شموع الحجم", ChartDisplayStyle.VOLUME_CANDLES),
+        ChartTypeOption("line", "خط", ChartDisplayStyle.LINE),
+        ChartTypeOption("line_markers", "خط بعلامات", ChartDisplayStyle.LINE_MARKERS),
+        ChartTypeOption("step", "خط متدرج", ChartDisplayStyle.STEP_LINE),
+        ChartTypeOption("area", "مساحة", ChartDisplayStyle.AREA),
+        ChartTypeOption("hlc_area", "منطقة HLC", ChartDisplayStyle.HLC_AREA),
+        ChartTypeOption("baseline", "خط الأساس", ChartDisplayStyle.BASELINE),
+        ChartTypeOption("columns", "الأعمدة", ChartDisplayStyle.COLUMNS),
+        ChartTypeOption("high_low", "أعلى-أدنى", ChartDisplayStyle.HIGH_LOW),
+        ChartTypeOption("footprint", "بصمة الحجم", null),
+        ChartTypeOption("time_price", "فرصة السعر الزمني", null),
+        ChartTypeOption("session_volume", "بروفايل أحجام التداول للجلسة", null),
+        ChartTypeOption("heikin", "هايكين آشي", ChartDisplayStyle.HEIKIN_ASHI),
+        ChartTypeOption("renko", "رينكو", null),
+        ChartTypeOption("line_break", "كسر الخط", null),
+        ChartTypeOption("kagi", "كاجي", null),
+        ChartTypeOption("point_figure", "النقطة والرقم", null),
+        ChartTypeOption("range", "مدى", null)
     )
 }
 
@@ -85,7 +81,7 @@ internal fun ChartTypeSheet(
         }
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.97f)
+            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.93f)
                 .background(background).testTag("chart_type_sheet")
         ) {
             Text(
@@ -116,16 +112,12 @@ internal fun ChartTypeSheet(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            Icon(
-                                option.icon, contentDescription = null,
-                                tint = if (active) Color.White else Color(0xFF101010),
-                                modifier = Modifier.size(25.dp)
-                            )
+                            ChartTypeGlyph(option.key, if (active) Color.White else Color(0xFF101010))
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 option.title, color = if (active) Color.White else Color(0xFF111111),
-                                fontSize = if (option.title.length > 23) 12.sp else 14.sp,
-                                lineHeight = 16.sp, fontWeight = FontWeight.Medium,
+                                fontSize = if (option.title.length > 23) 13.sp else 16.sp,
+                                lineHeight = 18.sp, fontWeight = FontWeight.Medium,
                                 textAlign = TextAlign.Center, maxLines = 2,
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp)
                             )
