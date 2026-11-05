@@ -267,8 +267,6 @@ private fun FibonacciStyleTab(
     onLineWidth: (Float) -> Unit
 ) {
     var extensionExpanded by remember { mutableStateOf(false) }
-    var positionExpanded by remember { mutableStateOf(false) }
-    var fontExpanded by remember { mutableStateOf(false) }
     val compact = LocalConfiguration.current.screenWidthDp < 380
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
         .padding(top = 10.dp, bottom = 14.dp).testTag("fib_style_content")) {
@@ -353,44 +351,80 @@ private fun FibonacciStyleTab(
         FibSettingsRow("انعكاس", settings.reverse, { onSettings(settings.copy(reverse = it)) }, "fib_reverse")
         FibSettingsRow("أسعار", settings.showPrices, { onSettings(settings.copy(showPrices = it)) }, "fib_prices")
         FibSettingsRow("مستويات", settings.showLevels, { onSettings(settings.copy(showLevels = it)) }, "fib_levels") {
-            TextButton(onClick = { onSettings(settings.copy(labelsAsPercents = !settings.labelsAsPercents)) },
-                modifier = Modifier.testTag("fib_level_label_format")) {
-                Text(if (settings.labelsAsPercents) "النسب %" else "القيم", color = fibInk)
-            }
+            Spacer(Modifier.width(if (compact) 30.dp else 60.dp))
+            FibChoice(settings.labelsAsPercents, listOf(false, true),
+                { if (it) "النسب %" else "القيم" },
+                { onSettings(settings.copy(labelsAsPercents = it)) }, "fib_level_label_format")
         }
         FibSettingsRow("عناوين", true, {}, "fib_titles", withCheck = false) {
-            Box {
-                OutlinedButton(onClick = { positionExpanded = true }) {
-                    Text(when (settings.labelPosition) {
-                        FibLabelPosition.LEFT -> "يسار"; FibLabelPosition.CENTER -> "وسط"; FibLabelPosition.RIGHT -> "يمين"
-                    }, color = fibInk)
-                }
-                DropdownMenu(expanded = positionExpanded, onDismissRequest = { positionExpanded = false }) {
-                    FibLabelPosition.entries.forEach { pos -> DropdownMenuItem(text = { Text(when(pos) {
-                        FibLabelPosition.LEFT -> "يسار"
-                        FibLabelPosition.CENTER -> "وسط"
+            Spacer(Modifier.width(if (compact) 30.dp else 60.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                FibChoice(settings.labelPosition, FibLabelPosition.entries,
+                    { when (it) {
+                        FibLabelPosition.LEFT -> "يسار"; FibLabelPosition.CENTER -> "وسط"
                         FibLabelPosition.RIGHT -> "يمين"
-                    }) }, onClick = {
-                        onSettings(settings.copy(labelPosition = pos)); positionExpanded = false
-                    }) }
-                }
+                    } }, { onSettings(settings.copy(labelPosition = it)) }, "fib_title_position")
+                FibChoice(settings.labelVerticalPosition, FibVerticalPosition.entries,
+                    { fibVerticalLabel(it) },
+                    { onSettings(settings.copy(labelVerticalPosition = it)) }, "fib_title_vertical")
             }
         }
-        FibSettingsRow("النص", settings.showText, { onSettings(settings.copy(showText = it)) }, "fib_text")
-        FibSettingsRow("حجم الخط", true, {}, "fib_text_size", withCheck = false) {
-            Box {
-                OutlinedButton(onClick = { fontExpanded = true }) { Text(settings.textSize.toString(), color = fibInk) }
-                DropdownMenu(expanded = fontExpanded, onDismissRequest = { fontExpanded = false }) {
-                    listOf(10, 12, 14, 16, 18, 20, 24).forEach { size ->
-                        DropdownMenuItem(text = { Text(size.toString()) }, onClick = {
-                            onSettings(settings.copy(textSize = size)); fontExpanded = false
-                        })
-                    }
-                }
+        FibSettingsRow("النص", settings.showText, { onSettings(settings.copy(showText = it)) }, "fib_text") {
+            Spacer(Modifier.width(if (compact) 30.dp else 60.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                FibChoice(settings.textAlignment, FibTextAlignment.entries,
+                    { when (it) {
+                        FibTextAlignment.LEFT -> "يسار"; FibTextAlignment.CENTER -> "مركز"
+                        FibTextAlignment.RIGHT -> "يمين"
+                    } }, { onSettings(settings.copy(textAlignment = it)) }, "fib_text_alignment")
+                FibChoice(settings.textVerticalPosition, FibVerticalPosition.entries,
+                    { fibVerticalLabel(it) },
+                    { onSettings(settings.copy(textVerticalPosition = it)) }, "fib_text_vertical")
             }
+        }
+        FibSettingsRow("حجم الخط", true, {}, "fib_text_size", withCheck = false) {
+            Spacer(Modifier.width(if (compact) 30.dp else 60.dp))
+            FibChoice(settings.textSize, listOf(10, 12, 14, 16, 18, 20, 24),
+                { it.toString() }, { onSettings(settings.copy(textSize = it)) }, "fib_font_size")
         }
         FibSettingsRow("مستويات فيبوناتشي استناداً على المقياس اللوغاريتمي", settings.logarithmic,
             { onSettings(settings.copy(logarithmic = it)) }, "fib_log_scale")
+    }
+}
+
+private fun fibVerticalLabel(position: FibVerticalPosition): String = when (position) {
+    FibVerticalPosition.TOP -> "أعلى"
+    FibVerticalPosition.CENTER -> "وسط"
+    FibVerticalPosition.BOTTOM -> "أسفل"
+}
+
+@Composable
+private fun <T : Any> FibChoice(
+    selected: T,
+    options: List<T>,
+    label: (T) -> String,
+    onSelect: (T) -> Unit,
+    tag: String
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { expanded = true },
+            modifier = Modifier.width(108.dp).height(39.dp).testTag(tag),
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, fibBorder),
+            contentPadding = PaddingValues(horizontal = 7.dp)) {
+            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null,
+                modifier = Modifier.size(17.dp), tint = Color(0xFF777777))
+            Spacer(Modifier.weight(1f))
+            Text(label(selected), color = fibInk, fontSize = 14.sp, maxLines = 1)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(text = { Text(label(option)) }, onClick = {
+                    onSelect(option); expanded = false
+                })
+            }
+        }
     }
 }
 

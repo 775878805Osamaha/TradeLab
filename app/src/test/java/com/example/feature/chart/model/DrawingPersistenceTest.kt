@@ -49,6 +49,10 @@ class DrawingPersistenceTest {
             showPrices = false, reverse = true, logarithmic = true,
             trendLineColor = Color(0xFF808080), trendLineStyle = DrawingLineStyle.DASHED,
             levelLineStyle = DrawingLineStyle.DOTTED, levelLineWidth = 3f,
+            labelPosition = FibLabelPosition.RIGHT,
+            labelVerticalPosition = FibVerticalPosition.BOTTOM,
+            textAlignment = FibTextAlignment.RIGHT,
+            textVerticalPosition = FibVerticalPosition.TOP,
             timeRules = FibTimeUnit.entries.map { unit ->
                 FibTimeRule(unit, enabled = unit != FibTimeUnit.MINUTES, from = 1, to = unit.upperBound)
             }
@@ -75,6 +79,20 @@ class DrawingPersistenceTest {
         assertNull(decoded.trendLineStyle)
         assertNull(decoded.levelLineStyle)
         assertNull(decoded.levelLineWidth)
+    }
+
+    @Test fun fibonacciVersionTwoPayloadRestoresIndependentLinesAndHistoricalLabelPlacement() {
+        val modern = FibonacciSettings(labelPosition = FibLabelPosition.RIGHT,
+            trendLineStyle = DrawingLineStyle.DOTTED,
+            levelLineWidth = 4f).encode().split('|')
+        val oldVersion = (listOf("2") + modern.subList(1, 20)).joinToString("|")
+        val decoded = FibonacciSettings.decode(oldVersion)
+        assertEquals(DrawingLineStyle.DOTTED, decoded.trendLineStyle)
+        assertEquals(4f, decoded.levelLineWidth!!, 0f)
+        assertEquals(FibLabelPosition.RIGHT, decoded.labelPosition)
+        assertEquals(FibVerticalPosition.TOP, decoded.labelVerticalPosition)
+        assertEquals(FibTextAlignment.RIGHT, decoded.textAlignment)
+        assertEquals(FibVerticalPosition.CENTER, decoded.textVerticalPosition)
     }
 
     @Test fun oldFibonacciDrawingsKeepTheirPreviousLevels() {

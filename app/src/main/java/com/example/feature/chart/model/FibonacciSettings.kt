@@ -8,6 +8,8 @@ private fun Boolean.asFlag(): Int = if (this) 1 else 0
 
 enum class FibExtension { NONE, LEFT, RIGHT, BOTH }
 enum class FibLabelPosition { LEFT, CENTER, RIGHT }
+enum class FibVerticalPosition { TOP, CENTER, BOTTOM }
+enum class FibTextAlignment { LEFT, CENTER, RIGHT }
 enum class FibTimeUnit(val label: String, val upperBound: Int) {
     TICKS("تيكات السعر", 1), SECONDS("ثواني", 59), MINUTES("دقائق", 59),
     HOURS("ساعات", 24), DAYS("الأيام", 366), WEEKS("أسابيع", 52),
@@ -48,7 +50,10 @@ data class FibonacciSettings(
     val trendLineColor: Color? = Color(0xFF858585),
     val trendLineStyle: DrawingLineStyle? = DrawingLineStyle.DASHED,
     val levelLineStyle: DrawingLineStyle? = DrawingLineStyle.SOLID,
-    val levelLineWidth: Float? = 1.8f
+    val levelLineWidth: Float? = 1.8f,
+    val labelVerticalPosition: FibVerticalPosition = FibVerticalPosition.CENTER,
+    val textAlignment: FibTextAlignment = FibTextAlignment.CENTER,
+    val textVerticalPosition: FibVerticalPosition = FibVerticalPosition.CENTER
 ) {
     fun isVisibleAt(timeframeCode: String): Boolean {
         val tf = Timeframe.fromCode(timeframeCode)
@@ -64,7 +69,7 @@ data class FibonacciSettings(
 
     /** Delimited versioned payload. The caller wraps this in Base64 inside DrawingEntity JSON. */
     fun encode(): String = listOf(
-        "2",
+        "3",
         levels.take(64).joinToString(";") { "${it.value},${it.enabled.asFlag()},${it.color.toArgb()}" },
         trendLine.asFlag().toString(), extension.name, singleColor.asFlag().toString(),
         background.asFlag().toString(), backgroundOpacity.toString(), reverse.asFlag().toString(),
@@ -75,7 +80,10 @@ data class FibonacciSettings(
         trendLineColor?.toArgb()?.toString() ?: "null",
         trendLineStyle?.name ?: "null",
         levelLineStyle?.name ?: "null",
-        levelLineWidth?.toString() ?: "null"
+        levelLineWidth?.toString() ?: "null",
+        labelVerticalPosition.name,
+        textAlignment.name,
+        textVerticalPosition.name
     ).joinToString("|")
 
     companion object {
@@ -84,7 +92,10 @@ data class FibonacciSettings(
             levels = FibonacciCalculator.DEFAULT_LEVELS.map { FibonacciLevel(it, Color.White) },
             trendLine = false, extension = FibExtension.BOTH, singleColor = true,
             labelsAsPercents = true, trendLineColor = null, trendLineStyle = null,
-            levelLineStyle = DrawingLineStyle.DASHED, levelLineWidth = null
+            levelLineStyle = DrawingLineStyle.DASHED, levelLineWidth = null,
+            labelVerticalPosition = FibVerticalPosition.TOP,
+            textAlignment = FibTextAlignment.LEFT,
+            textVerticalPosition = FibVerticalPosition.CENTER
         )
 
         fun defaultLevels(): List<FibonacciLevel> = listOf(
@@ -115,8 +126,10 @@ data class FibonacciSettings(
             if (value.isNullOrBlank()) return FibonacciSettings()
             return runCatching {
                 val p = value.split('|')
+                val isV3 = p.size == 23 && p[0] == "3"
                 val isV2 = p.size == 20 && p[0] == "2"
-                require(isV2 || (p.size == 16 && p[0] == "1"))
+                val hasIndependentLines = isV2 || isV3
+                require(isV3 || isV2 || (p.size == 16 && p[0] == "1"))
                 fun bit(raw: String): Boolean { require(raw == "0" || raw == "1"); return raw == "1" }
                 val levels = p[1].split(';').map { item ->
                     val fields = item.split(','); require(fields.size == 3)
@@ -136,15 +149,24 @@ data class FibonacciSettings(
                 val opacity = p[6].toFloat()
                 val fontSize = p[13].toInt()
                 require(opacity.isFinite() && opacity in 0f..1f && fontSize in 8..32)
-                val trendColor = if (isV2) p[16].takeUnless { it == "null" }?.toInt()?.let { Color(it) } else null
-                val trendStyle = if (isV2) p[17].takeUnless { it == "null" }?.let { DrawingLineStyle.valueOf(it) } else null
-                val levelStyle = if (isV2) p[18].takeUnless { it == "null" }?.let { DrawingLineStyle.valueOf(it) } else null
-                val levelWidth = if (isV2) p[19].takeUnless { it == "null" }?.toFloat() else null
+                val trendColor = if (hasIndependentLines) p[16].takeUnless { it == "null" }?.toInt()?.let { Color(it) } else null
+                val trendStyle = if (hasIndependentLines) p[17].takeUnless { it == "null" }?.let { DrawingLineStyle.valueOf(it) } else null
+                val levelStyle = if (hasIndependentLines) p[18].takeUnless { it == "null" }?.let { DrawingLineStyle.valueOf(it) } else null
+                val levelWidth = if (hasIndependentLines) p[19].takeUnless { it == "null" }?.toFloat() else null
                 require(levelWidth == null || (levelWidth.isFinite() && levelWidth in 0.5f..8f))
+                // Historical v1/v2 labels were left aligned and drawn above each level.
+                val labelVertical = if (isV3) FibVerticalPosition.valueOf(p[20]) else FibVerticalPosition.TOP
+                val textAlign = if (isV3) FibTextAlignment.valueOf(p[21]) else when (FibLabelPosition.valueOf(p[12])) {
+                    FibLabelPosition.LEFT -> FibTextAlignment.LEFT
+                    FibLabelPosition.CENTER -> FibTextAlignment.CENTER
+                    FibLabelPosition.RIGHT -> FibTextAlignment.RIGHT
+                }
+                val textVertical = if (isV3) FibVerticalPosition.valueOf(p[22]) else FibVerticalPosition.CENTER
                 FibonacciSettings(levels, bit(p[2]), FibExtension.valueOf(p[3]), bit(p[4]),
                     bit(p[5]), opacity, bit(p[7]), bit(p[8]), bit(p[9]), bit(p[10]),
                     bit(p[11]), FibLabelPosition.valueOf(p[12]), fontSize, bit(p[14]), rules,
-                    trendColor, trendStyle, levelStyle, levelWidth)
+                    trendColor, trendStyle, levelStyle, levelWidth,
+                    labelVertical, textAlign, textVertical)
             }.getOrDefault(FibonacciSettings())
         }
     }

@@ -176,13 +176,27 @@ object ChartDrawingsRenderer {
                                 val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                                     color = levelColor.toArgb()
                                     textSize = with(scope) { fib.textSize * density }
+                                    textAlign = when (fib.textAlignment) {
+                                        FibTextAlignment.LEFT -> android.graphics.Paint.Align.LEFT
+                                        FibTextAlignment.CENTER -> android.graphics.Paint.Align.CENTER
+                                        FibTextAlignment.RIGHT -> android.graphics.Paint.Align.RIGHT
+                                    }
                                 }
                                 val x = when (fib.labelPosition) {
                                     FibLabelPosition.LEFT -> x1 + 5f
-                                    FibLabelPosition.RIGHT -> x2 - paint.measureText(label) - 5f
-                                    FibLabelPosition.CENTER -> (x1 + x2 - paint.measureText(label)) / 2f
+                                    FibLabelPosition.RIGHT -> x2 - 5f
+                                    FibLabelPosition.CENTER -> (x1 + x2) / 2f
                                 }
-                                scope.drawContext.canvas.nativeCanvas.drawText(label, x, y - 4f, paint)
+                                val baseline = when (fib.labelVerticalPosition) {
+                                    FibVerticalPosition.TOP -> y - 4f
+                                    FibVerticalPosition.CENTER -> y + paint.textSize * .35f
+                                    FibVerticalPosition.BOTTOM -> y + paint.textSize + 4f
+                                } + when (fib.textVerticalPosition) {
+                                    FibVerticalPosition.TOP -> -2f
+                                    FibVerticalPosition.CENTER -> 0f
+                                    FibVerticalPosition.BOTTOM -> 2f
+                                }
+                                scope.drawContext.canvas.nativeCanvas.drawText(label, x, baseline, paint)
                             }
                         }
                     }

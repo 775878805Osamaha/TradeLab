@@ -77,6 +77,15 @@ class FibonacciSettingsScreenTest {
         compose.onNodeWithTag("fib_level_enabled_1").performScrollTo()
         compose.onNodeWithTag("fib_level_enabled_1").performClick()
         compose.onNodeWithTag("fib_level_value_1").assertIsEnabled()
+        compose.onNodeWithTag("fib_title_vertical").performScrollTo()
+        compose.onNodeWithTag("fib_title_vertical").performClick()
+        compose.onNodeWithText("أسفل").performClick()
+        compose.onNodeWithTag("fib_text_alignment").performScrollTo()
+        compose.onNodeWithTag("fib_text_alignment").performClick()
+        compose.onNodeWithText("يمين").performClick()
+        compose.onNodeWithTag("fib_text_vertical").performScrollTo()
+        compose.onNodeWithTag("fib_text_vertical").performClick()
+        compose.onNodeWithText("أعلى").performClick()
         compose.onNodeWithTag("fib_tab_1").performClick()
         compose.onNodeWithTag("fib_price_0").assertIsDisplayed()
         compose.onNodeWithTag("fib_confirm").assertIsDisplayed()
@@ -103,6 +112,12 @@ class FibonacciSettingsScreenTest {
             assertEquals(DrawingLineStyle.DASHED, saved!!.fibonacci.levelLineStyle)
             assertEquals(DrawingLineStyle.DOTTED, saved!!.fibonacci.trendLineStyle)
             assertEquals(3f, saved!!.fibonacci.levelLineWidth!!, 0f)
+            assertEquals(com.example.feature.chart.model.FibVerticalPosition.BOTTOM,
+                saved!!.fibonacci.labelVerticalPosition)
+            assertEquals(com.example.feature.chart.model.FibTextAlignment.RIGHT,
+                saved!!.fibonacci.textAlignment)
+            assertEquals(com.example.feature.chart.model.FibVerticalPosition.TOP,
+                saved!!.fibonacci.textVerticalPosition)
             assertFalse(saved!!.fibonacci.timeRules.first { it.unit == FibTimeUnit.MINUTES }.enabled)
             assertEquals(candles[304].openTime, saved!!.startTime)
         }
