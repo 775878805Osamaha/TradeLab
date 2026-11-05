@@ -10,6 +10,7 @@ on:
       - 'app/src/androidTest/java/com/example/Drawing*'
       - 'app/src/androidTest/java/com/example/ChartObjectTreeSheetTest.kt'
       - 'app/src/androidTest/java/com/example/IndicatorTemplatesSheetTest.kt'
+      - 'app/src/androidTest/java/com/example/FibonacciSettingsScreenTest.kt'
   workflow_dispatch:
 
 jobs:
@@ -55,7 +56,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -accel on -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
             chmod +x gradlew
-            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.DrawingAnchorInteractionTest,com.example.DrawingContextToolbarTest,com.example.ChartTypeSheetTest,com.example.AnalysisHubSheetTest,com.example.ChartObjectTreeSheetTest,com.example.IndicatorTemplatesSheetTest --stacktrace
+            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.DrawingAnchorInteractionTest,com.example.DrawingContextToolbarTest,com.example.ChartTypeSheetTest,com.example.AnalysisHubSheetTest,com.example.ChartObjectTreeSheetTest,com.example.IndicatorTemplatesSheetTest,com.example.FibonacciSettingsScreenTest --stacktrace
             mkdir -p drawing-captures
             adb pull /sdcard/Download/drawing-context-native-test.png drawing-captures/drawing-context-native-test.png
             adb pull /sdcard/Download/drawing-position-native-test.png drawing-captures/drawing-position-native-test.png
@@ -63,6 +64,9 @@ jobs:
             adb pull /sdcard/Download/tradelab-analysis-hub.png drawing-captures/tradelab-analysis-hub.png
             adb pull /sdcard/Download/tradelab-object-tree.png drawing-captures/tradelab-object-tree.png
             adb pull /sdcard/Download/tradelab-indicator-templates.png drawing-captures/tradelab-indicator-templates.png
+            adb pull /sdcard/Download/tradelab-fibonacci-style.png drawing-captures/tradelab-fibonacci-style.png
+            adb pull /sdcard/Download/tradelab-fibonacci-coordinates.png drawing-captures/tradelab-fibonacci-coordinates.png
+            adb pull /sdcard/Download/tradelab-fibonacci-visibility.png drawing-captures/tradelab-fibonacci-visibility.png
       - name: Preserve Android test reports
         if: always()
         uses: actions/upload-artifact@v4

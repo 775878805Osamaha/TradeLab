@@ -160,9 +160,12 @@ fun ChartScreen(
     var selectedDrawingId by remember { mutableStateOf<Long?>(null) }
     var selectedDrawingTouch by remember { mutableStateOf(Offset.Zero) }
     editingDrawing?.let { drawing ->
-        DrawingPropertiesDialog(drawing, onDismiss = { editingDrawing = null }, onDelete = { viewModel.deleteDrawing(drawing.id); selectedDrawingId = null; editingDrawing = null },
-            onSave = { viewModel.updateDrawing(it); editingDrawing = null },
-            onCopy = { viewModel.addDrawing(it.copy(id=0)) { id -> selectedDrawingId = id }; editingDrawing = null })
+        if (drawing.tool != DrawingTool.FIBONACCI) {
+            DrawingPropertiesDialog(drawing, onDismiss = { editingDrawing = null },
+                onDelete = { viewModel.deleteDrawing(drawing.id); selectedDrawingId = null; editingDrawing = null },
+                onSave = { viewModel.updateDrawing(it); editingDrawing = null },
+                onCopy = { viewModel.addDrawing(it.copy(id=0)) { id -> selectedDrawingId = id }; editingDrawing = null })
+        }
     }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showReplayDetails by remember { mutableStateOf(false) }
@@ -684,7 +687,7 @@ fun ChartScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            if (!immersiveChart) TopAppBar(
+            if (!immersiveChart && editingDrawing?.tool != DrawingTool.FIBONACCI) TopAppBar(
                 modifier = Modifier.height(if (immersiveChart) 44.dp else 64.dp),
                 title = {
                     Row(
@@ -774,6 +777,18 @@ fun ChartScreen(
             )
         }
     ) { paddingValues ->
+        val fibonacciEditor = editingDrawing?.takeIf { it.tool == DrawingTool.FIBONACCI }
+        if (fibonacciEditor != null) {
+            FibonacciSettingsScreen(
+                drawing = fibonacciEditor,
+                candles = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles,
+                onCancel = { editingDrawing = null },
+                onSave = { viewModel.updateDrawing(it); editingDrawing = null },
+                onDelete = { viewModel.deleteDrawing(fibonacciEditor.id); selectedDrawingId = null; editingDrawing = null },
+                onCopy = { viewModel.addDrawing(it.copy(id = 0)) { id -> selectedDrawingId = id }; editingDrawing = null },
+                modifier = Modifier.padding(paddingValues)
+            )
+        } else {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1814,6 +1829,7 @@ fun ChartScreen(
                     }
                 }
             }
+        }
         }
     }
 

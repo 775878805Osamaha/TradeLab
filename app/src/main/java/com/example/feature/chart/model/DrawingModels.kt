@@ -72,7 +72,8 @@ data class ChartDrawing(
     val text: String = "تعليق",
     val anchors: List<DrawingAnchor> = emptyList(),
     val screenX: Float? = null,
-    val screenY: Float? = null
+    val screenY: Float? = null,
+    val fibonacci: FibonacciSettings = FibonacciSettings()
 ) {
     fun toEntity(): DrawingEntity {
         val json = buildString {
@@ -89,6 +90,10 @@ data class ChartDrawing(
                 append(",\"anchorsBase64\":\"${Base64.getEncoder().encodeToString(encoded.toByteArray(Charsets.UTF_8))}\"")
             }
             if (screenX != null && screenY != null) append(",\"screenX\":$screenX,\"screenY\":$screenY")
+            if (tool == DrawingTool.FIBONACCI) {
+                val encoded = Base64.getEncoder().encodeToString(fibonacci.encode().toByteArray(Charsets.UTF_8))
+                append(",\"fibonacciBase64\":\"$encoded\"")
+            }
             append("}")
         }
         val hex = String.format(Locale.US, "#%08X", color.toArgb().toLong() and 0xFFFFFFFFL)
@@ -142,7 +147,10 @@ data class ChartDrawing(
                             if (t != null && p != null && p.isFinite() && p > 0) DrawingAnchor(t, p) else null
                         } ?: emptyList(),
                     screenX = Regex("\"screenX\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f },
-                    screenY = Regex("\"screenY\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f }
+                    screenY = Regex("\"screenY\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f },
+                    fibonacci = Regex("\"fibonacciBase64\":\"([^\"]*)\"").find(entity.pointsJson)?.groupValues?.get(1)
+                        ?.let { runCatching { FibonacciSettings.decode(String(Base64.getDecoder().decode(it), Charsets.UTF_8)) }.getOrDefault(FibonacciSettings()) }
+                        ?: if (tool == DrawingTool.FIBONACCI) FibonacciSettings.legacy() else FibonacciSettings()
                 )
             } catch (e: Exception) {
                 null

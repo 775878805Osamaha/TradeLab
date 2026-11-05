@@ -15,6 +15,8 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.exp
+import kotlin.math.ln
 
 object ChartDrawingsRenderer {
 
@@ -117,25 +119,57 @@ object ChartDrawingsRenderer {
                     }
                 }
                 DrawingTool.FIBONACCI -> {
-                    if (d.endPrice != null) {
-                        val levels = FibonacciCalculator.calculateLevels(d.startPrice, d.endPrice)
-                        for ((lvl, price) in levels) {
-                            val y = transform.priceToY(price)
-                            scope.drawLine(
-                                color = d.color.copy(alpha = 0.8f),
-                                start = Offset(0f, y),
-                                end = Offset(transform.chartWidth, y),
-                                strokeWidth = d.strokeWidth,
-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
-                            )
-                            scope.drawContext.canvas.nativeCanvas.apply {
-                                val paint = android.graphics.Paint().apply {
-                                    color = d.color.toArgb()
-                                    textSize = 18f
-                                    isAntiAlias = true
+                    val fib = d.fibonacci
+                    if (d.endPrice != null && fib.isVisibleAt(d.timeframe)) {
+                        val firstX = min(startX, endX ?: startX)
+                        val lastX = max(startX, endX ?: startX)
+                        val x1 = if (fib.extension == FibExtension.LEFT || fib.extension == FibExtension.BOTH) 0f else firstX
+                        val x2 = if (fib.extension == FibExtension.RIGHT || fib.extension == FibExtension.BOTH) transform.chartWidth else lastX
+                        if (fib.trendLine && endX != null && endY != null) {
+                            scope.drawLine(d.color, Offset(startX, startY), Offset(endX, endY),
+                                strokeWidth = d.strokeWidth, pathEffect = lineEffect)
+                        }
+                        val active = fib.levels.filter { it.enabled && it.value.isFinite() }
+                            .map { level ->
+                                val ratio = if (fib.reverse) 1.0 - level.value else level.value
+                                val price = if (fib.logarithmic && d.startPrice > 0 && d.endPrice > 0)
+                                    exp(ln(d.startPrice) + (ln(d.endPrice) - ln(d.startPrice)) * ratio)
+                                else d.startPrice + (d.endPrice - d.startPrice) * ratio
+                                Triple(level, price, transform.priceToY(price))
+                            }.filter { it.third.isFinite() }
+                        if (fib.background) {
+                            active.sortedBy { it.third }.zipWithNext().forEach { (top, bottom) ->
+                                scope.drawRect(
+                                    color = (if (fib.singleColor) d.color else top.first.color)
+                                        .copy(alpha = fib.backgroundOpacity.coerceIn(0f, 1f)),
+                                    topLeft = Offset(x1, top.third),
+                                    size = Size((x2 - x1).coerceAtLeast(0f), (bottom.third - top.third).coerceAtLeast(0f))
+                                )
+                            }
+                        }
+                        for ((level, price, y) in active) {
+                            val levelColor = if (fib.singleColor) d.color else level.color
+                            scope.drawLine(levelColor, Offset(x1, y), Offset(x2, y),
+                                strokeWidth = d.strokeWidth, pathEffect = lineEffect)
+                            if (fib.showText && (fib.showLevels || fib.showPrices)) {
+                                val levelLabel = if (fib.labelsAsPercents)
+                                    String.format(Locale.US, "%.1f%%", level.value * 100.0)
+                                else level.value.toString().removeSuffix(".0")
+                                val label = listOfNotNull(
+                                    levelLabel.takeIf { fib.showLevels },
+                                    QuotePriceFormatter.forSymbol(price,transform.visibleCandles.firstOrNull()?.symbol)
+                                        .takeIf { fib.showPrices }
+                                ).joinToString(" (") + if (fib.showLevels && fib.showPrices) ")" else ""
+                                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                                    color = levelColor.toArgb()
+                                    textSize = with(scope) { fib.textSize * density }
                                 }
-                                val lbl = String.format(Locale.US, "%.1f%% (%s)", lvl * 100, QuotePriceFormatter.forSymbol(price,transform.visibleCandles.firstOrNull()?.symbol))
-                                drawText(lbl, 10f, y - 4f, paint)
+                                val x = when (fib.labelPosition) {
+                                    FibLabelPosition.LEFT -> x1 + 5f
+                                    FibLabelPosition.RIGHT -> x2 - paint.measureText(label) - 5f
+                                    FibLabelPosition.CENTER -> (x1 + x2 - paint.measureText(label)) / 2f
+                                }
+                                scope.drawContext.canvas.nativeCanvas.drawText(label, x, y - 4f, paint)
                             }
                         }
                     }
