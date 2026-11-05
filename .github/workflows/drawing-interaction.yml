@@ -65,6 +65,8 @@ jobs:
             adb pull /sdcard/Download/tradelab-object-tree.png drawing-captures/tradelab-object-tree.png
             adb pull /sdcard/Download/tradelab-indicator-templates.png drawing-captures/tradelab-indicator-templates.png
             adb pull /sdcard/Download/tradelab-fibonacci-style.png drawing-captures/tradelab-fibonacci-style.png
+            adb pull /sdcard/Download/tradelab-fibonacci-style-levels.png drawing-captures/tradelab-fibonacci-style-levels.png
+            adb pull /sdcard/Download/tradelab-fibonacci-style-appearance.png drawing-captures/tradelab-fibonacci-style-appearance.png
             adb pull /sdcard/Download/tradelab-fibonacci-coordinates.png drawing-captures/tradelab-fibonacci-coordinates.png
             adb pull /sdcard/Download/tradelab-fibonacci-visibility.png drawing-captures/tradelab-fibonacci-visibility.png
       - name: Preserve Android test reports

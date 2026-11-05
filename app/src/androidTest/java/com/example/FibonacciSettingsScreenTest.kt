@@ -52,6 +52,13 @@ class FibonacciSettingsScreenTest {
         compose.onNodeWithTag("fib_level_value_1").assertIsNotEnabled()
         capture("tradelab-fibonacci-style.png")
 
+        // Cover the two additional scroll states supplied in the TradingView references.
+        compose.onNodeWithTag("fib_level_enabled_18").performScrollTo()
+        capture("tradelab-fibonacci-style-levels.png")
+        compose.onNodeWithTag("fib_log_scale").performScrollTo()
+        capture("tradelab-fibonacci-style-appearance.png")
+        compose.onNodeWithTag("fib_level_value_0").performScrollTo()
+
         compose.onNodeWithTag("fib_level_line_style").performClick()
         compose.onNodeWithText("خط متقطع").performClick()
         compose.onNodeWithTag("fib_level_line_width").performClick()

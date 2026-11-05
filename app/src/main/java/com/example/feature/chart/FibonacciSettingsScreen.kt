@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
@@ -268,15 +269,18 @@ private fun FibonacciStyleTab(
     var extensionExpanded by remember { mutableStateOf(false) }
     var positionExpanded by remember { mutableStateOf(false) }
     var fontExpanded by remember { mutableStateOf(false) }
+    val compact = LocalConfiguration.current.screenWidthDp < 380
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
         .padding(top = 10.dp, bottom = 14.dp).testTag("fib_style_content")) {
         FibSettingsRow("خط الاتجاه", settings.trendLine,
             { onSettings(settings.copy(trendLine = it)) }, "fib_trend_line") {
+            Spacer(Modifier.width(if (compact) 40.dp else 90.dp))
             FibLinePreview(settings.trendLineColor ?: lineColor,
                 settings.trendLineStyle ?: lineStyle, lineWidth, { onColor(-3) },
                 { onSettings(settings.copy(trendLineStyle = it)) }, onLineWidth)
         }
         FibSettingsRow("خط المستويات", true, {}, "fib_level_line", withCheck = false) {
+            Spacer(Modifier.width(if (compact) 25.dp else 45.dp))
             FibLevelLinePreview(settings.levelLineStyle ?: lineStyle,
                 settings.levelLineWidth ?: lineWidth,
                 { onSettings(settings.copy(levelLineStyle = it)) },
