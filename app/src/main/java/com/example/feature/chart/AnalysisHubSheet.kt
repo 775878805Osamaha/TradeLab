@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -45,31 +46,32 @@ internal object AnalysisHubCatalog {
         AnalysisHubItem("object_tree", "شجرة الكائنات", Icons.Default.Layers)
     )
     val information = listOf(
-        AnalysisHubItem("symbol_info", "معلومات الرمز", Icons.Default.InfoOutline),
+        AnalysisHubItem("symbol_info", "معلومات الرمز", Icons.Default.Info),
         AnalysisHubItem("financial_data", "البيانات المالية", Icons.Default.BarChart, enabled = false),
         AnalysisHubItem("forecasts", "التوقعات", Icons.Default.TrendingUp, enabled = false),
         AnalysisHubItem("technical_analysis", "تحليلات فنية", Icons.Default.Speed)
     )
     val more = listOf(
-        AnalysisHubItem("publish", "نشر التحليل", Icons.Default.LightbulbOutline),
+        AnalysisHubItem("publish", "نشر التحليل", Icons.Default.Lightbulb),
         AnalysisHubItem("pine_editor", "Pine Editor", Icons.Default.Code)
     )
 }
 
 @Composable
 private fun AnalysisHubTile(item: AnalysisHubItem, modifier: Modifier = Modifier, onAction: (String) -> Unit) {
+    val viewportWidthDp = LocalConfiguration.current.screenWidthDp
     val color = if (item.enabled) Color(0xFF121212) else Color(0xFFA4A4A4)
     val background = if (item.enabled) Color(0xFFF2F2F2) else Color(0xFFFAFAFA)
     Column(
-        modifier = modifier.height(72.dp)
-            .background(background, RoundedCornerShape(12.dp))
+        modifier = modifier.height((viewportWidthDp * 0.20f).dp)
+            .background(background, RoundedCornerShape((viewportWidthDp * 0.035f).dp))
             .clickable(enabled = item.enabled) { onAction(item.id) }
             .testTag("analysis_hub_${item.id}"),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         if (item.chartGlyph) ChartTypeGlyph("candles", color)
-        else Icon(item.icon ?: Icons.Default.InfoOutline, contentDescription = null, tint = color, modifier = Modifier.size(23.dp))
+        else Icon(item.icon ?: Icons.Default.Info, contentDescription = null, tint = color, modifier = Modifier.size(23.dp))
         Spacer(Modifier.height(8.dp))
         Text(
             item.label, color = color, fontSize = if (item.label.length > 17) 13.sp else 15.sp,
@@ -81,8 +83,10 @@ private fun AnalysisHubTile(item: AnalysisHubItem, modifier: Modifier = Modifier
 
 @Composable
 private fun AnalysisHubRow(items: List<AnalysisHubItem>, onAction: (String) -> Unit) {
+    val viewportWidthDp = LocalConfiguration.current.screenWidthDp
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = (viewportWidthDp * 0.044f).dp),
+            horizontalArrangement = Arrangement.spacedBy((viewportWidthDp * 0.023f).dp)) {
             items.forEach { item -> AnalysisHubTile(item, Modifier.weight(1f), onAction) }
         }
     }
