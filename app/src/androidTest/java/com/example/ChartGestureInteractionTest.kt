@@ -15,6 +15,7 @@ import com.example.ui.components.ChartFirstVisibleIndex
 import com.example.ui.components.ChartPriceIndexReady
 import com.example.ui.components.ChartScrollOffsetPx
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -98,5 +99,58 @@ class ChartGestureInteractionTest {
         val finalOffset = node().config[ChartScrollOffsetPx]
         assertTrue("A quick flick should glide farther than the injected finger travel",
             finalOffset - startOffset > chartWidth * .85f)
+    }
+
+    @Test fun pullingPastOldestBarLoadsHistoryEvenWhenOnlyFourBarsAreVisible() {
+        val requests = java.util.concurrent.atomic.AtomicInteger(0)
+        compose.setContent {
+            MaterialTheme {
+                CandlestickChart(candles.take(4), Modifier.fillMaxSize(),
+                    onRequestOlderHistory = { requests.incrementAndGet() })
+            }
+        }
+        fun node() = compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode()
+        compose.waitUntil(15_000) { node().config[ChartPriceIndexReady] }
+        val bounds = node().boundsInRoot
+        val pinchCenter = Offset(bounds.width * .5f, bounds.height * .5f)
+
+        // A two-finger pinch/translation must never be mistaken for a history pull.
+        compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+            val x = pinchCenter.x
+            val y = pinchCenter.y
+            pinch(start0 = Offset(x - 45f, y), start1 = Offset(x + 45f, y),
+                end0 = Offset(x + 10f, y), end1 = Offset(x + 130f, y), durationMillis = 350)
+        }
+        compose.waitForIdle()
+        assertEquals(0, requests.get())
+
+        compose.onNodeWithTag("candlestick_canvas").performTouchInput { swipeRight(durationMillis = 350) }
+        compose.waitForIdle()
+        assertEquals("A deliberate pull should request the next real-history page", 1, requests.get())
+
+        compose.onNodeWithTag("candlestick_canvas").performTouchInput { swipeRight(durationMillis = 350) }
+        compose.waitForIdle()
+        assertEquals("A new gesture may retry if no older data arrived", 2, requests.get())
+    }
+
+    @Test fun timeAxisDragCanZoomWithOneFinger() {
+        compose.setContent {
+            MaterialTheme { CandlestickChart(candles, Modifier.fillMaxSize(), referenceLayout = true) }
+        }
+        fun node() = compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode()
+        compose.waitUntil(15_000) { node().config[ChartPriceIndexReady] }
+        val oldWidth = node().config[ChartCandleWidthPx]
+        compose.onNodeWithTag("chart_time_axis_scale").performTouchInput {
+            swipeRight(durationMillis = 380)
+        }
+        compose.waitForIdle()
+        val larger = node().config[ChartCandleWidthPx]
+        assertTrue("Drag right on the time axis must enlarge candles", larger > oldWidth)
+        compose.onNodeWithTag("chart_time_axis_scale").performTouchInput {
+            swipeLeft(durationMillis = 380)
+        }
+        compose.waitForIdle()
+        assertTrue("Drag left on the time axis must shrink candles",
+            node().config[ChartCandleWidthPx] < larger)
     }
 }

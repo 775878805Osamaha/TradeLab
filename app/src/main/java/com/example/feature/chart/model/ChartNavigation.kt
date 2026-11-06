@@ -53,6 +53,19 @@ object ChartNavigation {
 
     data class PinchResult(val candleWidthPx: Float, val scrollOffsetPx: Float)
 
+    /** A horizontal drag on the time axis changes candle spacing around the touch. */
+    fun timeAxisZoom(
+        currentOffsetPx: Float,
+        candleWidthPx: Float,
+        chartWidthPx: Float,
+        touchX: Float,
+        fingerDeltaX: Float
+    ): PinchResult {
+        val base = chartWidthPx.takeIf { it.isFinite() && it > 0f } ?: 1f
+        val factor = kotlin.math.exp((fingerDeltaX / (base * .75f)).coerceIn(-.35f, .35f))
+        return pinch(currentOffsetPx, candleWidthPx, base, touchX, factor, 0f)
+    }
+
     /** A short, bounded release glide makes fast drags feel continuous. */
     fun releaseGlideDistance(velocityPxPerSecond: Float): Float =
         if (velocityPxPerSecond.isFinite() && kotlin.math.abs(velocityPxPerSecond) >= 450f)

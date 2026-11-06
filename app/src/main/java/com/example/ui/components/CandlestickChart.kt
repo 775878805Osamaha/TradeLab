@@ -288,6 +288,9 @@ fun CandlestickChart(
     val currentCandleCount by rememberUpdatedState(candles.size)
     val gestureFlingScope = rememberCoroutineScope()
     val releaseGlideJob = remember { arrayOfNulls<Job>(1) }
+    val gestureFingerCount = remember { intArrayOf(0) }
+    val historyEdgePull = remember { ChartHistoryEdgePull() }
+    val historyPullThresholdPx = with(chartDensity) { 64.dp.toPx() }
     // Clamp inside the gesture callback, before drawing; mutating Compose
     // viewport state from Canvas would schedule an unnecessary second frame.
     fun boundedOffset(requestedOffset: Float, width: Float): Float = ChartViewport.window(
@@ -297,6 +300,7 @@ fun CandlestickChart(
     // gesture callback fresh without restarting the active pointer detector.
     val requestOlderHistory by rememberUpdatedState(onRequestOlderHistory)
     val loadingOlderHistory by rememberUpdatedState(isLoadingOlderHistory)
+    val oldestAvailableCandleTime by rememberUpdatedState(candles.firstOrNull()?.openTime)
     var lastBackfillOldestTime by remember { mutableStateOf<Long?>(null) }
     // Do not permanently suppress automatic pagination after a transient
     // provider failure. Back off repeated attempts while the user remains
@@ -379,9 +383,11 @@ fun CandlestickChart(
                             while (true) {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 val pressed = event.changes.filter { it.pressed }
+                                gestureFingerCount[0] = pressed.size
                                 val now = event.changes.firstOrNull()?.uptimeMillis ?: 0L
                                 if (pressed.isNotEmpty() && !active) {
                                     releaseGlideJob[0]?.cancel()
+                                    historyEdgePull.beginTouch()
                                     recentX.clear()
                                     hadMultipleFingers = false
                                     active = true
@@ -435,8 +441,20 @@ fun CandlestickChart(
                                 zoomChange = zoom,
                                 panX = pan.x
                             )
+                            val bounded = boundedOffset(next.scrollOffsetPx, next.candleWidthPx)
+                            // At the oldest edge a touch still has meaning,
+                            // even when all currently loaded bars fit on screen
+                            // and the viewport's maximum history offset is 0.
+                            if (gestureFingerCount[0] == 1 && pan.x > 0f &&
+                                historyEdgePull.rightPull(next.scrollOffsetPx, bounded,
+                                    historyPullThresholdPx,
+                                    canRequest = requestOlderHistory != null && !loadingOlderHistory)) {
+                                lastBackfillOldestTime = oldestAvailableCandleTime
+                                lastBackfillScrollOffset = bounded
+                                requestOlderHistory?.invoke()
+                            }
                             candleWidthPx = next.candleWidthPx
-                            scrollOffsetPx = boundedOffset(next.scrollOffsetPx, next.candleWidthPx)
+                            scrollOffsetPx = bounded
                             if (pan.y.isFinite() && pan.y != 0f) {
                                 pricePanPx = (pricePanPx + pan.y).coerceIn(-6000f, 6000f)
                             }
@@ -1090,6 +1108,32 @@ fun CandlestickChart(
         // Chart navigation is gesture-first in the approved full-screen reference.
         // Preserve zoom, centering and reset through existing gesture and header controls;
         // do not overlay the wide legacy button bar on the candle/volume area.
+        // Dragging the physical time scale right/left zooms the candle spacing
+        // without replacing the chart with buttons or navigating away.
+        if (referenceLayout) Box(
+            modifier = Modifier
+                .align(androidx.compose.ui.AbsoluteAlignment.BottomLeft)
+                .width(with(chartDensity) { chartViewportWidthPx.toDp() })
+                .height(26.dp)
+                .testTag("chart_time_axis_scale")
+                .pointerInput(activeDrawingTool, isCrosshairActive) {
+                    if (activeDrawingTool == DrawingTool.NONE && !isCrosshairActive) {
+                        detectDragGestures(
+                            onDragStart = { releaseGlideJob[0]?.cancel() },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                val next = ChartNavigation.timeAxisZoom(
+                                    scrollOffsetPx, candleWidthPx, chartViewportWidthPx,
+                                    change.position.x, amount.x
+                                )
+                                candleWidthPx = next.candleWidthPx
+                                scrollOffsetPx = boundedOffset(next.scrollOffsetPx, next.candleWidthPx)
+                            }
+                        )
+                    }
+                }
+        )
+
         // Vertical price-axis scaling; reset-view restores automatic fitting.
         Box(
             modifier = Modifier

@@ -98,6 +98,18 @@ class ChartNavigationTest {
         assertTrue(badPosition.scrollOffsetPx.isFinite())
     }
 
+    @Test fun draggingTimeAxisZoomsAtTheTouchedTimestamp() {
+        val start = barsBehindLatestAt(180f, 600f, 12f, 50f)
+        val closer = ChartNavigation.timeAxisZoom(50f, 12f, 600f, 180f, 120f)
+        assertTrue(closer.candleWidthPx > 12f)
+        assertEquals(start,
+            barsBehindLatestAt(180f, 600f, closer.candleWidthPx, closer.scrollOffsetPx), .001f)
+        val restored = ChartNavigation.timeAxisZoom(closer.scrollOffsetPx, closer.candleWidthPx,
+            600f, 180f, -120f)
+        assertEquals(12f, restored.candleWidthPx, .001f)
+        assertEquals(50f, restored.scrollOffsetPx, .001f)
+    }
+
     @Test fun slowTouchReleaseStopsExactlyAtTheFinger() {
         assertEquals(0f, ChartNavigation.releaseGlideDistance(300f), 0f)
         assertEquals(0f, ChartNavigation.releaseGlideDistance(-300f), 0f)
