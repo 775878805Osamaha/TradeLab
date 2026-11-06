@@ -13,6 +13,7 @@ import com.example.ui.components.CandlestickChart
 import com.example.ui.components.ChartCandleWidthPx
 import com.example.ui.components.ChartFirstVisibleIndex
 import com.example.ui.components.ChartPriceIndexReady
+import com.example.ui.components.ChartScrollOffsetPx
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -80,5 +81,22 @@ class ChartGestureInteractionTest {
         compose.waitForIdle()
         assertTrue("Pinch-in must shrink candles",
             node().config[ChartCandleWidthPx] < widthAfterZoomIn)
+    }
+
+    @Test fun fastFlickContinuesBrieflyAfterRelease() {
+        compose.setContent {
+            MaterialTheme { CandlestickChart(candles, Modifier.fillMaxSize()) }
+        }
+        fun node() = compose.onNodeWithTag("candlestick_canvas").fetchSemanticsNode()
+        compose.waitUntil(15_000) { node().config[ChartPriceIndexReady] }
+        val startOffset = node().config[ChartScrollOffsetPx]
+        val chartWidth = node().boundsInRoot.width
+        compose.onNodeWithTag("candlestick_canvas").performTouchInput {
+            swipeRight(durationMillis = 110)
+        }
+        compose.waitForIdle()
+        val finalOffset = node().config[ChartScrollOffsetPx]
+        assertTrue("A quick flick should glide farther than the injected finger travel",
+            finalOffset - startOffset > chartWidth * .85f)
     }
 }

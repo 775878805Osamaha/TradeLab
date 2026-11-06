@@ -97,4 +97,17 @@ class ChartNavigationTest {
         val badPosition = ChartNavigation.pinch(100f, 12f, 600f, Float.NaN, 1.2f, Float.NaN)
         assertTrue(badPosition.scrollOffsetPx.isFinite())
     }
+
+    @Test fun slowTouchReleaseStopsExactlyAtTheFinger() {
+        assertEquals(0f, ChartNavigation.releaseGlideDistance(300f), 0f)
+        assertEquals(0f, ChartNavigation.releaseGlideDistance(-300f), 0f)
+    }
+
+    @Test fun fastReleaseGlidesInTheDragDirectionAndHasASafeLimit() {
+        assertEquals(200f, ChartNavigation.releaseGlideDistance(1_000f), 0.001f)
+        assertEquals(-200f, ChartNavigation.releaseGlideDistance(-1_000f), 0.001f)
+        assertEquals(540f, ChartNavigation.releaseGlideDistance(8_000f), 0f)
+        assertEquals(-540f, ChartNavigation.releaseGlideDistance(-8_000f), 0f)
+        assertEquals(0f, ChartNavigation.releaseGlideDistance(Float.NaN), 0f)
+    }
 }

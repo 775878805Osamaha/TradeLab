@@ -1,6 +1,9 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
 import com.example.feature.chart.model.snapDrawingPoint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -27,6 +30,8 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.awaitPointerEventScope
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.semantics
@@ -47,6 +52,8 @@ import java.util.*
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 // Inspectable viewport state for native gesture regression tests.
 val ChartFirstVisibleIndex = SemanticsPropertyKey<Int>("ChartFirstVisibleIndex")
@@ -280,6 +287,8 @@ fun CandlestickChart(
     // A guessed 600px width can mis-size early Replay candles on narrow phones.
     var chartViewportWidthPx by remember { mutableFloatStateOf(0f) }
     val currentCandleCount by rememberUpdatedState(candles.size)
+    val gestureFlingScope = rememberCoroutineScope()
+    val releaseGlideJob = remember { arrayOfNulls<Job>(1) }
     // Clamp inside the gesture callback, before drawing; mutating Compose
     // viewport state from Canvas would schedule an unnecessary second frame.
     fun boundedOffset(requestedOffset: Float, width: Float): Float = ChartViewport.window(
@@ -357,6 +366,60 @@ fun CandlestickChart(
                     this[ChartScrollOffsetPx] = scrollOffsetPx
                     this[ChartFirstVisibleIndex] = ChartViewport.window(candles.size,
                         chartViewportWidthPx, candleWidthPx, scrollOffsetPx).startIndex
+                }
+                // Observe release velocity in the Initial pass, without
+                // consuming any pointer events. The navigation detector owns
+                // the actual touches. A fresh touch immediately cancels any
+                // remaining glide, like dragging a physical chart surface.
+                .pointerInput(activeDrawingTool, isCrosshairActive, selectedDrawingId != null) {
+                    if (activeDrawingTool == DrawingTool.NONE && !isCrosshairActive && selectedDrawingIdNow == null) {
+                        awaitPointerEventScope {
+                            val recentX = java.util.ArrayDeque<Pair<Long, Float>>()
+                            var active = false
+                            var hadMultipleFingers = false
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val pressed = event.changes.filter { it.pressed }
+                                val now = event.changes.firstOrNull()?.uptimeMillis ?: 0L
+                                if (pressed.isNotEmpty() && !active) {
+                                    releaseGlideJob[0]?.cancel()
+                                    recentX.clear()
+                                    hadMultipleFingers = false
+                                    active = true
+                                }
+                                if (pressed.size > 1) hadMultipleFingers = true
+                                if (pressed.size == 1 && !hadMultipleFingers) {
+                                    recentX.addLast(now to pressed[0].position.x)
+                                    while (recentX.size > 2 && now - recentX.first.first > 120L) {
+                                        recentX.removeFirst()
+                                    }
+                                }
+                                if (pressed.isEmpty() && active) {
+                                    active = false
+                                    if (!hadMultipleFingers && recentX.size > 1) {
+                                        val first = recentX.first
+                                        val last = recentX.last
+                                        val elapsed = (last.first - first.first).coerceAtLeast(1L)
+                                        val velocity = (last.second - first.second) * 1000f / elapsed
+                                        val glide = ChartNavigation.releaseGlideDistance(velocity)
+                                        if (glide != 0f) {
+                                            releaseGlideJob[0] = gestureFlingScope.launch {
+                                                var previous = 0f
+                                                animate(0f, glide,
+                                                    animationSpec = tween(durationMillis = 280,
+                                                        easing = LinearOutSlowInEasing)) { value, _ ->
+                                                    val requested = scrollOffsetPx + value - previous
+                                                    scrollOffsetPx = boundedOffset(requested, candleWidthPx)
+                                                    previous = value
+                                                }
+                                            }
+                                        }
+                                    }
+                                    recentX.clear()
+                                }
+                            }
+                        }
+                    }
                 }
                 // A single detector handles both one-finger panning and
                 // two-finger pinch/translation. In normal analysis mode the

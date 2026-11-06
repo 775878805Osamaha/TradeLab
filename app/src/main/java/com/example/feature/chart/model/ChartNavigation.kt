@@ -52,4 +52,10 @@ object ChartNavigation {
     }
 
     data class PinchResult(val candleWidthPx: Float, val scrollOffsetPx: Float)
+
+    /** A short, bounded release glide makes fast drags feel continuous. */
+    fun releaseGlideDistance(velocityPxPerSecond: Float): Float =
+        if (velocityPxPerSecond.isFinite() && kotlin.math.abs(velocityPxPerSecond) >= 450f)
+            (velocityPxPerSecond * 0.20f).coerceIn(-540f, 540f)
+        else 0f
 }
