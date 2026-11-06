@@ -311,6 +311,9 @@ const server=createServer((req,res)=>{
     if(error.message==='unconfigured_gateway')return fail(res,503,'gateway_not_configured');
     if(error.message==='not_authenticated'||error.message==='invalid_session')
       return fail(res,401,'session_expired');
+    if(['invalid_tick_data','tick_timestamp_out_of_range','tick_account_mismatch',
+      'ambiguous_tick_pagination_boundary','empty_tick_page_with_more'].includes(error.message))
+      return fail(res,502,'ctrader_tick_history_unusable');
     if(error.message.startsWith('invalid_')||error.message==='account_not_authorized')
       return fail(res,400,'invalid_request');
     if(error.message==='ctrader_view_only_required')return fail(res,403,'ctrader_view_only_required');

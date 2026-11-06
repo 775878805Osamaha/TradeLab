@@ -246,6 +246,19 @@ fun ChartScreen(
             it.accountGeneration == rangeBrokerGeneration &&
             chartDisplayStyle == ChartDisplayStyle.RANGE
     }?.candles
+    val requestOlderRange: () -> Unit = {
+        if (!rangeLoading) {
+            if (rangeHistoryHours < 6) rangeHistoryHours = 6
+            else if (rangeHistoryHours < 24) rangeHistoryHours = (rangeHistoryHours + 6).coerceAtMost(24)
+            else if (!isEmbeddedReplay) {
+                // Broker requests must remain short (<= 1 week). Slide a
+                // bounded actual-tick window into the past, without an
+                // arbitrary earliest-date cutoff or fabricated quote history.
+                rangeRefreshAnchor = (rangeRefreshAnchor - 6 * 3_600_000L)
+                    .coerceAtLeast(24 * 3_600_000L + 1L)
+            }
+        }
+    }
     var immersiveChart by remember { mutableStateOf(true) }
     var pendingAnnotation by remember { mutableStateOf<com.example.feature.chart.model.ChartDrawing?>(null) }
     var annotationText by remember { mutableStateOf("") }
@@ -592,6 +605,15 @@ fun ChartScreen(
                     )
                     Text("الافتراضي 1000 تيك. المصدر: أسعار Bid التاريخية من حساب cTrader المحدد.",
                         style = MaterialTheme.typography.bodySmall)
+                    Text("فترة بيانات Tick المحملة (يمكن زيادتها بالسحب للخلف)",
+                        style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        listOf(1, 3, 6).forEach { hours ->
+                            FilterChip(selected = rangeHistoryHours == hours,
+                                onClick = { rangeHistoryHours = hours },
+                                label = { Text("$hours س") })
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -1312,7 +1334,7 @@ fun ChartScreen(
                         selectedPositionId = it.id
                     },
                     onRequestOlderHistory = if (rangeIsActive) ({
-                        if (!rangeLoading && rangeHistoryHours < 168) rangeHistoryHours = (rangeHistoryHours + 6).coerceAtMost(168)
+                        requestOlderRange()
                     }) else if (isEmbeddedReplay) null else ({ viewModel.loadOlderChartHistory() }),
                     referenceLayout = true,
                     bullishColor = Color(chartAppearance.up),
@@ -1340,11 +1362,16 @@ fun ChartScreen(
                             Text("مدى $fixedRangeTicks", color = TradingAccentLight, fontSize = 11.sp)
                         }
                         if (rangeLoading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                        if (!rangeLoading && rangeHistoryHours < 168) TextButton(onClick = {
-                            rangeHistoryHours = (rangeHistoryHours + 6).coerceAtMost(168)
-                        }, modifier = Modifier.testTag("range_load_older")) {
+                        if (!rangeLoading && (!isEmbeddedReplay || rangeHistoryHours < 24)) TextButton(
+                            onClick = requestOlderRange,
+                            modifier = Modifier.testTag("range_load_older")) {
                             Text("أقدم", fontSize = 11.sp)
                         }
+                        if (rangeEnd != null && !rangeLoading) Text(
+                            java.text.SimpleDateFormat("dd/MM HH:mm", Locale.getDefault())
+                                .format(java.util.Date(rangeEnd)),
+                            color = TradingTextSecondary, fontSize = 9.sp
+                        )
                         if (!isEmbeddedReplay) TextButton(onClick = {
                             rangeRefreshAnchor = System.currentTimeMillis()
                         }) { Text("تحديث", fontSize = 11.sp) }
