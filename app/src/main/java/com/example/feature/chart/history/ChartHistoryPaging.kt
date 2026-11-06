@@ -16,6 +16,13 @@ import java.io.IOException
 /** Timestamp paging has no cumulative candle/offset ceiling. Each request stays bounded. */
 object ChartHistoryPaging {
     const val PAGE_BARS = 500
+    private const val DAY_MILLIS = 86_400_000L
+    // FX metals and currencies can have multi-day broker closures. Searching
+    // just four calendar days can wrongly report end-of-history after a long
+    // holiday even when the next older real candle exists. Keep the search
+    // bounded and require a confirmed empty provider window at every step.
+    private const val BROKER_CLOSED_SESSION_SCAN_DAYS = 14L
+    private const val EXCHANGE_CLOSED_SESSION_SCAN_DAYS = 4L
 
     suspend fun before(
         symbol: String,
@@ -35,9 +42,13 @@ object ChartHistoryPaging {
         val interval = timeframe.minutes * 60_000L
         if (oldestOpen < interval) return emptyList()
         val brokerTimed = symbol in VerifiedMarketQuote.forexSymbols
-        // Scan contiguous windows spanning at least a long closed FX weekend.
+        // Scan only confirmed-empty contiguous windows; do not fabricate bars
+        // or confuse a provider error with a closed market session.
         val windowSpan = interval * pageBars
-        val windows = ((4L * 86_400_000L + windowSpan - 1L) / windowSpan).coerceAtLeast(1L)
+        val scanDays = if (brokerTimed) BROKER_CLOSED_SESSION_SCAN_DAYS
+            else EXCHANGE_CLOSED_SESSION_SCAN_DAYS
+        val windows = ((scanDays * DAY_MILLIS + windowSpan - 1L) / windowSpan)
+            .coerceAtLeast(1L)
         for (window in 0L until windows) {
             currentCoroutineContext().ensureActive()
             // A broker's immediately previous bar may have opened less than
@@ -101,6 +112,31 @@ object ChartHistoryPaging {
     fun merge(existing: List<Candle>, incoming: List<Candle>): List<Candle> {
         if (incoming.isEmpty()) return existing
         val page = incoming.sortedBy { it.openTime }
+        if (existing.isEmpty()) return page
+        // The usual deep-history page sits strictly before the existing
+        // candles. Bulk copies avoid comparing 100k timestamps every 500-bar
+        // download, and maintain the exact same chronological viewport anchor.
+        if (page.last().openTime < existing.first().openTime) {
+            return ArrayList<Candle>(existing.size + page.size).apply {
+                addAll(page)
+                addAll(existing)
+            }
+        }
+        // Live streams and closed-bar refreshes normally touch only the tail.
+        // Keep incoming candles authoritative on an overlapping last open.
+        if (page.first().openTime > existing.last().openTime) {
+            return ArrayList<Candle>(existing.size + page.size).apply {
+                addAll(existing)
+                addAll(page)
+            }
+        }
+        if (page.first().openTime == existing.last().openTime &&
+            page.zipWithNext().all { (a, b) -> a.openTime < b.openTime }) {
+            return ArrayList<Candle>(existing.size + page.size - 1).apply {
+                addAll(existing.subList(0, existing.lastIndex))
+                addAll(page)
+            }
+        }
         val merged = ArrayList<Candle>(existing.size + page.size)
         var i = 0
         var j = 0

@@ -135,6 +135,34 @@ class ChartHistoryPagingTest {
         assertEquals(1, page.size)
     }
 
+    @Test fun longBrokerHolidayBeyondFourDaysDoesNotCutOffOlderVerifiedCandles() = runBlocking {
+        val interval = 60_000L
+        val oldest = 50_000L * interval
+        var requests = 0
+        val page = ChartHistoryPaging.before("XAUUSD", Timeframe.M1, oldest) { from, to ->
+            requests++
+            // 13 fully closed 500-minute windows span more than four days.
+            if (requests <= 13) emptyList() else listOf(bar(Timeframe.M1, to))
+        }
+        assertEquals(14, requests)
+        assertEquals(1, page.size)
+        assertTrue(oldest - page.single().openTime > 4L * 86_400_000L)
+        assertEquals("ctrader:demo:test:42", page.single().source)
+    }
+
+    @Test fun anEntireFourteenDayVerifiedClosureTerminatesWithoutInventingBars() = runBlocking {
+        val interval = 60_000L
+        val oldest = 80_000L * interval
+        var requests = 0
+        val page = ChartHistoryPaging.before("XAUUSD", Timeframe.M1, oldest) { _, _ ->
+            requests++
+            emptyList()
+        }
+        assertTrue(page.isEmpty())
+        assertTrue(requests >= 40)
+        assertTrue(requests <= 41)
+    }
+
     @Test fun outageCancellationAndInvalidPricesCannotSkipHistory() = runBlocking {
         for (failure in listOf(MarketDataRequestException("HTTP 429"), CancellationException("stop"))) {
             var requests = 0
@@ -207,5 +235,30 @@ class ChartHistoryPagingTest {
         val after = ChartViewport.window(merged.size, 600f, 12f, 4_000f)
         assertEquals(bars[before.startIndex].openTime, merged[after.startIndex].openTime)
         assertEquals(bars[before.endIndex - 1].openTime, merged[after.endIndex - 1].openTime)
+    }
+
+    @Test fun mergeKeepsVerifiedPrefixTailAndInternalOverlapsWithoutDuplicates() {
+        val tf = Timeframe.M1
+        val existing = List(100_000) { bar(tf, (1_000L + it) * 60_000) }
+        val historicalPage = List(500) { bar(tf, (500L + it) * 60_000) }
+        val withHistory = ChartHistoryPaging.merge(existing, historicalPage)
+        assertEquals(100_500, withHistory.size)
+        assertEquals(historicalPage.first().openTime, withHistory.first().openTime)
+        assertSame(existing.first(), withHistory[500])
+
+        val live = existing.last().copy(close = 101.0)
+        val withRevisedTail = ChartHistoryPaging.merge(withHistory, listOf(live))
+        assertEquals(100_500, withRevisedTail.size)
+        assertEquals(101.0, withRevisedTail.last().close, 0.0)
+        val next = bar(tf, live.openTime + 60_000)
+        val withNext = ChartHistoryPaging.merge(withRevisedTail, listOf(live, next))
+        assertEquals(100_501, withNext.size)
+        assertSame(next, withNext.last())
+
+        val internal = bar(tf, existing[40_000].openTime, close = 99.0)
+        val withOverlap = ChartHistoryPaging.merge(withNext, listOf(internal))
+        assertEquals(100_501, withOverlap.size)
+        assertEquals(99.0, withOverlap[40_500].close, 0.0)
+        assertTrue(withOverlap.zipWithNext().all { (a, b) -> a.openTime < b.openTime })
     }
 }
