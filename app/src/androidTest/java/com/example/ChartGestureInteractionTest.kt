@@ -47,8 +47,9 @@ class ChartGestureInteractionTest {
             node().config[ChartFirstVisibleIndex] < before)
 
         val widthBefore = node().config[ChartCandleWidthPx]
+        val bounds = node().boundsInRoot
+        val center = Offset(bounds.width * .5f, bounds.height * .47f)
         compose.onNodeWithTag("candlestick_canvas").performTouchInput {
-            val center = Offset(size.width * .5f, size.height * .47f)
             pinch(
                 start0 = center - Offset(55f, 0f),
                 start1 = center + Offset(55f, 0f),
@@ -68,7 +69,6 @@ class ChartGestureInteractionTest {
         android.os.ParcelFileDescriptor.AutoCloseInputStream(screenshot).use { it.readBytes() }
 
         compose.onNodeWithTag("candlestick_canvas").performTouchInput {
-            val center = Offset(size.width * .5f, size.height * .47f)
             pinch(
                 start0 = center - Offset(130f, 0f),
                 start1 = center + Offset(130f, 0f),
