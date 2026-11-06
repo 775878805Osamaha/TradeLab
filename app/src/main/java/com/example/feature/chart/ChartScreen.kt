@@ -1413,7 +1413,8 @@ fun ChartScreen(
                     magnetEnabled = magnetEnabled,
                     drawings = displayedDrawings,
                     selectedDrawingId = selectedDrawingId,
-                    indicatorSettings = uiState.indicatorSettings,
+                    indicatorSettings = if (rangeIsActive && phantomBarsVisible)
+                        IndicatorSettings(isEmaEnabled = false) else uiState.indicatorSettings,
                     smaValues = if (rangeIsActive) activeRangeIndicators?.sma.orEmpty() else if (isEmbeddedReplay) replaySma else uiState.smaValues,
                     emaValues = if (rangeIsActive) activeRangeIndicators?.ema.orEmpty() else if (isEmbeddedReplay) replayEma else uiState.emaValues,
                     bollingerValues = if (rangeIsActive) activeRangeIndicators?.bollinger.orEmpty() else if (isEmbeddedReplay) replayBollinger else uiState.bollingerValues,
