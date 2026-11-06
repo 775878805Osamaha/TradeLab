@@ -42,6 +42,7 @@ import com.example.core.indicators.BollingerBandsResult
 import com.example.core.indicators.MacdResult
 import com.example.core.model.*
 import com.example.feature.chart.model.*
+import com.example.core.market.RangePhantomBars
 import com.example.ui.components.chart.ChartDrawingsRenderer
 import com.example.ui.components.chart.ChartIndicatorsRenderer
 import com.example.ui.components.chart.ChartOverlays
@@ -381,6 +382,11 @@ fun CandlestickChart(
                 scrollOffsetPx = if (before.second != rangeHistoryJumpGeneration) 0f else
                     RangeViewportContinuity.offsetAfterWindowChange(
                         before.third, candles, chartViewportWidthPx, candleWidthPx, scrollOffsetPx)
+            } else if (before != null && before.third.size != candles.size) {
+                // Also anchor the visible time when older bars are prepended
+                // or Phantom presentation is toggled for the same tick range.
+                scrollOffsetPx = RangeViewportContinuity.offsetAfterWindowChange(
+                    before.third, candles, chartViewportWidthPx, candleWidthPx, scrollOffsetPx)
             }
             val savedGeneration = if (before?.first == rangeHistoryWindowEnd)
                 before.second else rangeHistoryJumpGeneration
@@ -896,7 +902,9 @@ fun CandlestickChart(
                 val lowY = transform.priceToY(c.low)
 
                 val isBullish = c.close >= c.open
-                val candleColor = if (isBullish) bullishColor else bearishColor
+                val isPhantom = RangePhantomBars.isPhantom(c)
+                val candleColor = (if (isBullish) bullishColor else bearishColor)
+                    .let { if (isPhantom) it.copy(alpha = 0.55f) else it }
 
                 if (displayStyle == ChartDisplayStyle.COLUMNS) {
                     drawRect(color = candleColor.copy(alpha = 0.9f),
@@ -933,7 +941,8 @@ fun CandlestickChart(
                     color = candleColor,
                     topLeft = Offset(x - (adjustedWidth / 2f), bodyTop),
                     size = Size(adjustedWidth, bodyHeight),
-                    style = if((hollowUp || displayStyle == ChartDisplayStyle.HOLLOW_CANDLES) && isBullish)
+                    style = if (isPhantom ||
+                        ((hollowUp || displayStyle == ChartDisplayStyle.HOLLOW_CANDLES) && isBullish))
                         androidx.compose.ui.graphics.drawscope.Stroke(width = 1.4f)
                         else androidx.compose.ui.graphics.drawscope.Fill
                 )
@@ -1204,6 +1213,8 @@ fun CandlestickChart(
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
+                    if (RangePhantomBars.isPhantom(c))
+                        Text("Phantom · عرض فقط", fontSize = 10.sp, color = TradingGold)
                     Text("O: " + com.example.ui.components.chart.QuotePriceFormatter.price(c.open), fontSize = 10.sp, color = TradingTextSecondary)
                     Text("H: " + com.example.ui.components.chart.QuotePriceFormatter.price(c.high), fontSize = 10.sp, color = TradingPositive)
                     Text("L: " + com.example.ui.components.chart.QuotePriceFormatter.price(c.low), fontSize = 10.sp, color = TradingNegative)

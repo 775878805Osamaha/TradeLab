@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.core.market.DefaultSymbols
+import com.example.core.market.MarketSymbolRegistry
+import com.example.core.market.RangePhantomBars
 import com.example.core.market.RangeTickHistoryTooDenseException
 import com.example.core.model.Candle
 import com.example.core.model.DataSourceType
@@ -209,6 +211,12 @@ fun ChartScreen(
     var fixedRangeTicks by rememberSaveable {
         mutableIntStateOf(workspacePrefs.getInt("range_fixed_ticks", 1000).coerceIn(1, 100_000))
     }
+    var showRangePhantomBars by rememberSaveable {
+        mutableStateOf(workspacePrefs.getBoolean("range_phantom_bars", true))
+    }
+    LaunchedEffect(showRangePhantomBars) {
+        workspacePrefs.edit().putBoolean("range_phantom_bars", showRangePhantomBars).apply()
+    }
     var rangeSettingsOpen by remember { mutableStateOf(false) }
     var rangeDatePickerOpen by remember { mutableStateOf(false) }
     var rangeInput by remember { mutableStateOf(fixedRangeTicks.toString()) }
@@ -266,6 +274,15 @@ fun ChartScreen(
             it.accountGeneration == rangeBrokerGeneration &&
             chartDisplayStyle == ChartDisplayStyle.RANGE
     }?.candles
+    // Virtual gap fillers live ONLY in the chart's presentation layer. The
+    // broker snapshot, tick cache, replay cutoff, and trade data stay real.
+    val rangeVisualBars = remember(visibleRangeBars, showRangePhantomBars,
+        fixedRangeTicks, uiState.selectedSymbol) {
+        if (showRangePhantomBars && visibleRangeBars != null)
+            RangePhantomBars.project(visibleRangeBars,
+                MarketSymbolRegistry.getSymbol(uiState.selectedSymbol).tickSize, fixedRangeTicks)
+        else visibleRangeBars
+    }
     // Populate a usable initial chart progressively from genuine cTrader ticks.
     // Stop once there are enough candles, the bounded prefetch depth is reached,
     // or the user explicitly chooses a history window. Replay never auto-seeks.
@@ -651,6 +668,17 @@ fun ChartScreen(
                         modifier = Modifier.fillMaxWidth().testTag("range_size_ticks")
                     )
                     Text("الافتراضي 1000 تيك. المصدر: أسعار Bid التاريخية من حساب cTrader المحدد.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("سد الفجوات بصريًا (Phantom Bars)",
+                            modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                        Switch(checked = showRangePhantomBars,
+                            onCheckedChange = { showRangePhantomBars = it },
+                            modifier = Modifier.testTag("range_phantom_bars"))
+                    }
+                    Text("الشموع الافتراضية مميزة ومخصصة للرسم فقط؛ ليست أسعار Tick متداولة ولا تدخل في تنفيذ Replay أو إحصائيات الصفقات. عند وجودها تُخفى المؤشرات المحسوبة حتى لا تُستخدم أسعار افتراضية كإشارات.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Text("شموع حقيقية: ${visibleRangeBars?.size ?: 0} · شموع عرض افتراضية: ${((rangeVisualBars?.size ?: 0) - (visibleRangeBars?.size ?: 0)).coerceAtLeast(0)}",
                         style = MaterialTheme.typography.bodySmall)
                     Text("فترة بيانات Tick: $rangeHistoryHours ساعة. اسحب للخلف لتحميل المزيد؛ وقد يقلّص التطبيق الفترة تلقائيًا عند كثافة الأسعار.",
                         style = MaterialTheme.typography.bodySmall)
@@ -1344,9 +1372,11 @@ fun ChartScreen(
                     visibleRangeBars to ChartIndicatorPreparation.calculate(visibleRangeBars, uiState.indicatorSettings)
                 else null
             }
-            val activeRangeIndicators = rangePrepared?.takeIf { it.first === visibleRangeBars }?.second
+            val phantomBarsVisible = (rangeVisualBars?.size ?: 0) > (visibleRangeBars?.size ?: 0)
+            val activeRangeIndicators = if (phantomBarsVisible) null
+                else rangePrepared?.takeIf { it.first === visibleRangeBars }?.second
             val rangeIsActive = chartDisplayStyle == ChartDisplayStyle.RANGE
-            val chartBars = if (rangeIsActive) visibleRangeBars.orEmpty()
+            val chartBars = if (rangeIsActive) rangeVisualBars.orEmpty()
                 else if (isEmbeddedReplay) replayBars else uiState.candles
 
             val revealedDrawingTime = replayState.visibleCandles.lastOrNull()?.openTime
