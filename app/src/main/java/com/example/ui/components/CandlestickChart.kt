@@ -339,20 +339,28 @@ fun CandlestickChart(
     // leaves most of the canvas empty on phones; fit those bars on first load.
     // Never override user zoom after the initial fit.
     var initialCandleFitApplied by remember { mutableStateOf(false) }
+    var fittedDisplayStyle by remember { mutableStateOf<ChartDisplayStyle?>(null) }
     // Reset is a user-requested fresh fit, not merely a return to 12px bars.
     // This effect is declared after the state to avoid referencing an
     // uninitialized local Compose state holder.
     LaunchedEffect(resetViewTrigger) {
         if (resetViewTrigger > 0L) initialCandleFitApplied = false
     }
-    LaunchedEffect(candles.size, chartViewportWidthPx, initialCandleFitApplied) {
-        if (!initialCandleFitApplied && candles.isNotEmpty() && chartViewportWidthPx > 1f) {
-            if (candles.size <= 40) {
+    LaunchedEffect(candles.size, chartViewportWidthPx, initialCandleFitApplied, displayStyle) {
+        if ((!initialCandleFitApplied || fittedDisplayStyle != displayStyle) &&
+            candles.isNotEmpty() && chartViewportWidthPx > 1f) {
+            if (displayStyle == ChartDisplayStyle.RANGE) {
+                // Range candles arrive in older batches. A large initial fit
+                // would leave only a dozen oversized bars visible even after
+                // the broker has supplied much more history.
+                candleWidthPx = 14f
+            } else if (candles.size <= 40) {
                 candleWidthPx = (chartViewportWidthPx * 0.76f / candles.size)
                     .coerceIn(12f, 38f)
             }
             if (referenceLayout) scrollOffsetPx = -chartViewportWidthPx * 0.18f
             initialCandleFitApplied = true
+            fittedDisplayStyle = displayStyle
         }
     }
     Box(modifier = modifier.onSizeChanged { chartViewportWidthPx = (it.width - axisWidthPx).coerceAtLeast(1f) }) {

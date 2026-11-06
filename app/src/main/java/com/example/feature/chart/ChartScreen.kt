@@ -54,6 +54,7 @@ private data class RangeChartSnapshot(
     val size: Int,
     val hours: Int,
     val accountGeneration: Long,
+    val replay: Boolean,
     val candles: List<Candle>
 )
 
@@ -210,20 +211,23 @@ fun ChartScreen(
     var rangeSettingsOpen by remember { mutableStateOf(false) }
     var rangeInput by remember { mutableStateOf(fixedRangeTicks.toString()) }
     var rangeHistoryHours by remember { mutableIntStateOf(6) }
+    var rangeHistoryManuallyChosen by remember { mutableStateOf(false) }
     var rangeRefreshAnchor by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var rangeReplayBackshiftMillis by remember { mutableLongStateOf(0L) }
     var rangeSnapshot by remember { mutableStateOf<RangeChartSnapshot?>(null) }
     var rangeLoading by remember { mutableStateOf(false) }
     var rangeError by remember { mutableStateOf<String?>(null) }
     val rangeBrokerGeneration = viewModel.rangeAccountGeneration?.collectAsState()?.value ?: 0L
     val rangeReplayEnd = if (isEmbeddedReplay) replayState.visibleCandles.lastOrNull()?.closeTime?.minus(1L) else null
-    val rangeEnd = if (isEmbeddedReplay) rangeReplayEnd else rangeRefreshAnchor
+    val rangeEnd = if (isEmbeddedReplay) rangeReplayEnd?.minus(rangeReplayBackshiftMillis) else rangeRefreshAnchor
     LaunchedEffect(uiState.selectedSymbol, isEmbeddedReplay, rangeBrokerGeneration) {
         rangeHistoryHours = 6
+        rangeHistoryManuallyChosen = false
+        rangeReplayBackshiftMillis = 0L
         rangeRefreshAnchor = System.currentTimeMillis()
     }
     LaunchedEffect(chartDisplayStyle, uiState.selectedSymbol, isEmbeddedReplay,
         rangeEnd, rangeHistoryHours, fixedRangeTicks, rangeBrokerGeneration) {
-        rangeSnapshot = null
         rangeError = null
         rangeLoading = false
         if (chartDisplayStyle != ChartDisplayStyle.RANGE || rangeEnd == null) return@LaunchedEffect
@@ -233,7 +237,7 @@ fun ChartScreen(
             val bars = viewModel.loadRangeBars(uiState.selectedSymbol, start, rangeEnd,
                 fixedRangeTicks, includeIncomplete = !isEmbeddedReplay)
             rangeSnapshot = RangeChartSnapshot(uiState.selectedSymbol, rangeEnd,
-                fixedRangeTicks, rangeHistoryHours, rangeBrokerGeneration, bars)
+                fixedRangeTicks, rangeHistoryHours, rangeBrokerGeneration, isEmbeddedReplay, bars)
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -242,20 +246,36 @@ fun ChartScreen(
     }
     val visibleRangeBars = rangeSnapshot?.takeIf {
         it.symbol == uiState.selectedSymbol && it.end == rangeEnd &&
-            it.size == fixedRangeTicks && it.hours == rangeHistoryHours &&
+            it.size == fixedRangeTicks && it.replay == isEmbeddedReplay &&
+            (it.hours == rangeHistoryHours || rangeLoading || rangeError != null) &&
             it.accountGeneration == rangeBrokerGeneration &&
             chartDisplayStyle == ChartDisplayStyle.RANGE
     }?.candles
+    // Populate a usable initial chart progressively from genuine cTrader ticks.
+    // Stop once there are enough candles, the bounded prefetch depth is reached,
+    // or the user explicitly chooses a history window. Replay never auto-seeks.
+    LaunchedEffect(rangeSnapshot, rangeLoading, rangeError, rangeHistoryManuallyChosen,
+        chartDisplayStyle, isEmbeddedReplay) {
+        val snapshot = rangeSnapshot
+        if (!rangeLoading && rangeError == null && chartDisplayStyle == ChartDisplayStyle.RANGE &&
+            snapshot != null && snapshot.symbol == uiState.selectedSymbol &&
+            snapshot.size == fixedRangeTicks && snapshot.hours == rangeHistoryHours &&
+            snapshot.accountGeneration == rangeBrokerGeneration &&
+            RangeHistoryPaging.shouldPrefetchMoreBars(snapshot.candles.size, rangeHistoryHours,
+                rangeHistoryManuallyChosen, isEmbeddedReplay)) {
+            rangeHistoryHours = (rangeHistoryHours + RangeHistoryPaging.STEP_HOURS)
+                .coerceAtMost(RangeHistoryPaging.AUTO_MAX_HOURS)
+        }
+    }
     val requestOlderRange: () -> Unit = {
-        if (!rangeLoading) {
-            if (rangeHistoryHours < 6) rangeHistoryHours = 6
-            else if (rangeHistoryHours < 24) rangeHistoryHours = (rangeHistoryHours + 6).coerceAtMost(24)
-            else if (!isEmbeddedReplay) {
-                // Broker requests must remain short (<= 1 week). Slide a
-                // bounded actual-tick window into the past, without an
-                // arbitrary earliest-date cutoff or fabricated quote history.
-                rangeRefreshAnchor = (rangeRefreshAnchor - 6 * 3_600_000L)
-                    .coerceAtLeast(24 * 3_600_000L + 1L)
+        if (!rangeLoading && rangeEnd != null) {
+            rangeHistoryManuallyChosen = true
+            val next = RangeHistoryPaging.older(rangeEnd, rangeHistoryHours)
+            rangeHistoryHours = next.hours
+            if (next.end != rangeEnd) {
+                if (isEmbeddedReplay && rangeReplayEnd != null)
+                    rangeReplayBackshiftMillis = rangeReplayEnd - next.end
+                else rangeRefreshAnchor = next.end
             }
         }
     }
@@ -605,12 +625,15 @@ fun ChartScreen(
                     )
                     Text("الافتراضي 1000 تيك. المصدر: أسعار Bid التاريخية من حساب cTrader المحدد.",
                         style = MaterialTheme.typography.bodySmall)
-                    Text("فترة بيانات Tick المحملة (يمكن زيادتها بالسحب للخلف)",
+                    Text("فترة بيانات Tick المحملة: $rangeHistoryHours ساعة. اسحب للخلف لتحميل المزيد حتى أسبوع، ثم الانتقال إلى أسابيع أقدم.",
                         style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         listOf(1, 3, 6).forEach { hours ->
                             FilterChip(selected = rangeHistoryHours == hours,
-                                onClick = { rangeHistoryHours = hours },
+                                onClick = {
+                                    rangeHistoryManuallyChosen = true
+                                    rangeHistoryHours = hours
+                                },
                                 label = { Text("$hours س") })
                         }
                     }
@@ -1362,7 +1385,7 @@ fun ChartScreen(
                             Text("مدى $fixedRangeTicks", color = TradingAccentLight, fontSize = 11.sp)
                         }
                         if (rangeLoading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                        if (!rangeLoading && (!isEmbeddedReplay || rangeHistoryHours < 24)) TextButton(
+                        if (!rangeLoading) TextButton(
                             onClick = requestOlderRange,
                             modifier = Modifier.testTag("range_load_older")) {
                             Text("أقدم", fontSize = 11.sp)

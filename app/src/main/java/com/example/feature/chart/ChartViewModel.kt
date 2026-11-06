@@ -108,7 +108,10 @@ class ChartViewModel(
             }
             if (client.sourceKey(symbol) != source) error("تغير حساب cTrader أثناء جلب المدى")
             val visible = merged.filter { it.timestamp in from..to }
-            require(visible.size <= 250_000) { "عدد بيانات Tick أكبر من حد العرض؛ قلّص الفترة" }
+            // The visible one-week window is paged in six-hour increments.
+            // Keep a bounded rolling cache rather than failing after the old
+            // 250k-tick ceiling during a normal backwards chart gesture.
+            require(visible.size <= 1_000_000) { "عدد بيانات Tick أكبر من ذاكرة العرض؛ اختر فترة أقصر" }
             // Retain only the requested window. Otherwise a long replay session
             // would accumulate unlimited future and past quotes in memory.
             rangeTickWindow = RangeTickWindow(symbol, source, from, to, visible)
