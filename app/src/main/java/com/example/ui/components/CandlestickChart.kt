@@ -309,7 +309,7 @@ fun CandlestickChart(
     var lastBackfillScrollOffset by remember { mutableFloatStateOf(0f) }
     // Re-arm pagination after switching symbols/timeframes, even if the
     // newly loaded history happens to begin at the same timestamp.
-    LaunchedEffect(candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe) {
+    LaunchedEffect(candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe, displayStyle) {
         lastBackfillOldestTime = null
         lastBackfillScrollOffset = 0f
         scrollOffsetPx = 0f
@@ -325,8 +325,15 @@ fun CandlestickChart(
         // deliberately pans farther into history (at least five candles).
         // A stable viewport must not cause an automatic retry loop.
         val userAdvanced = scrollOffsetPx - lastBackfillScrollOffset >= candleWidthPx * 5f
+        // A rolling Range history window replaces the oldest six-hour slice
+        // on every request. Its oldest timestamp changes even if the user
+        // has stopped dragging, so only a fresh gesture may request another
+        // Range page. Otherwise the app would fetch indefinitely at the edge.
+        val canAutoBackfill = if (displayStyle == ChartDisplayStyle.RANGE)
+            lastBackfillOldestTime == null || userAdvanced
+        else lastBackfillOldestTime != oldest || userAdvanced
         if (scrollOffsetPx > 0f && scrollOffsetPx >= threshold &&
-            (lastBackfillOldestTime != oldest || userAdvanced)) {
+            canAutoBackfill) {
             lastBackfillOldestTime = oldest
             lastBackfillScrollOffset = scrollOffsetPx
             requestOlderHistory?.invoke()
