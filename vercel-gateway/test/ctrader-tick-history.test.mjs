@@ -6,9 +6,9 @@ import {CTraderGateway, normalizeHistoricalBidTicks} from '../ctrader.mjs';
 test('cTrader newest-first tick deltas become genuine chronological bid prices',()=>{
   assert.deepEqual(normalizeHistoricalBidTicks([
     {timestamp:1010,tick:200050000},
-    {timestamp:7,tick:200040000},
+    {timestamp:-7,tick:200040000},
     {timestamp:0,tick:200030000},
-    {timestamp:3,tick:200020000},
+    {timestamp:-3,tick:200020000},
   ],1000,1010),[
     {timestamp:1000,price:2000.2},
     {timestamp:1003,price:2000.3},
@@ -17,10 +17,11 @@ test('cTrader newest-first tick deltas become genuine chronological bid prices',
   ]);
 });
 
-test('historical tick decoding rejects corrupt prices, deltas and future ticks',()=>{
+test('historical tick decoding rejects corrupt prices, forward deltas and future ticks',()=>{
   assert.throws(()=>normalizeHistoricalBidTicks([{timestamp:1010,tick:0}],0,1010));
-  assert.throws(()=>normalizeHistoricalBidTicks([{timestamp:1010,tick:200000000},{timestamp:-2,tick:200100000}],0,1010));
+  assert.throws(()=>normalizeHistoricalBidTicks([{timestamp:1010,tick:200000000},{timestamp:2,tick:200100000}],0,1010));
   assert.throws(()=>normalizeHistoricalBidTicks([{timestamp:1011,tick:200000000}],0,1010));
+  assert.throws(()=>normalizeHistoricalBidTicks([{timestamp:1010,tick:200000000},{timestamp:-11,tick:200100000}],1000,1010));
 });
 
 test('tick requests use broker read-only historical message 2145 with bid type',async()=>{
@@ -33,7 +34,7 @@ test('tick requests use broker read-only historical message 2145 with bid type',
       const responseType={2100:2101,2102:2103,2145:2146}[packet.payloadType];
       const payload=packet.payloadType===2102?{ctidTraderAccountId:packet.payload.ctidTraderAccountId}
         :packet.payloadType===2145?{ctidTraderAccountId:12345,hasMore:false,
-          tickData:[{timestamp:1001,tick:200000000},{timestamp:1,tick:199900000}]}:{};
+          tickData:[{timestamp:1001,tick:200000000},{timestamp:-1,tick:199900000}]}:{};
       queueMicrotask(()=>this.emit('message',Buffer.from(JSON.stringify({
         clientMsgId:packet.clientMsgId,payloadType:responseType,payload}))));
     }
