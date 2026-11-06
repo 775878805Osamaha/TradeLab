@@ -105,6 +105,8 @@ fun CandlestickChart(
     isVolumeVisible: Boolean = true,
     resetViewTrigger: Long = 0L,
     displayStyle: ChartDisplayStyle = ChartDisplayStyle.CANDLES,
+    rangeHistoryWindowEnd: Long? = null,
+    rangeHistoryJumpGeneration: Int = 0,
     onAddDrawing: ((ChartDrawing) -> Unit)? = null,
     onSelectTrade: ((TradeJournalEntry) -> Unit)? = null,
     onSelectPosition: ((Position) -> Unit)? = null,
@@ -360,7 +362,7 @@ fun CandlestickChart(
                 // Range candles arrive in older batches. A large initial fit
                 // would leave only a dozen oversized bars visible even after
                 // the broker has supplied much more history.
-                candleWidthPx = 14f
+                candleWidthPx = 12f
             } else if (candles.size <= 40) {
                 candleWidthPx = (chartViewportWidthPx * 0.76f / candles.size)
                     .coerceIn(12f, 38f)
@@ -369,6 +371,21 @@ fun CandlestickChart(
             initialCandleFitApplied = true
             fittedDisplayStyle = displayStyle
         }
+    }
+    val previousRangeWindow = remember { arrayOfNulls<Triple<Long, Int, List<Candle>>>(1) }
+    LaunchedEffect(rangeHistoryWindowEnd, rangeHistoryJumpGeneration, displayStyle, candles.size,
+        candles.firstOrNull()?.openTime, candles.lastOrNull()?.openTime) {
+        if (displayStyle == ChartDisplayStyle.RANGE && rangeHistoryWindowEnd != null) {
+            val before = previousRangeWindow[0]
+            if (before != null && before.first != rangeHistoryWindowEnd) {
+                scrollOffsetPx = if (before.second != rangeHistoryJumpGeneration) 0f else
+                    RangeViewportContinuity.offsetAfterWindowChange(
+                        before.third, candles, chartViewportWidthPx, candleWidthPx, scrollOffsetPx)
+            }
+            val savedGeneration = if (before?.first == rangeHistoryWindowEnd)
+                before.second else rangeHistoryJumpGeneration
+            previousRangeWindow[0] = Triple(rangeHistoryWindowEnd, savedGeneration, candles)
+        } else previousRangeWindow[0] = null
     }
     Box(modifier = modifier.onSizeChanged { chartViewportWidthPx = (it.width - axisWidthPx).coerceAtLeast(1f) }) {
         Canvas(

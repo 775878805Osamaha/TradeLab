@@ -215,6 +215,7 @@ fun ChartScreen(
     var rangeHistoryHours by remember { mutableIntStateOf(6) }
     var rangeHistoryCapHours by remember { mutableStateOf<Int?>(null) }
     var rangeHistoryManuallyChosen by remember { mutableStateOf(false) }
+    var rangeHistoryJumpGeneration by remember { mutableIntStateOf(0) }
     var rangeRefreshAnchor by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var rangeReplayBackshiftMillis by remember { mutableLongStateOf(0L) }
     var rangeSnapshot by remember { mutableStateOf<RangeChartSnapshot?>(null) }
@@ -297,6 +298,7 @@ fun ChartScreen(
     val jumpRangeTo: (Long) -> Unit = { targetEnd ->
         rangeHistoryManuallyChosen = true
         rangeHistoryCapHours = null
+        rangeHistoryJumpGeneration += 1
         // A historical jump begins with a bounded day of real quotes. The
         // normal older-history gesture can extend it from there.
         rangeHistoryHours = 24
@@ -1369,6 +1371,9 @@ fun ChartScreen(
                     if (isEmbeddedReplay) replayState.datasetId else 0L, rangeIsActive, fixedRangeTicks) {
                 CandlestickChart(
                     candles = chartBars,
+                    rangeHistoryWindowEnd = if (rangeIsActive && visibleRangeBars != null)
+                        rangeSnapshot?.end else null,
+                    rangeHistoryJumpGeneration = if (rangeIsActive) rangeHistoryJumpGeneration else 0,
                     latestTick = (if (rangeIsActive) null else if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick)
                         ?.takeIf { it.symbol == uiState.selectedSymbol },
                     openPositions = if (isEmbeddedReplay) replayState.openPositions else uiState.openPositions,
@@ -1467,6 +1472,7 @@ fun ChartScreen(
                             rangeHistoryHours = 6
                             rangeHistoryCapHours = null
                             rangeHistoryManuallyChosen = false
+                            rangeHistoryJumpGeneration += 1
                             rangeRefreshAnchor = System.currentTimeMillis()
                         }) { Text("تحديث", fontSize = 11.sp) }
                     }

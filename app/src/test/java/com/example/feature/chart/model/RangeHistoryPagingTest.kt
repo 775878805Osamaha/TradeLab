@@ -35,8 +35,9 @@ class RangeHistoryPagingTest {
 
     @Test fun automaticallyPrefetchesEnoughBarsWithoutOverridingUserOrReplay() {
         assertTrue(RangeHistoryPaging.shouldPrefetchMoreBars(12, 6, false, false))
-        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(48, 6, false, false))
-        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 48, false, false))
+        assertTrue(RangeHistoryPaging.shouldPrefetchMoreBars(48, 6, false, false))
+        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(96, 6, false, false))
+        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 72, false, false))
         assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 6, true, false))
         assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 6, false, true))
     }

@@ -9,8 +9,8 @@ package com.example.feature.chart.model
 object RangeHistoryPaging {
     const val STEP_HOURS = 6
     const val MAX_WINDOW_HOURS = 7 * 24
-    const val AUTO_MAX_HOURS = 48
-    const val AUTO_TARGET_BARS = 48
+    const val AUTO_MAX_HOURS = 72
+    const val AUTO_TARGET_BARS = 96
     const val HOUR_MILLIS = 3_600_000L
 
     data class Window(val end: Long, val hours: Int) {
