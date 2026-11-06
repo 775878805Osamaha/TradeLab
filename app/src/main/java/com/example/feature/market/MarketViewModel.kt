@@ -41,7 +41,10 @@ class MarketViewModel(private val marketDataRepository: MarketDataRepository):Vi
     init { viewModelScope.launch {
         marketDataRepository.initializeSymbolsIfNeeded()
         val permits=Semaphore(3)
-        marketDataRepository.symbols.map{it.map{symbol->symbol.symbol}.toSet()}.distinctUntilChanged().collectLatest { symbols->
+        val availableSymbols = marketDataRepository.symbols.map { it.map { symbol -> symbol.symbol }.toSet() }
+        val brokerGeneration = marketDataRepository.cTrader?.accountGeneration ?: flowOf(0L)
+        combine(availableSymbols, brokerGeneration) { symbols, generation -> symbols to generation }
+            .distinctUntilChanged().collectLatest { (symbols, _) ->
             coroutineScope { symbols.filter{VerifiedMarketQuote.supports(it)}.forEach { symbol->
                 launch { marketDataRepository.provider.subscribe(symbol);marketDataRepository.observeTicks(symbol).collect{tick->if(tick.symbol==symbol)ticks.update{it+(symbol to tick)}} }
                 launch(Dispatchers.IO) { while(isActive) {
@@ -55,6 +58,14 @@ class MarketViewModel(private val marketDataRepository: MarketDataRepository):Vi
             } }
         }
     } }
+    init {
+        marketDataRepository.cTrader?.let { client ->
+            viewModelScope.launch { client.accountGeneration.collect {
+                ticks.update { rows -> rows.filterKeys { symbol -> symbol !in VerifiedMarketQuote.forexSymbols } }
+                histories.update { rows -> rows.filterKeys { symbol -> symbol !in VerifiedMarketQuote.forexSymbols } }
+            } }
+        }
+    }
     fun updateSearchQuery(value:String){query.value=value}
     fun selectCategory(value:MarketCategory){category.value=value}
     fun setSortOption(value:MarketSort){sort.value=value}

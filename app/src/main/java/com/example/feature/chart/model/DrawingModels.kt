@@ -39,6 +39,9 @@ enum class DrawingTool(val displayNameAr: String) {
 
 data class DrawingAnchor(val time: Long, val price: Double)
 
+/** Persisted per-drawing line appearance, shared by quick edit and properties. */
+enum class DrawingLineStyle { SOLID, DASHED, DOTTED }
+
 val DrawingTool.isTextTool: Boolean get() = this in setOf(DrawingTool.TABLE, DrawingTool.PRICE_NOTE, DrawingTool.SIGNPOST, DrawingTool.ANNOTATION, DrawingTool.TEXT, DrawingTool.ANCHORED_TEXT, DrawingTool.NOTE, DrawingTool.CALLOUT)
 val DrawingTool.isSinglePoint: Boolean get() = isTextTool || this in setOf(DrawingTool.IMAGE, DrawingTool.VOLUME_PROFILE_SESSION, DrawingTool.HORIZONTAL_LINE, DrawingTool.VERTICAL_LINE, DrawingTool.HORIZONTAL_RAY, DrawingTool.ARROW_UP, DrawingTool.ARROW_DOWN, DrawingTool.PRICE_LABEL, DrawingTool.FLAG, DrawingTool.PIN, DrawingTool.ANCHORED_VWAP)
 val DrawingTool.isVariablePath: Boolean get() = this == DrawingTool.PATH || this == DrawingTool.POLYLINE
@@ -64,16 +67,21 @@ data class ChartDrawing(
     val endTime: Long? = null,
     val color: Color = TradingGold,
     val strokeWidth: Float = 2.0f,
+    val lineStyle: DrawingLineStyle = DrawingLineStyle.SOLID,
+    val secondaryColor: Color = Color(0xFFFF3D48),
     val text: String = "تعليق",
     val anchors: List<DrawingAnchor> = emptyList(),
     val screenX: Float? = null,
-    val screenY: Float? = null
+    val screenY: Float? = null,
+    val fibonacci: FibonacciSettings = FibonacciSettings()
 ) {
     fun toEntity(): DrawingEntity {
         val json = buildString {
             append("{")
             append("\"startPrice\":$startPrice,")
             append("\"startTime\":$startTime")
+            append(",\"lineStyle\":\"${lineStyle.name}\"")
+            append(",\"secondaryColor\":${secondaryColor.toArgb()}")
             if (endPrice != null) append(",\"endPrice\":$endPrice")
             if (endTime != null) append(",\"endTime\":$endTime")
             append(",\"textBase64\":\"${Base64.getEncoder().encodeToString(text.toByteArray(Charsets.UTF_8))}\"")
@@ -82,6 +90,10 @@ data class ChartDrawing(
                 append(",\"anchorsBase64\":\"${Base64.getEncoder().encodeToString(encoded.toByteArray(Charsets.UTF_8))}\"")
             }
             if (screenX != null && screenY != null) append(",\"screenX\":$screenX,\"screenY\":$screenY")
+            if (tool == DrawingTool.FIBONACCI) {
+                val encoded = Base64.getEncoder().encodeToString(fibonacci.encode().toByteArray(Charsets.UTF_8))
+                append(",\"fibonacciBase64\":\"$encoded\"")
+            }
             append("}")
         }
         val hex = String.format(Locale.US, "#%08X", color.toArgb().toLong() and 0xFFFFFFFFL)
@@ -122,6 +134,10 @@ data class ChartDrawing(
                     endTime = eTime,
                     color = parsedColor,
                     strokeWidth = entity.strokeWidth,
+                    lineStyle = Regex("\"lineStyle\":\"([A-Z]+)\"").find(entity.pointsJson)?.groupValues?.get(1)
+                        ?.let { runCatching { DrawingLineStyle.valueOf(it) }.getOrNull() } ?: DrawingLineStyle.SOLID,
+                    secondaryColor = Regex("\"secondaryColor\":(-?[0-9]+)").find(entity.pointsJson)?.groupValues?.get(1)
+                        ?.toIntOrNull()?.let { Color(it) } ?: Color(0xFFFF3D48),
                     text = Regex("\"textBase64\":\"([^\"]*)\"").find(entity.pointsJson)?.groupValues?.get(1)
                         ?.let { String(Base64.getDecoder().decode(it), Charsets.UTF_8) } ?: "تعليق",
                     anchors = Regex("\"anchorsBase64\":\"([^\"]*)\"").find(entity.pointsJson)?.groupValues?.get(1)
@@ -131,7 +147,10 @@ data class ChartDrawing(
                             if (t != null && p != null && p.isFinite() && p > 0) DrawingAnchor(t, p) else null
                         } ?: emptyList(),
                     screenX = Regex("\"screenX\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f },
-                    screenY = Regex("\"screenY\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f }
+                    screenY = Regex("\"screenY\":([-+0-9.eE]+)").find(entity.pointsJson)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f },
+                    fibonacci = Regex("\"fibonacciBase64\":\"([^\"]*)\"").find(entity.pointsJson)?.groupValues?.get(1)
+                        ?.let { runCatching { FibonacciSettings.decode(String(Base64.getDecoder().decode(it), Charsets.UTF_8)) }.getOrDefault(FibonacciSettings()) }
+                        ?: if (tool == DrawingTool.FIBONACCI) FibonacciSettings.legacy() else FibonacciSettings()
                 )
             } catch (e: Exception) {
                 null

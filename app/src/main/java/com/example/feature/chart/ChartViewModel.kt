@@ -13,9 +13,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import com.example.feature.chart.history.ChartHistoryPaging
 import com.example.feature.chart.history.ChartHistoryDownload
+import com.example.feature.chart.history.ChartHistoryBatcher
+import com.example.feature.chart.history.ChartInitialHistoryScan
 import com.example.feature.chart.history.ChartHistoryRetry
+import com.example.feature.chart.history.ChartHistoryRetryPolicy
+import com.example.feature.chart.history.ChartClosedBarRefresh
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,8 +70,10 @@ class ChartViewModel(
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
 
     private var candleLoadJob: Job? = null
+    private var candleLoadGeneration = 0L
     private var olderHistoryJob: Job? = null
     private var historyDownloadGeneration = 0L
+    private var manuallyStoppedDeepHistoryGeneration = -1L
     private var tickJob: Job? = null
     private var klineRefreshJob: Job? = null
     private var klineStreamJob: Job? = null
@@ -84,7 +91,18 @@ class ChartViewModel(
         observeDataSourceType()
         observeConnectionDiagnostics()
         observeDrawings()
+        marketDataRepository.cTrader?.let { client ->
+            viewModelScope.launch { client.accountGeneration.collect {
+                if (_uiState.value.selectedSymbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
+                    _uiState.update { it.copy(latestTick = null, candles = emptyList(), isLoading = true) }
+                    loadCandlesForCurrentSymbol()
+                }
+            } }
+        }
     }
+
+    fun isVerifiedQuote(tick: Tick?, symbol: String, now: Long = System.currentTimeMillis()) =
+        marketDataRepository.provider.isVerifiedQuote(tick, symbol, now)
 
     private fun observeConnectionDiagnostics() {
         viewModelScope.launch {
@@ -94,28 +112,12 @@ class ChartViewModel(
         }
     }
 
-    fun configureHistoricalProviderKey(key: String) {
-        marketDataRepository.configureTwelveDataKey(key)
-        if (_uiState.value.selectedSymbol !in setOf("BTCUSDT", "ETHUSDT")) {
-            loadCandlesForCurrentSymbol()
-        }
-    }
-
-    fun hasHistoricalProviderKey(): Boolean = marketDataRepository.hasTwelveDataKey()
-
     /** Adjust the real OHLC history depth without changing the current instrument. */
     fun setChartHistoryBars(bars: Int) {
         require(bars in setOf(100, 250, 500, 750)) { "Unsupported chart history depth" }
         if (_uiState.value.chartHistoryBars == bars) return
         _uiState.update { it.copy(chartHistoryBars = bars, isLoading = true, candleLoadError = null, olderHistoryError = null) }
         loadCandlesForCurrentSymbol()
-    }
-
-    /** A single page covers 100 candle slots; scan at least 72h for closed FX sessions. */
-    private fun historicalScanWindows(timeframe: Timeframe): Long {
-        val pageMinutes = timeframe.minutes.toLong() * 100L
-        return ((72L * 60L + pageMinutes - 1L) / pageMinutes)
-            .coerceAtLeast(1L).coerceAtMost(60L)
     }
 
     /** Validate every backfilled candle before it can enter the visible chart. */
@@ -166,13 +168,14 @@ class ChartViewModel(
         val symbol = snapshot.selectedSymbol
         val timeframe = snapshot.selectedTimeframe
         val oldest = snapshot.candles.first().openTime
+        manuallyStoppedDeepHistoryGeneration = -1L
         val generation = ++historyDownloadGeneration
         _uiState.update { it.copy(isLoadingOlderHistory = true, olderHistoryError = null, historyDownloadMessage = null) }
         olderHistoryJob?.cancel()
         olderHistoryJob = viewModelScope.launch {
             try {
                 val confirmed = fetchOlderChartHistory(symbol, timeframe, oldest, generation)
-                val merged = mergeChartCandles(symbol, timeframe, confirmed) ?: return@launch
+                val merged = mergeChartCandles(symbol, timeframe, confirmed, generation) ?: return@launch
                 _uiState.update {
                     it.copy(isLoadingOlderHistory = false,
                         historySourceWarning = marketDataRepository.freeChartHistoryWarning(symbol) ?: it.historySourceWarning,
@@ -199,22 +202,34 @@ class ChartViewModel(
         val symbol = snapshot.selectedSymbol
         val timeframe = snapshot.selectedTimeframe
         if (snapshot.candles.size >= ChartHistoryDownload.TARGET) return
+        manuallyStoppedDeepHistoryGeneration = -1L
         val generation = ++historyDownloadGeneration
         _uiState.update { it.copy(isLoadingOlderHistory = true, isDownloadingDeepHistory = true,
             olderHistoryError = null, historyDownloadMessage = null) }
         olderHistoryJob?.cancel()
         olderHistoryJob = viewModelScope.launch {
+            val batcher = ChartHistoryBatcher(pageLimit = 5)
+            suspend fun publishPendingHistory() {
+                if (batcher.pendingPages == 0) return
+                val merged = mergeChartCandles(symbol, timeframe, batcher.snapshot(), generation)
+                    ?: throw kotlinx.coroutines.CancellationException("Chart changed")
+                // A cancelled merge must be retryable; acknowledge the real
+                // pending bars only after StateFlow accepted the whole batch.
+                batcher.committed()
+                recalculateIndicators(merged, _uiState.value.indicatorSettings)
+                _uiState.update { it.copy(historySourceWarning =
+                    marketDataRepository.freeChartHistoryWarning(symbol) ?: it.historySourceWarning) }
+            }
             try {
                 val result = ChartHistoryDownload.run(snapshot.candles,
                     fetchBefore = { oldest ->
                         fetchOlderChartHistory(symbol, timeframe, oldest, generation)
                     }, append = { page ->
-                        val merged = mergeChartCandles(symbol, timeframe, page)
-                            ?: throw kotlinx.coroutines.CancellationException("Chart changed")
-                        recalculateIndicators(merged, _uiState.value.indicatorSettings)
-                        _uiState.update { it.copy(historySourceWarning =
-                            marketDataRepository.freeChartHistoryWarning(symbol) ?: it.historySourceWarning) }
+                        batcher.stage(page)
+                        if (batcher.shouldFlush) publishPendingHistory()
                     })
+                // A download may end with 1–4 confirmed pages still buffered.
+                publishPendingHistory()
                 _uiState.update { it.copy(historyDownloadMessage = when(result) {
                     ChartHistoryDownload.Result.TARGET_REACHED -> "تم تحميل أكثر من 100 ألف شمعة فعلية"
                     ChartHistoryDownload.Result.NO_OLDER_PAGE -> "لا توجد شموع أقدم في النطاق الذي فحصه المصدر. يمكنك إعادة المحاولة."
@@ -228,6 +243,24 @@ class ChartViewModel(
                         (error.message ?: "تعذر الاتصال بالمصدر").take(120)) }
                 }
             } finally {
+                // Even if the user explicitly stopped the download, keep real
+                // pages fetched since the last UI batch. Never publish stale
+                // pages into a different chart, session, or new download.
+                val sameHistorySession =
+                    (historyDownloadGeneration == generation ||
+                        manuallyStoppedDeepHistoryGeneration == generation) &&
+                    _uiState.value.selectedSymbol == symbol &&
+                    _uiState.value.selectedTimeframe == timeframe
+                if (sameHistorySession && batcher.pendingPages > 0) {
+                    withContext(NonCancellable) {
+                        try { publishPendingHistory() } catch (_: Exception) {
+                            // Preserve the earlier error/cancellation cause.
+                            // Already published pages remain in the chart.
+                        }
+                    }
+                }
+                if (manuallyStoppedDeepHistoryGeneration == generation)
+                    manuallyStoppedDeepHistoryGeneration = -1L
                 if (historyDownloadGeneration == generation &&
                     _uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe &&
                     _uiState.value.isDownloadingDeepHistory) {
@@ -239,6 +272,7 @@ class ChartViewModel(
 
     fun stopDeepChartHistory() {
         if (!_uiState.value.isDownloadingDeepHistory) return
+        manuallyStoppedDeepHistoryGeneration = historyDownloadGeneration
         historyDownloadGeneration++
         olderHistoryJob?.cancel()
         _uiState.update { it.copy(isLoadingOlderHistory = false, isDownloadingDeepHistory = false,
@@ -247,16 +281,21 @@ class ChartViewModel(
 
     /** Merge off the UI thread; retry if a live candle arrived during the merge. */
     private suspend fun mergeChartCandles(
-        symbol: String, timeframe: Timeframe, incoming: List<Candle>
+        symbol: String, timeframe: Timeframe, incoming: List<Candle>,
+        historyGenerationGuard: Long? = null
     ): List<Candle>? {
+        fun currentHistoryAccepted(): Boolean = historyGenerationGuard == null ||
+            historyDownloadGeneration == historyGenerationGuard ||
+            manuallyStoppedDeepHistoryGeneration == historyGenerationGuard
         while (kotlinx.coroutines.currentCoroutineContext().isActive) {
             val snapshot = _uiState.value
-            if (snapshot.selectedSymbol != symbol || snapshot.selectedTimeframe != timeframe) return null
+            if (snapshot.selectedSymbol != symbol || snapshot.selectedTimeframe != timeframe ||
+                !currentHistoryAccepted()) return null
             val merged = withContext(Dispatchers.Default) { ChartHistoryPaging.merge(snapshot.candles, incoming) }
             var applied = false
             _uiState.update { state ->
                 applied = state.selectedSymbol == symbol && state.selectedTimeframe == timeframe &&
-                    state.candles === snapshot.candles
+                    state.candles === snapshot.candles && currentHistoryAccepted()
                 if (applied) state.copy(candles = merged) else state
             }
             if (applied) return merged
@@ -272,6 +311,7 @@ class ChartViewModel(
 
     fun selectSymbol(symbol: String) {
         if (_uiState.value.selectedSymbol == symbol) return
+        manuallyStoppedDeepHistoryGeneration = -1L
         // Prevent unsupported instruments from retaining a previous exchange quote.
         // The history loader will show an explicit unavailable-source message.
         candleLoadJob?.cancel()
@@ -300,6 +340,7 @@ class ChartViewModel(
 
     fun selectTimeframe(timeframe: Timeframe) {
         if (_uiState.value.selectedTimeframe == timeframe) return
+        manuallyStoppedDeepHistoryGeneration = -1L
         // Keep the existing bid/ask subscription: a timeframe change does not
         // change the instrument and should not disconnect its live quote.
         klineRefreshJob?.cancel()
@@ -354,22 +395,28 @@ class ChartViewModel(
         }
     }
 
-    fun addDrawing(drawing: ChartDrawing) {
+    fun addDrawing(drawing: ChartDrawing, onCreated: (Long) -> Unit = {}) {
         val sym = _uiState.value.selectedSymbol
         val tf = _uiState.value.selectedTimeframe.code
         val drawingWithMeta = drawing.copy(symbol = sym, timeframe = tf)
 
         viewModelScope.launch {
             if (drawingDao != null) {
-                withContext(Dispatchers.IO) {
+                val insertedId = withContext(Dispatchers.IO) {
                     drawingDao.insertDrawing(drawingWithMeta.toEntity())
                 }
+                if (insertedId > 0L && _uiState.value.selectedSymbol == sym &&
+                    _uiState.value.selectedTimeframe.code == tf) onCreated(insertedId)
             } else {
+                var createdId: Long? = null
                 _uiState.update { state ->
                     if (state.selectedSymbol == sym && state.selectedTimeframe.code == tf) {
-                        state.copy(drawings = state.drawings + drawingWithMeta)
+                        val nextId = (state.drawings.maxOfOrNull { it.id } ?: 0L) + 1L
+                        createdId = nextId
+                        state.copy(drawings = state.drawings + drawingWithMeta.copy(id = nextId))
                     } else state
                 }
+                createdId?.let(onCreated)
             }
         }
         _uiState.update { it.copy(activeDrawingTool = DrawingTool.NONE) }
@@ -423,7 +470,7 @@ class ChartViewModel(
         val state = _uiState.value
         val position = state.openPositions.firstOrNull { it.id == positionId } ?: return
         val tick = state.latestTick
-        if (tick == null || !com.example.core.market.VerifiedMarketQuote.isVerified(tick, position.symbol, System.currentTimeMillis())) {
+        if (tick == null || !isVerifiedQuote(tick, position.symbol, System.currentTimeMillis())) {
             _uiState.update { it.copy(message = "يلزم سعر حديث وموثوق لإغلاق الصفقة") }
             return
         }
@@ -457,7 +504,7 @@ class ChartViewModel(
         }
         val state = _uiState.value
         val tick = state.latestTick
-        if (tick == null || !com.example.core.market.VerifiedMarketQuote.isVerified(tick, state.selectedSymbol)) {
+        if (tick == null || !isVerifiedQuote(tick, state.selectedSymbol)) {
             _uiState.update { it.copy(message = "لا يمكن تنفيذ أمر بسعر غير متصل أو قديم") }
             return
         }
@@ -493,7 +540,9 @@ class ChartViewModel(
     }
 
     private fun loadCandlesForCurrentSymbol() {
+        manuallyStoppedDeepHistoryGeneration = -1L
         historyDownloadGeneration++
+        val candleGeneration = ++candleLoadGeneration
         olderHistoryJob?.cancel()
         _uiState.update { it.copy(isLoadingOlderHistory = false, isDownloadingDeepHistory = false, historyDownloadMessage = null, historySourceWarning = null, olderHistoryError = null) }
         val symbol = _uiState.value.selectedSymbol
@@ -502,8 +551,10 @@ class ChartViewModel(
 
         candleLoadJob?.cancel()
         candleLoadJob = viewModelScope.launch {
+            if (candleLoadGeneration != candleGeneration) return@launch
             if (!marketDataRepository.supportsHistoricalSymbol(symbol)) {
-                if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
+                if (candleLoadGeneration == candleGeneration &&
+                    _uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
                     _uiState.update {
                         it.copy(candles = emptyList(), latestTick = null, isLoading = false,
                             candleLoadError = "لا يوجد مصدر تاريخي مدعوم لهذا الرمز.")
@@ -513,56 +564,64 @@ class ChartViewModel(
             }
             val now = System.currentTimeMillis()
             val interval = tf.minutes * 60_000L
-            // The repository intentionally rejects an unfinished Binance bar.
-            // Request only fully closed candle OPEN timestamps, aligned to UTC
-            // (including Monday UTC alignment for weekly bars).
+            // Binance follows UTC exchange opens; cTrader uses real broker
+            // open-tick timestamps, which may shift on H4/D1/W1. A source-aware
+            // upper bound prevents omitting the latest completed broker bar.
             val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
-                .currentOpen(now, interval) - interval
-            val from = (lastClosedOpen - interval * (requestedBars - 1L)).coerceAtLeast(0L)
-
+                .latestClosedRequestTo(now, interval,
+                    symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols)
             try {
                 // Start live subscription even if historical REST loading fails.
-                if (com.example.core.market.VerifiedMarketQuote.supports(symbol)) subscribeToTicks(symbol)
+                if (com.example.core.market.VerifiedMarketQuote.supports(symbol) &&
+                    candleLoadGeneration == candleGeneration) subscribeToTicks(symbol)
                 // A provider may have fewer verified bars than the requested history.
                 // Retry smaller, recent windows instead of replacing the entire chart
                 // with an error. Never fabricate missing OHLC data.
                 var rawCandles = emptyList<com.example.core.model.Candle>()
                 var lastHistoryError: Exception? = null
-                // Gold/FX markets close over weekends. Search older CLOSED
-                // sessions when the most recent window has no verified candles.
-                // Use bounded requests to avoid downloading huge empty ranges.
+                // Gold/FX markets close over weekends and sometimes holidays.
+                // Scan contiguous, bounded windows; no gap can be skipped just
+                // because a broker's next real open is shifted by some minutes.
                 val initialDepths = listOf(requestedBars, 100, 40, 10, 1)
                     .distinct().filter { it in 1..requestedBars }
-                val scanWindows = if (symbol in setOf("BTCUSDT", "ETHUSDT")) 1L
-                    else historicalScanWindows(tf)
-                for (window in 0L until scanWindows) {
-                    val end = lastClosedOpen - window * interval * 100L
-                    if (end < 0L) break
-                    for (depth in if (window == 0L) initialDepths else listOf(100, 40, 10, 1).filter { it <= requestedBars }) {
-                        val attemptFrom = (end - interval * (depth - 1L)).coerceAtLeast(0L)
+                val scanPlan = ChartInitialHistoryScan.windows(
+                    lastClosedOpen = lastClosedOpen, intervalMillis = interval,
+                    initialBars = requestedBars,
+                    brokerTimed = symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols
+                )
+                for (window in scanPlan) {
+                    if (candleLoadGeneration != candleGeneration) return@launch
+                    val depths = if (window.isInitial) initialDepths else
+                        listOf(window.bars, 100, 40, 10, 1).distinct()
+                    for (depth in depths) {
+                        val attemptFrom = (window.to - interval * (depth - 1L))
+                            .coerceAtLeast(window.from)
                         try {
                             val fetched = marketDataRepository.getCandles(
-                                symbol, tf, attemptFrom, end
+                                symbol, tf, attemptFrom, window.to
                             )
                             if (fetched.isNotEmpty()) {
                                 // Never accept a page from a different symbol,
                                 // timeframe, or requested window.
                                 verifyOlderHistory(
-                                    fetched, symbol, tf, attemptFrom, end,
+                                    fetched, symbol, tf, attemptFrom, window.to,
                                     lastClosedOpen + interval
                                 )
-                                rawCandles = fetched
+                                // Wider closed-session queries should not
+                                // silently override the selected chart depth.
+                                rawCandles = fetched.takeLast(requestedBars)
                                 break
                             }
+                            if (!window.isInitial && depth == window.bars) break
                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                             throw cancelled
                         } catch (error: Exception) {
-                            // A DNS/HTTP outage is not an empty trading session.
-                            // Do not issue dozens of older-window retries for it.
-                            if (generateSequence<Throwable>(error) { it.cause }.any {
-                                it is com.example.core.market.MarketDataRequestException
-                            }) throw error
+                            // Only a verified empty broker response warrants
+                            // looking in prior closed sessions. Authentication,
+                            // network and OHLC-integrity errors must fail fast.
+                            if (!ChartHistoryRetryPolicy.shouldSearchOlderSession(error)) throw error
                             lastHistoryError = error
+                            if (!window.isInitial && depth == window.bars) break
                         }
                     }
                     if (rawCandles.isNotEmpty()) break
@@ -595,7 +654,8 @@ class ChartViewModel(
                     }
                 }
                 // Ignore responses that arrive after the user changes symbol or timeframe.
-                if (_uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf ||
+                if (candleLoadGeneration != candleGeneration ||
+                    _uiState.value.selectedSymbol != symbol || _uiState.value.selectedTimeframe != tf ||
                     _uiState.value.chartHistoryBars != requestedBars) return@launch
                 _uiState.update { it.copy(candles = aggregated, isLoading = false, candleLoadError = if (aggregated.isEmpty()) "لا تتوفر شموع مؤكدة لهذا الرمز والفاصل الزمني. حاول مجددًا." else null, message = null) }
                 recalculateIndicators(aggregated, _uiState.value.indicatorSettings)
@@ -611,7 +671,8 @@ class ChartViewModel(
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                if (_uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
+                if (candleLoadGeneration == candleGeneration &&
+                    _uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == tf) {
                     _uiState.update {
                         it.copy(
                             // A transient provider failure must not erase verified candles
@@ -654,52 +715,48 @@ class ChartViewModel(
     }
 
     /**
-     * Refresh genuine exchange OHLCV candles independently of bookTicker quotes.
-     * Binance REST klines include actual trade volume; bid/ask events do not.
-     * This is polling, not a WebSocket kline feed.
+     * Poll completed, source-verified OHLCV bars independently of bid/ask quotes.
+     * Binance uses exact UTC candle-open boundaries; cTrader bars can open on
+     * the broker's first tick, so use a narrow historical window instead.
      */
     private fun startKlineRefresh(symbol: String, timeframe: Timeframe) {
         klineRefreshJob?.cancel()
         if (!com.example.core.market.VerifiedMarketQuote.supports(symbol)) return
         klineRefreshJob = viewModelScope.launch {
+            val brokerTimed = symbol !in setOf("BTCUSDT", "ETHUSDT")
             var lastSuccessfullyRefreshedOpen = _uiState.value.candles.lastOrNull()?.openTime ?: Long.MIN_VALUE
-            var lastAttemptOpen = Long.MIN_VALUE
-            var attemptsForOpen = 0
+            var lastAttemptKey = Long.MIN_VALUE
+            var attemptsForKey = 0
             while (isActive) {
                 delay(10_000L)
                 if (_uiState.value.selectedSymbol != symbol ||
                     _uiState.value.selectedTimeframe != timeframe) break
                 try {
                     val now = System.currentTimeMillis()
-                    val interval = timeframe.minutes * 60_000L
-                    // Poll the last completed bar only. Binance also returns
-                    // the forming bar when endTime is 'now', which is not a
-                    // verified closed candle and can repaint the chart.
-                    val lastClosedOpen = com.example.core.market.HistoricalCandleBoundary
-                        .currentOpen(now, interval) - interval
-                    // One successful fetch per completed candle is sufficient.
-                    // Repeating the same historical request every 10 seconds
-                    // wastes bandwidth and risks exchange rate limits.
-                    if (lastClosedOpen == lastSuccessfullyRefreshedOpen) continue
-                    if (lastClosedOpen != lastAttemptOpen) {
-                        lastAttemptOpen = lastClosedOpen
-                        attemptsForOpen = 0
+                    val window = ChartClosedBarRefresh.window(now, timeframe, brokerTimed)
+                    // Fixed-grid Binance has exactly one last completed open;
+                    // broker opens are not required to be UTC-grid aligned.
+                    if (!brokerTimed && window.to == lastSuccessfullyRefreshedOpen) continue
+                    if (window.attemptKey != lastAttemptKey) {
+                        lastAttemptKey = window.attemptKey
+                        attemptsForKey = 0
                     }
-                    // Closed sessions and outages must not trigger an endless
-                    // 10-second retry loop for the same unavailable candle.
-                    if (attemptsForOpen >= 3) continue
-                    attemptsForOpen++
-                    val fresh = if (symbol in setOf("BTCUSDT", "ETHUSDT")) {
-                        marketDataRepository.provider.getHistoricalCandles(symbol, timeframe, lastClosedOpen, lastClosedOpen)
+                    // Closed broker sessions and outages cannot trigger an
+                    // unbounded request every ten seconds.
+                    if (attemptsForKey >= 3) continue
+                    attemptsForKey++
+                    val fetched = if (!brokerTimed) {
+                        marketDataRepository.provider.getHistoricalCandles(symbol, timeframe, window.from, window.to)
                     } else {
-                        marketDataRepository.getCandles(symbol, timeframe, lastClosedOpen, lastClosedOpen)
+                        marketDataRepository.getCandles(symbol, timeframe, window.from, window.to)
                     }
-                    if (fresh.isEmpty()) continue
-                    // A refresh must not introduce an unfinished, mismatched or
-                    // malformed exchange candle into the chart.
-                    if (fresh.any { candle ->
+                    if (fetched.isEmpty()) continue
+                    // The only acceptable update is a closed, valid bar from
+                    // the selected instrument, timeframe and verified provider.
+                    if (fetched.any { candle ->
                         candle.symbol != symbol || candle.timeframe != timeframe ||
-                        candle.openTime != lastClosedOpen ||
+                        candle.openTime !in window.from..window.to ||
+                        (!brokerTimed && candle.openTime != window.to) ||
                         !candle.open.isFinite() || !candle.high.isFinite() ||
                         !candle.low.isFinite() || !candle.close.isFinite() ||
                         candle.low <= 0.0 || candle.high < candle.low ||
@@ -707,10 +764,16 @@ class ChartViewModel(
                         candle.close !in candle.low..candle.high ||
                         !candle.volume.isFinite() || candle.volume < 0.0
                     }) continue
-                    lastSuccessfullyRefreshedOpen = lastClosedOpen
+                    // Do not repaint historical candles or repeatedly merge
+                    // the same cTrader bars when the broker market is closed.
+                    val fresh = if (brokerTimed) fetched.filter {
+                        it.openTime > lastSuccessfullyRefreshedOpen
+                    } else fetched
+                    if (fresh.isEmpty()) continue
                     if (_uiState.value.selectedSymbol != symbol ||
                         _uiState.value.selectedTimeframe != timeframe) break
                     val merged = mergeChartCandles(symbol, timeframe, fresh) ?: break
+                    lastSuccessfullyRefreshedOpen = fresh.maxOf { it.openTime }
                     recalculateIndicators(merged, _uiState.value.indicatorSettings)
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                     // Cancellation of the screen or symbol must stop polling promptly.
@@ -759,7 +822,7 @@ class ChartViewModel(
                 if (_uiState.value.selectedSymbol != symbol) return@collect
                 // A bad or mismatched quote must not overwrite the last trusted bid/ask,
                 // or trigger fills and stop-loss evaluation in the trading engine.
-                if (!com.example.core.market.VerifiedMarketQuote.isVerified(tick, symbol)) return@collect
+                if (!isVerifiedQuote(tick, symbol)) return@collect
                 val accepted = _uiState.value.latestTick
                 if (accepted != null && tick.timestamp < accepted.timestamp) return@collect
                 _uiState.update { state ->

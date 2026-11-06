@@ -13,7 +13,7 @@ class MarketSnapshotTests {
         assertNull(MarketQuoteSnapshot.from(gold,null,emptyList(),now).spread)
     }
     @Test fun expiredQuoteNeverHasLiveSpreadOrChange() {
-        val tick=Tick("XAUUSD",2000.0,2001.0,timestamp=100000,source="BIQUOTE_REST")
+        val tick=Tick("XAUUSD",2000.0,2001.0,timestamp=100000,source="CTRADER_GATEWAY")
         val stale=MarketQuoteSnapshot.from(gold,tick,emptyList(),120000)
         assertEquals(MarketQuoteSnapshot.Freshness.STALE,stale.freshness)
         assertNull(stale.spread);assertNull(stale.changePercent)

@@ -29,4 +29,23 @@ class DrawingAnchorEditingTest {
         assertSame(original,DrawingAnchorEditing.move(original,1,DrawingAnchor(-1,10.0)))
         assertTrue(DrawingAnchorEditing.points(original.copy(tool=DrawingTool.BRUSH)).isEmpty())
     }
+    @Test fun singlePointTextAndImageCanBeRepositionedFromTheirVisibleHandle() {
+        for (tool in listOf(DrawingTool.TEXT,DrawingTool.IMAGE,DrawingTool.PRICE_LABEL)) {
+            val original = drawing().copy(tool=tool,anchors=emptyList(),endTime=null,endPrice=null)
+            assertEquals(1,DrawingAnchorEditing.points(original).size)
+            val moved = DrawingAnchorEditing.move(original,0,DrawingAnchor(250,55.0))
+            assertEquals(250L,moved.startTime)
+            assertEquals(55.0,moved.startPrice,0.0)
+        }
+    }
+    @Test fun movingEntirePositionPreservesItsRiskRewardGeometry() {
+        val original = drawing().copy(tool=DrawingTool.LONG_POSITION)
+        val moved = DrawingAnchorEditing.translate(original,50,4.5)
+        assertEquals(150L,moved.startTime)
+        assertEquals(14.5,moved.startPrice,0.0)
+        assertEquals(original.anchors.map { it.price + 4.5 },moved.anchors.map { it.price })
+        assertEquals(original.anchors.map { it.time + 50 },moved.anchors.map { it.time })
+        assertEquals(original.endPrice!! + 4.5,moved.endPrice!!,0.0)
+        assertSame(original,DrawingAnchorEditing.translate(original,0,-100.0))
+    }
 }

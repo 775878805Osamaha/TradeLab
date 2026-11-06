@@ -73,6 +73,9 @@ jobs:
           echo "======================================================="
 
       - name: Run Unit Tests
+        id: unit_tests
+        # Preserve APK and reports even if Robolectric dependencies are unavailable.
+        continue-on-error: true
         run: ./gradlew test --stacktrace
 
       - name: Build Android Debug APK
@@ -108,3 +111,9 @@ jobs:
             app/build/test-results/
             app/build/reports/tests/
           if-no-files-found: warn
+
+      - name: Enforce unit test result after preserving APK and reports
+        if: steps.unit_tests.outcome == 'failure'
+        run: |
+          echo "::error::Unit tests failed. The APK artifact is diagnostic only; inspect the uploaded reports."
+          exit 1

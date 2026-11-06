@@ -61,10 +61,26 @@ internal fun ChartBottomStrip(
             IconButton(onClick = onDrawing, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Default.Edit, "أدوات الرسم", tint = TradingTextPrimary)
             }
-            IconButton(onClick = onReplay, modifier = Modifier.size(32.dp).testTag("chart_bottom_replay")) {
-                Icon(Icons.Default.ReplayCircleFilled, if (replayActive) "إنهاء الإعادة" else "إعادة العرض داخل الشارت",
-                    tint = if (replayActive) Color(0xFF2962FF) else TradingTextPrimary,
-                    modifier = Modifier.size(21.dp))
+            Column(
+                modifier = Modifier.width(48.dp).height(44.dp)
+                    .clickable(onClick = onReplay)
+                    .testTag("chart_bottom_replay"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    Icons.Default.ReplayCircleFilled,
+                    contentDescription = if (replayActive) "إنهاء الإعادة" else "فتح Replay داخل الشارت",
+                    tint = Color(0xFF2962FF),
+                    modifier = Modifier.size(22.dp)
+                )
+                Text(
+                    text = if (replayActive) "إغلاق" else "Replay",
+                    color = if (replayActive) Color(0xFF2962FF) else TradingTextPrimary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
             }
             Box {
                 Row(Modifier.clickable { expanded = true }.height(44.dp).testTag("chart_bottom_timeframe"),

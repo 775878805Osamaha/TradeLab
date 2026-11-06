@@ -47,18 +47,25 @@ object HistoricalCandleIntegrity {
             }
             require(candle.closeTime <= requestedTo) { "Incomplete candle outside requested range" }
             require(candle.source.isNotBlank()) { "Historical candle has no source attribution" }
-            // Binance W1 candles begin Monday 00:00 UTC (four days after Unix epoch).
-            // Do not exempt weekly bars from timestamp validation.
+            // cTrader timestamps denote the open tick at minute precision; broker
+            // H4/D1/W1 session starts may differ from Binance's fixed UTC grid.
+            // Preserve real broker candles without weakening fixed-grid feeds.
             val intervalMillis = candle.timeframe.minutes * 60_000L
             require(intervalMillis > 0L) { "Invalid historical timeframe" }
             require(candle.closeTime - candle.openTime <= intervalMillis + 1_000L) {
                 "Historical candle extends beyond its timeframe"
             }
-            val mondayOffset = 4L * 24 * 60 * 60 * 1000
-            val offset = if (candle.timeframe.minutes == 10_080) mondayOffset else 0L
-            require(Math.floorMod(candle.openTime, intervalMillis) ==
-                Math.floorMod(offset, intervalMillis)) {
-                "Misaligned candle timestamp"
+            if (candle.source.startsWith("ctrader:", ignoreCase = true)) {
+                require(Math.floorMod(candle.openTime, 60_000L) == 0L) {
+                    "Invalid cTrader bar minute timestamp"
+                }
+            } else {
+                val mondayOffset = 4L * 24 * 60 * 60 * 1000
+                val offset = if (candle.timeframe.minutes == 10_080) mondayOffset else 0L
+                require(Math.floorMod(candle.openTime, intervalMillis) ==
+                    Math.floorMod(offset, intervalMillis)) {
+                    "Misaligned candle timestamp"
+                }
             }
             if (expectedSource != null) {
                 require(candle.source == expectedSource) { "Unexpected historical data source" }

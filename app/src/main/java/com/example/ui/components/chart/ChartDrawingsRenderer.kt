@@ -15,6 +15,8 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.exp
+import kotlin.math.ln
 
 object ChartDrawingsRenderer {
 
@@ -32,6 +34,11 @@ object ChartDrawingsRenderer {
             val startY = transform.priceToY(d.startPrice)
             val endX = d.endTime?.let { transform.timeToX(it) }
             val endY = d.endPrice?.let { transform.priceToY(it) }
+            val lineEffect = when (d.lineStyle) {
+                DrawingLineStyle.SOLID -> null
+                DrawingLineStyle.DASHED -> PathEffect.dashPathEffect(floatArrayOf(10f, 6f))
+                DrawingLineStyle.DOTTED -> PathEffect.dashPathEffect(floatArrayOf(2f, 6f))
+            }
 
             when (d.tool) {
                 DrawingTool.HORIZONTAL_LINE -> {
@@ -40,7 +47,7 @@ object ChartDrawingsRenderer {
                         start = Offset(0f, startY),
                         end = Offset(transform.chartWidth, startY),
                         strokeWidth = d.strokeWidth,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f), 0f)
+                        pathEffect = lineEffect
                     )
                     // Price tag on right edge
                     scope.drawContext.canvas.nativeCanvas.apply {
@@ -50,6 +57,8 @@ object ChartDrawingsRenderer {
                             isAntiAlias = true
                         }
                         drawText(QuotePriceFormatter.forSymbol(d.startPrice,transform.visibleCandles.firstOrNull()?.symbol), transform.chartWidth - 65f, startY - 4f, paint)
+                        if (d.text != "تعليق" && d.text.isNotBlank())
+                            drawText(d.text.take(48), transform.chartWidth / 2f, startY - 8f, paint)
                     }
                 }
                 DrawingTool.VERTICAL_LINE -> {
@@ -58,7 +67,7 @@ object ChartDrawingsRenderer {
                         start = Offset(startX, 0f),
                         end = Offset(startX, transform.chartHeight),
                         strokeWidth = d.strokeWidth,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+                        pathEffect = lineEffect
                     )
                 }
                 DrawingTool.TRENDLINE -> {
@@ -67,8 +76,13 @@ object ChartDrawingsRenderer {
                             color = d.color,
                             start = Offset(startX, startY),
                             end = Offset(endX, endY),
-                            strokeWidth = d.strokeWidth
+                            strokeWidth = d.strokeWidth,
+                            pathEffect = lineEffect
                         )
+                        if (d.text != "تعليق" && d.text.isNotBlank()) {
+                            scope.drawContext.canvas.nativeCanvas.drawText(d.text.take(48), endX, endY - 10f,
+                                android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = d.color.toArgb(); textSize = 20f })
+                        }
                     }
                 }
                 DrawingTool.ANNOTATION -> {
@@ -105,25 +119,84 @@ object ChartDrawingsRenderer {
                     }
                 }
                 DrawingTool.FIBONACCI -> {
-                    if (d.endPrice != null) {
-                        val levels = FibonacciCalculator.calculateLevels(d.startPrice, d.endPrice)
-                        for ((lvl, price) in levels) {
-                            val y = transform.priceToY(price)
-                            scope.drawLine(
-                                color = d.color.copy(alpha = 0.8f),
-                                start = Offset(0f, y),
-                                end = Offset(transform.chartWidth, y),
-                                strokeWidth = d.strokeWidth,
-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
-                            )
-                            scope.drawContext.canvas.nativeCanvas.apply {
-                                val paint = android.graphics.Paint().apply {
-                                    color = d.color.toArgb()
-                                    textSize = 18f
-                                    isAntiAlias = true
+                    val fib = d.fibonacci
+                    val trendEffect = when (fib.trendLineStyle ?: d.lineStyle) {
+                        DrawingLineStyle.SOLID -> null
+                        DrawingLineStyle.DASHED -> PathEffect.dashPathEffect(floatArrayOf(9f, 6f))
+                        DrawingLineStyle.DOTTED -> PathEffect.dashPathEffect(floatArrayOf(2f, 6f))
+                    }
+                    val levelsEffect = when (fib.levelLineStyle ?: d.lineStyle) {
+                        DrawingLineStyle.SOLID -> null
+                        DrawingLineStyle.DASHED -> PathEffect.dashPathEffect(floatArrayOf(6f, 4f))
+                        DrawingLineStyle.DOTTED -> PathEffect.dashPathEffect(floatArrayOf(2f, 6f))
+                    }
+                    // Timeframe visibility belongs to the chart the user is viewing, not
+                    // the timeframe on which this drawing was first created.
+                    val currentTimeframe = transform.visibleCandles.firstOrNull()?.timeframe?.code ?: d.timeframe
+                    if (d.endPrice != null && fib.isVisibleAt(currentTimeframe)) {
+                        val firstX = min(startX, endX ?: startX)
+                        val lastX = max(startX, endX ?: startX)
+                        val x1 = if (fib.extension == FibExtension.LEFT || fib.extension == FibExtension.BOTH) 0f else firstX
+                        val x2 = if (fib.extension == FibExtension.RIGHT || fib.extension == FibExtension.BOTH) transform.chartWidth else lastX
+                        if (fib.trendLine && endX != null && endY != null) {
+                            scope.drawLine(fib.trendLineColor ?: d.color, Offset(startX, startY), Offset(endX, endY),
+                                strokeWidth = d.strokeWidth, pathEffect = trendEffect)
+                        }
+                        val active = fib.levels.filter { it.enabled && it.value.isFinite() }
+                            .map { level ->
+                                val ratio = if (fib.reverse) 1.0 - level.value else level.value
+                                val price = if (fib.logarithmic && d.startPrice > 0 && d.endPrice > 0)
+                                    exp(ln(d.startPrice) + (ln(d.endPrice) - ln(d.startPrice)) * ratio)
+                                else d.startPrice + (d.endPrice - d.startPrice) * ratio
+                                Triple(level, price, transform.priceToY(price))
+                            }.filter { it.third.isFinite() }
+                        if (fib.background) {
+                            active.sortedBy { it.third }.zipWithNext().forEach { (top, bottom) ->
+                                scope.drawRect(
+                                    color = (if (fib.singleColor) d.color else top.first.color)
+                                        .copy(alpha = fib.backgroundOpacity.coerceIn(0f, 1f)),
+                                    topLeft = Offset(x1, top.third),
+                                    size = Size((x2 - x1).coerceAtLeast(0f), (bottom.third - top.third).coerceAtLeast(0f))
+                                )
+                            }
+                        }
+                        for ((level, price, y) in active) {
+                            val levelColor = if (fib.singleColor) d.color else level.color
+                            scope.drawLine(levelColor, Offset(x1, y), Offset(x2, y),
+                                strokeWidth = fib.levelLineWidth ?: d.strokeWidth, pathEffect = levelsEffect)
+                            if (fib.showText && (fib.showLevels || fib.showPrices)) {
+                                val levelLabel = if (fib.labelsAsPercents)
+                                    String.format(Locale.US, "%.1f%%", level.value * 100.0)
+                                else level.value.toString().removeSuffix(".0")
+                                val label = listOfNotNull(
+                                    levelLabel.takeIf { fib.showLevels },
+                                    QuotePriceFormatter.forSymbol(price,transform.visibleCandles.firstOrNull()?.symbol)
+                                        .takeIf { fib.showPrices }
+                                ).joinToString(" (") + if (fib.showLevels && fib.showPrices) ")" else ""
+                                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                                    color = levelColor.toArgb()
+                                    textSize = with(scope) { fib.textSize * density }
+                                    textAlign = when (fib.textAlignment) {
+                                        FibTextAlignment.LEFT -> android.graphics.Paint.Align.LEFT
+                                        FibTextAlignment.CENTER -> android.graphics.Paint.Align.CENTER
+                                        FibTextAlignment.RIGHT -> android.graphics.Paint.Align.RIGHT
+                                    }
                                 }
-                                val lbl = String.format(Locale.US, "%.1f%% (%s)", lvl * 100, QuotePriceFormatter.forSymbol(price,transform.visibleCandles.firstOrNull()?.symbol))
-                                drawText(lbl, 10f, y - 4f, paint)
+                                val x = when (fib.labelPosition) {
+                                    FibLabelPosition.LEFT -> x1 + 5f
+                                    FibLabelPosition.RIGHT -> x2 - 5f
+                                    FibLabelPosition.CENTER -> (x1 + x2) / 2f
+                                }
+                                val baseline = when (fib.labelVerticalPosition) {
+                                    FibVerticalPosition.TOP -> y - 4f
+                                    FibVerticalPosition.CENTER -> y + paint.textSize * .35f
+                                    FibVerticalPosition.BOTTOM -> y + paint.textSize + 4f
+                                } + when (fib.textVerticalPosition) {
+                                    FibVerticalPosition.TOP -> -2f
+                                    FibVerticalPosition.CENTER -> 0f
+                                    FibVerticalPosition.BOTTOM -> 2f
+                                }
+                                scope.drawContext.canvas.nativeCanvas.drawText(label, x, baseline, paint)
                             }
                         }
                     }
