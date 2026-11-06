@@ -277,7 +277,7 @@ function safeDiagnostic(error){
   const category=String(error?.message||'');
   return {
     stage:['accounts','symbols','candles','ticks','spot'].includes(error?.stage)?error.stage:'other',
-    category:/^(ctrader_[a-z_]+|cTrader connection closed|not_authenticated|invalid_session|account_not_authorized|broker_exchange_failed|invalid_tick_data|tick_timestamp_out_of_range|tick_account_mismatch|ambiguous_tick_pagination_boundary|empty_tick_page_with_more)$/.test(category)
+    category:/^(ctrader_[a-z_]+|cTrader connection closed|not_authenticated|invalid_session|account_not_authorized|broker_exchange_failed|invalid_tick_data|invalid_tick_timestamp|invalid_tick_price|tick_timestamp_out_of_range|tick_account_mismatch|ambiguous_tick_pagination_boundary|empty_tick_page_with_more)$/.test(category)
       ?category:'unclassified',
     brokerCode:/^[A-Z0-9_]{1,64}$/.test(error?.brokerCode||'')?error.brokerCode:undefined,
     operation:Number.isInteger(error?.operation)?error.operation:undefined
@@ -311,7 +311,7 @@ const server=createServer((req,res)=>{
     if(error.message==='unconfigured_gateway')return fail(res,503,'gateway_not_configured');
     if(error.message==='not_authenticated'||error.message==='invalid_session')
       return fail(res,401,'session_expired');
-    if(['invalid_tick_data','tick_timestamp_out_of_range','tick_account_mismatch',
+    if(['invalid_tick_data','invalid_tick_timestamp','invalid_tick_price','tick_timestamp_out_of_range','tick_account_mismatch',
       'ambiguous_tick_pagination_boundary','empty_tick_page_with_more'].includes(error.message))
       return fail(res,502,'ctrader_tick_history_unusable');
     if(error.message.startsWith('invalid_')||error.message==='account_not_authorized')
