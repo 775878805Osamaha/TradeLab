@@ -77,7 +77,8 @@ enum class ChartDisplayStyle(val label: String) {
     BASELINE("خط الأساس"),
     COLUMNS("الأعمدة"),
     HIGH_LOW("أعلى-أدنى"),
-    HEIKIN_ASHI("هيكين آشي")
+    HEIKIN_ASHI("هيكين آشي"),
+    RANGE("مدى")
 }
 
 @Composable

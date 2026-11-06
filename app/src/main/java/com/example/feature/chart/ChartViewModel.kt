@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.core.indicators.*
 import com.example.core.market.CandleAggregator
+import com.example.core.market.MarketSymbolRegistry
+import com.example.core.market.RangeBarsEngine
 import com.example.core.model.*
 import com.example.data.local.dao.DrawingDao
 import com.example.data.repository.MarketDataRepository
@@ -68,6 +70,24 @@ class ChartViewModel(
 
     private val _uiState = MutableStateFlow(ChartUiState())
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
+
+    val rangeAccountGeneration: StateFlow<Long>? get() = marketDataRepository.cTrader?.accountGeneration
+
+    /** Range history is never backed by saved OHLC or a provider fallback. */
+    suspend fun loadRangeBars(symbol: String, from: Long, to: Long, sizeInPriceTicks: Int,
+                              includeIncomplete: Boolean): List<Candle> {
+        val client = marketDataRepository.cTrader ?: error("cTrader غير متصل")
+        require(symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
+            "شموع المدى متاحة حاليًا لرموز cTrader فقط"
+        }
+        val source = client.sourceKey(symbol)
+        val ticks = client.historicalBidTicks(symbol, from, to)
+        if (client.sourceKey(symbol) != source) error("تغير حساب cTrader أثناء جلب المدى")
+        return withContext(Dispatchers.Default) {
+            RangeBarsEngine.build(symbol, ticks, MarketSymbolRegistry.getSymbol(symbol).tickSize,
+                sizeInPriceTicks, source, includeIncomplete)
+        }
+    }
 
     private var candleLoadJob: Job? = null
     private var candleLoadGeneration = 0L

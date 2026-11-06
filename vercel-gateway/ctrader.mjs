@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
 import { hash as tokenHash } from './session.mjs';
 
-const REQUEST_RESPONSE = new Map([[2100,2101],[2149,2150],[2102,2103],[2114,2115],[2137,2138],[2127,2128],[2129,2130]]);
+const REQUEST_RESPONSE = new Map([[2100,2101],[2149,2150],[2102,2103],[2114,2115],[2137,2138],[2145,2146],[2127,2128],[2129,2130]]);
 const HOSTS = { demo: 'wss://demo.ctraderapi.com:5036', live: 'wss://live.ctraderapi.com:5036' };
 export const PERIODS = Object.freeze({M1:1,M2:2,M3:3,M4:4,M5:5,M10:6,M15:7,M30:8,H1:9,H4:10,H12:11,D1:12,W1:13,MN1:14});
 export function isReadOnlyScope(scope) {
@@ -40,6 +40,24 @@ export function normalizeBar(raw) {
     close: low + Number(raw.deltaClose || 0) / 100000,
     volume: Number(raw.volume || 0),
   };
+}
+/** cTrader stores the newest tick's absolute millisecond time, then backwards deltas. */
+export function normalizeHistoricalBidTicks(raw, from, to) {
+  if (!Array.isArray(raw)) throw Error('invalid_tick_response');
+  let previous = null;
+  const descending = raw.map((entry, index) => {
+    const delta = Number(entry.timestamp);
+    const rawPrice = Number(entry.tick);
+    if (!Number.isSafeInteger(delta) || delta < 0 ||
+        !Number.isSafeInteger(rawPrice) || rawPrice <= 0) throw Error('invalid_tick_data');
+    const timestamp = index === 0 ? delta : previous - delta;
+    if (!Number.isSafeInteger(timestamp) || timestamp < from || timestamp > to ||
+        (previous !== null && timestamp > previous)) throw Error('tick_timestamp_out_of_range');
+    previous = timestamp;
+    return {timestamp, price:rawPrice / 100000};
+  });
+  // Preserve broker order for multiple price changes at the same millisecond.
+  return descending.reverse();
 }
 class Channel {
   constructor(mode, id, secret, socketFactory=(url,options)=>new WebSocket(url,options)) {
@@ -179,17 +197,35 @@ class Channel {
   }
   async history(accountId,accessToken,symbolId,period,from,to,count) {
     await this.account(accountId,accessToken);
-    // cTrader permits only 5 historical requests/s per connection. Queue at <=4/s.
+    const result=await this.queueHistory(2137,{ctidTraderAccountId:accountId,symbolId,period,
+      fromTimestamp:from,toTimestamp:to,count});
+    return {candles:(result.trendbar||[]).map(normalizeBar).sort((a,b)=>a.timestamp-b.timestamp),hasMore:result.hasMore===true};
+  }
+  // Both trend bars and tick history share the broker's 5 historical calls/s limit.
+  async queueHistory(type,payload) {
     const job=this.historyQueue.then(async()=>{
       const wait=Math.max(0,this.nextHistoryAt-Date.now());
       if(wait) await new Promise(resolve=>setTimeout(resolve,wait));
       this.nextHistoryAt=Date.now()+250;
-      return this.send(2137,{ctidTraderAccountId:accountId,symbolId,period,
-        fromTimestamp:from,toTimestamp:to,count});
+      return this.send(type,payload);
     });
     this.historyQueue=job.then(()=>undefined,()=>undefined);
-    const result=await job;
-    return {candles:(result.trendbar||[]).map(normalizeBar).sort((a,b)=>a.timestamp-b.timestamp),hasMore:result.hasMore===true};
+    return job;
+  }
+  async historicalBidTicks(accountId,accessToken,symbolId,from,to) {
+    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 ||
+        to < from || to-from > 604800000) throw Error('invalid_tick_window');
+    await this.account(accountId,accessToken);
+    const result=await this.queueHistory(2145,{ctidTraderAccountId:accountId,
+      symbolId,type:1,fromTimestamp:from,toTimestamp:to});
+    if (String(result.ctidTraderAccountId) !== String(accountId)) throw Error('tick_account_mismatch');
+    const ticks=normalizeHistoricalBidTicks(result.tickData||[],from,to);
+    // A full millisecond group at the pagination edge cannot be resumed safely
+    // without a cursor. Fail explicitly rather than silently dropping quotes.
+    if (result.hasMore===true && ticks.length>1 && ticks[0].timestamp===ticks[1].timestamp)
+      throw Error('ambiguous_tick_pagination_boundary');
+    if (result.hasMore===true && !ticks.length) throw Error('empty_tick_page_with_more');
+    return {ticks,hasMore:result.hasMore===true};
   }
   async subscribe(accountId,accessToken,symbolId,cb) {
     await this.account(accountId,accessToken);

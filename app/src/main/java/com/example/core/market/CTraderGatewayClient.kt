@@ -198,6 +198,55 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         return tick
     }
 
+    /**
+     * Real historical BID quotes for fixed Range Bars. Never reconstruct
+     * ticks from the OHLC trendbars endpoint. Each broker page may be truncated.
+     */
+    suspend fun historicalBidTicks(symbol: String, from: Long, to: Long): List<RangePriceTick> =
+        withContext(Dispatchers.IO) {
+            val (account, id) = resolve(symbol)
+            val source = sourceName(account, id)
+            require(from > 0 && to >= from && to <= System.currentTimeMillis() &&
+                to - from <= 604_800_000L) { "نطاق Tick لا يتجاوز أسبوعًا واحدًا" }
+            val pages = ArrayList<List<RangePriceTick>>()
+            var end = to
+            var total = 0
+            var completed = false
+            for (pageNumber in 0 until 24) {
+                val json = request("/v1/ticks?accountId=$account&symbolId=$id&from=$from&to=$end")
+                if (resolve(symbol) != (account to id) || sourceName(account, id) != source)
+                    throw IOException("cTrader account changed during tick history request")
+                require(json.optString("source") == "ctrader" &&
+                    json.optString("quoteType") == "bid" &&
+                    json.optString("symbolId") == id.toString()) { "Wrong broker tick source" }
+                val values = json.getJSONArray("ticks")
+                require(values.length() <= 100_000) { "Oversized broker tick page" }
+                val page = ArrayList<RangePriceTick>(values.length())
+                var previous = -1L
+                for (i in 0 until values.length()) {
+                    val raw = values.getJSONObject(i)
+                    val timestamp = raw.getLong("timestamp")
+                    val price = raw.getDouble("price")
+                    require(timestamp in from..end && timestamp >= previous &&
+                        price.isFinite() && price > 0.0) { "Invalid broker tick history" }
+                    page.add(RangePriceTick(timestamp, price))
+                    previous = timestamp
+                }
+                total += page.size
+                require(total <= 250_000) { "تاريخ Tick كثيف جدًا؛ اختر نافذة أصغر" }
+                pages.add(page)
+                if (!json.optBoolean("hasMore")) { completed = true; break }
+                val oldest = page.firstOrNull()?.timestamp
+                    ?: throw IOException("Broker reported more ticks but returned none")
+                require(oldest > from) { "Broker tick history cannot be paged without gaps" }
+                // Same-millisecond quotes are not cursor-addressable. The server
+                // rejects a visibly ambiguous page boundary; never overlap pages.
+                end = oldest - 1
+            }
+            if (!completed) throw IOException("Broker tick pagination limit reached; reduce history window")
+            pages.asReversed().flatMap { it }
+        }
+
     suspend fun candles(symbol: String, timeframe: Timeframe, from: Long, to: Long): List<Candle> {
         val (account, id) = resolve(symbol)
         val period = if (timeframe == Timeframe.H2) Timeframe.H1 else timeframe

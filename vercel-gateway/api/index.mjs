@@ -246,6 +246,16 @@ async function handler(req,res){
       const data=await stage('candles',()=>upstream.channel(entry.isLive).history(id,session.access,symbolId,period,from,to,count));
       return reply(res,200,{symbolId:String(symbolId),period:periodName,source:'ctrader',...data},sessionHeader);
     }
+    if(path==='/v1/ticks'){
+      const {id,entry}=await stage('ticks',()=>accountAccess(session,url));
+      const symbolId=intArg(url,'symbolId',1,Number.MAX_SAFE_INTEGER);
+      const from=intArg(url,'from',0,2147483646000);
+      const to=intArg(url,'to',from,2147483646000);
+      if(to-from>604800000)return fail(res,400,'tick_window_exceeds_one_week');
+      const data=await stage('ticks',()=>upstream.channel(entry.isLive)
+        .historicalBidTicks(id,session.access,symbolId,from,to));
+      return reply(res,200,{symbolId:String(symbolId),source:'ctrader',quoteType:'bid',...data},sessionHeader);
+    }
     if(path==='/v1/spot'){
       const {id,entry}=await stage('spot',()=>accountAccess(session,url));
       const symbolId=intArg(url,'symbolId',1,Number.MAX_SAFE_INTEGER);
@@ -266,7 +276,7 @@ async function stage(name,fn){
 function safeDiagnostic(error){
   const category=String(error?.message||'');
   return {
-    stage:['accounts','symbols','candles','spot'].includes(error?.stage)?error.stage:'other',
+    stage:['accounts','symbols','candles','ticks','spot'].includes(error?.stage)?error.stage:'other',
     category:/^(ctrader_[a-z_]+|cTrader connection closed|not_authenticated|invalid_session|account_not_authorized|broker_exchange_failed)$/.test(category)
       ?category:'unclassified',
     brokerCode:/^[A-Z0-9_]{1,64}$/.test(error?.brokerCode||'')?error.brokerCode:undefined,
@@ -289,7 +299,7 @@ export function brokerRejection(error) {
     error:'ctrader_broker_rejected_request',
     stage,
     brokerCode:publicBrokerCodes.has(brokerCode)?brokerCode:undefined,
-    operation:[2100,2149,2102,2114,2137,2127].includes(operation)?operation:undefined,
+    operation:[2100,2149,2102,2114,2137,2145,2127].includes(operation)?operation:undefined,
   };
 }
 const server=createServer((req,res)=>{
