@@ -213,7 +213,13 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             var total = 0
             var completed = false
             for (pageNumber in 0 until 24) {
-                val json = request("/v1/ticks?accountId=$account&symbolId=$id&from=$from&to=$end")
+                val json = try {
+                    request("/v1/ticks?accountId=$account&symbolId=$id&from=$from&to=$end")
+                } catch (error: CTraderGatewayException) {
+                    if (error.statusCode == 404)
+                        throw IOException("بوابة cTrader لم تُحدَّث بعد لدعم تاريخ Tick؛ يلزم نشر /v1/ticks", error)
+                    throw error
+                }
                 if (resolve(symbol) != (account to id) || sourceName(account, id) != source)
                     throw IOException("cTrader account changed during tick history request")
                 require(json.optString("source") == "ctrader" &&
