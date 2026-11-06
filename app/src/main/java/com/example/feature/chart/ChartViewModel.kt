@@ -13,11 +13,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import com.example.feature.chart.history.ChartHistoryPaging
 import com.example.feature.chart.history.ChartHistoryDownload
+import com.example.feature.chart.history.ChartHistoryBatcher
 import com.example.feature.chart.history.ChartHistoryRetry
 import com.example.feature.chart.history.ChartHistoryRetryPolicy
 import com.example.feature.chart.history.ChartClosedBarRefresh
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -69,6 +71,7 @@ class ChartViewModel(
     private var candleLoadJob: Job? = null
     private var olderHistoryJob: Job? = null
     private var historyDownloadGeneration = 0L
+    private var manuallyStoppedDeepHistoryGeneration = -1L
     private var tickJob: Job? = null
     private var klineRefreshJob: Job? = null
     private var klineStreamJob: Job? = null
@@ -170,13 +173,14 @@ class ChartViewModel(
         val symbol = snapshot.selectedSymbol
         val timeframe = snapshot.selectedTimeframe
         val oldest = snapshot.candles.first().openTime
+        manuallyStoppedDeepHistoryGeneration = -1L
         val generation = ++historyDownloadGeneration
         _uiState.update { it.copy(isLoadingOlderHistory = true, olderHistoryError = null, historyDownloadMessage = null) }
         olderHistoryJob?.cancel()
         olderHistoryJob = viewModelScope.launch {
             try {
                 val confirmed = fetchOlderChartHistory(symbol, timeframe, oldest, generation)
-                val merged = mergeChartCandles(symbol, timeframe, confirmed) ?: return@launch
+                val merged = mergeChartCandles(symbol, timeframe, confirmed, generation) ?: return@launch
                 _uiState.update {
                     it.copy(isLoadingOlderHistory = false,
                         historySourceWarning = marketDataRepository.freeChartHistoryWarning(symbol) ?: it.historySourceWarning,
@@ -203,22 +207,34 @@ class ChartViewModel(
         val symbol = snapshot.selectedSymbol
         val timeframe = snapshot.selectedTimeframe
         if (snapshot.candles.size >= ChartHistoryDownload.TARGET) return
+        manuallyStoppedDeepHistoryGeneration = -1L
         val generation = ++historyDownloadGeneration
         _uiState.update { it.copy(isLoadingOlderHistory = true, isDownloadingDeepHistory = true,
             olderHistoryError = null, historyDownloadMessage = null) }
         olderHistoryJob?.cancel()
         olderHistoryJob = viewModelScope.launch {
+            val batcher = ChartHistoryBatcher(pageLimit = 5)
+            suspend fun publishPendingHistory() {
+                if (batcher.pendingPages == 0) return
+                val merged = mergeChartCandles(symbol, timeframe, batcher.snapshot(), generation)
+                    ?: throw kotlinx.coroutines.CancellationException("Chart changed")
+                // A cancelled merge must be retryable; acknowledge the real
+                // pending bars only after StateFlow accepted the whole batch.
+                batcher.committed()
+                recalculateIndicators(merged, _uiState.value.indicatorSettings)
+                _uiState.update { it.copy(historySourceWarning =
+                    marketDataRepository.freeChartHistoryWarning(symbol) ?: it.historySourceWarning) }
+            }
             try {
                 val result = ChartHistoryDownload.run(snapshot.candles,
                     fetchBefore = { oldest ->
                         fetchOlderChartHistory(symbol, timeframe, oldest, generation)
                     }, append = { page ->
-                        val merged = mergeChartCandles(symbol, timeframe, page)
-                            ?: throw kotlinx.coroutines.CancellationException("Chart changed")
-                        recalculateIndicators(merged, _uiState.value.indicatorSettings)
-                        _uiState.update { it.copy(historySourceWarning =
-                            marketDataRepository.freeChartHistoryWarning(symbol) ?: it.historySourceWarning) }
+                        batcher.stage(page)
+                        if (batcher.shouldFlush) publishPendingHistory()
                     })
+                // A download may end with 1–4 confirmed pages still buffered.
+                publishPendingHistory()
                 _uiState.update { it.copy(historyDownloadMessage = when(result) {
                     ChartHistoryDownload.Result.TARGET_REACHED -> "تم تحميل أكثر من 100 ألف شمعة فعلية"
                     ChartHistoryDownload.Result.NO_OLDER_PAGE -> "لا توجد شموع أقدم في النطاق الذي فحصه المصدر. يمكنك إعادة المحاولة."
@@ -232,6 +248,24 @@ class ChartViewModel(
                         (error.message ?: "تعذر الاتصال بالمصدر").take(120)) }
                 }
             } finally {
+                // Even if the user explicitly stopped the download, keep real
+                // pages fetched since the last UI batch. Never publish stale
+                // pages into a different chart, session, or new download.
+                val sameHistorySession =
+                    (historyDownloadGeneration == generation ||
+                        manuallyStoppedDeepHistoryGeneration == generation) &&
+                    _uiState.value.selectedSymbol == symbol &&
+                    _uiState.value.selectedTimeframe == timeframe
+                if (sameHistorySession && batcher.pendingPages > 0) {
+                    withContext(NonCancellable) {
+                        try { publishPendingHistory() } catch (_: Exception) {
+                            // Preserve the earlier error/cancellation cause.
+                            // Already published pages remain in the chart.
+                        }
+                    }
+                }
+                if (manuallyStoppedDeepHistoryGeneration == generation)
+                    manuallyStoppedDeepHistoryGeneration = -1L
                 if (historyDownloadGeneration == generation &&
                     _uiState.value.selectedSymbol == symbol && _uiState.value.selectedTimeframe == timeframe &&
                     _uiState.value.isDownloadingDeepHistory) {
@@ -243,6 +277,7 @@ class ChartViewModel(
 
     fun stopDeepChartHistory() {
         if (!_uiState.value.isDownloadingDeepHistory) return
+        manuallyStoppedDeepHistoryGeneration = historyDownloadGeneration
         historyDownloadGeneration++
         olderHistoryJob?.cancel()
         _uiState.update { it.copy(isLoadingOlderHistory = false, isDownloadingDeepHistory = false,
@@ -251,16 +286,21 @@ class ChartViewModel(
 
     /** Merge off the UI thread; retry if a live candle arrived during the merge. */
     private suspend fun mergeChartCandles(
-        symbol: String, timeframe: Timeframe, incoming: List<Candle>
+        symbol: String, timeframe: Timeframe, incoming: List<Candle>,
+        historyGenerationGuard: Long? = null
     ): List<Candle>? {
+        fun currentHistoryAccepted(): Boolean = historyGenerationGuard == null ||
+            historyDownloadGeneration == historyGenerationGuard ||
+            manuallyStoppedDeepHistoryGeneration == historyGenerationGuard
         while (kotlinx.coroutines.currentCoroutineContext().isActive) {
             val snapshot = _uiState.value
-            if (snapshot.selectedSymbol != symbol || snapshot.selectedTimeframe != timeframe) return null
+            if (snapshot.selectedSymbol != symbol || snapshot.selectedTimeframe != timeframe ||
+                !currentHistoryAccepted()) return null
             val merged = withContext(Dispatchers.Default) { ChartHistoryPaging.merge(snapshot.candles, incoming) }
             var applied = false
             _uiState.update { state ->
                 applied = state.selectedSymbol == symbol && state.selectedTimeframe == timeframe &&
-                    state.candles === snapshot.candles
+                    state.candles === snapshot.candles && currentHistoryAccepted()
                 if (applied) state.copy(candles = merged) else state
             }
             if (applied) return merged
@@ -276,6 +316,7 @@ class ChartViewModel(
 
     fun selectSymbol(symbol: String) {
         if (_uiState.value.selectedSymbol == symbol) return
+        manuallyStoppedDeepHistoryGeneration = -1L
         // Prevent unsupported instruments from retaining a previous exchange quote.
         // The history loader will show an explicit unavailable-source message.
         candleLoadJob?.cancel()
@@ -304,6 +345,7 @@ class ChartViewModel(
 
     fun selectTimeframe(timeframe: Timeframe) {
         if (_uiState.value.selectedTimeframe == timeframe) return
+        manuallyStoppedDeepHistoryGeneration = -1L
         // Keep the existing bid/ask subscription: a timeframe change does not
         // change the instrument and should not disconnect its live quote.
         klineRefreshJob?.cancel()
@@ -503,6 +545,7 @@ class ChartViewModel(
     }
 
     private fun loadCandlesForCurrentSymbol() {
+        manuallyStoppedDeepHistoryGeneration = -1L
         historyDownloadGeneration++
         olderHistoryJob?.cancel()
         _uiState.update { it.copy(isLoadingOlderHistory = false, isDownloadingDeepHistory = false, historyDownloadMessage = null, historySourceWarning = null, olderHistoryError = null) }
