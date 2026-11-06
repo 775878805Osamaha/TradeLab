@@ -43,10 +43,11 @@ export function normalizeBar(raw) {
 }
 /**
  * cTrader stores the newest tick's absolute millisecond time, then signed
- * differences relative to the immediately preceding (newer) tick. Since the
- * broker returns newest first, those subsequent deltas are negative or zero.
- * Do not turn negative deltas into positive distances: doing so rejects valid
- * broker history and leaves the Range chart blank.
+ * differences relative to the immediately preceding (newer) tick. Some tick
+ * payloads express the backwards distance as a signed negative difference,
+ * while others encode a positive distance. Both represent a move backwards
+ * from the newest tick; never treat either sign as a future quote. Validate
+ * the resulting absolute time against the requested broker interval.
  */
 export function normalizeHistoricalBidTicks(raw, from, to) {
   if (!Array.isArray(raw)) throw Error('invalid_tick_response');
@@ -54,9 +55,11 @@ export function normalizeHistoricalBidTicks(raw, from, to) {
   const descending = raw.map((entry, index) => {
     const delta = Number(entry.timestamp);
     const rawPrice = Number(entry.tick);
-    if (!Number.isSafeInteger(delta) || (index === 0 ? delta < 0 : delta > 0) ||
-        !Number.isSafeInteger(rawPrice) || rawPrice <= 0) throw Error('invalid_tick_data');
-    const timestamp = index === 0 ? delta : previous + delta;
+    if (!Number.isSafeInteger(delta) || (index === 0 && delta < 0))
+      throw Error('invalid_tick_timestamp');
+    if (!Number.isSafeInteger(rawPrice) || rawPrice <= 0)
+      throw Error('invalid_tick_price');
+    const timestamp = index === 0 ? delta : previous - Math.abs(delta);
     if (!Number.isSafeInteger(timestamp) || timestamp < from || timestamp > to ||
         (previous !== null && timestamp > previous)) throw Error('tick_timestamp_out_of_range');
     previous = timestamp;
