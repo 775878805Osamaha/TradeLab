@@ -277,7 +277,7 @@ function safeDiagnostic(error){
   const category=String(error?.message||'');
   return {
     stage:['accounts','symbols','candles','ticks','spot'].includes(error?.stage)?error.stage:'other',
-    category:/^(ctrader_[a-z_]+|cTrader connection closed|not_authenticated|invalid_session|account_not_authorized|broker_exchange_failed)$/.test(category)
+    category:/^(ctrader_[a-z_]+|cTrader connection closed|not_authenticated|invalid_session|account_not_authorized|broker_exchange_failed|invalid_tick_data|tick_timestamp_out_of_range|tick_account_mismatch|ambiguous_tick_pagination_boundary|empty_tick_page_with_more)$/.test(category)
       ?category:'unclassified',
     brokerCode:/^[A-Z0-9_]{1,64}$/.test(error?.brokerCode||'')?error.brokerCode:undefined,
     operation:Number.isInteger(error?.operation)?error.operation:undefined
