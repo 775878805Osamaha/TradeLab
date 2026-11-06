@@ -1257,7 +1257,7 @@ fun ChartScreen(
                     if (isEmbeddedReplay) replayState.datasetId else 0L, rangeIsActive, fixedRangeTicks) {
                 CandlestickChart(
                     candles = chartBars,
-                    latestTick = (if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick)
+                    latestTick = (if (rangeIsActive) null else if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick)
                         ?.takeIf { it.symbol == uiState.selectedSymbol },
                     openPositions = if (isEmbeddedReplay) replayState.openPositions else uiState.openPositions,
                     pendingOrders = if (isEmbeddedReplay) replayState.pendingOrders else uiState.pendingOrders,
@@ -1340,6 +1340,11 @@ fun ChartScreen(
                             Text("مدى $fixedRangeTicks", color = TradingAccentLight, fontSize = 11.sp)
                         }
                         if (rangeLoading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                        if (!rangeLoading && rangeHistoryHours < 168) TextButton(onClick = {
+                            rangeHistoryHours = (rangeHistoryHours + 6).coerceAtMost(168)
+                        }, modifier = Modifier.testTag("range_load_older")) {
+                            Text("أقدم", fontSize = 11.sp)
+                        }
                         if (!isEmbeddedReplay) TextButton(onClick = {
                             rangeRefreshAnchor = System.currentTimeMillis()
                         }) { Text("تحديث", fontSize = 11.sp) }
@@ -1415,7 +1420,7 @@ fun ChartScreen(
 
                 // Selectors live exclusively in the bottom strip in the default layout.
                 if (immersiveChart) {
-                    val headerBars = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
+                    val headerBars = chartBars
                     val lastClose = headerBars.lastOrNull()?.close
                     val priorClose = headerBars.getOrNull(headerBars.lastIndex - 1)?.close
                     val delta = if (lastClose != null && priorClose != null && priorClose > 0.0)
