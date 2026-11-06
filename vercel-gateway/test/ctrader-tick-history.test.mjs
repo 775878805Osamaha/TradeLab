@@ -17,11 +17,28 @@ test('cTrader newest-first tick deltas become genuine chronological bid prices',
   ]);
 });
 
-test('historical tick decoding rejects corrupt prices, forward deltas and future ticks',()=>{
+test('both signed differences and positive backwards distances remain chronological',()=>{
+  const expected=[
+    {timestamp:1000,price:2000.2},
+    {timestamp:1003,price:2000.3},
+    {timestamp:1003,price:2000.4},
+    {timestamp:1010,price:2000.5},
+  ];
+  for (const deltas of [[7,0,3],[-7,0,-3],[7,0,-3]]) {
+    const input=[{timestamp:1010,tick:200050000},
+      {timestamp:deltas[0],tick:200040000},
+      {timestamp:deltas[1],tick:200030000},
+      {timestamp:deltas[2],tick:200020000}];
+    assert.deepEqual(normalizeHistoricalBidTicks(input,1000,1010),expected);
+  }
+});
+
+test('historical tick decoding rejects corrupt prices, time bounds and unsafe deltas',()=>{
   assert.throws(()=>normalizeHistoricalBidTicks([{timestamp:1010,tick:0}],0,1010));
-  assert.throws(()=>normalizeHistoricalBidTicks([{timestamp:1010,tick:200000000},{timestamp:2,tick:200100000}],0,1010));
+  assert.throws(()=>normalizeHistoricalBidTicks([{timestamp:1010,tick:200000000},{timestamp:'x',tick:200100000}],0,1010));
   assert.throws(()=>normalizeHistoricalBidTicks([{timestamp:1011,tick:200000000}],0,1010));
   assert.throws(()=>normalizeHistoricalBidTicks([{timestamp:1010,tick:200000000},{timestamp:-11,tick:200100000}],1000,1010));
+  assert.throws(()=>normalizeHistoricalBidTicks([{timestamp:1010,tick:200000000},{timestamp:Number.MAX_SAFE_INTEGER+1,tick:200100000}],1000,1010));
 });
 
 test('tick requests use broker read-only historical message 2145 with bid type',async()=>{
