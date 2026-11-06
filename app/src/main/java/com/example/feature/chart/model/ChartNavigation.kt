@@ -20,4 +20,36 @@ object ChartNavigation {
 
     fun drag(currentOffsetPx: Float, fingerDeltaX: Float): Float =
         currentOffsetPx + fingerDeltaX
+
+    /**
+     * Keep the candle underneath the pinch centroid fixed on screen while its
+     * width changes. The offset is relative to the newest candle, not the
+     * oldest, so merely multiplying the width makes the whole chart jump.
+     * Apply the finger translation after the anchored zoom in the same frame.
+     */
+    fun pinch(
+        currentOffsetPx: Float,
+        candleWidthPx: Float,
+        chartWidthPx: Float,
+        centroidX: Float,
+        zoomChange: Float,
+        panX: Float
+    ): PinchResult {
+        if (!zoomChange.isFinite() || zoomChange <= 0f ||
+            !candleWidthPx.isFinite() || candleWidthPx <= 0f ||
+            !currentOffsetPx.isFinite()) {
+            return PinchResult(candleWidthPx, currentOffsetPx)
+        }
+        val nextWidth = (candleWidthPx * zoomChange).coerceIn(MIN_CANDLE_WIDTH, MAX_CANDLE_WIDTH)
+        val viewportWidth = chartWidthPx.takeIf { it.isFinite() && it > 0f } ?: 1f
+        val focalX = centroidX.takeIf { it.isFinite() }
+            ?.coerceIn(0f, viewportWidth) ?: viewportWidth / 2f
+        val distanceFromFocal = viewportWidth - focalX
+        val scale = nextWidth / candleWidthPx
+        val nextOffset = (currentOffsetPx + distanceFromFocal) * scale -
+            distanceFromFocal + (panX.takeIf { it.isFinite() } ?: 0f)
+        return PinchResult(nextWidth, nextOffset)
+    }
+
+    data class PinchResult(val candleWidthPx: Float, val scrollOffsetPx: Float)
 }

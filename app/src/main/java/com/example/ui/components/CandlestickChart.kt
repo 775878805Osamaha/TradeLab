@@ -7,8 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -56,6 +55,8 @@ val ChartOldestCandleTime = SemanticsPropertyKey<Long>("ChartOldestCandleTime")
 val ChartDisplayReady = SemanticsPropertyKey<Boolean>("ChartDisplayReady")
 val ChartPriceIndexReady = SemanticsPropertyKey<Boolean>("ChartPriceIndexReady")
 val ChartDrawingAnalysisReady = SemanticsPropertyKey<Boolean>("ChartDrawingAnalysisReady")
+val ChartCandleWidthPx = SemanticsPropertyKey<Float>("ChartCandleWidthPx")
+val ChartScrollOffsetPx = SemanticsPropertyKey<Float>("ChartScrollOffsetPx")
 
 enum class ChartDisplayStyle(val label: String) {
     BARS("أعمدة"),
@@ -244,21 +245,6 @@ fun CandlestickChart(
         drawingCurrentOffset = null
     }
 
-    val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
-        if (zoomChange.isFinite() && zoomChange > 0f) {
-            candleWidthPx = (candleWidthPx * zoomChange).coerceIn(6f, 80f)
-        }
-        // Transformable consumes multi-touch transforms; detectDragGestures
-        // below handles one-finger dragging. Apply two-finger translation as
-        // well so the chart does not freeze while users pinch and reposition.
-        if (panChange.x.isFinite() && panChange.x != 0f) {
-            scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, panChange.x)
-        }
-        if (panChange.y.isFinite() && panChange.y != 0f) {
-            pricePanPx = (pricePanPx + panChange.y).coerceIn(-6000f, 6000f)
-        }
-    }
-
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
     val dateTimeFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
     // Paint instances are reused across redraws instead of allocated once per
@@ -293,6 +279,12 @@ fun CandlestickChart(
     // Wait for the real measured width before applying initial candle fit.
     // A guessed 600px width can mis-size early Replay candles on narrow phones.
     var chartViewportWidthPx by remember { mutableFloatStateOf(0f) }
+    val currentCandleCount by rememberUpdatedState(candles.size)
+    // Clamp inside the gesture callback, before drawing; mutating Compose
+    // viewport state from Canvas would schedule an unnecessary second frame.
+    fun boundedOffset(requestedOffset: Float, width: Float): Float = ChartViewport.window(
+        currentCandleCount, chartViewportWidthPx, width, requestedOffset
+    ).clampedOffsetPx
     // Trigger historical backfill near the oldest visible candle. Keep the
     // gesture callback fresh without restarting the active pointer detector.
     val requestOlderHistory by rememberUpdatedState(onRequestOlderHistory)
@@ -361,14 +353,42 @@ fun CandlestickChart(
                     this[ChartPriceIndexReady] = priceRangeIndex != null
                     this[ChartDisplayReady] = displayStyle != ChartDisplayStyle.HEIKIN_ASHI || heikinAshi != null
                     this[ChartDrawingAnalysisReady] = drawingAnalysisRequest.isEmpty || drawingAnalysis != null
+                    this[ChartCandleWidthPx] = candleWidthPx
+                    this[ChartScrollOffsetPx] = scrollOffsetPx
                     this[ChartFirstVisibleIndex] = ChartViewport.window(candles.size,
                         chartViewportWidthPx, candleWidthPx, scrollOffsetPx).startIndex
                 }
-                .transformable(state = transformableState, enabled = activeDrawingTool == DrawingTool.NONE)
+                // A single detector handles both one-finger panning and
+                // two-finger pinch/translation. In normal analysis mode the
+                // drawing drag detector below is disabled, so the two do not
+                // compete for and cancel each other's touch events.
+                .pointerInput(activeDrawingTool, isCrosshairActive) {
+                    if (activeDrawingTool == DrawingTool.NONE && !isCrosshairActive) {
+                        detectTransformGestures { centroid, pan, zoom, _ ->
+                            val next = ChartNavigation.pinch(
+                                currentOffsetPx = scrollOffsetPx,
+                                candleWidthPx = candleWidthPx,
+                                chartWidthPx = chartViewportWidthPx,
+                                centroidX = centroid.x,
+                                zoomChange = zoom,
+                                panX = pan.x
+                            )
+                            candleWidthPx = next.candleWidthPx
+                            scrollOffsetPx = boundedOffset(next.scrollOffsetPx, next.candleWidthPx)
+                            if (pan.y.isFinite() && pan.y != 0f) {
+                                pricePanPx = (pricePanPx + pan.y).coerceIn(-6000f, 6000f)
+                            }
+                        }
+                    }
+                }
                 // Keep gesture recognition alive while Replay reveals each new candle.
                 // Recreating pointerInput on every candle update cancels active drags.
-                .pointerInput(activeDrawingTool, isCrosshairActive, candles.first().symbol, candles.first().timeframe) {
-                    detectDragGestures(
+                .pointerInput(activeDrawingTool, isCrosshairActive, selectedDrawingId != null,
+                    candles.first().symbol, candles.first().timeframe) {
+                    // When there is no active drawing, selection or crosshair,
+                    // the transform detector above owns one-finger movement.
+                    // Keep this drag detector for drawing-anchor edits.
+                    if (activeDrawingTool != DrawingTool.NONE || isCrosshairActive || selectedDrawingIdNow != null) detectDragGestures(
                         onDragStart = { offset ->
                             val transform = transformRef[0]
                             dragStartedInPlot = transform != null &&
@@ -439,7 +459,7 @@ fun CandlestickChart(
                                     )
                                 }
                             } else {
-                                scrollOffsetPx = ChartNavigation.drag(scrollOffsetPx, dragAmount.x)
+                                scrollOffsetPx = boundedOffset(ChartNavigation.drag(scrollOffsetPx, dragAmount.x), candleWidthPx)
                                 // Let a single diagonal gesture pan both time and price axes.
                                 // The visual direction follows the finger; reset view restores auto-fit.
                                 pricePanPx = (pricePanPx + dragAmount.y).coerceIn(-6000f, 6000f)
@@ -595,9 +615,6 @@ fun CandlestickChart(
                 candleWidthPx = candleWidthPx,
                 requestedOffsetPx = scrollOffsetPx
             )
-            if (scrollOffsetPx != viewport.clampedOffsetPx) {
-                scrollOffsetPx = viewport.clampedOffsetPx
-            }
             val fractionalScrollPx = viewport.fractionalScrollPx
             val startIndex = viewport.startIndex
             val endIndex = viewport.endIndex

@@ -11,6 +11,7 @@ on:
       - 'app/src/androidTest/java/com/example/ChartObjectTreeSheetTest.kt'
       - 'app/src/androidTest/java/com/example/IndicatorTemplatesSheetTest.kt'
       - 'app/src/androidTest/java/com/example/FibonacciSettingsScreenTest.kt'
+      - 'app/src/androidTest/java/com/example/ChartGestureInteractionTest.kt'
   workflow_dispatch:
 
 jobs:
@@ -56,7 +57,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -accel on -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
             chmod +x gradlew
-            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.DrawingAnchorInteractionTest,com.example.DrawingContextToolbarTest,com.example.ChartTypeSheetTest,com.example.AnalysisHubSheetTest,com.example.ChartObjectTreeSheetTest,com.example.IndicatorTemplatesSheetTest,com.example.FibonacciSettingsScreenTest --stacktrace
+            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.DrawingAnchorInteractionTest,com.example.DrawingContextToolbarTest,com.example.ChartTypeSheetTest,com.example.AnalysisHubSheetTest,com.example.ChartObjectTreeSheetTest,com.example.IndicatorTemplatesSheetTest,com.example.FibonacciSettingsScreenTest,com.example.ChartGestureInteractionTest --stacktrace
             mkdir -p drawing-captures
             adb pull /sdcard/Download/drawing-context-native-test.png drawing-captures/drawing-context-native-test.png
             adb pull /sdcard/Download/drawing-position-native-test.png drawing-captures/drawing-position-native-test.png
@@ -70,6 +71,7 @@ jobs:
             adb pull /sdcard/Download/tradelab-fibonacci-coordinates.png drawing-captures/tradelab-fibonacci-coordinates.png
             adb pull /sdcard/Download/tradelab-fibonacci-visibility.png drawing-captures/tradelab-fibonacci-visibility.png
             adb pull /sdcard/Download/tradelab-fibonacci-visibility-bottom.png drawing-captures/tradelab-fibonacci-visibility-bottom.png
+            adb pull /sdcard/Download/tradelab-chart-gesture-zoom.png drawing-captures/tradelab-chart-gesture-zoom.png
       - name: Preserve Android test reports
         if: always()
         uses: actions/upload-artifact@v4
