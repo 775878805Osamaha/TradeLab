@@ -47,22 +47,31 @@ export function normalizeBar(raw) {
  * payloads express the backwards distance as a signed negative difference,
  * while others encode a positive distance. Both represent a move backwards
  * from the newest tick; never treat either sign as a future quote. Validate
- * the resulting absolute time against the requested broker interval.
+ * the resulting absolute time against the requested broker interval. Prices
+ * are also delta encoded: the first price is absolute, subsequent ticks are
+ * signed differences relative to the previous (newer) quote.
  */
 export function normalizeHistoricalBidTicks(raw, from, to) {
   if (!Array.isArray(raw)) throw Error('invalid_tick_response');
   let previous = null;
+  let previousPrice = null;
   const descending = raw.map((entry, index) => {
+    if (entry?.timestamp == null) throw Error('invalid_tick_timestamp');
+    if (entry?.tick == null) throw Error('invalid_tick_price');
     const delta = Number(entry.timestamp);
-    const rawPrice = Number(entry.tick);
+    const priceDelta = Number(entry.tick);
     if (!Number.isSafeInteger(delta) || (index === 0 && delta < 0))
       throw Error('invalid_tick_timestamp');
+    if (!Number.isSafeInteger(priceDelta))
+      throw Error('invalid_tick_price');
+    const rawPrice = index === 0 ? priceDelta : previousPrice + priceDelta;
     if (!Number.isSafeInteger(rawPrice) || rawPrice <= 0)
       throw Error('invalid_tick_price');
     const timestamp = index === 0 ? delta : previous - Math.abs(delta);
     if (!Number.isSafeInteger(timestamp) || timestamp < from || timestamp > to ||
         (previous !== null && timestamp > previous)) throw Error('tick_timestamp_out_of_range');
     previous = timestamp;
+    previousPrice = rawPrice;
     return {timestamp, price:rawPrice / 100000};
   });
   // Preserve broker order for multiple price changes at the same millisecond.
