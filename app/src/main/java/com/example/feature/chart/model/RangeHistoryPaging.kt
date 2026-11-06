@@ -17,16 +17,31 @@ object RangeHistoryPaging {
         val start: Long get() = (end - hours * HOUR_MILLIS).coerceAtLeast(1L)
     }
 
-    fun older(end: Long, hours: Int): Window {
-        require(end > 0L && hours in 1..MAX_WINDOW_HOURS)
-        if (hours < MAX_WINDOW_HOURS) {
-            val next = if (hours < STEP_HOURS) STEP_HOURS
-                else (hours + STEP_HOURS).coerceAtMost(MAX_WINDOW_HOURS)
+    fun older(end: Long, hours: Int, maxHours: Int = MAX_WINDOW_HOURS): Window {
+        require(end > 0L && maxHours in 1..MAX_WINDOW_HOURS && hours in 1..maxHours)
+        if (hours < maxHours) {
+            val next = if (hours < STEP_HOURS) minOf(STEP_HOURS, maxHours)
+                else (hours + STEP_HOURS).coerceAtMost(maxHours)
             return Window(end, next)
         }
-        val earliestEnd = MAX_WINDOW_HOURS * HOUR_MILLIS + 1L
-        val nextEnd = (end - STEP_HOURS * HOUR_MILLIS).coerceAtLeast(earliestEnd)
-        return Window(nextEnd.coerceAtMost(end), MAX_WINDOW_HOURS)
+        val earliestEnd = maxHours * HOUR_MILLIS + 1L
+        val step = minOf(STEP_HOURS, maxHours)
+        val nextEnd = (end - step * HOUR_MILLIS).coerceAtLeast(earliestEnd)
+        return Window(nextEnd.coerceAtMost(end), maxHours)
+    }
+
+    fun smallerDenseWindow(hours: Int): Int {
+        require(hours in 1..MAX_WINDOW_HOURS)
+        return (hours / 2).coerceAtLeast(1)
+    }
+
+    /** Explicit historical jump keeps the request within the available one-week limit. */
+    fun jumpBack(end: Long, hours: Int, days: Int): Window {
+        require(end > 0L && hours in 1..MAX_WINDOW_HOURS && days > 0)
+        val earliestEnd = hours * HOUR_MILLIS + 1L
+        val jumped = (end - days.toLong() * 24L * HOUR_MILLIS)
+            .coerceAtLeast(earliestEnd).coerceAtMost(end)
+        return Window(jumped, hours)
     }
 
     fun shouldPrefetchMoreBars(candleCount: Int, hours: Int, manuallyChosen: Boolean,

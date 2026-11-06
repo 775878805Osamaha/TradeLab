@@ -7,6 +7,9 @@ import kotlin.math.roundToLong
 /** A single actual cTrader historical BID quote (not synthetic OHLC). */
 data class RangePriceTick(val timestamp: Long, val price: Double)
 
+/** The broker returned too many genuine ticks for a safe in-memory window. */
+class RangeTickHistoryTooDenseException(message: String) : IllegalStateException(message)
+
 /**
  * Fixed price-range bars. `sizeInPriceTicks` means multiples of the symbol's
  * minimum price movement, NOT a count of quote events and NOT an ATR period.

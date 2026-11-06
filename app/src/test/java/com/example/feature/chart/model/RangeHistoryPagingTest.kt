@@ -40,4 +40,25 @@ class RangeHistoryPagingTest {
         assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 6, true, false))
         assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 6, false, true))
     }
+
+    @Test fun denseBrokerWindowsShrinkAndThenSlideWithoutSkippingHours() {
+        val end = 100L * day
+        val denseCap = RangeHistoryPaging.smallerDenseWindow(24)
+        assertEquals(12, denseCap)
+        val first = RangeHistoryPaging.older(end, denseCap, denseCap)
+        assertEquals(end - 6L * RangeHistoryPaging.HOUR_MILLIS, first.end)
+        assertEquals(denseCap, first.hours)
+        val smallCap = RangeHistoryPaging.smallerDenseWindow(3)
+        assertEquals(1, smallCap)
+        val next = RangeHistoryPaging.older(end, 1, smallCap)
+        assertEquals(end - RangeHistoryPaging.HOUR_MILLIS, next.end)
+    }
+
+    @Test fun historicalJumpCanMoveMonthsBackWithoutRequestingOverOneWeek() {
+        val end = 400L * day
+        val jump = RangeHistoryPaging.jumpBack(end, 48, 365)
+        assertEquals(end - 365L * day, jump.end)
+        assertEquals(48, jump.hours)
+        assertEquals(48L * RangeHistoryPaging.HOUR_MILLIS, jump.end - jump.start)
+    }
 }

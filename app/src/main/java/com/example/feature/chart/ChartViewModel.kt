@@ -7,6 +7,8 @@ import com.example.core.market.CandleAggregator
 import com.example.core.market.MarketSymbolRegistry
 import com.example.core.market.RangeBarsEngine
 import com.example.core.market.RangePriceTick
+import com.example.core.market.RangeTickBatchLoader
+import com.example.core.market.RangeTickHistoryTooDenseException
 import com.example.core.model.*
 import com.example.data.local.dao.DrawingDao
 import com.example.data.repository.MarketDataRepository
@@ -98,12 +100,18 @@ class ChartViewModel(
                 it.symbol == symbol && it.source == source &&
                     from <= it.to && to >= it.from
             }
-            val merged = if (cached == null) client.historicalBidTicks(symbol, from, to)
+            val merged = if (cached == null) RangeTickBatchLoader.load(from, to) { start, end ->
+                client.historicalBidTicks(symbol, start, end)
+            }
             else {
                 val older = if (from < cached.from)
-                    client.historicalBidTicks(symbol, from, cached.from - 1L) else emptyList()
+                    RangeTickBatchLoader.load(from, cached.from - 1L) { start, end ->
+                        client.historicalBidTicks(symbol, start, end)
+                    } else emptyList()
                 val newer = if (to > cached.to)
-                    client.historicalBidTicks(symbol, cached.to + 1L, to) else emptyList()
+                    RangeTickBatchLoader.load(cached.to + 1L, to) { start, end ->
+                        client.historicalBidTicks(symbol, start, end)
+                    } else emptyList()
                 older + cached.ticks + newer
             }
             if (client.sourceKey(symbol) != source) error("تغير حساب cTrader أثناء جلب المدى")
@@ -111,7 +119,9 @@ class ChartViewModel(
             // The visible one-week window is paged in six-hour increments.
             // Keep a bounded rolling cache rather than failing after the old
             // 250k-tick ceiling during a normal backwards chart gesture.
-            require(visible.size <= 1_000_000) { "عدد بيانات Tick أكبر من ذاكرة العرض؛ اختر فترة أقصر" }
+            if (visible.size > RangeTickBatchLoader.MAX_WINDOW_TICKS)
+                throw RangeTickHistoryTooDenseException(
+                    "عدد بيانات Tick أكبر من ذاكرة العرض؛ استعرض فترة أقصر")
             // Retain only the requested window. Otherwise a long replay session
             // would accumulate unlimited future and past quotes in memory.
             rangeTickWindow = RangeTickWindow(symbol, source, from, to, visible)

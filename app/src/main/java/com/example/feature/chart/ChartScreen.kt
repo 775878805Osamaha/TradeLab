@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.core.market.DefaultSymbols
+import com.example.core.market.RangeTickHistoryTooDenseException
 import com.example.core.model.Candle
 import com.example.core.model.DataSourceType
 import com.example.core.model.OrderSide
@@ -209,8 +210,10 @@ fun ChartScreen(
         mutableIntStateOf(workspacePrefs.getInt("range_fixed_ticks", 1000).coerceIn(1, 100_000))
     }
     var rangeSettingsOpen by remember { mutableStateOf(false) }
+    var rangeDatePickerOpen by remember { mutableStateOf(false) }
     var rangeInput by remember { mutableStateOf(fixedRangeTicks.toString()) }
     var rangeHistoryHours by remember { mutableIntStateOf(6) }
+    var rangeHistoryCapHours by remember { mutableStateOf<Int?>(null) }
     var rangeHistoryManuallyChosen by remember { mutableStateOf(false) }
     var rangeRefreshAnchor by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var rangeReplayBackshiftMillis by remember { mutableLongStateOf(0L) }
@@ -222,6 +225,7 @@ fun ChartScreen(
     val rangeEnd = if (isEmbeddedReplay) rangeReplayEnd?.minus(rangeReplayBackshiftMillis) else rangeRefreshAnchor
     LaunchedEffect(uiState.selectedSymbol, isEmbeddedReplay, rangeBrokerGeneration) {
         rangeHistoryHours = 6
+        rangeHistoryCapHours = null
         rangeHistoryManuallyChosen = false
         rangeReplayBackshiftMillis = 0L
         rangeRefreshAnchor = System.currentTimeMillis()
@@ -240,12 +244,22 @@ fun ChartScreen(
                 fixedRangeTicks, rangeHistoryHours, rangeBrokerGeneration, isEmbeddedReplay, bars)
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
+        } catch (dense: RangeTickHistoryTooDenseException) {
+            // Keep genuine broker history, but reduce the tick-memory window
+            // and continue pagination in overlapping, shorter slices.
+            if (rangeHistoryHours > 1) {
+                val smaller = RangeHistoryPaging.smallerDenseWindow(rangeHistoryHours)
+                rangeHistoryCapHours = smaller
+                rangeHistoryHours = smaller
+                rangeHistoryManuallyChosen = true
+            } else rangeError = dense.message?.take(180) ?: "بيانات Tick كثيفة جدًا"
         } catch (error: Exception) {
             rangeError = error.message?.take(180) ?: "تعذر جلب بيانات Tick من cTrader"
         } finally { rangeLoading = false }
     }
     val visibleRangeBars = rangeSnapshot?.takeIf {
-        it.symbol == uiState.selectedSymbol && it.end == rangeEnd &&
+        it.symbol == uiState.selectedSymbol &&
+            (it.end == rangeEnd || (rangeLoading && !isEmbeddedReplay)) &&
             it.size == fixedRangeTicks && it.replay == isEmbeddedReplay &&
             (it.hours == rangeHistoryHours || rangeLoading || rangeError != null) &&
             it.accountGeneration == rangeBrokerGeneration &&
@@ -270,7 +284,8 @@ fun ChartScreen(
     val requestOlderRange: () -> Unit = {
         if (!rangeLoading && rangeEnd != null) {
             rangeHistoryManuallyChosen = true
-            val next = RangeHistoryPaging.older(rangeEnd, rangeHistoryHours)
+            val next = RangeHistoryPaging.older(rangeEnd, rangeHistoryHours,
+                rangeHistoryCapHours ?: RangeHistoryPaging.MAX_WINDOW_HOURS)
             rangeHistoryHours = next.hours
             if (next.end != rangeEnd) {
                 if (isEmbeddedReplay && rangeReplayEnd != null)
@@ -278,6 +293,16 @@ fun ChartScreen(
                 else rangeRefreshAnchor = next.end
             }
         }
+    }
+    val jumpRangeTo: (Long) -> Unit = { targetEnd ->
+        rangeHistoryManuallyChosen = true
+        rangeHistoryCapHours = null
+        // A historical jump begins with a bounded day of real quotes. The
+        // normal older-history gesture can extend it from there.
+        rangeHistoryHours = 24
+        if (isEmbeddedReplay && rangeReplayEnd != null)
+            rangeReplayBackshiftMillis = (rangeReplayEnd - targetEnd).coerceAtLeast(0L)
+        else rangeRefreshAnchor = targetEnd
     }
     var immersiveChart by remember { mutableStateOf(true) }
     var pendingAnnotation by remember { mutableStateOf<com.example.feature.chart.model.ChartDrawing?>(null) }
@@ -625,17 +650,35 @@ fun ChartScreen(
                     )
                     Text("الافتراضي 1000 تيك. المصدر: أسعار Bid التاريخية من حساب cTrader المحدد.",
                         style = MaterialTheme.typography.bodySmall)
-                    Text("فترة بيانات Tick المحملة: $rangeHistoryHours ساعة. اسحب للخلف لتحميل المزيد حتى أسبوع، ثم الانتقال إلى أسابيع أقدم.",
+                    Text("فترة بيانات Tick: $rangeHistoryHours ساعة. اسحب للخلف لتحميل المزيد؛ وقد يقلّص التطبيق الفترة تلقائيًا عند كثافة الأسعار.",
                         style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        listOf(1, 3, 6).forEach { hours ->
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        listOf(1, 3, 6, 12, 24, 48).forEach { hours ->
                             FilterChip(selected = rangeHistoryHours == hours,
                                 onClick = {
                                     rangeHistoryManuallyChosen = true
+                                    rangeHistoryCapHours = null
                                     rangeHistoryHours = hours
                                 },
                                 label = { Text("$hours س") })
                         }
+                    }
+                    Text("انتقال سريع إلى أسعار تاريخية من حساب cTrader:",
+                        style = MaterialTheme.typography.bodySmall)
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(7 to "أسبوع", 30 to "شهر", 365 to "سنة").forEach { (days, label) ->
+                            TextButton(onClick = {
+                                val currentEnd = rangeEnd ?: return@TextButton
+                                jumpRangeTo(RangeHistoryPaging.jumpBack(currentEnd, 24, days).end)
+                                rangeSettingsOpen = false
+                            }, enabled = rangeEnd != null) { Text(label) }
+                        }
+                        TextButton(onClick = {
+                            rangeSettingsOpen = false
+                            rangeDatePickerOpen = true
+                        }, enabled = rangeEnd != null) { Text("اختر تاريخًا") }
                     }
                 }
             },
@@ -651,6 +694,30 @@ fun ChartScreen(
             },
             dismissButton = { TextButton(onClick = { rangeSettingsOpen = false }) { Text("إلغاء") } }
         )
+    }
+    if (rangeDatePickerOpen) {
+        val currentMaximum = if (isEmbeddedReplay) rangeReplayEnd ?: System.currentTimeMillis()
+            else System.currentTimeMillis()
+        val picker = rememberDatePickerState(
+            initialSelectedDateMillis = (rangeEnd ?: currentMaximum).coerceAtMost(currentMaximum),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                    utcTimeMillis <= currentMaximum
+            }
+        )
+        DatePickerDialog(onDismissRequest = { rangeDatePickerOpen = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    picker.selectedDateMillis?.let { selected ->
+                        val endOfDay = (selected + 24L * 3_600_000L - 1L)
+                            .coerceAtMost(currentMaximum)
+                        jumpRangeTo(endOfDay)
+                    }
+                    rangeDatePickerOpen = false
+                }, enabled = picker.selectedDateMillis != null) { Text("عرض شموع المدى") }
+            }, dismissButton = {
+                TextButton(onClick = { rangeDatePickerOpen = false }) { Text("إلغاء") }
+            }) { DatePicker(state = picker) }
     }
     if (showChartExtras) AnalysisHubSheet(
         onDismiss = { showChartExtras = false },
@@ -1382,7 +1449,8 @@ fun ChartScreen(
                         TextButton(onClick = {
                             rangeInput = fixedRangeTicks.toString(); rangeSettingsOpen = true
                         }, modifier = Modifier.testTag("range_settings_open")) {
-                            Text("مدى $fixedRangeTicks", color = TradingAccentLight, fontSize = 11.sp)
+                            Text("مدى $fixedRangeTicks · ${visibleRangeBars?.size ?: 0}",
+                                color = TradingAccentLight, fontSize = 11.sp)
                         }
                         if (rangeLoading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                         if (!rangeLoading) TextButton(
@@ -1396,6 +1464,9 @@ fun ChartScreen(
                             color = TradingTextSecondary, fontSize = 9.sp
                         )
                         if (!isEmbeddedReplay) TextButton(onClick = {
+                            rangeHistoryHours = 6
+                            rangeHistoryCapHours = null
+                            rangeHistoryManuallyChosen = false
                             rangeRefreshAnchor = System.currentTimeMillis()
                         }) { Text("تحديث", fontSize = 11.sp) }
                     }

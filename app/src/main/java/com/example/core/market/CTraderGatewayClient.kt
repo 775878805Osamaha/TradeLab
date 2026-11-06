@@ -239,7 +239,8 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
                     previous = timestamp
                 }
                 total += page.size
-                require(total <= 250_000) { "تاريخ Tick كثيف جدًا؛ اختر نافذة أصغر" }
+                if (total > 250_000) throw RangeTickHistoryTooDenseException(
+                    "تاريخ Tick كثيف جدًا؛ اختر نافذة أصغر")
                 pages.add(page)
                 if (!json.optBoolean("hasMore")) { completed = true; break }
                 val oldest = page.firstOrNull()?.timestamp
@@ -249,7 +250,8 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
                 // rejects a visibly ambiguous page boundary; never overlap pages.
                 end = oldest - 1
             }
-            if (!completed) throw IOException("Broker tick pagination limit reached; reduce history window")
+            if (!completed) throw RangeTickHistoryTooDenseException(
+                "Broker tick pagination limit reached; reduce history window")
             pages.asReversed().flatMap { it }
         }
 
