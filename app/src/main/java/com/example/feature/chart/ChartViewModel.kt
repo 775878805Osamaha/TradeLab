@@ -6,6 +6,7 @@ import com.example.core.indicators.*
 import com.example.core.market.CandleAggregator
 import com.example.core.market.MarketSymbolRegistry
 import com.example.core.market.RangeBarsEngine
+import com.example.core.market.RangePriceTick
 import com.example.core.model.*
 import com.example.data.local.dao.DrawingDao
 import com.example.data.repository.MarketDataRepository
@@ -26,6 +27,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
 
 data class ChartUiState(
     val selectedSymbol: String = "XAUUSD",
@@ -73,6 +75,12 @@ class ChartViewModel(
 
     val rangeAccountGeneration: StateFlow<Long>? get() = marketDataRepository.cTrader?.accountGeneration
 
+    private data class RangeTickWindow(val symbol: String, val source: String,
+                                       val from: Long, val to: Long,
+                                       val ticks: List<RangePriceTick>)
+    private val rangeTickMutex = Mutex()
+    private var rangeTickWindow: RangeTickWindow? = null
+
     /** Range history is never backed by saved OHLC or a provider fallback. */
     suspend fun loadRangeBars(symbol: String, from: Long, to: Long, sizeInPriceTicks: Int,
                               includeIncomplete: Boolean): List<Candle> {
@@ -80,8 +88,32 @@ class ChartViewModel(
         require(symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
             "شموع المدى متاحة حاليًا لرموز cTrader فقط"
         }
+        require(from > 0L && to >= from && to - from <= 604_800_000L)
         val source = client.sourceKey(symbol)
-        val ticks = client.historicalBidTicks(symbol, from, to)
+        // Reuse real broker quotes when Replay advances a candle or rewinds.
+        // Cache never feeds a quote beyond the requested revealed cutoff.
+        rangeTickMutex.lock()
+        val ticks = try {
+            val cached = rangeTickWindow?.takeIf {
+                it.symbol == symbol && it.source == source &&
+                    from <= it.to && to >= it.from
+            }
+            val merged = if (cached == null) client.historicalBidTicks(symbol, from, to)
+            else {
+                val older = if (from < cached.from)
+                    client.historicalBidTicks(symbol, from, cached.from - 1L) else emptyList()
+                val newer = if (to > cached.to)
+                    client.historicalBidTicks(symbol, cached.to + 1L, to) else emptyList()
+                older + cached.ticks + newer
+            }
+            if (client.sourceKey(symbol) != source) error("تغير حساب cTrader أثناء جلب المدى")
+            val visible = merged.filter { it.timestamp in from..to }
+            require(visible.size <= 250_000) { "عدد بيانات Tick أكبر من حد العرض؛ قلّص الفترة" }
+            // Retain only the requested window. Otherwise a long replay session
+            // would accumulate unlimited future and past quotes in memory.
+            rangeTickWindow = RangeTickWindow(symbol, source, from, to, visible)
+            visible
+        } finally { rangeTickMutex.unlock() }
         if (client.sourceKey(symbol) != source) error("تغير حساب cTrader أثناء جلب المدى")
         return withContext(Dispatchers.Default) {
             RangeBarsEngine.build(symbol, ticks, MarketSymbolRegistry.getSymbol(symbol).tickSize,
@@ -113,6 +145,8 @@ class ChartViewModel(
         observeDrawings()
         marketDataRepository.cTrader?.let { client ->
             viewModelScope.launch { client.accountGeneration.collect {
+                rangeTickMutex.lock()
+                try { rangeTickWindow = null } finally { rangeTickMutex.unlock() }
                 if (_uiState.value.selectedSymbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
                     _uiState.update { it.copy(latestTick = null, candles = emptyList(), isLoading = true) }
                     loadCandlesForCurrentSymbol()
