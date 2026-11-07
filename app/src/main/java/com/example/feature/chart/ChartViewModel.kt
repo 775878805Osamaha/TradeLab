@@ -82,7 +82,8 @@ data class ChartUiState(
 class ChartViewModel(
     private val marketDataRepository: MarketDataRepository,
     private val tradingRepository: TradingRepository,
-    private val drawingDao: DrawingDao? = null
+    private val drawingDao: DrawingDao? = null,
+    private val rangeTickDiskStore: com.example.data.local.RangeTickDiskStore? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChartUiState())
@@ -109,6 +110,17 @@ class ChartViewModel(
         val includeIncomplete: Boolean, val result: VerifiedRangeBars
     )
     private var rangeScanCheckpoint: RangeScanCheckpoint? = null
+
+    private suspend fun verifiedHistoricalBidTicks(client: com.example.core.market.CTraderGatewayClient,
+                                                   symbol: String, source: String,
+                                                   from: Long, to: Long): List<RangePriceTick> {
+        return rangeTickDiskStore?.getOrDownload(source, symbol, from, to) { start, end ->
+            val quotes = client.historicalBidTicks(symbol, start, end)
+            if (client.sourceKey(symbol) != source)
+                error("تغير حساب cTrader أثناء جلب بيانات Tick")
+            quotes
+        } ?: client.historicalBidTicks(symbol, from, to)
+    }
 
     /** Range history is never backed by saved OHLC or a provider fallback. */
     suspend fun loadRangeBars(symbol: String, from: Long, to: Long, sizeInPriceTicks: Int,
@@ -164,7 +176,7 @@ class ChartViewModel(
                             }, onVerifiedSlice = { start, end, quotes ->
                                 incompleteRangeDownload.remember(symbol, source, start, end, quotes)
                             }, maxAllowedTicks = RangeTickBatchLoader.MAX_WINDOW_TICKS - partial.ticks.size) { start, end ->
-                            client.historicalBidTicks(symbol, start, end)
+                            verifiedHistoricalBidTicks(client, symbol, source, start, end)
                         }
                         ArrayList<RangePriceTick>(older.size + partial.ticks.size).apply {
                             addAll(older); addAll(partial.ticks)
@@ -185,7 +197,7 @@ class ChartViewModel(
                     onVerifiedSlice = { start, end, quotes ->
                         incompleteRangeDownload.remember(symbol, source, start, end, quotes)
                     }) { start, end ->
-                    client.historicalBidTicks(symbol, start, end)
+                    verifiedHistoricalBidTicks(client, symbol, source, start, end)
                 }
             }
             else {
@@ -232,7 +244,7 @@ class ChartViewModel(
                             publishVerifiedPreview(allVisible)
                         }, maxQuotes = budget,
                         initialSliceMillis = plannedSlice) { start, end ->
-                        client.historicalBidTicks(symbol, start, end)
+                        verifiedHistoricalBidTicks(client, symbol, source, start, end)
                     }
                 } else emptyList()
                 val newer = if (to > cached.to) {
@@ -242,7 +254,7 @@ class ChartViewModel(
                     RangeTickBatchLoader.load(cached.to + 1L, to,
                         onSliceComplete = onBatchProgress, maxAllowedTicks = budget,
                         initialSliceMillis = plannedSlice) { start, end ->
-                        client.historicalBidTicks(symbol, start, end)
+                        verifiedHistoricalBidTicks(client, symbol, source, start, end)
                     }
                 } else emptyList()
                 if (older.isEmpty() && newer.isEmpty()) retained
