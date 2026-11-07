@@ -4,6 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.core.indicators.*
 import com.example.core.market.CandleAggregator
+import com.example.core.market.MarketSymbolRegistry
+import com.example.core.market.RangeBarsEngine
+import com.example.core.market.RangeBarsBuildCache
+import com.example.core.market.VerifiedRangeBars
+import com.example.core.market.RangePriceTick
+import com.example.core.market.RangeTickBatchLoader
+import com.example.core.market.RangeTickSuffixCache
+import com.example.core.market.RangeTickWindowContinuation
+import com.example.core.market.RangeTickWindowReuse
+import com.example.core.market.RangeTickHistoryTooDenseException
 import com.example.core.model.*
 import com.example.data.local.dao.DrawingDao
 import com.example.data.repository.MarketDataRepository
@@ -18,12 +28,15 @@ import com.example.feature.chart.history.ChartInitialHistoryScan
 import com.example.feature.chart.history.ChartHistoryRetry
 import com.example.feature.chart.history.ChartHistoryRetryPolicy
 import com.example.feature.chart.history.ChartClosedBarRefresh
+import com.example.feature.chart.model.RangeHistoryPaging
+import com.example.feature.chart.model.RangeReplayVisibilityPolicy
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
 
 data class ChartUiState(
     val selectedSymbol: String = "XAUUSD",
@@ -57,6 +70,7 @@ data class ChartUiState(
     val historySourceWarning: String? = null,
     val candleLoadError: String? = null,
     val connectionDiagnostic: String = "لم يتم اختبار الاتصال بعد",
+    val rangePrecisionDiagnostic: String? = null,
     val message: String? = null
 )
 
@@ -68,6 +82,282 @@ class ChartViewModel(
 
     private val _uiState = MutableStateFlow(ChartUiState())
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
+
+    // The NavHost disposes ChartScreen on tab switches, not this ViewModel.
+    // Keep verified Range bars, paging and cutoff here until the market context changes.
+    internal val rangeSession = RangeChartSession()
+    private val rangeRequests = RangeChartRequestQueue()
+    private var rangeDownloadJob: Job? = null
+
+    val rangeAccountGeneration: StateFlow<Long>? get() = marketDataRepository.cTrader?.accountGeneration
+
+    private data class RangeTickWindow(val symbol: String, val source: String,
+                                       val from: Long, val to: Long,
+                                       val ticks: List<RangePriceTick>)
+    private val rangeTickMutex = Mutex()
+    private var rangeTickWindow: RangeTickWindow? = null
+    private val rangeBuildCache = RangeBarsBuildCache()
+    private val incompleteRangeDownload = RangeTickSuffixCache()
+
+    /** Range history is never backed by saved OHLC or a provider fallback. */
+    suspend fun loadRangeBars(symbol: String, from: Long, to: Long, sizeInPriceTicks: Int,
+                              includeIncomplete: Boolean,
+                              onProgress: suspend (VerifiedRangeBars) -> Unit = {},
+                              onBatchProgress: suspend (Int, Int) -> Unit = { _, _ -> }): VerifiedRangeBars {
+        val client = marketDataRepository.cTrader ?: error("cTrader غير متصل")
+        require(symbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
+            "شموع المدى متاحة حاليًا لرموز cTrader فقط"
+        }
+        require(from > 0L && to >= from && to - from <= 604_800_000L)
+        val source = client.sourceKey(symbol)
+        val tickSize = MarketSymbolRegistry.getSymbol(symbol).tickSize
+        // The broker-specific display scale is checked before downloading
+        // many megabytes of ticks. Digits alone do NOT prove the minimum tick.
+        val metadata = client.symbolPrecision(symbol)
+        if (metadata != null && !metadata.isConfiguredTickRepresentable(tickSize)) {
+            _uiState.update { it.copy(rangePrecisionDiagnostic =
+                "عدم تطابق دقة الرمز: cTrader يعرض ${metadata.digits} خانات، وإعداد الحركة المحلية $tickSize غير متوافق") }
+            error("دقة سعر $symbol لدى الوسيط تختلف عن إعداد TradeLab؛ يجب التحقق من Tick Size قبل حساب شموع المدى")
+        }
+        _uiState.update { it.copy(rangePrecisionDiagnostic = if (metadata == null)
+            "دقة رمز cTrader غير متاحة: بوابة /v1/symbol-detail لم تُنشر بعد؛ حجم Tick المحلي غير مؤكد"
+            else "دقة cTrader: ${metadata.digits} خانات · حجم حركة السعر المحلي قابل للتمثيل، ولم يُثبت Tick Size الفعلي") }
+        // Reuse real broker quotes when Replay advances a candle or rewinds.
+        // Cache never feeds a quote beyond the requested revealed cutoff.
+        rangeTickMutex.lock()
+        val ticks = try {
+            val cached = rangeTickWindow?.takeIf {
+                it.symbol == symbol && it.source == source &&
+                    from <= it.to && to >= it.from
+            }
+            val merged = if (cached == null) {
+                val partial = incompleteRangeDownload.snapshot(symbol, source, from, to)
+                if (partial != null) {
+                    // A previously cancelled request retained fully validated
+                    // contiguous pages. Never redownload those exact BID quotes.
+                    onBatchProgress(partial.ticks.size, 0)
+                    if (partial.ticks.isNotEmpty()) {
+                        val preview = withContext(Dispatchers.Default) {
+                            RangeBarsEngine.buildVerified(symbol, partial.ticks, tickSize,
+                                sizeInPriceTicks, source, includeIncomplete)
+                        }
+                        if (preview.candles.isNotEmpty()) onProgress(preview)
+                    }
+                    if (from >= partial.from) partial.ticks
+                    else {
+                        val older = RangeTickBatchLoader.load(from, partial.from - 1L,
+                            onSliceComplete = { quotes, slices ->
+                                onBatchProgress(partial.ticks.size + quotes, slices)
+                            }, onVerifiedSlice = { start, end, quotes ->
+                                incompleteRangeDownload.remember(symbol, source, start, end, quotes)
+                            }, maxAllowedTicks = RangeTickBatchLoader.MAX_WINDOW_TICKS - partial.ticks.size) { start, end ->
+                            client.historicalBidTicks(symbol, start, end)
+                        }
+                        ArrayList<RangePriceTick>(older.size + partial.ticks.size).apply {
+                            addAll(older); addAll(partial.ticks)
+                        }
+                    }
+                } else RangeTickBatchLoader.load(from, to,
+                    onNewestSlice = { newest ->
+                        if (client.sourceKey(symbol) != source)
+                            error("تغير حساب cTrader أثناء جلب المدى")
+                        val preview = withContext(Dispatchers.Default) {
+                            RangeBarsEngine.buildVerified(symbol, newest, tickSize,
+                                sizeInPriceTicks, source, includeIncomplete)
+                        }
+                        if (preview.candles.isNotEmpty()) onProgress(preview)
+                    }, onSliceComplete = onBatchProgress,
+                    onVerifiedSlice = { start, end, quotes ->
+                        incompleteRangeDownload.remember(symbol, source, start, end, quotes)
+                    }) { start, end ->
+                    client.historicalBidTicks(symbol, start, end)
+                }
+            }
+            else {
+                // Only keep actual quotes inside the newly requested window.
+                // This is a binary-search slice, not an O(n) scan of a whole
+                // prior week. Otherwise excluded old quotes exhausted the
+                // memory budget during Replay advances and backward pans.
+                val retained = RangeTickWindowReuse.between(cached.ticks, from, to)
+                val older = if (from < cached.from) {
+                    val budget = RangeTickBatchLoader.MAX_WINDOW_TICKS - retained.size
+                    if (budget <= 0) throw RangeTickHistoryTooDenseException(
+                        "عدد بيانات Tick أكبر من ذاكرة العرض؛ استعرض فترة أقصر")
+                    RangeTickWindowContinuation.downloadOlder(from, cached.from - 1L,
+                        symbol, source, incompleteRangeDownload,
+                        onProgress = onBatchProgress, maxQuotes = budget) { start, end ->
+                        client.historicalBidTicks(symbol, start, end)
+                    }
+                } else emptyList()
+                val newer = if (to > cached.to) {
+                    val budget = RangeTickBatchLoader.MAX_WINDOW_TICKS - retained.size - older.size
+                    if (budget <= 0) throw RangeTickHistoryTooDenseException(
+                        "عدد بيانات Tick أكبر من ذاكرة العرض؛ استعرض فترة أقصر")
+                    RangeTickBatchLoader.load(cached.to + 1L, to,
+                        onSliceComplete = onBatchProgress, maxAllowedTicks = budget) { start, end ->
+                        client.historicalBidTicks(symbol, start, end)
+                    }
+                } else emptyList()
+                if (older.isEmpty() && newer.isEmpty()) retained
+                else {
+                    ArrayList<RangePriceTick>(older.size + retained.size + newer.size).apply {
+                        addAll(older)
+                        addAll(retained)
+                        addAll(newer)
+                    }
+                }
+            }
+            if (client.sourceKey(symbol) != source) error("تغير حساب cTrader أثناء جلب المدى")
+            // Every source path now returns the exact inclusive requested
+            // interval; no filtering/copying of a second million-quote list.
+            val visible = merged
+            // The visible one-week window uses measured-density 1min–6h slices.
+            // Keep a bounded rolling cache rather than failing after the old
+            // 250k-tick ceiling during a normal backwards chart gesture.
+            if (visible.size > RangeTickBatchLoader.MAX_WINDOW_TICKS)
+                throw RangeTickHistoryTooDenseException(
+                    "عدد بيانات Tick أكبر من ذاكرة العرض؛ استعرض فترة أقصر")
+            // Retain only the requested window. Otherwise a long replay session
+            // would accumulate unlimited future and past quotes in memory.
+            if (rangeTickWindow?.ticks !== visible) rangeBuildCache.clear()
+            rangeTickWindow = RangeTickWindow(symbol, source, from, to, visible)
+            incompleteRangeDownload.clear()
+            visible
+        } finally { rangeTickMutex.unlock() }
+        if (client.sourceKey(symbol) != source) error("تغير حساب cTrader أثناء جلب المدى")
+        rangeBuildCache.find(ticks, symbol, source, tickSize,
+            sizeInPriceTicks, includeIncomplete)?.let { return it }
+        val computed = withContext(Dispatchers.Default) {
+            RangeBarsEngine.buildVerified(symbol, ticks, tickSize,
+                sizeInPriceTicks, source, includeIncomplete)
+        }
+        rangeTickMutex.lock()
+        try {
+            if (client.sourceKey(symbol) == source && rangeTickWindow?.ticks === ticks)
+                rangeBuildCache.remember(ticks, symbol, source, tickSize,
+                    sizeInPriceTicks, includeIncomplete, computed)
+        } finally { rangeTickMutex.unlock() }
+        return computed
+    }
+
+    /**
+     * Range BID tick downloads outlive the disposable ChartScreen composition.
+     * Reentering the Chart tab only offers an identical request; it cannot
+     * cancel or restart the verified cTrader history already in flight.
+     */
+    internal fun requestRangeHistory(request: RangeChartLoadRequest) {
+        if (rangeSession.context.value != request.context) return
+        if (RangeChartRestorationPolicy.canSkipDownload(rangeSession.snapshot.value,
+                request.context, request.cutoff, request.hours, request.requestGeneration)) return
+        if (rangeRequests.active?.context != null &&
+            rangeRequests.active?.context != request.context) cancelRangeHistory()
+        if (rangeRequests.offer(request)) executeRangeHistory(request)
+    }
+
+    /** Cancel only on a real instrument/account change, never on tab navigation. */
+    internal fun cancelObsoleteRangeHistory(context: RangeChartContext) {
+        if (rangeRequests.active?.context != null && rangeRequests.active?.context != context)
+            cancelRangeHistory()
+    }
+
+    internal fun cancelRangeHistory() {
+        rangeRequests.invalidate()
+        rangeDownloadJob?.cancel()
+        rangeDownloadJob = null
+        rangeSession.loadNonce.intValue++
+        rangeSession.loading.value = false
+    }
+
+    private fun executeRangeHistory(request: RangeChartLoadRequest) {
+        rangeDownloadJob = viewModelScope.launch {
+            val state = rangeSession
+            val context = request.context
+            // A new source context invalidates all former account/Replay quotes.
+            if (state.context.value != context) {
+                rangeRequests.finish(request)
+                return@launch
+            }
+            val nonce = ++state.loadNonce.intValue
+            val startTime = android.os.SystemClock.elapsedRealtime()
+            state.error.value = null
+            state.firstPageMs.value = null
+            state.fullLoadMs.value = null
+            state.receivedQuotes.intValue = 0
+            state.receivedSlices.intValue = 0
+            state.loading.value = true
+            try {
+                val from = (request.cutoff - request.hours * 3_600_000L).coerceAtLeast(1L)
+                val bars = withContext(Dispatchers.Default) {
+                    loadRangeBars(context.symbol, from, request.cutoff, context.size,
+                        includeIncomplete = !context.replay,
+                        onProgress = { recent ->
+                            withContext(Dispatchers.Main.immediate) {
+                                if (nonce != state.loadNonce.intValue || state.context.value != context)
+                                    return@withContext
+                                val stable = state.snapshot.value?.takeIf {
+                                    it.complete && it.candles.isNotEmpty() &&
+                                        it.symbol == context.symbol && it.size == context.size &&
+                                        it.replay == context.replay &&
+                                        it.accountGeneration == context.accountGeneration &&
+                                        it.replayDatasetId == context.replayDatasetId &&
+                                        RangeReplayVisibilityPolicy.canShow(it.end, request.cutoff,
+                                            context.replay, it.complete, state.loading.value, true)
+                                }
+                                if (stable == null) state.snapshot.value = RangeChartSnapshot(
+                                    context.symbol, request.cutoff, context.size, request.hours,
+                                    context.accountGeneration, context.replay, context.replayDatasetId,
+                                    recent.candles, recent.diagnostics, complete = false,
+                                    requestGeneration = request.requestGeneration)
+                                if (state.firstPageMs.value == null)
+                                    state.firstPageMs.value = android.os.SystemClock.elapsedRealtime() - startTime
+                            }
+                        }, onBatchProgress = { quotes, slices ->
+                            withContext(Dispatchers.Main.immediate) {
+                                if (nonce == state.loadNonce.intValue && state.context.value == context) {
+                                    state.receivedQuotes.intValue = quotes
+                                    state.receivedSlices.intValue = slices
+                                }
+                            }
+                        })
+                }
+                if (nonce == state.loadNonce.intValue && state.context.value == context) {
+                    state.snapshot.value = RangeChartSnapshot(context.symbol, request.cutoff,
+                        context.size, request.hours, context.accountGeneration, context.replay,
+                        context.replayDatasetId, bars.candles, bars.diagnostics, complete = true,
+                        requestGeneration = request.requestGeneration)
+                    state.fullLoadMs.value = android.os.SystemClock.elapsedRealtime() - startTime
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (dense: RangeTickHistoryTooDenseException) {
+                if (nonce == state.loadNonce.intValue && state.context.value == context) {
+                    if (request.hours > 1) {
+                        val smaller = RangeHistoryPaging.smallerDenseWindow(request.hours)
+                        state.historyCapHours.value = smaller
+                        state.historyHours.intValue = smaller
+                        state.historyManuallyChosen.value = true
+                        val latest = rangeRequests.pending?.takeIf { it.context == context }
+                            ?: request
+                        rangeRequests.offer(latest.copy(hours = smaller))
+                    } else state.error.value = dense.message?.take(180) ?: "بيانات Tick كثيفة جدًا"
+                }
+            } catch (error: Exception) {
+                if (nonce == state.loadNonce.intValue && state.context.value == context)
+                    state.error.value = error.message?.take(180) ?: "تعذر جلب بيانات Tick من cTrader"
+            } finally {
+                if (nonce == state.loadNonce.intValue) state.loading.value = false
+                // No cancellation is tied to the Chart tab's lifecycle. Replay
+                // merely replaces an unstarted pending cutoff with the latest.
+                rangeRequests.finish(request)?.let { next ->
+                    if (state.context.value == next.context &&
+                        !RangeChartRestorationPolicy.canSkipDownload(state.snapshot.value,
+                            next.context, next.cutoff, next.hours, next.requestGeneration)) {
+                        executeRangeHistory(next)
+                    } else rangeRequests.invalidate()
+                }
+            }
+        }
+    }
 
     private var candleLoadJob: Job? = null
     private var candleLoadGeneration = 0L
@@ -93,6 +383,11 @@ class ChartViewModel(
         observeDrawings()
         marketDataRepository.cTrader?.let { client ->
             viewModelScope.launch { client.accountGeneration.collect {
+                rangeTickMutex.lock()
+                try { rangeTickWindow = null; rangeBuildCache.clear()
+                    incompleteRangeDownload.clear() }
+                finally { rangeTickMutex.unlock() }
+                _uiState.update { it.copy(rangePrecisionDiagnostic = null) }
                 if (_uiState.value.selectedSymbol in com.example.core.market.VerifiedMarketQuote.forexSymbols) {
                     _uiState.update { it.copy(latestTick = null, candles = emptyList(), isLoading = true) }
                     loadCandlesForCurrentSymbol()

@@ -342,7 +342,9 @@ fun ReplayScreen(
                 TextButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.testTag("replay_indicators_btn")) {
                     Text("المؤشرات", fontSize = 11.sp)
                 }
-                ChartDisplayStyle.entries.forEach { style ->
+                // Range requires historical ticks; the legacy Replay route only
+                // has OHLC. The in-chart Replay uses the verified Range engine.
+                ChartDisplayStyle.entries.filter { it != ChartDisplayStyle.RANGE }.forEach { style ->
                     FilterChip(
                         selected = replayChartStyle == style,
                         onClick = { replayChartStyle = style },

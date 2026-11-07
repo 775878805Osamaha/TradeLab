@@ -42,6 +42,7 @@ import com.example.core.indicators.BollingerBandsResult
 import com.example.core.indicators.MacdResult
 import com.example.core.model.*
 import com.example.feature.chart.model.*
+import com.example.core.market.RangePhantomBars
 import com.example.ui.components.chart.ChartDrawingsRenderer
 import com.example.ui.components.chart.ChartIndicatorsRenderer
 import com.example.ui.components.chart.ChartOverlays
@@ -77,7 +78,8 @@ enum class ChartDisplayStyle(val label: String) {
     BASELINE("خط الأساس"),
     COLUMNS("الأعمدة"),
     HIGH_LOW("أعلى-أدنى"),
-    HEIKIN_ASHI("هيكين آشي")
+    HEIKIN_ASHI("هيكين آشي"),
+    RANGE("مدى")
 }
 
 @Composable
@@ -104,6 +106,8 @@ fun CandlestickChart(
     isVolumeVisible: Boolean = true,
     resetViewTrigger: Long = 0L,
     displayStyle: ChartDisplayStyle = ChartDisplayStyle.CANDLES,
+    rangeHistoryWindowEnd: Long? = null,
+    rangeHistoryJumpGeneration: Int = 0,
     onAddDrawing: ((ChartDrawing) -> Unit)? = null,
     onSelectTrade: ((TradeJournalEntry) -> Unit)? = null,
     onSelectPosition: ((Position) -> Unit)? = null,
@@ -123,7 +127,8 @@ fun CandlestickChart(
     showLastPrice: Boolean = true,
     showSourceTime: Boolean = true,
     axisTextScale: Float = 1f,
-    isLoadingOlderHistory: Boolean = false
+    isLoadingOlderHistory: Boolean = false,
+    emptyStateMessage: String = "جاري تحميل بيانات الشارت..."
 ) {
     if (candles.isEmpty()) {
         Box(
@@ -133,7 +138,7 @@ fun CandlestickChart(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "جاري تحميل بيانات الشارت...",
+                text = emptyStateMessage,
                 color = TradingTextSecondary,
                 style = MaterialTheme.typography.bodyMedium
             )
@@ -308,7 +313,7 @@ fun CandlestickChart(
     var lastBackfillScrollOffset by remember { mutableFloatStateOf(0f) }
     // Re-arm pagination after switching symbols/timeframes, even if the
     // newly loaded history happens to begin at the same timestamp.
-    LaunchedEffect(candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe) {
+    LaunchedEffect(candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe, displayStyle) {
         lastBackfillOldestTime = null
         lastBackfillScrollOffset = 0f
         scrollOffsetPx = 0f
@@ -324,8 +329,15 @@ fun CandlestickChart(
         // deliberately pans farther into history (at least five candles).
         // A stable viewport must not cause an automatic retry loop.
         val userAdvanced = scrollOffsetPx - lastBackfillScrollOffset >= candleWidthPx * 5f
+        // A rolling Range history window replaces the oldest six-hour slice
+        // on every request. Its oldest timestamp changes even if the user
+        // has stopped dragging, so only a fresh gesture may request another
+        // Range page. Otherwise the app would fetch indefinitely at the edge.
+        val canAutoBackfill = if (displayStyle == ChartDisplayStyle.RANGE)
+            lastBackfillOldestTime == null || userAdvanced
+        else lastBackfillOldestTime != oldest || userAdvanced
         if (scrollOffsetPx > 0f && scrollOffsetPx >= threshold &&
-            (lastBackfillOldestTime != oldest || userAdvanced)) {
+            canAutoBackfill) {
             lastBackfillOldestTime = oldest
             lastBackfillScrollOffset = scrollOffsetPx
             requestOlderHistory?.invoke()
@@ -338,21 +350,49 @@ fun CandlestickChart(
     // leaves most of the canvas empty on phones; fit those bars on first load.
     // Never override user zoom after the initial fit.
     var initialCandleFitApplied by remember { mutableStateOf(false) }
+    var fittedDisplayStyle by remember { mutableStateOf<ChartDisplayStyle?>(null) }
     // Reset is a user-requested fresh fit, not merely a return to 12px bars.
     // This effect is declared after the state to avoid referencing an
     // uninitialized local Compose state holder.
     LaunchedEffect(resetViewTrigger) {
         if (resetViewTrigger > 0L) initialCandleFitApplied = false
     }
-    LaunchedEffect(candles.size, chartViewportWidthPx, initialCandleFitApplied) {
-        if (!initialCandleFitApplied && candles.isNotEmpty() && chartViewportWidthPx > 1f) {
-            if (candles.size <= 40) {
+    LaunchedEffect(candles.size, chartViewportWidthPx, initialCandleFitApplied, displayStyle) {
+        if ((!initialCandleFitApplied || fittedDisplayStyle != displayStyle) &&
+            candles.isNotEmpty() && chartViewportWidthPx > 1f) {
+            if (displayStyle == ChartDisplayStyle.RANGE) {
+                // Range candles arrive in older batches. A large initial fit
+                // would leave only a dozen oversized bars visible even after
+                // the broker has supplied much more history.
+                candleWidthPx = 12f
+            } else if (candles.size <= 40) {
                 candleWidthPx = (chartViewportWidthPx * 0.76f / candles.size)
                     .coerceIn(12f, 38f)
             }
             if (referenceLayout) scrollOffsetPx = -chartViewportWidthPx * 0.18f
             initialCandleFitApplied = true
+            fittedDisplayStyle = displayStyle
         }
+    }
+    val previousRangeWindow = remember { arrayOfNulls<Triple<Long, Int, List<Candle>>>(1) }
+    LaunchedEffect(rangeHistoryWindowEnd, rangeHistoryJumpGeneration, displayStyle, candles.size,
+        candles.firstOrNull()?.openTime, candles.lastOrNull()?.openTime) {
+        if (displayStyle == ChartDisplayStyle.RANGE && rangeHistoryWindowEnd != null) {
+            val before = previousRangeWindow[0]
+            if (before != null && before.first != rangeHistoryWindowEnd) {
+                scrollOffsetPx = if (before.second != rangeHistoryJumpGeneration) 0f else
+                    RangeViewportContinuity.offsetAfterWindowChange(
+                        before.third, candles, chartViewportWidthPx, candleWidthPx, scrollOffsetPx)
+            } else if (before != null && before.third.size != candles.size) {
+                // Also anchor the visible time when older bars are prepended
+                // or Phantom presentation is toggled for the same tick range.
+                scrollOffsetPx = RangeViewportContinuity.offsetAfterWindowChange(
+                    before.third, candles, chartViewportWidthPx, candleWidthPx, scrollOffsetPx)
+            }
+            val savedGeneration = if (before?.first == rangeHistoryWindowEnd)
+                before.second else rangeHistoryJumpGeneration
+            previousRangeWindow[0] = Triple(rangeHistoryWindowEnd, savedGeneration, candles)
+        } else previousRangeWindow[0] = null
     }
     Box(modifier = modifier.onSizeChanged { chartViewportWidthPx = (it.width - axisWidthPx).coerceAtLeast(1f) }) {
         Canvas(
@@ -863,7 +903,9 @@ fun CandlestickChart(
                 val lowY = transform.priceToY(c.low)
 
                 val isBullish = c.close >= c.open
-                val candleColor = if (isBullish) bullishColor else bearishColor
+                val isPhantom = RangePhantomBars.isPhantom(c)
+                val candleColor = (if (isBullish) bullishColor else bearishColor)
+                    .let { if (isPhantom) it.copy(alpha = 0.55f) else it }
 
                 if (displayStyle == ChartDisplayStyle.COLUMNS) {
                     drawRect(color = candleColor.copy(alpha = 0.9f),
@@ -900,7 +942,11 @@ fun CandlestickChart(
                     color = candleColor,
                     topLeft = Offset(x - (adjustedWidth / 2f), bodyTop),
                     size = Size(adjustedWidth, bodyHeight),
-                    style = if((hollowUp || displayStyle == ChartDisplayStyle.HOLLOW_CANDLES) && isBullish)
+                    style = if (com.example.core.market.RangeCandleVisualPolicy.outline(
+                        isRangeChart = displayStyle == ChartDisplayStyle.RANGE,
+                        isVisualOnlyGap = isPhantom, isBullish = isBullish,
+                        hollowUp = hollowUp,
+                        hollowChart = displayStyle == ChartDisplayStyle.HOLLOW_CANDLES))
                         androidx.compose.ui.graphics.drawscope.Stroke(width = 1.4f)
                         else androidx.compose.ui.graphics.drawscope.Fill
                 )
@@ -912,9 +958,15 @@ fun CandlestickChart(
             // Show a full date at day boundaries; otherwise keep intraday labels short.
             var lastTimeLabelRight = -Float.MAX_VALUE
             var lastDisplayedDay = -1L
+            var lastDisplayedMinute: Long? = null
             visibleCandles.forEachIndexed { i, c ->
                 val x = transform.candleIndexToX(i)
                 val day = ChartTimeAxis.dayKey(c.openTime)
+                val minute = ChartTimeAxis.minuteKey(c.openTime)
+                // Price-based candles are not evenly spaced in time. Avoid
+                // drawing "13:30" repeatedly across a busy Range chart.
+                if (displayStyle == ChartDisplayStyle.RANGE && minute == lastDisplayedMinute)
+                    return@forEachIndexed
                 val label = ChartTimeAxis.label(
                     c.openTime,
                     if (lastDisplayedDay == day) c.openTime else null
@@ -932,6 +984,7 @@ fun CandlestickChart(
                     )
                     lastTimeLabelRight = right
                     lastDisplayedDay = day
+                    lastDisplayedMinute = minute
                 }
             }
 
@@ -1171,6 +1224,8 @@ fun CandlestickChart(
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
+                    if (RangePhantomBars.isPhantom(c))
+                        Text("Phantom · عرض فقط", fontSize = 10.sp, color = TradingGold)
                     Text("O: " + com.example.ui.components.chart.QuotePriceFormatter.price(c.open), fontSize = 10.sp, color = TradingTextSecondary)
                     Text("H: " + com.example.ui.components.chart.QuotePriceFormatter.price(c.high), fontSize = 10.sp, color = TradingPositive)
                     Text("L: " + com.example.ui.components.chart.QuotePriceFormatter.price(c.low), fontSize = 10.sp, color = TradingNegative)
