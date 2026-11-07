@@ -1,11 +1,13 @@
 package com.example.feature.chart
 
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import com.example.core.market.RangeTickDiagnostics
 import com.example.core.model.Candle
 import com.example.feature.chart.model.RangeHistoryPaging
+import com.example.ui.components.ChartDisplayStyle
 
 /**
  * Range charts are expensive to reconstruct from genuine cTrader BID ticks.
@@ -93,9 +95,31 @@ internal object RangeChartRestorationPolicy {
         snapshot.requestGeneration == requestGeneration
 }
 
+/** Persist the user's Range zoom and pan across tab and Canvas re-creation. */
+class RangeChartViewport {
+    val candleWidthPx = mutableFloatStateOf(12f)
+    val scrollOffsetPx = mutableFloatStateOf(0f)
+    val manualPriceScale = mutableFloatStateOf(1f)
+    val pricePanPx = mutableFloatStateOf(0f)
+    val initialFitApplied = mutableStateOf(false)
+    val fittedDisplayStyle = mutableStateOf<ChartDisplayStyle?>(null)
+    val lastResetTrigger = mutableLongStateOf(0L)
+
+    fun reset() {
+        candleWidthPx.floatValue = 12f
+        scrollOffsetPx.floatValue = 0f
+        manualPriceScale.floatValue = 1f
+        pricePanPx.floatValue = 0f
+        initialFitApplied.value = false
+        fittedDisplayStyle.value = null
+        lastResetTrigger.longValue = 0L
+    }
+}
+
 /** Compose-observable state whose lifetime matches ChartViewModel, not ChartScreen. */
 internal class RangeChartSession {
     val context = mutableStateOf<RangeChartContext?>(null)
+    val viewport = RangeChartViewport()
     val historyHours = mutableIntStateOf(RangeHistoryPaging.initialWindowHours(1000))
     val historyCapHours = mutableStateOf<Int?>(null)
     val historyManuallyChosen = mutableStateOf(false)
@@ -120,6 +144,7 @@ internal class RangeChartSession {
         historyCapHours.value = null
         historyManuallyChosen.value = false
         historyJumpGeneration.intValue = 0
+        viewport.reset()
         refreshAnchor.longValue = now
         replayBackshiftMillis.longValue = 0L
         snapshot.value = null

@@ -25,7 +25,11 @@ object RangeReplayVisibilityPolicy {
     fun canShow(snapshotEnd: Long, currentEnd: Long?, replay: Boolean,
                 complete: Boolean, loading: Boolean, sameDataset: Boolean): Boolean {
         if (currentEnd == null || !sameDataset) return false
-        if (!replay) return snapshotEnd == currentEnd || loading
+        // During a backwards historical jump an old live snapshot may end
+        // AFTER the requested cutoff. Never paint that future window merely
+        // because the replacement is still loading.
+        if (!replay) return snapshotEnd == currentEnd ||
+            (complete && loading && snapshotEnd < currentEnd)
         return snapshotEnd == currentEnd || (complete && snapshotEnd < currentEnd)
     }
 }

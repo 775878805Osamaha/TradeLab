@@ -58,5 +58,10 @@ class RangeReplayLoadQueueTest {
             replay = false, complete = true, loading = false, sameDataset = true))
         assertTrue(RangeReplayVisibilityPolicy.canShow(2_000L, 2_000L,
             replay = false, complete = false, loading = false, sameDataset = true))
+        // A manual backwards jump must not show a newer broker window while loading.
+        assertFalse(RangeReplayVisibilityPolicy.canShow(3_000L, 2_000L,
+            replay = false, complete = true, loading = true, sameDataset = true))
+        assertFalse(RangeReplayVisibilityPolicy.canShow(1_000L, 2_000L,
+            replay = false, complete = false, loading = true, sameDataset = true))
     }
 }

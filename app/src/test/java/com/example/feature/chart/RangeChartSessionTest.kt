@@ -124,4 +124,30 @@ class RangeChartSessionTest {
         assertNull(queue.pending)
         assertNull(queue.finish(earlier))
     }
+
+    @Test fun rangeViewportPreservesUserZoomAndPanOnTabReturn() {
+        val session = RangeChartSession()
+        session.alignTo(gold, 100_000L)
+        session.viewport.candleWidthPx.floatValue = 19f
+        session.viewport.scrollOffsetPx.floatValue = 420f
+        session.viewport.manualPriceScale.floatValue = 1.8f
+        session.viewport.pricePanPx.floatValue = -75f
+        session.viewport.initialFitApplied.value = true
+        session.viewport.fittedDisplayStyle.value = com.example.ui.components.ChartDisplayStyle.RANGE
+
+        assertFalse(session.alignTo(gold, 200_000L))
+        assertEquals(19f, session.viewport.candleWidthPx.floatValue, 0f)
+        assertEquals(420f, session.viewport.scrollOffsetPx.floatValue, 0f)
+        assertEquals(1.8f, session.viewport.manualPriceScale.floatValue, 0f)
+        assertEquals(-75f, session.viewport.pricePanPx.floatValue, 0f)
+        assertTrue(session.viewport.initialFitApplied.value)
+
+        // A different instrument is a real new viewport, unlike a tab switch.
+        assertTrue(session.alignTo(gold.copy(symbol = "EURUSD"), 200_000L))
+        assertEquals(12f, session.viewport.candleWidthPx.floatValue, 0f)
+        assertEquals(0f, session.viewport.scrollOffsetPx.floatValue, 0f)
+        assertEquals(1f, session.viewport.manualPriceScale.floatValue, 0f)
+        assertEquals(0f, session.viewport.pricePanPx.floatValue, 0f)
+        assertFalse(session.viewport.initialFitApplied.value)
+    }
 }

@@ -1522,6 +1522,7 @@ fun ChartScreen(
                     rangeHistoryWindowEnd = if (rangeIsActive && visibleRangeBars != null)
                         rangeSnapshot?.end else null,
                     rangeHistoryJumpGeneration = if (rangeIsActive) rangeHistoryJumpGeneration else 0,
+                    persistentRangeViewport = if (rangeIsActive) rangeSession.viewport else null,
                     latestTick = (if (rangeIsActive) null else if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick)
                         ?.takeIf { it.symbol == uiState.selectedSymbol },
                     openPositions = if (isEmbeddedReplay) replayState.openPositions else uiState.openPositions,

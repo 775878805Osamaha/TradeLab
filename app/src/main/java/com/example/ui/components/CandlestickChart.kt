@@ -42,6 +42,7 @@ import com.example.core.indicators.BollingerBandsResult
 import com.example.core.indicators.MacdResult
 import com.example.core.model.*
 import com.example.feature.chart.model.*
+import com.example.feature.chart.RangeChartViewport
 import com.example.core.market.RangePhantomBars
 import com.example.ui.components.chart.ChartDrawingsRenderer
 import com.example.ui.components.chart.ChartIndicatorsRenderer
@@ -108,6 +109,7 @@ fun CandlestickChart(
     displayStyle: ChartDisplayStyle = ChartDisplayStyle.CANDLES,
     rangeHistoryWindowEnd: Long? = null,
     rangeHistoryJumpGeneration: Int = 0,
+    persistentRangeViewport: RangeChartViewport? = null,
     onAddDrawing: ((ChartDrawing) -> Unit)? = null,
     onSelectTrade: ((TradeJournalEntry) -> Unit)? = null,
     onSelectPosition: ((Position) -> Unit)? = null,
@@ -163,12 +165,18 @@ fun CandlestickChart(
     val chartDensity = androidx.compose.ui.platform.LocalDensity.current
     val axisWidthPx = with(chartDensity) { 54.dp.toPx() }
 
-    // Viewport State
-    var candleWidthPx by remember { mutableFloatStateOf(12f) }
-    var scrollOffsetPx by remember { mutableFloatStateOf(0f) }
-    var manualPriceScale by remember { mutableFloatStateOf(1f) }
+    // For Range, this viewport belongs to the activity-scoped chart session.
+    // Navigating away, returning or switching to an empty/progress canvas must
+    // not reset the user's horizontal/vertical zoom and candle position.
+    val localViewport = remember { RangeChartViewport() }
+    val viewport = persistentRangeViewport ?: localViewport
+    var candleWidthPx by viewport.candleWidthPx
+    var scrollOffsetPx by viewport.scrollOffsetPx
+    var manualPriceScale by viewport.manualPriceScale
     // Vertical viewport translation in screen pixels, independent of candle zoom.
-    var pricePanPx by remember { mutableFloatStateOf(0f) }
+    var pricePanPx by viewport.pricePanPx
+    var initialCandleFitApplied by viewport.initialFitApplied
+    var fittedDisplayStyle by viewport.fittedDisplayStyle
     var crosshairOffset by remember { mutableStateOf<Offset?>(null) }
     var inspectedCandle by remember { mutableStateOf<Candle?>(null) }
 
@@ -230,11 +238,14 @@ fun CandlestickChart(
 
     // Reset View trigger
     LaunchedEffect(resetViewTrigger) {
-        if (resetViewTrigger > 0L) {
+        if (resetViewTrigger > 0L && viewport.lastResetTrigger.longValue != resetViewTrigger) {
             scrollOffsetPx = 0f
             candleWidthPx = 12f
             manualPriceScale = 1f
             pricePanPx = 0f
+            initialCandleFitApplied = false
+            fittedDisplayStyle = null
+            viewport.lastResetTrigger.longValue = resetViewTrigger
             crosshairOffset = null
             inspectedCandle = null
             transformRef[0] = null
@@ -316,7 +327,9 @@ fun CandlestickChart(
     LaunchedEffect(candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe, displayStyle) {
         lastBackfillOldestTime = null
         lastBackfillScrollOffset = 0f
-        scrollOffsetPx = 0f
+        // Range sessions reset on real symbol/size/account changes upstream.
+        // Do not overwrite the saved pan merely because this Canvas remounted.
+        if (persistentRangeViewport == null) scrollOffsetPx = 0f
     }
     LaunchedEffect(candles.firstOrNull()?.openTime, scrollOffsetPx, chartViewportWidthPx,
         candleWidthPx, isLoadingOlderHistory) {
@@ -349,14 +362,9 @@ fun CandlestickChart(
     // Early Replay can have only a few revealed bars. The fixed 12px default
     // leaves most of the canvas empty on phones; fit those bars on first load.
     // Never override user zoom after the initial fit.
-    var initialCandleFitApplied by remember { mutableStateOf(false) }
-    var fittedDisplayStyle by remember { mutableStateOf<ChartDisplayStyle?>(null) }
     // Reset is a user-requested fresh fit, not merely a return to 12px bars.
     // This effect is declared after the state to avoid referencing an
     // uninitialized local Compose state holder.
-    LaunchedEffect(resetViewTrigger) {
-        if (resetViewTrigger > 0L) initialCandleFitApplied = false
-    }
     LaunchedEffect(candles.size, chartViewportWidthPx, initialCandleFitApplied, displayStyle) {
         if ((!initialCandleFitApplied || fittedDisplayStyle != displayStyle) &&
             candles.isNotEmpty() && chartViewportWidthPx > 1f) {
