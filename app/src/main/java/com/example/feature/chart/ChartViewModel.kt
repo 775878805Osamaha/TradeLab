@@ -81,6 +81,10 @@ class ChartViewModel(
     private val _uiState = MutableStateFlow(ChartUiState())
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
 
+    // The NavHost disposes ChartScreen on tab switches, not this ViewModel.
+    // Keep verified Range bars, paging and cutoff here until the market context changes.
+    internal val rangeSession = RangeChartSession()
+
     val rangeAccountGeneration: StateFlow<Long>? get() = marketDataRepository.cTrader?.accountGeneration
 
     private data class RangeTickWindow(val symbol: String, val source: String,

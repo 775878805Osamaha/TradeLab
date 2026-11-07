@@ -36,7 +36,6 @@ import androidx.compose.ui.window.Dialog
 import com.example.core.market.DefaultSymbols
 import com.example.core.market.MarketSymbolRegistry
 import com.example.core.market.RangePhantomBars
-import com.example.core.market.RangeTickDiagnostics
 import com.example.core.market.RangeTickHistoryTooDenseException
 import com.example.core.model.Candle
 import com.example.core.model.DataSourceType
@@ -51,19 +50,6 @@ import com.example.ui.components.DataSourceBadge
 import com.example.ui.theme.*
 import java.util.Locale
 import kotlin.math.roundToInt
-
-private data class RangeChartSnapshot(
-    val symbol: String,
-    val end: Long,
-    val size: Int,
-    val hours: Int,
-    val accountGeneration: Long,
-    val replay: Boolean,
-    val replayDatasetId: Long,
-    val candles: List<Candle>,
-    val diagnostics: RangeTickDiagnostics,
-    val complete: Boolean
-)
 
 private data class RangeVisualSnapshot(
     val actual: List<Candle>,
@@ -237,37 +223,38 @@ fun ChartScreen(
     var rangeSettingsOpen by remember { mutableStateOf(false) }
     var rangeDatePickerOpen by remember { mutableStateOf(false) }
     var rangeInput by remember { mutableStateOf(fixedRangeTicks.toString()) }
-    var rangeHistoryHours by remember {
-        mutableIntStateOf(RangeHistoryPaging.initialWindowHours(fixedRangeTicks))
-    }
-    var rangeHistoryCapHours by remember { mutableStateOf<Int?>(null) }
-    var rangeHistoryManuallyChosen by remember { mutableStateOf(false) }
-    var rangeHistoryJumpGeneration by remember { mutableIntStateOf(0) }
-    var rangeRefreshAnchor by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var rangeReplayBackshiftMillis by remember { mutableLongStateOf(0L) }
-    var rangeSnapshot by remember { mutableStateOf<RangeChartSnapshot?>(null) }
-    var rangeLoading by remember { mutableStateOf(false) }
-    var rangeLoadNonce by remember { mutableIntStateOf(0) }
-    var rangeFirstPageMs by remember { mutableStateOf<Long?>(null) }
-    var rangeFullLoadMs by remember { mutableStateOf<Long?>(null) }
-    var rangeReceivedQuotes by remember { mutableIntStateOf(0) }
-    var rangeReceivedSlices by remember { mutableIntStateOf(0) }
-    var rangeError by remember { mutableStateOf<String?>(null) }
+    // ChartScreen is disposed when changing bottom tabs, while ChartViewModel
+    // remains activity-scoped. Keep the verified chart and its paging position
+    // on that longer-lived owner so returning never starts with an empty canvas.
+    val rangeSession = viewModel.rangeSession
+    var rangeHistoryHours by rangeSession.historyHours
+    var rangeHistoryCapHours by rangeSession.historyCapHours
+    var rangeHistoryManuallyChosen by rangeSession.historyManuallyChosen
+    var rangeHistoryJumpGeneration by rangeSession.historyJumpGeneration
+    var rangeRefreshAnchor by rangeSession.refreshAnchor
+    var rangeReplayBackshiftMillis by rangeSession.replayBackshiftMillis
+    var rangeSnapshot by rangeSession.snapshot
+    var rangeLoading by rangeSession.loading
+    var rangeLoadNonce by rangeSession.loadNonce
+    var rangeFirstPageMs by rangeSession.firstPageMs
+    var rangeFullLoadMs by rangeSession.fullLoadMs
+    var rangeReceivedQuotes by rangeSession.receivedQuotes
+    var rangeReceivedSlices by rangeSession.receivedSlices
+    var rangeError by rangeSession.error
     val rangeBrokerGeneration = viewModel.rangeAccountGeneration?.collectAsState()?.value ?: 0L
+    val rangeContext = RangeChartContext(uiState.selectedSymbol, fixedRangeTicks,
+        rangeBrokerGeneration, isEmbeddedReplay, if (isEmbeddedReplay) replayState.datasetId else 0L)
     val rangeReplayEnd = if (isEmbeddedReplay) replayState.visibleCandles.lastOrNull()?.closeTime?.minus(1L) else null
     val rangeEnd = if (isEmbeddedReplay) rangeReplayEnd?.minus(rangeReplayBackshiftMillis) else rangeRefreshAnchor
-    LaunchedEffect(uiState.selectedSymbol, isEmbeddedReplay, rangeBrokerGeneration,
-        fixedRangeTicks, if (isEmbeddedReplay) replayState.datasetId else 0L) {
-        rangeHistoryHours = RangeHistoryPaging.initialWindowHours(fixedRangeTicks)
-        rangeHistoryCapHours = null
-        rangeHistoryManuallyChosen = false
-        rangeReplayBackshiftMillis = 0L
-        rangeRefreshAnchor = System.currentTimeMillis()
+    LaunchedEffect(rangeContext) {
+        // Do not reset on a fresh composition of the SAME instrument/session.
+        rangeSession.alignTo(rangeContext)
     }
     val latestRangeEnd = rememberUpdatedState(rangeEnd)
     LaunchedEffect(chartDisplayStyle, uiState.selectedSymbol, isEmbeddedReplay,
         rangeHistoryHours, fixedRangeTicks, rangeBrokerGeneration,
-        if (isEmbeddedReplay) replayState.datasetId else 0L, rangeHistoryJumpGeneration) {
+        if (isEmbeddedReplay) replayState.datasetId else 0L,
+        rangeHistoryJumpGeneration, rangeSession.context.value) {
         // Replay advances the cutoff on EVERY revealed timeframe candle. The
         // former rangeEnd key cancelled the whole cTrader tick download each
         // time, often leaving a permanently blank Range chart. Conflate only
@@ -275,6 +262,10 @@ fun ChartScreen(
         // because another Replay candle was revealed.
         if (chartDisplayStyle != ChartDisplayStyle.RANGE) return@LaunchedEffect
         RangeReplayLoadQueue.consume(snapshotFlow { latestRangeEnd.value }) { requestedEnd ->
+        // Ignore an obsolete context before the context-alignment effect runs.
+        if (rangeSession.context.value != rangeContext) return@consume
+        if (RangeChartRestorationPolicy.canSkipDownload(rangeSnapshot, rangeContext,
+                requestedEnd, rangeHistoryHours, rangeHistoryJumpGeneration)) return@consume
         val nonce = ++rangeLoadNonce
         rangeError = null
         rangeLoading = false
@@ -284,6 +275,7 @@ fun ChartScreen(
         val requestedReplay = isEmbeddedReplay
         val requestedBrokerGeneration = rangeBrokerGeneration
         val requestedReplayDatasetId = if (requestedReplay) replayState.datasetId else 0L
+        val requestedGeneration = rangeHistoryJumpGeneration
         val loadStartedAt = android.os.SystemClock.elapsedRealtime()
         rangeFirstPageMs = null
         rangeFullLoadMs = null
@@ -318,7 +310,8 @@ fun ChartScreen(
                                     requestedSymbol, requestedEnd, requestedSize, requestedHours,
                                     requestedBrokerGeneration, requestedReplay,
                                     requestedReplayDatasetId,
-                                    recentBars.candles, recentBars.diagnostics, complete = false)
+                                    recentBars.candles, recentBars.diagnostics, complete = false,
+                                    requestGeneration = requestedGeneration)
                             if (nonce == rangeLoadNonce && rangeFirstPageMs == null)
                                 rangeFirstPageMs = android.os.SystemClock.elapsedRealtime() - loadStartedAt
                         }
@@ -335,7 +328,8 @@ fun ChartScreen(
             if (nonce == rangeLoadNonce) rangeSnapshot = RangeChartSnapshot(requestedSymbol,
                 requestedEnd, requestedSize, requestedHours, requestedBrokerGeneration,
                 requestedReplay, requestedReplayDatasetId,
-                bars.candles, bars.diagnostics, complete = true)
+                bars.candles, bars.diagnostics, complete = true,
+                requestGeneration = requestedGeneration)
             if (nonce == rangeLoadNonce)
                 rangeFullLoadMs = android.os.SystemClock.elapsedRealtime() - loadStartedAt
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
