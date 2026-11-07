@@ -43,9 +43,10 @@ object RangeBarsEngine {
         tickSize: Double,
         sizeInPriceTicks: Int,
         source: String,
-        includeIncomplete: Boolean = false
+        includeIncomplete: Boolean = false,
+        cancellationCheckpoint: () -> Unit = {}
     ): List<Candle> = buildVerified(symbol, ticks, tickSize, sizeInPriceTicks,
-        source, includeIncomplete).candles
+        source, includeIncomplete, cancellationCheckpoint).candles
 
     fun buildVerified(
         symbol: String,
@@ -53,7 +54,8 @@ object RangeBarsEngine {
         tickSize: Double,
         sizeInPriceTicks: Int,
         source: String,
-        includeIncomplete: Boolean = false
+        includeIncomplete: Boolean = false,
+        cancellationCheckpoint: () -> Unit = {}
     ): VerifiedRangeBars {
         require(sizeInPriceTicks in 1..100_000) { "Invalid fixed range size" }
         require(tickSize.isFinite() && tickSize > 0.0) { "Invalid symbol tick size" }
@@ -93,7 +95,11 @@ object RangeBarsEngine {
             ))
         }
 
+        var processedTicks = 0
         for (tick in ticks) {
+            // A cancelled historical pan must stop consuming CPU even while
+            // reconstructing a million quotes on Dispatchers.Default.
+            if ((processedTicks++ and 8191) == 0) cancellationCheckpoint()
             closedOnLastQuote = false
             require(tick.timestamp > 0 && tick.timestamp >= lastTimestamp) { "Out-of-order range ticks" }
             require(tick.price.isFinite() && tick.price > 0.0) { "Invalid range tick price" }

@@ -15,6 +15,7 @@ object RangeTickWindowContinuation {
         cache: RangeTickSuffixCache,
         onProgress: suspend (Int, Int) -> Unit = { _, _ -> },
         maxQuotes: Int = RangeTickBatchLoader.MAX_WINDOW_TICKS,
+        initialSliceMillis: Long = 3_600_000L,
         request: suspend (Long, Long) -> List<RangePriceTick>
     ): List<RangePriceTick> {
         require(from > 0L && to >= from && to - from <= 604_800_000L)
@@ -31,7 +32,8 @@ object RangeTickWindowContinuation {
                 onSliceComplete = { count, pages -> onProgress(savedCount + count, pages) },
                 onVerifiedSlice = { start, end, quotes ->
                     cache.remember(symbol, source, start, end, quotes)
-                }, maxAllowedTicks = maxQuotes - savedCount, request = request)
+                }, maxAllowedTicks = maxQuotes - savedCount,
+                initialSliceMillis = initialSliceMillis, request = request)
         } else emptyList()
         return if (verified == null) older else ArrayList<RangePriceTick>(older.size + savedCount).apply {
             addAll(older)

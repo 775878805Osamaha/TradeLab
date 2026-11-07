@@ -7,6 +7,17 @@ import org.junit.Test
 import java.io.IOException
 
 class RangeTickBatchLoaderTest {
+    @Test fun measuredDensityStartsDeepPanWithOneLargerRequest() = runBlocking {
+        val calls = mutableListOf<Pair<Long, Long>>()
+        val from = 1L
+        val to = 6L * 3_600_000L
+        RangeTickBatchLoader.load(from, to, initialSliceMillis = 6L * 3_600_000L) { start, end ->
+            calls.add(start to end)
+            listOf(RangePriceTick(start, 4050.0), RangePriceTick(end, 4050.01))
+        }
+        assertEquals(listOf(from to to), calls)
+    }
+
     @Test fun sparseSixHourHistoryUsesPreviewThenOneBulkRequest() = runBlocking {
         val from = 1L
         val to = from + 6L * 3_600_000L

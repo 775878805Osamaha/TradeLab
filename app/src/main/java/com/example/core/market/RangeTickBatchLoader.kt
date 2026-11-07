@@ -49,9 +49,11 @@ object RangeTickBatchLoader {
                      onSliceComplete: suspend (Int, Int) -> Unit = { _, _ -> },
                      onVerifiedSlice: suspend (Long, Long, List<RangePriceTick>) -> Unit = { _, _, _ -> },
                      maxAllowedTicks: Int = MAX_WINDOW_TICKS,
+                     initialSliceMillis: Long = HOUR_MILLIS,
                      request: suspend (Long, Long) -> List<RangePriceTick>): List<RangePriceTick> {
         require(from > 0L && to >= from && to - from <= 604_800_000L)
         require(maxAllowedTicks in 1..MAX_WINDOW_TICKS)
+        require(initialSliceMillis > 0L)
         var previewSent = false
         var count = 0
         var completeSlices = 0
@@ -101,7 +103,10 @@ object RangeTickBatchLoader {
         // Load the visible, most recent chart first. The final response is
         // still strictly chronological and includes all genuine broker ticks.
         var cursor = to
-        var requestMillis = HOUR_MILLIS
+        // Deep pans already contain genuine quotes from an overlapping range.
+        // Their measured density allows the first request to fetch several
+        // sparse hours at once, or start below an hour for very dense markets.
+        var requestMillis = initialSliceMillis.coerceIn(MIN_REQUEST_MILLIS, MAX_REQUEST_MILLIS)
         while (cursor >= from) {
             // Both endpoints are inclusive. If exactly one hour remains,
             // consume its first millisecond in this request instead of

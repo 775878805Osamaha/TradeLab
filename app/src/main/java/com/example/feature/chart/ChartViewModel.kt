@@ -13,6 +13,7 @@ import com.example.core.market.RangeTickBatchLoader
 import com.example.core.market.RangeTickSuffixCache
 import com.example.core.market.RangeTickWindowContinuation
 import com.example.core.market.RangeTickWindowReuse
+import com.example.core.market.RangeTickRollingWindow
 import com.example.core.market.RangeTickHistoryTooDenseException
 import com.example.core.model.*
 import com.example.data.local.dao.DrawingDao
@@ -20,7 +21,9 @@ import com.example.data.repository.MarketDataRepository
 import com.example.data.repository.TradingRepository
 import com.example.feature.chart.model.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import com.example.feature.chart.history.ChartHistoryPaging
 import com.example.feature.chart.history.ChartHistoryDownload
 import com.example.feature.chart.history.ChartHistoryBatcher
@@ -91,11 +94,9 @@ class ChartViewModel(
 
     val rangeAccountGeneration: StateFlow<Long>? get() = marketDataRepository.cTrader?.accountGeneration
 
-    private data class RangeTickWindow(val symbol: String, val source: String,
-                                       val from: Long, val to: Long,
-                                       val ticks: List<RangePriceTick>)
     private val rangeTickMutex = Mutex()
-    private var rangeTickWindow: RangeTickWindow? = null
+    private var rangeTickWindow: RangeTickRollingWindow.Window? = null
+    private var rangeVisibleWindow: RangeTickRollingWindow.Window? = null
     private val rangeBuildCache = RangeBarsBuildCache()
     private val incompleteRangeDownload = RangeTickSuffixCache()
 
@@ -138,8 +139,10 @@ class ChartViewModel(
                     onBatchProgress(partial.ticks.size, 0)
                     if (partial.ticks.isNotEmpty()) {
                         val preview = withContext(Dispatchers.Default) {
+                            val workingContext = currentCoroutineContext()
                             RangeBarsEngine.buildVerified(symbol, partial.ticks, tickSize,
-                                sizeInPriceTicks, source, includeIncomplete)
+                                sizeInPriceTicks, source, includeIncomplete,
+                                cancellationCheckpoint = { workingContext.ensureActive() })
                         }
                         if (preview.candles.isNotEmpty()) onProgress(preview)
                     }
@@ -162,8 +165,10 @@ class ChartViewModel(
                         if (client.sourceKey(symbol) != source)
                             error("تغير حساب cTrader أثناء جلب المدى")
                         val preview = withContext(Dispatchers.Default) {
+                            val workingContext = currentCoroutineContext()
                             RangeBarsEngine.buildVerified(symbol, newest, tickSize,
-                                sizeInPriceTicks, source, includeIncomplete)
+                                sizeInPriceTicks, source, includeIncomplete,
+                                cancellationCheckpoint = { workingContext.ensureActive() })
                         }
                         if (preview.candles.isNotEmpty()) onProgress(preview)
                     }, onSliceComplete = onBatchProgress,
@@ -178,14 +183,19 @@ class ChartViewModel(
                 // This is a binary-search slice, not an O(n) scan of a whole
                 // prior week. Otherwise excluded old quotes exhausted the
                 // memory budget during Replay advances and backward pans.
-                val retained = RangeTickWindowReuse.between(cached.ticks, from, to)
+                val retained = rangeVisibleWindow?.takeIf {
+                    it.symbol == symbol && it.source == source &&
+                        it.from == from && it.to == to
+                }?.ticks ?: RangeTickWindowReuse.between(cached.ticks, from, to)
+                val plannedSlice = RangeTickRollingWindow.initialSliceMillis(cached)
                 val older = if (from < cached.from) {
                     val budget = RangeTickBatchLoader.MAX_WINDOW_TICKS - retained.size
                     if (budget <= 0) throw RangeTickHistoryTooDenseException(
                         "عدد بيانات Tick أكبر من ذاكرة العرض؛ استعرض فترة أقصر")
                     RangeTickWindowContinuation.downloadOlder(from, cached.from - 1L,
                         symbol, source, incompleteRangeDownload,
-                        onProgress = onBatchProgress, maxQuotes = budget) { start, end ->
+                        onProgress = onBatchProgress, maxQuotes = budget,
+                        initialSliceMillis = plannedSlice) { start, end ->
                         client.historicalBidTicks(symbol, start, end)
                     }
                 } else emptyList()
@@ -194,7 +204,8 @@ class ChartViewModel(
                     if (budget <= 0) throw RangeTickHistoryTooDenseException(
                         "عدد بيانات Tick أكبر من ذاكرة العرض؛ استعرض فترة أقصر")
                     RangeTickBatchLoader.load(cached.to + 1L, to,
-                        onSliceComplete = onBatchProgress, maxAllowedTicks = budget) { start, end ->
+                        onSliceComplete = onBatchProgress, maxAllowedTicks = budget,
+                        initialSliceMillis = plannedSlice) { start, end ->
                         client.historicalBidTicks(symbol, start, end)
                     }
                 } else emptyList()
@@ -217,10 +228,13 @@ class ChartViewModel(
             if (visible.size > RangeTickBatchLoader.MAX_WINDOW_TICKS)
                 throw RangeTickHistoryTooDenseException(
                     "عدد بيانات Tick أكبر من ذاكرة العرض؛ استعرض فترة أقصر")
-            // Retain only the requested window. Otherwise a long replay session
-            // would accumulate unlimited future and past quotes in memory.
-            if (rangeTickWindow?.ticks !== visible) rangeBuildCache.clear()
-            rangeTickWindow = RangeTickWindow(symbol, source, from, to, visible)
+            // Retain a bounded contiguous union of verified quotes to make
+            // small deep-history pans reversible without another network call.
+            // Replay ALWAYS builds from 'visible', never from retained future.
+            if (rangeVisibleWindow?.ticks !== visible) rangeBuildCache.clear()
+            rangeTickWindow = RangeTickRollingWindow.extend(rangeTickWindow,
+                RangeTickRollingWindow.Window(symbol, source, from, to, visible))
+            rangeVisibleWindow = RangeTickRollingWindow.Window(symbol, source, from, to, visible)
             incompleteRangeDownload.clear()
             visible
         } finally { rangeTickMutex.unlock() }
@@ -228,8 +242,10 @@ class ChartViewModel(
         rangeBuildCache.find(ticks, symbol, source, tickSize,
             sizeInPriceTicks, includeIncomplete)?.let { return it }
         val computed = withContext(Dispatchers.Default) {
+            val workingContext = currentCoroutineContext()
             RangeBarsEngine.buildVerified(symbol, ticks, tickSize,
-                sizeInPriceTicks, source, includeIncomplete)
+                sizeInPriceTicks, source, includeIncomplete,
+                cancellationCheckpoint = { workingContext.ensureActive() })
         }
         rangeTickMutex.lock()
         try {
@@ -388,7 +404,7 @@ class ChartViewModel(
         marketDataRepository.cTrader?.let { client ->
             viewModelScope.launch { client.accountGeneration.collect {
                 rangeTickMutex.lock()
-                try { rangeTickWindow = null; rangeBuildCache.clear()
+                try { rangeTickWindow = null; rangeVisibleWindow = null; rangeBuildCache.clear()
                     incompleteRangeDownload.clear() }
                 finally { rangeTickMutex.unlock() }
                 _uiState.update { it.copy(rangePrecisionDiagnostic = null) }
