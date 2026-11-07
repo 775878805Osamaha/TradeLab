@@ -1,5 +1,7 @@
 package com.example.feature.chart.model
 
+import com.example.core.market.RangeBarsEngine
+import com.example.core.market.RangePriceTick
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -42,13 +44,46 @@ class RangeHistoryPagingTest {
         assertEquals(1L, RangeHistoryPaging.Window(lowest, 168).start)
     }
 
-    @Test fun automaticallyPrefetchesEnoughBarsWithoutOverridingUserOrReplay() {
+    @Test fun automaticallyPrefetchesEnoughRealBarsWithoutChangingReplayCursor() {
         assertTrue(RangeHistoryPaging.shouldPrefetchMoreBars(12, 6, false, false))
         assertTrue(RangeHistoryPaging.shouldPrefetchMoreBars(48, 6, false, false))
         assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(160, 6, false, false))
         assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 96, false, false))
         assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 6, true, false))
-        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 6, false, true))
+        // Replay also needs completed Range bars. Backfilling older BID quotes
+        // is safe: the requested end stays at the ALREADY REVEALED cutoff.
+        assertTrue(RangeHistoryPaging.shouldPrefetchMoreBars(0, 6, false, true))
+        assertTrue(RangeHistoryPaging.shouldPrefetchMoreBars(12, 24, false, true))
+        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(40, 6, false, true))
+        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(0, 48, false, true))
+        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(0, 6, true, true))
+        val end = 200L * day
+        val older = RangeHistoryPaging.older(end, 6,
+            RangeHistoryPaging.REPLAY_AUTO_MAX_HOURS)
+        assertEquals(end, older.end)
+        assertEquals(12, older.hours)
+    }
+
+    @Test fun replayThousandTickRangeNeedsOlderRealQuotesToFormFirstClosedCandle() {
+        val hour = RangeHistoryPaging.HOUR_MILLIS
+        val cutoff = 12L * hour
+        val quotes = listOf(
+            RangePriceTick(3L * hour, 4029.00),
+            RangePriceTick(7L * hour, 4040.00),
+            RangePriceTick(10L * hour, 4042.00)
+        )
+        fun replayBars(hours: Int) = RangeBarsEngine.build("XAUUSD",
+            quotes.filter { it.timestamp in (cutoff - hours * hour)..cutoff },
+            tickSize = 0.01, sizeInPriceTicks = 1_000,
+            source = "ctrader:demo:test", includeIncomplete = false)
+
+        // Before this fix, Replay froze at this EMPTY six-hour result forever:
+        // auto-extension was explicitly disabled whenever inReplay=true.
+        assertTrue(replayBars(6).isEmpty())
+        assertTrue(RangeHistoryPaging.shouldPrefetchMoreBars(0, 6, false, true))
+        val extended = replayBars(12)
+        assertEquals(1, extended.size)
+        assertTrue(extended.all { it.closeTime <= cutoff })
     }
 
     @Test fun denseBrokerWindowsShrinkAndThenSlideWithoutSkippingHours() {

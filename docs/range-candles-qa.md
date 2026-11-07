@@ -29,6 +29,9 @@
 25. **Quoted history excluded from a new Replay window still consumed memory.** When the request narrowed or shifted, the old code initially merged the entire cached quote list and then linearly filtered up to a million prices. A binary-search inclusive window slice now keeps just the needed quotes, including every price within duplicate millisecond boundaries. Download budgets account for already retained quotes *before* fetching/allocating new pages. No unrevealed future quotes can be reused in a narrower Replay window.
 26. **Insufficient reproducible field diagnostics.** Range settings now include a minimum-48dp, user-triggered “نسخ تقرير فحص شموع المدى” control. It copies the symbol, selected Range, chart cutoff, completeness, real Bid quote and page counts, duplicate timestamps, oversized/jump counts, measured load durations, and any error. It deliberately omits access tokens and brokerage account IDs. This enables comparison of the exact problem window without guessing from screenshots alone.
 27. **Build workflow ignored the actual Range fix branch.** The Android APK workflow now covers `fix/ctrader-range-*` and `feat/ctrader-range-*` branches, not just the single original dated branch. CI still must run before an APK from this work can be called verified.
+28. **Replay canceled every Range tick request as the candle cursor advanced.** `rangeEnd` was a key of the Range loader's Compose `LaunchedEffect`; each revealed M15 candle canceled the previous multi-page cTrader read. `RangeReplayLoadQueue` now finishes the current real BID download and conflates queued cursor updates, processing the newest revealed cutoff afterwards. Changing symbol, broker, chart mode, Range size, or Replay dataset still cancels obsolete work. A coroutine regression reproduces several cursor advances during a suspended network request.
+29. **Completed past Range bars disappeared at the next Replay step.** The visibility predicate required `snapshot.end == currentReplayEnd`, so even already verified historical candles were hidden while the next quote interval downloaded. A finished snapshot can now remain visible only if it belongs to the same Replay dataset and ends no later than the currently revealed cutoff. Unfinished previews from an older position, snapshots from another training dataset, and future quotes remain excluded. Regression tests verify these boundaries.
+30. **Replay permanently showed an empty loading chart for Range sizes with no completed bars in the initial window.** `RangeHistoryPaging.shouldPrefetchMoreBars` unconditionally disabled historical backfill in Replay, even when the first six hours formed zero closed Range bars. It now extends *older* broker history, keeping the Replay cursor fixed and never revealing future quotes, until 40 actual bars or a bounded 48-hour lookback. A fixture shows a 1000-tick XAUUSD bar absent in six hours but present after including earlier real quotes. When there are still no bars, the chart states the factual empty/error condition rather than displaying a misleading permanent spinner.
 
 ## Truth and trading integrity boundaries
 
@@ -45,6 +48,7 @@
 - `RangePhantomBarsTest`: a genuine oversized candle remains unchanged; optional bars only mark gaps between genuine candles.
 - `RangeTickBatchLoaderTest`: chronological output after newest-first loading, contiguous no-overlap slices, adaptive batch lengths, no single-millisecond extra request, same-millisecond dense split recovery, cancellation/resume at nested verified leaf boundaries, explicit unsplittable-one-millisecond failure, transient retry cap and permanent-error stop.
 - `RangeHistoryPagingTest`: quick initial time windows for small Range sizes; bounded historical paging.
+- `RangeReplayLoadQueueTest`: preserves in-flight downloads during rapid Replay advancement, catches up to the newest cutoff, and rejects future/foreign-dataset snapshots.
 - `RangeBarsBuildCacheTest`: exact quote identity, broker-account isolation, size/mode isolation, and eviction on window changes.
 - `RangeSymbolPrecisionTest`: validates representability and intentionally distinguishes displayed digits from actual tick-size claims.
 - `RangeCandleVisualPolicyTest`: real Range bodies stay solid even if the previous user's hollow setting is on.
@@ -65,6 +69,8 @@
 5. Inspect any oversized candle: check its exact OHLC, the reported real-quote jump count, and if necessary a broker Tick fixture. Never smooth it with fake trade prices.
 6. Run Replay at a fixed historical cutoff. There must be no future quote or virtual bar used in trade execution/results.
 7. Check older-history boundaries and multi-quote timestamps against raw cTrader BID data for any remaining discontinuity.
+8. In Replay XAUUSD at 1000 Range, play consecutive M15 candles while broker tick pages are downloading. Verified older Range bars should remain visible, the request should finish, and the latest revealed cutoff should then catch up; no future quotes may appear.
+9. Pause Replay where six hours contain no complete 1000-Range bar. Confirm that older BID history is fetched without changing the Replay position. If the 48-hour window still produces no completed bar, the screen must show a clear empty-state explanation, not an infinite loading message.
 
 ## Current verification status
 

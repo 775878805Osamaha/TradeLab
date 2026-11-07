@@ -13,6 +13,10 @@ object RangeHistoryPaging {
     // and several backwards gestures, without loading a full broker week.
     const val AUTO_MAX_HOURS = 96
     const val AUTO_TARGET_BARS = 160
+    // Replay extends ONLY the historical lookback before its revealed cutoff.
+    // It never advances the training cursor or exposes future broker prices.
+    const val REPLAY_AUTO_MAX_HOURS = 48
+    const val REPLAY_AUTO_TARGET_BARS = 40
     const val HOUR_MILLIS = 3_600_000L
 
     /** Small price ranges produce many bars from fewer quotes. Avoid downloading
@@ -69,7 +73,9 @@ object RangeHistoryPaging {
     }
 
     fun shouldPrefetchMoreBars(candleCount: Int, hours: Int, manuallyChosen: Boolean,
-                               inReplay: Boolean): Boolean =
-        !manuallyChosen && !inReplay && candleCount in 0 until AUTO_TARGET_BARS &&
-            hours in 1 until AUTO_MAX_HOURS
+                               inReplay: Boolean): Boolean {
+        val target = if (inReplay) REPLAY_AUTO_TARGET_BARS else AUTO_TARGET_BARS
+        val maximum = if (inReplay) REPLAY_AUTO_MAX_HOURS else AUTO_MAX_HOURS
+        return !manuallyChosen && candleCount in 0 until target && hours in 1 until maximum
+    }
 }

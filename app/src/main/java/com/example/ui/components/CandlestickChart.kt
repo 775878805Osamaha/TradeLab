@@ -127,7 +127,8 @@ fun CandlestickChart(
     showLastPrice: Boolean = true,
     showSourceTime: Boolean = true,
     axisTextScale: Float = 1f,
-    isLoadingOlderHistory: Boolean = false
+    isLoadingOlderHistory: Boolean = false,
+    emptyStateMessage: String = "جاري تحميل بيانات الشارت..."
 ) {
     if (candles.isEmpty()) {
         Box(
@@ -137,7 +138,7 @@ fun CandlestickChart(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "جاري تحميل بيانات الشارت...",
+                text = emptyStateMessage,
                 color = TradingTextSecondary,
                 style = MaterialTheme.typography.bodyMedium
             )

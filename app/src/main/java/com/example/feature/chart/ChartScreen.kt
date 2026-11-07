@@ -59,6 +59,7 @@ private data class RangeChartSnapshot(
     val hours: Int,
     val accountGeneration: Long,
     val replay: Boolean,
+    val replayDatasetId: Long,
     val candles: List<Candle>,
     val diagnostics: RangeTickDiagnostics,
     val complete: Boolean
@@ -255,25 +256,34 @@ fun ChartScreen(
     val rangeBrokerGeneration = viewModel.rangeAccountGeneration?.collectAsState()?.value ?: 0L
     val rangeReplayEnd = if (isEmbeddedReplay) replayState.visibleCandles.lastOrNull()?.closeTime?.minus(1L) else null
     val rangeEnd = if (isEmbeddedReplay) rangeReplayEnd?.minus(rangeReplayBackshiftMillis) else rangeRefreshAnchor
-    LaunchedEffect(uiState.selectedSymbol, isEmbeddedReplay, rangeBrokerGeneration, fixedRangeTicks) {
+    LaunchedEffect(uiState.selectedSymbol, isEmbeddedReplay, rangeBrokerGeneration,
+        fixedRangeTicks, if (isEmbeddedReplay) replayState.datasetId else 0L) {
         rangeHistoryHours = RangeHistoryPaging.initialWindowHours(fixedRangeTicks)
         rangeHistoryCapHours = null
         rangeHistoryManuallyChosen = false
         rangeReplayBackshiftMillis = 0L
         rangeRefreshAnchor = System.currentTimeMillis()
     }
+    val latestRangeEnd = rememberUpdatedState(rangeEnd)
     LaunchedEffect(chartDisplayStyle, uiState.selectedSymbol, isEmbeddedReplay,
-        rangeEnd, rangeHistoryHours, fixedRangeTicks, rangeBrokerGeneration) {
+        rangeHistoryHours, fixedRangeTicks, rangeBrokerGeneration,
+        if (isEmbeddedReplay) replayState.datasetId else 0L, rangeHistoryJumpGeneration) {
+        // Replay advances the cutoff on EVERY revealed timeframe candle. The
+        // former rangeEnd key cancelled the whole cTrader tick download each
+        // time, often leaving a permanently blank Range chart. Conflate only
+        // queued cutoffs; NEVER cancel a verified in-flight broker read just
+        // because another Replay candle was revealed.
+        if (chartDisplayStyle != ChartDisplayStyle.RANGE) return@LaunchedEffect
+        RangeReplayLoadQueue.consume(snapshotFlow { latestRangeEnd.value }) { requestedEnd ->
         val nonce = ++rangeLoadNonce
         rangeError = null
         rangeLoading = false
-        if (chartDisplayStyle != ChartDisplayStyle.RANGE || rangeEnd == null) return@LaunchedEffect
         val requestedSymbol = uiState.selectedSymbol
-        val requestedEnd = rangeEnd
         val requestedHours = rangeHistoryHours
         val requestedSize = fixedRangeTicks
         val requestedReplay = isEmbeddedReplay
         val requestedBrokerGeneration = rangeBrokerGeneration
+        val requestedReplayDatasetId = if (requestedReplay) replayState.datasetId else 0L
         val loadStartedAt = android.os.SystemClock.elapsedRealtime()
         rangeFirstPageMs = null
         rangeFullLoadMs = null
@@ -294,15 +304,20 @@ fun ChartScreen(
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
                             // Keep an existing complete chart stable while older history loads.
                             val stable = rangeSnapshot?.takeIf {
-                                it.complete && it.symbol == requestedSymbol &&
-                                    it.end == requestedEnd && it.size == requestedSize &&
+                                it.complete && it.candles.isNotEmpty() &&
+                                    it.symbol == requestedSymbol &&
+                                    it.size == requestedSize &&
                                     it.replay == requestedReplay &&
-                                    it.accountGeneration == requestedBrokerGeneration
+                                    it.accountGeneration == requestedBrokerGeneration &&
+                                    it.replayDatasetId == requestedReplayDatasetId &&
+                                    RangeReplayVisibilityPolicy.canShow(it.end, requestedEnd,
+                                        requestedReplay, it.complete, rangeLoading, true)
                             }
                             if (nonce == rangeLoadNonce && stable == null)
                                 rangeSnapshot = RangeChartSnapshot(
                                     requestedSymbol, requestedEnd, requestedSize, requestedHours,
                                     requestedBrokerGeneration, requestedReplay,
+                                    requestedReplayDatasetId,
                                     recentBars.candles, recentBars.diagnostics, complete = false)
                             if (nonce == rangeLoadNonce && rangeFirstPageMs == null)
                                 rangeFirstPageMs = android.os.SystemClock.elapsedRealtime() - loadStartedAt
@@ -319,13 +334,14 @@ fun ChartScreen(
             }
             if (nonce == rangeLoadNonce) rangeSnapshot = RangeChartSnapshot(requestedSymbol,
                 requestedEnd, requestedSize, requestedHours, requestedBrokerGeneration,
-                requestedReplay, bars.candles, bars.diagnostics, complete = true)
+                requestedReplay, requestedReplayDatasetId,
+                bars.candles, bars.diagnostics, complete = true)
             if (nonce == rangeLoadNonce)
                 rangeFullLoadMs = android.os.SystemClock.elapsedRealtime() - loadStartedAt
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (dense: RangeTickHistoryTooDenseException) {
-            if (nonce != rangeLoadNonce) return@LaunchedEffect
+            if (nonce != rangeLoadNonce) return@consume
             // Keep genuine broker history, but reduce the tick-memory window
             // and continue pagination in overlapping, shorter slices.
             if (rangeHistoryHours > 1) {
@@ -338,12 +354,15 @@ fun ChartScreen(
             if (nonce == rangeLoadNonce)
                 rangeError = error.message?.take(180) ?: "تعذر جلب بيانات Tick من cTrader"
         } finally { if (nonce == rangeLoadNonce) rangeLoading = false }
+        }
     }
     val visibleRangeBars = rangeSnapshot?.takeIf {
         it.symbol == uiState.selectedSymbol &&
-            (it.end == rangeEnd || (rangeLoading && !isEmbeddedReplay)) &&
+            RangeReplayVisibilityPolicy.canShow(it.end, rangeEnd, isEmbeddedReplay,
+                it.complete, rangeLoading,
+                it.replayDatasetId == (if (isEmbeddedReplay) replayState.datasetId else 0L)) &&
             it.size == fixedRangeTicks && it.replay == isEmbeddedReplay &&
-            (it.hours == rangeHistoryHours || rangeLoading || rangeError != null) &&
+            (it.hours == rangeHistoryHours || rangeLoading || rangeError != null || isEmbeddedReplay) &&
             it.accountGeneration == rangeBrokerGeneration &&
             chartDisplayStyle == ChartDisplayStyle.RANGE
     }?.candles
@@ -372,7 +391,8 @@ fun ChartScreen(
     }?.display ?: visibleRangeBars
     // Populate a usable initial chart progressively from genuine cTrader ticks.
     // Stop once there are enough candles, the bounded prefetch depth is reached,
-    // or the user explicitly chooses a history window. Replay never auto-seeks.
+    // or the user explicitly chooses a history window. Replay can backfill
+    // EARLIER verified BID history without seeking or revealing future data.
     LaunchedEffect(rangeSnapshot, rangeLoading, rangeError, rangeHistoryManuallyChosen,
         chartDisplayStyle, isEmbeddedReplay) {
         val snapshot = rangeSnapshot
@@ -383,7 +403,8 @@ fun ChartScreen(
             RangeHistoryPaging.shouldPrefetchMoreBars(snapshot.candles.size, rangeHistoryHours,
                 rangeHistoryManuallyChosen, isEmbeddedReplay)) {
             rangeHistoryHours = RangeHistoryPaging.older(rangeEnd ?: snapshot.end,
-                rangeHistoryHours, RangeHistoryPaging.AUTO_MAX_HOURS).hours
+                rangeHistoryHours, if (isEmbeddedReplay) RangeHistoryPaging.REPLAY_AUTO_MAX_HOURS
+                else RangeHistoryPaging.AUTO_MAX_HOURS).hours
         }
     }
     val requestOlderRange: () -> Unit = {
@@ -1583,6 +1604,16 @@ fun ChartScreen(
                     if (isEmbeddedReplay) replayState.datasetId else 0L, rangeIsActive, fixedRangeTicks) {
                 CandlestickChart(
                     candles = chartBars,
+                    emptyStateMessage = if (!rangeIsActive) "جاري تحميل بيانات الشارت..."
+                        else when {
+                            rangeError != null -> "تعذر تحميل شموع المدى من cTrader: ${rangeError.orEmpty()}"
+                            rangeEnd == null -> "انتظر اكتمال تحميل بيانات Replay التاريخية"
+                            rangeLoading -> "جاري تحميل أسعار Bid الحقيقية من cTrader..."
+                            rangeSnapshot?.complete == true &&
+                                visibleRangeBars.isNullOrEmpty() ->
+                                "لم تتشكل شموع مدى مكتملة في هذه الفترة. اختر مدى أصغر أو حمّل تاريخًا أقدم."
+                            else -> "جاري إعداد شموع المدى التاريخية..."
+                        },
                     rangeHistoryWindowEnd = if (rangeIsActive && visibleRangeBars != null)
                         rangeSnapshot?.end else null,
                     rangeHistoryJumpGeneration = if (rangeIsActive) rangeHistoryJumpGeneration else 0,
