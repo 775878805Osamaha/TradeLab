@@ -7,6 +7,8 @@ import com.example.core.market.CandleAggregator
 import com.example.core.market.MarketSymbolRegistry
 import com.example.core.market.RangeBarsEngine
 import com.example.core.market.RangeBarsBuildCache
+import com.example.core.market.VerifiedRangeAccumulator
+import com.example.core.market.RangeVerifiedPrefix
 import com.example.core.market.VerifiedRangeBars
 import com.example.core.market.RangePriceTick
 import com.example.core.market.RangeTickBatchLoader
@@ -99,6 +101,13 @@ class ChartViewModel(
     private var rangeVisibleWindow: RangeTickRollingWindow.Window? = null
     private val rangeBuildCache = RangeBarsBuildCache()
     private val incompleteRangeDownload = RangeTickSuffixCache()
+    private data class RangeScanCheckpoint(
+        val symbol: String, val source: String, val tickSize: Double,
+        val size: Int, val ticks: List<RangePriceTick>,
+        val accumulator: VerifiedRangeAccumulator,
+        val includeIncomplete: Boolean, val result: VerifiedRangeBars
+    )
+    private var rangeScanCheckpoint: RangeScanCheckpoint? = null
 
     /** Range history is never backed by saved OHLC or a provider fallback. */
     suspend fun loadRangeBars(symbol: String, from: Long, to: Long, sizeInPriceTicks: Int,
@@ -241,17 +250,43 @@ class ChartViewModel(
         if (client.sourceKey(symbol) != source) error("تغير حساب cTrader أثناء جلب المدى")
         rangeBuildCache.find(ticks, symbol, source, tickSize,
             sizeInPriceTicks, includeIncomplete)?.let { return it }
-        val computed = withContext(Dispatchers.Default) {
+        rangeTickMutex.lock()
+        val prior = try { rangeScanCheckpoint } finally { rangeTickMutex.unlock() }
+        val (computed, checkpoint) = withContext(Dispatchers.Default) {
             val workingContext = currentCoroutineContext()
-            RangeBarsEngine.buildVerified(symbol, ticks, tickSize,
-                sizeInPriceTicks, source, includeIncomplete,
-                cancellationCheckpoint = { workingContext.ensureActive() })
+            val prefix = prior?.takeIf {
+                it.symbol == symbol && it.source == source &&
+                    it.tickSize == tickSize && it.size == sizeInPriceTicks
+            }?.let { RangeVerifiedPrefix.reusableQuoteCount(it.ticks, ticks) {
+                workingContext.ensureActive()
+            } } ?: 0
+            if (prefix == ticks.size && prior != null &&
+                prior.includeIncomplete == includeIncomplete) {
+                // Replay advanced without any new BID quote. The entire
+                // result, including its last forming candle, is unchanged.
+                prior.result to prior.accumulator
+            } else {
+                val accumulator = when {
+                    prefix == ticks.size && prior != null -> prior.accumulator
+                    prefix > 0 -> prior!!.accumulator.fork()
+                    else -> VerifiedRangeAccumulator(symbol, tickSize, sizeInPriceTicks, source)
+                }
+                // A rebased window needs a full rebuild. A verified prefix
+                // needs only its newly revealed real BID suffix.
+                accumulator.append(ticks.subList(prefix, ticks.size)) {
+                    workingContext.ensureActive()
+                }
+                accumulator.snapshot(includeIncomplete) to accumulator
+            }
         }
         rangeTickMutex.lock()
         try {
-            if (client.sourceKey(symbol) == source && rangeTickWindow?.ticks === ticks)
+            if (client.sourceKey(symbol) == source && rangeVisibleWindow?.ticks === ticks) {
                 rangeBuildCache.remember(ticks, symbol, source, tickSize,
                     sizeInPriceTicks, includeIncomplete, computed)
+                rangeScanCheckpoint = RangeScanCheckpoint(symbol, source, tickSize,
+                    sizeInPriceTicks, ticks, checkpoint, includeIncomplete, computed)
+            }
         } finally { rangeTickMutex.unlock() }
         return computed
     }
@@ -404,7 +439,8 @@ class ChartViewModel(
         marketDataRepository.cTrader?.let { client ->
             viewModelScope.launch { client.accountGeneration.collect {
                 rangeTickMutex.lock()
-                try { rangeTickWindow = null; rangeVisibleWindow = null; rangeBuildCache.clear()
+                try { rangeTickWindow = null; rangeVisibleWindow = null
+                    rangeBuildCache.clear(); rangeScanCheckpoint = null
                     incompleteRangeDownload.clear() }
                 finally { rangeTickMutex.unlock() }
                 _uiState.update { it.copy(rangePrecisionDiagnostic = null) }
