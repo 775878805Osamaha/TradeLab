@@ -83,7 +83,8 @@ class ChartViewModel(
     private val marketDataRepository: MarketDataRepository,
     private val tradingRepository: TradingRepository,
     private val drawingDao: DrawingDao? = null,
-    private val rangeTickDiskStore: com.example.data.local.RangeTickDiskStore? = null
+    private val rangeTickDiskStore: com.example.data.local.RangeTickDiskStore? = null,
+    private val rangeBarDiskStore: com.example.data.local.RangeBarDiskStore? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChartUiState())
@@ -145,6 +146,12 @@ class ChartViewModel(
         _uiState.update { it.copy(rangePrecisionDiagnostic = if (metadata == null)
             "دقة رمز cTrader غير متاحة: بوابة /v1/symbol-detail لم تُنشر بعد؛ حجم Tick المحلي غير مؤكد"
             else "دقة cTrader: ${metadata.digits} خانات · حجم حركة السعر المحلي قابل للتمثيل، ولم يُثبت Tick Size الفعلي") }
+        // Fully verified materialized candles can be returned immediately,
+        // without deserializing and scanning hundreds of thousands of ticks.
+        // The exact source, cutoff, price precision and window must match;
+        // Replay can never reuse a snapshot extending past its revealed time.
+        rangeBarDiskStore?.exact(symbol, source, from, to, sizeInPriceTicks, tickSize,
+            includeIncomplete)?.let { return it }
         // Reuse real broker quotes when Replay advances a candle or rewinds.
         // Cache never feeds a quote beyond the requested revealed cutoff.
         rangeTickMutex.lock()
@@ -327,6 +334,10 @@ class ChartViewModel(
                     sizeInPriceTicks, ticks, checkpoint, includeIncomplete, computed)
             }
         } finally { rangeTickMutex.unlock() }
+        if (client.sourceKey(symbol) == source) {
+            rangeBarDiskStore?.save(symbol, source, from, to, sizeInPriceTicks, tickSize,
+                includeIncomplete, computed)
+        }
         return computed
     }
 
@@ -374,9 +385,33 @@ class ChartViewModel(
             state.fullLoadMs.value = null
             state.receivedQuotes.intValue = 0
             state.receivedSlices.intValue = 0
+            state.warmRestored.value = false
             state.loading.value = true
             try {
                 val from = (request.cutoff - request.hours * 3_600_000L).coerceAtLeast(1L)
+                // A cold process restart still has verified completed bars
+                // in Room. Paint them while newer broker pages update; never
+                // show a cached cutoff beyond the Replay reveal boundary.
+                val broker = marketDataRepository.cTrader
+                if (broker != null) {
+                    val source = broker.sourceKey(context.symbol)
+                    val tickSize = MarketSymbolRegistry.getSymbol(context.symbol).tickSize
+                    val warm = withContext(Dispatchers.Default) {
+                        rangeBarDiskStore?.newestCompatible(context.symbol, source,
+                            from, request.cutoff, context.size, tickSize, includeIncomplete = true)
+                    }
+                    if (warm != null && nonce == state.loadNonce.intValue &&
+                        state.context.value == context && broker.sourceKey(context.symbol) == source &&
+                        warm.to <= request.cutoff) {
+                        state.snapshot.value = RangeChartSnapshot(context.symbol, warm.to,
+                            context.size, request.hours, context.accountGeneration,
+                            context.replay, context.replayDatasetId,
+                            warm.result.candles, warm.result.diagnostics, complete = true,
+                            requestGeneration = request.requestGeneration,
+                            hasIncompleteLastBar = warm.result.hasIncompleteLastBar)
+                        state.warmRestored.value = true
+                    }
+                }
                 val bars = withContext(Dispatchers.Default) {
                     loadRangeBars(context.symbol, from, request.cutoff, context.size,
                         // Replay shows the forming bar from already revealed
@@ -419,6 +454,7 @@ class ChartViewModel(
                         context.replayDatasetId, bars.candles, bars.diagnostics, complete = true,
                         requestGeneration = request.requestGeneration,
                         hasIncompleteLastBar = bars.hasIncompleteLastBar)
+                    state.warmRestored.value = false
                     state.fullLoadMs.value = android.os.SystemClock.elapsedRealtime() - startTime
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {

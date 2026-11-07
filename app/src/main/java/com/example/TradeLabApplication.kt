@@ -6,6 +6,7 @@ import com.example.core.market.CTraderGatewayClient
 import com.example.data.local.AppDatabase
 import com.example.data.local.RangeTickCacheDatabase
 import com.example.data.local.RangeTickDiskStore
+import com.example.data.local.RangeBarDiskStore
 import com.example.data.repository.MarketDataRepository
 import com.example.data.repository.TradingRepository
 
@@ -21,6 +22,10 @@ class TradeLabApplication : Application() {
 
     val rangeTickDiskStore: RangeTickDiskStore by lazy {
         RangeTickDiskStore(RangeTickCacheDatabase.getInstance(this).slices())
+    }
+
+    val rangeBarDiskStore: RangeBarDiskStore by lazy {
+        RangeBarDiskStore(RangeTickCacheDatabase.getInstance(this).bars())
     }
 
     val marketDataProvider: DefaultMarketDataProvider by lazy {

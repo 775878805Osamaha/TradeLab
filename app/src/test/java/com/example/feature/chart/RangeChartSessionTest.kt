@@ -32,6 +32,18 @@ class RangeChartSessionTest {
             session.snapshot.value, gold, 100_000L, 6, 0))
     }
 
+    @Test fun aWarmDiskSnapshotIsNeverCarriedIntoAnotherBrokerOrSymbolContext() {
+        val session = RangeChartSession()
+        session.alignTo(gold, now = 100_000L)
+        session.warmRestored.value = true
+        session.snapshot.value = snapshot()
+        assertFalse(session.alignTo(gold, now = 200_000L))
+        assertTrue(session.warmRestored.value)
+        assertTrue(session.alignTo(gold.copy(accountGeneration = 9L), now = 200_000L))
+        assertFalse(session.warmRestored.value)
+        assertNull(session.snapshot.value)
+    }
+
     @Test fun reopeningChartTabDuringReplayPreservesModeBarsToolbarAndViewport() {
         val presentation = ChartReplayPresentation()
         val session = RangeChartSession()

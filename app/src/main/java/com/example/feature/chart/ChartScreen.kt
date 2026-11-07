@@ -237,6 +237,7 @@ fun ChartScreen(
     var rangeReplayBackshiftMillis by rangeSession.replayBackshiftMillis
     var rangeSnapshot by rangeSession.snapshot
     var rangeLoading by rangeSession.loading
+    val rangeWarmRestored by rangeSession.warmRestored
     var rangeFirstPageMs by rangeSession.firstPageMs
     var rangeFullLoadMs by rangeSession.fullLoadMs
     var rangeReceivedQuotes by rangeSession.receivedQuotes
@@ -1619,6 +1620,8 @@ fun ChartScreen(
                                 color = TradingAccentLight, fontSize = 11.sp)
                         }
                         if (rangeLoading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                        if (rangeWarmRestored && rangeLoading) Text("محفوظ محليًا · تحديث",
+                            fontSize = 9.sp, color = TradingTextSecondary)
                         if (rangePreviewVisible) Text("جارٍ تثبيت الشموع", fontSize = 9.sp,
                             color = TradingTextSecondary)
                         if (rangeHasFormingBar && !rangePreviewVisible)

@@ -150,6 +150,7 @@ internal class RangeChartSession {
     val refreshAnchor = mutableLongStateOf(System.currentTimeMillis())
     val replayBackshiftMillis = mutableLongStateOf(0L)
     val snapshot = mutableStateOf<RangeChartSnapshot?>(null)
+    val warmRestored = mutableStateOf(false)
     val loading = mutableStateOf(false)
     val loadNonce = mutableIntStateOf(0)
     val firstPageMs = mutableStateOf<Long?>(null)
@@ -171,6 +172,7 @@ internal class RangeChartSession {
         refreshAnchor.longValue = now
         replayBackshiftMillis.longValue = 0L
         snapshot.value = null
+        warmRestored.value = false
         loading.value = false
         firstPageMs.value = null
         fullLoadMs.value = null
