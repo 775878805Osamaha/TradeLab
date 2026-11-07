@@ -20,6 +20,52 @@ internal data class RangeChartContext(
     val replayDatasetId: Long
 )
 
+internal data class RangeChartLoadRequest(
+    val context: RangeChartContext,
+    val cutoff: Long,
+    val hours: Int,
+    val requestGeneration: Int
+)
+
+/**
+ * Queue only the newest pending Replay cutoff. Switching tabs does not
+ * terminate the in-flight download or enqueue an identical request again.
+ * This class has no Android dependency and can be exercised in JVM tests.
+ */
+internal class RangeChartRequestQueue {
+    var active: RangeChartLoadRequest? = null
+        private set
+    var pending: RangeChartLoadRequest? = null
+        private set
+
+    fun offer(request: RangeChartLoadRequest): Boolean {
+        if (active == null) {
+            active = request
+            return true
+        }
+        if (active == request) {
+            // A rewind to the in-flight cutoff supersedes a later queued one.
+            pending = null
+            return false
+        }
+        if (pending == request) return false
+        pending = request
+        return false
+    }
+
+    fun finish(completed: RangeChartLoadRequest): RangeChartLoadRequest? {
+        if (active != completed) return null
+        active = pending
+        pending = null
+        return active
+    }
+
+    fun invalidate() {
+        active = null
+        pending = null
+    }
+}
+
 internal data class RangeChartSnapshot(
     val symbol: String,
     val end: Long,

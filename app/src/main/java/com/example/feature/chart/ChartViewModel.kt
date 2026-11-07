@@ -28,6 +28,8 @@ import com.example.feature.chart.history.ChartInitialHistoryScan
 import com.example.feature.chart.history.ChartHistoryRetry
 import com.example.feature.chart.history.ChartHistoryRetryPolicy
 import com.example.feature.chart.history.ChartClosedBarRefresh
+import com.example.feature.chart.model.RangeHistoryPaging
+import com.example.feature.chart.model.RangeReplayVisibilityPolicy
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -84,6 +86,8 @@ class ChartViewModel(
     // The NavHost disposes ChartScreen on tab switches, not this ViewModel.
     // Keep verified Range bars, paging and cutoff here until the market context changes.
     internal val rangeSession = RangeChartSession()
+    private val rangeRequests = RangeChartRequestQueue()
+    private var rangeDownloadJob: Job? = null
 
     val rangeAccountGeneration: StateFlow<Long>? get() = marketDataRepository.cTrader?.accountGeneration
 
@@ -234,6 +238,125 @@ class ChartViewModel(
                     sizeInPriceTicks, includeIncomplete, computed)
         } finally { rangeTickMutex.unlock() }
         return computed
+    }
+
+    /**
+     * Range BID tick downloads outlive the disposable ChartScreen composition.
+     * Reentering the Chart tab only offers an identical request; it cannot
+     * cancel or restart the verified cTrader history already in flight.
+     */
+    internal fun requestRangeHistory(request: RangeChartLoadRequest) {
+        if (rangeSession.context.value != request.context) return
+        if (RangeChartRestorationPolicy.canSkipDownload(rangeSession.snapshot.value,
+                request.context, request.cutoff, request.hours, request.requestGeneration)) return
+        if (rangeRequests.active?.context != null &&
+            rangeRequests.active?.context != request.context) cancelRangeHistory()
+        if (rangeRequests.offer(request)) executeRangeHistory(request)
+    }
+
+    /** Cancel only on a real instrument/account change, never on tab navigation. */
+    internal fun cancelObsoleteRangeHistory(context: RangeChartContext) {
+        if (rangeRequests.active?.context != null && rangeRequests.active?.context != context)
+            cancelRangeHistory()
+    }
+
+    internal fun cancelRangeHistory() {
+        rangeRequests.invalidate()
+        rangeDownloadJob?.cancel()
+        rangeDownloadJob = null
+        rangeSession.loadNonce.intValue++
+        rangeSession.loading.value = false
+    }
+
+    private fun executeRangeHistory(request: RangeChartLoadRequest) {
+        rangeDownloadJob = viewModelScope.launch {
+            val state = rangeSession
+            val context = request.context
+            // A new source context invalidates all former account/Replay quotes.
+            if (state.context.value != context) {
+                rangeRequests.finish(request)
+                return@launch
+            }
+            val nonce = ++state.loadNonce.intValue
+            val startTime = android.os.SystemClock.elapsedRealtime()
+            state.error.value = null
+            state.firstPageMs.value = null
+            state.fullLoadMs.value = null
+            state.receivedQuotes.intValue = 0
+            state.receivedSlices.intValue = 0
+            state.loading.value = true
+            try {
+                val from = (request.cutoff - request.hours * 3_600_000L).coerceAtLeast(1L)
+                val bars = withContext(Dispatchers.Default) {
+                    loadRangeBars(context.symbol, from, request.cutoff, context.size,
+                        includeIncomplete = !context.replay,
+                        onProgress = { recent ->
+                            withContext(Dispatchers.Main.immediate) {
+                                if (nonce != state.loadNonce.intValue || state.context.value != context)
+                                    return@withContext
+                                val stable = state.snapshot.value?.takeIf {
+                                    it.complete && it.candles.isNotEmpty() &&
+                                        it.symbol == context.symbol && it.size == context.size &&
+                                        it.replay == context.replay &&
+                                        it.accountGeneration == context.accountGeneration &&
+                                        it.replayDatasetId == context.replayDatasetId &&
+                                        RangeReplayVisibilityPolicy.canShow(it.end, request.cutoff,
+                                            context.replay, it.complete, state.loading.value, true)
+                                }
+                                if (stable == null) state.snapshot.value = RangeChartSnapshot(
+                                    context.symbol, request.cutoff, context.size, request.hours,
+                                    context.accountGeneration, context.replay, context.replayDatasetId,
+                                    recent.candles, recent.diagnostics, complete = false,
+                                    requestGeneration = request.requestGeneration)
+                                if (state.firstPageMs.value == null)
+                                    state.firstPageMs.value = android.os.SystemClock.elapsedRealtime() - startTime
+                            }
+                        }, onBatchProgress = { quotes, slices ->
+                            withContext(Dispatchers.Main.immediate) {
+                                if (nonce == state.loadNonce.intValue && state.context.value == context) {
+                                    state.receivedQuotes.intValue = quotes
+                                    state.receivedSlices.intValue = slices
+                                }
+                            }
+                        })
+                }
+                if (nonce == state.loadNonce.intValue && state.context.value == context) {
+                    state.snapshot.value = RangeChartSnapshot(context.symbol, request.cutoff,
+                        context.size, request.hours, context.accountGeneration, context.replay,
+                        context.replayDatasetId, bars.candles, bars.diagnostics, complete = true,
+                        requestGeneration = request.requestGeneration)
+                    state.fullLoadMs.value = android.os.SystemClock.elapsedRealtime() - startTime
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (dense: RangeTickHistoryTooDenseException) {
+                if (nonce == state.loadNonce.intValue && state.context.value == context) {
+                    if (request.hours > 1) {
+                        val smaller = RangeHistoryPaging.smallerDenseWindow(request.hours)
+                        state.historyCapHours.value = smaller
+                        state.historyHours.intValue = smaller
+                        state.historyManuallyChosen.value = true
+                        val latest = rangeRequests.pending?.takeIf { it.context == context }
+                            ?: request
+                        rangeRequests.offer(latest.copy(hours = smaller))
+                    } else state.error.value = dense.message?.take(180) ?: "بيانات Tick كثيفة جدًا"
+                }
+            } catch (error: Exception) {
+                if (nonce == state.loadNonce.intValue && state.context.value == context)
+                    state.error.value = error.message?.take(180) ?: "تعذر جلب بيانات Tick من cTrader"
+            } finally {
+                if (nonce == state.loadNonce.intValue) state.loading.value = false
+                // No cancellation is tied to the Chart tab's lifecycle. Replay
+                // merely replaces an unstarted pending cutoff with the latest.
+                rangeRequests.finish(request)?.let { next ->
+                    if (state.context.value == next.context &&
+                        !RangeChartRestorationPolicy.canSkipDownload(state.snapshot.value,
+                            next.context, next.cutoff, next.hours, next.requestGeneration)) {
+                        executeRangeHistory(next)
+                    } else rangeRequests.invalidate()
+                }
+            }
+        }
     }
 
     private var candleLoadJob: Job? = null

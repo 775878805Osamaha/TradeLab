@@ -36,7 +36,6 @@ import androidx.compose.ui.window.Dialog
 import com.example.core.market.DefaultSymbols
 import com.example.core.market.MarketSymbolRegistry
 import com.example.core.market.RangePhantomBars
-import com.example.core.market.RangeTickHistoryTooDenseException
 import com.example.core.model.Candle
 import com.example.core.model.DataSourceType
 import com.example.core.model.OrderSide
@@ -235,7 +234,6 @@ fun ChartScreen(
     var rangeReplayBackshiftMillis by rangeSession.replayBackshiftMillis
     var rangeSnapshot by rangeSession.snapshot
     var rangeLoading by rangeSession.loading
-    var rangeLoadNonce by rangeSession.loadNonce
     var rangeFirstPageMs by rangeSession.firstPageMs
     var rangeFullLoadMs by rangeSession.fullLoadMs
     var rangeReceivedQuotes by rangeSession.receivedQuotes
@@ -248,106 +246,19 @@ fun ChartScreen(
     val rangeEnd = if (isEmbeddedReplay) rangeReplayEnd?.minus(rangeReplayBackshiftMillis) else rangeRefreshAnchor
     LaunchedEffect(rangeContext) {
         // Do not reset on a fresh composition of the SAME instrument/session.
-        rangeSession.alignTo(rangeContext)
+        if (rangeSession.alignTo(rangeContext))
+            viewModel.cancelObsoleteRangeHistory(rangeContext)
     }
-    val latestRangeEnd = rememberUpdatedState(rangeEnd)
-    LaunchedEffect(chartDisplayStyle, uiState.selectedSymbol, isEmbeddedReplay,
-        rangeHistoryHours, fixedRangeTicks, rangeBrokerGeneration,
-        if (isEmbeddedReplay) replayState.datasetId else 0L,
+    LaunchedEffect(chartDisplayStyle, rangeContext, rangeEnd, rangeHistoryHours,
         rangeHistoryJumpGeneration, rangeSession.context.value) {
-        // Replay advances the cutoff on EVERY revealed timeframe candle. The
-        // former rangeEnd key cancelled the whole cTrader tick download each
-        // time, often leaving a permanently blank Range chart. Conflate only
-        // queued cutoffs; NEVER cancel a verified in-flight broker read just
-        // because another Replay candle was revealed.
-        if (chartDisplayStyle != ChartDisplayStyle.RANGE) return@LaunchedEffect
-        RangeReplayLoadQueue.consume(snapshotFlow { latestRangeEnd.value }) { requestedEnd ->
-        // Ignore an obsolete context before the context-alignment effect runs.
-        if (rangeSession.context.value != rangeContext) return@consume
-        if (RangeChartRestorationPolicy.canSkipDownload(rangeSnapshot, rangeContext,
-                requestedEnd, rangeHistoryHours, rangeHistoryJumpGeneration)) return@consume
-        val nonce = ++rangeLoadNonce
-        rangeError = null
-        rangeLoading = false
-        val requestedSymbol = uiState.selectedSymbol
-        val requestedHours = rangeHistoryHours
-        val requestedSize = fixedRangeTicks
-        val requestedReplay = isEmbeddedReplay
-        val requestedBrokerGeneration = rangeBrokerGeneration
-        val requestedReplayDatasetId = if (requestedReplay) replayState.datasetId else 0L
-        val requestedGeneration = rangeHistoryJumpGeneration
-        val loadStartedAt = android.os.SystemClock.elapsedRealtime()
-        rangeFirstPageMs = null
-        rangeFullLoadMs = null
-        rangeReceivedQuotes = 0
-        rangeReceivedSlices = 0
-        rangeLoading = true
-        try {
-            val start = (requestedEnd - requestedHours * 3_600_000L).coerceAtLeast(1L)
-            // Validate/merge up to a million BID quotes off the UI thread.
-            // Only the small state commits cross back to Main; previously the
-            // loader's sorting checks and ArrayList merging could stall touch
-            // gestures every time an older broker page finished downloading.
-            val bars = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                viewModel.loadRangeBars(
-                    requestedSymbol, start, requestedEnd, requestedSize,
-                    includeIncomplete = !requestedReplay,
-                    onProgress = { recentBars ->
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
-                            // Keep an existing complete chart stable while older history loads.
-                            val stable = rangeSnapshot?.takeIf {
-                                it.complete && it.candles.isNotEmpty() &&
-                                    it.symbol == requestedSymbol &&
-                                    it.size == requestedSize &&
-                                    it.replay == requestedReplay &&
-                                    it.accountGeneration == requestedBrokerGeneration &&
-                                    it.replayDatasetId == requestedReplayDatasetId &&
-                                    RangeReplayVisibilityPolicy.canShow(it.end, requestedEnd,
-                                        requestedReplay, it.complete, rangeLoading, true)
-                            }
-                            if (nonce == rangeLoadNonce && stable == null)
-                                rangeSnapshot = RangeChartSnapshot(
-                                    requestedSymbol, requestedEnd, requestedSize, requestedHours,
-                                    requestedBrokerGeneration, requestedReplay,
-                                    requestedReplayDatasetId,
-                                    recentBars.candles, recentBars.diagnostics, complete = false,
-                                    requestGeneration = requestedGeneration)
-                            if (nonce == rangeLoadNonce && rangeFirstPageMs == null)
-                                rangeFirstPageMs = android.os.SystemClock.elapsedRealtime() - loadStartedAt
-                        }
-                    }, onBatchProgress = { quotes, slices ->
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
-                            if (nonce == rangeLoadNonce) {
-                                rangeReceivedQuotes = quotes
-                                rangeReceivedSlices = slices
-                            }
-                        }
-                    }
-                )
+        if (chartDisplayStyle == ChartDisplayStyle.RANGE &&
+            rangeSession.context.value == rangeContext) {
+            rangeEnd?.let { end ->
+                // The request belongs to ChartViewModel's scope, so changing
+                // bottom tabs cannot cancel an in-flight broker tick download.
+                viewModel.requestRangeHistory(RangeChartLoadRequest(
+                    rangeContext, end, rangeHistoryHours, rangeHistoryJumpGeneration))
             }
-            if (nonce == rangeLoadNonce) rangeSnapshot = RangeChartSnapshot(requestedSymbol,
-                requestedEnd, requestedSize, requestedHours, requestedBrokerGeneration,
-                requestedReplay, requestedReplayDatasetId,
-                bars.candles, bars.diagnostics, complete = true,
-                requestGeneration = requestedGeneration)
-            if (nonce == rangeLoadNonce)
-                rangeFullLoadMs = android.os.SystemClock.elapsedRealtime() - loadStartedAt
-        } catch (cancelled: kotlinx.coroutines.CancellationException) {
-            throw cancelled
-        } catch (dense: RangeTickHistoryTooDenseException) {
-            if (nonce != rangeLoadNonce) return@consume
-            // Keep genuine broker history, but reduce the tick-memory window
-            // and continue pagination in overlapping, shorter slices.
-            if (rangeHistoryHours > 1) {
-                val smaller = RangeHistoryPaging.smallerDenseWindow(rangeHistoryHours)
-                rangeHistoryCapHours = smaller
-                rangeHistoryHours = smaller
-                rangeHistoryManuallyChosen = true
-            } else rangeError = dense.message?.take(180) ?: "بيانات Tick كثيفة جدًا"
-        } catch (error: Exception) {
-            if (nonce == rangeLoadNonce)
-                rangeError = error.message?.take(180) ?: "تعذر جلب بيانات Tick من cTrader"
-        } finally { if (nonce == rangeLoadNonce) rangeLoading = false }
         }
     }
     val visibleRangeBars = rangeSnapshot?.takeIf {

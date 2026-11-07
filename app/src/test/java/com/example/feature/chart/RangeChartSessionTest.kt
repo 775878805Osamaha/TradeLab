@@ -70,4 +70,58 @@ class RangeChartSessionTest {
         assertFalse(RangeChartRestorationPolicy.canSkipDownload(completed,
             replay.copy(replayDatasetId = 42L), 100_000L, 6, 0))
     }
+
+    @Test fun leavingAndReturningWhileDownloadIsActiveDoesNotStartItAgain() {
+        val queue = RangeChartRequestQueue()
+        val first = RangeChartLoadRequest(gold, 100_000L, 6, 0)
+        assertTrue(queue.offer(first))
+        // ChartScreen was disposed, then reentered before the broker replied.
+        assertFalse(queue.offer(first))
+        assertEquals(first, queue.active)
+        assertNull(queue.pending)
+        assertNull(queue.finish(first))
+        assertNull(queue.active)
+        assertTrue(queue.offer(first)) // retry remains possible after a failed download
+    }
+
+    @Test fun replayKeepsActiveBrokerDownloadAndOnlyQueuesNewestRevealedCutoff() {
+        val queue = RangeChartRequestQueue()
+        val replay = gold.copy(replay = true, replayDatasetId = 22L)
+        val first = RangeChartLoadRequest(replay, 100_000L, 6, 0)
+        val middle = first.copy(cutoff = 200_000L)
+        val latest = first.copy(cutoff = 300_000L)
+        assertTrue(queue.offer(first))
+        assertFalse(queue.offer(middle))
+        assertFalse(queue.offer(latest))
+        assertFalse(queue.offer(latest))
+        assertEquals(first, queue.active)
+        assertEquals(latest, queue.pending)
+        assertEquals(latest, queue.finish(first))
+        assertEquals(latest, queue.active)
+        assertNull(queue.finish(latest))
+    }
+
+    @Test fun switchingCTraderAccountsInvalidatesInFlightAndQueuedRequests() {
+        val queue = RangeChartRequestQueue()
+        val first = RangeChartLoadRequest(gold, 100_000L, 6, 0)
+        queue.offer(first)
+        queue.offer(first.copy(cutoff = 200_000L))
+        queue.invalidate()
+        val newAccount = first.copy(context = gold.copy(accountGeneration = 8L))
+        assertTrue(queue.offer(newAccount))
+        assertNull(queue.finish(first)) // old cancelled job cannot consume new account work
+        assertEquals(newAccount, queue.active)
+        assertNull(queue.pending)
+    }
+
+    @Test fun replayRewindToActiveCutoffDiscardsPreviouslyQueuedFutureCutoff() {
+        val queue = RangeChartRequestQueue()
+        val replay = gold.copy(replay = true, replayDatasetId = 22L)
+        val earlier = RangeChartLoadRequest(replay, 100_000L, 6, 0)
+        queue.offer(earlier)
+        queue.offer(earlier.copy(cutoff = 200_000L))
+        assertFalse(queue.offer(earlier))
+        assertNull(queue.pending)
+        assertNull(queue.finish(earlier))
+    }
 }
