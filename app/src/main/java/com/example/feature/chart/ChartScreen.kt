@@ -72,11 +72,14 @@ fun ChartScreen(
     val replayState by replayViewModel.uiState.collectAsState()
     val historyTargetTime by replayViewModel.historyTargetTime.collectAsState()
     val orderKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    // A restored training account must not activate Replay on chart entry.
-    var isEmbeddedReplay by remember { mutableStateOf(false) }
+    // MainActivity retains ChartViewModel while tab navigation destroys this
+    // Composable. Restoring this same mode avoids resetting Range context and
+    // re-downloading all verified cTrader BID ticks on every tab return.
+    // Fresh app launches still default to analysis, not automatic Replay.
+    var isEmbeddedReplay by viewModel.replayPresentation.enabled
     // Opening Replay reveals the transport on the existing live chart first.
     // History replaces live candles only after the user starts or chooses a date.
-    var isReplayToolbarOpen by remember { mutableStateOf(false) }
+    var isReplayToolbarOpen by viewModel.replayPresentation.toolbarOpen
     val startReplayOnChart: () -> Unit = {
         replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
         isEmbeddedReplay = true

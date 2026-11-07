@@ -32,6 +32,41 @@ class RangeChartSessionTest {
             session.snapshot.value, gold, 100_000L, 6, 0))
     }
 
+    @Test fun reopeningChartTabDuringReplayPreservesModeBarsToolbarAndViewport() {
+        val presentation = ChartReplayPresentation()
+        val session = RangeChartSession()
+        val replayContext = gold.copy(replay = true, replayDatasetId = 41L)
+
+        // The app starts in analysis mode. The user explicitly opens Replay.
+        assertFalse(presentation.enabled.value)
+        assertFalse(presentation.toolbarOpen.value)
+        presentation.enabled.value = true
+        presentation.toolbarOpen.value = true
+        assertTrue(session.alignTo(replayContext, now = 100_000L))
+        val completed = snapshot(replayContext)
+        session.snapshot.value = completed
+        session.viewport.candleWidthPx.floatValue = 23f
+        session.viewport.scrollOffsetPx.floatValue = 375f
+
+        // ChartScreen is removed by bottom navigation, but ChartViewModel
+        // retains both presentation and the broker's verified Range snapshot.
+        assertTrue(presentation.enabled.value)
+        assertTrue(presentation.toolbarOpen.value)
+        assertFalse(session.alignTo(replayContext, now = 200_000L))
+        assertSame(completed, session.snapshot.value)
+        assertEquals(23f, session.viewport.candleWidthPx.floatValue, 0f)
+        assertEquals(375f, session.viewport.scrollOffsetPx.floatValue, 0f)
+        assertTrue(RangeChartRestorationPolicy.canSkipDownload(
+            session.snapshot.value, replayContext, 100_000L, 6, 0))
+
+        // Explicitly exiting Replay still returns to analysis mode.
+        presentation.close()
+        assertFalse(presentation.enabled.value)
+        assertFalse(presentation.toolbarOpen.value)
+        assertTrue(session.alignTo(gold, now = 200_000L))
+        assertNull(session.snapshot.value)
+    }
+
     @Test fun anExplicitRefreshMustDownloadEvenIfItsMillisecondCutoffIsUnchanged() {
         assertTrue(RangeChartRestorationPolicy.canSkipDownload(snapshot(), gold, 100_000L, 6, 0))
         assertFalse(RangeChartRestorationPolicy.canSkipDownload(snapshot(), gold, 100_000L, 6, 1))

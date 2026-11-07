@@ -91,6 +91,7 @@ class ChartViewModel(
     // The NavHost disposes ChartScreen on tab switches, not this ViewModel.
     // Keep verified Range bars, paging and cutoff here until the market context changes.
     internal val rangeSession = RangeChartSession()
+    internal val replayPresentation = ChartReplayPresentation()
     private val rangeRequests = RangeChartRequestQueue()
     private var rangeDownloadJob: Job? = null
 

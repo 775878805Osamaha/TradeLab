@@ -96,6 +96,24 @@ internal object RangeChartRestorationPolicy {
         snapshot.requestGeneration == requestGeneration
 }
 
+/**
+ * Replay is a chart mode, not a disposable Composable's local dialog state.
+ * The bottom navigation removes ChartScreen, while ChartViewModel (and the
+ * training ReplayViewModel) stay alive in MainActivity. Keeping these flags
+ * with that owner prevents a tab return from silently switching to analysis,
+ * changing the RangeChartContext and discarding verified broker candles.
+ * A fresh activity still begins in analysis mode unless Replay is opened.
+ */
+internal class ChartReplayPresentation {
+    val enabled = mutableStateOf(false)
+    val toolbarOpen = mutableStateOf(false)
+
+    fun close() {
+        enabled.value = false
+        toolbarOpen.value = false
+    }
+}
+
 /** Persist the user's Range zoom and pan across tab and Canvas re-creation. */
 class RangeChartViewport {
     val candleWidthPx = mutableFloatStateOf(12f)
