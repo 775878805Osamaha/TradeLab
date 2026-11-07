@@ -59,8 +59,13 @@ class RangeTickWindowContinuationTest {
             listOf(RangePriceTick(end, 4000.0 + requested.size))
         }
         assertEquals(2, result.size)
-        assertEquals(1L, requested.first().first)
-        assertEquals(3L * hour, requested.last().second)
+        // The loader intentionally fetches newest BID quotes first to paint
+        // the chart sooner. Both ends must still be covered exactly once.
+        assertEquals(3L * hour, requested.first().second)
+        assertEquals(1L, requested.last().first)
+        assertTrue(requested.zipWithNext().all { (newer, older) ->
+            older.second + 1L == newer.first
+        })
         assertTrue(result.none { it.price == 4050.0 })
     }
 
