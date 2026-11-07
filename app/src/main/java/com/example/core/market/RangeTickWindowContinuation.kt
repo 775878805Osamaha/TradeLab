@@ -14,6 +14,7 @@ object RangeTickWindowContinuation {
         source: String,
         cache: RangeTickSuffixCache,
         onProgress: suspend (Int, Int) -> Unit = { _, _ -> },
+        onPreview: suspend (List<RangePriceTick>) -> Unit = {},
         maxQuotes: Int = RangeTickBatchLoader.MAX_WINDOW_TICKS,
         initialSliceMillis: Long = 3_600_000L,
         request: suspend (Long, Long) -> List<RangePriceTick>
@@ -27,8 +28,21 @@ object RangeTickWindowContinuation {
             throw RangeTickHistoryTooDenseException(
                 "عدد بيانات Tick أكبر من ذاكرة العرض؛ استعرض فترة أقصر")
         if (verified != null) onProgress(savedCount, 0)
+        // A fully verified suffix from an interrupted backfill is immediately
+        // safe to render, even while still-older BID history is in flight.
+        if (verified?.ticks?.isNotEmpty() == true) onPreview(verified.ticks)
         val older = if (lastUnfetched >= from) {
             RangeTickBatchLoader.load(from, lastUnfetched,
+                onNewestSlice = { newest ->
+                    if (newest.isNotEmpty()) {
+                        val safe = if (verified == null) newest
+                            else ArrayList<RangePriceTick>(newest.size + savedCount).apply {
+                                addAll(newest)
+                                addAll(verified.ticks)
+                            }
+                        onPreview(safe)
+                    }
+                },
                 onSliceComplete = { count, pages -> onProgress(savedCount + count, pages) },
                 onVerifiedSlice = { start, end, quotes ->
                     cache.remember(symbol, source, start, end, quotes)

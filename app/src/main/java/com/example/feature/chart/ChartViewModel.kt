@@ -197,13 +197,39 @@ class ChartViewModel(
                         it.from == from && it.to == to
                 }?.ticks ?: RangeTickWindowReuse.between(cached.ticks, from, to)
                 val plannedSlice = RangeTickRollingWindow.initialSliceMillis(cached)
+                var previewSent = false
+                suspend fun publishVerifiedPreview(verifiedQuotes: List<RangePriceTick>) {
+                    if (previewSent || verifiedQuotes.isEmpty()) return
+                    val preview = withContext(Dispatchers.Default) {
+                        val workingContext = currentCoroutineContext()
+                        RangeBarsEngine.buildVerified(symbol, verifiedQuotes, tickSize,
+                            sizeInPriceTicks, source, includeIncomplete,
+                            cancellationCheckpoint = { workingContext.ensureActive() })
+                    }
+                    if (preview.candles.isNotEmpty()) {
+                        previewSent = true
+                        onProgress(preview)
+                    }
+                }
                 val older = if (from < cached.from) {
                     val budget = RangeTickBatchLoader.MAX_WINDOW_TICKS - retained.size
                     if (budget <= 0) throw RangeTickHistoryTooDenseException(
                         "عدد بيانات Tick أكبر من ذاكرة العرض؛ استعرض فترة أقصر")
+                    // A backwards historical move may already include real
+                    // BID quotes in its newest portion. Paint them before the
+                    // slower broker backfill, without touching future ticks.
+                    publishVerifiedPreview(retained)
                     RangeTickWindowContinuation.downloadOlder(from, cached.from - 1L,
                         symbol, source, incompleteRangeDownload,
-                        onProgress = onBatchProgress, maxQuotes = budget,
+                        onProgress = onBatchProgress,
+                        onPreview = { verifiedPrefix ->
+                            val allVisible = if (retained.isEmpty()) verifiedPrefix else
+                                ArrayList<RangePriceTick>(verifiedPrefix.size + retained.size).apply {
+                                    addAll(verifiedPrefix)
+                                    addAll(retained)
+                                }
+                            publishVerifiedPreview(allVisible)
+                        }, maxQuotes = budget,
                         initialSliceMillis = plannedSlice) { start, end ->
                         client.historicalBidTicks(symbol, start, end)
                     }

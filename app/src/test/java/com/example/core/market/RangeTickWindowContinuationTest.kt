@@ -10,6 +10,57 @@ class RangeTickWindowContinuationTest {
     private val symbol = "XAUUSD"
     private val hour = 3_600_000L
 
+    @Test fun olderBackfillImmediatelyPreviewsVerifiedSuffixThenNewestRealPage() = runBlocking {
+        val cache = RangeTickSuffixCache()
+        val from = 1L
+        val to = 4L * hour
+        val suffixStart = 3L * hour + 1L
+        val suffix = listOf(RangePriceTick(to, 4050.04))
+        cache.remember(symbol, source, suffixStart, to, suffix)
+        val allQuotes = listOf(RangePriceTick(hour, 4050.01),
+            RangePriceTick(2L * hour, 4050.02),
+            RangePriceTick(3L * hour, 4050.03), suffix.single())
+        val previews = mutableListOf<List<RangePriceTick>>()
+        val result = RangeTickWindowContinuation.downloadOlder(from, to,
+            symbol, source, cache,
+            onPreview = { previews.add(it.toList()) }) { start, end ->
+            allQuotes.filter { it.timestamp in start..end }
+        }
+        assertEquals(allQuotes, result)
+        assertTrue(previews.isNotEmpty())
+        assertEquals(suffix, previews.first())
+        assertEquals(listOf(3L * hour, to), previews[1].map { it.timestamp })
+        assertTrue(previews.all { page -> page.zipWithNext().all { (a, b) ->
+            a.timestamp <= b.timestamp
+        } && page.all { it.timestamp <= to } })
+    }
+
+    @Test fun cancelledVerifiedPreviewCanResumeWithoutRefetchingThatPage() = runBlocking {
+        val cache = RangeTickSuffixCache()
+        val from = 1L
+        val to = 3L * hour
+        val quotes = (1..3).map { RangePriceTick(it.toLong() * hour, 4050.0 + it) }
+        var verified = 0
+        try {
+            RangeTickWindowContinuation.downloadOlder(from, to,
+                symbol, source, cache,
+                onPreview = { if (++verified == 1) throw CancellationException("left chart") }
+            ) { start, end -> quotes.filter { it.timestamp in start..end } }
+            fail("Expected cancellation after the first verified preview")
+        } catch (_: CancellationException) { }
+        assertEquals(1, verified)
+        val saved = cache.snapshot(symbol, source, from, to)!!
+        assertEquals(to, saved.to)
+        val retried = mutableListOf<Pair<Long, Long>>()
+        val complete = RangeTickWindowContinuation.downloadOlder(from, to,
+            symbol, source, cache) { start, end ->
+            retried.add(start to end)
+            quotes.filter { it.timestamp in start..end }
+        }
+        assertEquals(quotes, complete)
+        assertTrue(retried.all { it.second < saved.from })
+    }
+
     @Test fun interruptedOlderPanResumesExactBrokerHistoryWithoutRedownloadingSavedSlice() = runBlocking {
         val cache = RangeTickSuffixCache()
         val from = 1L
