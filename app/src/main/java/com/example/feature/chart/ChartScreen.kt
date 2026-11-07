@@ -707,7 +707,7 @@ fun ChartScreen(
                     }
                     Text("العرض الافتراضي يستخدم شموع cTrader الحقيقية وحدها. عند تفعيل هذا الخيار تُضاف علامات مرئية فقط للفجوات بين شمعتين، دون تقسيم أي شمعة حقيقية أو تعديل سعرها. لا تدخل العلامات في Replay أو نتائج الصفقات.",
                         style = MaterialTheme.typography.bodySmall)
-                    Text("شموع حقيقية: ${visibleRangeBars?.size ?: 0} · شموع عرض افتراضية: ${((rangeVisualBars?.size ?: 0) - (visibleRangeBars?.size ?: 0)).coerceAtLeast(0)}",
+                    Text("شموع Bid: ${visibleRangeBars?.size ?: 0} · مكتملة: ${((visibleRangeBars?.size ?: 0) - (if (rangeSnapshot?.hasIncompleteLastBar == true) 1 else 0)).coerceAtLeast(0)} · شموع عرض افتراضية: ${((rangeVisualBars?.size ?: 0) - (visibleRangeBars?.size ?: 0)).coerceAtLeast(0)}",
                         style = MaterialTheme.typography.bodySmall)
                     val tickAudit = rangeSnapshot?.diagnostics?.takeIf { visibleRangeBars != null }
                     if (tickAudit != null) {
@@ -750,6 +750,7 @@ fun ChartScreen(
                                 "source=ctrader_bid",
                                 "status=${if (rangeLoading) "loading" else if (rangeError != null) "error" else if (snapshot?.complete == true) "complete" else "provisional"}",
                                 "bars=${visibleRangeBars?.size ?: 0}",
+                                "forming_bar=${snapshot?.hasIncompleteLastBar == true}",
                                 "visual_gap_markers=$showRangePhantomBars",
                                 "quote_count=${audit?.quoteCount ?: 0}",
                                 "same_millisecond_quotes=${audit?.sameMillisecondQuotes ?: 0}",
@@ -1467,14 +1468,19 @@ fun ChartScreen(
 
             // Range indicators are calculated from verified tick-derived bars,
             // never from the original timeframe OHLC or hidden Replay candles.
+            val rangeHasFormingBar = visibleRangeBars != null &&
+                rangeSnapshot?.hasIncompleteLastBar == true
+            val confirmedRangeBars = remember(visibleRangeBars, rangeHasFormingBar) {
+                if (rangeHasFormingBar) visibleRangeBars?.dropLast(1) else visibleRangeBars
+            }
             val rangePrepared by produceState<Pair<List<Candle>, PreparedChartIndicators>?>(
-                null, visibleRangeBars, rangeSnapshot?.complete,
+                null, confirmedRangeBars, rangeSnapshot?.complete,
                 uiState.indicatorSettings, chartDisplayStyle
             ) {
-                value = if (chartDisplayStyle == ChartDisplayStyle.RANGE && visibleRangeBars != null &&
+                value = if (chartDisplayStyle == ChartDisplayStyle.RANGE && confirmedRangeBars != null &&
                     rangeSnapshot?.complete == true)
-                    visibleRangeBars to kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                        ChartIndicatorPreparation.calculate(visibleRangeBars, uiState.indicatorSettings)
+                    confirmedRangeBars to kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                        ChartIndicatorPreparation.calculate(confirmedRangeBars, uiState.indicatorSettings)
                     }
                 else null
             }
@@ -1482,7 +1488,7 @@ fun ChartScreen(
             val rangePreviewVisible = rangeSnapshot?.complete == false &&
                 rangeSnapshot?.candles === visibleRangeBars
             val activeRangeIndicators = if (phantomBarsVisible || rangePreviewVisible) null
-                else rangePrepared?.takeIf { it.first === visibleRangeBars }?.second
+                else rangePrepared?.takeIf { it.first === confirmedRangeBars }?.second
             val rangeIsActive = chartDisplayStyle == ChartDisplayStyle.RANGE
             val chartBars = if (rangeIsActive) rangeVisualBars.orEmpty()
                 else if (isEmbeddedReplay) replayBars else uiState.candles
@@ -1516,7 +1522,7 @@ fun ChartScreen(
                             rangeLoading -> "جاري تحميل أسعار Bid الحقيقية من cTrader..."
                             rangeSnapshot?.complete == true &&
                                 visibleRangeBars.isNullOrEmpty() ->
-                                "لم تتشكل شموع مدى مكتملة في هذه الفترة. اختر مدى أصغر أو حمّل تاريخًا أقدم."
+                                "لا توجد أسعار Bid تكفي لشمعة مدى في هذه الفترة. اختر مدى أصغر أو حمّل تاريخًا أقدم."
                             else -> "جاري إعداد شموع المدى التاريخية..."
                         },
                     rangeHistoryWindowEnd = if (rangeIsActive && visibleRangeBars != null)
@@ -1612,6 +1618,9 @@ fun ChartScreen(
                         if (rangeLoading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                         if (rangePreviewVisible) Text("جارٍ تثبيت الشموع", fontSize = 9.sp,
                             color = TradingTextSecondary)
+                        if (rangeHasFormingBar && !rangePreviewVisible)
+                            Text("قيد التكوين", fontSize = 9.sp,
+                                color = TradingTextSecondary)
                         if (!rangeLoading) TextButton(
                             onClick = requestOlderRange,
                             modifier = Modifier.testTag("range_load_older")) {

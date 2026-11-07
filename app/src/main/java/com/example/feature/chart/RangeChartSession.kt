@@ -79,7 +79,8 @@ internal data class RangeChartSnapshot(
     val candles: List<Candle>,
     val diagnostics: RangeTickDiagnostics,
     val complete: Boolean,
-    val requestGeneration: Int
+    val requestGeneration: Int,
+    val hasIncompleteLastBar: Boolean = false
 )
 
 internal object RangeChartRestorationPolicy {
@@ -104,6 +105,8 @@ class RangeChartViewport {
     val initialFitApplied = mutableStateOf(false)
     val fittedDisplayStyle = mutableStateOf<ChartDisplayStyle?>(null)
     val lastResetTrigger = mutableLongStateOf(0L)
+    val lastBackfillOldestTime = mutableStateOf<Long?>(null)
+    val lastBackfillScrollOffset = mutableFloatStateOf(0f)
 
     fun reset() {
         candleWidthPx.floatValue = 12f
@@ -113,6 +116,8 @@ class RangeChartViewport {
         initialFitApplied.value = false
         fittedDisplayStyle.value = null
         lastResetTrigger.longValue = 0L
+        lastBackfillOldestTime.value = null
+        lastBackfillScrollOffset.floatValue = 0f
     }
 }
 

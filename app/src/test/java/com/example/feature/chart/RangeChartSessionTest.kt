@@ -134,6 +134,8 @@ class RangeChartSessionTest {
         session.viewport.pricePanPx.floatValue = -75f
         session.viewport.initialFitApplied.value = true
         session.viewport.fittedDisplayStyle.value = com.example.ui.components.ChartDisplayStyle.RANGE
+        session.viewport.lastBackfillOldestTime.value = 50_000L
+        session.viewport.lastBackfillScrollOffset.floatValue = 400f
 
         assertFalse(session.alignTo(gold, 200_000L))
         assertEquals(19f, session.viewport.candleWidthPx.floatValue, 0f)
@@ -141,6 +143,8 @@ class RangeChartSessionTest {
         assertEquals(1.8f, session.viewport.manualPriceScale.floatValue, 0f)
         assertEquals(-75f, session.viewport.pricePanPx.floatValue, 0f)
         assertTrue(session.viewport.initialFitApplied.value)
+        assertEquals(50_000L, session.viewport.lastBackfillOldestTime.value)
+        assertEquals(400f, session.viewport.lastBackfillScrollOffset.floatValue, 0f)
 
         // A different instrument is a real new viewport, unlike a tab switch.
         assertTrue(session.alignTo(gold.copy(symbol = "EURUSD"), 200_000L))
@@ -149,5 +153,7 @@ class RangeChartSessionTest {
         assertEquals(1f, session.viewport.manualPriceScale.floatValue, 0f)
         assertEquals(0f, session.viewport.pricePanPx.floatValue, 0f)
         assertFalse(session.viewport.initialFitApplied.value)
+        assertNull(session.viewport.lastBackfillOldestTime.value)
+        assertEquals(0f, session.viewport.lastBackfillScrollOffset.floatValue, 0f)
     }
 }

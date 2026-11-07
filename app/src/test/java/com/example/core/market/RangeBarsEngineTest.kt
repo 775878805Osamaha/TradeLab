@@ -90,6 +90,36 @@ class RangeBarsEngineTest {
         assertEquals(1, RangeBarsEngine.build("XAUUSD", points, 0.01, 1000, source, true).size)
     }
 
+    @Test fun replayCanDisplayItsRealFormingBarWithoutFutureTicks() {
+        val revealed = listOf(RangePriceTick(100L, 4058.00),
+            RangePriceTick(110L, 4058.35), RangePriceTick(120L, 4058.79))
+        val future = RangePriceTick(130L, 4069.00)
+        val beforeFuture = RangeBarsEngine.buildVerified("XAUUSD", revealed,
+            0.01, 1000, source, includeIncomplete = true)
+        assertTrue(beforeFuture.hasIncompleteLastBar)
+        assertEquals(1, beforeFuture.candles.size)
+        assertEquals(4058.79, beforeFuture.candles.single().close, 0.0)
+        assertTrue(beforeFuture.candles.single().closeTime <= future.timestamp)
+        assertEquals(0, RangeBarsEngine.buildVerified("XAUUSD", revealed,
+            0.01, 1000, source).candles.size)
+        val afterFuture = RangeBarsEngine.buildVerified("XAUUSD", revealed + future,
+            0.01, 1000, source, includeIncomplete = true)
+        assertFalse(afterFuture.hasIncompleteLastBar)
+        assertEquals(1, afterFuture.candles.size)
+        assertEquals(4069.00, afterFuture.candles.single().close, 0.0)
+    }
+
+    @Test fun incompleteRangeBarIsIdentifiedSeparatelyFromClosedBars() {
+        val ticks = listOf(RangePriceTick(100L, 4050.00),
+            RangePriceTick(110L, 4051.00), RangePriceTick(120L, 4051.50))
+        val result = RangeBarsEngine.buildVerified("XAUUSD", ticks,
+            0.01, 100, source, includeIncomplete = true)
+        assertEquals(2, result.candles.size)
+        assertTrue(result.hasIncompleteLastBar)
+        assertEquals(4051.00, result.candles.first().close, 0.0)
+        assertEquals(4051.50, result.candles.last().close, 0.0)
+    }
+
     @Test fun completedLastRangeDoesNotCreateDuplicateEmptyProjection() {
         val ticks = listOf(RangePriceTick(10, 4000.0), RangePriceTick(11, 4001.0))
         val bars = RangeBarsEngine.build("XAUUSD", ticks, 0.01, 100, source, true)

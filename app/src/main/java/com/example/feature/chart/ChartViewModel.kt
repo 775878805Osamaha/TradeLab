@@ -289,7 +289,9 @@ class ChartViewModel(
                 val from = (request.cutoff - request.hours * 3_600_000L).coerceAtLeast(1L)
                 val bars = withContext(Dispatchers.Default) {
                     loadRangeBars(context.symbol, from, request.cutoff, context.size,
-                        includeIncomplete = !context.replay,
+                        // Replay shows the forming bar from already revealed
+                        // BID ticks. It never reveals quotes beyond its cutoff.
+                        includeIncomplete = true,
                         onProgress = { recent ->
                             withContext(Dispatchers.Main.immediate) {
                                 if (nonce != state.loadNonce.intValue || state.context.value != context)
@@ -307,7 +309,8 @@ class ChartViewModel(
                                     context.symbol, request.cutoff, context.size, request.hours,
                                     context.accountGeneration, context.replay, context.replayDatasetId,
                                     recent.candles, recent.diagnostics, complete = false,
-                                    requestGeneration = request.requestGeneration)
+                                    requestGeneration = request.requestGeneration,
+                                    hasIncompleteLastBar = recent.hasIncompleteLastBar)
                                 if (state.firstPageMs.value == null)
                                     state.firstPageMs.value = android.os.SystemClock.elapsedRealtime() - startTime
                             }
@@ -324,7 +327,8 @@ class ChartViewModel(
                     state.snapshot.value = RangeChartSnapshot(context.symbol, request.cutoff,
                         context.size, request.hours, context.accountGeneration, context.replay,
                         context.replayDatasetId, bars.candles, bars.diagnostics, complete = true,
-                        requestGeneration = request.requestGeneration)
+                        requestGeneration = request.requestGeneration,
+                        hasIncompleteLastBar = bars.hasIncompleteLastBar)
                     state.fullLoadMs.value = android.os.SystemClock.elapsedRealtime() - startTime
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {

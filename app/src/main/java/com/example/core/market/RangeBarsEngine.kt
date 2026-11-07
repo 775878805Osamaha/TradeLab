@@ -23,7 +23,12 @@ data class RangeTickDiagnostics(
     val oversizedCandles: Int = 0
 )
 
-data class VerifiedRangeBars(val candles: List<Candle>, val diagnostics: RangeTickDiagnostics)
+data class VerifiedRangeBars(
+    val candles: List<Candle>,
+    val diagnostics: RangeTickDiagnostics,
+    /** The final observed bar has not yet covered the configured price range. */
+    val hasIncompleteLastBar: Boolean = false
+)
 
 /**
  * Fixed price-range bars. `sizeInPriceTicks` means multiples of the symbol's
@@ -146,7 +151,8 @@ object RangeBarsEngine {
         }
         // The next bar was anchored at the last close, but no *new* quote has
         // arrived yet. Do not draw a duplicate zero-range projection candle.
-        if (active && includeIncomplete && !closedOnLastQuote) emit(lastTimestamp)
+        val hasIncompleteLastBar = active && includeIncomplete && !closedOnLastQuote
+        if (hasIncompleteLastBar) emit(lastTimestamp)
         return VerifiedRangeBars(result, RangeTickDiagnostics(
             quoteCount = ticks.size,
             sameMillisecondQuotes = sameMillisecondQuotes,
@@ -154,6 +160,6 @@ object RangeBarsEngine {
             largestQuoteJumpTicks = largestQuoteJumpTicks,
             longestQuotePauseMillis = longestQuotePauseMillis,
             oversizedCandles = oversizedCandles
-        ))
+        ), hasIncompleteLastBar = hasIncompleteLastBar)
     }
 }

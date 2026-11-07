@@ -317,19 +317,22 @@ fun CandlestickChart(
     val requestOlderHistory by rememberUpdatedState(onRequestOlderHistory)
     val loadingOlderHistory by rememberUpdatedState(isLoadingOlderHistory)
     val oldestAvailableCandleTime by rememberUpdatedState(candles.firstOrNull()?.openTime)
-    var lastBackfillOldestTime by remember { mutableStateOf<Long?>(null) }
+    var lastBackfillOldestTime by viewport.lastBackfillOldestTime
     // Do not permanently suppress automatic pagination after a transient
     // provider failure. Back off repeated attempts while the user remains
     // parked at the same historical edge; a new drag can retry.
-    var lastBackfillScrollOffset by remember { mutableFloatStateOf(0f) }
+    var lastBackfillScrollOffset by viewport.lastBackfillScrollOffset
     // Re-arm pagination after switching symbols/timeframes, even if the
     // newly loaded history happens to begin at the same timestamp.
     LaunchedEffect(candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe, displayStyle) {
-        lastBackfillOldestTime = null
-        lastBackfillScrollOffset = 0f
         // Range sessions reset on real symbol/size/account changes upstream.
-        // Do not overwrite the saved pan merely because this Canvas remounted.
-        if (persistentRangeViewport == null) scrollOffsetPx = 0f
+        // Do not re-arm backfill or overwrite saved pan just because this
+        // Canvas remounted during a bottom-tab switch.
+        if (persistentRangeViewport == null) {
+            lastBackfillOldestTime = null
+            lastBackfillScrollOffset = 0f
+            scrollOffsetPx = 0f
+        }
     }
     LaunchedEffect(candles.firstOrNull()?.openTime, scrollOffsetPx, chartViewportWidthPx,
         candleWidthPx, isLoadingOlderHistory) {
