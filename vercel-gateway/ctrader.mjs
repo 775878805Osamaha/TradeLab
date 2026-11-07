@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
 import { hash as tokenHash } from './session.mjs';
 
-const REQUEST_RESPONSE = new Map([[2100,2101],[2149,2150],[2102,2103],[2114,2115],[2137,2138],[2145,2146],[2127,2128],[2129,2130]]);
+const REQUEST_RESPONSE = new Map([[2100,2101],[2149,2150],[2102,2103],[2114,2115],[2116,2117],[2137,2138],[2145,2146],[2127,2128],[2129,2130]]);
 const HOSTS = { demo: 'wss://demo.ctraderapi.com:5036', live: 'wss://live.ctraderapi.com:5036' };
 export const PERIODS = Object.freeze({M1:1,M2:2,M3:3,M4:4,M5:5,M10:6,M15:7,M30:8,H1:9,H4:10,H12:11,D1:12,W1:13,MN1:14});
 export function isReadOnlyScope(scope) {
@@ -213,6 +213,18 @@ class Channel {
     await this.account(accountId,accessToken);
     return (await this.send(2114,{ctidTraderAccountId:accountId,includeArchivedSymbols:false})).symbol||[];
   }
+  /** Full broker metadata is account-specific; the light symbol list has no digits. */
+  async symbolDetails(accountId,accessToken,symbolId) {
+    if (!Number.isSafeInteger(symbolId)||symbolId<=0) throw Error('invalid_symbol_id');
+    await this.account(accountId,accessToken);
+    const result=await this.send(2116,{ctidTraderAccountId:accountId,symbolId:[symbolId]});
+    if(String(result.ctidTraderAccountId)!==String(accountId))throw Error('symbol_account_mismatch');
+    const symbol=(result.symbol||[]).find(item=>String(item.symbolId)===String(symbolId));
+    if(!symbol || !Number.isInteger(symbol.digits) || symbol.digits<0 || symbol.digits>10 ||
+        !Number.isInteger(symbol.pipPosition) || symbol.pipPosition<0 || symbol.pipPosition>10)
+      throw Error('invalid_symbol_metadata');
+    return {symbolId:String(symbolId),digits:symbol.digits,pipPosition:symbol.pipPosition};
+  }
   async history(accountId,accessToken,symbolId,period,from,to,count) {
     await this.account(accountId,accessToken);
     const result=await this.queueHistory(2137,{ctidTraderAccountId:accountId,symbolId,period,
@@ -237,13 +249,14 @@ class Channel {
     const result=await this.queueHistory(2145,{ctidTraderAccountId:accountId,
       symbolId,type:1,fromTimestamp:from,toTimestamp:to});
     if (String(result.ctidTraderAccountId) !== String(accountId)) throw Error('tick_account_mismatch');
+    // cTrader does not guarantee that a capped page ends on a unique
+    // millisecond. Returning a truncated list would tempt clients to advance
+    // to oldest-1ms and permanently omit other quotes at that timestamp.
+    // Send only the density marker; Android retries with narrower DISJOINT
+    // time windows. This also avoids serializing useless megabytes of data.
+    if(result.hasMore===true)return {ticks:[],hasMore:true};
     const ticks=normalizeHistoricalBidTicks(result.tickData||[],from,to);
-    // A full millisecond group at the pagination edge cannot be resumed safely
-    // without a cursor. Fail explicitly rather than silently dropping quotes.
-    if (result.hasMore===true && ticks.length>1 && ticks[0].timestamp===ticks[1].timestamp)
-      throw Error('ambiguous_tick_pagination_boundary');
-    if (result.hasMore===true && !ticks.length) throw Error('empty_tick_page_with_more');
-    return {ticks,hasMore:result.hasMore===true};
+    return {ticks,hasMore:false};
   }
   async subscribe(accountId,accessToken,symbolId,cb) {
     await this.account(accountId,accessToken);

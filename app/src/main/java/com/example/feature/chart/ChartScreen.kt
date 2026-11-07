@@ -36,6 +36,7 @@ import androidx.compose.ui.window.Dialog
 import com.example.core.market.DefaultSymbols
 import com.example.core.market.MarketSymbolRegistry
 import com.example.core.market.RangePhantomBars
+import com.example.core.market.RangeTickDiagnostics
 import com.example.core.market.RangeTickHistoryTooDenseException
 import com.example.core.model.Candle
 import com.example.core.model.DataSourceType
@@ -58,7 +59,17 @@ private data class RangeChartSnapshot(
     val hours: Int,
     val accountGeneration: Long,
     val replay: Boolean,
-    val candles: List<Candle>
+    val candles: List<Candle>,
+    val diagnostics: RangeTickDiagnostics,
+    val complete: Boolean
+)
+
+private data class RangeVisualSnapshot(
+    val actual: List<Candle>,
+    val symbol: String,
+    val size: Int,
+    val phantomEnabled: Boolean,
+    val display: List<Candle>
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -212,15 +223,22 @@ fun ChartScreen(
         mutableIntStateOf(workspacePrefs.getInt("range_fixed_ticks", 1000).coerceIn(1, 100_000))
     }
     var showRangePhantomBars by rememberSaveable {
-        mutableStateOf(workspacePrefs.getBoolean("range_phantom_bars", true))
+        // Older builds enabled fabricated split bodies by default. Migrate
+        // existing installations once to genuine cTrader candles. Users can
+        // explicitly re-enable optional BETWEEN-candle gap markers later.
+        mutableStateOf(if (workspacePrefs.getBoolean("range_real_bars_migrated", false))
+            workspacePrefs.getBoolean("range_phantom_bars", false) else false)
     }
     LaunchedEffect(showRangePhantomBars) {
-        workspacePrefs.edit().putBoolean("range_phantom_bars", showRangePhantomBars).apply()
+        workspacePrefs.edit().putBoolean("range_real_bars_migrated", true)
+            .putBoolean("range_phantom_bars", showRangePhantomBars).apply()
     }
     var rangeSettingsOpen by remember { mutableStateOf(false) }
     var rangeDatePickerOpen by remember { mutableStateOf(false) }
     var rangeInput by remember { mutableStateOf(fixedRangeTicks.toString()) }
-    var rangeHistoryHours by remember { mutableIntStateOf(6) }
+    var rangeHistoryHours by remember {
+        mutableIntStateOf(RangeHistoryPaging.initialWindowHours(fixedRangeTicks))
+    }
     var rangeHistoryCapHours by remember { mutableStateOf<Int?>(null) }
     var rangeHistoryManuallyChosen by remember { mutableStateOf(false) }
     var rangeHistoryJumpGeneration by remember { mutableIntStateOf(0) }
@@ -228,12 +246,17 @@ fun ChartScreen(
     var rangeReplayBackshiftMillis by remember { mutableLongStateOf(0L) }
     var rangeSnapshot by remember { mutableStateOf<RangeChartSnapshot?>(null) }
     var rangeLoading by remember { mutableStateOf(false) }
+    var rangeLoadNonce by remember { mutableIntStateOf(0) }
+    var rangeFirstPageMs by remember { mutableStateOf<Long?>(null) }
+    var rangeFullLoadMs by remember { mutableStateOf<Long?>(null) }
+    var rangeReceivedQuotes by remember { mutableIntStateOf(0) }
+    var rangeReceivedSlices by remember { mutableIntStateOf(0) }
     var rangeError by remember { mutableStateOf<String?>(null) }
     val rangeBrokerGeneration = viewModel.rangeAccountGeneration?.collectAsState()?.value ?: 0L
     val rangeReplayEnd = if (isEmbeddedReplay) replayState.visibleCandles.lastOrNull()?.closeTime?.minus(1L) else null
     val rangeEnd = if (isEmbeddedReplay) rangeReplayEnd?.minus(rangeReplayBackshiftMillis) else rangeRefreshAnchor
-    LaunchedEffect(uiState.selectedSymbol, isEmbeddedReplay, rangeBrokerGeneration) {
-        rangeHistoryHours = 6
+    LaunchedEffect(uiState.selectedSymbol, isEmbeddedReplay, rangeBrokerGeneration, fixedRangeTicks) {
+        rangeHistoryHours = RangeHistoryPaging.initialWindowHours(fixedRangeTicks)
         rangeHistoryCapHours = null
         rangeHistoryManuallyChosen = false
         rangeReplayBackshiftMillis = 0L
@@ -241,19 +264,68 @@ fun ChartScreen(
     }
     LaunchedEffect(chartDisplayStyle, uiState.selectedSymbol, isEmbeddedReplay,
         rangeEnd, rangeHistoryHours, fixedRangeTicks, rangeBrokerGeneration) {
+        val nonce = ++rangeLoadNonce
         rangeError = null
         rangeLoading = false
         if (chartDisplayStyle != ChartDisplayStyle.RANGE || rangeEnd == null) return@LaunchedEffect
+        val requestedSymbol = uiState.selectedSymbol
+        val requestedEnd = rangeEnd
+        val requestedHours = rangeHistoryHours
+        val requestedSize = fixedRangeTicks
+        val requestedReplay = isEmbeddedReplay
+        val requestedBrokerGeneration = rangeBrokerGeneration
+        val loadStartedAt = android.os.SystemClock.elapsedRealtime()
+        rangeFirstPageMs = null
+        rangeFullLoadMs = null
+        rangeReceivedQuotes = 0
+        rangeReceivedSlices = 0
         rangeLoading = true
         try {
-            val start = (rangeEnd - rangeHistoryHours * 3_600_000L).coerceAtLeast(1L)
-            val bars = viewModel.loadRangeBars(uiState.selectedSymbol, start, rangeEnd,
-                fixedRangeTicks, includeIncomplete = !isEmbeddedReplay)
-            rangeSnapshot = RangeChartSnapshot(uiState.selectedSymbol, rangeEnd,
-                fixedRangeTicks, rangeHistoryHours, rangeBrokerGeneration, isEmbeddedReplay, bars)
+            val start = (requestedEnd - requestedHours * 3_600_000L).coerceAtLeast(1L)
+            // Validate/merge up to a million BID quotes off the UI thread.
+            // Only the small state commits cross back to Main; previously the
+            // loader's sorting checks and ArrayList merging could stall touch
+            // gestures every time an older broker page finished downloading.
+            val bars = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                viewModel.loadRangeBars(
+                    requestedSymbol, start, requestedEnd, requestedSize,
+                    includeIncomplete = !requestedReplay,
+                    onProgress = { recentBars ->
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                            // Keep an existing complete chart stable while older history loads.
+                            val stable = rangeSnapshot?.takeIf {
+                                it.complete && it.symbol == requestedSymbol &&
+                                    it.end == requestedEnd && it.size == requestedSize &&
+                                    it.replay == requestedReplay &&
+                                    it.accountGeneration == requestedBrokerGeneration
+                            }
+                            if (nonce == rangeLoadNonce && stable == null)
+                                rangeSnapshot = RangeChartSnapshot(
+                                    requestedSymbol, requestedEnd, requestedSize, requestedHours,
+                                    requestedBrokerGeneration, requestedReplay,
+                                    recentBars.candles, recentBars.diagnostics, complete = false)
+                            if (nonce == rangeLoadNonce && rangeFirstPageMs == null)
+                                rangeFirstPageMs = android.os.SystemClock.elapsedRealtime() - loadStartedAt
+                        }
+                    }, onBatchProgress = { quotes, slices ->
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                            if (nonce == rangeLoadNonce) {
+                                rangeReceivedQuotes = quotes
+                                rangeReceivedSlices = slices
+                            }
+                        }
+                    }
+                )
+            }
+            if (nonce == rangeLoadNonce) rangeSnapshot = RangeChartSnapshot(requestedSymbol,
+                requestedEnd, requestedSize, requestedHours, requestedBrokerGeneration,
+                requestedReplay, bars.candles, bars.diagnostics, complete = true)
+            if (nonce == rangeLoadNonce)
+                rangeFullLoadMs = android.os.SystemClock.elapsedRealtime() - loadStartedAt
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (dense: RangeTickHistoryTooDenseException) {
+            if (nonce != rangeLoadNonce) return@LaunchedEffect
             // Keep genuine broker history, but reduce the tick-memory window
             // and continue pagination in overlapping, shorter slices.
             if (rangeHistoryHours > 1) {
@@ -263,8 +335,9 @@ fun ChartScreen(
                 rangeHistoryManuallyChosen = true
             } else rangeError = dense.message?.take(180) ?: "بيانات Tick كثيفة جدًا"
         } catch (error: Exception) {
-            rangeError = error.message?.take(180) ?: "تعذر جلب بيانات Tick من cTrader"
-        } finally { rangeLoading = false }
+            if (nonce == rangeLoadNonce)
+                rangeError = error.message?.take(180) ?: "تعذر جلب بيانات Tick من cTrader"
+        } finally { if (nonce == rangeLoadNonce) rangeLoading = false }
     }
     val visibleRangeBars = rangeSnapshot?.takeIf {
         it.symbol == uiState.selectedSymbol &&
@@ -276,13 +349,27 @@ fun ChartScreen(
     }?.candles
     // Virtual gap fillers live ONLY in the chart's presentation layer. The
     // broker snapshot, tick cache, replay cutoff, and trade data stay real.
-    val rangeVisualBars = remember(visibleRangeBars, showRangePhantomBars,
-        fixedRangeTicks, uiState.selectedSymbol) {
-        if (showRangePhantomBars && visibleRangeBars != null)
-            RangePhantomBars.project(visibleRangeBars,
-                MarketSymbolRegistry.getSymbol(uiState.selectedSymbol).tickSize, fixedRangeTicks)
-        else visibleRangeBars
+    // Gap projection can expand thousands of bars; run it off the UI thread
+    // so pinch/drag gestures remain responsive during older-history fetches.
+    // A snapshot identity check prevents stale projected bars from being shown
+    // after a symbol, size or broker-window change.
+    val visualSnapshot by produceState<RangeVisualSnapshot?>(initialValue = null,
+        visibleRangeBars, showRangePhantomBars, fixedRangeTicks, uiState.selectedSymbol) {
+        value = null
+        val actual = visibleRangeBars ?: return@produceState
+        val displayed = if (showRangePhantomBars)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                RangePhantomBars.project(actual,
+                    MarketSymbolRegistry.getSymbol(uiState.selectedSymbol).tickSize, fixedRangeTicks)
+            }
+        else actual
+        value = RangeVisualSnapshot(actual, uiState.selectedSymbol, fixedRangeTicks,
+            showRangePhantomBars, displayed)
     }
+    val rangeVisualBars = visualSnapshot?.takeIf {
+        it.actual === visibleRangeBars && it.symbol == uiState.selectedSymbol &&
+            it.size == fixedRangeTicks && it.phantomEnabled == showRangePhantomBars
+    }?.display ?: visibleRangeBars
     // Populate a usable initial chart progressively from genuine cTrader ticks.
     // Stop once there are enough candles, the bounded prefetch depth is reached,
     // or the user explicitly chooses a history window. Replay never auto-seeks.
@@ -295,8 +382,8 @@ fun ChartScreen(
             snapshot.accountGeneration == rangeBrokerGeneration &&
             RangeHistoryPaging.shouldPrefetchMoreBars(snapshot.candles.size, rangeHistoryHours,
                 rangeHistoryManuallyChosen, isEmbeddedReplay)) {
-            rangeHistoryHours = (rangeHistoryHours + RangeHistoryPaging.STEP_HOURS)
-                .coerceAtMost(RangeHistoryPaging.AUTO_MAX_HOURS)
+            rangeHistoryHours = RangeHistoryPaging.older(rangeEnd ?: snapshot.end,
+                rangeHistoryHours, RangeHistoryPaging.AUTO_MAX_HOURS).hours
         }
     }
     val requestOlderRange: () -> Unit = {
@@ -656,7 +743,8 @@ fun ChartScreen(
             onDismissRequest = { rangeSettingsOpen = false },
             title = { Text("إعدادات شموع المدى") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("مدى ثابت بعدد وحدات حركة السعر (Tick Size)، وليس ATR أو عدد الصفقات.")
                     OutlinedTextField(
                         value = rangeInput,
@@ -667,19 +755,102 @@ fun ChartScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth().testTag("range_size_ticks")
                     )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        listOf(50, 100, 250, 500, 1000, 2000).forEach { range ->
+                            FilterChip(selected = parsed == range,
+                                onClick = { rangeInput = range.toString() },
+                                label = { Text("$range") })
+                        }
+                    }
+                    if (parsed != null && parsed in 1..100_000) {
+                        val tickSize = MarketSymbolRegistry.getSymbol(uiState.selectedSymbol).tickSize
+                        val priceMovement = java.math.BigDecimal.valueOf(parsed * tickSize)
+                            .stripTrailingZeros().toPlainString()
+                        Text("حجم كل مدى: $priceMovement وحدة سعرية · القيمة الأصغر تعطي شموعًا أكثر",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
                     Text("الافتراضي 1000 تيك. المصدر: أسعار Bid التاريخية من حساب cTrader المحدد.",
                         style = MaterialTheme.typography.bodySmall)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("سد الفجوات بصريًا (Phantom Bars)",
+                        Text("إظهار الفجوات بين الشموع (اختياري)",
                             modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                         Switch(checked = showRangePhantomBars,
                             onCheckedChange = { showRangePhantomBars = it },
                             modifier = Modifier.testTag("range_phantom_bars"))
                     }
-                    Text("الشموع الافتراضية مميزة ومخصصة للرسم فقط؛ ليست أسعار Tick متداولة ولا تدخل في تنفيذ Replay أو إحصائيات الصفقات. عند وجودها تُخفى المؤشرات المحسوبة حتى لا تُستخدم أسعار افتراضية كإشارات.",
+                    Text("العرض الافتراضي يستخدم شموع cTrader الحقيقية وحدها. عند تفعيل هذا الخيار تُضاف علامات مرئية فقط للفجوات بين شمعتين، دون تقسيم أي شمعة حقيقية أو تعديل سعرها. لا تدخل العلامات في Replay أو نتائج الصفقات.",
                         style = MaterialTheme.typography.bodySmall)
                     Text("شموع حقيقية: ${visibleRangeBars?.size ?: 0} · شموع عرض افتراضية: ${((rangeVisualBars?.size ?: 0) - (visibleRangeBars?.size ?: 0)).coerceAtLeast(0)}",
                         style = MaterialTheme.typography.bodySmall)
+                    val tickAudit = rangeSnapshot?.diagnostics?.takeIf { visibleRangeBars != null }
+                    if (tickAudit != null) {
+                        Text("فحص المصدر: ${tickAudit.quoteCount} سعر Bid حقيقي · " +
+                            "${tickAudit.sameMillisecondQuotes} أسعار بنفس المللي ثانية",
+                            style = MaterialTheme.typography.bodySmall)
+                        Text("قفزات Quote بلغت مدى كاملًا: ${tickAudit.jumpsOverOneRange} · " +
+                            "أكبر قفزة: ${tickAudit.largestQuoteJumpTicks} تيك · " +
+                            "شموع واسعة: ${tickAudit.oversizedCandles}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    uiState.rangePrecisionDiagnostic?.let { note ->
+                        Text(note, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (rangeFullLoadMs != null || rangeFirstPageMs != null) {
+                        Text("زمن أول دفعة: ${rangeFirstPageMs?.let { "${it}ms" } ?: "—"} · " +
+                            "اكتمال التحميل: ${rangeFullLoadMs?.let { "${it}ms" } ?: "جارٍ التحميل"}",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (rangeLoading && rangeReceivedSlices > 0)
+                        Text("جلب البيانات: $rangeReceivedQuotes سعر Bid خلال $rangeReceivedSlices دفعات · لم يكتمل الحساب بعد",
+                            style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(
+                        onClick = {
+                            // A reproducible, read-only audit for diagnosing
+                            // broker/history mismatches; no session tokens,
+                            // account identifiers or trading data are copied.
+                            val snapshot = rangeSnapshot?.takeIf { visibleRangeBars != null }
+                            val audit = snapshot?.diagnostics
+                            val report = listOf(
+                                "TradeLab Range QA",
+                                "symbol=${uiState.selectedSymbol}",
+                                "range_ticks=$fixedRangeTicks",
+                                "history_hours=$rangeHistoryHours",
+                                "window_end_utc_ms=${snapshot?.end ?: -1L}",
+                                "broker_generation=$rangeBrokerGeneration",
+                                "replay=$isEmbeddedReplay",
+                                "source=ctrader_bid",
+                                "status=${if (rangeLoading) "loading" else if (rangeError != null) "error" else if (snapshot?.complete == true) "complete" else "provisional"}",
+                                "bars=${visibleRangeBars?.size ?: 0}",
+                                "visual_gap_markers=$showRangePhantomBars",
+                                "quote_count=${audit?.quoteCount ?: 0}",
+                                "same_millisecond_quotes=${audit?.sameMillisecondQuotes ?: 0}",
+                                "range_jumps=${audit?.jumpsOverOneRange ?: 0}",
+                                "largest_jump_ticks=${audit?.largestQuoteJumpTicks ?: 0}",
+                                "oversized_bars=${audit?.oversizedCandles ?: 0}",
+                                "loaded_slices=$rangeReceivedSlices",
+                                "first_page_ms=${rangeFirstPageMs ?: -1}",
+                                "full_load_ms=${rangeFullLoadMs ?: -1}",
+                                "error=${rangeError.orEmpty()}"
+                            ).joinToString("\n")
+                            val clipboard = imageContext.getSystemService(
+                                android.content.Context.CLIPBOARD_SERVICE
+                            ) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+                                "TradeLab Range QA", report))
+                            android.widget.Toast.makeText(imageContext,
+                                "تم نسخ تقرير شموع المدى، أرسله عند ظهور اختلال",
+                                android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("range_copy_audit")
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("نسخ تقرير فحص شموع المدى")
+                    }
                     Text("فترة بيانات Tick: $rangeHistoryHours ساعة. اسحب للخلف لتحميل المزيد؛ وقد يقلّص التطبيق الفترة تلقائيًا عند كثافة الأسعار.",
                         style = MaterialTheme.typography.bodySmall)
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -827,7 +998,11 @@ fun ChartScreen(
                 Text("  نوع الرسم البياني")
             }
             TextButton(onClick={showLegacyChartSettings=false;showAppearance=true}) { Text(androidx.compose.ui.res.stringResource(com.example.R.string.chart_appearance)) }
-            TextButton(onClick={viewModel.toggleVolume()}) { Text(if(uiState.isVolumeVisible) "إخفاء الحجم" else "إظهار الحجم") }
+            TextButton(onClick={viewModel.toggleVolume()},
+                enabled = chartDisplayStyle != ChartDisplayStyle.RANGE) {
+                Text(if (chartDisplayStyle == ChartDisplayStyle.RANGE) "حجم التداول غير متاح لأسعار Bid"
+                    else if (uiState.isVolumeVisible) "إخفاء الحجم" else "إظهار الحجم")
+            }
             TextButton(onClick={magnetEnabled=!magnetEnabled}) { Text(if(magnetEnabled) "إيقاف المغناطيس" else "تفعيل المغناطيس") }
             TextButton(onClick={hideDrawings=!hideDrawings}) { Text(if(hideDrawings) "إظهار الرسومات" else "إخفاء الرسومات") }
             TextButton(onClick={viewModel.triggerResetView();showLegacyChartSettings=false}) { Text("إعادة ضبط العرض") }
@@ -970,6 +1145,7 @@ fun ChartScreen(
                     if (!immersiveChart) {
                     IconButton(
                         onClick = { viewModel.toggleVolume() },
+                        enabled = chartDisplayStyle != ChartDisplayStyle.RANGE,
                         modifier = Modifier.testTag("chart_toggle_volume_header")
                     ) {
                         Icon(
@@ -1366,14 +1542,20 @@ fun ChartScreen(
             // Range indicators are calculated from verified tick-derived bars,
             // never from the original timeframe OHLC or hidden Replay candles.
             val rangePrepared by produceState<Pair<List<Candle>, PreparedChartIndicators>?>(
-                null, visibleRangeBars, uiState.indicatorSettings, chartDisplayStyle
+                null, visibleRangeBars, rangeSnapshot?.complete,
+                uiState.indicatorSettings, chartDisplayStyle
             ) {
-                value = if (chartDisplayStyle == ChartDisplayStyle.RANGE && visibleRangeBars != null)
-                    visibleRangeBars to ChartIndicatorPreparation.calculate(visibleRangeBars, uiState.indicatorSettings)
+                value = if (chartDisplayStyle == ChartDisplayStyle.RANGE && visibleRangeBars != null &&
+                    rangeSnapshot?.complete == true)
+                    visibleRangeBars to kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                        ChartIndicatorPreparation.calculate(visibleRangeBars, uiState.indicatorSettings)
+                    }
                 else null
             }
             val phantomBarsVisible = (rangeVisualBars?.size ?: 0) > (visibleRangeBars?.size ?: 0)
-            val activeRangeIndicators = if (phantomBarsVisible) null
+            val rangePreviewVisible = rangeSnapshot?.complete == false &&
+                rangeSnapshot?.candles === visibleRangeBars
+            val activeRangeIndicators = if (phantomBarsVisible || rangePreviewVisible) null
                 else rangePrepared?.takeIf { it.first === visibleRangeBars }?.second
             val rangeIsActive = chartDisplayStyle == ChartDisplayStyle.RANGE
             val chartBars = if (rangeIsActive) rangeVisualBars.orEmpty()
@@ -1413,7 +1595,7 @@ fun ChartScreen(
                     magnetEnabled = magnetEnabled,
                     drawings = displayedDrawings,
                     selectedDrawingId = selectedDrawingId,
-                    indicatorSettings = if (rangeIsActive && phantomBarsVisible)
+                    indicatorSettings = if (rangeIsActive && (phantomBarsVisible || rangePreviewVisible))
                         IndicatorSettings(isEmaEnabled = false) else uiState.indicatorSettings,
                     smaValues = if (rangeIsActive) activeRangeIndicators?.sma.orEmpty() else if (isEmbeddedReplay) replaySma else uiState.smaValues,
                     emaValues = if (rangeIsActive) activeRangeIndicators?.ema.orEmpty() else if (isEmbeddedReplay) replayEma else uiState.emaValues,
@@ -1423,7 +1605,9 @@ fun ChartScreen(
                     macdValues = if (rangeIsActive) activeRangeIndicators?.macd.orEmpty() else if (isEmbeddedReplay) replayMacd else uiState.macdValues,
                     atrValues = if (rangeIsActive) activeRangeIndicators?.atr.orEmpty() else if (isEmbeddedReplay) replayAtr else uiState.atrValues,
                     isCrosshairActive = uiState.isCrosshairActive,
-                    isVolumeVisible = uiState.isVolumeVisible,
+                    // Broker BID quote counts are not traded volume. Do not
+                    // reserve a blank volume pane beneath the Range chart.
+                    isVolumeVisible = !rangeIsActive && uiState.isVolumeVisible,
                     resetViewTrigger = uiState.resetViewTrigger,
                     displayStyle = chartDisplayStyle,
                     onAddDrawing = {
@@ -1489,6 +1673,8 @@ fun ChartScreen(
                                 color = TradingAccentLight, fontSize = 11.sp)
                         }
                         if (rangeLoading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                        if (rangePreviewVisible) Text("جارٍ تثبيت الشموع", fontSize = 9.sp,
+                            color = TradingTextSecondary)
                         if (!rangeLoading) TextButton(
                             onClick = requestOlderRange,
                             modifier = Modifier.testTag("range_load_older")) {
@@ -1500,7 +1686,7 @@ fun ChartScreen(
                             color = TradingTextSecondary, fontSize = 9.sp
                         )
                         if (!isEmbeddedReplay) TextButton(onClick = {
-                            rangeHistoryHours = 6
+                            rangeHistoryHours = RangeHistoryPaging.initialWindowHours(fixedRangeTicks)
                             rangeHistoryCapHours = null
                             rangeHistoryManuallyChosen = false
                             rangeHistoryJumpGeneration += 1
@@ -1920,6 +2106,7 @@ fun ChartScreen(
                 ChartBottomStrip(
                     symbol = uiState.selectedSymbol,
                     timeframe = uiState.selectedTimeframe,
+                    rangeSizeInTicks = if (chartDisplayStyle == ChartDisplayStyle.RANGE) fixedRangeTicks else null,
                     replayActive = isReplayToolbarOpen,
                     onSymbol = { if (!isEmbeddedReplay || replayViewModel.canChangeDataset()) showSymbolSheet = true },
                     onTimeframe = { tf ->
@@ -1932,6 +2119,10 @@ fun ChartScreen(
                         }
                     },
                     onReplay = toggleReplayOnChart,
+                    onRangeSettings = {
+                        rangeInput = fixedRangeTicks.toString()
+                        rangeSettingsOpen = true
+                    },
                     onIndicators = { showIndicatorsDialog = true },
                     onDrawing = { showToolsMenu = true },
                     onMore = { showChartExtras = true }

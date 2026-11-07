@@ -6,12 +6,21 @@ import org.junit.Test
 class RangeHistoryPagingTest {
     private val day = 24L * RangeHistoryPaging.HOUR_MILLIS
 
+    @Test fun initialRangeHistoryAvoidsUnneededMultiHourTickDownloads() {
+        assertEquals(1, RangeHistoryPaging.initialWindowHours(50))
+        assertEquals(1, RangeHistoryPaging.initialWindowHours(100))
+        assertEquals(2, RangeHistoryPaging.initialWindowHours(250))
+        assertEquals(3, RangeHistoryPaging.initialWindowHours(500))
+        assertEquals(6, RangeHistoryPaging.initialWindowHours(1000))
+        assertEquals(6, RangeHistoryPaging.initialWindowHours(10000))
+    }
+
     @Test fun progressivelyExtendsRealTickHistoryUpToOneWeek() {
         val end = 100L * day
         var window = RangeHistoryPaging.Window(end, 1)
         window = RangeHistoryPaging.older(window.end, window.hours)
         assertEquals(6, window.hours)
-        repeat(27) { window = RangeHistoryPaging.older(window.end, window.hours) }
+        repeat(9) { window = RangeHistoryPaging.older(window.end, window.hours) }
         assertEquals(168, window.hours)
         assertEquals(end, window.end)
         assertEquals(end - 7 * day, window.start)
@@ -36,8 +45,8 @@ class RangeHistoryPagingTest {
     @Test fun automaticallyPrefetchesEnoughBarsWithoutOverridingUserOrReplay() {
         assertTrue(RangeHistoryPaging.shouldPrefetchMoreBars(12, 6, false, false))
         assertTrue(RangeHistoryPaging.shouldPrefetchMoreBars(48, 6, false, false))
-        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(96, 6, false, false))
-        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 72, false, false))
+        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(160, 6, false, false))
+        assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 96, false, false))
         assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 6, true, false))
         assertFalse(RangeHistoryPaging.shouldPrefetchMoreBars(12, 6, false, true))
     }
@@ -53,6 +62,16 @@ class RangeHistoryPagingTest {
         assertEquals(1, smallCap)
         val next = RangeHistoryPaging.older(end, 1, smallCap)
         assertEquals(end - RangeHistoryPaging.HOUR_MILLIS, next.end)
+    }
+
+    @Test fun fastManualBackfillStillRespectsSmallBrokerDensityCap() {
+        val end = 100L * day
+        var window = RangeHistoryPaging.Window(end, 1)
+        window = RangeHistoryPaging.older(window.end, window.hours, 3)
+        assertEquals(3, window.hours)
+        val slid = RangeHistoryPaging.older(window.end, window.hours, 3)
+        assertEquals(3, slid.hours)
+        assertEquals(end - 3L * RangeHistoryPaging.HOUR_MILLIS, slid.end)
     }
 
     @Test fun historicalJumpCanMoveMonthsBackWithoutRequestingOverOneWeek() {

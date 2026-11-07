@@ -941,8 +941,11 @@ fun CandlestickChart(
                     color = candleColor,
                     topLeft = Offset(x - (adjustedWidth / 2f), bodyTop),
                     size = Size(adjustedWidth, bodyHeight),
-                    style = if (isPhantom ||
-                        ((hollowUp || displayStyle == ChartDisplayStyle.HOLLOW_CANDLES) && isBullish))
+                    style = if (com.example.core.market.RangeCandleVisualPolicy.outline(
+                        isRangeChart = displayStyle == ChartDisplayStyle.RANGE,
+                        isVisualOnlyGap = isPhantom, isBullish = isBullish,
+                        hollowUp = hollowUp,
+                        hollowChart = displayStyle == ChartDisplayStyle.HOLLOW_CANDLES))
                         androidx.compose.ui.graphics.drawscope.Stroke(width = 1.4f)
                         else androidx.compose.ui.graphics.drawscope.Fill
                 )
@@ -954,9 +957,15 @@ fun CandlestickChart(
             // Show a full date at day boundaries; otherwise keep intraday labels short.
             var lastTimeLabelRight = -Float.MAX_VALUE
             var lastDisplayedDay = -1L
+            var lastDisplayedMinute: Long? = null
             visibleCandles.forEachIndexed { i, c ->
                 val x = transform.candleIndexToX(i)
                 val day = ChartTimeAxis.dayKey(c.openTime)
+                val minute = ChartTimeAxis.minuteKey(c.openTime)
+                // Price-based candles are not evenly spaced in time. Avoid
+                // drawing "13:30" repeatedly across a busy Range chart.
+                if (displayStyle == ChartDisplayStyle.RANGE && minute == lastDisplayedMinute)
+                    return@forEachIndexed
                 val label = ChartTimeAxis.label(
                     c.openTime,
                     if (lastDisplayedDay == day) c.openTime else null
@@ -974,6 +983,7 @@ fun CandlestickChart(
                     )
                     lastTimeLabelRight = right
                     lastDisplayedDay = day
+                    lastDisplayedMinute = minute
                 }
             }
 

@@ -14,6 +14,9 @@ object ChartTimeAxis {
 
     fun dayKey(epochMillis: Long): Long = Math.floorDiv(epochMillis, 86_400_000L)
 
+    /** Several non-time-based Range bars may share a minute. Label it once. */
+    fun minuteKey(epochMillis: Long): Long = Math.floorDiv(epochMillis, 60_000L)
+
     fun label(epochMillis: Long, previousDisplayedMillis: Long?): String {
         val format = if (previousDisplayedMillis == null ||
             dayKey(previousDisplayedMillis) != dayKey(epochMillis)) "MM/dd HH:mm" else "HH:mm"

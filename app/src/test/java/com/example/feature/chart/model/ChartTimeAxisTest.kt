@@ -24,6 +24,11 @@ class ChartTimeAxisTest {
         assertEquals(-1L, ChartTimeAxis.dayKey(-1L))
     }
 
+    @Test fun rangeBarsInsideOneMinuteShareOneAxisBucket() {
+        assertEquals(ChartTimeAxis.minuteKey(60_001L), ChartTimeAxis.minuteKey(119_999L))
+        assertNotEquals(ChartTimeAxis.minuteKey(119_999L), ChartTimeAxis.minuteKey(120_000L))
+    }
+
     @Test fun overlappingLabelsAreHidden() {
         assertFalse(ChartTimeAxis.shouldDisplay(100f, 180f, 600f, 95f))
         assertTrue(ChartTimeAxis.shouldDisplay(200f, 270f, 600f, 180f))

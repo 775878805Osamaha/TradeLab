@@ -14,18 +14,12 @@ class RangePhantomBarsTest {
         open = open, high = high, low = low, close = close,
         source = "ctrader:demo:123:456")
 
-    @Test fun oversizedActualTickJumpBecomesExplicitlyVirtualFixedRangeBodies() {
+    @Test fun actualTickJumpNeverBecomesImaginaryIntermediateCandles() {
         val actual = listOf(real(1L, 4060.0, 4050.0))
         val display = RangePhantomBars.project(actual, 0.01, 100)
-        assertEquals(10, display.size)
-        assertTrue(display.all(RangePhantomBars::isPhantom))
-        assertTrue(display.all { kotlin.math.abs(it.open - it.close) <= 1.0000001 })
-        assertEquals(4060.0, display.first().open, 1e-8)
-        assertEquals(4050.0, display.last().close, 1e-8)
-        // The real broker series remains unchanged for Replay and statistics.
-        assertEquals(1, actual.size)
-        assertEquals(4050.0, actual.single().close, 0.0)
-        assertFalse(RangePhantomBars.isPhantom(actual.single()))
+        assertSame(actual, display)
+        assertSame(actual.single(), display.single())
+        assertFalse(RangePhantomBars.isPhantom(display.single()))
     }
 
     @Test fun priceGapBetweenTrueQuotesGetsOnlyDisplayOnlyPhantoms() {
@@ -47,13 +41,13 @@ class RangePhantomBarsTest {
         assertFalse(RangePhantomBars.isPhantom(display.single()))
     }
 
-    @Test fun oversizedBarKeepsItsActualExtremeWicksAfterVisualProjection() {
+    @Test fun oversizedBarKeepsItsFullGenuineOHLC() {
         val spike = real(1L, 4060.0, 4050.0, high = 4061.5, low = 4049.5)
         val display = RangePhantomBars.project(listOf(spike), 0.01, 100)
-        assertEquals(10, display.size)
-        assertEquals(4061.5, display.maxOf { it.high }, 1e-8)
-        assertEquals(4049.5, display.minOf { it.low }, 1e-8)
-        assertTrue(display.all(RangePhantomBars::isPhantom))
+        assertEquals(listOf(spike), display)
+        assertEquals(4061.5, display.single().high, 1e-8)
+        assertEquals(4049.5, display.single().low, 1e-8)
+        assertFalse(RangePhantomBars.isPhantom(display.single()))
     }
 
     @Test fun smallRealRangeBarIsPreservedVerbatim() {

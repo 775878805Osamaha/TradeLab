@@ -7,7 +7,7 @@ import kotlin.math.min
 import kotlin.math.roundToLong
 
 /**
- * TradingView-style Phantom Bars are a VISUAL projection of untraded price gaps.
+ * Optional Phantom Bars illustrate gaps BETWEEN genuine bars only.
  * They are never broker quotes, must never be cached as genuine range history,
  * and must never be used for execution, backtests or trade statistics.
  *
@@ -43,22 +43,15 @@ object RangePhantomBars {
                     projected.addAll(gap)
             }
 
-            // A single actual quote may overshoot several complete ranges.
-            // Split only its displayed BODY. Keep the observed extremes as
-            // virtual wicks so no broker high/low silently disappears.
-            val split = segments(real.open, real.close, real, rangeTicks, tickSize).toMutableList()
-            if (split.isEmpty() || projected.size + split.size >= MAX_TOTAL_RENDER_BARS)
-                projected.add(real)
-            else {
-                val highIndex = if (real.close >= real.open) split.lastIndex else 0
-                val lowIndex = if (real.close >= real.open) 0 else split.lastIndex
-                split[highIndex] = split[highIndex].copy(high = max(split[highIndex].high, real.high))
-                split[lowIndex] = split[lowIndex].copy(low = min(split[lowIndex].low, real.low))
-                projected.addAll(split)
-            }
+            // Do not turn an observed price jump INSIDE a real range candle
+            // into an imaginary monotonic sequence. That used to replace the
+            // original bar with multiple translucent candles which looked
+            // like missing/misaligned quotes in XAUUSD. Its true OHLC must
+            // remain visible, even with this optional visual mode enabled.
+            projected.add(real)
             previous = real
         }
-        return projected
+        return if (projected.size == actualBars.size) actualBars else projected
     }
 
     private fun segments(from: Double, to: Double, template: Candle,

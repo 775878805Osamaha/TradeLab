@@ -88,3 +88,53 @@ test('tick requests use broker read-only historical message 2145 with bid type',
     await assert.rejects(gateway.channel(false).historicalBidTicks(12345,'read-only',987,0,604800001),/invalid_tick_window/);
   } finally {socket.close();}
 });
+
+test('broker full symbol metadata is account-authenticated and never guessed from light symbols',async()=>{
+  const requests=[];
+  class SymbolSocket extends EventEmitter {
+    constructor(){super();this.readyState=0;queueMicrotask(()=>{this.readyState=1;this.emit('open');});}
+    send(data,callback=()=>{}){
+      const packet=JSON.parse(data);requests.push(packet);
+      callback();
+      const responseType={2100:2101,2102:2103,2116:2117}[packet.payloadType];
+      const payload=packet.payloadType===2102?{ctidTraderAccountId:12345}
+        :packet.payloadType===2116?{ctidTraderAccountId:12345,
+          symbol:[{symbolId:987,digits:3,pipPosition:2}]}:{};
+      queueMicrotask(()=>this.emit('message',Buffer.from(JSON.stringify({
+        clientMsgId:packet.clientMsgId,payloadType:responseType,payload}))));
+    }
+    close(){this.readyState=3;this.emit('close');}
+  }
+  const socket=new SymbolSocket();
+  const gateway=new CTraderGateway('id','secret',{socketFactory:()=>socket});
+  try {
+    const result=await gateway.channel(false).symbolDetails(12345,'read-only',987);
+    assert.deepEqual(result,{symbolId:'987',digits:3,pipPosition:2});
+    const packet=requests.find(x=>x.payloadType===2116);
+    assert.deepEqual(packet.payload,{ctidTraderAccountId:12345,symbolId:[987]});
+    await assert.rejects(gateway.channel(false).symbolDetails(12345,'read-only',0),/invalid_symbol_id/);
+  } finally {socket.close();}
+});
+
+test('truncated broker tick page is only a density marker, never a partial candle input',async()=>{
+  class TruncatedSocket extends EventEmitter {
+    constructor(){super();this.readyState=0;queueMicrotask(()=>{this.readyState=1;this.emit('open');});}
+    send(data,callback=()=>{}){
+      const packet=JSON.parse(data);callback();
+      const responseType={2100:2101,2102:2103,2145:2146}[packet.payloadType];
+      const payload=packet.payloadType===2102?{ctidTraderAccountId:12345}
+        :packet.payloadType===2145?{ctidTraderAccountId:12345,hasMore:true,
+          tickData:[{timestamp:1010,tick:200000000},{timestamp:0,tick:100},
+            {timestamp:0,tick:200}]}:{};
+      queueMicrotask(()=>this.emit('message',Buffer.from(JSON.stringify({
+        clientMsgId:packet.clientMsgId,payloadType:responseType,payload}))));
+    }
+    close(){this.readyState=3;this.emit('close');}
+  }
+  const socket=new TruncatedSocket();
+  const gateway=new CTraderGateway('id','secret',{socketFactory:()=>socket});
+  try {
+    const page=await gateway.channel(false).historicalBidTicks(12345,'read-only',987,1000,1010);
+    assert.deepEqual(page,{ticks:[],hasMore:true});
+  } finally {socket.close();}
+});
