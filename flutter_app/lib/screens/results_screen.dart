@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../data/market_controller.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
 
 class ResultsScreen extends StatefulWidget {
-  const ResultsScreen({super.key});
+  const ResultsScreen({required this.controller, super.key});
+
+  final MarketController controller;
 
   @override
   State<ResultsScreen> createState() => _ResultsScreenState();
@@ -34,6 +37,31 @@ class _ResultsScreenState extends State<ResultsScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onAccountChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant ResultsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onAccountChange);
+      widget.controller.addListener(_onAccountChange);
+    }
+  }
+
+  void _onAccountChange() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onAccountChange);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Column(children: [
@@ -46,7 +74,12 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w800,
                 ))),
-            const TradeStatusChip(label: 'لا توجد حسابات متصلة'),
+            TradeStatusChip(
+              label: widget.controller.ctraderConnected
+                  ? 'cTrader متصل'
+                  : 'لا يوجد سجل تداول',
+              connected: widget.controller.ctraderConnected,
+            ),
           ]),
           const SizedBox(height: 12),
           SingleChildScrollView(
@@ -83,6 +116,19 @@ class _ResultsScreenState extends State<ResultsScreen> {
           ]),
         ),
         const SizedBox(height: 16),
+        if (widget.controller.ctraderConnected) ...[
+          TradeSurface(child: Row(children: [
+            const Icon(Icons.info_outline, color: TradeColors.blue),
+            const SizedBox(width: 8),
+            Expanded(child: Text(
+              'حساب cTrader متصل لقراءة أسعار السوق. نتائج التداول التجريبي '
+              'تحتاج إلى نقل سجل Room من تطبيق Android القديم أو تسجيل '
+              'الصفقات في قاعدة Flutter مستقلة. لن نعرض أرصدة أو أرباحًا مفترضة.',
+              style: Theme.of(context).textTheme.bodySmall,
+            )),
+          ])),
+          const SizedBox(height: 14),
+        ],
         if (_page == 0) ...[
           const TradeSectionTitle('ملخص الحساب'),
           _summary(),

@@ -122,7 +122,7 @@ class _TradeLabShellState extends State<TradeLabShell> {
                 children: [
                   MarketsScreen(controller: _market),
                   ChartScreen(controller: _market),
-                  const ResultsScreen(),
+                  ResultsScreen(controller: _market),
                   AccountScreen(
                     controller: _market,
                     darkMode: widget.darkMode,

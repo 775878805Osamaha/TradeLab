@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../chart/chart_annotations.dart';
 import '../chart/chart_viewport.dart';
 import '../data/range_bar_builder.dart';
 import '../data/tradelab_data.dart';
@@ -26,11 +27,13 @@ class _ChartScreenState extends State<ChartScreen> {
   final _rangeCache = <int, List<TradeCandle>>{};
   List<MarketBar> _actualBars = [];
   List<TradeCandle> _actualCandles = [];
+  List<int> _actualTimestamps = [];
   List<TradeCandle> _actualRange = [];
   int _loadRevision = 0;
   bool _loading = false;
   bool _olderLoading = false;
   bool _historyExhausted = false;
+  int? _olderCursorMs;
   String? _olderLoadError;
   String? _loadError;
   List<TradeCandle>? _heikinSource;
@@ -43,6 +46,7 @@ class _ChartScreenState extends State<ChartScreen> {
   int _rangeTicks = 1000;
   bool _replay = false;
   bool _drawing = false;
+  ChartDrawingTool _drawingTool = ChartDrawingTool.horizontal;
   bool _showIndicators = false;
   int _visibleThrough = 60;
   ChartViewport _viewport = const ChartViewport();
@@ -52,9 +56,17 @@ class _ChartScreenState extends State<ChartScreen> {
   Timer? _replayTimer;
   bool _playing = false;
   final List<double> _levels = [];
-  final List<List<double>> _lineUndo = [];
+  final List<ChartPattern> _patterns = [];
+  final List<(List<double>, List<ChartPattern>)> _lineUndo = [];
+  List<double> _analysisLevels = [];
+  List<ChartPattern> _analysisPatterns = [];
+  ChartAnchor? _pendingAnchor;
   int? _selectedLine;
+  int? _selectedPattern;
   bool _draggingLine = false;
+  bool _draggingPattern = false;
+  ChartPattern? _patternAtDragStart;
+  double _gestureFocalY = 0;
 
   TradeSymbol get _selectedSymbol => tradeSymbols.firstWhere((s) => s.code == _symbol);
   bool get _liveRequested => _selectedSymbol.source == TradeSource.binance ||
@@ -77,12 +89,15 @@ class _ChartScreenState extends State<ChartScreen> {
     if (_linkedBefore != linked || changedAccount) {
       _linkedBefore = linked;
       _accountBefore = widget.controller.accountId;
+      // Never carry another broker account's drawings into this account.
+      _resetDrawingObjects();
       if (linked && _selectedSymbol.source == TradeSource.ctrader) {
         _loadRealHistory();
       }
       if (!linked && _selectedSymbol.source == TradeSource.ctrader) {
         _loadRevision++;
         _actualBars = [];
+        _actualTimestamps = [];
         _actualRange = [];
         if (mounted) setState(() {});
       }
@@ -94,14 +109,25 @@ class _ChartScreenState extends State<ChartScreen> {
     if (!mounted) return;
     setState(() {
       _stopPlayback();
+      if (_replay) {
+        _levels..clear()..addAll(_analysisLevels);
+        _patterns..clear()..addAll(_analysisPatterns);
+      }
       _replay = false;
       _loading = true;
       _loadError = null;
       _historyExhausted = false;
+      _olderCursorMs = null;
       _olderLoadError = null;
       _actualBars = [];
       _actualCandles = [];
+      _actualTimestamps = [];
       _actualRange = [];
+      _patterns.clear();
+      _analysisPatterns = [];
+      _analysisLevels = [];
+      _pendingAnchor = null;
+      _selectedPattern = null;
     });
     try {
       if (_mode == ChartMode.range) {
@@ -117,6 +143,8 @@ class _ChartScreenState extends State<ChartScreen> {
         if (revision != _loadRevision || !mounted) return;
         _actualBars = bars;
         _actualCandles = bars.map((bar) => bar.candle).toList(growable: false);
+        _actualTimestamps = bars.map((bar) => bar.timestamp).toList(growable: false);
+        if (bars.isNotEmpty) _olderCursorMs = bars.first.timestamp;
       }
       if (revision == _loadRevision && _totalBars == 0) {
         _loadError = 'لم يُرجع المصدر شموعًا لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
@@ -130,23 +158,48 @@ class _ChartScreenState extends State<ChartScreen> {
     }
   }
 
-  Future<void> _loadOlderHistory() async {
+  Future<void> _loadOlderHistory({bool manual = false}) async {
     if (_olderLoading || _loading || _historyExhausted || !_liveRequested ||
-        _olderLoadError != null || _mode == ChartMode.range || _actualBars.isEmpty) return;
+        (!manual && _olderLoadError != null) ||
+        _mode == ChartMode.range || _actualBars.isEmpty) return;
     final revision = _loadRevision;
-    setState(() => _olderLoading = true);
+    setState(() {
+      _olderLoading = true;
+      _olderLoadError = null;
+    });
     try {
-      final before = DateTime.fromMillisecondsSinceEpoch(_actualBars.first.timestamp, isUtc: true);
+      final cursor = _olderCursorMs ?? _actualBars.first.timestamp;
+      final before = DateTime.fromMillisecondsSinceEpoch(cursor, isUtc: true);
       final older = await widget.controller.history(_selectedSymbol, _timeframe, before: before);
       if (revision != _loadRevision || !mounted) return;
       final earliest = _actualBars.first.timestamp;
       final unique = older.where((bar) => bar.timestamp < earliest).toList();
-      if (unique.isEmpty) _historyExhausted = true;
-      if (unique.isNotEmpty) setState(() {
+      if (unique.isEmpty) {
+        if (_selectedSymbol.source == TradeSource.binance) {
+          _historyExhausted = true;
+        } else {
+          // A broker may have a quiet 89-day window. An empty page is not
+          // proof that all earlier history is exhausted. Continue on demand.
+          _olderCursorMs = cursor - const Duration(days: 89).inMilliseconds;
+          _olderLoadError = 'لا توجد شموع في هذه الفترة. اضغط «أقدم» للبحث قبلها.';
+        }
+      } else {
+        _olderCursorMs = unique.first.timestamp;
+        setState(() {
         _actualBars = [...unique, ..._actualBars];
         _actualCandles = _actualBars.map((bar) => bar.candle).toList(growable: false);
+        _actualTimestamps = _actualBars.map((bar) => bar.timestamp).toList(growable: false);
+        for (var index = 0; index < _patterns.length; index++) {
+          _patterns[index] = _patterns[index].shifted(unique.length);
+        }
+        if (_pendingAnchor != null) {
+          _pendingAnchor = _pendingAnchor!.shifted(unique.length);
+        }
+        // The Replay cutoff must stay at the SAME historical candle when
+        // older candles are prepended. Never reveal new future candles.
         if (_replay) _visibleThrough += unique.length;
-      });
+        });
+      }
     } catch (_) {
       if (revision == _loadRevision && mounted) {
         _olderLoadError = 'تعذّر تحميل الشموع الأقدم. يمكنك إعادة المحاولة.';
@@ -180,10 +233,25 @@ class _ChartScreenState extends State<ChartScreen> {
     }
     setState(() {
         _stopPlayback();
+        if (!_replay) {
+          // Drawings created after the Replay cutoff could expose future
+          // information. Keep analysis objects separately until Replay ends.
+          _analysisLevels = List<double>.of(_levels);
+          _analysisPatterns = List<ChartPattern>.of(_patterns);
+          _levels.clear();
+          _patterns.clear();
+        } else {
+          _levels..clear()..addAll(_analysisLevels);
+          _patterns..clear()..addAll(_analysisPatterns);
+        }
         _replay = !_replay;
         _visibleThrough = math.max(1, _totalBars ~/ 2);
         _viewport = const ChartViewport();
         _crosshair = null;
+        _selectedLine = null;
+        _selectedPattern = null;
+        _pendingAnchor = null;
+        _lineUndo.clear();
       });
   }
 
@@ -276,6 +344,7 @@ class _ChartScreenState extends State<ChartScreen> {
                       _stopPlayback();
                       _symbol = item.code;
                       _viewport = const ChartViewport();
+                      _resetDrawingObjects();
                     });
                     Navigator.pop(sheetContext);
                     if (_liveRequested) _loadRealHistory();
@@ -302,7 +371,11 @@ class _ChartScreenState extends State<ChartScreen> {
                     label: Text(frame, textDirection: TextDirection.ltr),
                     selected: _timeframe == frame,
                     onSelected: (_) {
-                      setState(() { _timeframe = frame; _viewport = const ChartViewport(); });
+                      setState(() {
+                        _timeframe = frame;
+                        _viewport = const ChartViewport();
+                        _resetDrawingObjects();
+                      });
                       Navigator.pop(sheetContext);
                       if (_liveRequested && _mode != ChartMode.range) _loadRealHistory();
                     },
@@ -335,7 +408,11 @@ class _ChartScreenState extends State<ChartScreen> {
                     ? const Icon(Icons.check_circle, color: TradeColors.blue)
                     : null,
                 onTap: () {
-                  setState(() { _mode = item.$1; _viewport = const ChartViewport(); });
+                  setState(() {
+                    _mode = item.$1;
+                    _viewport = const ChartViewport();
+                    _resetDrawingObjects();
+                  });
                   Navigator.pop(sheetContext);
                   if (item.$1 == ChartMode.range) _showRangeSettings();
                   if (_liveRequested) _loadRealHistory();
@@ -377,6 +454,54 @@ class _ChartScreenState extends State<ChartScreen> {
     );
   }
 
+  Future<void> _showDrawingTools() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const TradeSectionTitle('أدوات الرسم'),
+            for (final option in const <(ChartDrawingTool, String, IconData)>[
+              (ChartDrawingTool.horizontal, 'خط أفقي', Icons.horizontal_rule),
+              (ChartDrawingTool.trendLine, 'خط اتجاه · نقطتان', Icons.trending_up),
+              (ChartDrawingTool.fibonacci, 'تصحيح فيبوناتشي · نقطتان', Icons.stacked_line_chart),
+            ])
+              ListTile(
+                title: Text(option.$2),
+                leading: Icon(option.$3),
+                trailing: _drawing && _drawingTool == option.$1
+                    ? const Icon(Icons.check_circle, color: TradeColors.blue)
+                    : null,
+                onTap: () {
+                  setState(() {
+                    _drawing = true;
+                    _drawingTool = option.$1;
+                    _pendingAnchor = null;
+                    _selectedLine = null;
+                    _selectedPattern = null;
+                  });
+                  Navigator.pop(sheetContext);
+                },
+              ),
+            ListTile(
+              title: const Text('إنهاء الرسم والعودة إلى تحريك الشارت'),
+              leading: const Icon(Icons.pan_tool_outlined),
+              onTap: () {
+                setState(() {
+                  _drawing = false;
+                  _pendingAnchor = null;
+                });
+                Navigator.pop(sheetContext);
+              },
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Widget _iconAction({
     required IconData icon,
     required String label,
@@ -403,16 +528,31 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   void _saveDrawingUndo() {
-    _lineUndo.add(List<double>.of(_levels));
+    _lineUndo.add((List<double>.of(_levels), List<ChartPattern>.of(_patterns)));
     if (_lineUndo.length > 30) _lineUndo.removeAt(0);
   }
 
   void _undoDrawing() {
     if (_lineUndo.isEmpty) return;
     setState(() {
-      _levels..clear()..addAll(_lineUndo.removeLast());
+      final previous = _lineUndo.removeLast();
+      _levels..clear()..addAll(previous.$1);
+      _patterns..clear()..addAll(previous.$2);
       _selectedLine = null;
+      _selectedPattern = null;
+      _pendingAnchor = null;
     });
+  }
+
+  void _resetDrawingObjects() {
+    _levels.clear();
+    _patterns.clear();
+    _analysisLevels = [];
+    _analysisPatterns = [];
+    _lineUndo.clear();
+    _pendingAnchor = null;
+    _selectedLine = null;
+    _selectedPattern = null;
   }
 
   ChartPriceScale _priceScale(List<TradeCandle> candles, double width, double height) =>
@@ -423,6 +563,151 @@ class _ChartScreenState extends State<ChartScreen> {
       if ((scale.y(_levels[index]) - y).abs() <= 18) return index;
     }
     return null;
+  }
+
+  int? _hitPattern(Offset position, ChartPriceScale scale,
+      double width, int visibleCount) {
+    for (var i = _patterns.length - 1; i >= 0; i--) {
+      final pattern = _patterns[i];
+      if (!pattern.visibleAt(visibleCount)) continue;
+      final x1 = _viewport.chartX(index: pattern.start.index,
+          candleCount: visibleCount, plotWidth: width);
+      final x2 = _viewport.chartX(index: pattern.end.index,
+          candleCount: visibleCount, plotWidth: width);
+      final y1 = scale.y(pattern.start.price);
+      final y2 = scale.y(pattern.end.price);
+      if (pattern.tool == ChartDrawingTool.fibonacci) {
+        final left = math.min(x1, x2) - 15;
+        if (position.dx < left || position.dx > width) continue;
+        if (ChartPattern.fibonacciRatios.any((ratio) =>
+            (scale.y(pattern.fibonacciPrice(ratio)) - position.dy).abs() < 17)) {
+          return i;
+        }
+      } else {
+        final dx = x2 - x1;
+        final dy = y2 - y1;
+        final lengthSquared = dx * dx + dy * dy;
+        final projection = lengthSquared == 0 ? 0.0 :
+            ((position.dx - x1) * dx + (position.dy - y1) * dy) /
+                lengthSquared;
+        final t = projection.clamp(0.0, 1.0);
+        final distance = math.sqrt(
+          math.pow(position.dx - (x1 + dx * t), 2) +
+          math.pow(position.dy - (y1 + dy * t), 2));
+        if (distance <= 17) return i;
+      }
+    }
+    return null;
+  }
+
+  ChartAnchor? _anchorAt(Offset point, ChartPriceScale scale,
+      double plotWidth, int count) {
+    final index = _viewport.indexAt(
+        x: point.dx, plotWidth: plotWidth, candleCount: count);
+    if (index == null) return null;
+    return ChartAnchor(index,
+        scale.price(point.dy.clamp(0, scale.height).toDouble()));
+  }
+
+  Future<void> _editSelectedDrawing() async {
+    final selected = _selectedPattern;
+    if (selected != null && selected < _patterns.length) {
+      final pattern = _patterns[selected];
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (context, updateSheet) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const TradeSectionTitle('خصائص الرسم'),
+                const SizedBox(height: 12),
+                Wrap(spacing: 10, children: [
+                  for (final color in const <int>[
+                    0xFF3467E9, 0xFF26A69A, 0xFFE34A4A, 0xFFE8A426,
+                  ])
+                    IconButton(
+                      tooltip: 'تغيير لون الرسم',
+                      onPressed: () {
+                        setState(() {
+                          _saveDrawingUndo();
+                          _patterns[selected] = _patterns[selected].styled(
+                              colorValue: color);
+                        });
+                        updateSheet(() {});
+                      },
+                      icon: Icon(Icons.circle, color: Color(color), size: 30),
+                    ),
+                ]),
+                ListTile(
+                  title: const Text('سماكة الخط'),
+                  subtitle: Slider(
+                    min: 1, max: 4, divisions: 6,
+                    value: _patterns[selected].strokeWidth.clamp(1.0, 4.0).toDouble(),
+                    onChangeStart: (_) => _saveDrawingUndo(),
+                    onChanged: (value) {
+                      setState(() => _patterns[selected] =
+                          _patterns[selected].styled(strokeWidth: value));
+                      updateSheet(() {});
+                    },
+                  ),
+                ),
+                if (pattern.tool == ChartDrawingTool.fibonacci)
+                  SwitchListTile(
+                    title: const Text('إظهار تسميات مستويات فيبوناتشي'),
+                    value: _patterns[selected].showLabels,
+                    onChanged: (value) {
+                      setState(() {
+                        _saveDrawingUndo();
+                        _patterns[selected] =
+                            _patterns[selected].styled(showLabels: value);
+                      });
+                      updateSheet(() {});
+                    },
+                  ),
+              ]),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    final index = _selectedLine;
+    if (index == null || index >= _levels.length) return;
+    final field = TextEditingController(text: _levels[index].toStringAsFixed(3));
+    try {
+      await showModalBottomSheet<void>(
+        context: context, showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const TradeSectionTitle('سعر الخط الأفقي'),
+              TextField(controller: field,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textDirection: TextDirection.ltr,
+                decoration: const InputDecoration(labelText: 'السعر')),
+              const SizedBox(height: 10),
+              FilledButton(
+                onPressed: () {
+                  final value = double.tryParse(field.text);
+                  if (value == null || !value.isFinite || value <= 0) return;
+                  setState(() {
+                    _saveDrawingUndo();
+                    _levels[index] = value;
+                  });
+                  Navigator.pop(sheetContext);
+                },
+                child: const Text('حفظ'),
+              ),
+            ]),
+          ),
+        ),
+      );
+    } finally {
+      field.dispose();
+    }
   }
 
   @override
@@ -485,7 +770,7 @@ class _ChartScreenState extends State<ChartScreen> {
           _iconAction(icon: Icons.functions, label: 'المؤشرات', active: _showIndicators,
             onPressed: () => setState(() => _showIndicators = !_showIndicators)),
           _iconAction(icon: Icons.edit_outlined, label: 'أدوات الرسم', active: _drawing,
-            onPressed: () => setState(() => _drawing = !_drawing)),
+            onPressed: _showDrawingTools),
           _iconAction(icon: Icons.zoom_in_outlined, label: 'تكبير الشارت',
             onPressed: () => _zoomBy(1.25)),
           _iconAction(icon: Icons.zoom_out_outlined, label: 'تصغير الشارت',
@@ -522,7 +807,7 @@ class _ChartScreenState extends State<ChartScreen> {
             Expanded(child: Text(_olderLoadError!, style: const TextStyle(fontSize: 12))),
             TextButton(onPressed: () {
               setState(() => _olderLoadError = null);
-              unawaited(_loadOlderHistory());
+              unawaited(_loadOlderHistory(manual: true));
             }, child: const Text('إعادة المحاولة')),
           ]),
         ),
@@ -536,12 +821,22 @@ class _ChartScreenState extends State<ChartScreen> {
             onScaleStart: (details) {
               _gestureStart = _viewport;
               _gestureFocalX = details.localFocalPoint.dx;
+              _gestureFocalY = details.localFocalPoint.dy;
               if (_drawing && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 _selectedLine = _hitLine(details.localFocalPoint.dy, scale);
                 _draggingLine = _selectedLine != null;
-                if (_draggingLine) _saveDrawingUndo();
-              } else {_draggingLine = false;}
+                _selectedPattern = _draggingLine ? null :
+                    _hitPattern(details.localFocalPoint, scale,
+                        plotWidth, candles.length);
+                _draggingPattern = _selectedPattern != null;
+                _patternAtDragStart = _draggingPattern
+                    ? _patterns[_selectedPattern!] : null;
+                if (_draggingLine || _draggingPattern) _saveDrawingUndo();
+              } else {
+                _draggingLine = false;
+                _draggingPattern = false;
+              }
             },
             onScaleUpdate: (details) {
               setState(() {
@@ -549,6 +844,20 @@ class _ChartScreenState extends State<ChartScreen> {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 _levels[_selectedLine!] = scale.price(
                     details.localFocalPoint.dy.clamp(0, scale.height).toDouble());
+              } else if (_draggingPattern && _selectedPattern != null &&
+                  _patternAtDragStart != null && details.pointerCount == 1) {
+                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
+                final original = _patternAtDragStart!;
+                final proposedBars = ((details.localFocalPoint.dx -
+                    _gestureFocalX) / _viewport.barWidth).round();
+                final minIndex = math.min(original.start.index, original.end.index);
+                final maxIndex = math.max(original.start.index, original.end.index);
+                final barDelta = proposedBars.clamp(-minIndex,
+                    math.max(0, candles.length - 1 - maxIndex));
+                final change = scale.price(
+                    details.localFocalPoint.dy.clamp(0, scale.height).toDouble()) -
+                    scale.price(_gestureFocalY.clamp(0, scale.height).toDouble());
+                _patterns[_selectedPattern!] = original.moved(barDelta.toInt(), change);
               } else if (details.pointerCount > 1) {
                 _viewport = _gestureStart.pinch(
                   scale: details.scale,
@@ -565,12 +874,17 @@ class _ChartScreenState extends State<ChartScreen> {
                 );
               }
               });
-              if (!_draggingLine && _liveRequested && _actualBars.isNotEmpty && !_replay &&
-                  _viewport.scrollBars > _actualBars.length - plotWidth / _viewport.barWidth - 25) {
+              if (!_draggingLine && _liveRequested && _actualBars.isNotEmpty &&
+                  _mode != ChartMode.range &&
+                  _viewport.scrollBars > candles.length - plotWidth / _viewport.barWidth - 25) {
                 unawaited(_loadOlderHistory());
               }
             },
-            onScaleEnd: (_) => _draggingLine = false,
+            onScaleEnd: (_) {
+              _draggingLine = false;
+              _draggingPattern = false;
+              _patternAtDragStart = null;
+            },
             onDoubleTap: () => setState(() { _viewport = const ChartViewport(); _crosshair = null; }),
             onLongPressStart: (details) => setState(() => _crosshair = details.localPosition),
             onLongPressMoveUpdate: (details) => setState(() => _crosshair = details.localPosition),
@@ -580,11 +894,44 @@ class _ChartScreenState extends State<ChartScreen> {
               final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
               final hit = _hitLine(details.localPosition.dy, scale);
               setState(() {
-                if (hit != null) {_selectedLine = hit; return;}
+                if (hit != null) {
+                  _selectedLine = hit;
+                  _selectedPattern = null;
+                  _pendingAnchor = null;
+                  return;
+                }
+                final hitPattern = _hitPattern(details.localPosition,
+                    scale, plotWidth, candles.length);
+                if (hitPattern != null) {
+                  _selectedPattern = hitPattern;
+                  _selectedLine = null;
+                  _pendingAnchor = null;
+                  return;
+                }
+                if (_drawingTool != ChartDrawingTool.horizontal) {
+                  final anchor = _anchorAt(details.localPosition, scale,
+                      plotWidth, candles.length);
+                  if (anchor == null) return;
+                  if (_pendingAnchor == null) {
+                    _pendingAnchor = anchor;
+                  } else {
+                    _saveDrawingUndo();
+                    _patterns.add(ChartPattern(
+                      tool: _drawingTool,
+                      start: _pendingAnchor!,
+                      end: anchor,
+                    ));
+                    _selectedPattern = _patterns.length - 1;
+                    _selectedLine = null;
+                    _pendingAnchor = null;
+                  }
+                  return;
+                }
                 _saveDrawingUndo();
                 _levels.add(scale.price(
                     details.localPosition.dy.clamp(0, scale.height).toDouble()));
                 _selectedLine = _levels.length - 1;
+                _selectedPattern = null;
               });
             },
             child: RepaintBoundary(
@@ -592,11 +939,14 @@ class _ChartScreenState extends State<ChartScreen> {
                 size: Size.infinite,
                 painter: _CandleChartPainter(
                   candles: candles,
+                  timestamps: _mode == ChartMode.range ? const [] : _actualTimestamps,
                   dark: Theme.of(context).brightness == Brightness.dark,
                   viewport: _viewport,
                   crosshair: _crosshair,
                   levels: List<double>.unmodifiable(_levels),
+                  patterns: List<ChartPattern>.unmodifiable(_patterns),
                   selectedLine: _drawing ? _selectedLine : null,
+                  selectedPattern: _drawing ? _selectedPattern : null,
                   indicator: _showIndicators,
                   isPreview: !_liveRequested,
                 ),
@@ -630,14 +980,23 @@ class _ChartScreenState extends State<ChartScreen> {
           Expanded(child: Text(_liveRequested
               ? (_loading ? 'جار تحميل شموع موثقة من المصدر' :
                   _loadError != null ? 'البيانات غير متاحة حاليًا' :
-                  'شموع المصدر الفعلي · Replay للشموع المحمّلة فقط')
+                  'شموع المصدر الفعلي · اسحب للشموع الأقدم أو حمّلها في Replay')
               : 'شموع توضيحية للتصميم وليست أسعارًا حقيقية',
               maxLines: 2, style: TextStyle(fontSize: 11))),
-          if (_drawing && _selectedLine != null && _selectedLine! < _levels.length)
-            IconButton(tooltip: 'حذف الخط المحدد', onPressed: () => setState(() {
+          if (_drawing && (_selectedLine != null || _selectedPattern != null))
+            IconButton(tooltip: 'خصائص الرسم المحدد',
+              onPressed: _editSelectedDrawing,
+              icon: const Icon(Icons.tune)),
+          if (_drawing && (_selectedLine != null || _selectedPattern != null))
+            IconButton(tooltip: 'حذف الرسم المحدد', onPressed: () => setState(() {
               _saveDrawingUndo();
-              _levels.removeAt(_selectedLine!);
+              if (_selectedLine != null && _selectedLine! < _levels.length) {
+                _levels.removeAt(_selectedLine!);
+              } else if (_selectedPattern != null && _selectedPattern! < _patterns.length) {
+                _patterns.removeAt(_selectedPattern!);
+              }
               _selectedLine = null;
+              _selectedPattern = null;
             }), icon: const Icon(Icons.delete_outline)),
           if (_lineUndo.isNotEmpty)
             TextButton.icon(
@@ -647,6 +1006,14 @@ class _ChartScreenState extends State<ChartScreen> {
             ),
         ]),
       ),
+      if (_pendingAnchor != null && _drawing)
+        Container(
+          alignment: Alignment.center,
+          color: TradeColors.blue.withValues(alpha: .06),
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: const Text('المس الشارت لتحديد النقطة الثانية للرسم',
+              style: TextStyle(fontSize: 12, color: TradeColors.blue)),
+        ),
       if (_replay) _replayControls(context),
     ]);
   }
@@ -661,6 +1028,20 @@ class _ChartScreenState extends State<ChartScreen> {
             Text('$_visibleThrough / $_totalBars ${_liveRequested ? 'شمعة' : 'شمعة توضيحية'}',
                 style: Theme.of(context).textTheme.labelSmall),
           ]),
+          if (_liveRequested && _mode != ChartMode.range && _actualBars.isNotEmpty)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                onPressed: _olderLoading || _historyExhausted
+                    ? null : () => _loadOlderHistory(manual: true),
+                icon: _olderLoading
+                    ? const SizedBox(width: 15, height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.history, size: 18),
+                label: Text(_historyExhausted ? 'لا تتوفر شموع أقدم'
+                    : 'تحميل شموع أقدم'),
+              ),
+            ),
           Row(children: [
             IconButton(tooltip: 'رجوع شمعة',
               onPressed: _visibleThrough <= 1 ? null : () => setState(() => _visibleThrough--),
@@ -691,21 +1072,27 @@ class _ChartScreenState extends State<ChartScreen> {
 class _CandleChartPainter extends CustomPainter {
   _CandleChartPainter({
     required this.candles,
+    required this.timestamps,
     required this.dark,
     required this.viewport,
     required this.crosshair,
     required this.levels,
+    required this.patterns,
     required this.selectedLine,
+    required this.selectedPattern,
     required this.indicator,
     required this.isPreview,
   });
 
   final List<TradeCandle> candles;
+  final List<int> timestamps;
   final bool dark;
   final ChartViewport viewport;
   final Offset? crosshair;
   final List<double> levels;
+  final List<ChartPattern> patterns;
   final int? selectedLine;
+  final int? selectedPattern;
   final bool indicator;
   final bool isPreview;
 
@@ -743,27 +1130,38 @@ class _CandleChartPainter extends CustomPainter {
     canvas.drawLine(Offset(axis, 0), Offset(axis, size.height), gridPaint);
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, axis, chartHeight));
+    final positiveWick = Paint()
+      ..color = TradeColors.positive
+      ..strokeWidth = 1.3;
+    final negativeWick = Paint()
+      ..color = TradeColors.negative
+      ..strokeWidth = 1.3;
+    final positiveBody = Paint()..color = TradeColors.positive;
+    final negativeBody = Paint()..color = TradeColors.negative;
     for (var i = start; i < ending; i++) {
       final candle = candles[i];
       final centerX = viewport.chartX(
         index: i, candleCount: candles.length, plotWidth: axis);
       if (centerX < -viewport.barWidth || centerX > axis + viewport.barWidth) continue;
-      final color = candle.positive ? TradeColors.positive : TradeColors.negative;
-      final center = Paint()..color = color..strokeWidth = 1.3;
-      canvas.drawLine(Offset(centerX, y(candle.high)), Offset(centerX, y(candle.low)), center);
+      canvas.drawLine(Offset(centerX, y(candle.high)), Offset(centerX, y(candle.low)),
+          candle.positive ? positiveWick : negativeWick);
       final openY = y(candle.open);
       final closeY = y(candle.close);
       canvas.drawRect(Rect.fromLTRB(
         centerX - viewport.barWidth * .31, math.min(openY, closeY),
         centerX + viewport.barWidth * .31, math.max(openY + 1, closeY + 1),
-      ), Paint()..color = color);
+      ), candle.positive ? positiveBody : negativeBody);
     }
     if (indicator) {
       final linePath = Path();
+      var rollingSum = 0.0;
+      for (var i = math.max(0, start - 11); i < start; i++) {
+        rollingSum += candles[i].close;
+      }
       for (var i = start; i < ending; i++) {
-        final from = math.max(0, i - 11);
-        final section = candles.sublist(from, i + 1);
-        final average = section.fold<double>(0, (sum, bar) => sum + bar.close) / section.length;
+        rollingSum += candles[i].close;
+        if (i > start && i >= 12) rollingSum -= candles[i - 12].close;
+        final average = rollingSum / math.min(12, i + 1);
         final x = viewport.chartX(
           index: i, candleCount: candles.length, plotWidth: axis);
         if (i == start) { linePath.moveTo(x, y(average)); } else { linePath.lineTo(x, y(average)); }
@@ -777,7 +1175,58 @@ class _CandleChartPainter extends CustomPainter {
         ..strokeWidth = selectedLine == index ? 2.4 : 1;
       canvas.drawLine(Offset(0, levelY), Offset(axis, levelY), marker);
     }
+    for (var index = 0; index < patterns.length; index++) {
+      final drawing = patterns[index];
+      // Replay is strictly prefix-only: drawings ending in the future stay
+      // invisible, even if their coordinates were created in analysis mode.
+      if (!drawing.visibleAt(candles.length)) continue;
+      final x1 = viewport.chartX(index: drawing.start.index,
+          candleCount: candles.length, plotWidth: axis);
+      final x2 = viewport.chartX(index: drawing.end.index,
+          candleCount: candles.length, plotWidth: axis);
+      final y1 = y(drawing.start.price);
+      final y2 = y(drawing.end.price);
+      final color = Color(drawing.colorValue);
+      final selected = selectedPattern == index;
+      final drawingPaint = Paint()
+        ..color = color
+        ..strokeWidth = drawing.strokeWidth + (selected ? 1 : 0)
+        ..style = PaintingStyle.stroke;
+      if (drawing.tool == ChartDrawingTool.fibonacci) {
+        final fromX = math.min(x1, x2);
+        for (final ratio in ChartPattern.fibonacciRatios) {
+          final price = drawing.fibonacciPrice(ratio);
+          final levelY = y(price);
+          canvas.drawLine(Offset(fromX, levelY),
+              Offset(axis, levelY), drawingPaint);
+          if (drawing.showLabels) {
+            _text(canvas, '${(ratio * 100).toStringAsFixed(1)}% ${price.toStringAsFixed(decimals)}',
+                Offset(fromX + 5, levelY - 13), color, 10);
+          }
+        }
+      } else {
+        canvas.drawLine(Offset(x1, y1), Offset(x2, y2), drawingPaint);
+      }
+      if (selected) {
+        final handle = Paint()..color = color;
+        canvas.drawCircle(Offset(x1, y1), 4.2, handle);
+        canvas.drawCircle(Offset(x2, y2), 4.2, handle);
+      }
+    }
     canvas.restore();
+    if (timestamps.length >= candles.length) {
+      // Real UTC dates only. Range bars and design fixtures have no
+      // trustworthy candle timestamps and must not fabricate them.
+      for (var tick = 1; tick <= 4; tick++) {
+        final x = axis * tick / 5;
+        final index = viewport.indexAt(x: x, plotWidth: axis,
+            candleCount: candles.length);
+        if (index == null) continue;
+        final date = DateTime.fromMillisecondsSinceEpoch(timestamps[index], isUtc: true);
+        final label = _formatUtc(date);
+        _text(canvas, label, Offset(x - 26, chartHeight + 4), text, 9);
+      }
+    }
     if (crosshair != null) {
       final location = Offset(
         crosshair!.dx.clamp(0, axis).toDouble(),
@@ -796,10 +1245,26 @@ class _CandleChartPainter extends CustomPainter {
           Paint()..color = TradeColors.blue);
       _text(canvas, crossPrice.toStringAsFixed(decimals),
           Offset(axis + 3, markerY + 2), Colors.white, 10);
+      if (timestamps.length >= candles.length) {
+        final index = viewport.indexAt(
+            x: location.dx, plotWidth: axis, candleCount: candles.length);
+        if (index != null) {
+          final date = DateTime.fromMillisecondsSinceEpoch(timestamps[index], isUtc: true);
+          final startX = (location.dx - 37).clamp(0.0, axis - 75).toDouble();
+          canvas.drawRect(Rect.fromLTWH(startX, chartHeight, 75, 20),
+              Paint()..color = TradeColors.blue);
+          _text(canvas, _formatUtc(date),
+              Offset(startX + 5, chartHeight + 4), Colors.white, 9);
+        }
+      }
     }
     // A separate LTR price axis keeps digits and decimal points predictable in RTL.
-    _text(canvas, isPreview ? 'معاينة' : 'سوق فعلي',
-        Offset(axis / 2 - 18, chartHeight + 3), text, 10);
+    if (timestamps.length < candles.length) {
+      _text(canvas, isPreview ? 'معاينة' : 'شموع مدى',
+          Offset(axis / 2 - 18, chartHeight + 3), text, 10);
+    } else {
+      _text(canvas, 'UTC', Offset(3, chartHeight + 4), text, 9);
+    }
   }
 
   static void _text(Canvas canvas, String value, Offset offset, Color color, double size) {
@@ -812,10 +1277,18 @@ class _CandleChartPainter extends CustomPainter {
     painter.paint(canvas, offset);
   }
 
+  static String _formatUtc(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}/'
+      '${date.month.toString().padLeft(2, '0')} '
+      '${date.hour.toString().padLeft(2, '0')}:'
+      '${date.minute.toString().padLeft(2, '0')}';
+
   @override
   bool shouldRepaint(covariant _CandleChartPainter old) =>
-      old.candles != candles || old.dark != dark || old.viewport != viewport ||
+      old.candles != candles || old.timestamps != timestamps ||
+      old.dark != dark || old.viewport != viewport ||
       old.crosshair != crosshair || old.indicator != indicator ||
-      old.levels != levels || old.selectedLine != selectedLine ||
+      old.levels != levels || old.patterns != patterns ||
+      old.selectedLine != selectedLine || old.selectedPattern != selectedPattern ||
       old.isPreview != isPreview;
 }

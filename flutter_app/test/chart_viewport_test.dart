@@ -72,4 +72,14 @@ void main() {
     expect(scaleAfterZoom.price(scaleAfterZoom.y(savedLevelPrice)),
         closeTo(savedLevelPrice, 1e-9));
   });
+
+  test('touch coordinates resolve actual candles, not future whitespace', () {
+    const viewport = ChartViewport(scrollBars: -15);
+    final x = viewport.chartX(index: 89, candleCount: 90, plotWidth: 300);
+    expect(viewport.indexAt(x: x, plotWidth: 300, candleCount: 90), 89);
+    expect(viewport.indexAt(x: 290, plotWidth: 300, candleCount: 90),
+        isNull);
+    expect(viewport.indexAt(x: -1, plotWidth: 300, candleCount: 90),
+        isNull);
+  });
 }

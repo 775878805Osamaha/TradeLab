@@ -48,6 +48,16 @@ class ChartViewport {
     required double plotWidth,
   }) => plotWidth - (candleCount - scrollBars - index - .5) * barWidth;
 
+  /// Converts an x-coordinate to the nearest candle index without clamping
+  /// future whitespace to the last candle (important for Replay correctness).
+  int? indexAt({required double x, required double plotWidth,
+      required int candleCount}) {
+    if (candleCount <= 0 || x < 0 || x > plotWidth) return null;
+    final index = ((x - plotWidth) / barWidth +
+        candleCount - scrollBars - .5).round();
+    return index < 0 || index >= candleCount ? null : index;
+  }
+
   double get futurePaddingBars => math.max(0.0, -scrollBars);
 
   double _boundedScroll(double proposed, double plotWidth, int candleCount,

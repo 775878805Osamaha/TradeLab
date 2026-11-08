@@ -69,6 +69,19 @@ void main() {
     expect(find.text('مدى 250'), findsWidgets);
   });
 
+  testWidgets('drawing picker offers price line, trend line, and Fibonacci',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    expect(find.text('خط أفقي'), findsOneWidget);
+    expect(find.text('خط اتجاه · نقطتان'), findsOneWidget);
+    expect(find.text('تصحيح فيبوناتشي · نقطتان'), findsOneWidget);
+    await tester.tap(find.text('خط اتجاه · نقطتان'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+  });
+
   testWidgets('navigation retains results and account screens', (tester) async {
     await openAtPhoneSize(tester);
     await tester.tap(find.text('النتائج').last);
