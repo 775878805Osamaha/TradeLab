@@ -2,19 +2,27 @@ import 'package:flutter/material.dart';
 
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
+import '../data/market_controller.dart';
 
 class AccountScreen extends StatelessWidget {
   const AccountScreen({
+    required this.controller,
     required this.darkMode,
     required this.onDarkModeChanged,
     super.key,
   });
 
   final bool darkMode;
+  final MarketController controller;
   final ValueChanged<bool> onDarkModeChanged;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: controller,
+    builder: (context, _) => _content(context),
+  );
+
+  Widget _content(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return ListView(padding: const EdgeInsets.all(16), children: [
       Text('الحساب والإعدادات',
@@ -40,10 +48,12 @@ class AccountScreen extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     )),
                 const SizedBox(height: 3),
-                Text('غير متصل في معاينة Flutter',
+                Text(controller.ctraderConnected ? 'حساب cTrader مرتبط للقراءة فقط'
+                    : 'اربط حساب cTrader لإظهار الذهب والفوركس',
                     style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
               ])),
-          const TradeStatusChip(label: 'غير متصل'),
+          TradeStatusChip(label: controller.ctraderConnected ? 'متصل' : 'غير متصل',
+            connected: controller.ctraderConnected),
         ]),
       ),
       const SizedBox(height: 24),
@@ -53,15 +63,45 @@ class AccountScreen extends StatelessWidget {
         child: Column(children: [
           _sourceTile(context,
               title: 'cTrader',
-              subtitle: 'مصدر الذهب والفوركس · يتطلب ربط حسابك',
+              subtitle: controller.ctraderConnected
+                ? 'مصرّح للقراءة فقط · ${controller.accountId}'
+                : 'مصدر الذهب والفوركس · يتطلب ربط حسابك',
               icon: Icons.show_chart),
           const Divider(height: 1),
           _sourceTile(context,
               title: 'Binance',
-              subtitle: 'مصدر العملات الرقمية · غير متصل بعد',
+              subtitle: controller.binanceConnected
+                ? 'مصدر الكريبتو · الأسعار مستلمة من Binance'
+                : 'مصدر الكريبتو · اضغط التحديث لجلب الأسعار',
               icon: Icons.currency_bitcoin),
         ]),
       ),
+      const SizedBox(height: 12),
+      if (controller.busy) const LinearProgressIndicator(),
+      if (controller.error != null) Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(controller.error!, style: TextStyle(color: colors.error)),
+      ),
+      if (!controller.ctraderConnected)
+        FilledButton.icon(key: const Key('ctrader-connect'),
+          onPressed: controller.busy ? null : controller.connectCTrader,
+          icon: const Icon(Icons.link), label: const Text('ربط حساب cTrader للقراءة فقط')),
+      if (controller.ctraderConnected) ...[
+        DropdownButtonFormField<String>(
+          key: const Key('ctrader-account-selector'),
+          initialValue: controller.accountId,
+          decoration: const InputDecoration(labelText: 'حساب وسيط cTrader'),
+          items: controller.accounts.map((account) => DropdownMenuItem(
+            value: account.id,
+            child: Text('${account.broker} · ${account.id} ${account.isLive ? '(Live)' : '(Demo)'}'),
+          )).toList(),
+          onChanged: (value) {if (value != null) controller.chooseAccount(value);},
+        ),
+        TextButton.icon(onPressed: controller.disconnect,
+          icon: const Icon(Icons.link_off), label: const Text('فصل حساب cTrader')),
+      ],
+      OutlinedButton.icon(onPressed: controller.loadingQuotes ? null : controller.refreshQuotes,
+          icon: const Icon(Icons.refresh), label: const Text('جلب أحدث أسعار Binance')),
       const SizedBox(height: 22),
       const TradeSectionTitle('مظهر التطبيق'),
       TradeSurface(
@@ -80,7 +120,7 @@ class AccountScreen extends StatelessWidget {
       TradeSurface(child: Column(children: [
         _infoRow(context, 'التطبيق', 'TradeLab Flutter'),
         const SizedBox(height: 12),
-        _infoRow(context, 'حالة الإصدار', 'معاينة تصميم'),
+        _infoRow(context, 'حالة الإصدار', 'ربط بيانات تجريبي للقراءة فقط'),
         const SizedBox(height: 12),
         _infoRow(context, 'الوضع الافتراضي للشارت', 'التحليل'),
         const SizedBox(height: 12),
@@ -88,8 +128,8 @@ class AccountScreen extends StatelessWidget {
       ])),
       const SizedBox(height: 24),
       const Text(
-        'هذه النسخة لا تنقل بيانات Room أو عمليات حسابك من تطبيق Android الحالي. '
-        'سيتم تنفيذ الربط والتحقق من سلامة البيانات في مرحلة مستقلة.',
+        'هذه النسخة لا تنقل بيانات Room أو أوامر التداول من تطبيق Android الحالي. '
+        'كل مستخدم يربط حساب cTrader بنفسه، وتظل النتائج والأرصدة غير مفعلة لحين ربط قاعدة البيانات.',
         style: TextStyle(fontSize: 12, height: 1.6),
         textAlign: TextAlign.center,
       ),
@@ -106,7 +146,9 @@ class AccountScreen extends StatelessWidget {
             textAlign: TextAlign.right,
             style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text(subtitle),
-        trailing: const Icon(Icons.link_off, size: 18),
+        trailing: Icon(title == 'cTrader' && controller.ctraderConnected ||
+          title == 'Binance' && controller.binanceConnected
+            ? Icons.check_circle_outline : Icons.link_off, size: 18),
       );
 
   Widget _infoRow(BuildContext context, String title, String value) => Row(

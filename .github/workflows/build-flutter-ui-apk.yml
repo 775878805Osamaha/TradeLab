@@ -39,12 +39,14 @@ jobs:
           cp -r ../app/src/main/res/mipmap-* android/app/src/main/res/
           cp ../app/src/main/res/drawable/ic_launcher_*.xml android/app/src/main/res/drawable/
           sed -i 's/android:label="tradelab_flutter"/android:label="TradeLab Flutter Preview"/' android/app/src/main/AndroidManifest.xml
+      - name: Configure isolated Flutter OAuth callback and internet permission
+        run: python3 tool/configure_android_host.py
       - name: Fetch Flutter dependencies
         run: flutter pub get
       - name: Static analysis
         run: flutter analyze --no-fatal-infos
       - name: Interaction tests
-        run: flutter test test/widget_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart
+        run: flutter test test/widget_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/market_api_test.dart
       - name: Capture chart design snapshot
         run: flutter test --update-goldens test/golden_test.dart
       - name: Build debug APK

@@ -4,6 +4,7 @@ import { WebSocketServer } from 'ws';
 import { randomToken, hash, constantTimeMatch, sealedCodec } from '../session.mjs';
 import { CTraderGateway, PERIODS } from '../ctrader.mjs';
 import { encodeTickResponse } from '../tick-response.mjs';
+import { authPage } from '../auth-page.mjs';
 
 // Vercel's single free-tier web service. It keeps no database of user credentials:
 // broker tokens are encrypted with a SERVER-ONLY key and retained in the Android Keystore.
@@ -158,20 +159,6 @@ async function getSpot(channel,id,access,symbol){
     });
   } finally {unsub();}
 }
-function authPage(ticket) {
-  const uri='tradelab://oauth/ctrader?ticket='+encodeURIComponent(ticket);
-  const nonce=randomToken();
-  const body=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="referrer" content="no-referrer"><title>TradeLab cTrader</title></head>
-<body style="background:#071018;color:white;font-family:sans-serif;text-align:center;padding:42px 14px">
-<h2>تم تفويض TradeLab للقراءة فقط</h2>
-<p>اضغط لفتح تطبيق TradeLab وإكمال ربط حسابك.</p>
-<a style="display:inline-block;padding:16px 24px;background:#00bda7;color:#001;border-radius:9px"
-href="${uri}">فتح TradeLab</a>
-<script nonce="${nonce}">location.replace(${JSON.stringify(uri)})</script></body></html>`;
-  return {body,nonce};
-}
 async function handler(req,res){
   const {path,url}=route(req);
   if(req.method==='GET' && path==='/healthz')return reply(res,200,{
@@ -187,7 +174,9 @@ async function handler(req,res){
   if(req.method==='GET' && path==='/auth/ctrader/start'){
     const challenge=url.searchParams.get('challenge');
     if(!validToken(challenge))return fail(res,400,'invalid_challenge');
-    const flow=codec.seal({type:'flow',v:1,challenge,nonce:randomUUID(),
+    const client=url.searchParams.get('client')||'native';
+    if(!['native','flutter'].includes(client))return fail(res,400,'invalid_client');
+    const flow=codec.seal({type:'flow',v:1,challenge,client,nonce:randomUUID(),
       expires:Date.now()+10*60000});
     const target=new URL('https://id.ctrader.com/my/settings/openapi/grantingaccess/');
     for(const [k,v] of Object.entries({client_id:process.env.CTRADER_CLIENT_ID,
@@ -213,7 +202,7 @@ async function handler(req,res){
     // on first use, but expires in two minutes and carries encrypted content.
     const ticket=codec.seal({v:1,type:'handoff',challenge:flow.challenge,
       expires:Date.now()+120000,...tokens});
-    const page=authPage(ticket);
+    const page=authPage(ticket,flow.client==='flutter'?'flutter':'native');
     return html(res,200,page.body,{...clear,'Content-Security-Policy':
       `default-src 'none'; script-src 'nonce-${page.nonce}'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'`});
   }

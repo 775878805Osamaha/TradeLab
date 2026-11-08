@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../data/tradelab_data.dart';
+import '../data/market_controller.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
 
 class MarketsScreen extends StatefulWidget {
-  const MarketsScreen({super.key});
+  const MarketsScreen({required this.controller, super.key});
+  final MarketController controller;
 
   @override
   State<MarketsScreen> createState() => _MarketsScreenState();
@@ -18,7 +20,16 @@ class _MarketsScreenState extends State<MarketsScreen> {
   bool _favoritesOnly = false;
 
   @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_rebuild);
+  }
+
+  void _rebuild() {if (mounted) setState(() {});}
+
+  @override
   void dispose() {
+    widget.controller.removeListener(_rebuild);
     _search.dispose();
     super.dispose();
   }
@@ -49,7 +60,16 @@ class _MarketsScreenState extends State<MarketsScreen> {
             Expanded(child: Text('الأسواق',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800))),
-            const TradeStatusChip(label: 'غير متصل'),
+            TradeStatusChip(label: widget.controller.binanceConnected
+                ? 'Binance متصل' : 'بانتظار الأسعار',
+                connected: widget.controller.binanceConnected),
+            IconButton(
+              tooltip: 'تحديث أسعار Binance',
+              onPressed: widget.controller.loadingQuotes ? null : widget.controller.refreshQuotes,
+              icon: widget.controller.loadingQuotes
+                  ? const SizedBox(width: 18,height: 18,child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.refresh),
+            ),
             IconButton(
               tooltip: 'عرض المفضلة فقط',
               icon: Icon(_favoritesOnly ? Icons.star : Icons.star_border,
@@ -99,7 +119,7 @@ class _MarketsScreenState extends State<MarketsScreen> {
                   if (index == 0) {
                     return const Padding(
                       padding: EdgeInsets.only(bottom: 6),
-                      child: Text('الرموز المتاحة · الأسعار تنتظر الربط',
+                      child: Text('الذهب والفوركس: cTrader · الكريبتو: Binance',
                           style: TextStyle(fontSize: 12)),
                     );
                   }
@@ -143,10 +163,14 @@ class _MarketsScreenState extends State<MarketsScreen> {
                       )),
                       Column(crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                        const Text('—', style: TextStyle(
-                            fontWeight: FontWeight.w800, fontSize: 16)),
+                        Text(widget.controller.cryptoPrices[symbol.code] == null
+                            ? '—' : widget.controller.cryptoPrices[symbol.code]!.toStringAsFixed(2),
+                            textDirection: TextDirection.ltr,
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                         Text(symbol.source == TradeSource.ctrader
-                            ? 'cTrader · غير متصل' : 'Binance · غير متصل',
+                            ? widget.controller.ctraderConnected ? 'cTrader · الحساب مرتبط' : 'cTrader · يتطلب الربط'
+                            : widget.controller.cryptoPrices.containsKey(symbol.code)
+                                ? 'Binance · سعر فعلي' : 'Binance · اضغط تحديث',
                             style: TextStyle(fontSize: 10,
                                 color: colors.onSurfaceVariant)),
                       ]),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'data/market_controller.dart';
 
 import 'screens/account_screen.dart';
 import 'screens/chart_screen.dart';
@@ -10,7 +11,9 @@ import 'theme/tradelab_theme.dart';
 void main() => runApp(const TradeLabApp());
 
 class TradeLabApp extends StatefulWidget {
-  const TradeLabApp({super.key});
+  const TradeLabApp({this.controller, super.key});
+
+  final MarketController? controller;
 
   @override
   State<TradeLabApp> createState() => _TradeLabAppState();
@@ -38,6 +41,7 @@ class _TradeLabAppState extends State<TradeLabApp> {
           child: child ?? const SizedBox.shrink(),
         ),
         home: TradeLabShell(
+          controller: widget.controller,
           darkMode: _themeMode == ThemeMode.dark,
           onDarkModeChanged: (enabled) => setState(() {
             _themeMode = enabled ? ThemeMode.dark : ThemeMode.light;
@@ -48,12 +52,14 @@ class _TradeLabAppState extends State<TradeLabApp> {
 
 class TradeLabShell extends StatefulWidget {
   const TradeLabShell({
+    this.controller,
     required this.darkMode,
     required this.onDarkModeChanged,
     super.key,
   });
 
   final bool darkMode;
+  final MarketController? controller;
   final ValueChanged<bool> onDarkModeChanged;
 
   @override
@@ -64,6 +70,19 @@ class _TradeLabShellState extends State<TradeLabShell> {
   // The approved tab order is Market → Chart → Results → Account (RTL).
   // Chart opens in ANALYSIS mode, never an implicit Replay session.
   int _selectedIndex = 1;
+  late final MarketController _market = widget.controller ?? MarketController();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.controller == null) _market.initialize();
+  }
+
+  @override
+  void dispose() {
+    if (widget.controller == null) _market.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,15 +114,17 @@ class _TradeLabShellState extends State<TradeLabShell> {
         bottom: false,
         child: Column(
           children: [
-            const FlutterPreviewNotice(),
+            AnimatedBuilder(animation: _market,
+              builder: (context, _) => FlutterPreviewNotice(controller: _market)),
             Expanded(
               child: IndexedStack(
                 index: _selectedIndex,
                 children: [
-                  const MarketsScreen(),
-                  const ChartScreen(),
+                  MarketsScreen(controller: _market),
+                  ChartScreen(controller: _market),
                   const ResultsScreen(),
                   AccountScreen(
+                    controller: _market,
                     darkMode: widget.darkMode,
                     onDarkModeChanged: widget.onDarkModeChanged,
                   ),
@@ -116,18 +137,23 @@ class _TradeLabShellState extends State<TradeLabShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         destinations: destinations,
-        onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+        onDestinationSelected: (index) {
+          setState(() => _selectedIndex = index);
+          if (index == 0) _market.refreshQuotes();
+        },
       ),
     );
   }
 }
 
 class FlutterPreviewNotice extends StatelessWidget {
-  const FlutterPreviewNotice({super.key});
+  const FlutterPreviewNotice({required this.controller, super.key});
+
+  final MarketController controller;
 
   @override
   Widget build(BuildContext context) => Semantics(
-        label: 'نسخة واجهات تجريبية. أسعار السوق الحقيقية غير متصلة.',
+        label: 'حالة ربط مصادر بيانات السوق',
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
@@ -140,7 +166,11 @@ class FlutterPreviewNotice extends StatelessWidget {
               const SizedBox(width: 7),
               Flexible(
                 child: Text(
-                  'معاينة تصميم Flutter · بيانات السوق غير متصلة',
+                  controller.ctraderConnected
+                    ? 'cTrader مرتبط للقراءة فقط · بيانات الرموز الأخرى حسب مصدرها'
+                    : controller.binanceConnected
+                      ? 'Binance متصل · cTrader يتطلب ربط حسابك'
+                      : 'معاينة تصميم Flutter · الذهب والفوركس يتطلبان ربط cTrader',
                   maxLines: 2,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(

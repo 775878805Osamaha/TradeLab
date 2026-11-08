@@ -1,4 +1,33 @@
 import 'dart:math' as math;
+import '../data/tradelab_data.dart';
+
+/// Stable price coordinates shared by drawing gestures and chart painting.
+/// Drawings are anchored to market prices, not screen-height fractions.
+class ChartPriceScale {
+  const ChartPriceScale(this.minimum, this.maximum, this.height);
+  final double minimum;
+  final double maximum;
+  final double height;
+
+  factory ChartPriceScale.visible(List<TradeCandle> candles, ChartViewport viewport,
+      double width, double height) {
+    if (candles.isEmpty) return ChartPriceScale(0, 1, height);
+    final (start, end) = viewport.visibleIndices(
+      plotWidth: width, candleCount: candles.length);
+    if (start >= end) return ChartPriceScale(0, 1, height);
+    var minPrice = double.infinity;
+    var maxPrice = double.negativeInfinity;
+    for (var i = start; i < end; i++) {
+      minPrice = math.min(minPrice, candles[i].low);
+      maxPrice = math.max(maxPrice, candles[i].high);
+    }
+    final padding = math.max((maxPrice - minPrice) * .08, maxPrice.abs() * .00001);
+    return ChartPriceScale(minPrice - padding, maxPrice + padding, height);
+  }
+
+  double y(double price) => (maximum - price) / (maximum - minimum) * height;
+  double price(double y) => maximum - y / height * (maximum - minimum);
+}
 
 /// Price-chart horizontal viewport. Zero means the newest bar is at the right
 /// price axis; negative scrolling leaves intentional space after the last bar.
