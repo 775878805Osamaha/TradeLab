@@ -40,7 +40,7 @@ class _AddPaperEntrySheetState extends State<AddPaperEntrySheet> {
   Future<DateTime?> _chooseDateTime(DateTime initial) async {
     final date = await showDatePicker(context: context,
       initialDate: initial, firstDate: DateTime(2000), lastDate: DateTime.now());
-    if (date == null || !mounted) return null;
+    if (date == null || !mounted) { return null; }
     final time = await showTimePicker(context: context,
       initialTime: TimeOfDay.fromDateTime(initial));
     if (time == null) return null;
@@ -124,7 +124,7 @@ class _AddPaperEntrySheetState extends State<AddPaperEntrySheet> {
             _field(_amount, 'المبلغ بالدولار USD'),
           if (_kind == LedgerKind.closedTrade) ...[
             DropdownButtonFormField<String>(
-              value: _symbol,
+              initialValue: _symbol,
               decoration: const InputDecoration(labelText: 'الرمز (تسعير بالدولار)'),
               items: LedgerEntry.usdQuotedSymbols.map((symbol) =>
                   DropdownMenuItem(value: symbol, child: Text(symbol,

@@ -353,7 +353,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 tooltip: 'حذف القيد', icon: const Icon(Icons.delete_outline),
                 onPressed: () => _confirmDelete(entry)),
             ]))),
-          ),
       ]);
 
   Widget _cashMovements(LedgerReport report) => Column(
@@ -374,7 +373,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
               tooltip: 'حذف القيد', icon: const Icon(Icons.delete_outline),
               onPressed: () => _confirmDelete(entry)),
           ]))),
-        ),
     ],
   );
 
@@ -397,7 +395,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 color: day.value >= 0
                     ? TradeColors.positive : TradeColors.negative)),
           ]))),
-        ),
     ]);
   }
 
