@@ -94,7 +94,7 @@ class _MarketsScreenState extends State<MarketsScreen> {
             : ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 itemCount: _visible.length + 1,
-                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                separatorBuilder: (context, index) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return const Padding(

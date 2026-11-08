@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../data/range_bar_builder.dart';
 import '../data/tradelab_data.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
@@ -18,6 +19,7 @@ class ChartScreen extends StatefulWidget {
 
 class _ChartScreenState extends State<ChartScreen> {
   final _fixture = previewCandles();
+  final _rangeCache = <int, List<TradeCandle>>{};
   String _symbol = 'XAUUSD';
   String _timeframe = '15m';
   ChartMode _mode = ChartMode.candles;
@@ -75,6 +77,14 @@ class _ChartScreenState extends State<ChartScreen> {
       );
 
   List<TradeCandle> get _displayCandles {
+    if (_mode == ChartMode.range) {
+      if (!_replay) {
+        return _rangeCache.putIfAbsent(_rangeTicks,
+            () => previewRangeCandles(_rangeTicks));
+      }
+      final throughTick = (_visibleThrough / _fixture.length * 1800).round();
+      return previewRangeCandles(_rangeTicks, throughTick: throughTick);
+    }
     final count = _replay ? _visibleThrough : _fixture.length;
     final raw = _fixture.take(count).toList(growable: false);
     if (_mode != ChartMode.heikinAshi) return raw;
@@ -293,7 +303,7 @@ class _ChartScreenState extends State<ChartScreen> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           color: TradeColors.blue.withValues(alpha: .07),
-          child: Text('مدى $_rangeTicks · الحساب الفعلي يحتاج Tick من cTrader',
+          child: Text('مدى $_rangeTicks · عرض محسوب من تيكات تجريبية، وليس cTrader',
               style: const TextStyle(fontSize: 11, color: TradeColors.blue)),
         ),
       Expanded(

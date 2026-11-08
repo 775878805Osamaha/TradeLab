@@ -18,8 +18,8 @@ delete the native app, its local Room database or its cTrader login credentials.
 - Account: displays cTrader/Binance as *unconnected*. Theme toggle works.
 
 **Important:** Preview candles are deterministic example data and are explicitly
-marked as a design fixture. Range mode currently presents only the settings
-and preview visualization, **not broker-accurate Range bars**. Production Range
+marked as a design fixture. Range mode computes incremental price-distance bars
+from **synthetic preview ticks**, not broker-accurate Range bars. Production
 aggregation requires chronological cTrader bid ticks and must be validated
 against the existing native Range implementation and backtesting constraints.
 
