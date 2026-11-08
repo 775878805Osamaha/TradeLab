@@ -163,12 +163,19 @@ class _MarketsScreenState extends State<MarketsScreen> {
                       )),
                       Column(crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                        Text(widget.controller.cryptoPrices[symbol.code] == null
-                            ? '—' : widget.controller.cryptoPrices[symbol.code]!.toStringAsFixed(2),
+                        Text((symbol.source == TradeSource.ctrader
+                            ? widget.controller.forexPrices[symbol.code]
+                            : widget.controller.cryptoPrices[symbol.code]) == null
+                            ? '—' : (symbol.source == TradeSource.ctrader
+                            ? widget.controller.forexPrices[symbol.code]!
+                            : widget.controller.cryptoPrices[symbol.code]!).toStringAsFixed(
+                                symbol.code == 'USDJPY' ? 3 : symbol.kind == InstrumentKind.forex ? 5 : 2),
                             textDirection: TextDirection.ltr,
                             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                         Text(symbol.source == TradeSource.ctrader
-                            ? widget.controller.ctraderConnected ? 'cTrader · الحساب مرتبط' : 'cTrader · يتطلب الربط'
+                            ? widget.controller.forexPrices.containsKey(symbol.code)
+                              ? 'cTrader · سعر BID فعلي'
+                              : widget.controller.ctraderConnected ? 'cTrader · اضغط تحديث' : 'cTrader · يتطلب الربط'
                             : widget.controller.cryptoPrices.containsKey(symbol.code)
                                 ? 'Binance · سعر فعلي' : 'Binance · اضغط تحديث',
                             style: TextStyle(fontSize: 10,

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/chart_viewport.dart';
+import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 void main() {
   test('a left drag creates right-side whitespace and centers the last bar', () {
@@ -56,5 +57,19 @@ void main() {
     expect(start, greaterThanOrEqualTo(0));
     expect(end, lessThanOrEqualTo(50));
     expect(start, lessThan(end));
+  });
+
+  test('a drawing stays on its market price when the viewport zooms', () {
+    final candles = List<TradeCandle>.generate(100, (i) =>
+        TradeCandle(100.0 + i, 101.0 + i, 99.0 + i, 100.5 + i));
+    const viewport = ChartViewport();
+    final scale = ChartPriceScale.visible(candles, viewport, 300, 400);
+    const savedLevelPrice = 188.25;
+    expect(scale.price(scale.y(savedLevelPrice)), closeTo(savedLevelPrice, 1e-9));
+    final zoomed = viewport.pinch(scale: 2, initialFocalX: 150,
+        currentFocalX: 150, plotWidth: 300, candleCount: 100);
+    final scaleAfterZoom = ChartPriceScale.visible(candles, zoomed, 300, 400);
+    expect(scaleAfterZoom.price(scaleAfterZoom.y(savedLevelPrice)),
+        closeTo(savedLevelPrice, 1e-9));
   });
 }

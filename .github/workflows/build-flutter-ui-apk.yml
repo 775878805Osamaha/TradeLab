@@ -47,6 +47,8 @@ jobs:
         run: flutter analyze --no-fatal-infos
       - name: Interaction tests
         run: flutter test test/widget_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/market_api_test.dart
+      - name: Verify native OAuth compatibility
+        run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs
       - name: Capture chart design snapshot
         run: flutter test --update-goldens test/golden_test.dart
       - name: Build debug APK

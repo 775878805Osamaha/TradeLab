@@ -72,6 +72,9 @@ void main() {
     await tester.tap(find.text('الحساب').last);
     await tester.pumpAndSettle();
     expect(find.text('الحساب والإعدادات'), findsOneWidget);
+    await tester.scrollUntilVisible(find.byKey(const Key('dark-mode-switch')),
+        180, scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('dark-mode-switch')), findsOneWidget);
   });
 }

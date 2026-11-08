@@ -7,6 +7,16 @@ import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 void main() {
+  test('Flutter login is blocked until compatible gateway version is deployed', () async {
+    final old = MarketApi(client: MockClient((_) async =>
+      http.Response(jsonEncode({'status':'ok','authEnabled':true}),200)));
+    expect(await old.supportsFlutterOAuth(), isFalse);
+    final updated = MarketApi(client: MockClient((_) async =>
+      http.Response(jsonEncode({'status':'ok','authEnabled':true,
+        'flutterOAuthSupported':true}),200)));
+    expect(await updated.supportsFlutterOAuth(), isTrue);
+  });
+
   test('Binance candles use public Binance endpoint and reject open candles', () async {
     final client = MockClient((request) async {
       expect(request.url.host, 'api.binance.com');

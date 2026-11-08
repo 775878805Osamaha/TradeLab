@@ -49,6 +49,13 @@ class MarketApi {
   Uri _gateway(String path, Map<String, String> query) =>
       Uri.parse(gateway).replace(path: path, queryParameters: query.isEmpty ? null : query);
 
+  Future<bool> supportsFlutterOAuth() async {
+    try {
+      final status = await _json(_gateway('/healthz', {}));
+      return status['flutterOAuthSupported'] == true && status['authEnabled'] == true;
+    } catch (_) {return false;}
+  }
+
   Future<String> redeem({required String ticket, required String verifier}) async {
     final data = await _json(_gateway('/auth/ctrader/redeem', {}),
       body: {'ticket': ticket, 'verifier': verifier});
@@ -155,6 +162,23 @@ class MarketApi {
     var point = 1.0;
     for (var i = 0; i < digits; i++) {point /= 10;}
     return point;
+  }
+
+  Future<double> ctraderBid({required String token, required String accountId,
+    required String symbol}) async {
+    final id = await symbolId(token: token, accountId: accountId, symbol: symbol);
+    final data = await _json(_gateway('/v1/spot', {
+      'accountId': accountId, 'symbolId': '$id',
+    }), token: token);
+    final bid = (data['bid'] as num?)?.toDouble();
+    final ask = (data['ask'] as num?)?.toDouble();
+    final timestamp = (data['timestamp'] as num?)?.toInt();
+    if (data['source'] != 'ctrader' || '${data['symbolId']}' != '$id' ||
+        timestamp == null || timestamp <= 0 || bid == null || ask == null ||
+        !bid.isFinite || !ask.isFinite || bid <= 0 || ask < bid) {
+      throw const MarketDataException('تعذر التحقق من السعر المباشر لـcTrader.');
+    }
+    return bid;
   }
 
   Future<List<MarketBar>> binanceCandles({required String symbol,

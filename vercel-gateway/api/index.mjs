@@ -163,6 +163,7 @@ async function handler(req,res){
   const {path,url}=route(req);
   if(req.method==='GET' && path==='/healthz')return reply(res,200,{
     status:'ok',service:'TradeLab cTrader OAuth gateway',
+    flutterOAuthSupported:true,
     transportRevision:'account-already-logged-in-2026-11-04',
     brokerErrorDetails:true,
     configured:!!(process.env.CTRADER_CLIENT_ID&&process.env.CTRADER_CLIENT_SECRET&&process.env.SESSION_ENCRYPTION_KEY),

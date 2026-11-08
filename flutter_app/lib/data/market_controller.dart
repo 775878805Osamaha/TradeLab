@@ -26,6 +26,7 @@ class MarketController extends ChangeNotifier {
   String? accountId;
   List<CTraderAccount> accounts = const [];
   final Map<String, double> cryptoPrices = {};
+  final Map<String, double> forexPrices = {};
   bool busy = false;
   bool loadingQuotes = false;
   String? error;
@@ -60,6 +61,11 @@ class MarketController extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
+      if (!await _api.supportsFlutterOAuth()) {
+        throw const MarketDataException(
+          'بوابة cTrader لم تُحدّث بعد لدعم عودة تسجيل الدخول إلى Flutter. '
+          'يجب نشر تحديث البوابة أولًا.');
+      }
       final random = Random.secure();
       final bytes = List<int>.generate(32, (_) => random.nextInt(256));
       final verifier = base64UrlEncode(bytes).replaceAll('=', '');
@@ -129,6 +135,7 @@ class MarketController extends ChangeNotifier {
   void chooseAccount(String id) {
     if (accounts.any((a) => a.id == id)) {
       accountId = id;
+      forexPrices.clear();
       notifyListeners();
     }
   }
@@ -137,6 +144,7 @@ class MarketController extends ChangeNotifier {
     _token = null;
     accountId = null;
     accounts = const [];
+    forexPrices.clear();
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _pendingKey);
     notifyListeners();
@@ -177,13 +185,24 @@ class MarketController extends ChangeNotifier {
     if (loadingQuotes) return;
     loadingQuotes = true;
     notifyListeners();
-    for (final symbol in tradeSymbols.where((s) => s.source == TradeSource.binance)) {
+    final requestedAccount = accountId;
+    await Future.wait(tradeSymbols.map((symbol) async {
       try {
-        cryptoPrices[symbol.code] = await _api.binancePrice(symbol.code);
+        if (symbol.source == TradeSource.binance) {
+          cryptoPrices[symbol.code] = await _api.binancePrice(symbol.code);
+        } else if (ctraderConnected && requestedAccount != null) {
+          final result = await _api.ctraderBid(
+              token: _token!, accountId: requestedAccount, symbol: symbol.code);
+          if (ctraderConnected && accountId == requestedAccount) {
+            forexPrices[symbol.code] = result;
+          }
+        }
       } catch (_) {
-        cryptoPrices.remove(symbol.code);
+        if (symbol.source == TradeSource.binance) {
+          cryptoPrices.remove(symbol.code);
+        } else {forexPrices.remove(symbol.code);}
       }
-    }
+    }));
     loadingQuotes = false;
     notifyListeners();
   }
