@@ -26,16 +26,19 @@ import com.example.ui.theme.*
 internal fun ChartBottomStrip(
     symbol: String,
     timeframe: Timeframe,
+    rangeSizeInTicks: Int? = null,
     replayActive: Boolean,
     onSymbol: () -> Unit,
     onTimeframe: (Timeframe) -> Unit,
     onReplay: () -> Unit,
+    onRangeSettings: () -> Unit = {},
     onIndicators: () -> Unit,
     onDrawing: () -> Unit,
     onMore: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val intervalLabel = rangeSizeInTicks?.let { "مدى $it" } ?: timeframe.arabicLabel()
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Row(
             Modifier.fillMaxWidth().height(44.dp).background(TradingChartBackground)
@@ -46,7 +49,7 @@ internal fun ChartBottomStrip(
             IconButton(onClick = {
                 val send = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, "TradeLab · $symbol · ${timeframe.displayName}")
+                    putExtra(Intent.EXTRA_TEXT, "TradeLab · $symbol · $intervalLabel")
                 }
                 context.startActivity(Intent.createChooser(send, "مشاركة الشارت"))
             }, modifier = Modifier.size(36.dp).testTag("chart_share")) {
@@ -83,12 +86,15 @@ internal fun ChartBottomStrip(
                 )
             }
             Box {
-                Row(Modifier.clickable { expanded = true }.height(44.dp).testTag("chart_bottom_timeframe"),
+                Row(Modifier.clickable {
+                    if (rangeSizeInTicks != null) onRangeSettings() else expanded = true
+                }.height(44.dp).testTag("chart_bottom_timeframe"),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text(timeframe.arabicLabel(), color = TradingTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(intervalLabel, color = TradingTextPrimary,
+                        fontSize = if (rangeSizeInTicks != null) 12.sp else 14.sp, fontWeight = FontWeight.Bold)
                     Icon(Icons.Default.KeyboardArrowDown, "الفاصل الزمني", tint = TradingTextPrimary, modifier = Modifier.size(16.dp))
                 }
-                DropdownMenu(expanded, { expanded = false }) {
+                DropdownMenu(expanded && rangeSizeInTicks == null, { expanded = false }) {
                     Timeframe.entries.forEach { tf ->
                         DropdownMenuItem(text = { Text(tf.displayName) }, onClick = { expanded = false; onTimeframe(tf) })
                     }

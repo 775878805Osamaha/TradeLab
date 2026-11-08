@@ -44,8 +44,8 @@ class ChartTypeSheetTest {
             .performScrollToNode(hasTestTag("chart_type_range"))
         compose.onNodeWithTag("chart_type_range").performClick()
         compose.runOnIdle {
-            assertEquals("مدى", unavailable)
-            assertEquals(ChartDisplayStyle.AREA, current.value)
+            assertEquals(null, unavailable)
+            assertEquals(ChartDisplayStyle.RANGE, current.value)
         }
     }
 

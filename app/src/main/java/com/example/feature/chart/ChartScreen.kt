@@ -34,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.core.market.DefaultSymbols
+import com.example.core.market.MarketSymbolRegistry
+import com.example.core.market.RangePhantomBars
+import com.example.core.model.Candle
 import com.example.core.model.DataSourceType
 import com.example.core.model.OrderSide
 import com.example.core.model.Timeframe
@@ -46,6 +49,14 @@ import com.example.ui.components.DataSourceBadge
 import com.example.ui.theme.*
 import java.util.Locale
 import kotlin.math.roundToInt
+
+private data class RangeVisualSnapshot(
+    val actual: List<Candle>,
+    val symbol: String,
+    val size: Int,
+    val phantomEnabled: Boolean,
+    val display: List<Candle>
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,11 +72,14 @@ fun ChartScreen(
     val replayState by replayViewModel.uiState.collectAsState()
     val historyTargetTime by replayViewModel.historyTargetTime.collectAsState()
     val orderKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    // A restored training account must not activate Replay on chart entry.
-    var isEmbeddedReplay by remember { mutableStateOf(false) }
+    // MainActivity retains ChartViewModel while tab navigation destroys this
+    // Composable. Restoring this same mode avoids resetting Range context and
+    // re-downloading all verified cTrader BID ticks on every tab return.
+    // Fresh app launches still default to analysis, not automatic Replay.
+    var isEmbeddedReplay by viewModel.replayPresentation.enabled
     // Opening Replay reveals the transport on the existing live chart first.
     // History replaces live candles only after the user starts or chooses a date.
-    var isReplayToolbarOpen by remember { mutableStateOf(false) }
+    var isReplayToolbarOpen by viewModel.replayPresentation.toolbarOpen
     val startReplayOnChart: () -> Unit = {
         replayViewModel.loadReplayData(uiState.selectedSymbol, uiState.selectedTimeframe)
         isEmbeddedReplay = true
@@ -194,6 +208,138 @@ fun ChartScreen(
     }
     var chartDisplayStyle by remember { mutableStateOf(runCatching { ChartDisplayStyle.valueOf(workspacePrefs.getString("display_style","CANDLES")!!) }.getOrDefault(ChartDisplayStyle.CANDLES)) }
     LaunchedEffect(chartDisplayStyle) { workspacePrefs.edit().putString("display_style",chartDisplayStyle.name).apply() }
+    var fixedRangeTicks by rememberSaveable {
+        mutableIntStateOf(workspacePrefs.getInt("range_fixed_ticks", 1000).coerceIn(1, 100_000))
+    }
+    var showRangePhantomBars by rememberSaveable {
+        // Older builds enabled fabricated split bodies by default. Migrate
+        // existing installations once to genuine cTrader candles. Users can
+        // explicitly re-enable optional BETWEEN-candle gap markers later.
+        mutableStateOf(if (workspacePrefs.getBoolean("range_real_bars_migrated", false))
+            workspacePrefs.getBoolean("range_phantom_bars", false) else false)
+    }
+    LaunchedEffect(showRangePhantomBars) {
+        workspacePrefs.edit().putBoolean("range_real_bars_migrated", true)
+            .putBoolean("range_phantom_bars", showRangePhantomBars).apply()
+    }
+    var rangeSettingsOpen by remember { mutableStateOf(false) }
+    var rangeDatePickerOpen by remember { mutableStateOf(false) }
+    var rangeInput by remember { mutableStateOf(fixedRangeTicks.toString()) }
+    // ChartScreen is disposed when changing bottom tabs, while ChartViewModel
+    // remains activity-scoped. Keep the verified chart and its paging position
+    // on that longer-lived owner so returning never starts with an empty canvas.
+    val rangeSession = viewModel.rangeSession
+    var rangeHistoryHours by rangeSession.historyHours
+    var rangeHistoryCapHours by rangeSession.historyCapHours
+    var rangeHistoryManuallyChosen by rangeSession.historyManuallyChosen
+    var rangeHistoryJumpGeneration by rangeSession.historyJumpGeneration
+    var rangeRefreshAnchor by rangeSession.refreshAnchor
+    var rangeReplayBackshiftMillis by rangeSession.replayBackshiftMillis
+    var rangeSnapshot by rangeSession.snapshot
+    var rangeLoading by rangeSession.loading
+    val rangeWarmRestored by rangeSession.warmRestored
+    var rangeFirstPageMs by rangeSession.firstPageMs
+    var rangeFullLoadMs by rangeSession.fullLoadMs
+    var rangeReceivedQuotes by rangeSession.receivedQuotes
+    var rangeReceivedSlices by rangeSession.receivedSlices
+    var rangeError by rangeSession.error
+    val rangeBrokerGeneration = viewModel.rangeAccountGeneration?.collectAsState()?.value ?: 0L
+    val rangeContext = RangeChartContext(uiState.selectedSymbol, fixedRangeTicks,
+        rangeBrokerGeneration, isEmbeddedReplay, if (isEmbeddedReplay) replayState.datasetId else 0L)
+    val rangeReplayEnd = if (isEmbeddedReplay) replayState.visibleCandles.lastOrNull()?.closeTime?.minus(1L) else null
+    val rangeEnd = if (isEmbeddedReplay) rangeReplayEnd?.minus(rangeReplayBackshiftMillis) else rangeRefreshAnchor
+    LaunchedEffect(rangeContext) {
+        // Do not reset on a fresh composition of the SAME instrument/session.
+        if (rangeSession.alignTo(rangeContext))
+            viewModel.cancelObsoleteRangeHistory(rangeContext)
+    }
+    LaunchedEffect(chartDisplayStyle, rangeContext, rangeEnd, rangeHistoryHours,
+        rangeHistoryJumpGeneration, rangeSession.context.value) {
+        if (chartDisplayStyle == ChartDisplayStyle.RANGE &&
+            rangeSession.context.value == rangeContext) {
+            rangeEnd?.let { end ->
+                // The request belongs to ChartViewModel's scope, so changing
+                // bottom tabs cannot cancel an in-flight broker tick download.
+                viewModel.requestRangeHistory(RangeChartLoadRequest(
+                    rangeContext, end, rangeHistoryHours, rangeHistoryJumpGeneration))
+            }
+        }
+    }
+    val visibleRangeBars = rangeSnapshot?.takeIf {
+        it.symbol == uiState.selectedSymbol &&
+            RangeReplayVisibilityPolicy.canShow(it.end, rangeEnd, isEmbeddedReplay,
+                it.complete, rangeLoading,
+                it.replayDatasetId == (if (isEmbeddedReplay) replayState.datasetId else 0L)) &&
+            it.size == fixedRangeTicks && it.replay == isEmbeddedReplay &&
+            (it.hours == rangeHistoryHours || rangeLoading || rangeError != null || isEmbeddedReplay) &&
+            it.accountGeneration == rangeBrokerGeneration &&
+            chartDisplayStyle == ChartDisplayStyle.RANGE
+    }?.candles
+    // Virtual gap fillers live ONLY in the chart's presentation layer. The
+    // broker snapshot, tick cache, replay cutoff, and trade data stay real.
+    // Gap projection can expand thousands of bars; run it off the UI thread
+    // so pinch/drag gestures remain responsive during older-history fetches.
+    // A snapshot identity check prevents stale projected bars from being shown
+    // after a symbol, size or broker-window change.
+    val visualSnapshot by produceState<RangeVisualSnapshot?>(initialValue = null,
+        visibleRangeBars, showRangePhantomBars, fixedRangeTicks, uiState.selectedSymbol) {
+        value = null
+        val actual = visibleRangeBars ?: return@produceState
+        val displayed = if (showRangePhantomBars)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                RangePhantomBars.project(actual,
+                    MarketSymbolRegistry.getSymbol(uiState.selectedSymbol).tickSize, fixedRangeTicks)
+            }
+        else actual
+        value = RangeVisualSnapshot(actual, uiState.selectedSymbol, fixedRangeTicks,
+            showRangePhantomBars, displayed)
+    }
+    val rangeVisualBars = visualSnapshot?.takeIf {
+        it.actual === visibleRangeBars && it.symbol == uiState.selectedSymbol &&
+            it.size == fixedRangeTicks && it.phantomEnabled == showRangePhantomBars
+    }?.display ?: visibleRangeBars
+    // Populate a usable initial chart progressively from genuine cTrader ticks.
+    // Stop once there are enough candles, the bounded prefetch depth is reached,
+    // or the user explicitly chooses a history window. Replay can backfill
+    // EARLIER verified BID history without seeking or revealing future data.
+    LaunchedEffect(rangeSnapshot, rangeLoading, rangeError, rangeHistoryManuallyChosen,
+        chartDisplayStyle, isEmbeddedReplay) {
+        val snapshot = rangeSnapshot
+        if (!rangeLoading && rangeError == null && chartDisplayStyle == ChartDisplayStyle.RANGE &&
+            snapshot != null && snapshot.symbol == uiState.selectedSymbol &&
+            snapshot.size == fixedRangeTicks && snapshot.hours == rangeHistoryHours &&
+            snapshot.accountGeneration == rangeBrokerGeneration &&
+            RangeHistoryPaging.shouldPrefetchMoreBars(snapshot.candles.size, rangeHistoryHours,
+                rangeHistoryManuallyChosen, isEmbeddedReplay)) {
+            rangeHistoryHours = RangeHistoryPaging.older(rangeEnd ?: snapshot.end,
+                rangeHistoryHours, if (isEmbeddedReplay) RangeHistoryPaging.REPLAY_AUTO_MAX_HOURS
+                else RangeHistoryPaging.AUTO_MAX_HOURS).hours
+        }
+    }
+    val requestOlderRange: () -> Unit = {
+        if (!rangeLoading && rangeEnd != null) {
+            rangeHistoryManuallyChosen = true
+            val next = RangeHistoryPaging.older(rangeEnd, rangeHistoryHours,
+                rangeHistoryCapHours ?: RangeHistoryPaging.MAX_WINDOW_HOURS)
+            rangeHistoryHours = next.hours
+            if (next.end != rangeEnd) {
+                if (isEmbeddedReplay && rangeReplayEnd != null)
+                    rangeReplayBackshiftMillis = rangeReplayEnd - next.end
+                else rangeRefreshAnchor = next.end
+            }
+        }
+    }
+    val jumpRangeTo: (Long) -> Unit = { targetEnd ->
+        rangeHistoryManuallyChosen = true
+        rangeHistoryCapHours = null
+        rangeHistoryJumpGeneration += 1
+        // A historical jump begins with a bounded day of real quotes. The
+        // normal older-history gesture can extend it from there.
+        rangeHistoryHours = 24
+        if (isEmbeddedReplay && rangeReplayEnd != null)
+            rangeReplayBackshiftMillis = (rangeReplayEnd - targetEnd).coerceAtLeast(0L)
+        else rangeRefreshAnchor = targetEnd
+    }
     var immersiveChart by remember { mutableStateOf(true) }
     var pendingAnnotation by remember { mutableStateOf<com.example.feature.chart.model.ChartDrawing?>(null) }
     var annotationText by remember { mutableStateOf("") }
@@ -508,6 +654,10 @@ fun ChartScreen(
             onSelect = { chosen ->
                 chartDisplayStyle = chosen
                 showChartTypeSheet = false
+                if (chosen == ChartDisplayStyle.RANGE) {
+                    rangeInput = fixedRangeTicks.toString()
+                    rangeSettingsOpen = true
+                }
             },
             onUnavailable = { name ->
                 android.widget.Toast.makeText(imageContext,
@@ -516,6 +666,190 @@ fun ChartScreen(
             },
             onDismiss = { showChartTypeSheet = false }
         )
+    }
+    if (rangeSettingsOpen) {
+        val parsed = rangeInput.toIntOrNull()
+        AlertDialog(
+            onDismissRequest = { rangeSettingsOpen = false },
+            title = { Text("إعدادات شموع المدى") },
+            text = {
+                Column(modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("مدى ثابت بعدد وحدات حركة السعر (Tick Size)، وليس ATR أو عدد الصفقات.")
+                    OutlinedTextField(
+                        value = rangeInput,
+                        onValueChange = { rangeInput = it.filter(Char::isDigit).take(6) },
+                        label = { Text("حجم المدى بالتيكات") },
+                        singleLine = true,
+                        isError = parsed == null || parsed !in 1..100_000,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth().testTag("range_size_ticks")
+                    )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        listOf(50, 100, 250, 500, 1000, 2000).forEach { range ->
+                            FilterChip(selected = parsed == range,
+                                onClick = { rangeInput = range.toString() },
+                                label = { Text("$range") })
+                        }
+                    }
+                    if (parsed != null && parsed in 1..100_000) {
+                        val tickSize = MarketSymbolRegistry.getSymbol(uiState.selectedSymbol).tickSize
+                        val priceMovement = java.math.BigDecimal.valueOf(parsed * tickSize)
+                            .stripTrailingZeros().toPlainString()
+                        Text("حجم كل مدى: $priceMovement وحدة سعرية · القيمة الأصغر تعطي شموعًا أكثر",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("الافتراضي 1000 تيك. المصدر: أسعار Bid التاريخية من حساب cTrader المحدد.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("إظهار الفجوات بين الشموع (اختياري)",
+                            modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                        Switch(checked = showRangePhantomBars,
+                            onCheckedChange = { showRangePhantomBars = it },
+                            modifier = Modifier.testTag("range_phantom_bars"))
+                    }
+                    Text("العرض الافتراضي يستخدم شموع cTrader الحقيقية وحدها. عند تفعيل هذا الخيار تُضاف علامات مرئية فقط للفجوات بين شمعتين، دون تقسيم أي شمعة حقيقية أو تعديل سعرها. لا تدخل العلامات في Replay أو نتائج الصفقات.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Text("شموع Bid: ${visibleRangeBars?.size ?: 0} · مكتملة: ${((visibleRangeBars?.size ?: 0) - (if (rangeSnapshot?.hasIncompleteLastBar == true) 1 else 0)).coerceAtLeast(0)} · شموع عرض افتراضية: ${((rangeVisualBars?.size ?: 0) - (visibleRangeBars?.size ?: 0)).coerceAtLeast(0)}",
+                        style = MaterialTheme.typography.bodySmall)
+                    val tickAudit = rangeSnapshot?.diagnostics?.takeIf { visibleRangeBars != null }
+                    if (tickAudit != null) {
+                        Text("فحص المصدر: ${tickAudit.quoteCount} سعر Bid حقيقي · " +
+                            "${tickAudit.sameMillisecondQuotes} أسعار بنفس المللي ثانية",
+                            style = MaterialTheme.typography.bodySmall)
+                        Text("قفزات Quote بلغت مدى كاملًا: ${tickAudit.jumpsOverOneRange} · " +
+                            "أكبر قفزة: ${tickAudit.largestQuoteJumpTicks} تيك · " +
+                            "شموع واسعة: ${tickAudit.oversizedCandles}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    uiState.rangePrecisionDiagnostic?.let { note ->
+                        Text(note, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (rangeFullLoadMs != null || rangeFirstPageMs != null) {
+                        Text("زمن أول دفعة: ${rangeFirstPageMs?.let { "${it}ms" } ?: "—"} · " +
+                            "اكتمال التحميل: ${rangeFullLoadMs?.let { "${it}ms" } ?: "جارٍ التحميل"}",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (rangeLoading && rangeReceivedSlices > 0)
+                        Text("جلب البيانات: $rangeReceivedQuotes سعر Bid خلال $rangeReceivedSlices دفعات · لم يكتمل الحساب بعد",
+                            style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(
+                        onClick = {
+                            // A reproducible, read-only audit for diagnosing
+                            // broker/history mismatches; no session tokens,
+                            // account identifiers or trading data are copied.
+                            val snapshot = rangeSnapshot?.takeIf { visibleRangeBars != null }
+                            val audit = snapshot?.diagnostics
+                            val report = listOf(
+                                "TradeLab Range QA",
+                                "symbol=${uiState.selectedSymbol}",
+                                "range_ticks=$fixedRangeTicks",
+                                "history_hours=$rangeHistoryHours",
+                                "window_end_utc_ms=${snapshot?.end ?: -1L}",
+                                "broker_generation=$rangeBrokerGeneration",
+                                "replay=$isEmbeddedReplay",
+                                "source=ctrader_bid",
+                                "status=${if (rangeLoading) "loading" else if (rangeError != null) "error" else if (snapshot?.complete == true) "complete" else "provisional"}",
+                                "bars=${visibleRangeBars?.size ?: 0}",
+                                "forming_bar=${snapshot?.hasIncompleteLastBar == true}",
+                                "visual_gap_markers=$showRangePhantomBars",
+                                "quote_count=${audit?.quoteCount ?: 0}",
+                                "same_millisecond_quotes=${audit?.sameMillisecondQuotes ?: 0}",
+                                "range_jumps=${audit?.jumpsOverOneRange ?: 0}",
+                                "largest_jump_ticks=${audit?.largestQuoteJumpTicks ?: 0}",
+                                "oversized_bars=${audit?.oversizedCandles ?: 0}",
+                                "loaded_slices=$rangeReceivedSlices",
+                                "first_page_ms=${rangeFirstPageMs ?: -1}",
+                                "full_load_ms=${rangeFullLoadMs ?: -1}",
+                                "error=${rangeError.orEmpty()}"
+                            ).joinToString("\n")
+                            val clipboard = imageContext.getSystemService(
+                                android.content.Context.CLIPBOARD_SERVICE
+                            ) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+                                "TradeLab Range QA", report))
+                            android.widget.Toast.makeText(imageContext,
+                                "تم نسخ تقرير شموع المدى، أرسله عند ظهور اختلال",
+                                android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("range_copy_audit")
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("نسخ تقرير فحص شموع المدى")
+                    }
+                    Text("فترة بيانات Tick: $rangeHistoryHours ساعة. اسحب للخلف لتحميل المزيد؛ وقد يقلّص التطبيق الفترة تلقائيًا عند كثافة الأسعار.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        listOf(1, 3, 6, 12, 24, 48).forEach { hours ->
+                            FilterChip(selected = rangeHistoryHours == hours,
+                                onClick = {
+                                    rangeHistoryManuallyChosen = true
+                                    rangeHistoryCapHours = null
+                                    rangeHistoryHours = hours
+                                },
+                                label = { Text("$hours س") })
+                        }
+                    }
+                    Text("انتقال سريع إلى أسعار تاريخية من حساب cTrader:",
+                        style = MaterialTheme.typography.bodySmall)
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(7 to "أسبوع", 30 to "شهر", 365 to "سنة").forEach { (days, label) ->
+                            TextButton(onClick = {
+                                val currentEnd = rangeEnd ?: return@TextButton
+                                jumpRangeTo(RangeHistoryPaging.jumpBack(currentEnd, 24, days).end)
+                                rangeSettingsOpen = false
+                            }, enabled = rangeEnd != null) { Text(label) }
+                        }
+                        TextButton(onClick = {
+                            rangeSettingsOpen = false
+                            rangeDatePickerOpen = true
+                        }, enabled = rangeEnd != null) { Text("اختر تاريخًا") }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (parsed != null && parsed in 1..100_000) {
+                        fixedRangeTicks = parsed
+                        workspacePrefs.edit().putInt("range_fixed_ticks", parsed).apply()
+                        rangeSettingsOpen = false
+                    }
+                }, enabled = parsed != null && parsed in 1..100_000,
+                    modifier = Modifier.testTag("range_size_apply")) { Text("تطبيق") }
+            },
+            dismissButton = { TextButton(onClick = { rangeSettingsOpen = false }) { Text("إلغاء") } }
+        )
+    }
+    if (rangeDatePickerOpen) {
+        val currentMaximum = if (isEmbeddedReplay) rangeReplayEnd ?: System.currentTimeMillis()
+            else System.currentTimeMillis()
+        val picker = rememberDatePickerState(
+            initialSelectedDateMillis = (rangeEnd ?: currentMaximum).coerceAtMost(currentMaximum),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                    utcTimeMillis <= currentMaximum
+            }
+        )
+        DatePickerDialog(onDismissRequest = { rangeDatePickerOpen = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    picker.selectedDateMillis?.let { selected ->
+                        val endOfDay = (selected + 24L * 3_600_000L - 1L)
+                            .coerceAtMost(currentMaximum)
+                        jumpRangeTo(endOfDay)
+                    }
+                    rangeDatePickerOpen = false
+                }, enabled = picker.selectedDateMillis != null) { Text("عرض شموع المدى") }
+            }, dismissButton = {
+                TextButton(onClick = { rangeDatePickerOpen = false }) { Text("إلغاء") }
+            }) { DatePicker(state = picker) }
     }
     if (showChartExtras) AnalysisHubSheet(
         onDismiss = { showChartExtras = false },
@@ -595,7 +929,11 @@ fun ChartScreen(
                 Text("  نوع الرسم البياني")
             }
             TextButton(onClick={showLegacyChartSettings=false;showAppearance=true}) { Text(androidx.compose.ui.res.stringResource(com.example.R.string.chart_appearance)) }
-            TextButton(onClick={viewModel.toggleVolume()}) { Text(if(uiState.isVolumeVisible) "إخفاء الحجم" else "إظهار الحجم") }
+            TextButton(onClick={viewModel.toggleVolume()},
+                enabled = chartDisplayStyle != ChartDisplayStyle.RANGE) {
+                Text(if (chartDisplayStyle == ChartDisplayStyle.RANGE) "حجم التداول غير متاح لأسعار Bid"
+                    else if (uiState.isVolumeVisible) "إخفاء الحجم" else "إظهار الحجم")
+            }
             TextButton(onClick={magnetEnabled=!magnetEnabled}) { Text(if(magnetEnabled) "إيقاف المغناطيس" else "تفعيل المغناطيس") }
             TextButton(onClick={hideDrawings=!hideDrawings}) { Text(if(hideDrawings) "إظهار الرسومات" else "إخفاء الرسومات") }
             TextButton(onClick={viewModel.triggerResetView();showLegacyChartSettings=false}) { Text("إعادة ضبط العرض") }
@@ -738,6 +1076,7 @@ fun ChartScreen(
                     if (!immersiveChart) {
                     IconButton(
                         onClick = { viewModel.toggleVolume() },
+                        enabled = chartDisplayStyle != ChartDisplayStyle.RANGE,
                         modifier = Modifier.testTag("chart_toggle_volume_header")
                     ) {
                         Icon(
@@ -1131,6 +1470,34 @@ fun ChartScreen(
             val replayMacd = replayValues.macd
             val replayAtr = replayValues.atr
 
+            // Range indicators are calculated from verified tick-derived bars,
+            // never from the original timeframe OHLC or hidden Replay candles.
+            val rangeHasFormingBar = visibleRangeBars != null &&
+                rangeSnapshot?.hasIncompleteLastBar == true
+            val confirmedRangeBars = remember(visibleRangeBars, rangeHasFormingBar) {
+                if (rangeHasFormingBar) visibleRangeBars?.dropLast(1) else visibleRangeBars
+            }
+            val rangeWarmVisible = rangeWarmRestored && rangeSnapshot?.candles === visibleRangeBars
+            val rangePrepared by produceState<Pair<List<Candle>, PreparedChartIndicators>?>(
+                null, confirmedRangeBars, rangeSnapshot?.complete,
+                uiState.indicatorSettings, chartDisplayStyle, rangeWarmVisible
+            ) {
+                value = if (chartDisplayStyle == ChartDisplayStyle.RANGE && confirmedRangeBars != null &&
+                    rangeSnapshot?.complete == true && !rangeWarmVisible)
+                    confirmedRangeBars to kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                        ChartIndicatorPreparation.calculate(confirmedRangeBars, uiState.indicatorSettings)
+                    }
+                else null
+            }
+            val phantomBarsVisible = (rangeVisualBars?.size ?: 0) > (visibleRangeBars?.size ?: 0)
+            val rangePreviewVisible = rangeSnapshot?.complete == false &&
+                rangeSnapshot?.candles === visibleRangeBars
+            val activeRangeIndicators = if (phantomBarsVisible || rangePreviewVisible || rangeWarmVisible) null
+                else rangePrepared?.takeIf { it.first === confirmedRangeBars }?.second
+            val rangeIsActive = chartDisplayStyle == ChartDisplayStyle.RANGE
+            val chartBars = if (rangeIsActive) rangeVisualBars.orEmpty()
+                else if (isEmbeddedReplay) replayBars else uiState.candles
+
             val revealedDrawingTime = replayState.visibleCandles.lastOrNull()?.openTime
             val displayedDrawings = remember(uiState.drawings, isEmbeddedReplay, revealedDrawingTime, hideDrawings) {
                 if(hideDrawings) emptyList() else
@@ -1149,10 +1516,25 @@ fun ChartScreen(
             ) {
                 // Reset pan/zoom when the instrument, timeframe, or replay context changes.
                 // Do not key on candle data: incoming prices must not jump the viewport.
-                key(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay, if (isEmbeddedReplay) replayState.datasetId else 0L) {
+                key(uiState.selectedSymbol, uiState.selectedTimeframe, isEmbeddedReplay,
+                    if (isEmbeddedReplay) replayState.datasetId else 0L, rangeIsActive, fixedRangeTicks) {
                 CandlestickChart(
-                    candles = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles,
-                    latestTick = (if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick)
+                    candles = chartBars,
+                    emptyStateMessage = if (!rangeIsActive) "جاري تحميل بيانات الشارت..."
+                        else when {
+                            rangeError != null -> "تعذر تحميل شموع المدى من cTrader: ${rangeError.orEmpty()}"
+                            rangeEnd == null -> "انتظر اكتمال تحميل بيانات Replay التاريخية"
+                            rangeLoading -> "جاري تحميل أسعار Bid الحقيقية من cTrader..."
+                            rangeSnapshot?.complete == true &&
+                                visibleRangeBars.isNullOrEmpty() ->
+                                "لا توجد أسعار Bid تكفي لشمعة مدى في هذه الفترة. اختر مدى أصغر أو حمّل تاريخًا أقدم."
+                            else -> "جاري إعداد شموع المدى التاريخية..."
+                        },
+                    rangeHistoryWindowEnd = if (rangeIsActive && visibleRangeBars != null)
+                        rangeSnapshot?.end else null,
+                    rangeHistoryJumpGeneration = if (rangeIsActive) rangeHistoryJumpGeneration else 0,
+                    persistentRangeViewport = if (rangeIsActive) rangeSession.viewport else null,
+                    latestTick = (if (rangeIsActive) null else if (isEmbeddedReplay) replayState.latestTick else uiState.latestTick)
                         ?.takeIf { it.symbol == uiState.selectedSymbol },
                     openPositions = if (isEmbeddedReplay) replayState.openPositions else uiState.openPositions,
                     pendingOrders = if (isEmbeddedReplay) replayState.pendingOrders else uiState.pendingOrders,
@@ -1161,16 +1543,20 @@ fun ChartScreen(
                     magnetEnabled = magnetEnabled,
                     drawings = displayedDrawings,
                     selectedDrawingId = selectedDrawingId,
-                    indicatorSettings = uiState.indicatorSettings,
-                    smaValues = if (isEmbeddedReplay) replaySma else uiState.smaValues,
-                    emaValues = if (isEmbeddedReplay) replayEma else uiState.emaValues,
-                    bollingerValues = if (isEmbeddedReplay) replayBollinger else uiState.bollingerValues,
-                    vwapValues = if (isEmbeddedReplay) replayVwap else uiState.vwapValues,
-                    rsiValues = if (isEmbeddedReplay) replayRsi else uiState.rsiValues,
-                    macdValues = if (isEmbeddedReplay) replayMacd else uiState.macdValues,
-                    atrValues = if (isEmbeddedReplay) replayAtr else uiState.atrValues,
+                    indicatorSettings = if (rangeIsActive &&
+                        (phantomBarsVisible || rangePreviewVisible || rangeWarmVisible))
+                        IndicatorSettings(isEmaEnabled = false) else uiState.indicatorSettings,
+                    smaValues = if (rangeIsActive) activeRangeIndicators?.sma.orEmpty() else if (isEmbeddedReplay) replaySma else uiState.smaValues,
+                    emaValues = if (rangeIsActive) activeRangeIndicators?.ema.orEmpty() else if (isEmbeddedReplay) replayEma else uiState.emaValues,
+                    bollingerValues = if (rangeIsActive) activeRangeIndicators?.bollinger.orEmpty() else if (isEmbeddedReplay) replayBollinger else uiState.bollingerValues,
+                    vwapValues = if (rangeIsActive) activeRangeIndicators?.vwap.orEmpty() else if (isEmbeddedReplay) replayVwap else uiState.vwapValues,
+                    rsiValues = if (rangeIsActive) activeRangeIndicators?.rsi.orEmpty() else if (isEmbeddedReplay) replayRsi else uiState.rsiValues,
+                    macdValues = if (rangeIsActive) activeRangeIndicators?.macd.orEmpty() else if (isEmbeddedReplay) replayMacd else uiState.macdValues,
+                    atrValues = if (rangeIsActive) activeRangeIndicators?.atr.orEmpty() else if (isEmbeddedReplay) replayAtr else uiState.atrValues,
                     isCrosshairActive = uiState.isCrosshairActive,
-                    isVolumeVisible = uiState.isVolumeVisible,
+                    // Broker BID quote counts are not traded volume. Do not
+                    // reserve a blank volume pane beneath the Range chart.
+                    isVolumeVisible = !rangeIsActive && uiState.isVolumeVisible,
                     resetViewTrigger = uiState.resetViewTrigger,
                     displayStyle = chartDisplayStyle,
                     onAddDrawing = {
@@ -1206,7 +1592,9 @@ fun ChartScreen(
                         selectedPositionReplay = isEmbeddedReplay
                         selectedPositionId = it.id
                     },
-                    onRequestOlderHistory = if (isEmbeddedReplay) null else ({ viewModel.loadOlderChartHistory() }),
+                    onRequestOlderHistory = if (rangeIsActive) ({
+                        requestOlderRange()
+                    }) else if (isEmbeddedReplay) null else ({ viewModel.loadOlderChartHistory() }),
                     referenceLayout = true,
                     bullishColor = Color(chartAppearance.up),
                     bearishColor = Color(chartAppearance.down),
@@ -1219,8 +1607,56 @@ fun ChartScreen(
                     showLastPrice = chartAppearance.lastPrice,
                     showSourceTime = chartAppearance.sourceTime,
                     axisTextScale = chartAppearance.axisScale,
-                    isLoadingOlderHistory = uiState.isLoadingOlderHistory
+                    isLoadingOlderHistory = if (rangeIsActive) rangeLoading else uiState.isLoadingOlderHistory
                 )
+                }
+
+                if (rangeIsActive) {
+                    Row(Modifier.align(Alignment.TopCenter).padding(top = 42.dp)
+                        .background(TradingElevated.copy(alpha = .95f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = {
+                            rangeInput = fixedRangeTicks.toString(); rangeSettingsOpen = true
+                        }, modifier = Modifier.testTag("range_settings_open")) {
+                            Text("مدى $fixedRangeTicks · ${visibleRangeBars?.size ?: 0}",
+                                color = TradingAccentLight, fontSize = 11.sp)
+                        }
+                        if (rangeLoading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                        if (rangeWarmRestored && rangeLoading) Text("محفوظ محليًا · تحديث",
+                            fontSize = 9.sp, color = TradingTextSecondary)
+                        if (rangeWarmRestored && !rangeLoading) Text("محفوظ محليًا · تعذر التحديث",
+                            fontSize = 9.sp, color = TradingTextSecondary)
+                        if (rangePreviewVisible) Text("جارٍ تثبيت الشموع", fontSize = 9.sp,
+                            color = TradingTextSecondary)
+                        if (rangeHasFormingBar && !rangePreviewVisible)
+                            Text("قيد التكوين", fontSize = 9.sp,
+                                color = TradingTextSecondary)
+                        if (!rangeLoading) TextButton(
+                            onClick = requestOlderRange,
+                            modifier = Modifier.testTag("range_load_older")) {
+                            Text("أقدم", fontSize = 11.sp)
+                        }
+                        if (rangeEnd != null && !rangeLoading) Text(
+                            java.text.SimpleDateFormat("dd/MM HH:mm", Locale.getDefault())
+                                .format(java.util.Date(rangeEnd)),
+                            color = TradingTextSecondary, fontSize = 9.sp
+                        )
+                        if (!isEmbeddedReplay) TextButton(onClick = {
+                            rangeHistoryHours = RangeHistoryPaging.initialWindowHours(fixedRangeTicks)
+                            rangeHistoryCapHours = null
+                            rangeHistoryManuallyChosen = false
+                            rangeHistoryJumpGeneration += 1
+                            rangeRefreshAnchor = System.currentTimeMillis()
+                        }) { Text("تحديث", fontSize = 11.sp) }
+                    }
+                    val rangeMessage = rangeError ?: if (visibleRangeBars?.isEmpty() == true)
+                        "لم تكتمل شمعة مدى من بيانات cTrader في هذه الفترة؛ جرّب مدى أصغر أو اسحب إلى تاريخ أقدم" else null
+                    if (rangeMessage != null && !rangeLoading) {
+                        Text(rangeMessage, color = TradingTextPrimary, fontSize = 12.sp,
+                            modifier = Modifier.align(Alignment.Center).padding(20.dp)
+                                .background(TradingCard.copy(alpha = .95f), RoundedCornerShape(9.dp))
+                                .padding(12.dp).testTag("range_data_status"))
+                    }
                 }
 
                 // Keep selection, resize handles and quick edits in the SAME
@@ -1284,7 +1720,7 @@ fun ChartScreen(
 
                 // Selectors live exclusively in the bottom strip in the default layout.
                 if (immersiveChart) {
-                    val headerBars = if (isEmbeddedReplay) replayState.visibleCandles else uiState.candles
+                    val headerBars = chartBars
                     val lastClose = headerBars.lastOrNull()?.close
                     val priorClose = headerBars.getOrNull(headerBars.lastIndex - 1)?.close
                     val delta = if (lastClose != null && priorClose != null && priorClose > 0.0)
@@ -1626,6 +2062,7 @@ fun ChartScreen(
                 ChartBottomStrip(
                     symbol = uiState.selectedSymbol,
                     timeframe = uiState.selectedTimeframe,
+                    rangeSizeInTicks = if (chartDisplayStyle == ChartDisplayStyle.RANGE) fixedRangeTicks else null,
                     replayActive = isReplayToolbarOpen,
                     onSymbol = { if (!isEmbeddedReplay || replayViewModel.canChangeDataset()) showSymbolSheet = true },
                     onTimeframe = { tf ->
@@ -1638,6 +2075,10 @@ fun ChartScreen(
                         }
                     },
                     onReplay = toggleReplayOnChart,
+                    onRangeSettings = {
+                        rangeInput = fixedRangeTicks.toString()
+                        rangeSettingsOpen = true
+                    },
                     onIndicators = { showIndicatorsDialog = true },
                     onDrawing = { showToolsMenu = true },
                     onMore = { showChartExtras = true }

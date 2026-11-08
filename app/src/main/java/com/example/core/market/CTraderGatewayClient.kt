@@ -12,9 +12,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
@@ -27,6 +31,8 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /** Only the cTrader read-only gateway is permitted for metals and forex. */
 class CTraderGatewayClient(context: Context, private val origin: String = GATEWAY_ORIGIN) {
@@ -43,6 +49,8 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
     private val _accountGeneration = MutableStateFlow(0L)
     val accountGeneration: StateFlow<Long> = _accountGeneration
     private val symbolIds = HashMap<String, Long>()
+    private val symbolPrecisionCache = HashMap<String, RangeSymbolPrecision>()
+    private val missingSymbolDetailUntil = HashMap<String, Long>()
 
     private val _status = MutableStateFlow(if (session.isBlank()) "غير مرتبط بـ cTrader" else "جارٍ التحقق من cTrader")
     val status: StateFlow<String> = _status
@@ -87,6 +95,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         require(token.isNotBlank() && token.length <= 6144) { "Invalid cTrader session" }
         synchronized(lock) {
             session = token; selectedId = ""; symbolIds.clear()
+            symbolPrecisionCache.clear(); missingSymbolDetailUntil.clear()
             quoteNotBefore = System.currentTimeMillis()
             persist()
         }
@@ -113,7 +122,8 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             val ids = fetchSymbols(next)
             commitSelection(next, ids, list)
         } catch (error: Exception) {
-            synchronized(lock) { selectedId = ""; symbolIds.clear(); persist() }
+            synchronized(lock) { selectedId = ""; symbolIds.clear()
+                symbolPrecisionCache.clear(); missingSymbolDetailUntil.clear(); persist() }
             _accounts.value = emptyList()
             _selectedAccount.value = ""
             _accountGeneration.value += 1L
@@ -148,6 +158,8 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             selectedId = accountId
             symbolIds.clear()
             symbolIds.putAll(ids)
+            symbolPrecisionCache.clear()
+            missingSymbolDetailUntil.clear()
             quoteNotBefore = System.currentTimeMillis()
             persist()
         }
@@ -162,7 +174,7 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         synchronized(lock) {
             session = ""; selectedId = ""; pendingVerifier = null
             quoteNotBefore = System.currentTimeMillis()
-            symbolIds.clear(); persist()
+            symbolIds.clear(); symbolPrecisionCache.clear(); missingSymbolDetailUntil.clear(); persist()
         }
         _accountGeneration.value += 1L
         _accounts.value = emptyList(); _selectedAccount.value = ""
@@ -172,6 +184,39 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
     fun sourceKey(symbol: String): String {
         val (account, id) = resolve(symbol)
         return sourceName(account, id)
+    }
+
+    /** Read the broker's full symbol (not the light symbols list). An older,
+     * undeployed gateway returns null; never manufacture broker metadata. */
+    suspend fun symbolPrecision(symbol: String): RangeSymbolPrecision? {
+        val (account, id) = resolve(symbol)
+        val key = sourceName(account, id)
+        synchronized(lock) { symbolPrecisionCache[key] }?.let { return it }
+        if (synchronized(lock) { (missingSymbolDetailUntil[key] ?: 0L) > System.currentTimeMillis() })
+            return null
+        val json = try {
+            request("/v1/symbol-detail?accountId=$account&symbolId=$id")
+        } catch (missing: CTraderGatewayException) {
+            if (missing.statusCode == 404) {
+                synchronized(lock) {
+                    if (sourceName(account, id) == key)
+                        missingSymbolDetailUntil[key] = System.currentTimeMillis() + 60_000L
+                }
+                return null
+            }
+            throw missing
+        }
+        if (resolve(symbol) != (account to id) || sourceName(account, id) != key)
+            throw IOException("cTrader account changed during symbol metadata request")
+        require(json.optString("source") == "ctrader" &&
+            json.optString("symbolId") == id.toString() &&
+            json.optString("accountId") == account &&
+            json.has("digits") && json.has("pipPosition")) {
+            "Incorrect cTrader symbol metadata source"
+        }
+        val metadata = RangeSymbolPrecision(json.getInt("digits"), json.getInt("pipPosition"))
+        synchronized(lock) { if (sourceName(account, id) == key) symbolPrecisionCache[key] = metadata }
+        return metadata
     }
 
     /** Reject quotes from a prior broker account even during their 15-second freshness window. */
@@ -197,6 +242,50 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         require(VerifiedMarketQuote.isVerified(tick, symbol)) { "cTrader quote is stale or invalid" }
         return tick
     }
+
+    /**
+     * Real historical BID quotes for fixed Range Bars. Never reconstruct
+     * ticks from the OHLC trendbars endpoint. Each broker page may be truncated.
+     */
+    suspend fun historicalBidTicks(symbol: String, from: Long, to: Long): List<RangePriceTick> =
+        withContext(Dispatchers.IO) {
+            val (account, id) = resolve(symbol)
+            val source = sourceName(account, id)
+            require(from > 0 && to >= from && to <= System.currentTimeMillis() &&
+                to - from <= 604_800_000L) { "نطاق Tick لا يتجاوز أسبوعًا واحدًا" }
+            val json = try {
+                request("/v1/ticks?accountId=$account&symbolId=$id&from=$from&to=$to")
+            } catch (error: CTraderGatewayException) {
+                if (error.statusCode == 404)
+                    throw IOException("بوابة cTrader لم تُحدَّث بعد لدعم تاريخ Tick؛ يلزم نشر /v1/ticks", error)
+                throw error
+            }
+            if (resolve(symbol) != (account to id) || sourceName(account, id) != source)
+                throw IOException("cTrader account changed during tick history request")
+            require(json.optString("source") == "ctrader" &&
+                json.optString("quoteType") == "bid" &&
+                json.optString("symbolId") == id.toString()) { "Wrong broker tick source" }
+            // hasMore means the broker did NOT return all quotes within the
+            // interval. Never page by oldestTimestamp-1: multiple genuine BID
+            // changes can share that millisecond. The batch loader splits
+            // the time interval into contiguous halves and retries safely.
+            if (json.optBoolean("hasMore")) throw RangeTickHistoryTooDenseException(
+                "cTrader أعاد بيانات Tick غير مكتملة؛ جارٍ تقسيم الفترة للحصول على الأسعار كلها")
+            val values = json.getJSONArray("ticks")
+            require(values.length() <= 100_000) { "Oversized broker tick page" }
+            val quotes = ArrayList<RangePriceTick>(values.length())
+            var previous = -1L
+            for (i in 0 until values.length()) {
+                val raw = values.getJSONObject(i)
+                val timestamp = raw.getLong("timestamp")
+                val price = raw.getDouble("price")
+                require(timestamp in from..to && timestamp >= previous &&
+                    price.isFinite() && price > 0.0) { "Invalid broker tick history" }
+                quotes.add(RangePriceTick(timestamp, price))
+                previous = timestamp
+            }
+            quotes
+        }
 
     suspend fun candles(symbol: String, timeframe: Timeframe, from: Long, to: Long): List<Candle> {
         val (account, id) = resolve(symbol)
@@ -251,6 +340,47 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
         selectedId to id
     }
 
+    private data class HttpPayload(val status: Int, val content: String, val refreshedSession: String?)
+
+    /** Cancel a pending HTTP request as soon as the chart's window changes.
+     * Blocking execute() previously occupied the Range mutex until the
+     * network timeout even after the user switched symbols or Range sizes. */
+    private suspend fun awaitHttp(request: Request, maxChars: Int, tickPage: Boolean): HttpPayload =
+        suspendCancellableCoroutine { continuation ->
+            val call = client.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (continuation.isActive) continuation.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    if (!continuation.isActive) {
+                        response.close()
+                        return
+                    }
+                    try {
+                        response.use { received ->
+                            if (received.isSuccessful && received.body?.contentLength()?.let { it > maxChars } == true)
+                                throw if (tickPage) RangeTickHistoryTooDenseException(
+                                    "صفحة Tick كبيرة؛ يلزم تقسيم الفترة")
+                                else IOException("Oversized cTrader response")
+                            val content = received.body?.string()
+                                ?: throw IOException("Empty cTrader response")
+                            if (received.isSuccessful && content.length > maxChars)
+                                throw if (tickPage) RangeTickHistoryTooDenseException(
+                                    "صفحة Tick كبيرة؛ يلزم تقسيم الفترة")
+                                else IOException("Oversized cTrader response")
+                            if (continuation.isActive) continuation.resume(HttpPayload(
+                                received.code, content, received.header("X-TradeLab-Session")))
+                        }
+                    } catch (error: Exception) {
+                        if (continuation.isActive) continuation.resumeWithException(error)
+                    }
+                }
+            })
+        }
+
     private suspend fun request(path: String, post: JSONObject? = null): JSONObject = withContext(Dispatchers.IO) {
         require(origin.startsWith("https://") && !origin.contains('@')) { "HTTPS gateway required" }
         val token = synchronized(lock) { session }
@@ -260,23 +390,21 @@ class CTraderGatewayClient(context: Context, private val origin: String = GATEWA
             builder.header("Authorization", "Bearer $token")
         }
         if (post != null) builder.post(post.toString().toRequestBody("application/json".toMediaType()))
-        client.newCall(builder.build()).execute().use { response ->
-            if (!response.isSuccessful) {
-                val body = response.body?.string()?.take(2048).orEmpty()
-                val code = runCatching { JSONObject(body).optString("error") }.getOrNull()
-                throw CTraderGatewayException(response.code, code)
-            }
-            val content = response.body?.string() ?: throw IOException("Empty cTrader response")
-            if (content.length > 2_000_000) throw IOException("Oversized cTrader response")
-            val json = JSONObject(content)
-            response.header("X-TradeLab-Session")?.let { newToken ->
-                if (newToken.isNotBlank() && newToken.length <= 6144) synchronized(lock) {
-                    // A slow request cannot overwrite the session after logout/account change.
-                    if (session == token) { session = newToken; persist() }
-                }
-            }
-            json
+        val tickPage = path.startsWith("/v1/ticks")
+        val wire = awaitHttp(builder.build(), if (tickPage) 8_000_000 else 2_000_000, tickPage)
+        if (wire.status !in 200..299) {
+            val body = wire.content.take(2048)
+            val code = runCatching { JSONObject(body).optString("error") }.getOrNull()
+            throw CTraderGatewayException(wire.status, code)
         }
+        val json = JSONObject(wire.content)
+        wire.refreshedSession?.let { newToken ->
+            if (newToken.isNotBlank() && newToken.length <= 6144) synchronized(lock) {
+                // A slow request cannot overwrite the session after logout/account change.
+                if (session == token) { session = newToken; persist() }
+            }
+        }
+        json
     }
 
     private fun persist() { secureStore.save(JSONObject().put("session", session).put("account", selectedId)) }

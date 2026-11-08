@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { randomToken, hash, constantTimeMatch, sealedCodec } from '../session.mjs';
 import { CTraderGateway, PERIODS } from '../ctrader.mjs';
+import { encodeTickResponse } from '../tick-response.mjs';
 
 // Vercel's single free-tier web service. It keeps no database of user credentials:
 // broker tokens are encrypted with a SERVER-ONLY key and retained in the Android Keystore.
@@ -45,6 +46,14 @@ function reply(res,code,body,extra={}) {
   if(res.headersSent)return;
   res.writeHead(code,{...securityHeaders,'Content-Type':'application/json; charset=utf-8',...extra});
   res.end(JSON.stringify(body));
+}
+async function tickReply(req,res,body,extra={}) {
+  if(res.headersSent)return;
+  const {bytes,headers}=await encodeTickResponse(body,req.headers['accept-encoding']||'');
+  if(res.headersSent)return;
+  res.writeHead(200,{...securityHeaders,'Content-Type':'application/json; charset=utf-8',
+    'Content-Length':bytes.length,...headers,...extra});
+  res.end(bytes);
 }
 function redirect(res,url,extra={}) {
   res.writeHead(302,{...securityHeaders,Location:url,...extra});res.end();
@@ -233,6 +242,13 @@ async function handler(req,res){
       const symbols=await stage('symbols',()=>upstream.channel(entry.isLive).symbols(id,session.access));
       return reply(res,200,{accountId:String(id),symbols},sessionHeader);
     }
+    if(path==='/v1/symbol-detail'){
+      const {id,entry}=await stage('symbols',()=>accountAccess(session,url));
+      const symbolId=intArg(url,'symbolId',1,Number.MAX_SAFE_INTEGER);
+      const detail=await stage('symbols',()=>upstream.channel(entry.isLive)
+        .symbolDetails(id,session.access,symbolId));
+      return reply(res,200,{accountId:String(id),source:'ctrader',...detail},sessionHeader);
+    }
     if(path==='/v1/candles'){
       const {id,entry}=await stage('candles',()=>accountAccess(session,url));
       const symbolId=intArg(url,'symbolId',1,Number.MAX_SAFE_INTEGER);
@@ -245,6 +261,16 @@ async function handler(req,res){
       if(to-from>90*86400000)return fail(res,400,'date_window_too_wide');
       const data=await stage('candles',()=>upstream.channel(entry.isLive).history(id,session.access,symbolId,period,from,to,count));
       return reply(res,200,{symbolId:String(symbolId),period:periodName,source:'ctrader',...data},sessionHeader);
+    }
+    if(path==='/v1/ticks'){
+      const {id,entry}=await stage('ticks',()=>accountAccess(session,url));
+      const symbolId=intArg(url,'symbolId',1,Number.MAX_SAFE_INTEGER);
+      const from=intArg(url,'from',0,2147483646000);
+      const to=intArg(url,'to',from,2147483646000);
+      if(to-from>604800000)return fail(res,400,'tick_window_exceeds_one_week');
+      const data=await stage('ticks',()=>upstream.channel(entry.isLive)
+        .historicalBidTicks(id,session.access,symbolId,from,to));
+      return tickReply(req,res,{symbolId:String(symbolId),source:'ctrader',quoteType:'bid',...data},sessionHeader);
     }
     if(path==='/v1/spot'){
       const {id,entry}=await stage('spot',()=>accountAccess(session,url));
@@ -266,8 +292,8 @@ async function stage(name,fn){
 function safeDiagnostic(error){
   const category=String(error?.message||'');
   return {
-    stage:['accounts','symbols','candles','spot'].includes(error?.stage)?error.stage:'other',
-    category:/^(ctrader_[a-z_]+|cTrader connection closed|not_authenticated|invalid_session|account_not_authorized|broker_exchange_failed)$/.test(category)
+    stage:['accounts','symbols','candles','ticks','spot'].includes(error?.stage)?error.stage:'other',
+    category:/^(ctrader_[a-z_]+|cTrader connection closed|not_authenticated|invalid_session|account_not_authorized|broker_exchange_failed|invalid_tick_data|invalid_tick_timestamp|invalid_tick_price|tick_timestamp_out_of_range|tick_account_mismatch|ambiguous_tick_pagination_boundary|empty_tick_page_with_more|symbol_account_mismatch|invalid_symbol_metadata)$/.test(category)
       ?category:'unclassified',
     brokerCode:/^[A-Z0-9_]{1,64}$/.test(error?.brokerCode||'')?error.brokerCode:undefined,
     operation:Number.isInteger(error?.operation)?error.operation:undefined
@@ -289,7 +315,7 @@ export function brokerRejection(error) {
     error:'ctrader_broker_rejected_request',
     stage,
     brokerCode:publicBrokerCodes.has(brokerCode)?brokerCode:undefined,
-    operation:[2100,2149,2102,2114,2137,2127].includes(operation)?operation:undefined,
+    operation:[2100,2149,2102,2114,2116,2137,2145,2127].includes(operation)?operation:undefined,
   };
 }
 const server=createServer((req,res)=>{
@@ -301,6 +327,9 @@ const server=createServer((req,res)=>{
     if(error.message==='unconfigured_gateway')return fail(res,503,'gateway_not_configured');
     if(error.message==='not_authenticated'||error.message==='invalid_session')
       return fail(res,401,'session_expired');
+    if(['invalid_tick_data','invalid_tick_timestamp','invalid_tick_price','tick_timestamp_out_of_range','tick_account_mismatch',
+      'ambiguous_tick_pagination_boundary','empty_tick_page_with_more'].includes(error.message))
+      return fail(res,502,'ctrader_tick_history_unusable');
     if(error.message.startsWith('invalid_')||error.message==='account_not_authorized')
       return fail(res,400,'invalid_request');
     if(error.message==='ctrader_view_only_required')return fail(res,403,'ctrader_view_only_required');

@@ -50,7 +50,7 @@ internal object ChartTypeCatalog {
         ChartTypeOption("line_break", "كسر الخط", null),
         ChartTypeOption("kagi", "كاجي", null),
         ChartTypeOption("point_figure", "النقطة والرقم", null),
-        ChartTypeOption("range", "مدى", null)
+        ChartTypeOption("range", "مدى", ChartDisplayStyle.RANGE)
     )
 }
 

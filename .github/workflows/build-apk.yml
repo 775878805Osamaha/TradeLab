@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      - 'feat/ctrader-range-*'
+      - 'fix/ctrader-range-*'
   pull_request:
     branches:
       - main
@@ -63,6 +65,12 @@ jobs:
       - name: Make Gradle Executable
         run: chmod +x gradlew
 
+      - name: Verify cTrader tick gateway
+        run: |
+          npm ci --prefix vercel-gateway --ignore-scripts --no-audit --no-fund
+          npm test --prefix vercel-gateway
+          npm run check --prefix vercel-gateway
+
       - name: Toolchain Diagnostics
         run: |
           echo "================ TOOLCHAIN DIAGNOSTICS ================"
@@ -77,6 +85,14 @@ jobs:
         # Preserve APK and reports even if Robolectric dependencies are unavailable.
         continue-on-error: true
         run: ./gradlew test --stacktrace
+
+      - name: Preserve specific Range history test results
+        if: always()
+        run: |
+          if [ -d app/build/test-results ]; then
+            echo "Range candle regression results are included in the reports artifact."
+            find app/build/test-results -type f -name '*Range*.xml' -print || true
+          fi
 
       - name: Build Android Debug APK
         run: ./gradlew assembleDebug --stacktrace
