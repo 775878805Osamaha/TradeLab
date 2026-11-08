@@ -132,4 +132,30 @@ void main() {
     expect(quotes, [1.25, 1.25]);
     expect(symbolRequests, 1);
   });
+
+  test('Binance paper quote uses verified bid/ask, never last-trade ticker', () async {
+    final api = MarketApi(client: MockClient((request) async {
+      expect(request.url.host, 'api.binance.com');
+      expect(request.url.path, '/api/v3/ticker/bookTicker');
+      expect(request.url.queryParameters['symbol'], 'BTCUSDT');
+      return http.Response(jsonEncode({
+        'symbol': 'BTCUSDT', 'bidPrice': '105.5', 'askPrice': '106.2',
+      }), 200);
+    }));
+    final quoted = await api.binanceQuote('BTCUSDT');
+    expect(quoted.bid, 105.5);
+    expect(quoted.ask, 106.2);
+    expect(quoted.executionPrice(buy: true), 106.2);
+    expect(quoted.executionPrice(buy: false), 105.5);
+    quoted.assertFresh(nowMs: DateTime.now().toUtc().millisecondsSinceEpoch);
+  });
+
+  test('Binance paper quote rejects crossed and tampered prices', () async {
+    final api = MarketApi(client: MockClient((_) async =>
+      http.Response(jsonEncode({
+        'symbol': 'BTCUSDT', 'bidPrice': '120', 'askPrice': '110',
+      }), 200)));
+    await expectLater(api.binanceQuote('BTCUSDT'),
+      throwsA(isA<MarketDataException>()));
+  });
 }

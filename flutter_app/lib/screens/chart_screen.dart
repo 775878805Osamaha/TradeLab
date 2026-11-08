@@ -10,14 +10,19 @@ import '../data/range_bar_builder.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
 import '../data/market_controller.dart';
+import '../paper/paper_journal_controller.dart';
+import '../paper/paper_ledger.dart';
+import '../paper/paper_order_sheet.dart';
+import '../paper/paper_trade_service.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
 
 enum ChartMode { candles, heikinAshi, range }
 
 class ChartScreen extends StatefulWidget {
-  const ChartScreen({required this.controller, super.key});
+  const ChartScreen({required this.controller, this.journal, super.key});
   final MarketController controller;
+  final PaperJournalController? journal;
 
   @override
   State<ChartScreen> createState() => _ChartScreenState();
@@ -282,6 +287,25 @@ class _ChartScreenState extends State<ChartScreen> {
           content: Text('هذه معاينة للواجهة. ربط cTrader وبيانات Room بالنسخة الجديدة لم يكتمل بعد.'),
         ),
       );
+
+  void _openPaperOrder() {
+    final journal = widget.journal;
+    if (journal == null || journal.busy || journal.error != null || _replay) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('أغلق Replay وانتظر حتى يصبح الدفتر المحلي جاهزًا.')));
+      return;
+    }
+    if (!LedgerEntry.usdQuotedSymbols.contains(_symbol)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('التداول التجريبي الحالي متاح للرموز المسعرة بالدولار فقط.')));
+      return;
+    }
+    showModalBottomSheet<void>(context: context, showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => PaperOrderSheet(symbol: _selectedSymbol,
+        service: PaperTradeService(
+          quotes: LivePaperQuoteProvider(widget.controller), journal: journal)));
+  }
 
   List<TradeCandle> get _displayCandles {
     if (_mode == ChartMode.range) {
@@ -1013,6 +1037,16 @@ class _ChartScreenState extends State<ChartScreen> {
             ),
         ]),
       ),
+      if (widget.journal != null && !_replay)
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: TextButton.icon(
+            key: const Key('open-paper-order'),
+            onPressed: _openPaperOrder,
+            icon: const Icon(Icons.add_chart, size: 17),
+            label: const Text('صفقة تجريبية'),
+          ),
+        ),
       if (_pendingAnchor != null && _drawing)
         Container(
           alignment: Alignment.center,

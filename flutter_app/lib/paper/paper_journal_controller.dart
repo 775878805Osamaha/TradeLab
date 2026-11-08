@@ -56,6 +56,21 @@ class PaperJournalController extends ChangeNotifier {
     await refresh();
   }
 
+  Future<void> closeTrade(LedgerEntry position,
+      {required double exitPrice, required int timestampMs}) async {
+    if (busy || position.accountKey != _accountKey ||
+        position.kind != LedgerKind.openTrade) {
+      throw StateError('المركز ليس مفتوحًا في الدفتر الحالي.');
+    }
+    if (timestampMs < position.timestampMs || exitPrice <= 0 ||
+        !exitPrice.isFinite) {
+      throw const FormatException('سعر الخروج أو تاريخه غير صالح.');
+    }
+    await _store.closeTrade(_accountKey, position.id,
+      exitPrice: exitPrice, timestampMs: timestampMs);
+    await refresh();
+  }
+
   @override
   void dispose() {
     _revision++;

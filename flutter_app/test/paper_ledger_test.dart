@@ -68,4 +68,19 @@ void main() {
     expect(report.profitFactor, isNull);
     expect(report.balanceSeries, isEmpty);
   });
+
+  test('open positions never affect realized profit or win rate', () {
+    final open = LedgerEntry(id: 5, accountKey: 'ctrader:101',
+      kind: LedgerKind.openTrade, timestampMs: day2,
+      openedAtMs: day2, symbol: 'XAUUSD', side: PaperSide.buy,
+      quantity: 1, entryPrice: 2000);
+    open.validate();
+    final report = calculateLedgerReport([
+      cash(1, LedgerKind.deposit, 1000, day1), open,
+    ]);
+    expect(report.tradeCount, 0);
+    expect(report.netProfit, 0);
+    expect(report.closingBalance, 1000);
+    expect(report.winRate, isNull);
+  });
 }

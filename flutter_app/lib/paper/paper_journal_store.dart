@@ -7,6 +7,8 @@ abstract class PaperJournalStore {
   Future<List<LedgerEntry>> list(String accountKey);
   Future<void> add(LedgerEntry entry);
   Future<void> delete(String accountKey, int id);
+  Future<void> closeTrade(String accountKey, int id,
+      {required double exitPrice, required int timestampMs});
   Future<void> close();
 }
 
@@ -88,6 +90,19 @@ class SqlitePaperJournalStore implements PaperJournalStore {
     final db = await _database;
     await db.delete('ledger_entries',
       where: 'account_key = ? AND id = ?', whereArgs: [accountKey, id]);
+  }
+
+  @override
+  Future<void> closeTrade(String accountKey, int id,
+      {required double exitPrice, required int timestampMs}) async {
+    final db = await _database;
+    final affected = await db.update('ledger_entries', {
+      'kind': LedgerKind.closedTrade.name,
+      'exit_price': exitPrice,
+      'timestamp_ms': timestampMs,
+    }, where: 'account_key = ? AND id = ? AND kind = ? AND timestamp_ms <= ?',
+       whereArgs: [accountKey, id, LedgerKind.openTrade.name, timestampMs]);
+    if (affected != 1) throw StateError('الصفقة لم تعد مفتوحة أو تغيّر الحساب.');
   }
 
   @override

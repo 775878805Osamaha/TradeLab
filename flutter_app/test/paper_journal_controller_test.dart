@@ -15,6 +15,21 @@ class _FakeStore implements PaperJournalStore {
   Future<void> close() async {}
 
   @override
+  Future<void> closeTrade(String accountKey, int id,
+      {required double exitPrice, required int timestampMs}) async {
+    final rows = entries[accountKey] ?? [];
+    final index = rows.indexWhere((entry) => entry.id == id &&
+      entry.kind == LedgerKind.openTrade && entry.timestampMs <= timestampMs);
+    if (index < 0) throw StateError('not an open trade');
+    final old = rows[index];
+    rows[index] = LedgerEntry(id: old.id, accountKey: old.accountKey,
+      kind: LedgerKind.closedTrade, timestampMs: timestampMs,
+      symbol: old.symbol, side: old.side, quantity: old.quantity,
+      entryPrice: old.entryPrice, exitPrice: exitPrice,
+      openedAtMs: old.openedAtMs, fee: old.fee);
+  }
+
+  @override
   Future<void> delete(String accountKey, int id) async {
     entries[accountKey]?.removeWhere((entry) => entry.id == id);
   }

@@ -185,7 +185,7 @@ class MarketApi {
     return point;
   }
 
-  Future<double> ctraderBid({required String token, required String accountId,
+  Future<MarketQuote> ctraderQuote({required String token, required String accountId,
     required String symbol}) async {
     final id = await symbolId(token: token, accountId: accountId, symbol: symbol);
     final data = await _json(_gateway('/v1/spot', {
@@ -199,7 +199,31 @@ class MarketApi {
         !bid.isFinite || !ask.isFinite || bid <= 0 || ask < bid) {
       throw const MarketDataException('تعذر التحقق من السعر المباشر لـcTrader.');
     }
-    return bid;
+    return MarketQuote(symbol: symbol, source: TradeSource.ctrader,
+      bid: bid, ask: ask, timestampMs: timestamp);
+  }
+
+  Future<double> ctraderBid({required String token, required String accountId,
+    required String symbol}) async => (await ctraderQuote(
+      token: token, accountId: accountId, symbol: symbol)).bid;
+
+  /// Binance best bid/ask, not the last trade or an estimated spread.
+  Future<MarketQuote> binanceQuote(String symbol) async {
+    if (!const {'BTCUSDT', 'ETHUSDT'}.contains(symbol)) {
+      throw const MarketDataException('رمز الكريبتو غير معتمد.');
+    }
+    final data = await _json(Uri.https('api.binance.com',
+      '/api/v3/ticker/bookTicker', {'symbol': symbol}));
+    final bid = double.tryParse('${data['bidPrice']}');
+    final ask = double.tryParse('${data['askPrice']}');
+    if (data['symbol'] != symbol || bid == null || ask == null ||
+        !bid.isFinite || !ask.isFinite || bid <= 0 || ask < bid) {
+      throw const MarketDataException('أسعار BID/ASK المستلمة من Binance غير صالحة.');
+    }
+    // bookTicker has no exchange event timestamp. Record receipt time,
+    // never claim this is a broker-provided timestamp.
+    return MarketQuote(symbol: symbol, source: TradeSource.binance,
+      bid: bid, ask: ask, timestampMs: DateTime.now().toUtc().millisecondsSinceEpoch);
   }
 
   Future<List<MarketBar>> binanceCandles({required String symbol,
@@ -254,6 +278,29 @@ class MarketDataException implements Exception {
   final bool sessionExpired;
   @override
   String toString() => message;
+}
+
+class MarketQuote {
+  const MarketQuote({required this.symbol, required this.source,
+    required this.bid, required this.ask, required this.timestampMs});
+
+  final String symbol;
+  final TradeSource source;
+  final double bid;
+  final double ask;
+  final int timestampMs;
+
+  /// A simulated BUY crosses the ask; a simulated SELL crosses the bid.
+  double executionPrice({required bool buy}) => buy ? ask : bid;
+
+  void assertFresh({required int nowMs, int maxAgeMs = 90000}) {
+    final age = nowMs - timestampMs;
+    if (timestampMs <= 0 || age < -5000 || age > maxAgeMs ||
+        !bid.isFinite || !ask.isFinite || bid <= 0 || ask < bid) {
+      throw const MarketDataException(
+        'السعر قديم أو غير صالح. تعذر تنفيذ صفقة تجريبية حتى وصول سعر حديث.');
+    }
+  }
 }
 
 class CTraderAccount {

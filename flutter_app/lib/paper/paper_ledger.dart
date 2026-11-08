@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 /// A local, user-entered paper journal. No entry represents a broker order.
-enum LedgerKind { deposit, withdrawal, closedTrade }
+enum LedgerKind { deposit, withdrawal, openTrade, closedTrade }
 
 enum PaperSide { buy, sell }
 
@@ -49,6 +49,7 @@ class LedgerEntry {
   double get balanceDelta => switch (kind) {
     LedgerKind.deposit => amount!,
     LedgerKind.withdrawal => -amount!,
+    LedgerKind.openTrade => 0,
     LedgerKind.closedTrade => realizedPnl,
   };
 
@@ -56,7 +57,7 @@ class LedgerEntry {
     if (accountKey.trim().isEmpty || timestampMs <= 0) {
       throw const FormatException('هوية الدفتر أو تاريخ القيد غير صالح.');
     }
-    if (kind != LedgerKind.closedTrade) {
+    if (kind == LedgerKind.deposit || kind == LedgerKind.withdrawal) {
       if (amount == null || !amount!.isFinite || amount! <= 0) {
         throw const FormatException('أدخل مبلغًا موجبًا صالحًا.');
       }
@@ -65,10 +66,12 @@ class LedgerEntry {
     if (!usdQuotedSymbols.contains(symbol) || side == null ||
         quantity == null || !quantity!.isFinite || quantity! <= 0 ||
         entryPrice == null || !entryPrice!.isFinite || entryPrice! <= 0 ||
-        exitPrice == null || !exitPrice!.isFinite || exitPrice! <= 0 ||
+        (kind == LedgerKind.closedTrade &&
+            (exitPrice == null || !exitPrice!.isFinite || exitPrice! <= 0)) ||
+        (kind == LedgerKind.openTrade && exitPrice != null) ||
         !fee.isFinite || fee < 0 ||
         (openedAtMs != null && (openedAtMs! <= 0 || openedAtMs! > timestampMs)) ||
-        !realizedPnl.isFinite) {
+        (kind == LedgerKind.closedTrade && !realizedPnl.isFinite)) {
       throw const FormatException('تفاصيل الصفقة غير صالحة أو عملتها ليست الدولار.');
     }
   }
@@ -145,6 +148,8 @@ LedgerReport calculateLedgerReport(List<LedgerEntry> all,
         break;
       case LedgerKind.withdrawal:
         withdrawals += entry.amount!;
+        break;
+      case LedgerKind.openTrade:
         break;
       case LedgerKind.closedTrade:
         final pnl = entry.realizedPnl;

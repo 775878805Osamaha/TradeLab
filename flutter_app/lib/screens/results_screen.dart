@@ -6,6 +6,8 @@ import '../data/market_controller.dart';
 import '../paper/add_paper_entry_sheet.dart';
 import '../paper/paper_journal_controller.dart';
 import '../paper/paper_ledger.dart';
+import '../paper/paper_trade_service.dart';
+import '../data/tradelab_data.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
 
@@ -24,6 +26,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
   int _page = 0;
   DateTimeRange? _customRange;
   int? _selectedCurvePoint;
+  final Set<int> _closingIds = {};
 
   static const _pages = [
     'نظرة عامة', 'المنحنيات البيانية', 'يوميات الصفقات',
@@ -189,6 +192,8 @@ class _ResultsScreenState extends State<ResultsScreen> {
         )),
         const SizedBox(height: 14),
         if (_page == 0) ...[
+          _openPositions(),
+          const SizedBox(height: 16),
           const TradeSectionTitle('ملخص الحساب'),
           _summary(report),
           const SizedBox(height: 20),
@@ -202,6 +207,8 @@ class _ResultsScreenState extends State<ResultsScreen> {
         ] else if (_page == 1) ...[
           _curve(report),
         ] else if (_page == 2) ...[
+          _openPositions(),
+          const SizedBox(height: 16),
           _recentTrades(report, all: true),
         ] else if (_page == 3) ...[
           _statistics(report),
@@ -354,6 +361,73 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 onPressed: () => _confirmDelete(entry)),
             ]))),
       ]);
+
+  Widget _openPositions() {
+    final positions = widget.journal?.entries.where((entry) =>
+        entry.kind == LedgerKind.openTrade).toList().reversed.toList() ?? const <LedgerEntry>[];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const TradeSectionTitle('المراكز التجريبية المفتوحة'),
+      if (positions.isEmpty)
+        _emptyMessage('لا توجد مراكز مفتوحة. يمكنك فتح صفقة تجريبية من الشارت.'),
+      for (final position in positions)
+        Padding(padding: const EdgeInsets.only(bottom: 8),
+          child: TradeSurface(child: Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${position.symbol} · ${position.side == PaperSide.buy ? 'شراء' : 'بيع'}',
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text('${position.quantity} وحدة · دخول ${position.entryPrice}',
+                  style: Theme.of(context).textTheme.bodySmall),
+                Text('مفتوحة منذ ${_day(position.openedAtMs ?? position.timestampMs)}',
+                  style: Theme.of(context).textTheme.bodySmall),
+              ])),
+            FilledButton.tonal(
+              onPressed: _closingIds.contains(position.id) || widget.journal?.busy == true
+                  ? null : () => _closePosition(position),
+              child: Text(_closingIds.contains(position.id) ? 'انتظر' : 'إغلاق تجريبي'),
+            ),
+          ]))),
+        ),
+    ]);
+  }
+
+  Future<void> _closePosition(LedgerEntry position) async {
+    final journal = widget.journal;
+    if (journal == null || _closingIds.contains(position.id)) return;
+    setState(() => _closingIds.add(position.id));
+    try {
+      final symbol = tradeSymbols.firstWhere((item) => item.code == position.symbol);
+      final service = PaperTradeService(
+        quotes: LivePaperQuoteProvider(widget.controller), journal: journal);
+      final quote = await service.prepare(symbol);
+      if (!mounted) return;
+      final exit = quote.quote.executionPrice(buy: position.side == PaperSide.sell);
+      final direction = position.side == PaperSide.buy ? 1 : -1;
+      final estimatedPnl = (exit - position.entryPrice!) * position.quantity! * direction;
+      final accepted = await showDialog<bool>(context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('تأكيد إغلاق تجريبي'),
+          content: Text('${position.symbol} · خروج عند $exit\n'
+            'الربح/الخسارة المحققة نظريًا: ${_money(estimatedPnl, signed: true)}\n'
+            'سيُحفظ إغلاق محلي فقط، دون أمر للوسيط أو رسوم إضافية.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('إغلاق الصفقة')),
+          ],
+        ));
+      if (accepted != true) return;
+      await service.close(position: position, prepared: quote);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('حُفظ إغلاق الصفقة التجريبية في الدفتر.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر إغلاق الصفقة: $error')));
+    } finally {
+      if (mounted) setState(() => _closingIds.remove(position.id));
+    }
+  }
 
   Widget _cashMovements(LedgerReport report) => Column(
     crossAxisAlignment: CrossAxisAlignment.start, children: [

@@ -184,6 +184,24 @@ class MarketController extends ChangeNotifier {
     return _api.ctraderPointSize(token: _token!, accountId: accountId!, symbol: symbol.code);
   }
 
+  /// Returns a fresh source quote on demand; never submits broker orders.
+  Future<MarketQuote> paperQuote(TradeSymbol symbol) async {
+    if (symbol.source == TradeSource.binance) {
+      return _api.binanceQuote(symbol.code);
+    }
+    final account = accountId;
+    final token = _token;
+    if (!ctraderConnected || token == null || account == null) {
+      throw const MarketDataException('اربط حساب cTrader للحصول على سعر فعلي للصفقة التجريبية.');
+    }
+    final quote = await _api.ctraderQuote(token: token,
+      accountId: account, symbol: symbol.code);
+    if (accountId != account || _token == null) {
+      throw const MarketDataException('تغير حساب cTrader أثناء طلب السعر. أعد المحاولة.');
+    }
+    return quote;
+  }
+
   Future<void> refreshQuotes() async {
     if (loadingQuotes) return;
     loadingQuotes = true;
