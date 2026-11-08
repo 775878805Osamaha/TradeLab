@@ -10,7 +10,9 @@ on:
       - .github/workflows/build-flutter-ui-apk.yml
 
 permissions:
-  contents: read
+  # A prerelease exposes the APK itself rather than forcing Android users to
+  # extract the ZIP wrapper used for GitHub Actions artifacts.
+  contents: write
 
 jobs:
   flutter-ui:
@@ -53,11 +55,25 @@ jobs:
         run: flutter test --update-goldens test/golden_test.dart
       - name: Build debug APK
         run: flutter build apk --debug
+      - name: Validate installable APK and prepare direct download
+        run: |
+          set -euo pipefail
+          apk="build/app/outputs/flutter-apk/app-debug.apk"
+          test -s "$apk"
+          unzip -t "$apk" >/dev/null
+          tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$tools_dir/apksigner" verify --verbose "$apk"
+          "$tools_dir/aapt" dump badging "$apk" | sed -n '1,10p'
+          cp "$apk" "build/app/outputs/flutter-apk/TradeLab-Flutter.apk"
+          sha256sum "build/app/outputs/flutter-apk/TradeLab-Flutter.apk" \
+            > "build/app/outputs/flutter-apk/TradeLab-Flutter.apk.sha256"
       - name: Upload installable Flutter UI preview
         uses: actions/upload-artifact@v4
         with:
           name: TradeLab-Flutter-UI-Preview-APK
-          path: flutter_app/build/app/outputs/flutter-apk/app-debug.apk
+          path: |
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Flutter.apk
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Flutter.apk.sha256
           if-no-files-found: error
       - name: Upload design snapshot
         uses: actions/upload-artifact@v4
@@ -65,3 +81,17 @@ jobs:
           name: TradeLab-Flutter-Chart-Snapshot
           path: flutter_app/test/goldens/tradelab_chart_flutter.png
           if-no-files-found: error
+      - name: Publish direct APK as GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="flutter-preview-${GITHUB_SHA:0:12}"
+          gh release create "$tag" \
+            "build/app/outputs/flutter-apk/TradeLab-Flutter.apk#TradeLab-Flutter.apk" \
+            "build/app/outputs/flutter-apk/TradeLab-Flutter.apk.sha256#TradeLab-Flutter.apk.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "TradeLab Flutter Preview ${GITHUB_SHA:0:7}" \
+            --notes "Flutter/Dart preview APK, Android debug signed. This build is distinct from the existing Kotlin TradeLab app. cTrader OAuth needs the server gateway update before live broker login will work."

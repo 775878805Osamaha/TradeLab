@@ -58,7 +58,10 @@ flutter run
 ```
 
 The GitHub Actions workflow `TradeLab Flutter UI Preview APK` builds a separate
-debug APK and produces a chart snapshot as downloadable CI artifacts. Its Android
+debug APK, verifies its ZIP structure and Android debug signature, publishes a
+**directly downloadable APK** as a GitHub prerelease, and produces a chart
+snapshot as a CI artifact. Download the `.apk` asset from GitHub Releases,
+**not** the GitHub Actions ZIP artifact. Its Android
 host has a separate package from the Kotlin app so no existing account data is
 overwritten by installing the preview.
 
