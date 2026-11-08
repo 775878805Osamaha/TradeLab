@@ -22,6 +22,15 @@ assert application is not None
 activity = application.find('activity')
 assert activity is not None
 
+# Flutter's built-in handler conflicts with the app_links plugin. This flag
+# routes the custom OAuth URI exclusively to app_links (Flutter 3.24+).
+if not any(entry.attrib.get(android + 'name') == 'flutter_deeplinking_enabled'
+           for entry in activity.findall('meta-data')):
+    ET.SubElement(activity, 'meta-data', {
+        android + 'name': 'flutter_deeplinking_enabled',
+        android + 'value': 'false',
+    })
+
 if not any(data.attrib.get(android + 'scheme') == 'tradelabflutter'
            for intent in activity.findall('intent-filter')
            for data in intent.findall('data')):
