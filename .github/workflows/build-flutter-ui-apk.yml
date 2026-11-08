@@ -84,7 +84,7 @@ jobs:
           profile: pixel_5
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             adb devices
             adb install "$GITHUB_WORKSPACE/flutter_app/build/app/outputs/flutter-apk/TradeLab-Flutter.apk"
             adb shell monkey -p com.example.tradelab_flutter -c android.intent.category.LAUNCHER 1
