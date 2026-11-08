@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../chart/chart_annotations.dart';
 import '../chart/chart_viewport.dart';
+import '../chart/candle_prefix.dart';
 import '../data/range_bar_builder.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
@@ -192,6 +193,11 @@ class _ChartScreenState extends State<ChartScreen> {
         for (var index = 0; index < _patterns.length; index++) {
           _patterns[index] = _patterns[index].shifted(unique.length);
         }
+        if (_replay) {
+          _analysisPatterns = _analysisPatterns
+              .map((drawing) => drawing.shifted(unique.length))
+              .toList(growable: false);
+        }
         if (_pendingAnchor != null) {
           _pendingAnchor = _pendingAnchor!.shifted(unique.length);
         }
@@ -280,7 +286,8 @@ class _ChartScreenState extends State<ChartScreen> {
   List<TradeCandle> get _displayCandles {
     if (_mode == ChartMode.range) {
       if (_liveRequested) {
-        final range = _replay ? _actualRange.take(_visibleThrough).toList() : _actualRange;
+        final range = _replay
+            ? CandlePrefix(_actualRange, _visibleThrough) : _actualRange;
         return range;
       }
       if (!_replay) {
@@ -292,7 +299,7 @@ class _ChartScreenState extends State<ChartScreen> {
     }
     final source = _liveRequested ? _actualCandles : _fixture;
     if (_mode != ChartMode.heikinAshi) {
-      return _replay ? source.take(_visibleThrough).toList(growable: false) : source;
+      return _replay ? CandlePrefix(source, _visibleThrough) : source;
     }
     // A Heikin-Ashi candle depends only on past candles. Compute the full
     // causal sequence once per source, then reveal a prefix in Replay.
@@ -301,7 +308,7 @@ class _ChartScreenState extends State<ChartScreen> {
       _heikinCache = _buildHeikinAshi(source);
     }
     final smoothed = _heikinCache!;
-    return _replay ? smoothed.take(_visibleThrough).toList(growable: false) : smoothed;
+    return _replay ? CandlePrefix(smoothed, _visibleThrough) : smoothed;
   }
 
   static List<TradeCandle> _buildHeikinAshi(List<TradeCandle> raw) {
