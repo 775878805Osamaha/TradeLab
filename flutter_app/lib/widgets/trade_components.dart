@@ -65,7 +65,9 @@ class TradeStatusChip extends StatelessWidget {
                     ? TradeColors.positive
                     : Theme.of(context).colorScheme.onSurfaceVariant),
             const SizedBox(width: 5),
-            Text(label, style: Theme.of(context).textTheme.labelSmall),
+            Flexible(child: Text(label, maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall)),
           ],
         ),
       );

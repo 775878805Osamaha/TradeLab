@@ -100,10 +100,13 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(TradeLabApp(controller: controller));
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'initial chart layout');
     await tester.tap(find.byKey(const Key('symbol-picker')));
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'symbol picker layout');
     await tester.tap(find.text('BTCUSDT').last);
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Binance chart layout');
     expect(find.text('بيانات فعلية'), findsOneWidget);
     expect(find.textContaining('جارِ تحميل شموع'), findsNothing);
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);

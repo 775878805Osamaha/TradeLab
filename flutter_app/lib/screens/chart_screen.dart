@@ -444,8 +444,9 @@ class _ChartScreenState extends State<ChartScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(mainAxisSize: MainAxisSize.min, children: [
-                    Text(_symbol, textDirection: TextDirection.ltr,
-                        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
+                    Flexible(child: Text(_symbol, textDirection: TextDirection.ltr,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900))),
                     const SizedBox(width: 4),
                     const Icon(Icons.keyboard_arrow_down, size: 19),
                   ]),
@@ -456,9 +457,9 @@ class _ChartScreenState extends State<ChartScreen> {
               ),
             ),
           ),
-          TradeStatusChip(label: _liveRequested
+          Flexible(child: TradeStatusChip(label: _liveRequested
               ? (_loading ? 'جار التحميل' : _loadError != null ? 'خطأ في المصدر' : 'بيانات فعلية')
-              : 'معاينة', connected: _liveRequested && !_loading && _loadError == null && candles.isNotEmpty),
+              : 'معاينة', connected: _liveRequested && !_loading && _loadError == null && candles.isNotEmpty)),
           _iconAction(icon: Icons.fullscreen, label: 'ملء الشاشة', onPressed: _notifyUnconnected),
           _iconAction(icon: Icons.refresh, label: 'تحديث أسعار السوق',
             onPressed: _liveRequested ? _loadRealHistory : _notifyUnconnected),
