@@ -70,6 +70,14 @@ jobs:
           cp "$apk" "build/app/outputs/flutter-apk/TradeLab-Flutter.apk"
           sha256sum "build/app/outputs/flutter-apk/TradeLab-Flutter.apk" \
             > "build/app/outputs/flutter-apk/TradeLab-Flutter.apk.sha256"
+      - name: Upload installable Flutter UI preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Flutter-UI-Preview-APK
+          path: |
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Flutter.apk
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Flutter.apk.sha256
+          if-no-files-found: error
       - name: Enable KVM for Android emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -96,14 +104,6 @@ jobs:
         with:
           name: TradeLab-Flutter-Android-Emulator-Screenshot
           path: flutter_app/build/tradelab_emulator.png
-          if-no-files-found: error
-      - name: Upload installable Flutter UI preview
-        uses: actions/upload-artifact@v4
-        with:
-          name: TradeLab-Flutter-UI-Preview-APK
-          path: |
-            flutter_app/build/app/outputs/flutter-apk/TradeLab-Flutter.apk
-            flutter_app/build/app/outputs/flutter-apk/TradeLab-Flutter.apk.sha256
           if-no-files-found: error
       - name: Upload design snapshot
         uses: actions/upload-artifact@v4
