@@ -86,16 +86,16 @@ class TradeEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
         child: Padding(
-          padding: const EdgeInsets.all(TradeSpacing.lg),
+          padding: const EdgeInsets.all(TradeSpacing.sm),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 40, color: TradeColors.blueLight),
-              const SizedBox(height: 12),
+              Icon(icon, size: 34, color: TradeColors.blueLight),
+              const SizedBox(height: 8),
               Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   )),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(description,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(

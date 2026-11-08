@@ -125,7 +125,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
         crossAxisCount: 2,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: 1.65,
+        childAspectRatio: 1.35,
         children: [
           _metric('صافي الربح', Icons.trending_up, TradeColors.positive),
           _metric('إجمالي الإيداعات', Icons.south_west, TradeColors.blue),
@@ -152,7 +152,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
   Widget _curve() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const TradeSectionTitle('منحنى الرصيد (Equity)'),
         TradeSurface(child: SizedBox(
-          height: 210,
+          height: 240,
           child: const TradeEmptyState(
             icon: Icons.show_chart,
             title: 'في انتظار سجل التداول',
@@ -187,7 +187,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
 
   Widget _recentTrades() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const TradeSectionTitle('آخر الصفقات المغلقة'),
-        const TradeSurface(child: SizedBox(height: 175,
+        const TradeSurface(child: SizedBox(height: 190,
           child: TradeEmptyState(
             icon: Icons.receipt_long_outlined,
             title: 'لا توجد صفقات',

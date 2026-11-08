@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'screens/account_screen.dart';
 import 'screens/chart_screen.dart';
@@ -25,6 +26,13 @@ class _TradeLabAppState extends State<TradeLabApp> {
         theme: TradeTheme.light(),
         darkTheme: TradeTheme.dark(),
         themeMode: _themeMode,
+        locale: const Locale('ar'),
+        supportedLocales: const [Locale('ar'), Locale('en')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         builder: (context, child) => Directionality(
           textDirection: TextDirection.rtl,
           child: child ?? const SizedBox.shrink(),
