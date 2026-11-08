@@ -1,0 +1,55 @@
+name: TradeLab Flutter UI Preview APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/tradelab-flutter-ui-20261108
+    paths:
+      - flutter_app/**
+      - .github/workflows/build-flutter-ui-apk.yml
+
+permissions:
+  contents: read
+
+jobs:
+  flutter-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate isolated Flutter Android host
+        run: flutter create --platforms android --project-name tradelab_flutter . --no-pub
+      - name: Fetch Flutter dependencies
+        run: flutter pub get
+      - name: Static analysis
+        run: flutter analyze --no-fatal-infos
+      - name: Interaction tests
+        run: flutter test test/widget_test.dart
+      - name: Capture chart design snapshot
+        run: flutter test --update-goldens test/golden_test.dart
+      - name: Build debug APK
+        run: flutter build apk --debug
+      - name: Upload installable Flutter UI preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Flutter-UI-Preview-APK
+          path: flutter_app/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+      - name: Upload design snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Flutter-Chart-Snapshot
+          path: flutter_app/test/goldens/tradelab_chart_flutter.png
+          if-no-files-found: error

@@ -1,0 +1,15 @@
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.metadata
+.idea/
+build/
+coverage/
+android/
+ios/
+linux/
+macos/
+windows/
+web/
+test/goldens/
