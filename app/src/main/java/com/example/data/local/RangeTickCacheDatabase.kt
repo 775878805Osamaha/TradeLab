@@ -32,7 +32,12 @@ data class RangeTickSliceEntity(
     val savedAtMillis: Long
 )
 
-data class RangeTickDiskSpan(val fromMillis: Long, val toMillis: Long)
+data class RangeTickDiskSpan(
+    val fromMillis: Long,
+    val toMillis: Long,
+    val quoteCount: Int,
+    val savedAtMillis: Long
+)
 
 /** Precomputed bars for an exact verified tick window, never partial pages. */
 @Entity(
@@ -54,7 +59,7 @@ data class RangeBarSnapshotEntity(
 
 @Dao
 interface RangeTickSliceDao {
-    @Query("""SELECT fromMillis, toMillis FROM verified_ctrader_bid_slices
+    @Query("""SELECT fromMillis, toMillis, quoteCount, savedAtMillis FROM verified_ctrader_bid_slices
         WHERE source = :source AND symbol = :symbol
         AND toMillis >= :from AND fromMillis <= :to
         ORDER BY fromMillis ASC, toMillis DESC""")

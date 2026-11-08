@@ -15,7 +15,8 @@ class RangeTickDiskStoreTest {
         override suspend fun covered(source: String, symbol: String, from: Long, to: Long) =
             rows.values.filter { it.source == source && it.symbol == symbol &&
                 it.toMillis >= from && it.fromMillis <= to }
-                .map { RangeTickDiskSpan(it.fromMillis, it.toMillis) }
+                .map { RangeTickDiskSpan(it.fromMillis, it.toMillis,
+                    it.quoteCount, it.savedAtMillis) }
 
         override suspend fun find(source: String, symbol: String, from: Long, to: Long) =
             rows[key(source, symbol, from, to)]
@@ -80,6 +81,55 @@ class RangeTickDiskStoreTest {
             emptyList()
         }
         assertTrue(otherAccountCalled)
+    }
+
+    @Test fun anExpiredEmptyPageIsRedownloadedButNearbyFreshEmptyPagesAreReused() = runBlocking {
+        val now = 10L * 3_600_000L
+        var clock = now
+        val dao = MemoryDao()
+        val store = RangeTickDiskStore(dao) { clock }
+        val source = "ctrader:acc:1"
+        var downloads = 0
+        store.getOrDownload(source, "XAUUSD", now - 100L, now) { _, _ ->
+            downloads++
+            emptyList()
+        }
+        clock += 14L * 60_000L
+        store.getOrDownload(source, "XAUUSD", now - 100L, now) { _, _ ->
+            fail("Fresh empty results are temporarily cached")
+            emptyList()
+        }
+        assertFalse(store.hasExpiredEmptyPages(source, "XAUUSD", now - 100L, now))
+        clock += 2L * 60_000L
+        assertTrue(store.hasExpiredEmptyPages(source, "XAUUSD", now - 100L, now))
+        val recovered = listOf(RangePriceTick(now - 50L, 4071.37))
+        assertEquals(recovered, store.getOrDownload(source, "XAUUSD", now - 100L, now) { _, _ ->
+            downloads++
+            recovered
+        })
+        assertEquals(2, downloads)
+        clock += 365L * 24L * 3_600_000L
+        assertFalse(store.hasExpiredEmptyPages(source, "XAUUSD", now - 100L, now))
+        assertEquals(recovered, store.getOrDownload(source, "XAUUSD", now - 100L, now) { _, _ ->
+            fail("Real BID quotes must never be discarded by empty-page expiration")
+            emptyList()
+        })
+    }
+
+    @Test fun oldEmptyHistoryPagesAreRevalidatedAfterADayWithoutDiscardingRecentRealQuotes() = runBlocking {
+        val historicTo = 2L * 3_600_000L
+        val currentTime = historicTo + 10L * 24L * 3_600_000L
+        var clock = currentTime
+        val dao = MemoryDao()
+        val store = RangeTickDiskStore(dao) { clock }
+        val source = "ctrader:acc:1"
+        store.getOrDownload(source, "XAUUSD", 1L, historicTo) { _, _ -> emptyList() }
+        clock += 23L * 3_600_000L
+        assertFalse(store.hasExpiredEmptyPages(source, "XAUUSD", 1L, historicTo))
+        clock += 2L * 3_600_000L
+        assertTrue(store.hasExpiredEmptyPages(source, "XAUUSD", 1L, historicTo))
+        val refreshed = listOf(RangePriceTick(50L, 4071.25))
+        assertEquals(refreshed, store.getOrDownload(source, "XAUUSD", 1L, historicTo) { _, _ -> refreshed })
     }
 
     @Test fun corruptedSavedPageFallsBackToRealBrokerAndInvalidDataIsNotSaved() = runBlocking {

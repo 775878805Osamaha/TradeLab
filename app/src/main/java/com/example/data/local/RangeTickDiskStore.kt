@@ -3,6 +3,7 @@ package com.example.data.local
 import com.example.core.market.RangePriceTick
 import com.example.core.market.RangeTickCacheCodec
 import com.example.core.market.RangeTickCacheCoverage
+import com.example.core.market.RangeEmptyTickPagePolicy
 import com.example.core.market.RangeTickWindowReuse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -10,15 +11,32 @@ import kotlinx.coroutines.ensureActive
 
 /**
  * Persistent cTrader BID quote pages, keyed by the selected broker account's
- * sourceKey, symbol and exact covered milliseconds. Every empty page is also
- * saved so an inactive market session is not repeatedly downloaded.
+ * sourceKey, symbol and exact covered milliseconds. Empty pages are briefly
+ * cached to avoid needless weekend requests, then rechecked with the broker.
  *
  * SQLite stores compressed lossless pages rather than millions of individual
  * rows. A request with different boundaries reuses all covered saved portions
  * and asks cTrader ONLY for the uncovered gaps. Cache write failures never
  * replace real history with synthetic data or prevent a network response.
  */
-class RangeTickDiskStore(private val dao: RangeTickSliceDao) {
+class RangeTickDiskStore(
+    private val dao: RangeTickSliceDao,
+    private val nowMillis: () -> Long = { System.currentTimeMillis() }
+) {
+    /** Invalidate materialized Range bars if their source window included a
+     * temporary zero-quote response which is now due for re-verification. */
+    suspend fun hasExpiredEmptyPages(source: String, symbol: String,
+                                     from: Long, to: Long): Boolean {
+        return try {
+            val now = nowMillis()
+            dao.covered(source, symbol, from, to).any { page ->
+                !RangeEmptyTickPagePolicy.reusable(page.quoteCount, page.toMillis,
+                    page.savedAtMillis, now)
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { false }
+    }
+
     private suspend fun safelyDiscard(source: String, symbol: String, from: Long, to: Long) {
         try { dao.discard(source, symbol, from, to) }
         catch (cancelled: CancellationException) { throw cancelled }
@@ -44,8 +62,15 @@ class RangeTickDiskStore(private val dao: RangeTickSliceDao) {
         val saved = try { dao.covered(source, symbol, from, to) }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { emptyList() }
+        val now = nowMillis()
+        val (reusable, expired) = saved.partition {
+            RangeEmptyTickPagePolicy.reusable(it.quoteCount, it.toMillis, it.savedAtMillis, now)
+        }
+        // Discard only expired empty intervals. Valid non-empty BID quotes
+        // never expire, and unrelated account data is left untouched.
+        for (page in expired) safelyDiscard(source, symbol, page.fromMillis, page.toMillis)
         val plan = RangeTickCacheCoverage.plan(from, to,
-            saved.map { RangeTickCacheCoverage.Span(it.fromMillis, it.toMillis) })
+            reusable.map { RangeTickCacheCoverage.Span(it.fromMillis, it.toMillis) })
         val combined = ArrayList<RangePriceTick>()
         for (piece in plan) {
             currentCoroutineContext().ensureActive()
@@ -63,7 +88,7 @@ class RangeTickDiskStore(private val dao: RangeTickSliceDao) {
             try {
                 dao.save(RangeTickSliceEntity(source, symbol, piece.from, piece.to,
                     verified.size, RangeTickCacheCodec.encode(verified, piece.from, piece.to),
-                    System.currentTimeMillis()))
+                    nowMillis()))
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { /* Continue displaying verified broker data. */ }
         }

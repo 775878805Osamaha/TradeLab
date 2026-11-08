@@ -146,12 +146,26 @@ class ChartViewModel(
         _uiState.update { it.copy(rangePrecisionDiagnostic = if (metadata == null)
             "دقة رمز cTrader غير متاحة: بوابة /v1/symbol-detail لم تُنشر بعد؛ حجم Tick المحلي غير مؤكد"
             else "دقة cTrader: ${metadata.digits} خانات · حجم حركة السعر المحلي قابل للتمثيل، ولم يُثبت Tick Size الفعلي") }
+        val expiredEmptyBrokerPage = rangeTickDiskStore?.hasExpiredEmptyPages(
+            source, symbol, from, to) == true
         // Fully verified materialized candles can be returned immediately,
         // without deserializing and scanning hundreds of thousands of ticks.
         // The exact source, cutoff, price precision and window must match;
         // Replay can never reuse a snapshot extending past its revealed time.
-        rangeBarDiskStore?.exact(symbol, source, from, to, sizeInPriceTicks, tickSize,
-            includeIncomplete)?.let { return it }
+        if (!expiredEmptyBrokerPage) rangeBarDiskStore?.exact(symbol, source, from, to,
+            sizeInPriceTicks, tickSize, includeIncomplete)?.let { return it }
+        if (expiredEmptyBrokerPage) {
+            // Invalidate the in-memory prefix too: otherwise a valid-but-
+            // incomplete old window may bypass the disk recheck entirely.
+            rangeTickMutex.lock()
+            try {
+                rangeTickWindow = null
+                rangeVisibleWindow = null
+                rangeBuildCache.clear()
+                rangeScanCheckpoint = null
+                incompleteRangeDownload.clear()
+            } finally { rangeTickMutex.unlock() }
+        }
         // Reuse real broker quotes when Replay advances a candle or rewinds.
         // Cache never feeds a quote beyond the requested revealed cutoff.
         rangeTickMutex.lock()
