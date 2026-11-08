@@ -17,7 +17,7 @@ permissions:
 jobs:
   flutter-ui:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: flutter_app
@@ -53,20 +53,50 @@ jobs:
         run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs
       - name: Capture chart design snapshot
         run: flutter test --update-goldens test/golden_test.dart
-      - name: Build debug APK
-        run: flutter build apk --debug
+      - name: Build optimized Flutter preview APK
+        # Flutter's generated Android host signs this preview using its
+        # ephemeral debug certificate; this is NOT a Play Store release.
+        run: flutter build apk --release
       - name: Validate installable APK and prepare direct download
         run: |
           set -euo pipefail
-          apk="build/app/outputs/flutter-apk/app-debug.apk"
+          apk="build/app/outputs/flutter-apk/app-release.apk"
           test -s "$apk"
           unzip -t "$apk" >/dev/null
           tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           "$tools_dir/apksigner" verify --verbose "$apk"
           "$tools_dir/aapt" dump badging "$apk" | sed -n '1,10p'
+          "$tools_dir/aapt" dump badging "$apk" | rg "package: name='com.example.tradelab_flutter'"
           cp "$apk" "build/app/outputs/flutter-apk/TradeLab-Flutter.apk"
           sha256sum "build/app/outputs/flutter-apk/TradeLab-Flutter.apk" \
             > "build/app/outputs/flutter-apk/TradeLab-Flutter.apk.sha256"
+      - name: Enable KVM for Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch APK on Android 13 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            adb devices
+            adb install "$GITHUB_WORKSPACE/flutter_app/build/app/outputs/flutter-apk/TradeLab-Flutter.apk"
+            adb shell monkey -p com.example.tradelab_flutter -c android.intent.category.LAUNCHER 1
+            sleep 5
+            adb shell pidof -s com.example.tradelab_flutter
+            adb exec-out screencap -p > "$GITHUB_WORKSPACE/flutter_app/build/tradelab_emulator.png"
+      - name: Upload real Android emulator screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Flutter-Android-Emulator-Screenshot
+          path: flutter_app/build/tradelab_emulator.png
+          if-no-files-found: error
       - name: Upload installable Flutter UI preview
         uses: actions/upload-artifact@v4
         with:
@@ -94,4 +124,4 @@ jobs:
             --target "$GITHUB_SHA" \
             --prerelease \
             --title "TradeLab Flutter Preview ${GITHUB_SHA:0:7}" \
-            --notes "Flutter/Dart preview APK, Android debug signed. This build is distinct from the existing Kotlin TradeLab app. cTrader OAuth needs the server gateway update before live broker login will work."
+            --notes "Flutter/Dart optimized AOT preview APK, signed with an ephemeral debug certificate (not Play Store signing). Tested for install and launch on an Android 13 emulator. This is separate from the Kotlin TradeLab app; cTrader OAuth needs the gateway deployment before broker login works."
