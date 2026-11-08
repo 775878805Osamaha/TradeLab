@@ -105,6 +105,7 @@ class MarketController extends ChangeNotifier {
       // Verify account access before activating a token or claiming connection.
       final authorized = await _api.accounts(issued);
       if (authorized.isEmpty) throw const MarketDataException('لا توجد حسابات cTrader مصرح بها.');
+      _api.forgetCTraderSymbols();
       await _storage.write(key: _tokenKey, value: issued);
       _token = issued;
       accounts = authorized;
@@ -135,6 +136,7 @@ class MarketController extends ChangeNotifier {
   void chooseAccount(String id) {
     if (accounts.any((a) => a.id == id)) {
       accountId = id;
+      _api.forgetCTraderSymbols();
       forexPrices.clear();
       notifyListeners();
     }
@@ -145,6 +147,7 @@ class MarketController extends ChangeNotifier {
     accountId = null;
     accounts = const [];
     forexPrices.clear();
+    _api.forgetCTraderSymbols();
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _pendingKey);
     notifyListeners();

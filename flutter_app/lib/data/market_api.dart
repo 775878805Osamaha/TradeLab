@@ -13,6 +13,11 @@ class MarketApi {
   final http.Client _client;
   final String gateway;
   final void Function(String)? onSessionRefresh;
+  // One broker symbol-list request per authorized account, including when
+  // quote requests for several forex instruments arrive concurrently.
+  final Map<String, Future<Map<String, int>>> _symbolLists = {};
+
+  void forgetCTraderSymbols() => _symbolLists.clear();
 
   void close() => _client.close();
 
@@ -80,16 +85,32 @@ class MarketApi {
 
   Future<int> symbolId({required String token, required String accountId,
     required String symbol}) async {
+    final pending = _symbolLists.putIfAbsent(accountId,
+        () => _fetchSymbolList(token: token, accountId: accountId));
+    try {
+      final id = (await pending)[symbol.toUpperCase()];
+      if (id != null) return id;
+    } catch (_) {
+      // A rejected request must be retryable on the next deliberate refresh.
+      if (identical(_symbolLists[accountId], pending)) _symbolLists.remove(accountId);
+      rethrow;
+    }
+    throw MarketDataException('رمز $symbol غير متاح لدى وسيط حساب cTrader المحدد.');
+  }
+
+  Future<Map<String, int>> _fetchSymbolList({required String token,
+    required String accountId}) async {
     final data = await _json(_gateway('/v1/symbols', {'accountId': accountId}), token: token);
     final entries = data['symbols'];
     if (entries is! List) throw const MarketDataException('قائمة رموز cTrader غير صالحة.');
+    final ids = <String, int>{};
     for (final item in entries) {
       if (item is! Map || item['archived'] == true) continue;
       final name = (item['symbolName'] ?? item['name'])?.toString().toUpperCase().replaceAll('/', '');
       final id = int.tryParse('${item['symbolId']}');
-      if (name == symbol.toUpperCase() && id != null && id > 0) return id;
+      if (name != null && id != null && id > 0) ids[name] = id;
     }
-    throw MarketDataException('رمز $symbol غير متاح لدى وسيط حساب cTrader المحدد.');
+    return ids;
   }
 
   Future<List<MarketBar>> ctraderCandles({required String token, required String accountId,

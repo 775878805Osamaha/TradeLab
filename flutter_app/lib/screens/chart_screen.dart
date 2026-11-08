@@ -31,7 +31,10 @@ class _ChartScreenState extends State<ChartScreen> {
   bool _loading = false;
   bool _olderLoading = false;
   bool _historyExhausted = false;
+  String? _olderLoadError;
   String? _loadError;
+  List<TradeCandle>? _heikinSource;
+  List<TradeCandle>? _heikinCache;
   bool _linkedBefore = false;
   String? _accountBefore;
   String _symbol = 'XAUUSD';
@@ -95,6 +98,7 @@ class _ChartScreenState extends State<ChartScreen> {
       _loading = true;
       _loadError = null;
       _historyExhausted = false;
+      _olderLoadError = null;
       _actualBars = [];
       _actualCandles = [];
       _actualRange = [];
@@ -114,6 +118,9 @@ class _ChartScreenState extends State<ChartScreen> {
         _actualBars = bars;
         _actualCandles = bars.map((bar) => bar.candle).toList(growable: false);
       }
+      if (revision == _loadRevision && _totalBars == 0) {
+        _loadError = 'لم يُرجع المصدر شموعًا لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
+      }
     } on MarketDataException catch (e) {
       if (revision == _loadRevision) _loadError = e.message;
     } catch (_) {
@@ -125,9 +132,9 @@ class _ChartScreenState extends State<ChartScreen> {
 
   Future<void> _loadOlderHistory() async {
     if (_olderLoading || _loading || _historyExhausted || !_liveRequested ||
-        _mode == ChartMode.range || _actualBars.isEmpty) return;
+        _olderLoadError != null || _mode == ChartMode.range || _actualBars.isEmpty) return;
     final revision = _loadRevision;
-    _olderLoading = true;
+    setState(() => _olderLoading = true);
     try {
       final before = DateTime.fromMillisecondsSinceEpoch(_actualBars.first.timestamp, isUtc: true);
       final older = await widget.controller.history(_selectedSymbol, _timeframe, before: before);
@@ -141,8 +148,14 @@ class _ChartScreenState extends State<ChartScreen> {
         if (_replay) _visibleThrough += unique.length;
       });
     } catch (_) {
-      // Old loaded candles remain valid; retry on another deliberate drag.
-    } finally {_olderLoading = false;}
+      if (revision == _loadRevision && mounted) {
+        _olderLoadError = 'تعذّر تحميل الشموع الأقدم. يمكنك إعادة المحاولة.';
+      }
+    } finally {
+      if (revision == _loadRevision && mounted) {
+        setState(() => _olderLoading = false);
+      }
+    }
   }
 
   @override
@@ -210,10 +223,21 @@ class _ChartScreenState extends State<ChartScreen> {
       return previewRangeCandles(_rangeTicks, throughTick: throughTick);
     }
     final source = _liveRequested ? _actualCandles : _fixture;
-    final count = _replay ? _visibleThrough.clamp(0, source.length) : source.length;
-    final raw = source.take(count).toList(growable: false);
-    if (raw.isEmpty) return raw;
-    if (_mode != ChartMode.heikinAshi) return raw;
+    if (_mode != ChartMode.heikinAshi) {
+      return _replay ? source.take(_visibleThrough).toList(growable: false) : source;
+    }
+    // A Heikin-Ashi candle depends only on past candles. Compute the full
+    // causal sequence once per source, then reveal a prefix in Replay.
+    if (!identical(source, _heikinSource)) {
+      _heikinSource = source;
+      _heikinCache = _buildHeikinAshi(source);
+    }
+    final smoothed = _heikinCache!;
+    return _replay ? smoothed.take(_visibleThrough).toList(growable: false) : smoothed;
+  }
+
+  static List<TradeCandle> _buildHeikinAshi(List<TradeCandle> raw) {
+    if (raw.isEmpty) return const [];
     final result = <TradeCandle>[];
     var previousOpen = (raw.first.open + raw.first.close) / 2;
     var previousClose = (raw.first.open + raw.first.high + raw.first.low + raw.first.close) / 4;
@@ -488,10 +512,24 @@ class _ChartScreenState extends State<ChartScreen> {
         MaterialBanner(content: Text(_loadError!), actions: [
           TextButton(onPressed: _loadRealHistory, child: const Text('إعادة المحاولة')),
         ]),
+      if (_olderLoading) const LinearProgressIndicator(minHeight: 2),
+      if (_olderLoadError != null)
+        Container(
+          color: TradeColors.blue.withValues(alpha: .06),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(children: [
+            Expanded(child: Text(_olderLoadError!, style: const TextStyle(fontSize: 12))),
+            TextButton(onPressed: () {
+              setState(() => _olderLoadError = null);
+              unawaited(_loadOlderHistory());
+            }, child: const Text('إعادة المحاولة')),
+          ]),
+        ),
       Expanded(
         child: LayoutBuilder(builder: (context, constraints) {
           final plotWidth = math.max(1.0, constraints.maxWidth - 61);
-          return GestureDetector(
+          return Stack(children: [
+          Positioned.fill(child: GestureDetector(
             key: const Key('chart-gesture-area'),
             behavior: HitTestBehavior.opaque,
             onScaleStart: (details) {
@@ -563,7 +601,23 @@ class _ChartScreenState extends State<ChartScreen> {
                 ),
               ),
             ),
-          );
+          )),
+          if (_liveRequested && candles.isEmpty)
+            Positioned.fill(child: IgnorePointer(child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 30),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  if (_loading)
+                    const CircularProgressIndicator(strokeWidth: 2),
+                  if (_loading) const SizedBox(height: 14),
+                  Text(_loading ? 'جارِ تحميل شموع السوق الفعلية…'
+                    : _loadError ?? 'لا توجد شموع متاحة من المصدر.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant)),
+                ]),
+              ),
+            ))),
+          ]);
         }),
       ),
       Container(

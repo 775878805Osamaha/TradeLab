@@ -26,6 +26,10 @@ delete the native app, its local Room database or its cTrader login credentials.
   broker-provided decimal point precision; incomplete tick responses fail closed.
 - Drawing levels are anchored to **price**, selectable, draggable, undoable and
   individually deletable, rather than attached to screen coordinates.
+- Broker symbol IDs are cached per account and invalidated on account changes,
+  reducing redundant symbol-list requests while paging. Live chart loading,
+  empty-data and older-page retry states are visible instead of appearing as a
+  blank chart. Heikin-Ashi smoothing is reused until the source candles change.
 - Results: full V3 tabs, date filters and all nine metric labels with blank
   values until actual Room trading results are connected.
 - Account: account login and switcher, Binance refresh, connection status and

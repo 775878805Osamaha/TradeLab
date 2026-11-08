@@ -81,4 +81,55 @@ void main() {
         symbol:'XAUUSD', before:DateTime.utc(2026, 11, 8)),
         throwsA(isA<MarketDataException>()));
   });
+
+  test('cTrader symbol metadata is reused for repeated market requests and reset safely', () async {
+    var symbolRequests = 0;
+    final client = MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        symbolRequests++;
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      expect(request.url.path, '/v1/spot');
+      expect(request.url.queryParameters['symbolId'], '42');
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'symbolId': '42', 'timestamp': 1700000000000,
+        'bid': 2000, 'ask': 2000.2,
+      }), 200);
+    });
+    final api = MarketApi(client: client);
+    expect(await api.ctraderBid(token: 'token', accountId: '1', symbol: 'XAUUSD'), 2000);
+    expect(await api.ctraderBid(token: 'token', accountId: '1', symbol: 'XAUUSD'), 2000);
+    expect(symbolRequests, 1);
+    api.forgetCTraderSymbols();
+    expect(await api.ctraderBid(token: 'token', accountId: '1', symbol: 'XAUUSD'), 2000);
+    expect(symbolRequests, 2);
+  });
+
+  test('parallel forex quotes share one authorized broker symbol-list request', () async {
+    var symbolRequests = 0;
+    final client = MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        symbolRequests++;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+          {'symbolName': 'EURUSD', 'symbolId': 43},
+        ]}), 200);
+      }
+      final id = request.url.queryParameters['symbolId'];
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'symbolId': id, 'timestamp': 1700000000000,
+        'bid': 1.25, 'ask': 1.26,
+      }), 200);
+    });
+    final api = MarketApi(client: client);
+    final quotes = await Future.wait([
+      api.ctraderBid(token: 'token', accountId: '1', symbol: 'XAUUSD'),
+      api.ctraderBid(token: 'token', accountId: '1', symbol: 'EURUSD'),
+    ]);
+    expect(quotes, [1.25, 1.25]);
+    expect(symbolRequests, 1);
+  });
 }
