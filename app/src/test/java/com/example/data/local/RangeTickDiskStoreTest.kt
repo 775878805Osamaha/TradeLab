@@ -110,7 +110,7 @@ class RangeTickDiskStoreTest {
         val now = 10L * 3_600_000L
         var clock = now
         val dao = MemoryDao()
-        val store = RangeTickDiskStore(dao) { clock }
+        val store = RangeTickDiskStore(dao, nowMillis = { clock })
         val source = "ctrader:acc:1"
         var downloads = 0
         store.getOrDownload(source, "XAUUSD", now - 100L, now) { _, _ ->
@@ -144,7 +144,7 @@ class RangeTickDiskStoreTest {
         val currentTime = historicTo + 10L * 24L * 3_600_000L
         var clock = currentTime
         val dao = MemoryDao()
-        val store = RangeTickDiskStore(dao) { clock }
+        val store = RangeTickDiskStore(dao, nowMillis = { clock })
         val source = "ctrader:acc:1"
         store.getOrDownload(source, "XAUUSD", 1L, historicTo) { _, _ -> emptyList() }
         clock += 23L * 3_600_000L
