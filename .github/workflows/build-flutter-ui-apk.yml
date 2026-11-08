@@ -66,7 +66,7 @@ jobs:
           tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           "$tools_dir/apksigner" verify --verbose "$apk"
           "$tools_dir/aapt" dump badging "$apk" | sed -n '1,10p'
-          "$tools_dir/aapt" dump badging "$apk" | rg "package: name='com.example.tradelab_flutter'"
+          "$tools_dir/aapt" dump badging "$apk" | grep -F "package: name='com.example.tradelab_flutter'"
           cp "$apk" "build/app/outputs/flutter-apk/TradeLab-Flutter.apk"
           sha256sum "build/app/outputs/flutter-apk/TradeLab-Flutter.apk" \
             > "build/app/outputs/flutter-apk/TradeLab-Flutter.apk.sha256"
