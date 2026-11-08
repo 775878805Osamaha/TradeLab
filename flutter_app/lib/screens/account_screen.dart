@@ -153,9 +153,11 @@ class AccountScreen extends StatelessWidget {
 
   Widget _infoRow(BuildContext context, String title, String value) => Row(
         children: [
-          Expanded(child: Text(title, style: TextStyle(
+          Expanded(flex: 2, child: Text(title, style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant))),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Expanded(flex: 3, child: Text(value, maxLines: 3,
+              textAlign: TextAlign.left,
+              style: const TextStyle(fontWeight: FontWeight.w600))),
         ],
       );
 }
