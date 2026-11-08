@@ -387,7 +387,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
               child: Text(_closingIds.contains(position.id) ? 'انتظر' : 'إغلاق تجريبي'),
             ),
           ]))),
-        ),
     ]);
   }
 
