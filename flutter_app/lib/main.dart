@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'data/market_controller.dart';
+import 'paper/paper_journal_controller.dart';
+import 'paper/paper_journal_store.dart';
 
 import 'screens/account_screen.dart';
 import 'screens/chart_screen.dart';
@@ -11,9 +13,10 @@ import 'theme/tradelab_theme.dart';
 void main() => runApp(const TradeLabApp());
 
 class TradeLabApp extends StatefulWidget {
-  const TradeLabApp({this.controller, super.key});
+  const TradeLabApp({this.controller, this.journal, super.key});
 
   final MarketController? controller;
+  final PaperJournalController? journal;
 
   @override
   State<TradeLabApp> createState() => _TradeLabAppState();
@@ -42,6 +45,7 @@ class _TradeLabAppState extends State<TradeLabApp> {
         ),
         home: TradeLabShell(
           controller: widget.controller,
+          journal: widget.journal,
           darkMode: _themeMode == ThemeMode.dark,
           onDarkModeChanged: (enabled) => setState(() {
             _themeMode = enabled ? ThemeMode.dark : ThemeMode.light;
@@ -53,6 +57,7 @@ class _TradeLabAppState extends State<TradeLabApp> {
 class TradeLabShell extends StatefulWidget {
   const TradeLabShell({
     this.controller,
+    this.journal,
     required this.darkMode,
     required this.onDarkModeChanged,
     super.key,
@@ -60,6 +65,7 @@ class TradeLabShell extends StatefulWidget {
 
   final bool darkMode;
   final MarketController? controller;
+  final PaperJournalController? journal;
   final ValueChanged<bool> onDarkModeChanged;
 
   @override
@@ -71,16 +77,28 @@ class _TradeLabShellState extends State<TradeLabShell> {
   // Chart opens in ANALYSIS mode, never an implicit Replay session.
   int _selectedIndex = 1;
   late final MarketController _market = widget.controller ?? MarketController();
+  late final PaperJournalController _journal = widget.journal ??
+      PaperJournalController(store: SqlitePaperJournalStore());
 
   @override
   void initState() {
     super.initState();
+    _market.addListener(_onAccountChanged);
+    _journal.useAccount(_market.accountId);
     if (widget.controller == null) _market.initialize();
+  }
+
+  void _onAccountChanged() {
+    if (_market.accountId != null || _journal.accountKey != 'local:guest') {
+      _journal.useAccount(_market.accountId);
+    }
   }
 
   @override
   void dispose() {
+    _market.removeListener(_onAccountChanged);
     if (widget.controller == null) _market.dispose();
+    if (widget.journal == null) _journal.dispose();
     super.dispose();
   }
 
@@ -122,7 +140,7 @@ class _TradeLabShellState extends State<TradeLabShell> {
                 children: [
                   MarketsScreen(controller: _market),
                   ChartScreen(controller: _market),
-                  ResultsScreen(controller: _market),
+                  ResultsScreen(controller: _market, journal: _journal),
                   AccountScreen(
                     controller: _market,
                     darkMode: widget.darkMode,
