@@ -46,6 +46,7 @@ object RangeTickBatchLoader {
 
     suspend fun load(from: Long, to: Long,
                      onNewestSlice: suspend (List<RangePriceTick>) -> Unit = {},
+                     onGrowingHistory: (suspend (List<RangePriceTick>) -> Unit)? = null,
                      onSliceComplete: suspend (Int, Int) -> Unit = { _, _ -> },
                      onVerifiedSlice: suspend (Long, Long, List<RangePriceTick>) -> Unit = { _, _, _ -> },
                      maxAllowedTicks: Int = MAX_WINDOW_TICKS,
@@ -55,6 +56,7 @@ object RangeTickBatchLoader {
         require(maxAllowedTicks in 1..MAX_WINDOW_TICKS)
         require(initialSliceMillis > 0L)
         var previewSent = false
+        var nextGrowingPreviewQuoteCount = 0
         var count = 0
         var completeSlices = 0
         // Keep each real broker leaf exactly once, newest-first. The former
@@ -97,6 +99,17 @@ object RangeTickBatchLoader {
             if (!previewSent && page.isNotEmpty()) {
                 previewSent = true
                 onNewestSlice(page)
+                nextGrowingPreviewQuoteCount = count * 2
+            } else if (previewSent && onGrowingHistory != null &&
+                count >= nextGrowingPreviewQuoteCount) {
+                // The verified leaves form one contiguous newest-first
+                // suffix. Show a growing *chronological* chart without
+                // exposing an unrequested/future quote. Doubling the quote
+                // threshold prevents O(pages * ticks) reconstructions.
+                val verifiedSuffix = ArrayList<RangePriceTick>(count)
+                for (slice in descendingSlices.asReversed()) verifiedSuffix.addAll(slice)
+                onGrowingHistory(verifiedSuffix)
+                nextGrowingPreviewQuoteCount = count * 2
             }
         }
 

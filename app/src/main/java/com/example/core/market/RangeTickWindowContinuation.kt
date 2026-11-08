@@ -43,6 +43,14 @@ object RangeTickWindowContinuation {
                         onPreview(safe)
                     }
                 },
+                onGrowingHistory = { growing ->
+                    val safe = if (verified == null) growing
+                        else ArrayList<RangePriceTick>(growing.size + savedCount).apply {
+                            addAll(growing)
+                            addAll(verified.ticks)
+                        }
+                    onPreview(safe)
+                },
                 onSliceComplete = { count, pages -> onProgress(savedCount + count, pages) },
                 onVerifiedSlice = { start, end, quotes ->
                     cache.remember(symbol, source, start, end, quotes)

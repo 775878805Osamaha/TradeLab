@@ -33,6 +33,8 @@ class RangeTickWindowContinuationTest {
         assertTrue(previews.all { page -> page.zipWithNext().all { (a, b) ->
             a.timestamp <= b.timestamp
         } && page.all { it.timestamp <= to } })
+        assertEquals("At least one growing preview should include older confirmed quotes",
+            allQuotes, previews.last())
     }
 
     @Test fun cancelledVerifiedPreviewCanResumeWithoutRefetchingThatPage() = runBlocking {

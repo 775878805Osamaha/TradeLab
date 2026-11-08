@@ -117,6 +117,50 @@ class RangeTickBatchLoaderTest {
         })
     }
 
+    @Test fun growingPreviewsAlwaysContainVerifiedChronologicalSuffixAndNoFutureReplayQuote() = runBlocking {
+        val hour = 3_600_000L
+        val cutoff = 3L * hour
+        val realQuotes = listOf(1L, hour, hour + 1L, 2L * hour, cutoff)
+            .mapIndexed { index, time -> RangePriceTick(time, 4050.0 + index) }
+        val initial = mutableListOf<List<RangePriceTick>>()
+        val growing = mutableListOf<List<RangePriceTick>>()
+        val finished = RangeTickBatchLoader.load(1L, cutoff,
+            onNewestSlice = { initial += it.toList() },
+            onGrowingHistory = { growing += it.toList() }) { start, end ->
+            realQuotes.filter { it.timestamp in start..end }
+        }
+        assertEquals(realQuotes, finished)
+        assertEquals(listOf(realQuotes.last()), initial.single())
+        assertTrue("The chart must repaint before the final history batch", growing.isNotEmpty())
+        assertEquals(realQuotes, growing.last())
+        assertTrue(growing.all { suffix ->
+            suffix.all { it.timestamp <= cutoff } &&
+                suffix.zipWithNext().all { (left, right) -> left.timestamp <= right.timestamp } &&
+                finished.takeLast(suffix.size) == suffix
+        })
+    }
+
+    @Test fun denseSplitGrowingPreviewHasBoundedRebuildsAndNeverLosesRepeatedMillisecondQuotes() = runBlocking {
+        val source = listOf(900L, 1_000L, 1_000L, 1_001L,
+            1_500L, 1_500L, 1_800L, 2_000L)
+            .mapIndexed { i, time -> RangePriceTick(time, 4050.0 + i * 0.01) }
+        val previews = mutableListOf<List<RangePriceTick>>()
+        val all = RangeTickBatchLoader.load(900L, 2_000L,
+            onGrowingHistory = { previews += it.toList() }) { start, end ->
+            if (end - start > 200L) throw RangeTickHistoryTooDenseException("hasMore")
+            source.filter { it.timestamp in start..end }
+        }
+        assertEquals(source, all)
+        assertTrue(previews.isNotEmpty())
+        assertTrue("Growing previews must be logarithmically bounded", previews.size <= 4)
+        assertTrue(previews.zipWithNext().all { (a, b) -> b.size >= a.size * 2 })
+        assertTrue(previews.all { subset ->
+            all.takeLast(subset.size) == subset &&
+                subset.count { it.timestamp == 1_500L } <= 2
+        })
+        assertEquals(2, all.count { it.timestamp == 1_500L })
+    }
+
     @Test fun exactSliceCountersNeverImplyUnfetchedTicksAreAlreadyAvailable() = runBlocking {
         val progress = mutableListOf<Pair<Int, Int>>()
         val bars = RangeTickBatchLoader.load(1L, 3_600_002L,

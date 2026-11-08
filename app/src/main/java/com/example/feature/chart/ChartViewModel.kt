@@ -191,7 +191,22 @@ class ChartViewModel(
                     }
                     if (from >= partial.from) partial.ticks
                     else {
+                        suspend fun publishResumedVerifiedHistory(olderQuotes: List<RangePriceTick>) {
+                            if (olderQuotes.isEmpty()) return
+                            val safe = ArrayList<RangePriceTick>(olderQuotes.size + partial.ticks.size).apply {
+                                addAll(olderQuotes); addAll(partial.ticks)
+                            }
+                            val preview = withContext(Dispatchers.Default) {
+                                val workingContext = currentCoroutineContext()
+                                RangeBarsEngine.buildVerified(symbol, safe, tickSize,
+                                    sizeInPriceTicks, source, includeIncomplete,
+                                    cancellationCheckpoint = { workingContext.ensureActive() })
+                            }
+                            if (preview.candles.isNotEmpty()) onProgress(preview)
+                        }
                         val older = RangeTickBatchLoader.load(from, partial.from - 1L,
+                            onNewestSlice = { newest -> publishResumedVerifiedHistory(newest) },
+                            onGrowingHistory = { growing -> publishResumedVerifiedHistory(growing) },
                             onSliceComplete = { quotes, slices ->
                                 onBatchProgress(partial.ticks.size + quotes, slices)
                             }, onVerifiedSlice = { start, end, quotes ->
@@ -203,22 +218,27 @@ class ChartViewModel(
                             addAll(older); addAll(partial.ticks)
                         }
                     }
-                } else RangeTickBatchLoader.load(from, to,
-                    onNewestSlice = { newest ->
+                } else {
+                    suspend fun publishGrowingVerifiedHistory(verifiedQuotes: List<RangePriceTick>) {
                         if (client.sourceKey(symbol) != source)
                             error("تغير حساب cTrader أثناء جلب المدى")
                         val preview = withContext(Dispatchers.Default) {
                             val workingContext = currentCoroutineContext()
-                            RangeBarsEngine.buildVerified(symbol, newest, tickSize,
+                            RangeBarsEngine.buildVerified(symbol, verifiedQuotes, tickSize,
                                 sizeInPriceTicks, source, includeIncomplete,
                                 cancellationCheckpoint = { workingContext.ensureActive() })
                         }
                         if (preview.candles.isNotEmpty()) onProgress(preview)
-                    }, onSliceComplete = onBatchProgress,
-                    onVerifiedSlice = { start, end, quotes ->
-                        incompleteRangeDownload.remember(symbol, source, start, end, quotes)
-                    }) { start, end ->
-                    verifiedHistoricalBidTicks(client, symbol, source, start, end)
+                    }
+                    RangeTickBatchLoader.load(from, to,
+                        onNewestSlice = { newest -> publishGrowingVerifiedHistory(newest) },
+                        onGrowingHistory = { growing -> publishGrowingVerifiedHistory(growing) },
+                        onSliceComplete = onBatchProgress,
+                        onVerifiedSlice = { start, end, quotes ->
+                            incompleteRangeDownload.remember(symbol, source, start, end, quotes)
+                        }) { start, end ->
+                        verifiedHistoricalBidTicks(client, symbol, source, start, end)
+                    }
                 }
             }
             else {
@@ -231,9 +251,9 @@ class ChartViewModel(
                         it.from == from && it.to == to
                 }?.ticks ?: RangeTickWindowReuse.between(cached.ticks, from, to)
                 val plannedSlice = RangeTickRollingWindow.initialSliceMillis(cached)
-                var previewSent = false
+                var previewQuoteCount = 0
                 suspend fun publishVerifiedPreview(verifiedQuotes: List<RangePriceTick>) {
-                    if (previewSent || verifiedQuotes.isEmpty()) return
+                    if (verifiedQuotes.isEmpty() || verifiedQuotes.size <= previewQuoteCount) return
                     val preview = withContext(Dispatchers.Default) {
                         val workingContext = currentCoroutineContext()
                         RangeBarsEngine.buildVerified(symbol, verifiedQuotes, tickSize,
@@ -241,7 +261,7 @@ class ChartViewModel(
                             cancellationCheckpoint = { workingContext.ensureActive() })
                     }
                     if (preview.candles.isNotEmpty()) {
-                        previewSent = true
+                        previewQuoteCount = verifiedQuotes.size
                         onProgress(preview)
                     }
                 }
