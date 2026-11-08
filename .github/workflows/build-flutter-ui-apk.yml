@@ -33,6 +33,9 @@ jobs:
         run: flutter create --platforms android --project-name tradelab_flutter . --no-pub
       - name: Preserve TradeLab launcher branding
         run: |
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            rm -f "android/app/src/main/res/mipmap-${density}/ic_launcher.png"
+          done
           cp -r ../app/src/main/res/mipmap-* android/app/src/main/res/
           cp ../app/src/main/res/drawable/ic_launcher_*.xml android/app/src/main/res/drawable/
           sed -i 's/android:label="tradelab_flutter"/android:label="TradeLab Flutter Preview"/' android/app/src/main/AndroidManifest.xml
