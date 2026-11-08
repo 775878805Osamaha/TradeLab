@@ -89,4 +89,44 @@ class RangeTickCacheRoomTest {
             } finally { upgraded.close() }
         } finally { context.deleteDatabase(dbName) }
     }
+
+    @Test fun latestReplaySnapshotReopensExactlyAndKeepsAllOriginalBidQuotes() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val dbName = "verified_bid_cache_coalescing_reopen_test.db"
+        context.deleteDatabase(dbName)
+        val source = "ctrader:demo:7:12"
+        val quotes = listOf(RangePriceTick(100L, 4071.37),
+            RangePriceTick(101L, 4072.37))
+        val oldBars = VerifiedRangeBars(listOf(Candle("XAUUSD", Timeframe.M1,
+            100L, 102L, 4071.37, 4081.37, 4070.0, 4072.37, 0.0, source)),
+            RangeTickDiagnostics(2), true)
+        val newBars = VerifiedRangeBars(listOf(Candle("XAUUSD", Timeframe.M1,
+            100L, 103L, 4071.37, 4081.37, 4070.0, 4072.37, 0.0, source)),
+            RangeTickDiagnostics(2), true)
+        try {
+            val first = Room.databaseBuilder(context, RangeTickCacheDatabase::class.java, dbName)
+                .build()
+            try {
+                RangeTickDiskStore(first.slices()).getOrDownload(source, "XAUUSD", 1L, 300L) {
+                    _, _ -> quotes
+                }
+                val snapshots = RangeBarDiskStore(first.bars())
+                snapshots.save("XAUUSD", source, 1L, 300L, 1000, 0.01, true, oldBars)
+                snapshots.save("XAUUSD", source, 1L, 301L, 1000, 0.01, true, newBars)
+            } finally { first.close() }
+            val reopened = Room.databaseBuilder(context, RangeTickCacheDatabase::class.java, dbName)
+                .build()
+            try {
+                val snapshots = RangeBarDiskStore(reopened.bars())
+                assertEquals(newBars, snapshots.exact("XAUUSD", source, 1L, 301L,
+                    1000, 0.01, true))
+                assertEquals(null, snapshots.exact("XAUUSD", source, 1L, 300L,
+                    1000, 0.01, true))
+                assertEquals(quotes, RangeTickDiskStore(reopened.slices()).getOrDownload(
+                    source, "XAUUSD", 1L, 300L) { _, _ ->
+                    error("Snapshot coalescing must never delete the original BID history")
+                })
+            } finally { reopened.close() }
+        } finally { context.deleteDatabase(dbName) }
+    }
 }

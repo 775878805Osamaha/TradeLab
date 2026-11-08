@@ -10,6 +10,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
@@ -109,6 +110,30 @@ interface RangeBarSnapshotDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(snapshot: RangeBarSnapshotEntity)
+
+    @Query("""DELETE FROM verified_ctrader_range_snapshots
+        WHERE source = :source AND symbol = :symbol AND rangeTicks = :size
+        AND tickSizeBits = :tickSizeBits AND includeIncomplete = :includeIncomplete
+        AND toMillis BETWEEN :bucketStart AND :bucketEnd
+        AND fromMillis BETWEEN :minimumFrom AND :maximumFrom
+        AND NOT (fromMillis = :keepFrom AND toMillis = :keepTo)""")
+    suspend fun discardNearbySnapshots(source: String, symbol: String, size: Int,
+        tickSizeBits: Long, includeIncomplete: Boolean, bucketStart: Long,
+        bucketEnd: Long, minimumFrom: Long, maximumFrom: Long,
+        keepFrom: Long, keepTo: Long)
+
+    /** Commit the latest seen Replay cutoff and remove only redundant nearby
+     * *bar snapshots*. Raw, lossless cTrader BID slices are never touched.
+     * A transaction ensures a failed write cannot erase the old warm preview. */
+    @Transaction
+    suspend fun saveCoalesced(snapshot: RangeBarSnapshotEntity,
+                              bucketStart: Long, bucketEnd: Long,
+                              minimumFrom: Long, maximumFrom: Long) {
+        save(snapshot)
+        discardNearbySnapshots(snapshot.source, snapshot.symbol, snapshot.rangeTicks,
+            snapshot.tickSizeBits, snapshot.includeIncomplete, bucketStart, bucketEnd,
+            minimumFrom, maximumFrom, snapshot.fromMillis, snapshot.toMillis)
+    }
 
     @Query("""DELETE FROM verified_ctrader_range_snapshots WHERE source = :source
         AND symbol = :symbol AND fromMillis = :from AND toMillis = :to

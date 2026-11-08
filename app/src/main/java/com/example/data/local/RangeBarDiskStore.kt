@@ -64,20 +64,20 @@ class RangeBarDiskStore(private val dao: RangeBarSnapshotDao) {
         // historic market data. Retry that window on the next chart open.
         if (bars.diagnostics.quoteCount == 0) return
         try {
-            // Replay can reveal a new cutoff on every step. Materializing
-            // every 100-ms/one-minute change would fill the phone with near-
-            // identical screenshots of the same data. Retain one completed
-            // snapshot per five-minute moving window, while keeping ALL
-            // verified broker Tick pages separately and losslessly.
-            val recentlySaved = dao.latest(source, symbol, size, tickSize.toBits(),
-                includeIncomplete, (to - RangeBarWarmRestorePolicy.SNAPSHOT_COALESCE_MILLIS)
-                    .coerceAtLeast(1L), to)
-            if (recentlySaved.any { it.toMillis != to &&
-                kotlin.math.abs(it.fromMillis - from) <=
-                    RangeBarWarmRestorePolicy.SNAPSHOT_COALESCE_MILLIS }) return
-            dao.save(RangeBarSnapshotEntity(source, symbol, from, to, size, tickSize.toBits(),
-                includeIncomplete, RangeBarSnapshotCodec.encode(symbol, source, bars),
-                System.currentTimeMillis()))
+            // Keep the *last* fully verified cutoff in each five-minute time
+            // bucket. Skipping near-duplicates instead left only an older
+            // snapshot on disk: reopening the exact last-seen chart then
+            // had to rescan hundreds of thousands of quotes. Replacing the
+            // nearby materialization preserves fast exact restoration while
+            // bounding Replay snapshot growth. Broker BID pages are NEVER
+            // deleted by this operation.
+            val interval = RangeBarWarmRestorePolicy.SNAPSHOT_COALESCE_MILLIS
+            val bucketStart = to / interval * interval
+            val bucketEnd = bucketStart + interval - 1L
+            dao.saveCoalesced(RangeBarSnapshotEntity(source, symbol, from, to,
+                size, tickSize.toBits(), includeIncomplete,
+                RangeBarSnapshotCodec.encode(symbol, source, bars), System.currentTimeMillis()),
+                bucketStart, bucketEnd, (from - interval).coerceAtLeast(1L), from + interval)
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { /* Failure to save does not discard verified in-memory bars. */ }
     }

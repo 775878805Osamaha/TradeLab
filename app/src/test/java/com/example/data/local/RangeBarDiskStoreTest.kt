@@ -44,6 +44,18 @@ class RangeBarDiskStoreTest {
             rows += snapshot
         }
 
+        override suspend fun discardNearbySnapshots(source: String, symbol: String,
+                       size: Int, tickSizeBits: Long, includeIncomplete: Boolean,
+                       bucketStart: Long, bucketEnd: Long, minimumFrom: Long,
+                       maximumFrom: Long, keepFrom: Long, keepTo: Long) {
+            rows.removeAll { it.source == source && it.symbol == symbol &&
+                it.rangeTicks == size && it.tickSizeBits == tickSizeBits &&
+                it.includeIncomplete == includeIncomplete &&
+                it.toMillis in bucketStart..bucketEnd &&
+                it.fromMillis in minimumFrom..maximumFrom &&
+                (it.fromMillis != keepFrom || it.toMillis != keepTo) }
+        }
+
         override suspend fun discard(source: String, symbol: String, from: Long, to: Long,
                                      size: Int, tickSizeBits: Long, includeIncomplete: Boolean) {
             rows.removeAll { it.source == source && it.symbol == symbol &&
@@ -125,8 +137,35 @@ class RangeBarDiskStoreTest {
         store.save(gold, source, start + 1_000, finish + 1_000, 1000, 0.01, true,
             result(start + 1_100, start + 1_200))
         assertEquals(1, dao.rows.size)
+        // Last-seen cutoff, not the older first snapshot, must survive an
+        // app restart for instant exact restoration without re-scanning ticks.
+        val reopened = RangeBarDiskStore(dao)
+        assertNull(reopened.exact(gold, source, start, finish, 1000, 0.01, true))
+        assertEquals(result(start + 1_100, start + 1_200), reopened.exact(gold,
+            source, start + 1_000, finish + 1_000, 1000, 0.01, true))
         store.save(gold, source, start + 360_000, finish + 360_000, 1000, 0.01, true,
             result(start + 360_100, start + 360_200))
         assertEquals(2, dao.rows.size)
+        assertNotNull(reopened.exact(gold, source, start + 1_000, finish + 1_000,
+            1000, 0.01, true))
+    }
+
+    @Test fun replacingLatestPreviewCannotDeleteOtherAccountsOrRangeSizes() = runBlocking {
+        val dao = FakeDao()
+        val store = RangeBarDiskStore(dao)
+        val from = 3_600_000L
+        val to = 7_200_000L
+        store.save(gold, source, from, to, 1000, 0.01, true,
+            result(from + 100, from + 200))
+        store.save(gold, source, from, to, 100, 0.01, true,
+            result(from + 100, from + 200))
+        store.save(gold, "ctrader:demo:another", from, to, 1000, 0.01, true,
+            VerifiedRangeBars(emptyList(), RangeTickDiagnostics(1), false))
+        store.save(gold, source, from + 1_000L, to + 1_000L, 1000, 0.01, true,
+            result(from + 1_100, from + 1_200))
+        assertEquals(3, dao.rows.size)
+        assertNotNull(store.exact(gold, source, from, to, 100, 0.01, true))
+        assertNotNull(store.exact(gold, "ctrader:demo:another", from, to, 1000, 0.01, true))
+        assertNull(store.exact(gold, source, from, to, 1000, 0.01, true))
     }
 }
