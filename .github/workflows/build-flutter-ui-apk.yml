@@ -44,7 +44,7 @@ jobs:
       - name: Static analysis
         run: flutter analyze --no-fatal-infos
       - name: Interaction tests
-        run: flutter test test/widget_test.dart test/range_bar_builder_test.dart
+        run: flutter test test/widget_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart
       - name: Capture chart design snapshot
         run: flutter test --update-goldens test/golden_test.dart
       - name: Build debug APK

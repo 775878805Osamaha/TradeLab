@@ -11,7 +11,9 @@ delete the native app, its local Room database or its cTrader login credentials.
 - RTL Arabic shell with four bottom tabs: Markets, Chart, Results, Account.
 - Chart defaults to **Analysis**. Replay is an in-chart overlay, never a new
   screen. Symbol, timeframe, Japanese candles, Heikin-Ashi, and Range UI
-  selectors, indicator preview, line drawing/undo and pinch/pan gestures.
+  selectors, indicator preview, line drawing/undo, a long-press crosshair,
+  focal-point-preserving pinch, historical drag and optional right-hand whitespace
+  that allows the latest candle to move to the chart center.
 - Markets: search, categories and local favorites. No fabricated live quotes.
 - Results: full V3 tabs, date filters and all nine metric labels with blank
   values until actual Room trading results are connected.

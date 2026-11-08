@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../chart/chart_viewport.dart';
 import '../data/range_bar_builder.dart';
 import '../data/tradelab_data.dart';
 import '../theme/tradelab_theme.dart';
@@ -28,9 +29,10 @@ class _ChartScreenState extends State<ChartScreen> {
   bool _drawing = false;
   bool _showIndicators = false;
   int _visibleThrough = 60;
-  double _barWidth = 10;
-  double _olderBars = 0;
-  double _startBarWidth = 10;
+  ChartViewport _viewport = const ChartViewport();
+  ChartViewport _gestureStart = const ChartViewport();
+  double _gestureFocalX = 0;
+  Offset? _crosshair;
   Timer? _replayTimer;
   bool _playing = false;
   final List<double> _levels = [];
@@ -51,7 +53,8 @@ class _ChartScreenState extends State<ChartScreen> {
         _stopPlayback();
         _replay = !_replay;
         _visibleThrough = _fixture.length ~/ 2;
-        _olderBars = 0;
+        _viewport = const ChartViewport();
+        _crosshair = null;
       });
 
   void _togglePlay() {
@@ -125,7 +128,7 @@ class _ChartScreenState extends State<ChartScreen> {
                     setState(() {
                       _stopPlayback();
                       _symbol = item.code;
-                      _olderBars = 0;
+                      _viewport = const ChartViewport();
                     });
                     Navigator.pop(sheetContext);
                   },
@@ -151,7 +154,7 @@ class _ChartScreenState extends State<ChartScreen> {
                     label: Text(frame, textDirection: TextDirection.ltr),
                     selected: _timeframe == frame,
                     onSelected: (_) {
-                      setState(() { _timeframe = frame; _olderBars = 0; });
+                      setState(() { _timeframe = frame; _viewport = const ChartViewport(); });
                       Navigator.pop(sheetContext);
                     },
                   )).toList()),
@@ -183,7 +186,7 @@ class _ChartScreenState extends State<ChartScreen> {
                     ? const Icon(Icons.check_circle, color: TradeColors.blue)
                     : null,
                 onTap: () {
-                  setState(() { _mode = item.$1; _olderBars = 0; });
+                  setState(() { _mode = item.$1; _viewport = const ChartViewport(); });
                   Navigator.pop(sheetContext);
                   if (item.$1 == ChartMode.range) _showRangeSettings();
                 },
@@ -235,6 +238,18 @@ class _ChartScreenState extends State<ChartScreen> {
         icon: Icon(icon, size: 22,
             color: active ? TradeColors.blue : Theme.of(context).colorScheme.onSurface),
       );
+
+  void _zoomBy(double factor) {
+    final width = math.max(80.0, MediaQuery.sizeOf(context).width - 61);
+    final count = _displayCandles.length;
+    setState(() => _viewport = _viewport.pinch(
+          scale: factor,
+          initialFocalX: width / 2,
+          currentFocalX: width / 2,
+          plotWidth: width,
+          candleCount: count,
+        ));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -292,6 +307,12 @@ class _ChartScreenState extends State<ChartScreen> {
             onPressed: () => setState(() => _showIndicators = !_showIndicators)),
           _iconAction(icon: Icons.edit_outlined, label: 'أدوات الرسم', active: _drawing,
             onPressed: () => setState(() => _drawing = !_drawing)),
+          _iconAction(icon: Icons.zoom_in_outlined, label: 'تكبير الشارت',
+            onPressed: () => _zoomBy(1.25)),
+          _iconAction(icon: Icons.zoom_out_outlined, label: 'تصغير الشارت',
+            onPressed: () => _zoomBy(.8)),
+          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
+            onPressed: () => setState(() => _viewport = _viewport.jumpToLatest())),
           const SizedBox(width: 8),
           if (_mode == ChartMode.range)
             TextButton(onPressed: _showRangeSettings, child: Text('مدى $_rangeTicks')),
@@ -308,22 +329,37 @@ class _ChartScreenState extends State<ChartScreen> {
         ),
       Expanded(
         child: LayoutBuilder(builder: (context, constraints) {
-          final visibleOnScreen = (constraints.maxWidth / _barWidth).floor();
-          final maxPan = math.max(0, candles.length - visibleOnScreen + 5).toDouble();
+          final plotWidth = math.max(1.0, constraints.maxWidth - 61);
           return GestureDetector(
             key: const Key('chart-gesture-area'),
             behavior: HitTestBehavior.opaque,
-            onScaleStart: (_) => _startBarWidth = _barWidth,
+            onScaleStart: (details) {
+              _gestureStart = _viewport;
+              _gestureFocalX = details.localFocalPoint.dx;
+            },
             onScaleUpdate: (details) => setState(() {
               if (details.pointerCount > 1) {
-                _barWidth = (_startBarWidth * details.scale).clamp(5.0, 30.0);
+                _viewport = _gestureStart.pinch(
+                  scale: details.scale,
+                  initialFocalX: _gestureFocalX,
+                  currentFocalX: details.localFocalPoint.dx,
+                  plotWidth: plotWidth,
+                  candleCount: candles.length,
+                );
+              } else {
+                _viewport = _viewport.pan(
+                  deltaX: details.focalPointDelta.dx,
+                  plotWidth: plotWidth,
+                  candleCount: candles.length,
+                );
               }
-              _olderBars = (_olderBars + details.focalPointDelta.dx / _barWidth)
-                  .clamp(0.0, maxPan);
             }),
-            onDoubleTap: () => setState(() { _barWidth = 10; _olderBars = 0; }),
+            onDoubleTap: () => setState(() { _viewport = const ChartViewport(); _crosshair = null; }),
+            onLongPressStart: (details) => setState(() => _crosshair = details.localPosition),
+            onLongPressMoveUpdate: (details) => setState(() => _crosshair = details.localPosition),
+            onLongPressEnd: (_) => setState(() => _crosshair = null),
             onTapUp: (details) {
-              if (!_drawing) return;
+              if (!_drawing || details.localPosition.dx > plotWidth) return;
               setState(() => _levels.add(details.localPosition.dy / constraints.maxHeight));
             },
             child: RepaintBoundary(
@@ -332,8 +368,8 @@ class _ChartScreenState extends State<ChartScreen> {
                 painter: _CandleChartPainter(
                   candles: candles,
                   dark: Theme.of(context).brightness == Brightness.dark,
-                  barWidth: _barWidth,
-                  olderBars: _olderBars,
+                  viewport: _viewport,
+                  crosshair: _crosshair,
                   levels: List<double>.unmodifiable(_levels),
                   indicator: _showIndicators,
                 ),
@@ -402,16 +438,16 @@ class _CandleChartPainter extends CustomPainter {
   _CandleChartPainter({
     required this.candles,
     required this.dark,
-    required this.barWidth,
-    required this.olderBars,
+    required this.viewport,
+    required this.crosshair,
     required this.levels,
     required this.indicator,
   });
 
   final List<TradeCandle> candles;
   final bool dark;
-  final double barWidth;
-  final double olderBars;
+  final ChartViewport viewport;
+  final Offset? crosshair;
   final List<double> levels;
   final bool indicator;
 
@@ -424,9 +460,11 @@ class _CandleChartPainter extends CustomPainter {
     final axis = size.width - 61;
     if (axis < 30 || size.height < 60 || candles.isEmpty) return;
     final chartHeight = size.height - 24;
-    final maxVisible = (axis / barWidth).ceil() + 3;
-    final ending = (candles.length - olderBars.floor()).clamp(1, candles.length);
-    final start = math.max(0, ending - maxVisible);
+    final (start, ending) = viewport.visibleIndices(
+      plotWidth: axis,
+      candleCount: candles.length,
+    );
+    if (start >= ending) return;
     final selected = candles.sublist(start, ending);
     final maximum = selected.map((c) => c.high).reduce(math.max) + .8;
     final minimum = selected.map((c) => c.low).reduce(math.min) - .8;
@@ -448,16 +486,17 @@ class _CandleChartPainter extends CustomPainter {
     canvas.clipRect(Rect.fromLTWH(0, 0, axis, chartHeight));
     for (var i = start; i < ending; i++) {
       final candle = candles[i];
-      final centerX = axis - (ending - i - .5) * barWidth;
-      if (centerX < -barWidth || centerX > axis + barWidth) continue;
+      final centerX = viewport.chartX(
+        index: i, candleCount: candles.length, plotWidth: axis);
+      if (centerX < -viewport.barWidth || centerX > axis + viewport.barWidth) continue;
       final color = candle.positive ? TradeColors.positive : TradeColors.negative;
       final center = Paint()..color = color..strokeWidth = 1.3;
       canvas.drawLine(Offset(centerX, y(candle.high)), Offset(centerX, y(candle.low)), center);
       final openY = y(candle.open);
       final closeY = y(candle.close);
       canvas.drawRect(Rect.fromLTRB(
-        centerX - barWidth * .31, math.min(openY, closeY),
-        centerX + barWidth * .31, math.max(openY + 1, closeY + 1),
+        centerX - viewport.barWidth * .31, math.min(openY, closeY),
+        centerX + viewport.barWidth * .31, math.max(openY + 1, closeY + 1),
       ), Paint()..color = color);
     }
     if (indicator) {
@@ -466,7 +505,8 @@ class _CandleChartPainter extends CustomPainter {
         final from = math.max(0, i - 11);
         final section = candles.sublist(from, i + 1);
         final average = section.fold<double>(0, (sum, bar) => sum + bar.close) / section.length;
-        final x = axis - (ending - i - .5) * barWidth;
+        final x = viewport.chartX(
+          index: i, candleCount: candles.length, plotWidth: axis);
         if (i == start) { linePath.moveTo(x, y(average)); } else { linePath.lineTo(x, y(average)); }
       }
       canvas.drawPath(linePath, Paint()..color = TradeColors.blue..strokeWidth = 1.6
@@ -478,6 +518,25 @@ class _CandleChartPainter extends CustomPainter {
       canvas.drawLine(Offset(0, levelY), Offset(axis, levelY), marker);
     }
     canvas.restore();
+    if (crosshair != null) {
+      final location = Offset(
+        crosshair!.dx.clamp(0, axis).toDouble(),
+        crosshair!.dy.clamp(0, chartHeight).toDouble(),
+      );
+      final crossPaint = Paint()
+        ..color = dark ? const Color(0xFF9CA9B9) : const Color(0xFF8692A3)
+        ..strokeWidth = 1;
+      canvas.drawLine(Offset(location.dx, 0),
+          Offset(location.dx, chartHeight), crossPaint);
+      canvas.drawLine(Offset(0, location.dy),
+          Offset(axis, location.dy), crossPaint);
+      final crossPrice = maximum - location.dy / chartHeight * span;
+      final markerY = (location.dy - 9).clamp(0, chartHeight - 18).toDouble();
+      canvas.drawRect(Rect.fromLTWH(axis, markerY, 61, 18),
+          Paint()..color = TradeColors.blue);
+      _text(canvas, crossPrice.toStringAsFixed(2),
+          Offset(axis + 3, markerY + 2), Colors.white, 10);
+    }
     // A separate LTR price axis keeps digits and decimal points predictable in RTL.
     _text(canvas, 'معاينة', Offset(axis / 2 - 18, chartHeight + 3), text, 10);
   }
@@ -494,7 +553,7 @@ class _CandleChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CandleChartPainter old) =>
-      old.candles != candles || old.dark != dark || old.barWidth != barWidth ||
-      old.olderBars != olderBars || old.indicator != indicator ||
+      old.candles != candles || old.dark != dark || old.viewport != viewport ||
+      old.crosshair != crosshair || old.indicator != indicator ||
       old.levels != levels;
 }

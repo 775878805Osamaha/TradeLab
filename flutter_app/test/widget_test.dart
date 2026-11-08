@@ -29,6 +29,27 @@ void main() {
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);
   });
 
+  testWidgets('chart accepts one-finger drag and returns to latest', (tester) async {
+    await openAtPhoneSize(tester);
+    final chart = find.byKey(const Key('chart-gesture-area'));
+    await tester.drag(chart, const Offset(-130, 0));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.byTooltip('العودة إلى أحدث شمعة'));
+    await tester.tap(find.byTooltip('العودة إلى أحدث شمعة'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact chart remains readable on narrow screens', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const TradeLabApp());
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+  });
+
   testWidgets('Range candles selector has explicit settings', (tester) async {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('نوع الشموع'));
