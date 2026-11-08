@@ -21,8 +21,11 @@ import kotlinx.coroutines.ensureActive
  */
 class RangeTickDiskStore(
     private val dao: RangeTickSliceDao,
-    private val nowMillis: () -> Long = { System.currentTimeMillis() }
+    private val nowMillis: () -> Long = { System.currentTimeMillis() },
+    maxDecodedQuotes: Int = 200_000
 ) {
+    private val decodedPages = RangeTickDecodedPageCache(maxDecodedQuotes)
+
     /** Invalidate materialized Range bars if their source window included a
      * temporary zero-quote response which is now due for re-verification. */
     suspend fun hasExpiredEmptyPages(source: String, symbol: String,
@@ -38,6 +41,7 @@ class RangeTickDiskStore(
     }
 
     private suspend fun safelyDiscard(source: String, symbol: String, from: Long, to: Long) {
+        decodedPages.remove(RangeTickDecodedPageCache.Key(source, symbol, from, to))
         try { dao.discard(source, symbol, from, to) }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { /* Disk failure must not hide genuine BID quotes. */ }
@@ -45,10 +49,14 @@ class RangeTickDiskStore(
 
     private suspend fun cachedPage(source: String, symbol: String,
                                    span: RangeTickCacheCoverage.Span): List<RangePriceTick>? {
+        val key = RangeTickDecodedPageCache.Key(source, symbol, span.from, span.to)
+        decodedPages.get(key)?.let { return it }
         return try {
             val row = dao.find(source, symbol, span.from, span.to) ?: return null
-            RangeTickCacheCodec.decode(row.compressedBidQuotes, row.quoteCount,
+            val decoded = RangeTickCacheCodec.decode(row.compressedBidQuotes, row.quoteCount,
                 row.fromMillis, row.toMillis)
+            decodedPages.put(key, decoded)
+            decoded
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) {
             safelyDiscard(source, symbol, span.from, span.to)
@@ -89,6 +97,8 @@ class RangeTickDiskStore(
                 dao.save(RangeTickSliceEntity(source, symbol, piece.from, piece.to,
                     verified.size, RangeTickCacheCodec.encode(verified, piece.from, piece.to),
                     nowMillis()))
+                decodedPages.put(RangeTickDecodedPageCache.Key(source, symbol, piece.from, piece.to),
+                    verified)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { /* Continue displaying verified broker data. */ }
         }

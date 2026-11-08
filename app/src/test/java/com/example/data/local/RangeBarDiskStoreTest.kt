@@ -28,6 +28,14 @@ class RangeBarDiskStoreTest {
                 it.tickSizeBits == tickSizeBits && it.includeIncomplete == includeIncomplete &&
                 it.toMillis in minimumTo..requestedTo }.sortedByDescending { it.toMillis }.take(4)
 
+        override suspend fun overlappingPreviews(source: String, symbol: String, size: Int,
+                    tickSizeBits: Long, includeIncomplete: Boolean, minimumTo: Long,
+                    requestedTo: Long, requestedFrom: Long): List<RangeBarSnapshotEntity> =
+            rows.filter { it.source == source && it.symbol == symbol && it.rangeTicks == size &&
+                it.tickSizeBits == tickSizeBits && it.includeIncomplete == includeIncomplete &&
+                it.toMillis in minimumTo..requestedTo && it.toMillis > requestedFrom &&
+                it.fromMillis < requestedTo }.sortedByDescending { it.toMillis }.take(12)
+
         override suspend fun save(snapshot: RangeBarSnapshotEntity) {
             rows.removeAll { it.source == snapshot.source && it.symbol == snapshot.symbol &&
                 it.fromMillis == snapshot.fromMillis && it.toMillis == snapshot.toMillis &&
@@ -71,6 +79,21 @@ class RangeBarDiskStoreTest {
             oldFrom + 60_000L, oldTo + 60_000L, 1000, 0.01, true))
         assertNull(store.newestCompatible(gold, source,
             oldFrom - 60_000L, oldTo - 60_000L, 1000, 0.01, true))
+    }
+
+    @Test fun reopeningChartAnHourLaterUsesOnlyOverlappingHistoricalBarsAsTemporaryPreview() = runBlocking {
+        val dao = FakeDao()
+        val store = RangeBarDiskStore(dao)
+        val from = 1_000_000L
+        val to = from + 6L * 3_600_000L
+        val earlier = result(from + 100L, from + 200L)
+        store.save(gold, source, from, to, 1000, 0.01, true, earlier)
+        assertEquals(earlier, store.newestCompatible(gold, source,
+            from + 3_600_000L, to + 3_600_000L, 1000, 0.01, true)?.result)
+        assertNull(store.newestCompatible(gold, source,
+            from + 5L * 3_600_000L, to + 5L * 3_600_000L, 1000, 0.01, true))
+        assertNull(store.newestCompatible(gold, source,
+            from - 1L, to - 1L, 1000, 0.01, true))
     }
 
     @Test fun futureBarsNeverGetCommittedEvenIfCallerLabelsThemComplete() = runBlocking {

@@ -1,6 +1,7 @@
 package com.example.data.local
 
 import com.example.core.market.RangePriceTick
+import com.example.core.market.RangeTickCacheCodec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
@@ -9,6 +10,7 @@ import org.junit.Test
 class RangeTickDiskStoreTest {
     private class MemoryDao : RangeTickSliceDao {
         private val rows = linkedMapOf<List<Any>, RangeTickSliceEntity>()
+        var diskReads = 0
         private fun key(source: String, symbol: String, from: Long, to: Long) =
             listOf(source, symbol, from, to)
 
@@ -18,8 +20,10 @@ class RangeTickDiskStoreTest {
                 .map { RangeTickDiskSpan(it.fromMillis, it.toMillis,
                     it.quoteCount, it.savedAtMillis) }
 
-        override suspend fun find(source: String, symbol: String, from: Long, to: Long) =
-            rows[key(source, symbol, from, to)]
+        override suspend fun find(source: String, symbol: String, from: Long, to: Long): RangeTickSliceEntity? {
+            diskReads++
+            return rows[key(source, symbol, from, to)]
+        }
 
         override suspend fun save(slice: RangeTickSliceEntity) {
             rows[key(slice.source, slice.symbol, slice.fromMillis, slice.toMillis)] = slice
@@ -45,6 +49,25 @@ class RangeTickDiskStoreTest {
         assertEquals(quotes, first)
         assertEquals(quotes, second)
         assertEquals(1, downloads)
+    }
+
+    @Test fun repeatedDiskCachedRangePansDecodeEachQuotePageOnlyOncePerAppProcess() = runBlocking {
+        val dao = MemoryDao()
+        val quotes = listOf(RangePriceTick(10L, 4071.37), RangePriceTick(20L, 4072.37))
+        dao.save(RangeTickSliceEntity("ctrader:account:1", "XAUUSD", 1L, 30L,
+            quotes.size, RangeTickCacheCodec.encode(quotes, 1L, 30L), System.currentTimeMillis()))
+        val store = RangeTickDiskStore(dao)
+        assertEquals(quotes, store.getOrDownload("ctrader:account:1", "XAUUSD", 1L, 30L) { _, _ ->
+            fail("Verified disk data must not be redownloaded")
+            emptyList()
+        })
+        assertEquals(1, dao.diskReads)
+        assertEquals(listOf(quotes.last()), store.getOrDownload(
+            "ctrader:account:1", "XAUUSD", 15L, 30L) { _, _ ->
+            fail("Moving over the same disk page must not redownload")
+            emptyList()
+        })
+        assertEquals(1, dao.diskReads)
     }
 
     @Test fun deepHistoricalBackfillOnlyFetchesUncoveredHoursAndKeepsOrder() = runBlocking {

@@ -97,6 +97,16 @@ interface RangeBarSnapshotDao {
                        includeIncomplete: Boolean, minimumTo: Long,
                        requestedTo: Long): List<RangeBarSnapshotEntity>
 
+    @Query("""SELECT * FROM verified_ctrader_range_snapshots
+        WHERE source = :source AND symbol = :symbol AND rangeTicks = :size
+        AND tickSizeBits = :tickSizeBits AND includeIncomplete = :includeIncomplete
+        AND toMillis BETWEEN :minimumTo AND :requestedTo
+        AND toMillis > :requestedFrom AND fromMillis < :requestedTo
+        ORDER BY toMillis DESC LIMIT 12""")
+    suspend fun overlappingPreviews(source: String, symbol: String, size: Int,
+        tickSizeBits: Long, includeIncomplete: Boolean, minimumTo: Long,
+        requestedTo: Long, requestedFrom: Long): List<RangeBarSnapshotEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(snapshot: RangeBarSnapshotEntity)
 

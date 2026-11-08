@@ -39,5 +39,11 @@ class RangeBarSnapshotCodecTest {
             3_600_000L, 7_300_000L, 3_660_000L, 7_260_000L))
         assertFalse(RangeBarWarmRestorePolicy.canPreview(
             1_000L, 2_000L, 4_000_000L, 7_260_000L))
+        assertTrue(RangeBarWarmRestorePolicy.canPreview(
+            3_600_000L, 25_200_000L, 7_200_000L, 28_800_000L))
+        assertFalse(RangeBarWarmRestorePolicy.canPreview(
+            3_600_000L, 25_200_000L, 21_600_000L, 43_200_000L))
+        assertFalse(RangeBarWarmRestorePolicy.canPreview(
+            3_600_000L, 25_200_000L, 7_200_000L, 25_199_999L))
     }
 }

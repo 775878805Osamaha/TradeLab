@@ -84,11 +84,20 @@ object RangeBarSnapshotCodec {
 
 /** Old completed windows may be displayed ONLY while a matching newer cutoff loads. */
 object RangeBarWarmRestorePolicy {
-    const val MAX_STALE_MILLIS = 5L * 60_000L
+    /** Temporary display while fresher broker history loads, not an entry for trading. */
+    const val MAX_PREVIEW_STALE_MILLIS = 24L * 3_600_000L
+    /** Avoid writing a new nearly-identical disk image on every Replay step. */
+    const val SNAPSHOT_COALESCE_MILLIS = 5L * 60_000L
 
-    fun canPreview(savedFrom: Long, savedTo: Long, requestedFrom: Long, requestedTo: Long): Boolean =
-        requestedFrom > 0L && requestedTo >= requestedFrom && savedFrom > 0L &&
-        savedTo >= savedFrom && savedTo <= requestedTo &&
-        requestedTo - savedTo <= MAX_STALE_MILLIS &&
-        kotlin.math.abs(requestedFrom - savedFrom) <= MAX_STALE_MILLIS
+    fun canPreview(savedFrom: Long, savedTo: Long, requestedFrom: Long, requestedTo: Long): Boolean {
+        if (requestedFrom <= 0L || requestedTo <= requestedFrom ||
+            savedFrom <= 0L || savedTo <= savedFrom || savedTo > requestedTo ||
+            requestedTo - savedTo > MAX_PREVIEW_STALE_MILLIS) return false
+        // Never paint a disconnected or mostly-out-of-viewport window after
+        // an overnight restart. A matching old window is safe only when at
+        // least half of its smaller span overlaps the requested span.
+        val overlap = minOf(savedTo, requestedTo) - maxOf(savedFrom, requestedFrom)
+        return overlap > 0L && overlap >= minOf(savedTo - savedFrom,
+            requestedTo - requestedFrom) / 2L
+    }
 }

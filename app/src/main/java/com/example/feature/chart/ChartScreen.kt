@@ -1477,12 +1477,13 @@ fun ChartScreen(
             val confirmedRangeBars = remember(visibleRangeBars, rangeHasFormingBar) {
                 if (rangeHasFormingBar) visibleRangeBars?.dropLast(1) else visibleRangeBars
             }
+            val rangeWarmVisible = rangeWarmRestored && rangeSnapshot?.candles === visibleRangeBars
             val rangePrepared by produceState<Pair<List<Candle>, PreparedChartIndicators>?>(
                 null, confirmedRangeBars, rangeSnapshot?.complete,
-                uiState.indicatorSettings, chartDisplayStyle
+                uiState.indicatorSettings, chartDisplayStyle, rangeWarmVisible
             ) {
                 value = if (chartDisplayStyle == ChartDisplayStyle.RANGE && confirmedRangeBars != null &&
-                    rangeSnapshot?.complete == true)
+                    rangeSnapshot?.complete == true && !rangeWarmVisible)
                     confirmedRangeBars to kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                         ChartIndicatorPreparation.calculate(confirmedRangeBars, uiState.indicatorSettings)
                     }
@@ -1491,7 +1492,7 @@ fun ChartScreen(
             val phantomBarsVisible = (rangeVisualBars?.size ?: 0) > (visibleRangeBars?.size ?: 0)
             val rangePreviewVisible = rangeSnapshot?.complete == false &&
                 rangeSnapshot?.candles === visibleRangeBars
-            val activeRangeIndicators = if (phantomBarsVisible || rangePreviewVisible) null
+            val activeRangeIndicators = if (phantomBarsVisible || rangePreviewVisible || rangeWarmVisible) null
                 else rangePrepared?.takeIf { it.first === confirmedRangeBars }?.second
             val rangeIsActive = chartDisplayStyle == ChartDisplayStyle.RANGE
             val chartBars = if (rangeIsActive) rangeVisualBars.orEmpty()
@@ -1542,7 +1543,8 @@ fun ChartScreen(
                     magnetEnabled = magnetEnabled,
                     drawings = displayedDrawings,
                     selectedDrawingId = selectedDrawingId,
-                    indicatorSettings = if (rangeIsActive && (phantomBarsVisible || rangePreviewVisible))
+                    indicatorSettings = if (rangeIsActive &&
+                        (phantomBarsVisible || rangePreviewVisible || rangeWarmVisible))
                         IndicatorSettings(isEmaEnabled = false) else uiState.indicatorSettings,
                     smaValues = if (rangeIsActive) activeRangeIndicators?.sma.orEmpty() else if (isEmbeddedReplay) replaySma else uiState.smaValues,
                     emaValues = if (rangeIsActive) activeRangeIndicators?.ema.orEmpty() else if (isEmbeddedReplay) replayEma else uiState.emaValues,
@@ -1621,6 +1623,8 @@ fun ChartScreen(
                         }
                         if (rangeLoading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                         if (rangeWarmRestored && rangeLoading) Text("محفوظ محليًا · تحديث",
+                            fontSize = 9.sp, color = TradingTextSecondary)
+                        if (rangeWarmRestored && !rangeLoading) Text("محفوظ محليًا · تعذر التحديث",
                             fontSize = 9.sp, color = TradingTextSecondary)
                         if (rangePreviewVisible) Text("جارٍ تثبيت الشموع", fontSize = 9.sp,
                             color = TradingTextSecondary)

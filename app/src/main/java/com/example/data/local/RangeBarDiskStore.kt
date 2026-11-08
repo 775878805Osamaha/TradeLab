@@ -40,8 +40,9 @@ class RangeBarDiskStore(private val dao: RangeBarSnapshotDao) {
     suspend fun newestCompatible(symbol: String, source: String, from: Long, to: Long,
                                  size: Int, tickSize: Double, includeIncomplete: Boolean): Saved? {
         return try {
-            val rows = dao.latest(source, symbol, size, tickSize.toBits(), includeIncomplete,
-                (to - RangeBarWarmRestorePolicy.MAX_STALE_MILLIS).coerceAtLeast(1L), to)
+            val rows = dao.overlappingPreviews(source, symbol, size, tickSize.toBits(),
+                includeIncomplete, (to - RangeBarWarmRestorePolicy.MAX_PREVIEW_STALE_MILLIS)
+                    .coerceAtLeast(1L), to, from)
             for (row in rows) {
                 if (!RangeBarWarmRestorePolicy.canPreview(row.fromMillis, row.toMillis, from, to))
                     continue
@@ -69,11 +70,11 @@ class RangeBarDiskStore(private val dao: RangeBarSnapshotDao) {
             // snapshot per five-minute moving window, while keeping ALL
             // verified broker Tick pages separately and losslessly.
             val recentlySaved = dao.latest(source, symbol, size, tickSize.toBits(),
-                includeIncomplete, (to - RangeBarWarmRestorePolicy.MAX_STALE_MILLIS)
+                includeIncomplete, (to - RangeBarWarmRestorePolicy.SNAPSHOT_COALESCE_MILLIS)
                     .coerceAtLeast(1L), to)
             if (recentlySaved.any { it.toMillis != to &&
                 kotlin.math.abs(it.fromMillis - from) <=
-                    RangeBarWarmRestorePolicy.MAX_STALE_MILLIS }) return
+                    RangeBarWarmRestorePolicy.SNAPSHOT_COALESCE_MILLIS }) return
             dao.save(RangeBarSnapshotEntity(source, symbol, from, to, size, tickSize.toBits(),
                 includeIncomplete, RangeBarSnapshotCodec.encode(symbol, source, bars),
                 System.currentTimeMillis()))
