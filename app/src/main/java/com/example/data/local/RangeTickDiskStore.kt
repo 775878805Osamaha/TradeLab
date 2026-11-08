@@ -8,6 +8,9 @@ import com.example.core.market.RangeTickWindowReuse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Persistent cTrader BID quote pages, keyed by the selected broker account's
@@ -25,6 +28,9 @@ class RangeTickDiskStore(
     maxDecodedQuotes: Int = 200_000
 ) {
     private val decodedPages = RangeTickDecodedPageCache(maxDecodedQuotes)
+    // Two overlapping deep pans must not both fetch the same missing BID
+    // page. Different brokers/symbols can still load independently.
+    private val downloadLocks = ConcurrentHashMap<Pair<String, String>, Mutex>()
 
     /** Invalidate materialized Range bars if their source window included a
      * temporary zero-quote response which is now due for re-verification. */
@@ -67,6 +73,14 @@ class RangeTickDiskStore(
     suspend fun getOrDownload(source: String, symbol: String, from: Long, to: Long,
                               download: suspend (Long, Long) -> List<RangePriceTick>): List<RangePriceTick> {
         require(source.startsWith("ctrader:") && symbol.isNotBlank() && from > 0 && to >= from)
+        // Coverage is planned *after* acquiring the lock so the second
+        // request observes pages durably written by the first one.
+        val lock = downloadLocks.computeIfAbsent(source to symbol) { Mutex() }
+        return lock.withLock { loadExclusive(source, symbol, from, to, download) }
+    }
+
+    private suspend fun loadExclusive(source: String, symbol: String, from: Long, to: Long,
+                                      download: suspend (Long, Long) -> List<RangePriceTick>): List<RangePriceTick> {
         val saved = try { dao.covered(source, symbol, from, to) }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { emptyList() }

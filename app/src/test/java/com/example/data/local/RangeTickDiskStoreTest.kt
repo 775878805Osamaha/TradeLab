@@ -3,7 +3,11 @@ package com.example.data.local
 import com.example.core.market.RangePriceTick
 import com.example.core.market.RangeTickCacheCodec
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -182,5 +186,93 @@ class RangeTickDiskStoreTest {
             fail("Cancellation must propagate")
         } catch (_: CancellationException) { }
         assertTrue(dao.covered("ctrader:acc:1", "XAUUSD", 1, 20).isEmpty())
+    }
+
+    @Test fun concurrentSameBrokerRequestsDownloadMissingBidPageOnlyOnce() = runBlocking {
+        val dao = MemoryDao()
+        val store = RangeTickDiskStore(dao)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var downloads = 0
+        val verified = listOf(RangePriceTick(10L, 4071.37))
+        val first = async {
+            store.getOrDownload("ctrader:acc:1", "XAUUSD", 1L, 20L) { _, _ ->
+                downloads++
+                entered.complete(Unit)
+                release.await()
+                verified
+            }
+        }
+        entered.await()
+        val waiting = async {
+            store.getOrDownload("ctrader:acc:1", "XAUUSD", 1L, 20L) { _, _ ->
+                fail("A second overlapping request must reuse the first verified disk page")
+                emptyList()
+            }
+        }
+        yield()
+        assertFalse(waiting.isCompleted)
+        release.complete(Unit)
+        assertEquals(verified, first.await())
+        assertEquals(verified, waiting.await())
+        assertEquals(1, downloads)
+    }
+
+    @Test fun aSlowAccountDownloadNeverBlocksAnotherBrokerAccount() = runBlocking {
+        val dao = MemoryDao()
+        val store = RangeTickDiskStore(dao)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val first = async {
+            store.getOrDownload("ctrader:acc:1", "XAUUSD", 1L, 20L) { _, _ ->
+                entered.complete(Unit)
+                release.await()
+                listOf(RangePriceTick(10L, 4071.37))
+            }
+        }
+        entered.await()
+        try {
+            val other = withTimeout(1_000L) {
+                store.getOrDownload("ctrader:acc:2", "XAUUSD", 1L, 20L) { _, _ ->
+                    listOf(RangePriceTick(15L, 4080.0))
+                }
+            }
+            assertEquals(listOf(RangePriceTick(15L, 4080.0)), other)
+        } finally {
+            release.complete(Unit)
+            first.await()
+        }
+    }
+
+    @Test fun cancellingAWaitingPanDoesNotCancelItsVerifiedBrokerPredecessor() = runBlocking {
+        val dao = MemoryDao()
+        val store = RangeTickDiskStore(dao)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val first = async {
+            store.getOrDownload("ctrader:acc:1", "XAUUSD", 1L, 20L) { _, _ ->
+                entered.complete(Unit)
+                release.await()
+                listOf(RangePriceTick(10L, 4071.37))
+            }
+        }
+        entered.await()
+        val obsoletePan = async {
+            store.getOrDownload("ctrader:acc:1", "XAUUSD", 1L, 20L) { _, _ ->
+                fail("Cancelled pan must not issue a second network request")
+                emptyList()
+            }
+        }
+        yield()
+        obsoletePan.cancel()
+        try { obsoletePan.await(); fail("Cancelled pan should not complete") }
+        catch (_: CancellationException) { }
+        release.complete(Unit)
+        assertEquals(listOf(RangePriceTick(10L, 4071.37)), first.await())
+        assertEquals(listOf(RangePriceTick(10L, 4071.37)), store.getOrDownload(
+            "ctrader:acc:1", "XAUUSD", 1L, 20L) { _, _ ->
+            fail("Verified BID page must survive cancellation of the waiting pan")
+            emptyList()
+        })
     }
 }
