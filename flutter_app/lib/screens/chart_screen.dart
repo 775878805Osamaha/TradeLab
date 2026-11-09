@@ -311,9 +311,9 @@ class _ChartScreenState extends State<ChartScreen> {
       _olderLoadError = null;
     });
     try {
-      // A provider response covers exactly six days, including empty
-      // trading periods. Reuse that verified interval before making another
-      // broker request; individual archived ticks do not prove coverage.
+      // Cover the exact six-day interval using one or more independently
+      // verified local windows, even if they were saved with different
+      // boundaries on a previous app session. Partial archives are unsafe.
       final endMs = _rangeOlderCursorMs ?? earliest - 1;
       final fromMs = endMs -
           RangeTickStore.verifiedWindowDuration.inMilliseconds;
@@ -323,7 +323,7 @@ class _ChartScreenState extends State<ChartScreen> {
       }
       List<MarketTick>? older;
       try {
-        older = await RangeTickStore.readVerifiedWindow(
+        older = await RangeTickStore.readCoveredInterval(
           account, symbol.code, fromMs: fromMs, toMs: endMs);
       } catch (_) {
         // A damaged local cache can be recovered from cTrader.
