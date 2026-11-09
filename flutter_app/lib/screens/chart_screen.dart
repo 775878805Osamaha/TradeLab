@@ -187,17 +187,21 @@ class _ChartScreenState extends State<ChartScreen> {
         final cacheKey = '$account:${symbol.code}';
         // Reuse only a recent *complete* timestamped provider window. The
         // v3 price-only snapshot is not sufficient for historical paging.
-        List<MarketTick>? ticks;
+        VerifiedBidWindow? restored;
         try {
-          ticks = await RangeTickStore.readLatestVerifiedWindow(
+          restored = await RangeTickStore.readLatestVerifiedWindowWithCoverage(
               account, symbol.code);
         } catch (_) {
-          // Database faults must not prevent loading verified provider data.
-          ticks = null;
+          // A damaged or unavailable cache must not block verified cTrader.
+          restored = null;
         }
         if (revision != _loadRevision || !mounted) return;
+        var ticks = restored?.ticks;
+        var coveredFromMs = restored?.fromMs;
         if (ticks == null || ticks.isEmpty) {
           final windowEnd = DateTime.now().toUtc().millisecondsSinceEpoch;
+          coveredFromMs = windowEnd -
+              RangeTickStore.verifiedWindowDuration.inMilliseconds;
           ticks = await widget.controller.rangeTicks(symbol,
               before: DateTime.fromMillisecondsSinceEpoch(windowEnd, isUtc: true));
           if (revision != _loadRevision || !mounted) return;
@@ -205,17 +209,15 @@ class _ChartScreenState extends State<ChartScreen> {
             throw const MarketDataException(
                 'لم يُرجع cTrader تيكات ضمن الفترة المطلوبة.');
           }
-          // Only non-truncated provider responses reach rangeTicks. Store
-          // their exact six-day coverage, not inferred bounds from first/last
-          // ticks. Writes run after the UI has received the prices.
+          // Save the full provider coverage, including quiet/no-tick time.
+          // Historical paging must use its start rather than ticks.first.
           unawaited(RangeTickStore.archiveVerifiedWindow(
             account, symbol.code, ticks,
-            fromMs: windowEnd -
-                RangeTickStore.verifiedWindowDuration.inMilliseconds,
-            toMs: windowEnd,
+            fromMs: coveredFromMs, toMs: windowEnd,
           ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
         }
         _rangeHistoryTicks = ticks;
+        _rangeOlderCursorMs = coveredFromMs! - 1;
         var point = _rangePointCache[cacheKey];
         if (point == null) {
           point = await widget.controller.pointSize(_selectedSymbol);
