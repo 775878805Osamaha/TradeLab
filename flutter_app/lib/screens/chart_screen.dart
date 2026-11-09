@@ -31,6 +31,9 @@ class ChartScreen extends StatefulWidget {
 class _ChartScreenState extends State<ChartScreen> {
   final _fixture = previewCandles();
   final _rangeCache = <int, List<TradeCandle>>{};
+  // Session-only BID tick cache: switching Range size rebuilds locally.
+  // Scoped by account and symbol; not a substitute for persistent history.
+  final _rangeBidCache = <String, List<double>>{};
   List<MarketBar> _actualBars = [];
   List<TradeCandle> _actualCandles = [];
   List<int> _actualTimestamps = [];
@@ -94,6 +97,7 @@ class _ChartScreenState extends State<ChartScreen> {
     final linked = widget.controller.ctraderConnected;
     final changedAccount = _accountBefore != widget.controller.accountId;
     if (_linkedBefore != linked || changedAccount) {
+      _rangeBidCache.clear();
       _linkedBefore = linked;
       _accountBefore = widget.controller.accountId;
       // Never carry another broker account's drawings into this account.
@@ -141,11 +145,23 @@ class _ChartScreenState extends State<ChartScreen> {
         if (!_rangeSourceSupported) {
           throw const MarketDataException('شموع المدى الحقيقية متاحة حاليًا لرموز cTrader فقط؛ لا تتوفر تيكات Binance لهذا الوضع.');
         }
-        final ticks = await widget.controller.rangeTicks(_selectedSymbol);
+        final cacheKey = '${widget.controller.accountId}:${_selectedSymbol.code}';
+        var prices = _rangeBidCache[cacheKey];
+        if (prices == null) {
+          final ticks = await widget.controller.rangeTicks(_selectedSymbol);
+          if (revision != _loadRevision || !mounted) return;
+          if (ticks.isEmpty) {
+            throw const MarketDataException('لم يُرجع cTrader تيكات ضمن الفترة المطلوبة.');
+          }
+          prices = ticks.map((tick) => tick.bid).toList(growable: false);
+          // Bound the in-memory cache to avoid accumulating symbols indefinitely.
+          if (_rangeBidCache.length >= 3) _rangeBidCache.clear();
+          _rangeBidCache[cacheKey] = prices;
+        }
         final point = await widget.controller.pointSize(_selectedSymbol);
-        if (ticks.isEmpty) throw const MarketDataException('لم يُرجع cTrader تيكات ضمن الفترة المطلوبة.');
+        if (revision != _loadRevision || !mounted) return;
         final builder = RangeBarBuilder(_rangeTicks * point);
-        for (final tick in ticks) {builder.appendBidTick(tick.bid);}
+        for (final price in prices) {builder.appendBidTick(price);}
         if (revision != _loadRevision || !mounted) return;
         _actualRange = builder.snapshot();
       } else {
