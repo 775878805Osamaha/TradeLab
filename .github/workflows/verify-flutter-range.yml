@@ -1,0 +1,58 @@
+name: Verify TradeLab Flutter Range History
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'flutter_app/**'
+      - '.github/workflows/verify-flutter-range.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-flutter-range:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Android host
+        run: flutter create --platforms android --project-name tradelab_flutter . --no-pub
+      - name: Configure OAuth callback and internet permission
+        run: python3 tool/configure_android_host.py
+      - name: Fetch dependencies
+        run: flutter pub get
+      - name: Analyze Dart and Flutter
+        run: flutter analyze --no-fatal-infos
+      - name: Verify historical tick archive and chart interactions
+        run: |
+          flutter test test/range_tick_store_test.dart \
+            test/range_bar_builder_test.dart \
+            test/chart_viewport_test.dart \
+            test/chart_annotations_test.dart \
+            test/market_api_test.dart
+      - name: Build Android release preview (no publishing)
+        run: flutter build apk --release
+      - name: Validate built APK archive
+        run: |
+          set -euo pipefail
+          test -s build/app/outputs/flutter-apk/app-release.apk
+          unzip -t build/app/outputs/flutter-apk/app-release.apk >/dev/null
+      - name: Upload test APK for manual device validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Range-Verification-APK
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
