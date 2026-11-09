@@ -23,6 +23,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  # SQLite backend for deterministic desktop unit tests of the Android cache.
+  sqflite_common_ffi: ^2.3.7
 
 flutter:
   uses-material-design: true
