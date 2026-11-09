@@ -12,7 +12,9 @@ class MarketApi {
 
   final http.Client _client;
   final String gateway;
-  final void Function(String)? onSessionRefresh;
+  /// Includes the token which actually authorized this HTTP request. A slow
+  /// response from an older login must not replace the current session.
+  void Function(String requestToken, String refreshedToken)? onSessionRefresh;
   // One broker symbol-list request per authorized account, including when
   // quote requests for several forex instruments arrive concurrently.
   final Map<String, Future<Map<String, int>>> _symbolLists = {};
@@ -34,8 +36,6 @@ class MarketApi {
     } catch (_) {
       throw const MarketDataException('تعذر الوصول إلى مصدر السوق. تحقق من الإنترنت وأعد المحاولة.');
     }
-    final refreshed = response.headers['x-tradelab-session'];
-    if (refreshed != null && refreshed.isNotEmpty) onSessionRefresh?.call(refreshed);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       if (response.statusCode == 401) {
         throw const MarketDataException('انتهت جلسة cTrader. أعد ربط الحساب.', sessionExpired: true);
@@ -45,6 +45,10 @@ class MarketApi {
     try {
       final data = jsonDecode(response.body);
       if (data is! Map<String, dynamic>) throw const FormatException();
+      final refreshed = response.headers['x-tradelab-session'];
+      if (token != null && refreshed != null && refreshed.isNotEmpty) {
+        onSessionRefresh?.call(token, refreshed);
+      }
       return data;
     } catch (_) {
       throw const MarketDataException('أعاد مصدر السوق استجابة غير صالحة.');

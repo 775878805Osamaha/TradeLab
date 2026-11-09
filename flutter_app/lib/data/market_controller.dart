@@ -15,7 +15,8 @@ import 'tradelab_data.dart';
 class MarketController extends ChangeNotifier {
   MarketController({MarketApi? api, FlutterSecureStorage? storage})
       : _storage = storage ?? const FlutterSecureStorage() {
-    _api = api ?? MarketApi(onSessionRefresh: _onRefreshedToken);
+    _api = api ?? MarketApi();
+    _api.onSessionRefresh = _onRefreshedToken;
   }
 
   late final MarketApi _api;
@@ -23,6 +24,10 @@ class MarketController extends ChangeNotifier {
   static const _tokenKey = 'tradelab_flutter_ctrader_session';
   static const _pendingKey = 'tradelab_flutter_oauth_pending';
   String? _token;
+  int _accountGeneration = 0;
+  // Serialize refreshed-session writes with logout so that a late write can
+  // never recreate a token after the user has explicitly disconnected.
+  Future<void> _pendingSessionWrite = Future<void>.value();
   String? accountId;
   List<CTraderAccount> accounts = const [];
   final Map<String, double> cryptoPrices = {};
@@ -89,6 +94,7 @@ class MarketController extends ChangeNotifier {
         uri.path != '/ctrader' || !uri.hasQuery) return;
     final ticket = uri.queryParameters['ticket'];
     if (ticket == null || ticket.isEmpty) return;
+    final generation = ++_accountGeneration;
     busy = true;
     error = null;
     notifyListeners();
@@ -105,8 +111,10 @@ class MarketController extends ChangeNotifier {
       // Verify account access before activating a token or claiming connection.
       final authorized = await _api.accounts(issued);
       if (authorized.isEmpty) throw const MarketDataException('لا توجد حسابات cTrader مصرح بها.');
+      if (generation != _accountGeneration) return;
       _api.forgetCTraderSymbols();
-      await _storage.write(key: _tokenKey, value: issued);
+      await _storeSession(issued);
+      if (generation != _accountGeneration) return;
       _token = issued;
       accounts = authorized;
       accountId = authorized.first.id;
@@ -122,11 +130,15 @@ class MarketController extends ChangeNotifier {
   Future<void> _loadAccounts() async {
     final token = _token;
     if (token == null) return;
+    final generation = _accountGeneration;
     try {
-      accounts = await _api.accounts(token);
+      final received = await _api.accounts(token);
+      if (generation != _accountGeneration) return;
+      accounts = received;
       accountId = accounts.isEmpty ? null : accounts.first.id;
       if (accounts.isEmpty) error = 'لا توجد حسابات cTrader متاحة لهذا التفويض.';
     } on MarketDataException catch (e) {
+      if (generation != _accountGeneration) return;
       if (e.sessionExpired) {
         await disconnect();
       } else {error = e.message;}
@@ -135,6 +147,8 @@ class MarketController extends ChangeNotifier {
 
   void chooseAccount(String id) {
     if (accounts.any((a) => a.id == id)) {
+      if (accountId == id) return;
+      _accountGeneration++;
       accountId = id;
       _api.forgetCTraderSymbols();
       forexPrices.clear();
@@ -143,19 +157,34 @@ class MarketController extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
+    _accountGeneration++;
     _token = null;
     accountId = null;
     accounts = const [];
     forexPrices.clear();
     _api.forgetCTraderSymbols();
+    try { await _pendingSessionWrite; } catch (_) {
+      // Explicit logout still clears even if saving an earlier refresh failed.
+    }
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _pendingKey);
     notifyListeners();
   }
 
-  void _onRefreshedToken(String newToken) {
+  void _onRefreshedToken(String requestToken, String newToken) {
+    if (_token != requestToken || newToken == requestToken) return;
     _token = newToken;
-    unawaited(_storage.write(key: _tokenKey, value: newToken));
+    unawaited(_storeSession(newToken).catchError((Object _) {
+      error = 'تعذر حفظ جلسة cTrader المحدّثة على الجهاز.';
+      notifyListeners();
+    }));
+  }
+
+  Future<void> _storeSession(String value) {
+    _pendingSessionWrite = _pendingSessionWrite
+        .catchError((Object _) {})
+        .then((_) => _storage.write(key: _tokenKey, value: value));
+    return _pendingSessionWrite;
   }
 
   Future<List<MarketBar>> history(TradeSymbol symbol, String timeframe,
@@ -164,17 +193,29 @@ class MarketController extends ChangeNotifier {
       return _api.binanceCandles(symbol: symbol.code, timeframe: timeframe, before: before);
     }
     if (!ctraderConnected) throw const MarketDataException('اربط حساب cTrader لعرض أسعار الذهب والفوركس.');
-    return _api.ctraderCandles(token: _token!, accountId: accountId!,
+    final generation = _accountGeneration;
+    final account = accountId!;
+    final bars = await _api.ctraderCandles(token: _token!, accountId: account,
         symbol: symbol.code, timeframe: timeframe,
         before: before ?? DateTime.now().toUtc());
+    if (generation != _accountGeneration || accountId != account) {
+      throw const MarketDataException('تغير حساب cTrader أثناء تحميل الشموع. أعد المحاولة.');
+    }
+    return bars;
   }
 
   Future<List<MarketTick>> rangeTicks(TradeSymbol symbol, {DateTime? before}) async {
     if (symbol.source != TradeSource.ctrader || !ctraderConnected) {
       throw const MarketDataException('شموع المدى تتطلب تيكات BID حقيقية من cTrader.');
     }
-    return _api.ctraderBidTicks(token: _token!, accountId: accountId!,
+    final generation = _accountGeneration;
+    final account = accountId!;
+    final ticks = await _api.ctraderBidTicks(token: _token!, accountId: account,
         symbol: symbol.code, before: before ?? DateTime.now().toUtc());
+    if (generation != _accountGeneration || accountId != account) {
+      throw const MarketDataException('تغير حساب cTrader أثناء تحميل تيكات المدى. أعد المحاولة.');
+    }
+    return ticks;
   }
 
   /// Refresh just the uncovered interval after a cached six-day window.
@@ -187,6 +228,7 @@ class MarketController extends ChangeNotifier {
   }) async {
     final account = accountId;
     final token = _token;
+    final generation = _accountGeneration;
     if (symbol.source != TradeSource.ctrader ||
         account == null || token == null) {
       throw const MarketDataException(
@@ -199,7 +241,7 @@ class MarketController extends ChangeNotifier {
       fromMs: fromMs,
       toMs: toMs,
     );
-    if (accountId != account || _token == null) {
+    if (generation != _accountGeneration || accountId != account || _token == null) {
       throw const MarketDataException(
           'تغيّر حساب cTrader أثناء تحديث تيكات المدى. أعد المحاولة.');
     }
@@ -210,7 +252,14 @@ class MarketController extends ChangeNotifier {
     if (!ctraderConnected || symbol.source != TradeSource.ctrader) {
       throw const MarketDataException('يلزم ربط cTrader لدقة تسعير شموع المدى.');
     }
-    return _api.ctraderPointSize(token: _token!, accountId: accountId!, symbol: symbol.code);
+    final generation = _accountGeneration;
+    final account = accountId!;
+    final point = await _api.ctraderPointSize(
+        token: _token!, accountId: account, symbol: symbol.code);
+    if (generation != _accountGeneration || accountId != account) {
+      throw const MarketDataException('تغير حساب cTrader أثناء قراءة دقة التسعير. أعد المحاولة.');
+    }
+    return point;
   }
 
   /// Returns a fresh source quote on demand; never submits broker orders.
@@ -220,12 +269,13 @@ class MarketController extends ChangeNotifier {
     }
     final account = accountId;
     final token = _token;
+    final generation = _accountGeneration;
     if (!ctraderConnected || token == null || account == null) {
       throw const MarketDataException('اربط حساب cTrader للحصول على سعر فعلي للصفقة التجريبية.');
     }
     final quote = await _api.ctraderQuote(token: token,
       accountId: account, symbol: symbol.code);
-    if (accountId != account || _token == null) {
+    if (generation != _accountGeneration || accountId != account || _token == null) {
       throw const MarketDataException('تغير حساب cTrader أثناء طلب السعر. أعد المحاولة.');
     }
     return quote;
@@ -236,6 +286,7 @@ class MarketController extends ChangeNotifier {
     loadingQuotes = true;
     notifyListeners();
     final requestedAccount = accountId;
+    final generation = _accountGeneration;
     await Future.wait(tradeSymbols.map((symbol) async {
       try {
         if (symbol.source == TradeSource.binance) {
@@ -243,14 +294,16 @@ class MarketController extends ChangeNotifier {
         } else if (ctraderConnected && requestedAccount != null) {
           final result = await _api.ctraderBid(
               token: _token!, accountId: requestedAccount, symbol: symbol.code);
-          if (ctraderConnected && accountId == requestedAccount) {
+          if (generation == _accountGeneration && ctraderConnected && accountId == requestedAccount) {
             forexPrices[symbol.code] = result;
           }
         }
       } catch (_) {
         if (symbol.source == TradeSource.binance) {
           cryptoPrices.remove(symbol.code);
-        } else {forexPrices.remove(symbol.code);}
+        } else if (generation == _accountGeneration) {
+          forexPrices.remove(symbol.code);
+        }
       }
     }));
     loadingQuotes = false;
