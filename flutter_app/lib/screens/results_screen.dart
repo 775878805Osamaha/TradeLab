@@ -109,7 +109,39 @@ class _ResultsScreenState extends State<ResultsScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final journal = widget.journal;
-    final report = _report();
+    LedgerReport report;
+    try {
+      report = _report();
+    } catch (error, stackTrace) {
+      // Keep the results tab usable if a local ledger record is malformed.
+      FlutterError.reportError(FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'tradelab results',
+        context: ErrorDescription('while calculating the local ledger report'),
+      ));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.warning_amber_rounded, size: 38),
+            const SizedBox(height: 12),
+            const Text('تعذر حساب النتائج المحلية',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            const Text('لم تُحذف بياناتك. تحقق من سجل التداول أو أعد فتح القسم.',
+              textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () => widget.journal?.refresh(),
+              icon: const Icon(Icons.refresh),
+              label: const Text('إعادة تحميل السجل'),
+            ),
+          ]),
+        ),
+      );
+    }
     return Column(children: [
       Container(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
