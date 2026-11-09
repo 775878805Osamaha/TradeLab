@@ -7,6 +7,7 @@ import '../chart/chart_annotations.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_builder.dart';
+import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
 import '../data/market_controller.dart';
@@ -182,6 +183,21 @@ class _ChartScreenState extends State<ChartScreen> {
           _rangeBidCachedAt.remove(cacheKey);
         }
         if (prices == null) {
+          // A verified snapshot may survive a process restart. Fail open to
+          // the live feed if the device database is unavailable or corrupt.
+          try {
+            prices = await RangeTickStore.readFresh(
+                widget.controller.accountId!, _selectedSymbol.code);
+          } catch (_) {
+            prices = null;
+          }
+          if (revision != _loadRevision || !mounted) return;
+          if (prices != null) {
+            _rangeBidCache[cacheKey] = prices;
+            _rangeBidCachedAt[cacheKey] = DateTime.now().toUtc();
+          }
+        }
+        if (prices == null) {
           final ticks = await widget.controller.rangeTicks(_selectedSymbol);
           if (revision != _loadRevision || !mounted) return;
           if (ticks.isEmpty) {
@@ -195,6 +211,12 @@ class _ChartScreenState extends State<ChartScreen> {
           }
           _rangeBidCache[cacheKey] = prices;
           _rangeBidCachedAt[cacheKey] = DateTime.now().toUtc();
+          // Cache failures must never prevent rendering verified market data.
+          try {
+            await RangeTickStore.saveVerified(
+                widget.controller.accountId!, _selectedSymbol.code, prices);
+          } catch (_) {}
+          if (revision != _loadRevision || !mounted) return;
         }
         var point = _rangePointCache[cacheKey];
         if (point == null) {
