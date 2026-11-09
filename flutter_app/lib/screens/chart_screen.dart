@@ -329,17 +329,14 @@ class _ChartScreenState extends State<ChartScreen> {
       } else {
         final bars = await widget.controller.history(_selectedSymbol, _timeframe);
         if (revision != _loadRevision || !mounted) return;
-        // Apply the same chronological and uniqueness guarantees to the
-        // initial page as to older pages; Replay indices must be monotonic.
-        final byTimestamp = <int, MarketBar>{
-          for (final bar in bars) bar.timestamp: bar,
-        };
-        final ordered = byTimestamp.values.toList()
-          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-        _actualBars = ordered;
-        _actualCandles = ordered.map((bar) => bar.candle).toList(growable: false);
-        _actualTimestamps = ordered.map((bar) => bar.timestamp).toList(growable: false);
-        if (ordered.isNotEmpty) _olderCursorMs = ordered.first.timestamp;
+        // MarketApi already validated strictly ascending broker timestamps
+        // and OHLC. Do not sort or deduplicate again in the UI: doing so
+        // would conceal a source/protocol defect behind plausible candles.
+        _actualBars = List<MarketBar>.unmodifiable(bars);
+        _actualCandles = bars.map((bar) => bar.candle).toList(growable: false);
+        _actualTimestamps =
+            bars.map((bar) => bar.timestamp).toList(growable: false);
+        if (bars.isNotEmpty) _olderCursorMs = bars.first.timestamp;
       }
       if (revision == _loadRevision && _totalBars == 0) {
         _loadError = 'لم يُرجع المصدر شموعًا لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
@@ -516,8 +513,15 @@ class _ChartScreenState extends State<ChartScreen> {
     });
     try {
       final cursor = _olderCursorMs ?? _actualBars.first.timestamp;
-      final before = DateTime.fromMillisecondsSinceEpoch(cursor, isUtc: true);
-      final older = await widget.controller.history(_selectedSymbol, _timeframe, before: before);
+      if (cursor < 1) {
+        if (mounted) setState(() => _historyExhausted = true);
+        return;
+      }
+      // The cursor is exclusive; never re-request the same broker minute.
+      final before = DateTime.fromMillisecondsSinceEpoch(
+          cursor - 1, isUtc: true);
+      final older = await widget.controller.history(
+          _selectedSymbol, _timeframe, before: before);
       if (revision != _loadRevision || !mounted) return;
       final earliest = _actualBars.first.timestamp;
       // Providers can return pages out of order or with duplicate timestamps.
@@ -532,10 +536,13 @@ class _ChartScreenState extends State<ChartScreen> {
         if (_selectedSymbol.source == TradeSource.binance) {
           _historyExhausted = true;
         } else {
-          // A broker may have a quiet 89-day window. An empty page is not
-          // proof that all earlier history is exhausted. Continue on demand.
-          _olderCursorMs = cursor - const Duration(days: 89).inMilliseconds;
-          _olderLoadError = 'لا توجد شموع في هذه الفترة. اضغط «أقدم» للبحث قبلها.';
+          // A quiet short-window M1 response is not the end of history.
+          // Continue immediately before the exact window queried, not
+          // 89 days earlier (which would silently skip archived candles).
+          _olderCursorMs = cursor -
+              MarketApi.ctraderCandleLookback(_timeframe).inMilliseconds;
+          _olderLoadError =
+              'لا توجد شموع في الفترة السابقة. اضغط «أقدم» للبحث قبلها.';
         }
       } else {
         _olderCursorMs = unique.first.timestamp;
