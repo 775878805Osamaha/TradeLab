@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'data/market_controller.dart';
+import 'data/market_bar_store.dart';
 import 'paper/paper_journal_controller.dart';
 import 'paper/paper_journal_store.dart';
 import 'replay/replay_lab_bridge.dart';
@@ -46,10 +47,11 @@ void main() {
 }
 
 class TradeLabApp extends StatefulWidget {
-  const TradeLabApp({this.controller, this.journal, super.key});
+  const TradeLabApp({this.controller, this.journal, this.barStore, super.key});
 
   final MarketController? controller;
   final PaperJournalController? journal;
+  final MarketBarStore? barStore;
 
   @override
   State<TradeLabApp> createState() => _TradeLabAppState();
@@ -79,6 +81,7 @@ class _TradeLabAppState extends State<TradeLabApp> {
         home: TradeLabShell(
           controller: widget.controller,
           journal: widget.journal,
+          barStore: widget.barStore,
           darkMode: _themeMode == ThemeMode.dark,
           onDarkModeChanged: (enabled) => setState(() {
             _themeMode = enabled ? ThemeMode.dark : ThemeMode.light;
@@ -91,6 +94,7 @@ class TradeLabShell extends StatefulWidget {
   const TradeLabShell({
     this.controller,
     this.journal,
+    this.barStore,
     required this.darkMode,
     required this.onDarkModeChanged,
     super.key,
@@ -99,6 +103,7 @@ class TradeLabShell extends StatefulWidget {
   final bool darkMode;
   final MarketController? controller;
   final PaperJournalController? journal;
+  final MarketBarStore? barStore;
   final ValueChanged<bool> onDarkModeChanged;
 
   @override
@@ -180,7 +185,7 @@ class _TradeLabShellState extends State<TradeLabShell> {
                 children: [
                   MarketsScreen(controller: _market),
                   ChartScreen(controller: _market, journal: _journal,
-                    labBridge: _labBridge),
+                    labBridge: _labBridge, barStore: widget.barStore),
                   ResultsScreen(controller: _market, journal: _journal),
                   TradingLabScreen(controller: _market, journal: _journal,
                     replayBridge: _labBridge,

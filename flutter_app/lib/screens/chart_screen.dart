@@ -28,10 +28,11 @@ enum ChartMode { candles, heikinAshi, range }
 
 class ChartScreen extends StatefulWidget {
   const ChartScreen({required this.controller, this.journal, this.labBridge,
-    super.key});
+    this.barStore, super.key});
   final MarketController controller;
   final PaperJournalController? journal;
   final ReplayLabBridge? labBridge;
+  final MarketBarStore? barStore;
 
   @override
   State<ChartScreen> createState() => _ChartScreenState();
@@ -39,7 +40,7 @@ class ChartScreen extends StatefulWidget {
 
 class _ChartScreenState extends State<ChartScreen> {
   final _fixture = previewCandles();
-  final _barStore = MarketBarStore();
+  late final _barStore = widget.barStore ?? MarketBarStore();
   final _rangeCache = <int, List<TradeCandle>>{};
   // Session-only BID tick cache: switching Range size rebuilds locally.
   // Scoped by account and symbol; not a substitute for persistent history.
