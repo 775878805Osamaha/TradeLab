@@ -7,6 +7,7 @@ import '../chart/chart_annotations.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_builder.dart';
+import '../data/market_bar_store.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_tick_rollforward.dart';
 import '../data/range_tick_store.dart';
@@ -38,6 +39,7 @@ class ChartScreen extends StatefulWidget {
 
 class _ChartScreenState extends State<ChartScreen> {
   final _fixture = previewCandles();
+  final _barStore = MarketBarStore();
   final _rangeCache = <int, List<TradeCandle>>{};
   // Session-only BID tick cache: switching Range size rebuilds locally.
   // Scoped by account and symbol; not a substitute for persistent history.
@@ -55,6 +57,7 @@ class _ChartScreenState extends State<ChartScreen> {
   int? _rangeOlderCursorMs;
   int _loadRevision = 0;
   bool _loading = false;
+  bool _showingCachedBars = false;
   bool _olderLoading = false;
   bool _historyExhausted = false;
   int? _olderCursorMs;
@@ -93,6 +96,16 @@ class _ChartScreenState extends State<ChartScreen> {
   double _gestureFocalY = 0;
 
   TradeSymbol get _selectedSymbol => tradeSymbols.firstWhere((s) => s.code == _symbol);
+  String get _barCacheAccount => _selectedSymbol.source == TradeSource.binance
+      ? 'public' : widget.controller.accountId ?? '';
+
+  void _publishBars(List<MarketBar> bars) {
+    final ordered = bars.toList()..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    _actualBars = List<MarketBar>.unmodifiable(ordered);
+    _actualCandles = ordered.map((bar) => bar.candle).toList(growable: false);
+    _actualTimestamps = ordered.map((bar) => bar.timestamp).toList(growable: false);
+    _olderCursorMs = ordered.isEmpty ? null : ordered.first.timestamp;
+  }
   bool get _liveRequested => _selectedSymbol.source == TradeSource.binance ||
       widget.controller.ctraderConnected;
   bool get _rangeSourceSupported => _selectedSymbol.source == TradeSource.ctrader;
@@ -159,6 +172,7 @@ class _ChartScreenState extends State<ChartScreen> {
         _olderLoadError = null;
         _loadError = null;
         _loading = false;
+        _showingCachedBars = false;
         if (mounted) setState(() {});
       }
     }
@@ -175,6 +189,7 @@ class _ChartScreenState extends State<ChartScreen> {
       }
       _replay = false;
       _loading = true;
+      _showingCachedBars = false;
       // Invalidate the previous history request's UI state. Its finally block
       // intentionally ignores stale revisions, so reset the spinner here.
       _olderLoading = false;
@@ -196,6 +211,28 @@ class _ChartScreenState extends State<ChartScreen> {
       _selectedPattern = null;
     });
     try {
+      if (_mode != ChartMode.range) {
+        // First paint previously verified OHLC without waiting for the broker.
+        // A cached page remains labelled as historical until refresh succeeds.
+        try {
+          final cached = await _barStore.readLatest(
+            source: _selectedSymbol.source,
+            account: _barCacheAccount,
+            symbol: _selectedSymbol.code,
+            timeframe: _timeframe,
+          );
+          if (revision != _loadRevision || !mounted) return;
+          if (cached.isNotEmpty) {
+            setState(() {
+              _publishBars(cached);
+              _showingCachedBars = true;
+            });
+          }
+        } catch (_) {
+          // Missing/unavailable or corrupt cache: only verified provider data
+          // may populate the chart; never substitute example OHLC.
+        }
+      }
       if (_mode == ChartMode.range) {
         if (!_rangeSourceSupported) {
           throw const MarketDataException('شموع المدى الحقيقية متاحة حاليًا لرموز cTrader فقط؛ لا تتوفر تيكات Binance لهذا الوضع.');
@@ -293,16 +330,30 @@ class _ChartScreenState extends State<ChartScreen> {
         // Apply the same chronological and uniqueness guarantees to the
         // initial page as to older pages; Replay indices must be monotonic.
         final byTimestamp = <int, MarketBar>{
+          for (final bar in _actualBars) bar.timestamp: bar,
           for (final bar in bars) bar.timestamp: bar,
         };
         final ordered = byTimestamp.values.toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
         // Publish each provider-history generation as immutable: captured
         // Replay prefixes must remain frozen when newer pages are loaded.
-        _actualBars = List<MarketBar>.unmodifiable(ordered);
-        _actualCandles = ordered.map((bar) => bar.candle).toList(growable: false);
-        _actualTimestamps = ordered.map((bar) => bar.timestamp).toList(growable: false);
-        if (ordered.isNotEmpty) _olderCursorMs = ordered.first.timestamp;
+        _publishBars(ordered);
+        // An empty successful provider page does not make previously saved
+        // historical candles current; keep the local-origin disclosure.
+        _showingCachedBars = bars.isEmpty && ordered.isNotEmpty;
+        if (bars.isNotEmpty) {
+          try {
+            await _barStore.appendVerified(
+              source: _selectedSymbol.source,
+              account: _barCacheAccount,
+              symbol: _selectedSymbol.code,
+              timeframe: _timeframe,
+              bars: bars,
+            );
+          } catch (_) {
+            // Storage must never prevent a verified live provider chart.
+          }
+        }
       }
       if (revision == _loadRevision && _totalBars == 0) {
         _loadError = 'لم يُرجع المصدر شموعًا لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
@@ -480,7 +531,24 @@ class _ChartScreenState extends State<ChartScreen> {
     try {
       final cursor = _olderCursorMs ?? _actualBars.first.timestamp;
       final before = DateTime.fromMillisecondsSinceEpoch(cursor, isUtc: true);
-      final older = await widget.controller.history(_selectedSymbol, _timeframe, before: before);
+      List<MarketBar> older = const [];
+      var fromProvider = false;
+      try {
+        older = await _barStore.readOlder(
+          source: _selectedSymbol.source,
+          account: _barCacheAccount,
+          symbol: _selectedSymbol.code,
+          timeframe: _timeframe,
+          beforeMs: cursor,
+        );
+      } catch (_) {
+        // A corrupt archive cannot be used for Replay; ask the provider.
+      }
+      if (revision != _loadRevision || !mounted) return;
+      if (older.isEmpty) {
+        older = await widget.controller.history(_selectedSymbol, _timeframe, before: before);
+        fromProvider = true;
+      }
       if (revision != _loadRevision || !mounted) return;
       final earliest = _actualBars.first.timestamp;
       // Providers can return pages out of order or with duplicate timestamps.
@@ -521,6 +589,19 @@ class _ChartScreenState extends State<ChartScreen> {
         // older candles are prepended. Never reveal new future candles.
         if (_replay) _visibleThrough += unique.length;
         });
+        if (fromProvider) {
+          try {
+            await _barStore.appendVerified(
+              source: _selectedSymbol.source,
+              account: _barCacheAccount,
+              symbol: _selectedSymbol.code,
+              timeframe: _timeframe,
+              bars: older,
+            );
+          } catch (_) {
+            // The verified provider page is still useful if SQLite is full.
+          }
+        }
       }
     } catch (_) {
       if (revision == _loadRevision && mounted) {
@@ -1123,7 +1204,9 @@ class _ChartScreenState extends State<ChartScreen> {
             ),
           ),
           Flexible(child: TradeStatusChip(label: _liveRequested
-              ? (_loading ? 'جار التحميل' : _loadError != null ? 'خطأ في المصدر' : 'بيانات فعلية')
+              ? (_showingCachedBars ? 'أرشيف محلي' :
+                  _loading ? 'جار التحميل' :
+                  _loadError != null ? 'خطأ في المصدر' : 'بيانات فعلية')
               : 'معاينة', connected: _liveRequested && !_loading && _loadError == null && candles.isNotEmpty)),
           _iconAction(icon: Icons.fullscreen, label: 'ملء الشاشة', onPressed: _notifyUnconnected),
           _iconAction(icon: Icons.refresh, label: 'تحديث أسعار السوق',
@@ -1372,7 +1455,8 @@ class _ChartScreenState extends State<ChartScreen> {
           const Icon(Icons.info_outline, size: 15, color: TradeColors.blue),
           const SizedBox(width: 6),
           Expanded(child: Text(_liveRequested
-              ? (_loading ? 'جار تحميل شموع موثقة من المصدر' :
+              ? (_showingCachedBars ? 'شموع تاريخية محفوظة محليًا · قد تكون قديمة' :
+                  _loading ? 'جار تحميل شموع موثقة من المصدر' :
                   _loadError != null ? 'البيانات غير متاحة حاليًا' :
                   'شموع المصدر الفعلي · اسحب للشموع الأقدم أو حمّلها في Replay')
               : 'شموع توضيحية للتصميم وليست أسعارًا حقيقية',
