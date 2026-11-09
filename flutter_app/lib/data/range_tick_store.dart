@@ -292,6 +292,66 @@ class RangeTickStore {
     return _windowDigest(ticks) == expectedDigest ? ticks : null;
   }
 
+  /// Reads a requested historical interval from one or more individually
+  /// verified broker windows, even when their saved boundaries differ from
+  /// today's paging cursor. Every millisecond must be covered by a window
+  /// with a matching SHA-256 manifest; arbitrary archived tick rows are not
+  /// evidence that quiet trading periods were successfully downloaded.
+  ///
+  /// Windows are consumed in disjoint millisecond slices, so overlapping
+  /// cached windows cannot duplicate genuine same-millisecond broker ticks.
+  /// Returns null when any part is missing, damaged or too large; callers
+  /// must fetch that requested interval from the verified cTrader provider.
+  static Future<List<MarketTick>?> readCoveredInterval(
+    String accountId,
+    String symbol, {
+    required int fromMs,
+    required int toMs,
+    int maxTicks = 1000000,
+  }) async {
+    if (accountId.isEmpty || symbol.isEmpty || fromMs < 0 || toMs < fromMs ||
+        maxTicks < 1 || maxTicks > 1000000) {
+      throw ArgumentError('Invalid verified BID interval lookup');
+    }
+    final db = await _open();
+    final result = <MarketTick>[];
+    var cursor = fromMs;
+    var attempts = 0;
+    while (cursor <= toMs) {
+      // Prefer the furthest-ending verified window, but try a few
+      // alternatives if a migrated or corrupted manifest fails validation.
+      final candidates = await db.query('range_tick_windows',
+        columns: ['from_ms', 'to_ms'],
+        where: 'account_id = ? AND symbol = ? AND from_ms <= ? AND to_ms >= ?',
+        whereArgs: [accountId, symbol, cursor, cursor],
+        orderBy: 'to_ms DESC', limit: 8);
+      if (candidates.isEmpty) return null;
+      List<MarketTick>? validTicks;
+      int? coverageEnd;
+      for (final row in candidates) {
+        if (++attempts > 64) return null;
+        final windowFrom = (row['from_ms'] as num).toInt();
+        final windowTo = (row['to_ms'] as num).toInt();
+        final verified = await readVerifiedWindow(
+          accountId, symbol, fromMs: windowFrom, toMs: windowTo);
+        if (verified == null) continue;
+        validTicks = verified;
+        coverageEnd = windowTo;
+        break;
+      }
+      if (validTicks == null || coverageEnd == null) return null;
+      final segmentEnd = coverageEnd < toMs ? coverageEnd : toMs;
+      for (final tick in validTicks) {
+        if (tick.timestamp < cursor) continue;
+        if (tick.timestamp > segmentEnd) break;
+        result.add(tick);
+        if (result.length > maxTicks) return null;
+      }
+      cursor = segmentEnd + 1;
+    }
+    return result;
+  }
+
   /// A recent complete window can restore an initial chart after restart.
   /// Older windows are available through readVerifiedWindow only, preventing
   /// stale quotes from being mistaken for current live market data.
