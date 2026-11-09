@@ -19,6 +19,20 @@ class _DigestCollector implements Sink<Digest> {
   void close() {}
 }
 
+/// Complete, source-verified broker interval with its original boundaries.
+/// Tick timestamps alone cannot reveal periods without any market events.
+class VerifiedBidWindow {
+  const VerifiedBidWindow({
+    required this.fromMs,
+    required this.toMs,
+    required this.ticks,
+  });
+
+  final int fromMs;
+  final int toMs;
+  final List<MarketTick> ticks;
+}
+
 /// A stable pagination position, including same-millisecond ordering.
 class ArchivedBidTick {
   const ArchivedBidTick(this.tick, this.sequence);
@@ -281,7 +295,10 @@ class RangeTickStore {
   /// A recent complete window can restore an initial chart after restart.
   /// Older windows are available through readVerifiedWindow only, preventing
   /// stale quotes from being mistaken for current live market data.
-  static Future<List<MarketTick>?> readLatestVerifiedWindow(
+  /// Restore the latest complete provider interval, retaining the exact
+  /// start timestamp used by the gateway. The next historical request must
+  /// start *before this interval*, not before its oldest nonempty tick.
+  static Future<VerifiedBidWindow?> readLatestVerifiedWindowWithCoverage(
     String accountId,
     String symbol, {
     Duration maxAge = const Duration(minutes: 2),
@@ -295,9 +312,24 @@ class RangeTickStore {
       orderBy: 'to_ms DESC', limit: 1);
     if (windows.isEmpty) return null;
     final row = windows.single;
-    return readVerifiedWindow(accountId, symbol,
-      fromMs: (row['from_ms'] as num).toInt(),
-      toMs: (row['to_ms'] as num).toInt());
+    final fromMs = (row['from_ms'] as num).toInt();
+    final toMs = (row['to_ms'] as num).toInt();
+    final ticks = await readVerifiedWindow(
+      accountId, symbol, fromMs: fromMs, toMs: toMs);
+    if (ticks == null) return null;
+    return VerifiedBidWindow(fromMs: fromMs, toMs: toMs, ticks: ticks);
+  }
+
+  /// Legacy caller convenience; chart paging should use the coverage-aware
+  /// version to avoid re-downloading already verified quiet market periods.
+  static Future<List<MarketTick>?> readLatestVerifiedWindow(
+    String accountId,
+    String symbol, {
+    Duration maxAge = const Duration(minutes: 2),
+  }) async {
+    final window = await readLatestVerifiedWindowWithCoverage(
+        accountId, symbol, maxAge: maxAge);
+    return window?.ticks;
   }
 
   /// Append ordered verified BID ticks, preserving same-millisecond events.
