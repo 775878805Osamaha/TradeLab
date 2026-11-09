@@ -82,6 +82,58 @@ void main() {
         throwsA(isA<MarketDataException>()));
   });
 
+  test('cTrader fills truncated tick pages by splitting exact milliseconds',
+      () async {
+    final end = DateTime.utc(2026, 11, 8).millisecondsSinceEpoch;
+    final start = end - const Duration(days: 6).inMilliseconds;
+    final middle = start + (end - start) ~/ 2;
+    final intervals = <(int, int)>[];
+    final client = MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      expect(request.url.path, '/v1/ticks');
+      final from = int.parse(request.url.queryParameters['from']!);
+      final to = int.parse(request.url.queryParameters['to']!);
+      intervals.add((from, to));
+      if (from == start && to == end) {
+        return http.Response(jsonEncode({
+          'source': 'ctrader', 'quoteType': 'bid',
+          'symbolId': '42', 'hasMore': true, 'ticks': [],
+        }), 200);
+      }
+      final rows = from == start && to == middle
+          ? [
+              {'timestamp': middle, 'price': 1900.1},
+              {'timestamp': middle, 'price': 1900.2},
+            ]
+          : [
+              {'timestamp': middle + 1, 'price': 1900.3},
+              {'timestamp': middle + 1, 'price': 1900.4},
+            ];
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'quoteType': 'bid',
+        'symbolId': '42', 'hasMore': false, 'ticks': rows,
+      }), 200);
+    });
+    final api = MarketApi(client: client);
+    final ticks = await api.ctraderBidTicks(
+      token: 'secret', accountId: '1', symbol: 'XAUUSD',
+      before: DateTime.fromMillisecondsSinceEpoch(end, isUtc: true),
+    );
+    expect(intervals, [
+      (start, end),
+      (start, middle),
+      (middle + 1, end),
+    ]);
+    expect(ticks.map((tick) => tick.timestamp).toList(),
+        [middle, middle, middle + 1, middle + 1]);
+    expect(ticks.map((tick) => tick.bid).toList(),
+        [1900.1, 1900.2, 1900.3, 1900.4]);
+  });
+
   test('cTrader symbol metadata is reused for repeated market requests and reset safely', () async {
     var symbolRequests = 0;
     final client = MockClient((request) async {
