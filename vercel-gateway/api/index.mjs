@@ -250,7 +250,11 @@ async function handler(req,res){
             count=intArg(url,'count',1,1000);
       if(to-from>90*86400000)return fail(res,400,'date_window_too_wide');
       const data=await stage('candles',()=>upstream.channel(entry.isLive).history(id,session.access,symbolId,period,from,to,count));
-      return reply(res,200,{symbolId:String(symbolId),period:periodName,source:'ctrader',...data},sessionHeader);
+      // Carry the authenticated broker account identity through to Flutter.
+      // A source label alone cannot prove that the selected XAUUSD feed
+      // belongs to the currently selected cTrader broker account.
+      return reply(res,200,{accountId:String(id),symbolId:String(symbolId),
+        period:periodName,source:'ctrader',...data},sessionHeader);
     }
     if(path==='/v1/ticks'){
       const {id,entry}=await stage('ticks',()=>accountAccess(session,url));
