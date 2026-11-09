@@ -26,6 +26,9 @@ class RangeBarBuilder {
 
   List<TradeCandle> get closed => List.unmodifiable(_closed);
 
+  /// O(1) completion count for timestamp/tick-index tracking.
+  int get closedCount => _closed.length;
+
   TradeCandle? get forming => _open == null
       ? null
       : TradeCandle(_open!, _high!, _low!, _lastPrice!);
