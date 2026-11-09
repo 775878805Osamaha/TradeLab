@@ -177,6 +177,35 @@ class MarketController extends ChangeNotifier {
         symbol: symbol.code, before: before ?? DateTime.now().toUtc());
   }
 
+  /// Refresh just the uncovered interval after a cached six-day window.
+  /// The connected account is captured and rechecked to avoid displaying
+  /// another account's BID ticks after a broker account switch.
+  Future<List<MarketTick>> rangeTicksBetween(
+    TradeSymbol symbol, {
+    required int fromMs,
+    required int toMs,
+  }) async {
+    final account = accountId;
+    final token = _token;
+    if (symbol.source != TradeSource.ctrader ||
+        account == null || token == null) {
+      throw const MarketDataException(
+          'تحديث شموع المدى يتطلب اتصال cTrader صالحًا.');
+    }
+    final ticks = await _api.ctraderBidTicksRange(
+      token: token,
+      accountId: account,
+      symbol: symbol.code,
+      fromMs: fromMs,
+      toMs: toMs,
+    );
+    if (accountId != account || _token == null) {
+      throw const MarketDataException(
+          'تغيّر حساب cTrader أثناء تحديث تيكات المدى. أعد المحاولة.');
+    }
+    return ticks;
+  }
+
   Future<double> pointSize(TradeSymbol symbol) async {
     if (!ctraderConnected || symbol.source != TradeSource.ctrader) {
       throw const MarketDataException('يلزم ربط cTrader لدقة تسعير شموع المدى.');
