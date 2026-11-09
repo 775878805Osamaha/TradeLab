@@ -93,7 +93,11 @@ void main() {
     await tester.enterText(find.byKey(const Key('lab-observed-target')), '102');
     await tester.enterText(find.byKey(
       const Key('lab-observed-round-trip-cost')), '0.25');
-    await tester.ensureVisible(find.byKey(const Key('lab-record-observed-signal')));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('lab-record-observed-signal')), 100,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('lab-observed-trade')),
+        matching: find.byType(Scrollable)).first);
     await tester.tap(find.byKey(const Key('lab-record-observed-signal')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('بانتظار شمعة الدخول'), 100,
@@ -187,7 +191,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('lab-tab-1')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('lab-stop-loss')));
+    await tester.scrollUntilVisible(find.byKey(const Key('lab-stop-loss')),
+      -120, scrollable: find.descendant(
+        of: find.byKey(const Key('lab-risk-calculator')),
+        matching: find.byType(Scrollable)).first);
     await tester.pumpAndSettle();
     final stopField = tester.widget<TextField>(find.byKey(
       const Key('lab-stop-loss')));
