@@ -70,6 +70,25 @@ void main() {
     // The chart must NOT clamp this zero to one visible candle.
   });
 
+  test('large Range history builds on background isolate identically',
+      () async {
+    final ticks = List<MarketTick>.generate(6001, (index) =>
+        MarketTick(1700000000000 + index,
+            1900 + (index % 17) * .13 + (index % 5) * .02));
+    final synchronous = RangeBarTimeline.build(ticks, .5);
+    final asyncResult = await RangeBarTimeline.buildAsync(ticks, .5);
+    expect(asyncResult.endTickIndices, synchronous.endTickIndices);
+    expect(asyncResult.bars.length, synchronous.bars.length);
+    for (var index = 0; index < synchronous.bars.length; index++) {
+      final expected = synchronous.bars[index];
+      final actual = asyncResult.bars[index];
+      expect(actual.open, expected.open);
+      expect(actual.high, expected.high);
+      expect(actual.low, expected.low);
+      expect(actual.close, expected.close);
+    }
+  });
+
   test('empty tick window does not invent Range bars', () {
     final timeline = RangeBarTimeline.build(const <MarketTick>[], 1);
     expect(timeline.bars, isEmpty);
