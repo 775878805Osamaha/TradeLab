@@ -40,7 +40,34 @@ class MarketApi {
       if (response.statusCode == 401) {
         throw const MarketDataException('انتهت جلسة cTrader. أعد ربط الحساب.', sessionExpired: true);
       }
-      throw MarketDataException('فشل الاتصال بالمصدر (${response.statusCode}). أعد المحاولة.');
+      // The backend returns bounded public reason codes only. Never
+      // expose raw cTrader responses, private account identifiers or tokens.
+      String? reason;
+      try {
+        final data = jsonDecode(response.body);
+        if (data is Map<String, dynamic> && data['error'] is String) {
+          reason = data['error'] as String;
+        }
+      } catch (_) {}
+      if (url.path == '/v1/candles') {
+        if (reason == 'ctrader_candle_history_unusable') {
+          throw const MarketDataException(
+              'وصلت شموع غير متسقة من cTrader. '
+              'لم يتم عرض أسعار غير موثوقة؛ أعد تحميل الشارت.');
+        }
+        if (reason == 'ctrader_broker_rejected_request') {
+          throw const MarketDataException(
+              'رفض وسيط cTrader طلب تاريخ الشموع. '
+              'تحقق من الحساب والرمز والإطار الزمني.');
+        }
+        if (reason == 'invalid_request') {
+          throw const MarketDataException(
+              'رفضت بوابة cTrader نطاق طلب الشموع. '
+              'يلزم تحديث التطبيق أو إعادة اختيار الإطار.');
+        }
+      }
+      throw MarketDataException(
+          'فشل الاتصال بالمصدر (${response.statusCode}). أعد المحاولة.');
     }
     try {
       final data = jsonDecode(response.body);
@@ -169,7 +196,7 @@ class MarketApi {
     }
     final data = await _json(_gateway('/v1/candles', {
       'accountId': accountId, 'symbolId': '$id', 'period': period,
-      'from': '$startMs', 'to': '$endMs', 'count': '1000',
+      'from': '$startMs', 'to': '$endMs', 'count': '900',
     }), token: token);
     if (data['source'] != 'ctrader' || data['period'] != period ||
         '${data['symbolId']}' != '$id' ||
