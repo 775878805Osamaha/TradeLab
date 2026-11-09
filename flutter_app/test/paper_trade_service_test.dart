@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
@@ -5,6 +7,7 @@ import 'package:tradelab_flutter/paper/paper_journal_controller.dart';
 import 'package:tradelab_flutter/paper/paper_journal_store.dart';
 import 'package:tradelab_flutter/paper/paper_ledger.dart';
 import 'package:tradelab_flutter/paper/paper_trade_service.dart';
+import 'package:tradelab_flutter/paper/paper_risk_engine.dart';
 
 class _QuoteProvider implements PaperQuoteProvider {
   _QuoteProvider(this.quote);
@@ -25,7 +28,8 @@ class _Store implements PaperJournalStore {
       timestampMs: entry.timestampMs, openedAtMs: entry.openedAtMs,
       symbol: entry.symbol, side: entry.side, quantity: entry.quantity,
       entryPrice: entry.entryPrice, exitPrice: entry.exitPrice,
-      amount: entry.amount, fee: entry.fee));
+      amount: entry.amount, fee: entry.fee,
+      stopLoss: entry.stopLoss, takeProfit: entry.takeProfit));
   }
   @override
   Future<void> closeTrade(String key, int id,
@@ -38,7 +42,8 @@ class _Store implements PaperJournalStore {
       accountKey: old.accountKey, kind: LedgerKind.closedTrade,
       symbol: old.symbol, side: old.side, quantity: old.quantity,
       entryPrice: old.entryPrice, exitPrice: exitPrice,
-      timestampMs: timestampMs, openedAtMs: old.openedAtMs);
+      timestampMs: timestampMs, openedAtMs: old.openedAtMs,
+      stopLoss: old.stopLoss, takeProfit: old.takeProfit);
   }
   @override
   Future<void> delete(String key, int id) async {
@@ -46,6 +51,17 @@ class _Store implements PaperJournalStore {
   }
   @override
   Future<void> close() async {}
+}
+
+class _DelayedStore extends _Store {
+  final gate = Completer<void>();
+  bool holdWrites = false;
+
+  @override
+  Future<void> add(LedgerEntry entry) async {
+    if (holdWrites) await gate.future;
+    await super.add(entry);
+  }
 }
 
 void main() {
@@ -159,5 +175,61 @@ void main() {
     await expectLater(service.close(position: open, prepared: prepared),
       throwsStateError);
     expect(journal.entries.single.kind, LedgerKind.closedTrade);
+  });
+
+  test('risk-managed entry stores SL/TP and refuses an oversized trade', () async {
+    final store = _Store();
+    final journal = PaperJournalController(store: store);
+    addTearDown(journal.dispose);
+    await journal.useAccount('11');
+    await journal.add(const LedgerEntry(id: 0, accountKey: 'ctrader:11',
+      kind: LedgerKind.deposit, timestampMs: time - 1000, amount: 10000));
+    final service = PaperTradeService(
+      quotes: _QuoteProvider(quote(2000, 2000.4)), journal: journal,
+      nowMs: () => time);
+    final prepared = await service.prepare(symbol);
+    const limits = PaperRiskLimits(maxLossPerTradeUsd: 10);
+    final assessment = service.assessRisk(symbol: symbol, side: PaperSide.buy,
+      stopLoss: 1999, takeProfit: 2003, limits: limits, prepared: prepared,
+      units: 2);
+    expect(assessment.allowed, isTrue);
+    expect(assessment.riskUsd, closeTo(2.8, 0.00001));
+    await expectLater(service.openRiskManaged(symbol: symbol,
+      side: PaperSide.buy, units: 10, stopLoss: 1999, takeProfit: 2003,
+      limits: limits, prepared: prepared), throwsStateError);
+    expect(journal.entries.length, 1);
+    await service.openRiskManaged(symbol: symbol,
+      side: PaperSide.buy, units: 2, stopLoss: 1999, takeProfit: 2003,
+      limits: limits, prepared: prepared);
+    expect(journal.entries.length, 2);
+    expect(journal.entries.last.stopLoss, 1999);
+    expect(journal.entries.last.takeProfit, 2003);
+  });
+
+  test('concurrent order sheets cannot both bypass the journal risk gate', () async {
+    final store = _DelayedStore();
+    final journal = PaperJournalController(store: store);
+    addTearDown(journal.dispose);
+    await journal.useAccount('11');
+    await journal.add(const LedgerEntry(id: 0, accountKey: 'ctrader:11',
+      kind: LedgerKind.deposit, timestampMs: time - 1000, amount: 10000));
+    final quotes = _QuoteProvider(quote(2000, 2000.4));
+    final first = PaperTradeService(quotes: quotes, journal: journal,
+      nowMs: () => time);
+    final second = PaperTradeService(quotes: quotes, journal: journal,
+      nowMs: () => time);
+    final prepared = await first.prepare(symbol);
+    const limits = PaperRiskLimits(maxLossPerTradeUsd: 10);
+    store.holdWrites = true;
+    final pending = first.openRiskManaged(symbol: symbol, side: PaperSide.buy,
+      units: 2, stopLoss: 1999, takeProfit: 2003,
+      limits: limits, prepared: prepared);
+    await expectLater(second.openRiskManaged(symbol: symbol,
+      side: PaperSide.buy, units: 2, stopLoss: 1999,
+      takeProfit: 2003, limits: limits, prepared: prepared), throwsStateError);
+    store.gate.complete();
+    await pending;
+    expect(journal.entries.where((e) => e.kind == LedgerKind.openTrade),
+      hasLength(1));
   });
 }

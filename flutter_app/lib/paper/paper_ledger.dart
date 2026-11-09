@@ -19,6 +19,8 @@ class LedgerEntry {
     this.fee = 0,
     this.amount,
     this.openedAtMs,
+    this.stopLoss,
+    this.takeProfit,
   });
 
   final int id;
@@ -33,6 +35,9 @@ class LedgerEntry {
   final double fee;
   final double? amount;
   final int? openedAtMs;
+  /// Informational risk levels only; they are not broker or automatic orders.
+  final double? stopLoss;
+  final double? takeProfit;
 
   /// For this first journal, only USD-quoted symbols are eligible, and
   /// quantity means base-asset units (not FX lots or margin contracts).
@@ -70,6 +75,12 @@ class LedgerEntry {
             (exitPrice == null || !exitPrice!.isFinite || exitPrice! <= 0)) ||
         (kind == LedgerKind.openTrade && exitPrice != null) ||
         !fee.isFinite || fee < 0 ||
+        (stopLoss != null && (!stopLoss!.isFinite || stopLoss! <= 0)) ||
+        (takeProfit != null && (!takeProfit!.isFinite || takeProfit! <= 0)) ||
+        (stopLoss != null && side == PaperSide.buy && stopLoss! >= entryPrice!) ||
+        (stopLoss != null && side == PaperSide.sell && stopLoss! <= entryPrice!) ||
+        (takeProfit != null && side == PaperSide.buy && takeProfit! <= entryPrice!) ||
+        (takeProfit != null && side == PaperSide.sell && takeProfit! >= entryPrice!) ||
         (openedAtMs != null && (openedAtMs! <= 0 || openedAtMs! > timestampMs)) ||
         (kind == LedgerKind.closedTrade && !realizedPnl.isFinite)) {
       throw const FormatException('تفاصيل الصفقة غير صالحة أو عملتها ليست الدولار.');

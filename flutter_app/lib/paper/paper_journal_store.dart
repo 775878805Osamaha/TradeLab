@@ -21,7 +21,7 @@ class SqlitePaperJournalStore implements PaperJournalStore {
   Future<Database> _open() async {
     final directory = await getDatabasesPath();
     return openDatabase(path.join(directory, 'tradelab_flutter_paper_v1.db'),
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE ledger_entries (
@@ -36,11 +36,19 @@ class SqlitePaperJournalStore implements PaperJournalStore {
             entry_price REAL,
             exit_price REAL,
             fee REAL NOT NULL DEFAULT 0,
-            opened_at_ms INTEGER
+            opened_at_ms INTEGER,
+            stop_loss REAL,
+            take_profit REAL
           )
         ''');
         await db.execute('CREATE INDEX ledger_account_time '
             'ON ledger_entries(account_key, timestamp_ms, id)');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE ledger_entries ADD COLUMN stop_loss REAL');
+          await db.execute('ALTER TABLE ledger_entries ADD COLUMN take_profit REAL');
+        }
       });
   }
 
@@ -63,6 +71,8 @@ class SqlitePaperJournalStore implements PaperJournalStore {
       exitPrice: (row['exit_price'] as num?)?.toDouble(),
       fee: (row['fee'] as num).toDouble(),
       openedAtMs: row['opened_at_ms'] as int?,
+      stopLoss: (row['stop_loss'] as num?)?.toDouble(),
+      takeProfit: (row['take_profit'] as num?)?.toDouble(),
     )).toList(growable: false);
   }
 
@@ -82,6 +92,8 @@ class SqlitePaperJournalStore implements PaperJournalStore {
       'exit_price': entry.exitPrice,
       'fee': entry.fee,
       'opened_at_ms': entry.openedAtMs,
+      'stop_loss': entry.stopLoss,
+      'take_profit': entry.takeProfit,
     });
   }
 

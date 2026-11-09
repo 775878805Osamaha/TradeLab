@@ -17,15 +17,20 @@ import '../paper/paper_journal_controller.dart';
 import '../paper/paper_ledger.dart';
 import '../paper/paper_order_sheet.dart';
 import '../paper/paper_trade_service.dart';
+import '../replay/replay_analysis_sheet.dart';
+import '../replay/replay_completed_prefix.dart';
+import '../replay/replay_lab_bridge.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
 
 enum ChartMode { candles, heikinAshi, range }
 
 class ChartScreen extends StatefulWidget {
-  const ChartScreen({required this.controller, this.journal, super.key});
+  const ChartScreen({required this.controller, this.journal, this.labBridge,
+    super.key});
   final MarketController controller;
   final PaperJournalController? journal;
+  final ReplayLabBridge? labBridge;
 
   @override
   State<ChartScreen> createState() => _ChartScreenState();
@@ -103,12 +108,24 @@ class _ChartScreenState extends State<ChartScreen> {
   @override
   void initState() {
     super.initState();
+    widget.labBridge?.attach(capture: _captureReplayLabSnapshot,
+      pause: _pauseReplayForNavigation);
     _linkedBefore = widget.controller.ctraderConnected;
     _accountBefore = widget.controller.accountId;
     widget.controller.addListener(_onMarketUpdate);
     // Binance does not require a cTrader session. Load its chart immediately
     // when selected, even on a device that has never linked a broker.
     if (_liveRequested) Future.microtask(_loadRealHistory);
+  }
+
+  @override
+  void didUpdateWidget(covariant ChartScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.labBridge != widget.labBridge) {
+      oldWidget.labBridge?.detach();
+      widget.labBridge?.attach(capture: _captureReplayLabSnapshot,
+        pause: _pauseReplayForNavigation);
+    }
   }
 
   void _onMarketUpdate() {
@@ -280,7 +297,9 @@ class _ChartScreenState extends State<ChartScreen> {
         };
         final ordered = byTimestamp.values.toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-        _actualBars = ordered;
+        // Publish each provider-history generation as immutable: captured
+        // Replay prefixes must remain frozen when newer pages are loaded.
+        _actualBars = List<MarketBar>.unmodifiable(ordered);
         _actualCandles = ordered.map((bar) => bar.candle).toList(growable: false);
         _actualTimestamps = ordered.map((bar) => bar.timestamp).toList(growable: false);
         if (ordered.isNotEmpty) _olderCursorMs = ordered.first.timestamp;
@@ -484,7 +503,7 @@ class _ChartScreenState extends State<ChartScreen> {
       } else {
         _olderCursorMs = unique.first.timestamp;
         setState(() {
-        _actualBars = [...unique, ..._actualBars];
+        _actualBars = List<MarketBar>.unmodifiable([...unique, ..._actualBars]);
         _actualCandles = _actualBars.map((bar) => bar.candle).toList(growable: false);
         _actualTimestamps = _actualBars.map((bar) => bar.timestamp).toList(growable: false);
         for (var index = 0; index < _patterns.length; index++) {
@@ -516,6 +535,7 @@ class _ChartScreenState extends State<ChartScreen> {
 
   @override
   void dispose() {
+    widget.labBridge?.detach();
     widget.controller.removeListener(_onMarketUpdate);
     _loadRevision++;
     _replayTimer?.cancel();
@@ -526,6 +546,24 @@ class _ChartScreenState extends State<ChartScreen> {
     _replayTimer?.cancel();
     _replayTimer = null;
     _playing = false;
+  }
+
+  void _pauseReplayForNavigation() {
+    if (_playing && mounted) setState(_stopPlayback);
+  }
+
+  ReplayLabSnapshot? _captureReplayLabSnapshot() {
+    if (!_replay || !_liveRequested || _mode == ChartMode.range ||
+        _loading || _actualBars.isEmpty) return null;
+    final visible = replayCompletedPrefixCount(source: _selectedSymbol.source,
+      availableBars: _actualBars.length, cursor: _visibleThrough);
+    if (visible < 1) return null;
+    return ReplayLabSnapshot(
+      symbol: _symbol,
+      timeframe: _timeframe,
+      accountKey: widget.journal?.accountKey ?? 'local:guest',
+      bars: FrozenMarketBarPrefix(_actualBars, visible),
+    );
   }
 
   void _toggleReplay() {
@@ -597,6 +635,26 @@ class _ChartScreenState extends State<ChartScreen> {
       builder: (_) => PaperOrderSheet(symbol: _selectedSymbol,
         service: PaperTradeService(
           quotes: LivePaperQuoteProvider(widget.controller), journal: journal)));
+  }
+
+  void _openReplayAnalysis() {
+    if (!_replay || !_liveRequested || _mode == ChartMode.range) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('تحليل Replay يتطلب شموع OHLC حقيقية من cTrader أو Binance.')));
+      return;
+    }
+    final visible = replayCompletedPrefixCount(source: _selectedSymbol.source,
+      availableBars: _actualBars.length, cursor: _visibleThrough);
+    if (visible < 30) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('حمّل 30 شمعة تاريخية مغلقة على الأقل لتحليل Replay.')));
+      return;
+    }
+    final prefix = FrozenMarketBarPrefix(_actualBars, visible);
+    showModalBottomSheet<void>(context: context, showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => ReplayAnalysisSheet(bars: prefix,
+        symbol: _symbol, timeframe: _timeframe));
   }
 
   List<TradeCandle> get _displayCandles {
@@ -1370,6 +1428,10 @@ class _ChartScreenState extends State<ChartScreen> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Row(children: [
             const Text('Replay', style: TextStyle(fontWeight: FontWeight.w800)),
+            IconButton(key: const Key('replay-analysis'),
+              tooltip: 'تحليل Replay بالشموع الظاهرة',
+              onPressed: _openReplayAnalysis,
+              icon: const Icon(Icons.analytics_outlined, size: 19)),
             const Spacer(),
             Text('$_visibleThrough / $_totalBars ${_liveRequested ? 'شمعة' : 'شمعة توضيحية'}',
                 style: Theme.of(context).textTheme.labelSmall),

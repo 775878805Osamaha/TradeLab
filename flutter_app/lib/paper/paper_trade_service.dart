@@ -3,6 +3,7 @@ import '../data/market_controller.dart';
 import '../data/tradelab_data.dart';
 import 'paper_journal_controller.dart';
 import 'paper_ledger.dart';
+import 'paper_risk_engine.dart';
 
 abstract interface class PaperQuoteProvider {
   Future<MarketQuote> fetch(TradeSymbol symbol);
@@ -32,6 +33,8 @@ class PaperTradeService {
   final PaperQuoteProvider quotes;
   final PaperJournalController journal;
   final int Function() _nowMs;
+  bool _openingRiskManaged = false;
+  final PaperRiskEngine _risk = const PaperRiskEngine();
 
   static int _clock() => DateTime.now().toUtc().millisecondsSinceEpoch;
 
@@ -76,6 +79,59 @@ class PaperTradeService {
     );
     record.validate();
     await journal.add(record);
+  }
+
+  /// Only reads the current account's local ledger; no broker execution.
+  PaperRiskAssessment assessRisk({required TradeSymbol symbol,
+      required PaperSide side, required double stopLoss,
+      required double takeProfit, required PaperRiskLimits limits,
+      required PreparedPaperQuote prepared, double? units}) {
+    _verify(prepared, symbol);
+    return _risk.assess(
+      plan: PaperTradePlan(side: side,
+        entryPrice: prepared.quote.executionPrice(buy: side == PaperSide.buy),
+        stopLoss: stopLoss, takeProfit: takeProfit),
+      limits: limits, entries: journal.entries,
+      nowMs: _nowMs(), requestedUnits: units);
+  }
+
+  /// Re-checks *after* confirmation, at the exact saved quote, before writing.
+  /// The protective levels are stored as plans, not exchange stop orders.
+  Future<void> openRiskManaged({required TradeSymbol symbol,
+      required PaperSide side, required double units,
+      required double stopLoss, required double takeProfit,
+      required PaperRiskLimits limits,
+      required PreparedPaperQuote prepared}) async {
+    if (_openingRiskManaged) {
+      throw StateError('هناك صفقة قيد التسجيل. انتظر اكتمالها.');
+    }
+    _openingRiskManaged = true;
+    try {
+      _verify(prepared, symbol);
+      final timestamp = _nowMs();
+      final record = LedgerEntry(
+        id: 0, accountKey: prepared.accountKey, kind: LedgerKind.openTrade,
+        timestampMs: timestamp, openedAtMs: timestamp,
+        symbol: symbol.code, side: side, quantity: units,
+        entryPrice: prepared.quote.executionPrice(buy: side == PaperSide.buy),
+        stopLoss: stopLoss, takeProfit: takeProfit, fee: 0,
+      );
+      record.validate();
+      await journal.addWithValidation(record, (currentEntries) {
+        // Check the account, quote and funds inside the journal's write lock.
+        _verify(prepared, symbol);
+        final assessment = _risk.assess(
+          plan: PaperTradePlan(side: side, entryPrice: record.entryPrice!,
+            stopLoss: stopLoss, takeProfit: takeProfit),
+          limits: limits, entries: currentEntries,
+          nowMs: _nowMs(), requestedUnits: units);
+        if (!assessment.allowed) {
+          throw StateError(assessment.reasons.join(' '));
+        }
+      });
+    } finally {
+      _openingRiskManaged = false;
+    }
   }
 
   Future<void> close({required LedgerEntry position,

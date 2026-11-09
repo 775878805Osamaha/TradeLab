@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/tradelab_data.dart';
 import 'paper_ledger.dart';
+import 'paper_risk_engine.dart';
 import 'paper_trade_service.dart';
 
 class PaperOrderSheet extends StatefulWidget {
@@ -17,18 +18,75 @@ class PaperOrderSheet extends StatefulWidget {
 class _PaperOrderSheetState extends State<PaperOrderSheet> {
   late Future<PreparedPaperQuote> _quote = widget.service.prepare(widget.symbol);
   final _units = TextEditingController(text: '1');
+  final _stopLoss = TextEditingController();
+  final _takeProfit = TextEditingController();
+  final _riskUsd = TextEditingController();
+  final _dailyLimitUsd = TextEditingController();
   PaperSide _side = PaperSide.buy;
   bool _saving = false;
   String? _error;
 
   @override
-  void dispose() { _units.dispose(); super.dispose(); }
+  void dispose() {
+    _units.dispose();
+    _stopLoss.dispose();
+    _takeProfit.dispose();
+    _riskUsd.dispose();
+    _dailyLimitUsd.dispose();
+    super.dispose();
+  }
+
+  double? _parse(TextEditingController field) =>
+      double.tryParse(field.text.trim().replaceAll(',', '.'));
+
+  ({double stop, double target, PaperRiskLimits limits}) _riskInputs() {
+    final stop = _parse(_stopLoss);
+    final target = _parse(_takeProfit);
+    final maxLoss = _parse(_riskUsd);
+    final dailyText = _dailyLimitUsd.text.trim();
+    final dailyLimit = dailyText.isEmpty ? null : _parse(_dailyLimitUsd);
+    if (stop == null || target == null || maxLoss == null ||
+        (dailyText.isNotEmpty && dailyLimit == null)) {
+      throw const FormatException('أدخل وقف الخسارة والهدف وأقصى خسارة للصفقة بالدولار.');
+    }
+    return (stop: stop, target: target,
+      limits: PaperRiskLimits(maxLossPerTradeUsd: maxLoss,
+        maxDailyLossUsd: dailyLimit));
+  }
+
+  void _suggestUnits(PreparedPaperQuote prepared) {
+    try {
+      final fields = _riskInputs();
+      final assessment = widget.service.assessRisk(symbol: widget.symbol,
+        side: _side, stopLoss: fields.stop, takeProfit: fields.target,
+        limits: fields.limits, prepared: prepared);
+      if (!assessment.allowed) throw StateError(assessment.reasons.join(' '));
+      setState(() {
+        _units.text = assessment.maxUnits.toString();
+        _error = null;
+      });
+    } catch (error) {
+      setState(() => _error = error.toString());
+    }
+  }
 
   Future<void> _submit(PreparedPaperQuote prepared) async {
     if (_saving) return;
-    final units = double.tryParse(_units.text.trim().replaceAll(',', '.'));
+    final units = _parse(_units);
     if (units == null || !units.isFinite || units <= 0) {
       setState(() => _error = 'أدخل كمية موجبة بوحدات الأصل، وليست لوت.');
+      return;
+    }
+    late final ({double stop, double target, PaperRiskLimits limits}) fields;
+    late final PaperRiskAssessment assessment;
+    try {
+      fields = _riskInputs();
+      assessment = widget.service.assessRisk(symbol: widget.symbol,
+        side: _side, stopLoss: fields.stop, takeProfit: fields.target,
+        limits: fields.limits, prepared: prepared, units: units);
+      if (!assessment.allowed) throw StateError(assessment.reasons.join(' '));
+    } catch (error) {
+      setState(() => _error = error.toString());
       return;
     }
     final quotedPrice = prepared.quote.executionPrice(buy: _side == PaperSide.buy);
@@ -37,7 +95,11 @@ class _PaperOrderSheetState extends State<PaperOrderSheet> {
         title: const Text('تأكيد صفقة تجريبية'),
         content: Text('${_side == PaperSide.buy ? 'شراء' : 'بيع'} '
             '${widget.symbol.code} · $units وحدة عند سعر $quotedPrice\n'
+            'وقف: ${fields.stop} · هدف: ${fields.target}\n'
+            'مخاطرة محسوبة: ${assessment.riskUsd.toStringAsFixed(2)} USD'
+            ' · عائد/مخاطرة: ${assessment.rewardRisk.toStringAsFixed(2)}\n'
             'هذا تسجيل افتراضي حسب عرض السعر الحالي، وليس تنفيذًا لدى الوسيط. '
+            'مستويات الوقف والهدف مرجعية فقط ولا تُنفذ تلقائيًا. '
             'السبريد محسوب، لكن الانزلاق والعمولات والرافعة غير مُحاكاة.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false),
@@ -49,8 +111,9 @@ class _PaperOrderSheetState extends State<PaperOrderSheet> {
     if (accepted != true || !mounted) return;
     setState(() { _saving = true; _error = null; });
     try {
-      await widget.service.open(symbol: widget.symbol, side: _side,
-        units: units, prepared: prepared);
+      await widget.service.openRiskManaged(symbol: widget.symbol, side: _side,
+        units: units, prepared: prepared,
+        stopLoss: fields.stop, takeProfit: fields.target, limits: fields.limits);
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
@@ -115,6 +178,39 @@ class _PaperOrderSheetState extends State<PaperOrderSheet> {
                   textDirection: TextDirection.ltr,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(), labelText: 'الكمية بوحدات الأصل (ليست لوت)')),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: TextField(controller: _stopLoss,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textDirection: TextDirection.ltr,
+                    decoration: const InputDecoration(border: OutlineInputBorder(),
+                      labelText: 'وقف الخسارة SL'))),
+                  const SizedBox(width: 8),
+                  Expanded(child: TextField(controller: _takeProfit,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textDirection: TextDirection.ltr,
+                    decoration: const InputDecoration(border: OutlineInputBorder(),
+                      labelText: 'الهدف TP'))),
+                ]),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: TextField(controller: _riskUsd,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textDirection: TextDirection.ltr,
+                    decoration: const InputDecoration(border: OutlineInputBorder(),
+                      labelText: 'أقصى خسارة للصفقة USD'))),
+                  const SizedBox(width: 8),
+                  Expanded(child: TextField(controller: _dailyLimitUsd,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textDirection: TextDirection.ltr,
+                    decoration: const InputDecoration(border: OutlineInputBorder(),
+                      labelText: 'حد الخسارة اليومي UTC (اختياري)'))),
+                ]),
+                Align(alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    onPressed: _saving ? null : () => _suggestUnits(prepared),
+                    icon: const Icon(Icons.calculate_outlined),
+                    label: const Text('احسب الكمية حسب الرصيد والمخاطرة'))),
                 const SizedBox(height: 12),
                 if (_error != null) Text(_error!,
                   style: TextStyle(color: Theme.of(context).colorScheme.error)),

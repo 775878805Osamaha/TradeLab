@@ -3,10 +3,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'data/market_controller.dart';
 import 'paper/paper_journal_controller.dart';
 import 'paper/paper_journal_store.dart';
+import 'replay/replay_lab_bridge.dart';
 
 import 'screens/account_screen.dart';
 import 'screens/chart_screen.dart';
 import 'screens/markets_screen.dart';
+import 'screens/trading_lab_screen.dart';
 import 'screens/results_screen.dart';
 import 'theme/tradelab_theme.dart';
 
@@ -104,12 +106,13 @@ class TradeLabShell extends StatefulWidget {
 }
 
 class _TradeLabShellState extends State<TradeLabShell> {
-  // The approved tab order is Market → Chart → Results → Account (RTL).
+  // Preserve the original four tabs; add a dedicated Lab beside Results.
   // Chart opens in ANALYSIS mode, never an implicit Replay session.
   int _selectedIndex = 1;
   late final MarketController _market = widget.controller ?? MarketController();
   late final PaperJournalController _journal = widget.journal ??
       PaperJournalController(store: SqlitePaperJournalStore());
+  final ReplayLabBridge _labBridge = ReplayLabBridge();
 
   @override
   void initState() {
@@ -130,6 +133,7 @@ class _TradeLabShellState extends State<TradeLabShell> {
     _market.removeListener(_onAccountChanged);
     if (widget.controller == null) _market.dispose();
     if (widget.journal == null) _journal.dispose();
+    _labBridge.dispose();
     super.dispose();
   }
 
@@ -152,6 +156,11 @@ class _TradeLabShellState extends State<TradeLabShell> {
         label: 'النتائج',
       ),
       NavigationDestination(
+        icon: Icon(Icons.science_outlined),
+        selectedIcon: Icon(Icons.science),
+        label: 'المختبر',
+      ),
+      NavigationDestination(
         icon: Icon(Icons.account_balance_outlined),
         selectedIcon: Icon(Icons.account_balance),
         label: 'الحساب',
@@ -170,8 +179,12 @@ class _TradeLabShellState extends State<TradeLabShell> {
                 index: _selectedIndex,
                 children: [
                   MarketsScreen(controller: _market),
-                  ChartScreen(controller: _market, journal: _journal),
+                  ChartScreen(controller: _market, journal: _journal,
+                    labBridge: _labBridge),
                   ResultsScreen(controller: _market, journal: _journal),
+                  TradingLabScreen(controller: _market, journal: _journal,
+                    replayBridge: _labBridge,
+                    onOpenChart: () => setState(() => _selectedIndex = 1)),
                   AccountScreen(
                     controller: _market,
                     darkMode: widget.darkMode,
@@ -187,6 +200,8 @@ class _TradeLabShellState extends State<TradeLabShell> {
         selectedIndex: _selectedIndex,
         destinations: destinations,
         onDestinationSelected: (index) {
+          if (index != 1) _labBridge.pausePlayback();
+          if (index == 3) _labBridge.labSelected();
           setState(() => _selectedIndex = index);
           if (index == 0) _market.refreshQuotes();
         },

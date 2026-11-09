@@ -29,7 +29,11 @@ void main() {
     await tester.tap(find.byTooltip('تشغيل Replay داخل الشارت'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+    expect(find.byKey(const Key('replay-analysis')), findsOneWidget);
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('replay-analysis')));
+    await tester.pump();
+    expect(find.textContaining('يتطلب شموع OHLC حقيقية'), findsOneWidget);
     await tester.tap(find.byTooltip('إغلاق Replay'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);

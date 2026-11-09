@@ -11,6 +11,7 @@ class PaperJournalController extends ChangeNotifier {
   String get accountKey => _accountKey;
   List<LedgerEntry> entries = const [];
   bool busy = false;
+  bool _writing = false;
   String? error;
   int _revision = 0;
 
@@ -42,23 +43,41 @@ class PaperJournalController extends ChangeNotifier {
   }
 
   Future<void> add(LedgerEntry entry) async {
-    if (busy || entry.accountKey != _accountKey) {
-      throw StateError('الدفتر غير جاهز أو تغيّر الحساب.');
+    await addWithValidation(entry, (_) {});
+  }
+
+  /// Keeps account-scoped validation and the write in one controller-level
+  /// critical section. Two sheets cannot both pass against the same balance.
+  Future<void> addWithValidation(LedgerEntry entry,
+      void Function(List<LedgerEntry>) validateCurrent) async {
+    if (busy || _writing || entry.accountKey != _accountKey) {
+      throw StateError('الدفتر غير جاهز أو توجد عملية أخرى أو تغيّر الحساب.');
     }
-    entry.validate();
-    await _store.add(entry);
-    await refresh();
+    _writing = true;
+    try {
+      entry.validate();
+      validateCurrent(List<LedgerEntry>.unmodifiable(entries));
+      await _store.add(entry);
+      await refresh();
+    } finally {
+      _writing = false;
+    }
   }
 
   Future<void> delete(int id) async {
-    if (busy) throw StateError('انتظر حتى يكتمل تحميل الدفتر.');
-    await _store.delete(_accountKey, id);
-    await refresh();
+    if (busy || _writing) throw StateError('انتظر حتى يكتمل تحميل الدفتر.');
+    _writing = true;
+    try {
+      await _store.delete(_accountKey, id);
+      await refresh();
+    } finally {
+      _writing = false;
+    }
   }
 
   Future<void> closeTrade(LedgerEntry position,
       {required double exitPrice, required int timestampMs}) async {
-    if (busy || position.accountKey != _accountKey ||
+    if (busy || _writing || position.accountKey != _accountKey ||
         position.kind != LedgerKind.openTrade) {
       throw StateError('المركز ليس مفتوحًا في الدفتر الحالي.');
     }
@@ -66,9 +85,14 @@ class PaperJournalController extends ChangeNotifier {
         !exitPrice.isFinite) {
       throw const FormatException('سعر الخروج أو تاريخه غير صالح.');
     }
-    await _store.closeTrade(_accountKey, position.id,
-      exitPrice: exitPrice, timestampMs: timestampMs);
-    await refresh();
+    _writing = true;
+    try {
+      await _store.closeTrade(_accountKey, position.id,
+        exitPrice: exitPrice, timestampMs: timestampMs);
+      await refresh();
+    } finally {
+      _writing = false;
+    }
   }
 
   @override

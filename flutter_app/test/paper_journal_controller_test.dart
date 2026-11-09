@@ -26,7 +26,8 @@ class _FakeStore implements PaperJournalStore {
       kind: LedgerKind.closedTrade, timestampMs: timestampMs,
       symbol: old.symbol, side: old.side, quantity: old.quantity,
       entryPrice: old.entryPrice, exitPrice: exitPrice,
-      openedAtMs: old.openedAtMs, fee: old.fee);
+      openedAtMs: old.openedAtMs, fee: old.fee,
+      stopLoss: old.stopLoss, takeProfit: old.takeProfit);
   }
 
   @override
