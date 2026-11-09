@@ -33,6 +33,15 @@ jobs:
         run: flutter create --platforms android --project-name tradelab_flutter . --no-pub
       - name: Configure isolated OAuth callback
         run: python3 tool/configure_android_host.py
+      - name: Give test APK its own Android package
+        # GitHub-generated signing keys vary between runs. Do not replace an
+        # existing preview installation or force users to erase its data.
+        run: |
+          set -euo pipefail
+          gradle=android/app/build.gradle.kts
+          grep -Fq 'applicationId = "com.example.tradelab_flutter"' "$gradle"
+          sed -i 's/applicationId = "com.example.tradelab_flutter"/applicationId = "com.example.tradelab_flutter.labtest"/' "$gradle"
+          grep -Fq 'applicationId = "com.example.tradelab_flutter.labtest"' "$gradle"
       - name: Resolve dependencies
         run: flutter pub get
       - name: Analyze all Flutter source
@@ -60,10 +69,23 @@ jobs:
             -maxdepth 1 -type d | sort -V | tail -n 1)"
           "$tools_dir/apksigner" verify --verbose "$apk"
           "$tools_dir/aapt" dump badging "$apk" \
-            | grep -F "package: name='com.example.tradelab_flutter'"
+            | grep -F "package: name='com.example.tradelab_flutter.labtest'"
           cp "$apk" build/app/outputs/flutter-apk/TradeLab-Lab-Test.apk
           sha256sum build/app/outputs/flutter-apk/TradeLab-Lab-Test.apk \
             > build/app/outputs/flutter-apk/TradeLab-Lab-Test.apk.sha256
+      - name: Upload installable APK before emulator validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Lab-Test-APK
+          path: |
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Lab-Test.apk
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Lab-Test.apk.sha256
+          if-no-files-found: error
+      - name: Enable virtualization for Android emulator
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+          fi
       - name: Install and launch candidate on Android 13 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -76,22 +98,20 @@ jobs:
             set -eu
             apk="$GITHUB_WORKSPACE/flutter_app/build/app/outputs/flutter-apk/TradeLab-Lab-Test.apk"
             adb install "$apk"
-            adb shell monkey -p com.example.tradelab_flutter \
+            adb shell monkey -p com.example.tradelab_flutter.labtest \
               -c android.intent.category.LAUNCHER 1
             sleep 5
-            adb shell pidof -s com.example.tradelab_flutter
+            adb shell pidof -s com.example.tradelab_flutter.labtest
             adb exec-out screencap -p \
               > "$GITHUB_WORKSPACE/flutter_app/tradelab-lab-android13.png"
             adb logcat -d -b crash \
               > "$GITHUB_WORKSPACE/flutter_app/tradelab-lab-crash.log"
-      - name: Upload test-only APK and installation evidence
+      - name: Upload Android 13 installation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: TradeLab-Lab-Test-APK-and-QA
+          name: TradeLab-Lab-Android13-QA
           path: |
-            flutter_app/build/app/outputs/flutter-apk/TradeLab-Lab-Test.apk
-            flutter_app/build/app/outputs/flutter-apk/TradeLab-Lab-Test.apk.sha256
             flutter_app/tradelab-lab-android13.png
             flutter_app/tradelab-lab-crash.log
           if-no-files-found: warn
