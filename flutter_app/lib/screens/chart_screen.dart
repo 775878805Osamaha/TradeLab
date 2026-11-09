@@ -286,6 +286,14 @@ class _ChartScreenState extends State<ChartScreen> {
       final older = await widget.controller.rangeTicks(
         symbol, before: DateTime.fromMillisecondsSinceEpoch(earliest, isUtc: true));
       if (!mounted || revision != _loadRevision) return;
+      // The provider window includes the cursor timestamp. Its events
+      // may share a millisecond with the first loaded tick; we cannot
+      // safely infer their relative order without a provider event ID.
+      // Do not silently discard potentially distinct BID ticks.
+      if (older.any((tick) => tick.timestamp == earliest)) {
+        throw const MarketDataException(
+          'حدّ التيكات يحتوي أحداثًا بالتوقيت نفسه؛ تعذّر دمج الصفحة بأمان.');
+      }
       final prefix = older.where((tick) => tick.timestamp < earliest).toList();
       if (prefix.isEmpty) {
         _olderLoadError = 'لا تتوفر تيكات أقدم في هذه الفترة.';
