@@ -48,6 +48,28 @@ void main() {
     }
   });
 
+  test('new Range origin can make every bar depend on future ticks', () {
+    // The original close at timestamp 101 was safe to show in Replay.
+    final old = RangeBarTimeline.build([
+      MarketTick(100, 100),
+      MarketTick(101, 101),
+      MarketTick(102, 102),
+    ], 1);
+    final cutoffTick = old.endTickIndices.first;
+    expect(cutoffTick, 1);
+
+    // Adding a preceding price changes the new Range origin to 100.5,
+    // so the first close occurs at timestamp 102 (still in the future).
+    final rebuilt = RangeBarTimeline.build([
+      MarketTick(90, 100.5),
+      MarketTick(100, 100),
+      MarketTick(101, 101),
+      MarketTick(102, 102),
+    ], 1);
+    expect(rebuilt.visibleBarsThroughTick(1 + cutoffTick), 0);
+    // The chart must NOT clamp this zero to one visible candle.
+  });
+
   test('empty tick window does not invent Range bars', () {
     final timeline = RangeBarTimeline.build(const <MarketTick>[], 1);
     expect(timeline.bars, isEmpty);
