@@ -283,8 +283,18 @@ class _ChartScreenState extends State<ChartScreen> {
     try {
       // Fetch the immediately preceding provider window. Do not stitch
       // arbitrary cached ranges together: gaps would alter Range bar closes.
+      // Use an exclusive millisecond cursor. The gateway's end timestamp is
+      // inclusive; requesting at earliest would re-fetch same-ms events and
+      // make their order ambiguous without broker event identifiers.
+      if (earliest <= 0) {
+        _historyExhausted = true;
+        return;
+      }
       final older = await widget.controller.rangeTicks(
-        symbol, before: DateTime.fromMillisecondsSinceEpoch(earliest, isUtc: true));
+        symbol,
+        before: DateTime.fromMillisecondsSinceEpoch(
+          earliest - 1, isUtc: true),
+      );
       if (!mounted || revision != _loadRevision) return;
       // The provider window includes the cursor timestamp. Its events
       // may share a millisecond with the first loaded tick; we cannot
