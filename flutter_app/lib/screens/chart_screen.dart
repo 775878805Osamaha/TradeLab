@@ -260,8 +260,9 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   Future<void> _loadOlderRangeHistory() async {
-    if (_olderLoading || _loading || !_liveRequested ||
-        _mode != ChartMode.range || _rangeHistoryTicks.isEmpty ||
+    if (_olderLoading || _loading || _historyExhausted ||
+        !_liveRequested || _mode != ChartMode.range ||
+        _rangeHistoryTicks.isEmpty ||
         widget.controller.accountId == null) return;
     final revision = _loadRevision;
     final account = widget.controller.accountId!;
@@ -1165,8 +1166,11 @@ class _ChartScreenState extends State<ChartScreen> {
                   _viewport.scrollBars >
                       candles.length - plotWidth / _viewport.barWidth - 25) {
                 if (_mode == ChartMode.range) {
-                  if (_rangeHistoryTicks.isNotEmpty && !_replay &&
-                      _olderLoadError == null) {
+                  if (_rangeHistoryTicks.isNotEmpty &&
+                      !_historyExhausted && _olderLoadError == null) {
+                    // Replay is safe to prefetch too: the historical merge
+                    // reanchors the cutoff to the source BID tick and refuses
+                    // a rebuild that would reveal future market events.
                     unawaited(_loadOlderRangeHistory());
                   }
                 } else if (_actualBars.isNotEmpty) {
