@@ -19,6 +19,8 @@ class RangeTickStore {
   static Database? _database;
   static Future<Database>? _opening;
 
+  static const verifiedWindowDuration = Duration(days: 6);
+
   static Future<Database> _open() async {
     if (_database != null) return _database!;
     // Share one in-flight open and allow retry after a failed initialization.
@@ -37,7 +39,7 @@ class RangeTickStore {
     final root = await getDatabasesPath();
     final db = await openDatabase(
       path.join(root, 'tradelab_range_ticks.db'),
-      version: 3,
+      version: 4,
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE range_tick_snapshots (
@@ -47,10 +49,12 @@ class RangeTickStore {
           )
         ''');
         await _createArchive(db);
+        await _createWindowIndex(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) await _createArchive(db);
         if (oldVersion < 3) await _upgradeArchive(db);
+        if (oldVersion < 4) await _createWindowIndex(db);
       },
     );
     _database = db;
@@ -135,6 +139,121 @@ class RangeTickStore {
       CREATE INDEX IF NOT EXISTS idx_range_tick_archive_lookup
       ON range_tick_archive (account_id, symbol, timestamp_ms)
     ''');
+  }
+
+
+  static Future<void> _createWindowIndex(DatabaseExecutor db) async {
+    // Records complete provider responses, not inferred continuity from
+    // nearby timestamps. Old v3 rows remain unverified until fetched again.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS range_tick_windows (
+        account_id TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        from_ms INTEGER NOT NULL,
+        to_ms INTEGER NOT NULL,
+        tick_count INTEGER NOT NULL,
+        saved_at_ms INTEGER NOT NULL,
+        PRIMARY KEY (account_id, symbol, from_ms, to_ms)
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_range_tick_windows_recent
+      ON range_tick_windows (account_id, symbol, to_ms DESC)
+    ''');
+  }
+
+  /// Only mark a window complete after the provider returned a verified,
+  /// ordered, non-truncated response and every tick reached the archive.
+  /// If the app closes between the writes, orphan ticks are safe: no
+  /// manifest exists, so a later lookup will fetch the provider again.
+  static Future<void> archiveVerifiedWindow(
+    String accountId,
+    String symbol,
+    List<MarketTick> ticks, {
+    required int fromMs,
+    required int toMs,
+  }) async {
+    if (accountId.isEmpty || symbol.isEmpty || fromMs < 0 || toMs < fromMs ||
+        toMs - fromMs != verifiedWindowDuration.inMilliseconds ||
+        ticks.any((tick) => tick.timestamp < fromMs || tick.timestamp > toMs)) {
+      throw ArgumentError('Invalid verified BID window bounds');
+    }
+    // appendHistorical checks chronological ordering, exact overlap values
+    // and same-millisecond multiplicities, inside its own transaction.
+    await appendHistorical(accountId, symbol, ticks);
+    final db = await _open();
+    await db.transaction((txn) async {
+      final counts = await txn.rawQuery('''
+        SELECT COUNT(*) AS total FROM range_tick_archive
+        WHERE account_id = ? AND symbol = ?
+          AND timestamp_ms BETWEEN ? AND ?
+      ''', [accountId, symbol, fromMs, toMs]);
+      if ((counts.first['total'] as num).toInt() != ticks.length) {
+        throw StateError('Archived BID window does not match provider count');
+      }
+      await txn.insert('range_tick_windows', {
+        'account_id': accountId,
+        'symbol': symbol,
+        'from_ms': fromMs,
+        'to_ms': toMs,
+        'tick_count': ticks.length,
+        'saved_at_ms': DateTime.now().toUtc().millisecondsSinceEpoch,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
+  }
+
+  /// Returns null unless the exact provider interval was archived and its
+  /// event count still matches. Empty verified windows return an empty list.
+  /// Never infer complete history from a subset of archived tick rows.
+  static Future<List<MarketTick>?> readVerifiedWindow(
+    String accountId,
+    String symbol, {
+    required int fromMs,
+    required int toMs,
+  }) async {
+    if (accountId.isEmpty || symbol.isEmpty || fromMs < 0 || toMs < fromMs) {
+      throw ArgumentError('Invalid BID window lookup');
+    }
+    final db = await _open();
+    final windows = await db.query('range_tick_windows',
+      columns: ['tick_count'],
+      where: 'account_id = ? AND symbol = ? AND from_ms = ? AND to_ms = ?',
+      whereArgs: [accountId, symbol, fromMs, toMs], limit: 1);
+    if (windows.isEmpty) return null;
+    final rows = await db.query('range_tick_archive',
+      columns: ['timestamp_ms', 'bid'],
+      where: 'account_id = ? AND symbol = ? AND timestamp_ms BETWEEN ? AND ?',
+      whereArgs: [accountId, symbol, fromMs, toMs],
+      orderBy: 'timestamp_ms ASC, sequence_no ASC');
+    if (rows.length != (windows.single['tick_count'] as num).toInt()) {
+      return null;
+    }
+    return rows.map((row) => MarketTick(
+      (row['timestamp_ms'] as num).toInt(),
+      (row['bid'] as num).toDouble(),
+    )).toList(growable: false);
+  }
+
+  /// A recent complete window can restore an initial chart after restart.
+  /// Older windows are available through readVerifiedWindow only, preventing
+  /// stale quotes from being mistaken for current live market data.
+  static Future<List<MarketTick>?> readLatestVerifiedWindow(
+    String accountId,
+    String symbol, {
+    Duration maxAge = const Duration(minutes: 2),
+  }) async {
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final db = await _open();
+    final windows = await db.query('range_tick_windows',
+      columns: ['from_ms', 'to_ms'],
+      where: 'account_id = ? AND symbol = ? AND to_ms BETWEEN ? AND ?',
+      whereArgs: [accountId, symbol, now - maxAge.inMilliseconds, now],
+      orderBy: 'to_ms DESC', limit: 1);
+    if (windows.isEmpty) return null;
+    final row = windows.single;
+    return readVerifiedWindow(accountId, symbol,
+      fromMs: (row['from_ms'] as num).toInt(),
+      toMs: (row['to_ms'] as num).toInt());
   }
 
   /// Append ordered verified BID ticks, preserving same-millisecond events.
