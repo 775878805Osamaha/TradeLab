@@ -20,6 +20,20 @@ test('cTrader trendbar normalizer requires actual price fields',()=>{
     assert.equal(bar.timestamp,29000000*60_000);
 });
 
+test('rejects malformed or fabricated cTrader trendbar prices and times',()=>{
+    const valid={low:230000000,deltaOpen:30000,deltaHigh:50000,
+      deltaClose:20000,utcTimestampInMinutes:29000000,volume:65};
+    assert.throws(()=>normalizeBar({...valid,low:null}),/invalid_ctrader_trendbar/);
+    assert.throws(()=>normalizeBar({...valid,utcTimestampInMinutes:undefined}),
+        /invalid_ctrader_trendbar/);
+    assert.throws(()=>normalizeBar({...valid,deltaOpen:60000}),
+        /invalid_ctrader_trendbar/);
+    assert.throws(()=>normalizeBar({...valid,deltaClose:-1}),
+        /invalid_ctrader_trendbar/);
+    assert.throws(()=>normalizeBar({...valid,volume:'abc'}),
+        /invalid_ctrader_trendbar/);
+});
+
 test('merge demo and live authorized accounts without dropping one or duplicating both',()=>{
     const demo={permissionScope:'SCOPE_VIEW',ctidTraderAccount:[
         {ctidTraderAccountId:101,isLive:false,brokerTitleShort:'Demo Broker',traderLogin:12345}
