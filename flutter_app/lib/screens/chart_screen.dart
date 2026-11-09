@@ -91,6 +91,62 @@ class _ChartScreenState extends State<ChartScreen> {
   bool get _liveRequested => _selectedSymbol.source == TradeSource.binance ||
       widget.controller.ctraderConnected;
   bool get _rangeSourceSupported => _selectedSymbol.source == TradeSource.ctrader;
+
+  CTraderAccount? get _selectedBrokerAccount {
+    final accountId = widget.controller.accountId;
+    if (accountId == null) return null;
+    for (final account in widget.controller.accounts) {
+      if (account.id == accountId) return account;
+    }
+    return null;
+  }
+
+  String _utcMinuteLabel(int timestampMs) {
+    final date = DateTime.fromMillisecondsSinceEpoch(
+        timestampMs, isUtc: true);
+    return '${date.hour.toString().padLeft(2, '0')}:'
+        '${date.minute.toString().padLeft(2, '0')} UTC';
+  }
+
+  /// A read-only OAuth session is NOT proof the market feed is current.
+  /// Never display a green "real data" badge for a historical M1 chart
+  /// that stopped advancing hours ago.
+  bool get _ctraderTimeCandlesStale {
+    if (_selectedSymbol.source != TradeSource.ctrader ||
+        _mode == ChartMode.range || _actualTimestamps.isEmpty) return false;
+    final last = _actualTimestamps.last;
+    final interval = switch (_timeframe) {
+      '1m' => 1, '2m' => 2, '3m' => 3, '5m' => 5,
+      '15m' => 15, '30m' => 30, '1h' => 60,
+      '4h' => 240, '1D' => 1440, '1W' => 10080,
+      '1M' => 43200, _ => 1,
+    };
+    final lag = DateTime.now().toUtc().millisecondsSinceEpoch - last;
+    return lag > math.max(interval * 3, 10) * 60000;
+  }
+
+  String get _marketEvidenceLabel {
+    if (!_liveRequested) return 'بيانات معاينة فقط';
+    if (_loading) return 'جار تحميل الأسعار من المصدر';
+    if (_loadError != null) return 'تعذر التحقق من مصدر الأسعار';
+    if (_selectedSymbol.source == TradeSource.ctrader) {
+      final account = _selectedBrokerAccount;
+      final broker = account?.broker.isNotEmpty == true
+          ? account!.broker : 'الوسيط المرتبط';
+      final mode = account?.isLive == true ? 'حقيقي' : 'تجريبي';
+      if (_mode == ChartMode.range && _rangeHistoryTicks.isNotEmpty) {
+        return 'BID cTrader · $broker ($mode) · آخر تيك '
+            '${_utcMinuteLabel(_rangeHistoryTicks.last.timestamp)}';
+      }
+      if (_actualTimestamps.isNotEmpty) {
+        return 'شموع cTrader · $broker ($mode) · آخر شمعة '
+            '${_utcMinuteLabel(_actualTimestamps.last)}'
+            '${_ctraderTimeCandlesStale ? ' · بيانات متأخرة' : ''}';
+      }
+      return 'لم تصل شموع موثقة من cTrader لهذا الرمز';
+    }
+    return 'شموع Binance · آخر بيانات مصدر موثق';
+  }
   int get _totalBars {
     if (_mode == ChartMode.range) {
       if (_liveRequested) return _actualRange.length;
@@ -1057,16 +1113,23 @@ class _ChartScreenState extends State<ChartScreen> {
                     const SizedBox(width: 4),
                     const Icon(Icons.keyboard_arrow_down, size: 19),
                   ]),
-                  Text(_liveRequested ? 'تحليل السوق · ${_selectedSymbol.source == TradeSource.binance ? 'Binance' : 'cTrader'}'
+                  Text(_liveRequested
+                      ? 'تحليل السوق · ${_selectedSymbol.source == TradeSource.binance ? 'Binance' : 'cTrader'}'
                       : 'تحليل السوق · غير متصل',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
                 ]),
               ),
             ),
           ),
           Flexible(child: TradeStatusChip(label: _liveRequested
-              ? (_loading ? 'جار التحميل' : _loadError != null ? 'خطأ في المصدر' : 'بيانات فعلية')
-              : 'معاينة', connected: _liveRequested && !_loading && _loadError == null && candles.isNotEmpty)),
+              ? (_loading ? 'جار التحميل' : _loadError != null
+                  ? 'خطأ في المصدر' : _ctraderTimeCandlesStale
+                  ? 'بيانات متأخرة' : _selectedSymbol.source == TradeSource.ctrader
+                  ? 'شموع cTrader' : 'شموع Binance')
+              : 'معاينة', connected: _liveRequested && !_loading &&
+                  _loadError == null && !_ctraderTimeCandlesStale &&
+                  candles.isNotEmpty)),
           _iconAction(icon: Icons.fullscreen, label: 'ملء الشاشة', onPressed: _notifyUnconnected),
           _iconAction(icon: Icons.refresh, label: 'تحديث أسعار السوق',
             onPressed: _liveRequested ? _loadRealHistory : _notifyUnconnected),
@@ -1313,12 +1376,9 @@ class _ChartScreenState extends State<ChartScreen> {
         child: Row(children: [
           const Icon(Icons.info_outline, size: 15, color: TradeColors.blue),
           const SizedBox(width: 6),
-          Expanded(child: Text(_liveRequested
-              ? (_loading ? 'جار تحميل شموع موثقة من المصدر' :
-                  _loadError != null ? 'البيانات غير متاحة حاليًا' :
-                  'شموع المصدر الفعلي · اسحب للشموع الأقدم أو حمّلها في Replay')
-              : 'شموع توضيحية للتصميم وليست أسعارًا حقيقية',
-              maxLines: 2, style: TextStyle(fontSize: 11))),
+          Expanded(child: Text(_marketEvidenceLabel,
+              maxLines: 2, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11))),
           if (_drawing && (_selectedLine != null || _selectedPattern != null))
             IconButton(tooltip: 'خصائص الرسم المحدد',
               onPressed: _editSelectedDrawing,
