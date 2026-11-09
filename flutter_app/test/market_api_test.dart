@@ -50,6 +50,75 @@ void main() {
         throwsA(isA<MarketDataException>()));
   });
 
+  test('cTrader M1 requests bounded recent closed candles only', () async {
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final lastClosedMinute =
+        (now ~/ 60000) * 60000 - 60000;
+    final seen = <Uri>[];
+    final client = MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42}
+        ]}), 200);
+      }
+      seen.add(request.url);
+      expect(request.url.path, '/v1/candles');
+      expect(request.url.queryParameters['period'], 'M1');
+      expect(request.url.queryParameters['symbolId'], '42');
+      final from = int.parse(request.url.queryParameters['from']!);
+      final to = int.parse(request.url.queryParameters['to']!);
+      expect(to - from, 900 * 60000);
+      expect(to % 60000, 59999);
+      expect(to, lessThan(now));
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'period': 'M1', 'symbolId': '42',
+        'hasMore': false,
+        'candles': [
+          {'timestamp': lastClosedMinute, 'open': 4110.0,
+           'high': 4111.0, 'low': 4109.0, 'close': 4110.5},
+        ],
+      }), 200);
+    });
+    final api = MarketApi(client: client);
+    final candles = await api.ctraderCandles(
+      token: 'test', accountId: '7', symbol: 'XAUUSD',
+      timeframe: '1m', before: DateTime.now().toUtc(),
+    );
+    expect(candles, hasLength(1));
+    expect(candles.single.timestamp, lastClosedMinute);
+    expect(seen, hasLength(1));
+  });
+
+  test('cTrader M1 refuses incomplete pages or active-minute candles',
+      () async {
+    for (final mode in ['truncated', 'forming']) {
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+      final activeMinute = (now ~/ 60000) * 60000;
+      final client = MockClient((request) async {
+        if (request.url.path == '/v1/symbols') {
+          return http.Response(jsonEncode({'symbols': [
+            {'symbolName': 'XAUUSD', 'symbolId': 42}
+          ]}), 200);
+        }
+        return http.Response(jsonEncode({
+          'source': 'ctrader', 'period': 'M1', 'symbolId': '42',
+          'hasMore': mode == 'truncated',
+          'candles': [
+            {'timestamp': activeMinute, 'open': 4110.0,
+             'high': 4110.5, 'low': 4109.5, 'close': 4110.2}
+          ],
+        }), 200);
+      });
+      final api = MarketApi(client: client);
+      await expectLater(
+        api.ctraderCandles(token:'test', accountId:'7',
+          symbol:'XAUUSD', timeframe:'1m',
+          before:DateTime.now().toUtc()),
+        throwsA(isA<MarketDataException>()),
+      );
+    }
+  });
+
   test('cTrader rejects unverified source even for correctly shaped bars', () async {
     final client = MockClient((request) async {
       if (request.url.path == '/v1/symbols') {
