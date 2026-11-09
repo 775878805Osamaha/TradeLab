@@ -259,11 +259,22 @@ class Channel {
     // applying fromTimestamp. An extra older closed bar is real broker data
     // but lies outside our requested chart window. Filter it, never
     // misclassify that valid response as an invalid HTTP request.
-    const ordered=(result.trendbar||[]).map(normalizeBar)
-      .sort((a,b)=>a.timestamp-b.timestamp);
+    const relevant=[];
+    for(const raw of result.trendbar||[]) {
+      // Inspect only the broker's UTC open time to identify out-of-range
+      // overfetch. An unrelated old bar with malformed OHLC must not poison
+      // the requested interval; a malformed timestamp is still fatal.
+      const minute=Number(raw?.utcTimestampInMinutes);
+      const timestamp=minute*60000;
+      if(!Number.isSafeInteger(minute) || minute<=0 ||
+         !Number.isSafeInteger(timestamp))
+        throw Error('invalid_ctrader_trendbar_timestamps');
+      if(timestamp<from || timestamp>to)continue;
+      relevant.push(normalizeBar(raw));
+    }
+    const ordered=relevant.sort((a,b)=>a.timestamp-b.timestamp);
     const candles=[];
     for(const bar of ordered) {
-      if(bar.timestamp<from || bar.timestamp>to)continue;
       const previous=candles[candles.length-1];
       if(previous?.timestamp===bar.timestamp) {
         // Identical duplicate source records may be ignored safely, but
