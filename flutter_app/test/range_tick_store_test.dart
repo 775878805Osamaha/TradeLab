@@ -177,6 +177,83 @@ void main() {
     ), isNull);
   });
 
+  test('joins complete cached windows across different session boundaries',
+      () async {
+    final start = DateTime.utc(2025, 6, 1).millisecondsSinceEpoch;
+    final leftEnd = start - 1;
+    await RangeTickStore.archiveVerifiedWindow(
+      'spanning-account', 'XAUUSD', [
+        MarketTick(leftEnd - 3600000, 1990),
+        MarketTick(leftEnd, 1991),
+        MarketTick(leftEnd, 1991.1),
+      ],
+      fromMs: leftEnd - sixDaysMs, toMs: leftEnd,
+    );
+    await RangeTickStore.archiveVerifiedWindow(
+      'spanning-account', 'XAUUSD', [
+        MarketTick(start, 1992),
+        MarketTick(start, 1992.1),
+        MarketTick(start + 3600000, 1993),
+      ],
+      fromMs: start, toMs: start + sixDaysMs,
+    );
+    final cached = await RangeTickStore.readCoveredInterval(
+      'spanning-account', 'XAUUSD',
+      fromMs: start - 3600001, toMs: start + 3600000,
+    );
+    expect(cached!.map((t) => t.bid).toList(),
+        [1990, 1991, 1991.1, 1992, 1992.1, 1993]);
+  });
+
+  test('overlapping verified windows do not duplicate BID ticks', () async {
+    final start = DateTime.utc(2025, 7, 1).millisecondsSinceEpoch;
+    const dayMs = 86400000;
+    final shared = [
+      MarketTick(start + dayMs * 2, 2200),
+      MarketTick(start + dayMs * 5, 2201),
+    ];
+    await RangeTickStore.archiveVerifiedWindow(
+      'offset-account', 'XAUUSD', shared,
+      fromMs: start, toMs: start + sixDaysMs,
+    );
+    await RangeTickStore.archiveVerifiedWindow(
+      'offset-account', 'XAUUSD', [
+        ...shared,
+        MarketTick(start + dayMs * 7, 2202),
+      ],
+      fromMs: start + dayMs * 2,
+      toMs: start + dayMs * 2 + sixDaysMs,
+    );
+    final cached = await RangeTickStore.readCoveredInterval(
+      'offset-account', 'XAUUSD',
+      fromMs: start + dayMs, toMs: start + dayMs * 7,
+    );
+    expect(cached!.map((t) => t.bid).toList(), [2200, 2201, 2202]);
+  });
+
+  test('one millisecond coverage gap and wrong account are cache misses',
+      () async {
+    final start = DateTime.utc(2025, 8, 1).millisecondsSinceEpoch;
+    await RangeTickStore.archiveVerifiedWindow(
+      'gap-account', 'XAUUSD', const <MarketTick>[],
+      fromMs: start, toMs: start + sixDaysMs,
+    );
+    await RangeTickStore.archiveVerifiedWindow(
+      'gap-account', 'XAUUSD', const <MarketTick>[],
+      fromMs: start + sixDaysMs + 2,
+      toMs: start + sixDaysMs * 2 + 2,
+    );
+    expect(await RangeTickStore.readCoveredInterval(
+      'gap-account', 'XAUUSD',
+      fromMs: start + sixDaysMs - 1,
+      toMs: start + sixDaysMs + 3,
+    ), isNull);
+    expect(await RangeTickStore.readCoveredInterval(
+      'other-account', 'XAUUSD',
+      fromMs: start, toMs: start + sixDaysMs,
+    ), isNull);
+  });
+
   test('latest verified window restores fresh timestamped ticks', () async {
     final end = DateTime.now().toUtc().millisecondsSinceEpoch - 1000;
     final from = end - sixDaysMs;
