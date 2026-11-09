@@ -21,6 +21,7 @@ class MarketController extends ChangeNotifier {
   late final MarketApi _api;
   final FlutterSecureStorage _storage;
   static const _tokenKey = 'tradelab_flutter_ctrader_session';
+  static const _selectedAccountKey = 'tradelab_flutter_ctrader_selected_account';
   static const _pendingKey = 'tradelab_flutter_oauth_pending';
   String? _token;
   String? accountId;
@@ -124,8 +125,25 @@ class MarketController extends ChangeNotifier {
     if (token == null) return;
     try {
       accounts = await _api.accounts(token);
-      accountId = accounts.isEmpty ? null : accounts.first.id;
-      if (accounts.isEmpty) error = 'لا توجد حسابات cTrader متاحة لهذا التفويض.';
+      // cTrader can authorize several live/demo broker accounts. Never
+      // silently switch back to the first (possibly demo) account on
+      // app restart, token refresh, or an OAuth reconnection.
+      String? preferred;
+      try {
+        preferred = await _storage.read(key: _selectedAccountKey);
+      } catch (_) {
+        // Secure preference failure cannot alter broker authenticity.
+      }
+      final current = accountId;
+      final selected = accounts.any((a) => a.id == current)
+          ? current
+          : accounts.any((a) => a.id == preferred)
+              ? preferred : null;
+      accountId = accounts.isEmpty ? null : selected ?? accounts.first.id;
+      _api.forgetCTraderSymbols();
+      if (accounts.isEmpty) {
+        error = 'لا توجد حسابات cTrader متاحة لهذا التفويض.';
+      }
     } on MarketDataException catch (e) {
       if (e.sessionExpired) {
         await disconnect();
@@ -136,6 +154,9 @@ class MarketController extends ChangeNotifier {
   void chooseAccount(String id) {
     if (accounts.any((a) => a.id == id)) {
       accountId = id;
+      unawaited(_storage.write(
+        key: _selectedAccountKey, value: id,
+      ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       _api.forgetCTraderSymbols();
       forexPrices.clear();
       notifyListeners();
@@ -150,6 +171,7 @@ class MarketController extends ChangeNotifier {
     _api.forgetCTraderSymbols();
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _pendingKey);
+    await _storage.delete(key: _selectedAccountKey);
     notifyListeners();
   }
 
