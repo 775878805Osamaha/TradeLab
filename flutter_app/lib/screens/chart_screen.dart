@@ -330,6 +330,18 @@ class _ChartScreenState extends State<ChartScreen> {
           : null;
       final timeline = await RangeBarTimeline.buildAsync(combined, _rangeTicks * point);
       if (!mounted || revision != _loadRevision) return;
+      final previousDisplayCount = _replay ? _visibleThrough : _actualRange.length;
+      final oldViewport = _viewport;
+      // Preserve the market event visible near the right edge rather than
+      // preserving a Range bar index (which changes after historical rebuild).
+      var oldAnchorIndex = -1;
+      if (oldViewport.scrollBars > 0 && previousDisplayCount > 0 &&
+          _rangeBarEndTickIndices.length >= previousDisplayCount) {
+        oldAnchorIndex = (previousDisplayCount - 1 - oldViewport.scrollBars)
+            .round().clamp(0, previousDisplayCount - 1);
+      }
+      final anchorTickIndex = oldAnchorIndex < 0
+          ? null : prefix.length + _rangeBarEndTickIndices[oldAnchorIndex];
       // A different Range origin can move the first new close beyond the
       // Replay cutoff. Never force at least one candle: that would reveal
       // a bar formed using BID ticks from the still-hidden future.
@@ -348,6 +360,18 @@ class _ChartScreenState extends State<ChartScreen> {
         return;
       }
       setState(() {
+        final nextDisplayCount = _replay
+            ? safeReplayBars! : timeline.bars.length;
+        if (anchorTickIndex != null && nextDisplayCount > 0) {
+          final newAnchorIndex = (timeline.visibleBarsThroughTick(
+                  anchorTickIndex) - 1).clamp(0, nextDisplayCount - 1);
+          _viewport = oldViewport.remapHistoricalAnchor(
+            oldCount: previousDisplayCount,
+            oldIndex: oldAnchorIndex,
+            newCount: nextDisplayCount,
+            newIndex: newAnchorIndex,
+          );
+        }
         _rangeHistoryTicks = combined;
         _rangeOlderCursorMs = fromMs - 1;
         _actualRange = timeline.bars;
