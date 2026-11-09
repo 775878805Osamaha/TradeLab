@@ -10,7 +10,37 @@ import 'screens/markets_screen.dart';
 import 'screens/results_screen.dart';
 import 'theme/tradelab_theme.dart';
 
-void main() => runApp(const TradeLabApp());
+void main() {
+  // Release builds otherwise replace a failed widget with an opaque grey area.
+  // Keep a visible recovery message without exposing broker or account data.
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    FlutterError.reportError(details);
+    return const Material(
+      color: Color(0xFFF7F8FB),
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, size: 36, color: Color(0xFFB42318)),
+              SizedBox(height: 12),
+              Text('تعذر عرض هذا القسم',
+                textAlign: TextAlign.center,
+                textDirection: TextDirection.rtl,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              SizedBox(height: 8),
+              Text('حدث خطأ في واجهة التطبيق. جرّب فتح قسم آخر ثم العودة.',
+                textAlign: TextAlign.center,
+                textDirection: TextDirection.rtl),
+            ],
+          ),
+        ),
+      ),
+    );
+  };
+  runApp(const TradeLabApp());
+}
 
 class TradeLabApp extends StatefulWidget {
   const TradeLabApp({this.controller, this.journal, super.key});
