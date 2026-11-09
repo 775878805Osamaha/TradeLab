@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'candle_period.dart';
 import 'tradelab_data.dart';
 
 /// The only permitted providers: cTrader for forex/gold, Binance for crypto.
@@ -145,7 +146,7 @@ class MarketApi {
     final now = DateTime.now().toUtc().millisecondsSinceEpoch;
     final closedThrough = end < now ? end : now;
     return verified.where((bar) =>
-      _barEndMs(bar.timestamp, timeframe) <= closedThrough,
+      candlePeriodEndMs(bar.timestamp, timeframe) <= closedThrough,
     ).toList(growable: false);
   }
 
@@ -357,22 +358,6 @@ class MarketApi {
     if (price == null || !price.isFinite || price <= 0) throw const MarketDataException('سعر Binance غير صالح.');
     return price;
   }
-}
-
-/// Exclusive close boundary for a broker candle, including calendar months.
-/// Use UTC so daylight-saving transitions never shift daily/weekly candles.
-int _barEndMs(int openMs, String timeframe) {
-  if (timeframe == '1M') {
-    final open = DateTime.fromMillisecondsSinceEpoch(openMs, isUtc: true);
-    return DateTime.utc(open.year, open.month + 1).millisecondsSinceEpoch;
-  }
-  final minutes = switch (timeframe) {
-    '1m' => 1, '3m' => 3, '5m' => 5, '15m' => 15,
-    '30m' => 30, '1h' => 60, '4h' => 240,
-    '1D' => 1440, '1W' => 10080,
-    _ => throw const MarketDataException('إطار زمني غير مدعوم'),
-  };
-  return openMs + minutes * 60000;
 }
 
 class MarketDataException implements Exception {

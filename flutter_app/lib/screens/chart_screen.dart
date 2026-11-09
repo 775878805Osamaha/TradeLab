@@ -8,6 +8,7 @@ import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_builder.dart';
 import '../data/market_bar_store.dart';
+import '../data/market_bar_continuity.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_tick_rollforward.dart';
 import '../data/range_tick_store.dart';
@@ -330,12 +331,14 @@ class _ChartScreenState extends State<ChartScreen> {
         if (revision != _loadRevision || !mounted) return;
         // Apply the same chronological and uniqueness guarantees to the
         // initial page as to older pages; Replay indices must be monotonic.
-        final byTimestamp = <int, MarketBar>{
-          for (final bar in _actualBars) bar.timestamp: bar,
-          for (final bar in bars) bar.timestamp: bar,
-        };
-        final ordered = byTimestamp.values.toList()
-          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        // Old local archives can end months before the new broker snapshot.
+        // Keep only the connected cached tail; backfill any missing interval
+        // via provider paging when the user scrolls, rather than hiding gaps.
+        final ordered = MarketBarContinuity.joinLatest(
+          cached: _actualBars,
+          provider: bars,
+          timeframe: _timeframe,
+        );
         // Publish each provider-history generation as immutable: captured
         // Replay prefixes must remain frozen when newer pages are loaded.
         _publishBars(ordered);
@@ -546,6 +549,12 @@ class _ChartScreenState extends State<ChartScreen> {
         // A corrupt archive cannot be used for Replay; ask the provider.
       }
       if (revision != _loadRevision || !mounted) return;
+      // A disjoint archived page is not a valid next page. Fetch the missing
+      // interval from the verified provider before using that old archive.
+      older = MarketBarContinuity.cachedPredecessors(
+        cached: older, nextOpenMs: _actualBars.first.timestamp,
+        timeframe: _timeframe,
+      );
       if (older.isEmpty) {
         older = await widget.controller.history(_selectedSymbol, _timeframe, before: before);
         fromProvider = true;
