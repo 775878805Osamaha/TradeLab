@@ -23,7 +23,9 @@ function socketForTrendbars({accountId='12345',malformed=false,extraOlder=false,
              trendbar:[
                ...(extraOlder ? [{
                  utcTimestampInMinutes:29999998,
-                 low:411000000,deltaOpen:0,deltaHigh:100000,
+                 // A malformed older candle outside the requested interval
+                 // cannot invalidate genuine bars inside this time window.
+                 low:411000000,deltaOpen:200000,deltaHigh:-1,
                  deltaClose:50000,volume:40,
                }] : []),
                {
