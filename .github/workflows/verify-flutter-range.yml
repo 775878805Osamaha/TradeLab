@@ -49,6 +49,7 @@ jobs:
             test/range_bar_builder_test.dart \
             test/chart_viewport_test.dart \
             test/chart_annotations_test.dart \
+            test/ctrader_candle_stitcher_test.dart \
             test/market_api_test.dart
       - name: Build Android release preview (no publishing)
         run: flutter build apk --release
