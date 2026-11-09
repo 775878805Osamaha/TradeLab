@@ -328,6 +328,23 @@ class _ChartScreenState extends State<ChartScreen> {
           : null;
       final timeline = RangeBarTimeline.build(combined, _rangeTicks * point);
       if (!mounted || revision != _loadRevision) return;
+      // A different Range origin can move the first new close beyond the
+      // Replay cutoff. Never force at least one candle: that would reveal
+      // a bar formed using BID ticks from the still-hidden future.
+      if (_replay && replayCutoffTick == null) {
+        _olderLoadError =
+            'تعذر تثبيت موضع Replay على تيك معروف. أعد المحاولة خارج Replay.';
+        return;
+      }
+      final safeReplayBars = replayCutoffTick == null
+          ? null
+          : timeline.visibleBarsThroughTick(prefix.length + replayCutoffTick);
+      if (_replay && (safeReplayBars == null || safeReplayBars == 0)) {
+        _olderLoadError =
+            'يغيّر التاريخ الأقدم بداية شموع المدى قبل موضع Replay؛ '
+            'لن نعرض شمعة تحتاج تيكات مستقبلية. أوقف Replay لتحميلها.';
+        return;
+      }
       setState(() {
         _rangeHistoryTicks = combined;
         _rangeOlderCursorMs = fromMs - 1;
@@ -336,9 +353,7 @@ class _ChartScreenState extends State<ChartScreen> {
         if (_replay && replayCutoffTick != null) {
           _stopPlayback();
           final previousVisible = _visibleThrough;
-          _visibleThrough = math.max(1,
-              timeline.visibleBarsThroughTick(
-                  prefix.length + replayCutoffTick));
+          _visibleThrough = safeReplayBars!;
           // Existing drawing anchors are bar-index based. Shift them with
           // the Replay cursor as a best-effort visual alignment; the replay
           // data cutoff itself remains tied to the exact BID event index.
