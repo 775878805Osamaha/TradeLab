@@ -18,6 +18,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(
       body: ReplayResearchWorkspace(snapshot: snapshot, onOpenChart: () {}))));
 
+    await tester.ensureVisible(find.byKey(const Key('lab-replay-observed-tab')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('lab-replay-observed-tab')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('lab-observed-stop')), '99');

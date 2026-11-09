@@ -429,11 +429,13 @@ class _PaperRiskCalculatorState extends State<PaperRiskCalculator> {
         DropdownButtonFormField<String>(
           key: const Key('lab-risk-symbol'),
           initialValue: _code,
+          isExpanded: true,
           decoration: const InputDecoration(labelText: 'الرمز'),
           items: [for (final symbol in tradeSymbols)
             if (LedgerEntry.usdQuotedSymbols.contains(symbol.code))
               DropdownMenuItem(value: symbol.code,
-                child: Text('${symbol.code} · ${symbol.title}'))],
+                child: Text('${symbol.code} · ${symbol.title}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis))],
           onChanged: (value) {
             if (value == null) return;
             _invalidate();

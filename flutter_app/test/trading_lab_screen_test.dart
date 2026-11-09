@@ -78,11 +78,15 @@ void main() {
     await tester.tap(find.text('المختبر').last);
     await tester.pumpAndSettle();
     expect(find.text('مختبر التداول'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('lab-tab-2')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('lab-tab-2')));
     await tester.pumpAndSettle();
     expect(find.textContaining('جلسة مجمدة · BTCUSDT'), findsOneWidget);
     expect(find.byKey(const Key('run-replay-analysis')), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('lab-replay-observed-tab')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('lab-replay-observed-tab')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('lab-observed-stop')), '98');
@@ -207,6 +211,8 @@ void main() {
     await tester.pumpWidget(TradeLabApp(controller: market, journal: journal));
     await tester.pumpAndSettle();
     await tester.tap(find.text('المختبر').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('lab-tab-2')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('lab-tab-2')));
     await tester.pumpAndSettle();
