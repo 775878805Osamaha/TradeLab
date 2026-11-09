@@ -97,7 +97,9 @@ class _ChartScreenState extends State<ChartScreen> {
     _linkedBefore = widget.controller.ctraderConnected;
     _accountBefore = widget.controller.accountId;
     widget.controller.addListener(_onMarketUpdate);
-    if (_linkedBefore) Future.microtask(_loadRealHistory);
+    // Binance does not require a cTrader session. Load its chart immediately
+    // when selected, even on a device that has never linked a broker.
+    if (_liveRequested) Future.microtask(_loadRealHistory);
   }
 
   void _onMarketUpdate() {
