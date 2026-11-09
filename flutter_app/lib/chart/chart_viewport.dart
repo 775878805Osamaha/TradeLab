@@ -96,6 +96,31 @@ class ChartViewport {
     );
   }
 
+  /// Keep the same historical candle under the same x-coordinate after
+  /// Range bars are regenerated from newly prepended BID ticks. Range bar
+  /// counts and indices can both change when the starting price changes.
+  /// This is intentionally separate from the regular gesture pan.
+  ChartViewport remapHistoricalAnchor({
+    required int oldCount,
+    required int oldIndex,
+    required int newCount,
+    required int newIndex,
+  }) {
+    if (scrollBars <= 0 || oldCount < 1 || newCount < 1 ||
+        oldIndex < 0 || oldIndex >= oldCount ||
+        newIndex < 0 || newIndex >= newCount) {
+      return this;
+    }
+    // chartX depends on (candleCount - scrollBars - index).
+    // Preserve that expression at the same bar width and plot width.
+    final remapped = scrollBars +
+        (newCount - oldCount) - (newIndex - oldIndex);
+    return ChartViewport(
+      barWidth: barWidth,
+      scrollBars: remapped.clamp(0.0, (newCount - 1).toDouble()).toDouble(),
+    );
+  }
+
   ChartViewport jumpToLatest() => ChartViewport(barWidth: barWidth);
 
   /// Inclusive first and exclusive last candidate indices, with a small
