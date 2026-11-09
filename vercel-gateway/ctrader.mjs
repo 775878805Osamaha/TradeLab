@@ -31,15 +31,33 @@ export function mergeReadOnlyAccountLists(results) {
   return [...accounts.values()];
 }
 export function normalizeBar(raw) {
-  const low = Number(raw.low) / 100000;
-  return {
-    timestamp: Number(raw.utcTimestampInMinutes) * 60000,
-    open: low + Number(raw.deltaOpen || 0) / 100000,
-    high: low + Number(raw.deltaHigh || 0) / 100000,
-    low,
-    close: low + Number(raw.deltaClose || 0) / 100000,
-    volume: Number(raw.volume || 0),
-  };
+  // Per cTrader Open API, OHLC deltas are positive offsets from LOW in
+  // 1/100000 price units. Never repair a malformed broker bar with guessed
+  // prices, missing timestamps, or a synthetic candle.
+  if (!raw || raw.low == null || raw.utcTimestampInMinutes == null)
+    throw Error('invalid_ctrader_trendbar');
+  const tsMinutes = Number(raw.utcTimestampInMinutes);
+  const rawLow = Number(raw.low);
+  const deltaOpen = Number(raw.deltaOpen ?? 0);
+  const deltaHigh = Number(raw.deltaHigh ?? 0);
+  const deltaClose = Number(raw.deltaClose ?? 0);
+  const volume = Number(raw.volume ?? 0);
+  if (![tsMinutes,rawLow,deltaOpen,deltaHigh,deltaClose,volume]
+    .every(Number.isSafeInteger) || tsMinutes <= 0 || rawLow <= 0 ||
+    deltaOpen < 0 || deltaHigh < 0 || deltaClose < 0 || volume < 0 ||
+    deltaOpen > deltaHigh || deltaClose > deltaHigh)
+    throw Error('invalid_ctrader_trendbar');
+  const timestamp=tsMinutes*60000;
+  if (!Number.isSafeInteger(timestamp))
+    throw Error('invalid_ctrader_trendbar');
+  const low = rawLow/100000;
+  const open = (rawLow+deltaOpen)/100000;
+  const high = (rawLow+deltaHigh)/100000;
+  const close = (rawLow+deltaClose)/100000;
+  if (![low,open,high,close].every(Number.isFinite) ||
+      low > open || low > close || high < open || high < close)
+    throw Error('invalid_ctrader_trendbar');
+  return {timestamp,open,high,low,close,volume};
 }
 /**
  * cTrader stores the newest tick's absolute millisecond time, then signed
@@ -229,7 +247,22 @@ class Channel {
     await this.account(accountId,accessToken);
     const result=await this.queueHistory(2137,{ctidTraderAccountId:accountId,symbolId,period,
       fromTimestamp:from,toTimestamp:to,count});
-    return {candles:(result.trendbar||[]).map(normalizeBar).sort((a,b)=>a.timestamp-b.timestamp),hasMore:result.hasMore===true};
+    // Broker account ID is required by ProtoOAGetTrendbarsRes. A response
+    // belonging to another account must never be labeled as this user's
+    // XAUUSD chart, even when prices and symbol names look plausible.
+    if (String(result.ctidTraderAccountId) !== String(accountId) ||
+        (result.symbolId != null && String(result.symbolId) !== String(symbolId)) ||
+        (result.period != null && Number(result.period) !== Number(period)) ||
+        !Array.isArray(result.trendbar))
+      throw Error('ctrader_trendbar_provenance_mismatch');
+    const candles=result.trendbar.map(normalizeBar)
+      .sort((a,b)=>a.timestamp-b.timestamp);
+    for(let i=0;i<candles.length;i++) {
+      if(candles[i].timestamp<from || candles[i].timestamp>to ||
+          (i>0 && candles[i].timestamp<=candles[i-1].timestamp))
+        throw Error('invalid_ctrader_trendbar_timestamps');
+    }
+    return {candles,hasMore:result.hasMore===true};
   }
   // Both trend bars and tick history share the broker's 5 historical calls/s limit.
   async queueHistory(type,payload) {
