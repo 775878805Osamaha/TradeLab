@@ -267,42 +267,49 @@ class _ChartScreenState extends State<ChartScreen> {
       _olderLoadError = null;
     });
     try {
-      // Fetch the immediately preceding provider window. Do not stitch
-      // arbitrary cached ranges together: gaps would alter Range bar closes.
-      // Use an exclusive millisecond cursor. The gateway's end timestamp is
-      // inclusive; requesting at earliest would re-fetch same-ms events and
-      // make their order ambiguous without broker event identifiers.
-      if (earliest <= 0) {
+      // A provider response covers exactly six days, including empty
+      // trading periods. Reuse that verified interval before making another
+      // broker request; individual archived ticks do not prove coverage.
+      final endMs = _rangeOlderCursorMs ?? earliest - 1;
+      final fromMs = endMs -
+          RangeTickStore.verifiedWindowDuration.inMilliseconds;
+      if (fromMs < 0) {
         _historyExhausted = true;
         return;
       }
-      final older = await widget.controller.rangeTicks(
-        symbol,
-        before: DateTime.fromMillisecondsSinceEpoch(
-          earliest - 1, isUtc: true),
-      );
-      if (!mounted || revision != _loadRevision) return;
-      // The provider window includes the cursor timestamp. Its events
-      // may share a millisecond with the first loaded tick; we cannot
-      // safely infer their relative order without a provider event ID.
-      // Do not silently discard potentially distinct BID ticks.
-      if (older.any((tick) => tick.timestamp == earliest)) {
-        throw const MarketDataException(
-          'حدّ التيكات يحتوي أحداثًا بالتوقيت نفسه؛ تعذّر دمج الصفحة بأمان.');
+      List<MarketTick>? older;
+      try {
+        older = await RangeTickStore.readVerifiedWindow(
+          account, symbol.code, fromMs: fromMs, toMs: endMs);
+      } catch (_) {
+        // A damaged local cache can be recovered from cTrader.
+        older = null;
       }
-      final prefix = older.where((tick) => tick.timestamp < earliest).toList();
-      if (prefix.isEmpty) {
-        _olderLoadError = 'لا تتوفر تيكات أقدم في هذه الفترة.';
+      if (!mounted || revision != _loadRevision) return;
+      if (older == null) {
+        older = await widget.controller.rangeTicks(
+          symbol,
+          before: DateTime.fromMillisecondsSinceEpoch(endMs, isUtc: true),
+        );
+        if (!mounted || revision != _loadRevision) return;
+        // Save exact provider coverage, including verified empty windows,
+        // without blocking chart rendering.
+        unawaited(RangeTickStore.archiveVerifiedWindow(
+          account, symbol.code, older, fromMs: fromMs, toMs: endMs,
+        ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+      }
+      // The cursor is exclusive, even when several ticks share a ms.
+      if (older.any((tick) => tick.timestamp >= earliest)) {
+        throw const MarketDataException(
+          'تيكات الصفحة الأقدم تتداخل مع حد الشارت؛ تم إيقاف الدمج.');
+      }
+      if (older.isEmpty) {
+        _rangeOlderCursorMs = fromMs - 1;
+        _olderLoadError =
+            'لا توجد تيكات في الأيام الستة السابقة. اضغط «أقدم» لمتابعة البحث.';
         return;
       }
-      // The new page must end before the current one starts. A missing
-      // timestamp boundary is not proof of contiguous tick coverage; do
-      // not present a stitched Range chart as verified history.
-      final maxGap = const Duration(days: 6).inMilliseconds;
-      if (earliest - prefix.last.timestamp > maxGap) {
-        throw const MarketDataException(
-          'توجد فجوة بين صفحات تيكات cTrader؛ لن ندمج تاريخًا غير متصل.');
-      }
+      final prefix = older;
       final combined = [...prefix, ..._rangeHistoryTicks];
       final point = _rangePointCache['$account:${symbol.code}'];
       if (point == null || !point.isFinite || point <= 0) {
@@ -315,6 +322,7 @@ class _ChartScreenState extends State<ChartScreen> {
       if (!mounted || revision != _loadRevision) return;
       setState(() {
         _rangeHistoryTicks = combined;
+        _rangeOlderCursorMs = fromMs - 1;
         _actualRange = builder.snapshot();
         // Rebuilding from older ticks changes Range bar boundaries. Exit
         // Replay rather than silently shifting its cutoff to future bars.
@@ -325,10 +333,6 @@ class _ChartScreenState extends State<ChartScreen> {
           _patterns..clear()..addAll(_analysisPatterns);
         }
       });
-      // Archive is best effort; verified cTrader data is already displayed.
-      unawaited(RangeTickStore.appendHistorical(
-        account, symbol.code, prefix,
-      ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
     } on MarketDataException catch (error) {
       if (mounted && revision == _loadRevision) _olderLoadError = error.message;
     } catch (_) {
