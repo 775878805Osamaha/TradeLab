@@ -65,6 +65,7 @@ void main() {
       expect(request.url.path, '/v1/candles');
       expect(request.url.queryParameters['period'], 'M1');
       expect(request.url.queryParameters['symbolId'], '42');
+      expect(request.url.queryParameters['count'], '900');
       final from = int.parse(request.url.queryParameters['from']!);
       final to = int.parse(request.url.queryParameters['to']!);
       expect(to - from, 900 * 60000);
@@ -88,6 +89,29 @@ void main() {
     expect(candles, hasLength(1));
     expect(candles.single.timestamp, lastClosedMinute);
     expect(seen, hasLength(1));
+  });
+
+  test('cTrader reports unusable provider OHLC distinctly from bad requests',
+      () async {
+    final client = MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42}
+        ]}), 200);
+      }
+      return http.Response(
+        jsonEncode({'error': 'ctrader_candle_history_unusable'}), 502,
+      );
+    });
+    final api = MarketApi(client: client);
+    await expectLater(
+      api.ctraderCandles(token: 'test', accountId: '7',
+        symbol: 'XAUUSD', timeframe: '1m',
+        before: DateTime.now().toUtc()),
+      throwsA(isA<MarketDataException>().having(
+        (error) => error.message, 'message',
+        contains('شموع غير متسقة'))),
+    );
   });
 
   test('cTrader M1 rejects another authorized broker account', () async {
