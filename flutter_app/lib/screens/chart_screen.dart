@@ -1010,7 +1010,9 @@ class _ChartScreenState extends State<ChartScreen> {
             Expanded(child: Text(_olderLoadError!, style: const TextStyle(fontSize: 12))),
             TextButton(onPressed: () {
               setState(() => _olderLoadError = null);
-              unawaited(_loadOlderHistory(manual: true));
+              unawaited(_mode == ChartMode.range
+                  ? _loadOlderRangeHistory()
+                  : _loadOlderHistory(manual: true));
             }, child: const Text('إعادة المحاولة')),
           ]),
         ),
@@ -1241,18 +1243,22 @@ class _ChartScreenState extends State<ChartScreen> {
             Text('$_visibleThrough / $_totalBars ${_liveRequested ? 'شمعة' : 'شمعة توضيحية'}',
                 style: Theme.of(context).textTheme.labelSmall),
           ]),
-          if (_liveRequested && _mode != ChartMode.range && _actualBars.isNotEmpty)
+          if (_liveRequested && (_mode == ChartMode.range
+              ? _rangeHistoryTicks.isNotEmpty : _actualBars.isNotEmpty))
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: TextButton.icon(
                 onPressed: _olderLoading || _historyExhausted
-                    ? null : () => _loadOlderHistory(manual: true),
+                    ? null : () => _mode == ChartMode.range
+                        ? _loadOlderRangeHistory()
+                        : _loadOlderHistory(manual: true),
                 icon: _olderLoading
                     ? const SizedBox(width: 15, height: 15,
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.history, size: 18),
                 label: Text(_historyExhausted ? 'لا تتوفر شموع أقدم'
-                    : 'تحميل شموع أقدم'),
+                    : _mode == ChartMode.range
+                        ? 'تحميل تيكات مدى أقدم' : 'تحميل شموع أقدم'),
               ),
             ),
           Row(children: [
