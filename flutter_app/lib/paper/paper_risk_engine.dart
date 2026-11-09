@@ -116,12 +116,12 @@ class PaperRiskEngine {
 
     final utc = DateTime.fromMillisecondsSinceEpoch(nowMs, isUtc: true);
     final dayStart = DateTime.utc(utc.year, utc.month, utc.day).millisecondsSinceEpoch;
-    final today'sTrades = entries.where((entry) =>
+    final todaysTrades = entries.where((entry) =>
       (entry.kind == LedgerKind.openTrade || entry.kind == LedgerKind.closedTrade) &&
       (entry.openedAtMs ?? entry.timestampMs) >= dayStart &&
       (entry.openedAtMs ?? entry.timestampMs) <= nowMs).length;
     if (limits.maxTradesPerDay != null &&
-        today'sTrades >= limits.maxTradesPerDay!) {
+        todaysTrades >= limits.maxTradesPerDay!) {
       issues.add('وصلت إلى حد عدد الصفقات اليومي.');
     }
 

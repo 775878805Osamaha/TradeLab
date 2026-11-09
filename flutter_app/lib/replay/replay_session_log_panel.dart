@@ -111,7 +111,7 @@ class ReplaySessionLogPanel extends StatelessWidget {
         if (outcome?.netRMultiple != null)
           _summary(outcome!.status == ReplayTradeStatus.open
               ? 'R صافي تقديري غير محقق' : 'R الصافي التقديري',
-            outcome!.netRMultiple!.toStringAsFixed(2)),
+            outcome.netRMultiple!.toStringAsFixed(2)),
         if (row.result.reason != null)
           Text(row.result.reason!,
             style: TextStyle(color: Theme.of(context).colorScheme.error)),

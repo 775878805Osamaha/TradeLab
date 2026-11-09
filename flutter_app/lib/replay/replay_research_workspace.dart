@@ -110,7 +110,7 @@ class _ReplayResearchWorkspaceState extends State<ReplayResearchWorkspace> {
         ? const TradeEmptyState(icon: Icons.history_outlined,
             title: 'يلزم 30 شمعة مغلقة',
             description: 'حرّك Replay إلى الأمام لتحميل عينة كافية '
-              'لمحاكاة الاحتمالات. متابعة الإشارة متاحة الآن.'),
+              'لمحاكاة الاحتمالات. متابعة الإشارة متاحة الآن.')
         : ReplayAnalysisSheet(
             key: ValueKey('replay-scenarios-${widget.snapshot.accountKey}-'
               '${widget.snapshot.symbol}-${widget.snapshot.timeframe}-'
