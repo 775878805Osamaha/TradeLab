@@ -19,16 +19,18 @@ class RangeTickStore {
   static Database? _database;
   static Future<Database>? _opening;
 
-  static Future<Database> _open() {
-    if (_database != null) return Future.value(_database!);
-    // Prevent two simultaneous chart requests from opening separate handles.
-    return _opening ??= _openDatabase().then((db) {
+  static Future<Database> _open() async {
+    if (_database != null) return _database!;
+    // Share one in-flight open and allow retry after a failed initialization.
+    final pending = _opening ??= _openDatabase();
+    try {
+      final db = await pending;
       _database = db;
       return db;
-    }).catchError((Object error, StackTrace stack) {
+    } catch (_) {
       _opening = null;
-      Error.throwWithStackTrace(error, stack);
-    });
+      rethrow;
+    }
   }
 
   static Future<Database> _openDatabase() async {
