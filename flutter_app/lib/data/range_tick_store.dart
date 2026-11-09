@@ -2,8 +2,9 @@ import 'dart:convert';
 
 import 'package:path/path.dart' as path;
 
-import 'market_api.dart';
 import 'package:sqflite/sqflite.dart';
+
+import 'market_api.dart';
 
 /// Persists a complete, verified BID tick window; never persists partial pages.
 /// Account IDs are part of the key to prevent cross-account data reuse.
@@ -27,7 +28,7 @@ class RangeTickStore {
     final root = await getDatabasesPath();
     final db = await openDatabase(
       path.join(root, 'tradelab_range_ticks.db'),
-      version: 2,
+      version: 3,
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE range_tick_snapshots (
@@ -40,6 +41,7 @@ class RangeTickStore {
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) await _createArchive(db);
+        if (oldVersion < 3) await _upgradeArchive(db);
       },
     );
     _database = db;
@@ -93,7 +95,8 @@ class RangeTickStore {
         symbol TEXT NOT NULL,
         timestamp_ms INTEGER NOT NULL,
         bid REAL NOT NULL,
-        PRIMARY KEY (account_id, symbol, timestamp_ms)
+        sequence_no INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (account_id, symbol, timestamp_ms, sequence_no)
       )
     ''');
     await db.execute('''
@@ -102,8 +105,22 @@ class RangeTickStore {
     ''');
   }
 
-  /// Append verified cTrader BID ticks to permanent history. A timestamp
-  /// collision is ignored rather than replacing already archived market data.
+  static Future<void> _upgradeArchive(DatabaseExecutor db) async {
+    // SQLite cannot change a primary key in place. Keep existing history and
+    // add an ordinal so multiple ticks within one millisecond are preserved.
+    await db.execute('ALTER TABLE range_tick_archive RENAME TO range_tick_archive_v2');
+    await _createArchive(db);
+    await db.execute('''
+      INSERT INTO range_tick_archive
+        (account_id, symbol, timestamp_ms, sequence_no, bid)
+      SELECT account_id, symbol, timestamp_ms, 0, bid
+      FROM range_tick_archive_v2
+    ''');
+    await db.execute('DROP TABLE range_tick_archive_v2');
+  }
+
+  /// Append ordered verified BID ticks, preserving same-millisecond events.
+  /// Repeated pages use the same within-timestamp ordinal for deduplication.
   static Future<int> appendHistorical(
       String accountId, String symbol, List<MarketTick> ticks) async {
     if (accountId.isEmpty || symbol.isEmpty) {
@@ -121,12 +138,20 @@ class RangeTickStore {
     final db = await _open();
     return db.transaction((txn) async {
       var inserted = 0;
+      var lastTimestamp = -1;
+      var sequence = 0;
       for (final tick in ticks) {
+        if (tick.timestamp != lastTimestamp) {
+          lastTimestamp = tick.timestamp;
+          sequence = 0;
+        } else {
+          sequence++;
+        }
         final rowId = await txn.rawInsert('''
           INSERT OR IGNORE INTO range_tick_archive
-          (account_id, symbol, timestamp_ms, bid)
-          VALUES (?, ?, ?, ?)
-        ''', [accountId, symbol, tick.timestamp, tick.bid]);
+          (account_id, symbol, timestamp_ms, sequence_no, bid)
+          VALUES (?, ?, ?, ?, ?)
+        ''', [accountId, symbol, tick.timestamp, sequence, tick.bid]);
         if (rowId > 0) inserted++;
       }
       return inserted;
@@ -148,7 +173,7 @@ class RangeTickStore {
         columns: ['timestamp_ms', 'bid'],
         where: 'account_id = ? AND symbol = ? AND timestamp_ms < ?',
         whereArgs: [accountId, symbol, beforeMs],
-        orderBy: 'timestamp_ms DESC',
+        orderBy: 'timestamp_ms DESC, sequence_no DESC',
         limit: limit);
     return rows.reversed.map((row) => MarketTick(
         row['timestamp_ms'] as int, (row['bid'] as num).toDouble()))
