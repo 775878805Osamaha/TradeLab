@@ -11,8 +11,11 @@ import 'tradelab_data.dart';
 /// This is an integration-ready *reference algorithm*, not yet a promise of
 /// identical results to cTrader/TradingView's proprietary Range semantics.
 class RangeBarBuilder {
-  RangeBarBuilder(this.priceDistance)
-      : assert(priceDistance > 0 && priceDistance.isFinite);
+  RangeBarBuilder(this.priceDistance) {
+    if (!priceDistance.isFinite || priceDistance <= 0) {
+      throw ArgumentError.value(priceDistance, 'priceDistance', 'Must be finite and positive');
+    }
+  }
 
   final double priceDistance;
   final List<TradeCandle> _closed = [];
@@ -28,7 +31,9 @@ class RangeBarBuilder {
       : TradeCandle(_open!, _high!, _low!, _lastPrice!);
 
   void appendBidTick(double price) {
-    if (!price.isFinite) throw ArgumentError.value(price, 'price');
+    if (!price.isFinite || price <= 0) {
+      throw ArgumentError.value(price, 'price', 'BID price must be finite and positive');
+    }
     if (_open == null) {
       _open = _high = _low = _lastPrice = price;
       return;
