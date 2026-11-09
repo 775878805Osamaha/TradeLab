@@ -1,5 +1,7 @@
 package com.example.feature.settings
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -18,9 +21,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.market.DefaultMarketDataProvider
+import com.example.TradeLabApplication
 import com.example.core.model.ProviderConnectionStatus
 import com.example.ui.components.DataSourceBadge
 import com.example.ui.theme.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -30,10 +36,18 @@ import java.util.*
 fun SettingsScreen(
     provider: DefaultMarketDataProvider,
     onBack: () -> Unit,
+    cTraderScope: CoroutineScope,
     modifier: Modifier = Modifier
 ) {
     androidx.activity.compose.BackHandler(onBack = onBack)
     val diag by provider.diagnosticInfo.collectAsState()
+    val context = LocalContext.current
+    val cTrader = (context.applicationContext as TradeLabApplication).cTrader
+    val cTraderStatus by cTrader.status.collectAsState()
+    val cTraderAccounts by cTrader.accounts.collectAsState()
+    val selectedCTraderAccount by cTrader.selectedAccount.collectAsState()
+    var linking by remember { mutableStateOf(false) }
+    var selectingAccount by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val sdf = remember { SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") } }
 
@@ -60,6 +74,73 @@ fun SettingsScreen(
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item { AppearanceSettings() }
+            item {
+                Card(Modifier.fillMaxWidth().testTag("ctrader_settings_card")) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("cTrader • الفوركس والذهب", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(cTraderStatus, fontSize = 12.sp, color = TradingTextSecondary)
+                        Text("كل مستخدم يربط حسابه الخاص بصلاحية القراءة فقط. جميع الصفقات داخل TradeLab تجريبية.",
+                            fontSize = 12.sp, color = TradingTextSecondary)
+                        Button(
+                            onClick = {
+                                try {
+                                    val url = cTrader.beginAuthorization()
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                } catch (error: Exception) { cTrader.reportError("لم يتم فتح صفحة التفويض") }
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("ctrader_connect_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = TradingAccent)
+                        ) { Text(if (cTrader.isLinked()) "إعادة ربط cTrader" else "ربط حساب cTrader") }
+                        if (cTrader.isLinked()) {
+                            TextButton(onClick = { cTraderScope.launch {
+                                linking = true
+                                try {
+                                    cTrader.refreshAccounts()
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    // The gateway client has already published the failure.
+                                } finally { linking = false }
+                            } }, enabled = !linking) { Text("تحديث الحسابات والرموز") }
+                            if (cTraderAccounts.isNotEmpty()) {
+                                var expanded by remember { mutableStateOf(false) }
+                                Box {
+                                    OutlinedButton(onClick = { expanded = true }, enabled = !selectingAccount,
+                                        modifier = Modifier.fillMaxWidth().testTag("ctrader_account_selector")) {
+                                        Text("حساب cTrader: $selectedCTraderAccount")
+                                    }
+                                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                        cTraderAccounts.forEach { account ->
+                                            DropdownMenuItem(text = {
+                                                Text("${account.id} • ${if (account.isLive) "Live" else "Demo"} • ${account.broker}")
+                                            }, onClick = {
+                                                expanded = false
+                                                cTraderScope.launch {
+                                                    selectingAccount = true
+                                                    try {
+                                                        cTrader.selectAccount(account.id)
+                                                        provider.invalidateForexQuotes()
+                                                    } catch (cancelled: CancellationException) {
+                                                        throw cancelled
+                                                    } catch (error: Exception) {
+                                                        cTrader.reportError(error.message ?: "فشل اختيار الحساب")
+                                                    } finally { selectingAccount = false }
+                                                }
+                                            })
+                                        }
+                                    }
+                                }
+                            }
+                            OutlinedButton(onClick = {
+                                cTrader.logout()
+                                provider.invalidateForexQuotes()
+                            }, modifier = Modifier.fillMaxWidth().testTag("ctrader_logout_button")) {
+                                Text("فصل حساب cTrader")
+                            }
+                        }
+                    }
+                }
+            }
             // Live Connectivity & Quality Diagnostic Card (Section 36)
             item {
                 Card(
@@ -111,8 +192,6 @@ fun SettingsScreen(
                 }
             }
 
-            item { HistorySettingsCard() }
-
             // Architecture & Compliance Card
             item {
                 Card(
@@ -130,7 +209,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "• BTCUSDT و ETHUSDT متصلان مباشرة ببيانات السوق اللحظية عبر Binance Public WebSocket.\n" +
-                                    "• XAUUSD وأزواج الفوركس لا تملك حاليًا مصدر أسعار موثوقًا؛ لا تُعرض أسعار وهمية على أنها مباشرة.\n" +
+                                    "• XAUUSD وأزواج الفوركس: cTrader فقط من حساب المستخدم بعد تسجيل الدخول، دون مزود بديل.\n" +
                                     "• التطبيق لا يتصل بأي وسيط مالي، ولا يدعم التداول بأموال حقيقية نهائياً. كل الأوامر افتراضية 100%.",
                             fontSize = 12.sp,
                             color = TradingTextSecondary,
@@ -140,31 +219,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Custom Provider / API Keys Documentation Card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = TradingCard),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(TradingBorder))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Key, contentDescription = null, tint = TradingGold)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "ربط مزود بيانات خاص (API)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "تم بناء معمارية التطبيق خلف الواجهة المجردة MarketDataProvider و HistoricalDataProvider.\n" +
-                                    "لإضافة مفاتيح مزود مدفوع مثل TwelveData أو Polygon أو Interactive Brokers، يتم إدخال المفاتيح بشكل آمن عبر لوحة الأسرار (Secrets panel) أو ملف .env دون تضمينها في الكود.",
-                            fontSize = 12.sp,
-                            color = TradingTextSecondary,
-                            lineHeight = 18.sp
-                        )
-                    }
-                }
-            }
         }
     }
 }

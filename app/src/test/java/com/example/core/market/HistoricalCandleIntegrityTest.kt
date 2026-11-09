@@ -69,6 +69,37 @@ class HistoricalCandleIntegrityTest {
         }
     }
 
+    @Test fun acceptsAuthenticOffGridBrokerBarOpensForH4D1AndW1() {
+        val hour = 3_600_000L
+        val cases = listOf(
+            Timeframe.H4 to hour,
+            Timeframe.D1 to 22L * hour,
+            Timeframe.W1 to (3L * 24 + 22) * hour
+        )
+        for ((tf, open) in cases) {
+            val bar = candle(open, source = "ctrader:demo:account:42")
+                .copy(timeframe = tf, closeTime = open + tf.minutes * 60_000L)
+            val result = HistoricalCandleIntegrity.validate(
+                listOf(bar), 0L, bar.closeTime + 1L,
+                expectedSource = bar.source, expectedTimeframe = tf)
+            assertEquals(listOf(open), result.map { it.openTime })
+        }
+    }
+
+    @Test fun keepsFixedGridValidationForBinanceAndRejectsSubminuteBrokerBars() {
+        val hour = 3_600_000L
+        val offGridBinance = candle(hour, source = "BINANCE_HISTORICAL")
+            .copy(timeframe = Timeframe.H4, closeTime = hour + 4L * hour)
+        assertThrows(IllegalArgumentException::class.java) {
+            HistoricalCandleIntegrity.validate(listOf(offGridBinance), 0, offGridBinance.closeTime + 1)
+        }
+        val nonMinuteBroker = candle(hour + 1000L, source = "ctrader:demo:account:42")
+            .copy(timeframe = Timeframe.H4, closeTime = 5L * hour + 1000L)
+        assertThrows(IllegalArgumentException::class.java) {
+            HistoricalCandleIntegrity.validate(listOf(nonMinuteBroker), 0, nonMinuteBroker.closeTime + 1)
+        }
+    }
+
     @Test fun rejectsIncompleteRange() {
         assertThrows(IllegalArgumentException::class.java) {
             HistoricalCandleIntegrity.validate(listOf(candle(120_000)), 0, 150_000)

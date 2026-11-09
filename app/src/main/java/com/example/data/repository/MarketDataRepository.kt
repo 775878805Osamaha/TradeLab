@@ -4,8 +4,9 @@ import com.example.core.market.DataIntegrityValidator
 import com.example.core.market.HistoricalCandleIntegrity
 import com.example.core.market.HistoricalCandleBoundary
 import com.example.core.market.HistoricalCandleCoverage
-import com.example.core.market.TwelveDataHistoricalProvider
-import com.example.core.market.BiquoteHistoricalProvider
+import com.example.core.market.CTraderGatewayClient
+import com.example.core.market.ReplayHistoricalSourceGate
+import com.example.core.market.VerifiedMarketQuote
 import com.example.core.market.DefaultMarketDataProvider
 import com.example.core.market.DefaultSymbols
 import com.example.core.market.MarketDataDiagnostic
@@ -27,91 +28,30 @@ class MarketDataRepository(
     val provider: DefaultMarketDataProvider,
     private val candleDao: CandleDao,
     private val symbolDao: SymbolDao,
-    archiveDirectory: java.io.File? = null
+    val cTrader: CTraderGatewayClient? = null
 ) {
+    /** Chart, Replay and Backtest must use the exact same provider and account. */
+    suspend fun getOlderChartCandles(symbol: String, timeframe: Timeframe, from: Long, to: Long) =
+        getCandles(symbol, timeframe, from, to)
 
-    private val chartArchive = com.example.core.market.DukascopyChartHistoryProvider(archiveDirectory = archiveDirectory)
-    private val freeFileArchive = archiveDirectory?.let {
-        com.example.core.market.HistDataChartHistoryProvider(java.io.File(it.parentFile,"histdata-history-v1"))
-    }
-    fun freeChartHistoryWarning(symbol: String): String? = freeFileArchive?.warning(symbol)
-
-    /** Deep analysis history is an attributed BID archive, separate from live quotes. */
-    suspend fun getOlderChartCandles(symbol: String, timeframe: Timeframe, from: Long, to: Long): List<Candle> {
-        if (hasTwelveDataKey() || !com.example.core.market.DukascopyChartHistoryProvider.supports(symbol)) {
-            return getCandles(symbol, timeframe, from, to)
-        }
-        val now=System.currentTimeMillis()
-        val split = com.example.core.market.ChartHistorySourceWindow.split(timeframe,from,to,now)
-        split.recent?.let { recent ->
-            // A known unpublished archive tail must be requested from the live-history
-            // source, rather than silently jumping over it to an older archive day.
-            val tail = com.example.core.market.ChartRecentHistory.load(timeframe,recent.from,recent.to,now,
-                recent={ getCandles(symbol,timeframe,recent.from,recent.to) },
-                archive={ start,end -> getArchivedChartCandles(symbol,timeframe,start,end) })
-            val older = split.archive?.let { getArchivedChartCandles(symbol,timeframe,it.from,it.to) } ?: emptyList()
-            return HistoricalCandleIntegrity.validate(older+tail,from,to+timeframe.minutes*60_000L,
-                expectedSymbol=symbol,expectedTimeframe=timeframe)
-        }
-        return getArchivedChartCandles(symbol,timeframe,from,to)
-    }
-
-    private suspend fun getArchivedChartCandles(symbol: String,timeframe: Timeframe,from: Long,to: Long): List<Candle> {
-        val cached = withContext(Dispatchers.IO) {
-            candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
-                .filter { it.source in setOf(com.example.core.market.DukascopyChartHistoryProvider.SOURCE,
-                    com.example.core.market.HistDataChartHistoryProvider.SOURCE) }
-        }
-        if (HistoricalCandleCoverage.isComplete(cached, from, to, timeframe.minutes * 60_000L)) {
-            return HistoricalCandleIntegrity.validate(cached, from, to + timeframe.minutes * 60_000L,
-                expectedSymbol = symbol, expectedTimeframe = timeframe)
-        }
-        val candles = com.example.core.market.FreeChartHistory.load(
-            cachedAlternative = { freeFileArchive?.cached(symbol,timeframe,from,to) },
-            primary = { chartArchive.fetch(symbol,timeframe,from,to) },
-            alternative = freeFileArchive?.let { archive -> suspend { archive.fetch(symbol,timeframe,from,to) } }
-        )
-        if (candles.isEmpty() && freeFileArchive==null) return getCandles(symbol, timeframe, from, to)
-        withContext(Dispatchers.IO) { candleDao.insertCandles(candles.map { it.toEntity() }) }
-        return candles
-    }
+    fun freeChartHistoryWarning(symbol: String): String? = null
 
     val providerDiagnostics: StateFlow<MarketDataDiagnostic> = provider.diagnosticInfo
 
-    // In-memory only. The user explicitly supplies their own provider key.
-    // Do not cache or print credentials.
-    private var twelveDataApiKey: String = ""
-    private val twelveData = TwelveDataHistoricalProvider()
-    private val keylessHistorical = BiquoteHistoricalProvider()
-
-    // A bounded exact-window cache also covers verified sparse forex sessions.
-    // Room's contiguous-cache check deliberately cannot recognize weekends.
-    // Only immutable, provider-verified responses enter this cache.
-    private data class HistoricalWindow(
-        val symbol: String, val timeframe: Timeframe, val from: Long, val to: Long,
-        val keyedProvider: Boolean
-    )
-    private val verifiedForexWindows = object :
-        LinkedHashMap<HistoricalWindow, List<Candle>>(48, 0.75f, true) {
-        override fun removeEldestEntry(
-            eldest: MutableMap.MutableEntry<HistoricalWindow, List<Candle>>?
-        ): Boolean = size > 48
-    }
-    private val forexWindowLock = Any()
-
-    fun configureTwelveDataKey(key: String) {
-        require(key.length <= 256) { "API key is too long" }
-        val updated = key.trim()
-        if (updated != twelveDataApiKey) {
-            synchronized(forexWindowLock) { verifiedForexWindows.clear() }
-        }
-        twelveDataApiKey = updated
-    }
-
-    fun hasTwelveDataKey(): Boolean = twelveDataApiKey.isNotBlank()
-
     fun supportsHistoricalSymbol(symbol: String): Boolean =
-        symbol == "BTCUSDT" || symbol == "ETHUSDT" || twelveData.supports(symbol)
+        VerifiedMarketQuote.supports(symbol)
+
+    /** A restored Replay dataset must still belong to the authorized broker account. */
+    fun isTrustedReplayDataset(symbol: String, timeframe: Timeframe, candles: List<Candle>): Boolean =
+        ReplayHistoricalSourceGate.isTrusted(symbol, timeframe, candles, activeCTraderSource(symbol))
+
+    fun isCurrentReplaySource(symbol: String, source: String?): Boolean =
+        ReplayHistoricalSourceGate.isCurrent(symbol, source, activeCTraderSource(symbol))
+
+    private fun activeCTraderSource(symbol: String): String? =
+        if (symbol in VerifiedMarketQuote.forexSymbols)
+            runCatching { cTrader?.sourceKey(symbol) }.getOrNull()
+        else null
 
     val symbols: Flow<List<SymbolInfo>> = symbolDao.getAllSymbols().map { list ->
         if (list.isEmpty()) {
@@ -156,153 +96,55 @@ class MarketDataRepository(
         require(pageSize in 1..1000) { "pageSize must be between 1 and 1000" }
         val intervalMillis = timeframe.minutes * 60_000L
         require(intervalMillis > 0L) { "Invalid timeframe interval" }
+        val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
         // Exclude the currently forming candle by its exchange open time,
-        // not by subtracting an interval from now (which rejects valid history).
-        require(HistoricalCandleBoundary.isClosedRange(
-            to, System.currentTimeMillis(), intervalMillis
+        // using the source's opening-time convention. cTrader bars can open
+        // off the UTC grid; their latest safe open is now minus one duration.
+        require(to <= HistoricalCandleBoundary.latestClosedRequestTo(
+            System.currentTimeMillis(), intervalMillis, brokerTimed = !isCrypto
         )) { "Historical range includes an unfinished candle" }
         // Bound replay memory while fetching and validating one network page at a time.
         // Both boundaries are candle-open timestamps; reject partial windows.
         val weeklyInterval = 7L * 24 * 60 * 60 * 1000
         val weeklyOffset = 4L * 24 * 60 * 60 * 1000
         val offset = if (intervalMillis == weeklyInterval) weeklyOffset else 0L
-        require(Math.floorMod(from - offset, intervalMillis) == 0L &&
-            Math.floorMod(to - offset, intervalMillis) == 0L) {
+        require(if (isCrypto) {
+            Math.floorMod(from - offset, intervalMillis) == 0L &&
+                Math.floorMod(to - offset, intervalMillis) == 0L
+        } else {
+            Math.floorMod(from, 60_000L) == 0L && Math.floorMod(to, 60_000L) == 0L
+        }) {
             "Historical candle range must align to timeframe boundaries"
         }
         val requestedBars = (to - from) / intervalMillis + 1L
         require(requestedBars <= 20_000L) {
             "Historical range exceeds 20000 candles. Request a shorter range."
         }
-        val isCrypto = symbol == "BTCUSDT" || symbol == "ETHUSDT"
         if (!isCrypto) {
-            if (!twelveData.supports(symbol)) {
-                throw java.io.IOException("No configured historical provider for $symbol")
-            }
-            // No credentials needed for normal chart viewing. An explicitly
-            // configured Twelve Data key remains available as an alternative.
-            // Do not fabricate bars to fill forex weekend/session gaps.
-            val requestedKey = twelveDataApiKey
-            val windowKey = HistoricalWindow(
-                symbol, timeframe, from, to, requestedKey.isNotBlank()
-            )
-            if (requestedBars <= 250L) {
-                synchronized(forexWindowLock) { verifiedForexWindows[windowKey] }
-                    ?.let { return@withContext it }
-            }
-            val cachedForex = DataIntegrityValidator.sanitizeCandles(
-                candleDao.getCandlesRange(symbol, timeframe.code, from, to)
-                    .map { it.toDomain() }
-            ).filter { candle ->
-                candle.symbol == symbol && candle.timeframe == timeframe &&
-                    candle.source == if (requestedKey.isNotBlank()) {
-                        "TWELVE_DATA_HISTORICAL"
-                    } else {
-                        "BIQUOTE_HISTORICAL"
-                    }
-            }
-            // A complete contiguous verified cache window needs no network.
-            // Never assume that a sparse forex session is complete merely
-            // because some candles were previously stored.
-            if (HistoricalCandleCoverage.isComplete(
-                    cachedForex, from, to, intervalMillis
-                )) {
+            require(symbol in VerifiedMarketQuote.forexSymbols) { "Unsupported cTrader instrument: $symbol" }
+            val gateway = cTrader ?: throw java.io.IOException("cTrader gateway is not configured")
+            // Enforce account+broker-symbol provenance. Old Biquote/Twelve/Dukascopy
+            // Room rows are never handed to Chart, Replay or Backtest.
+            val source = gateway.sourceKey(symbol)
+            val cache = DataIntegrityValidator.sanitizeCandles(
+                candleDao.getCandlesRange(symbol, timeframe.code, from, to).map { it.toDomain() }
+            ).filter { it.symbol == symbol && it.timeframe == timeframe && it.source == source }
+            if (HistoricalCandleCoverage.isComplete(cache, from, to, intervalMillis)) {
                 return@withContext HistoricalCandleIntegrity.validate(
-                    cachedForex, from, to + intervalMillis,
+                    cache, from, to + intervalMillis, expectedSource = source,
                     expectedSymbol = symbol, expectedTimeframe = timeframe
                 )
             }
-            // Forex/metals have market-session gaps. Fetch in bounded pages;
-            // never fabricate bars and never return a partially successful range.
-            val providerLimit = if (requestedKey.isNotBlank()) 1000 else 750
-            val safePageSize = minOf(pageSize, providerLimit)
-            val pages = ArrayList<Candle>(minOf(requestedBars.toInt(), 20_000))
-            var cursor = from
-            while (cursor <= to) {
-                currentCoroutineContext().ensureActive()
-                val remainingBars = (to - cursor) / intervalMillis + 1L
-                // Keyless Biquote reserves two source bars for boundary handling.
-                val maxPageBars = if (requestedKey.isNotBlank()) safePageSize else
-                    minOf(safePageSize, 750 / when (timeframe.minutes) {
-                        3 -> 3
-                        120 -> 2
-                        10080 -> 7
-                        else -> 1
-                    })
-                require(maxPageBars > 0) { "Unsupported historical page size" }
-                val barsInPage = minOf(remainingBars, maxPageBars.toLong())
-                val end = cursor + (barsInPage - 1L) * intervalMillis
-                val chunk = try {
-                    if (requestedKey.isNotBlank()) {
-                        twelveData.fetch(symbol, timeframe, cursor, end, requestedKey)
-                    } else {
-                        keylessHistorical.fetch(symbol, timeframe, cursor, end)
-                    }
-                } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                    throw cancelled
-                } catch (error: java.io.IOException) {
-                    // Some providers signal a fully closed market as an empty
-                    // result rather than an empty candle array. Do not hide
-                    // transport failures, authorization errors or rate limits.
-                    throw java.io.IOException(
-                        "Historical page $cursor..$end failed for $symbol: ${error.message}", error
-                    )
-                }
-                currentCoroutineContext().ensureActive()
-                if (chunk.isEmpty()) {
-                    // Market holidays/weekends may produce an empty window.
-                    // Do not synthesize missing bars or abort a longer valid range.
-                    if (end == to) break
-                    cursor = end + intervalMillis
-                    yield()
-                    continue
-                }
-                val verified = HistoricalCandleIntegrity.validate(
-                    chunk,
-                    requestedFrom = cursor,
-                    requestedTo = end + intervalMillis,
-                    expectedSymbol = symbol,
-                    expectedTimeframe = timeframe
-                )
-                require(verified.all { it.openTime in cursor..end }) {
-                    "Historical provider returned candles outside requested page"
-                }
-                pages.addAll(verified)
-                if (end == to) break
-                cursor = end + intervalMillis
-                yield()
-            }
+            val candles = gateway.candles(symbol, timeframe, from, to)
+            if (candles.isEmpty()) throw com.example.core.market.NoHistoricalCandlesException(symbol)
             val verified = HistoricalCandleIntegrity.validate(
-                pages,
-                requestedFrom = from,
-                requestedTo = to + intervalMillis,
-                expectedSymbol = symbol,
-                expectedTimeframe = timeframe
+                candles, from, to + intervalMillis, expectedSource = source,
+                expectedSymbol = symbol, expectedTimeframe = timeframe
             )
-            if (verified.isEmpty()) {
-                throw com.example.core.market.NoHistoricalCandlesException(symbol)
-            }
-            // Never hand replay duplicate or out-of-order timestamps across pages.
-            require(verified.zipWithNext().all { (a, b) -> a.openTime < b.openTime }) {
-                "Historical pages contain duplicate or unordered candle timestamps"
-            }
-            // Persist only provider-verified forex/metals OHLC. Repeated chart
-            // navigation can then reuse a fully contiguous cached window without
-            // another network round trip; session gaps still require provider checks.
-            // Persisting validated OHLC is best-effort; a Room write failure
-            // must not erase real candles already verified from the provider.
-            try {
-                candleDao.insertCandles(verified.map { it.toEntity() })
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                // Return verified candles even when the optional cache is unavailable.
-            }
-            if (requestedBars <= 250L) {
-                synchronized(forexWindowLock) {
-                    verifiedForexWindows[windowKey] = verified.toList()
-                }
-            }
+            // A broker/account switch during the request invalidates the entire page.
+            require(gateway.sourceKey(symbol) == source) { "cTrader account changed during historical download" }
+            currentCoroutineContext().ensureActive()
+            candleDao.insertCandles(verified.map { it.toEntity() })
             return@withContext verified
         }
         val local = DataIntegrityValidator.sanitizeCandles(

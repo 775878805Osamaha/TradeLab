@@ -60,7 +60,6 @@ fun ReplayScreen(
     var showDrawingTools by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showMarketDialog by remember { mutableStateOf(false) }
-    var twelveDataKeyInput by remember { mutableStateOf("") }
     var showCsvImportDialog by remember { mutableStateOf(false) }
     var csvImportSymbol by remember { mutableStateOf("XAUUSD") }
     var csvImportSource by remember { mutableStateOf("broker-export") }
@@ -343,7 +342,9 @@ fun ReplayScreen(
                 TextButton(onClick = { showIndicatorsDialog = true }, modifier = Modifier.testTag("replay_indicators_btn")) {
                     Text("المؤشرات", fontSize = 11.sp)
                 }
-                ChartDisplayStyle.entries.forEach { style ->
+                // Range requires historical ticks; the legacy Replay route only
+                // has OHLC. The in-chart Replay uses the verified Range engine.
+                ChartDisplayStyle.entries.filter { it != ChartDisplayStyle.RANGE }.forEach { style ->
                     FilterChip(
                         selected = replayChartStyle == style,
                         onClick = { replayChartStyle = style },
@@ -1078,7 +1079,7 @@ fun ReplayScreen(
                             )
                         }
                     }
-                    Text("الذهب والفوركس • Twelve Data", fontSize = 12.sp, color = TradingTextSecondary)
+                    Text("الذهب والفوركس • cTrader (الحساب المحدد في الإعدادات)", fontSize = 12.sp, color = TradingTextSecondary)
                     listOf(
                         listOf("XAUUSD", "XAGUSD", "EURUSD"),
                         listOf("GBPUSD", "USDJPY", "USDCHF"),
@@ -1098,24 +1099,8 @@ fun ReplayScreen(
                             }
                         }
                     }
-                    OutlinedTextField(
-                        value = twelveDataKeyInput,
-                        onValueChange = { twelveDataKeyInput = it },
-                        label = { Text("Twelve Data API Key") },
-                        singleLine = true,
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth().testTag("replay_twelvedata_key")
-                    )
-                    TextButton(onClick = {
-                        viewModel.configureHistoricalApiKey(twelveDataKeyInput)
-                        twelveDataKeyInput = ""
-                    }) { Text(if (viewModel.hasHistoricalApiKey()) "تحديث المفتاح" else "تفعيل مصدر الذهب والفوركس") }
-                    Text("المفتاح يُحفظ في الذاكرة فقط. توفر البيانات والفترات يعتمد على اشتراك المزود. أسعار الوسط قد تختلف عن MT5.",
+                    Text("لتحميل الشموع التاريخية في Replay، اربط حساب cTrader للقراءة فقط من إعدادات التطبيق. لا تُستخدم مصادر خارجية بديلة.",
                         color = TradingTextSecondary, fontSize = 11.sp)
-                    TextButton(onClick = {
-                        showMarketDialog = false
-                        showCsvImportDialog = true
-                    }) { Text("استيراد تاريخ حقيقي من ملف CSV") }
                     Text("الإطار الزمني", fontWeight = FontWeight.Bold)
                     Column(
                         modifier = Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())

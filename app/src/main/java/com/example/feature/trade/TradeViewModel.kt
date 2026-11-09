@@ -52,6 +52,9 @@ class TradeViewModel(
     private val riskEngine: RiskEngine = RiskEngine()
 ) : ViewModel() {
 
+    fun isVerifiedQuote(tick: Tick?, symbol: String, now: Long = System.currentTimeMillis()) =
+        marketDataRepository.provider.isVerifiedQuote(tick, symbol, now)
+
     private val _uiState = MutableStateFlow(TradeUiState())
     val uiState: StateFlow<TradeUiState> = _uiState.asStateFlow()
 
@@ -62,6 +65,11 @@ class TradeViewModel(
     init {
         observeAccountAndPositions()
         selectSymbol(_uiState.value.selectedSymbol)
+        marketDataRepository.cTrader?.let { client ->
+            viewModelScope.launch { client.accountGeneration.collect {
+                _uiState.update { it.copy(latestTick = null, candles = emptyList(), riskAnalysis = null) }
+            } }
+        }
     }
 
     private fun observeAccountAndPositions() {
@@ -295,7 +303,7 @@ class TradeViewModel(
         }
 
         // Never submit a virtual market order using an old or unsupported quote.
-        val verifiedMarketQuote = com.example.core.market.VerifiedMarketQuote.isVerified(state.latestTick, state.selectedSymbol)
+        val verifiedMarketQuote = marketDataRepository.provider.isVerifiedQuote(state.latestTick, state.selectedSymbol)
         if (state.orderType == OrderType.MARKET && !verifiedMarketQuote) {
             _uiState.update { it.copy(message = "السعر المباشر غير متاح أو متأخر. انتظر تحديث مصدر السوق قبل تنفيذ الأمر.") }
             return
@@ -489,13 +497,6 @@ class TradeViewModel(
         loadCandles(_uiState.value.selectedSymbol)
     }
 
-    fun configureHistoricalProviderKey(key: String) {
-        marketDataRepository.configureTwelveDataKey(key)
-        loadCandles(_uiState.value.selectedSymbol)
-    }
-
-    fun hasHistoricalProviderKey(): Boolean = marketDataRepository.hasTwelveDataKey()
-
     private fun loadCandles(symbol: String) {
         candleLoadJob?.cancel()
         _uiState.update { state ->
@@ -531,7 +532,7 @@ class TradeViewModel(
             marketDataRepository.provider.subscribe(symbol)
             marketDataRepository.observeTicks(symbol).collect { tick ->
                 if (_uiState.value.selectedSymbol != symbol ||
-                    !com.example.core.market.VerifiedMarketQuote.isVerified(tick, symbol)) return@collect
+                    !marketDataRepository.provider.isVerifiedQuote(tick, symbol)) return@collect
                 val previous = _uiState.value.latestTick
                 if (previous != null && tick.timestamp < previous.timestamp) return@collect
                 _uiState.update { it.copy(latestTick = tick) }

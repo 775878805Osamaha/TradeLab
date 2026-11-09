@@ -1,6 +1,10 @@
 package com.example
 
 import android.os.Bundle
+import android.content.Intent
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -8,7 +12,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -45,6 +48,28 @@ import com.example.ui.theme.TradingBorder
 import com.example.ui.theme.TradingCard
 
 class MainActivity : ComponentActivity() {
+    private fun handleCTraderCallback(intent: Intent?) {
+        val app = application as TradeLabApplication
+        val data = intent?.data ?: return
+        if (!app.cTrader.isCallback(data)) return
+        lifecycleScope.launch {
+            try {
+                app.cTrader.completeAuthorization(data)
+                app.marketDataProvider.invalidateForexQuotes()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                app.cTrader.reportError(error.message ?: "فشل التفويض")
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCTraderCallback(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -52,13 +77,27 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.rgb(0, 13, 22))
         )
 
+        val app = application as TradeLabApplication
+        val isCTraderCallback = intent?.data?.let(app.cTrader::isCallback) == true
+        if (!isCTraderCallback && app.cTrader.isLinked()) {
+            lifecycleScope.launch {
+                try {
+                    app.cTrader.refreshAccounts()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // The gateway client has already published the failure.
+                }
+            }
+        }
+
         setContent {
-            val app = LocalContext.current.applicationContext as TradeLabApplication
 
             // ViewModels scoped cleanly with dependencies
             val accountViewModel by remember { lazy { AccountViewModel(app.tradingRepository) } }
             val marketViewModel = remember { MarketViewModel(app.marketDataRepository) }
-            val chartViewModel = remember { ChartViewModel(app.marketDataRepository, app.tradingRepository, app.database.drawingDao()) }
+            val chartViewModel = remember { ChartViewModel(app.marketDataRepository, app.tradingRepository,
+                app.database.drawingDao(), app.rangeTickDiskStore, app.rangeBarDiskStore) }
             val tradeViewModel by remember { lazy { TradeViewModel(app.tradingRepository, app.marketDataRepository) } }
             val resultsViewModel by remember { lazy { ResultsViewModel(app.tradingRepository, app.trainingSessionStore) } }
             val historyViewModel by remember { lazy { HistoryViewModel(app.tradingRepository) } }
@@ -131,7 +170,6 @@ class MainActivity : ComponentActivity() {
                                     replayViewModel = replayViewModel,
                                     embeddedReplayLaunchRequest = embeddedReplayLaunchRequest,
                                     onEmbeddedReplayLaunchConsumed = { embeddedReplayLaunchRequest = 0 },
-                                    onNavigateToReplay = openReplayOnChart,
                                     onImmersiveChanged = { chartImmersive = it }
                                 )
                             }
@@ -214,6 +252,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Settings.route) {
                                 SettingsScreen(
                                     provider = app.marketDataProvider,
+                                    cTraderScope = lifecycleScope,
                                     onBack = { navController.popBackStack() }
                                 )
                             }
@@ -222,5 +261,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        handleCTraderCallback(intent)
     }
 }

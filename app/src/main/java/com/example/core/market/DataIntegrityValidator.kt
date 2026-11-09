@@ -83,6 +83,7 @@ object DataIntegrityValidator {
         if (candles.isEmpty()) return ValidationResult.Invalid("Historical series is empty")
         val symbol = candles.first().symbol
         val timeframe = candles.first().timeframe
+        val source = candles.first().source
         val expectedDuration = timeframe.minutes.toLong() * 60_000L
         if (expectedDuration <= 0L) return ValidationResult.Invalid("Invalid historical timeframe duration")
         var previousOpen = Long.MIN_VALUE
@@ -91,8 +92,8 @@ object DataIntegrityValidator {
             if (validity is ValidationResult.Invalid) {
                 return ValidationResult.Invalid("Bar $index: ${validity.reason}")
             }
-            if (candle.symbol != symbol || candle.timeframe != timeframe) {
-                return ValidationResult.Invalid("Mixed symbol or timeframe at bar $index")
+            if (candle.symbol != symbol || candle.timeframe != timeframe || candle.source != source) {
+                return ValidationResult.Invalid("Mixed symbol, timeframe or source at bar $index")
             }
             if (candle.closeTime - candle.openTime > expectedDuration + 1_000L) {
                 return ValidationResult.Invalid("Bar $index extends beyond its timeframe")
@@ -104,6 +105,7 @@ object DataIntegrityValidator {
                 return ValidationResult.Invalid("Overlapping candle close/open timestamps at bar $index")
             }
             if (index > 0 && expectedDuration > 0L &&
+                !source.startsWith("ctrader:", ignoreCase = true) &&
                 candle.openTime - previousOpen < expectedDuration) {
                 return ValidationResult.Invalid("Overlapping historical candles at bar $index")
             }

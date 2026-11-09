@@ -7,6 +7,47 @@ import java.math.RoundingMode
 
 /** Transport-independent Open API decoder. Never supplies credentials or executes orders. */
 object CTraderTrendbars {
+    /**
+     * cTrader has no native H2 period. Combine only genuine consecutive H1
+     * broker bars in the same UTC two-hour bucket; a missing hour yields no
+     * H2 candle. Open-tick minutes can differ between consecutive H1 bars.
+     */
+    internal fun aggregateVerifiedH2(hourly: List<Candle>): List<Candle> {
+        if (hourly.isEmpty()) return emptyList()
+        val ordered = closeAtNextBrokerOpen(hourly)
+        require(ordered.all { it.timeframe == Timeframe.H1 &&
+            it.symbol == ordered.first().symbol && it.source == ordered.first().source &&
+            DataIntegrityValidator.validateCandle(it).isValid }) { "Invalid H1 source bars for H2" }
+        return ordered.groupBy { Math.floorDiv(it.openTime, 7_200_000L) }
+            .values.mapNotNull { pair ->
+                if (pair.size != 2) return@mapNotNull null
+                val (first, second) = pair
+                val firstHour = Math.floorDiv(first.openTime, 3_600_000L)
+                if (Math.floorMod(firstHour, 2L) != 0L ||
+                    Math.floorDiv(second.openTime, 3_600_000L) != firstHour + 1L ||
+                    first.closeTime > second.openTime ||
+                    second.closeTime - first.openTime > 7_200_000L) return@mapNotNull null
+                Candle(first.symbol, Timeframe.H2, first.openTime, second.closeTime,
+                    first.open, maxOf(first.high, second.high), minOf(first.low, second.low),
+                    second.close, first.volume + second.volume, first.source)
+            }
+    }
+
+    /**
+     * A broker's next bar may open before the preceding nominal UTC duration
+     * ends (e.g. the DST transition of a daily bar). Bound the prior close by
+     * that *observed* next open. Never create or interpolate missing prices.
+     */
+    internal fun closeAtNextBrokerOpen(candles: List<Candle>): List<Candle> {
+        val ordered = candles.sortedBy { it.openTime }
+        return ordered.mapIndexed { index, candle ->
+            val nextOpen = ordered.getOrNull(index + 1)?.openTime
+            if (nextOpen != null && nextOpen > candle.openTime && nextOpen < candle.closeTime) {
+                candle.copy(closeTime = nextOpen)
+            } else candle
+        }
+    }
+
     data class Bar(
         val utcTimestampInMinutes: Long,
         val low: Long,
@@ -60,7 +101,8 @@ object CTraderTrendbars {
                 bar.volume.toDouble(), source)
         }
         // Exact boundary filtering is necessary: API responses may include the live bar.
-        val closed = candles.filter { it.openTime >= from && it.closeTime <= closedUntil }
+        val closed = closeAtNextBrokerOpen(candles)
+            .filter { it.openTime >= from && it.closeTime <= closedUntil }
         if (closed.isEmpty()) return emptyList()
         return HistoricalCandleIntegrity.validate(closed, from, closedUntil, source, symbol, timeframe)
     }

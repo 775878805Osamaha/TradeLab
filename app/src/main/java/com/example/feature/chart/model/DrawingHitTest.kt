@@ -4,7 +4,8 @@ import androidx.compose.ui.geometry.Offset
 import kotlin.math.*
 
 object DrawingHitTest {
-    fun distance(d: ChartDrawing, t: ChartTransform, point: Offset): Float {
+    /** The risk/reward rectangles are drawn in dp; hit testing must use the same canvas density. */
+    fun distance(d: ChartDrawing, t: ChartTransform, point: Offset, canvasDensity: Float = 1f): Float {
         val a = if(d.tool==DrawingTool.ANCHORED_TEXT && d.screenX!=null && d.screenY!=null) Offset(d.screenX*t.chartWidth,d.screenY*t.chartHeight)
             else Offset(t.timeToX(d.startTime)?:return Float.MAX_VALUE,t.priceToY(d.startPrice))
         val b = Offset(d.endTime?.let{t.timeToX(it)}?:a.x,d.endPrice?.let{t.priceToY(it)}?:a.y)
@@ -20,7 +21,21 @@ object DrawingHitTest {
             DrawingTool.VERTICAL_LINE -> abs(point.x-a.x)
             DrawingTool.EXTENDED_LINE -> segment(a,b,1)
             DrawingTool.RAY -> segment(a,b,2)
-            DrawingTool.RECTANGLE -> listOf(a,Offset(b.x,a.y),b,Offset(a.x,b.y),a).zipWithNext().minOf{segment(it.first,it.second)}
+            DrawingTool.RECTANGLE -> {
+                if (point.x in min(a.x,b.x)..max(a.x,b.x) && point.y in min(a.y,b.y)..max(a.y,b.y)) 0f
+                else listOf(a,Offset(b.x,a.y),b,Offset(a.x,b.y),a).zipWithNext().minOf{segment(it.first,it.second)}
+            }
+            DrawingTool.LONG_POSITION, DrawingTool.SHORT_POSITION -> {
+                val anchors = d.anchors.mapNotNull { p -> t.timeToX(p.time)?.let { Offset(it, t.priceToY(p.price)) } }
+                if (anchors.size < 3) segment(a,b) else {
+                    val entry = anchors[0]; val target = anchors[1]; val stop = anchors[2]
+                    val right = maxOf(entry.x, target.x, stop.x, entry.x + 80f * canvasDensity)
+                    val top = minOf(entry.y, target.y, stop.y)
+                    val bottom = maxOf(entry.y, target.y, stop.y)
+                    if (point.x in entry.x..right && point.y in top..bottom) 0f
+                    else listOf(entry.y, target.y, stop.y).minOf { y -> segment(Offset(entry.x,y),Offset(right,y)) }
+                }
+            }
             DrawingTool.CIRCLE, DrawingTool.ELLIPSE -> {
                 val center=(a+b)/2f;val radiusX=abs(b.x-a.x)/2f;val radiusY=abs(b.y-a.y)/2f
                 if(d.tool==DrawingTool.CIRCLE) abs((point-center).getDistance()-min(radiusX,radiusY))

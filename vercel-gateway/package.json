@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check api/index.mjs && node --check session.mjs && node --check ctrader.mjs"
+    "check": "node --check api/index.mjs && node --check session.mjs && node --check ctrader.mjs && node --check tick-response.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"

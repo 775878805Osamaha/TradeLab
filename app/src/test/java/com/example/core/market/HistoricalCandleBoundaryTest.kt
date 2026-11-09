@@ -46,6 +46,24 @@ class HistoricalCandleBoundaryTest {
         assertTrue(HistoricalCandleBoundary.isClosedRange(lastClosedOpen, now, week))
     }
 
+    @Test fun completedBrokerOpenMayBeOffUtcH4DailyAndWeeklyGrids() {
+        val minute = 60_000L
+        val now = 30L * 86_400_000L + 23L * 3_600_000L + 37L * minute
+        for (duration in listOf(4L, 24L, 168L).map { it * 3_600_000L }) {
+            val to = HistoricalCandleBoundary.latestClosedRequestTo(now, duration, true)
+            assertEquals((now - duration) / minute * minute, to)
+            assertTrue(to + duration <= now)
+            assertTrue(to % duration != 0L)
+        }
+    }
+
+    @Test fun binanceCompletedOpenStillUsesExchangeWeeklyGrid() {
+        val week = 604_800_000L
+        val now = 345_600_000L + 4L * week + 2L * 86_400_000L
+        assertEquals(345_600_000L + 3L * week,
+            HistoricalCandleBoundary.latestClosedRequestTo(now, week, false))
+    }
+
     @Test fun weeklyBoundaryBeforeFirstMondayDoesNotReturnNegativeTime() {
         val week = 604_800_000L
         assertEquals(-259_200_000L, HistoricalCandleBoundary.currentOpen(0L, week))
