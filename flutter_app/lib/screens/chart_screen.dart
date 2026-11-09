@@ -229,7 +229,14 @@ class _ChartScreenState extends State<ChartScreen> {
       final older = await widget.controller.history(_selectedSymbol, _timeframe, before: before);
       if (revision != _loadRevision || !mounted) return;
       final earliest = _actualBars.first.timestamp;
-      final unique = older.where((bar) => bar.timestamp < earliest).toList();
+      // Providers can return pages out of order or with duplicate timestamps.
+      // Normalize before prepending so chart indices and Replay stay stable.
+      final byTimestamp = <int, MarketBar>{};
+      for (final bar in older) {
+        if (bar.timestamp < earliest) byTimestamp[bar.timestamp] = bar;
+      }
+      final unique = byTimestamp.values.toList()
+        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
       if (unique.isEmpty) {
         if (_selectedSymbol.source == TradeSource.binance) {
           _historyExhausted = true;
