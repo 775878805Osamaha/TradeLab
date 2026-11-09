@@ -12,6 +12,7 @@ import '../data/range_tick_rollforward.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
+import '../data/ctrader_candle_stitcher.dart';
 import '../data/market_controller.dart';
 import '../paper/paper_journal_controller.dart';
 import '../paper/paper_ledger.dart';
@@ -73,6 +74,8 @@ class _ChartScreenState extends State<ChartScreen> {
   double _gestureFocalX = 0;
   Offset? _crosshair;
   Timer? _replayTimer;
+  Timer? _closedCandleTimer;
+  bool _refreshingClosedCandles = false;
   bool _playing = false;
   final List<double> _levels = [];
   final List<ChartPattern> _patterns = [];
@@ -162,6 +165,12 @@ class _ChartScreenState extends State<ChartScreen> {
     _linkedBefore = widget.controller.ctraderConnected;
     _accountBefore = widget.controller.accountId;
     widget.controller.addListener(_onMarketUpdate);
+    // Poll only broker-closed candles. Never update Replay or request
+    // synthetic OHLC from non-cTrader sources.
+    _closedCandleTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => unawaited(_refreshClosedCTraderCandles()),
+    );
     // Binance does not require a cTrader session. Load its chart immediately
     // when selected, even on a device that has never linked a broker.
     if (_liveRequested) Future.microtask(_loadRealHistory);
@@ -347,6 +356,60 @@ class _ChartScreenState extends State<ChartScreen> {
       if (revision == _loadRevision) _loadError = 'تعذر تحميل بيانات السوق. أعد المحاولة.';
     } finally {
       if (revision == _loadRevision && mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _refreshClosedCTraderCandles() async {
+    if (!mounted || _refreshingClosedCandles || _loading || _olderLoading ||
+        _replay || _draggingLine || _draggingPattern ||
+        !_liveRequested || _loadError != null ||
+        _selectedSymbol.source != TradeSource.ctrader ||
+        _mode == ChartMode.range || _actualBars.isEmpty) return;
+    final revision = _loadRevision;
+    final symbol = _selectedSymbol;
+    final timeframe = _timeframe;
+    final lastTimestamp = _actualBars.last.timestamp;
+    _refreshingClosedCandles = true;
+    try {
+      final recent = await widget.controller.closedCandlesSince(
+          symbol, timeframe, lastTimestamp);
+      if (!mounted || revision != _loadRevision || _replay ||
+          _selectedSymbol.code != symbol.code || _timeframe != timeframe) {
+        return;
+      }
+      final combined = CTraderCandleStitcher.append(_actualBars, recent);
+      final appended = combined.length - _actualBars.length;
+      if (appended == 0) {
+        // Update the freshness label even when the broker has no new candle.
+        setState(() {});
+        return;
+      }
+      setState(() {
+        _actualBars = combined;
+        _actualCandles =
+            combined.map((bar) => bar.candle).toList(growable: false);
+        _actualTimestamps =
+            combined.map((bar) => bar.timestamp).toList(growable: false);
+        // Hold the same historical bar at the same x position if the user
+        // is inspecting older candles; at the latest edge, follow new bars.
+        if (_viewport.scrollBars > 0) {
+          _viewport = ChartViewport(
+            barWidth: _viewport.barWidth,
+            scrollBars: _viewport.scrollBars + appended,
+          );
+        }
+      });
+    } on MarketDataException catch (error) {
+      if (mounted && revision == _loadRevision) {
+        setState(() => _loadError = error.message);
+      }
+    } catch (_) {
+      if (mounted && revision == _loadRevision) {
+        setState(() => _loadError =
+            'فشل تحديث شموع cTrader المغلقة. اضغط تحديث لإعادة المحاولة.');
+      }
+    } finally {
+      _refreshingClosedCandles = false;
     }
   }
 
@@ -582,6 +645,7 @@ class _ChartScreenState extends State<ChartScreen> {
     widget.controller.removeListener(_onMarketUpdate);
     _loadRevision++;
     _replayTimer?.cancel();
+    _closedCandleTimer?.cancel();
     super.dispose();
   }
 
