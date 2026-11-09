@@ -287,7 +287,7 @@ function safeDiagnostic(error){
   const category=String(error?.message||'');
   return {
     stage:['accounts','symbols','candles','ticks','spot'].includes(error?.stage)?error.stage:'other',
-    category:/^(ctrader_[a-z_]+|cTrader connection closed|not_authenticated|invalid_session|account_not_authorized|broker_exchange_failed|invalid_tick_data|invalid_tick_timestamp|invalid_tick_price|tick_timestamp_out_of_range|tick_account_mismatch|ambiguous_tick_pagination_boundary|empty_tick_page_with_more|symbol_account_mismatch|invalid_symbol_metadata|invalid_ctrader_trendbar|invalid_ctrader_trendbar_timestamps)$/.test(category)
+    category:/^(ctrader_[a-z_]+|cTrader connection closed|not_authenticated|invalid_session|account_not_authorized|broker_exchange_failed|invalid_tick_data|invalid_tick_timestamp|invalid_tick_price|tick_timestamp_out_of_range|tick_account_mismatch|ambiguous_tick_pagination_boundary|empty_tick_page_with_more|symbol_account_mismatch|invalid_symbol_metadata|invalid_ctrader_trendbar|invalid_ctrader_trendbar_timestamps|ctrader_candle_history_unusable)$/.test(category)
       ?category:'unclassified',
     brokerCode:/^[A-Z0-9_]{1,64}$/.test(error?.brokerCode||'')?error.brokerCode:undefined,
     operation:Number.isInteger(error?.operation)?error.operation:undefined
@@ -328,8 +328,8 @@ const server=createServer((req,res)=>{
     // NOT malformed Android requests. Keep unsafe candles off the chart
     // while reporting a diagnostic that does not expose account details.
     if(error.stage==='candles' &&
-       ['invalid_ctrader_trendbar','invalid_ctrader_trendbar_timestamps']
-         .includes(error.message))
+       ['invalid_ctrader_trendbar','invalid_ctrader_trendbar_timestamps',
+        'ctrader_candle_history_unusable'].includes(error.message))
       return fail(res,502,'ctrader_candle_history_unusable');
     if(error.message.startsWith('invalid_')||error.message==='account_not_authorized')
       return fail(res,400,'invalid_request');
