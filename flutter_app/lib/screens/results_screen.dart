@@ -431,10 +431,10 @@ class _ResultsScreenState extends State<ResultsScreen> {
   Widget _cashMovements(LedgerReport report) => Column(
     crossAxisAlignment: CrossAxisAlignment.start, children: [
       const TradeSectionTitle('الحركات النقدية'),
-      if (!report.entries.any((e) => e.kind != LedgerKind.closedTrade))
+      if (!report.entries.any((e) => e.kind == LedgerKind.deposit || e.kind == LedgerKind.withdrawal))
         _emptyMessage('لم تُسجّل إيداعات أو سحوبات في هذه الفترة.'),
       for (final entry in report.entries.where((e) =>
-          e.kind != LedgerKind.closedTrade).toList().reversed.take(5))
+          (e.kind == LedgerKind.deposit || e.kind == LedgerKind.withdrawal)).toList().reversed.take(5))
         Padding(padding: const EdgeInsets.only(bottom: 8),
           child: TradeSurface(child: Row(children: [
             Icon(entry.kind == LedgerKind.deposit ? Icons.south_west : Icons.north_east,
