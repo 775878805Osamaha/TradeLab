@@ -72,6 +72,7 @@ void main() {
       expect(to, lessThan(now));
       return http.Response(jsonEncode({
         'source': 'ctrader', 'period': 'M1', 'symbolId': '42',
+        'accountId': '7',
         'hasMore': false,
         'candles': [
           {'timestamp': lastClosedMinute, 'open': 4110.0,
@@ -89,6 +90,32 @@ void main() {
     expect(seen, hasLength(1));
   });
 
+  test('cTrader M1 rejects another authorized broker account', () async {
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final closed = (now ~/ 60000) * 60000 - 60000;
+    final client = MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42}
+        ]}), 200);
+      }
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'period': 'M1', 'symbolId': '42',
+        // A legitimate feed from a different account must be rejected.
+        'accountId': '8', 'hasMore': false,
+        'candles': [
+          {'timestamp': closed, 'open': 4110.0,
+           'high': 4111.0, 'low': 4109.0, 'close': 4110.5},
+        ],
+      }), 200);
+    });
+    final api = MarketApi(client: client);
+    await expectLater(api.ctraderCandles(
+      token: 'test', accountId: '7', symbol: 'XAUUSD',
+      timeframe: '1m', before: DateTime.now().toUtc(),
+    ), throwsA(isA<MarketDataException>()));
+  });
+
   test('cTrader M1 refuses incomplete pages or active-minute candles',
       () async {
     for (final mode in ['truncated', 'forming']) {
@@ -102,6 +129,7 @@ void main() {
         }
         return http.Response(jsonEncode({
           'source': 'ctrader', 'period': 'M1', 'symbolId': '42',
+        'accountId': '7',
           'hasMore': mode == 'truncated',
           'candles': [
             {'timestamp': activeMinute, 'open': 4110.0,
