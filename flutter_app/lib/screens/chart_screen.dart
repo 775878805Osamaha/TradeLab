@@ -1079,10 +1079,19 @@ class _ChartScreenState extends State<ChartScreen> {
                 );
               }
               });
-              if (!_draggingLine && _liveRequested && _actualBars.isNotEmpty &&
-                  _mode != ChartMode.range &&
-                  _viewport.scrollBars > candles.length - plotWidth / _viewport.barWidth - 25) {
-                unawaited(_loadOlderHistory());
+              // Historical paging works for both time candles and Range
+              // bars. Avoid requests while a drawing is being dragged.
+              if (!_draggingLine && !_draggingPattern && _liveRequested &&
+                  _viewport.scrollBars >
+                      candles.length - plotWidth / _viewport.barWidth - 25) {
+                if (_mode == ChartMode.range) {
+                  if (_rangeHistoryTicks.isNotEmpty && !_replay &&
+                      _olderLoadError == null) {
+                    unawaited(_loadOlderRangeHistory());
+                  }
+                } else if (_actualBars.isNotEmpty) {
+                  unawaited(_loadOlderHistory());
+                }
               }
             },
             onScaleEnd: (_) {
