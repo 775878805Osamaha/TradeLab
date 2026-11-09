@@ -9,8 +9,120 @@ import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/market_controller.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
+/// Simulates a platform-keychain read that completes after an explicit logout.
+class _DelayedReadStorage implements FlutterSecureStorage {
+  final initialRead = Completer<String?>();
+  final values = <String, String>{};
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    final key = invocation.namedArguments[#key] as String?;
+    if (invocation.memberName == #read) {
+      if (key == 'tradelab_flutter_ctrader_session') {
+        return initialRead.future;
+      }
+      return Future<String?>.value(values[key]);
+    }
+    if (invocation.memberName == #delete) {
+      values.remove(key);
+      return Future<void>.value();
+    }
+    if (invocation.memberName == #write) {
+      values[key!] = invocation.namedArguments[#value] as String;
+      return Future<void>.value();
+    }
+    return super.noSuchMethod(invocation);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('logout during secure-storage restore cannot resurrect old cTrader',
+      () async {
+    final storage = _DelayedReadStorage();
+    final controller = MarketController(
+      storage: storage,
+      api: MarketApi(client: MockClient((request) async {
+        fail('A cancelled restore must not contact the broker gateway.');
+      })),
+    );
+    addTearDown(controller.dispose);
+
+    final restoring = controller.initialize(enableDeepLinks: false);
+    await controller.disconnect();
+    storage.initialRead.complete('obsolete-token');
+    await restoring;
+
+    expect(controller.ctraderConnected, isFalse);
+    expect(controller.accountId, isNull);
+    expect(controller.accounts, isEmpty);
+  });
+
+  test('logout while OAuth gateway health is pending cancels browser launch',
+      () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final entered = Completer<void>();
+    final response = Completer<http.Response>();
+    final controller = MarketController(api: MarketApi(client: MockClient(
+      (request) async {
+        expect(request.url.path, '/healthz');
+        entered.complete();
+        return response.future;
+      },
+    )));
+    addTearDown(controller.dispose);
+
+    final connecting = controller.connectCTrader();
+    await entered.future;
+    await controller.disconnect();
+    response.complete(http.Response(jsonEncode({
+      'flutterOAuthSupported': true, 'authEnabled': true,
+    }), 200));
+    await connecting;
+
+    expect(controller.busy, isFalse);
+    expect(controller.error, isNull);
+    expect(await const FlutterSecureStorage().read(
+      key: 'tradelab_flutter_oauth_pending'), isNull);
+  });
+
+  test('cancelled OAuth callback cannot delete a newer PKCE verifier',
+      () async {
+    const pendingKey = 'tradelab_flutter_oauth_pending';
+    final pending = jsonEncode({
+      'verifier': 'first-verifier',
+      'created': DateTime.now().toUtc().millisecondsSinceEpoch,
+    });
+    FlutterSecureStorage.setMockInitialValues({pendingKey: pending});
+    final entered = Completer<void>();
+    final response = Completer<http.Response>();
+    final controller = MarketController(api: MarketApi(client: MockClient(
+      (request) async {
+        expect(request.url.path, '/auth/ctrader/redeem');
+        entered.complete();
+        return response.future;
+      },
+    )));
+    addTearDown(controller.dispose);
+
+    final callback = controller.completeOAuth(Uri.parse(
+      'tradelabflutter://oauth/ctrader?ticket=old-ticket'));
+    await entered.future;
+    await controller.disconnect();
+    const newerPending = 'newer-pkce-verifier';
+    await const FlutterSecureStorage().write(
+      key: pendingKey, value: newerPending);
+    response.complete(http.Response(jsonEncode({
+      'permission': 'read_only', 'sessionToken': 'obsolete-session',
+    }), 200));
+    await callback;
+
+    expect(controller.ctraderConnected, isFalse);
+    expect(controller.busy, isFalse);
+    expect(controller.error, isNull);
+    expect(await const FlutterSecureStorage().read(key: pendingKey), newerPending);
+  });
 
   test('successful authenticated responses identify their originating token',
       () async {

@@ -28,6 +28,9 @@ class MarketController extends ChangeNotifier {
   // Serialize refreshed-session writes with logout so that a late write can
   // never recreate a token after the user has explicitly disconnected.
   Future<void> _pendingSessionWrite = Future<void>.value();
+  // OAuth verifier writes/deletes must also be ordered. Otherwise a delayed
+  // callback can erase the verifier of a newer authorization attempt.
+  Future<void> _pendingOAuthWrite = Future<void>.value();
   String? accountId;
   List<CTraderAccount> accounts = const [];
   final Map<String, double> cryptoPrices = {};
@@ -41,12 +44,20 @@ class MarketController extends ChangeNotifier {
   bool get binanceConnected => cryptoPrices.isNotEmpty;
 
   Future<void> initialize({bool enableDeepLinks = true}) async {
+    final generation = _accountGeneration;
     try {
-      _token = await _storage.read(key: _tokenKey);
-      if (_token != null) await _loadAccounts();
+      final restored = await _storage.read(key: _tokenKey);
+      // The user may disconnect (or complete a different login) while secure
+      // storage is still reading the old token. Never resurrect that session.
+      if (generation == _accountGeneration) {
+        _token = restored;
+        if (_token != null) await _loadAccounts();
+      }
     } catch (_) {
-      error = 'تعذر استعادة جلسة cTrader. أعد ربط الحساب إذا لزم.';
-      notifyListeners();
+      if (generation == _accountGeneration) {
+        error = 'تعذر استعادة جلسة cTrader. أعد ربط الحساب إذا لزم.';
+        notifyListeners();
+      }
     }
     if (enableDeepLinks) {
       try {
@@ -62,11 +73,14 @@ class MarketController extends ChangeNotifier {
 
   Future<void> connectCTrader() async {
     if (busy) return;
+    final generation = _accountGeneration;
     busy = true;
     error = null;
     notifyListeners();
     try {
-      if (!await _api.supportsFlutterOAuth()) {
+      final supported = await _api.supportsFlutterOAuth();
+      if (generation != _accountGeneration) return;
+      if (!supported) {
         throw const MarketDataException(
           'بوابة cTrader لم تُحدّث بعد لدعم عودة تسجيل الدخول إلى Flutter. '
           'يجب نشر تحديث البوابة أولًا.');
@@ -76,17 +90,26 @@ class MarketController extends ChangeNotifier {
       final verifier = base64UrlEncode(bytes).replaceAll('=', '');
       final challenge = base64UrlEncode(sha256.convert(utf8.encode(verifier)).bytes)
           .replaceAll('=', '');
-      await _storage.write(key: _pendingKey,
-          value: jsonEncode({'verifier': verifier,
-            'created': DateTime.now().toUtc().millisecondsSinceEpoch}));
+      await _changePendingOAuth(generation, jsonEncode({
+        'verifier': verifier,
+        'created': DateTime.now().toUtc().millisecondsSinceEpoch,
+      }));
+      if (generation != _accountGeneration) return;
       final start = Uri.parse(_api.gateway).replace(path: '/auth/ctrader/start',
           queryParameters: {'challenge': challenge, 'client': 'flutter'});
       if (!await launchUrl(start, mode: LaunchMode.externalApplication)) {
         throw const MarketDataException('تعذر فتح متصفح تسجيل الدخول.');
       }
     } catch (e) {
-      error = e is MarketDataException ? e.message : 'تعذر بدء تسجيل الدخول الآمن إلى cTrader.';
-    } finally {busy = false; notifyListeners();}
+      if (generation == _accountGeneration) {
+        error = e is MarketDataException ? e.message : 'تعذر بدء تسجيل الدخول الآمن إلى cTrader.';
+      }
+    } finally {
+      if (generation == _accountGeneration) {
+        busy = false;
+        notifyListeners();
+      }
+    }
   }
 
   Future<void> completeOAuth(Uri uri) async {
@@ -100,6 +123,7 @@ class MarketController extends ChangeNotifier {
     notifyListeners();
     try {
       final raw = await _storage.read(key: _pendingKey);
+      if (generation != _accountGeneration) return;
       if (raw == null) throw const MarketDataException('انتهت محاولة التفويض. ابدأ تسجيل الدخول من جديد.');
       final pending = jsonDecode(raw) as Map<String, dynamic>;
       final age = DateTime.now().toUtc().millisecondsSinceEpoch - (pending['created'] as int);
@@ -108,6 +132,7 @@ class MarketController extends ChangeNotifier {
         throw const MarketDataException('انتهت صلاحية التفويض. أعد ربط الحساب.');
       }
       final issued = await _api.redeem(ticket: ticket, verifier: pending['verifier'] as String);
+      if (generation != _accountGeneration) return;
       // Verify account access before activating a token or claiming connection.
       final authorized = await _api.accounts(issued);
       if (authorized.isEmpty) throw const MarketDataException('لا توجد حسابات cTrader مصرح بها.');
@@ -119,11 +144,15 @@ class MarketController extends ChangeNotifier {
       accounts = authorized;
       accountId = authorized.first.id;
     } catch (e) {
-      error = e is MarketDataException ? e.message : 'فشل تأكيد تسجيل الدخول. حاول مرة أخرى.';
+      if (generation == _accountGeneration) {
+        error = e is MarketDataException ? e.message : 'فشل تأكيد تسجيل الدخول. حاول مرة أخرى.';
+      }
     } finally {
-      await _storage.delete(key: _pendingKey);
-      busy = false;
-      notifyListeners();
+      await _changePendingOAuth(generation, null);
+      if (generation == _accountGeneration) {
+        busy = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -157,18 +186,41 @@ class MarketController extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
-    _accountGeneration++;
+    final generation = ++_accountGeneration;
     _token = null;
     accountId = null;
     accounts = const [];
     forexPrices.clear();
+    busy = false;
+    error = null;
     _api.forgetCTraderSymbols();
-    try { await _pendingSessionWrite; } catch (_) {
-      // Explicit logout still clears even if saving an earlier refresh failed.
-    }
-    await _storage.delete(key: _tokenKey);
-    await _storage.delete(key: _pendingKey);
+    // Queue both deletions *before* yielding: a new login that starts during
+    // logout can only save its session/verifier after the old ones are cleared.
+    final clearingSession = _clearStoredSession();
+    final clearingOAuth = _changePendingOAuth(generation, null);
+    await Future.wait([clearingSession, clearingOAuth]);
     notifyListeners();
+  }
+
+  Future<void> _clearStoredSession() {
+    _pendingSessionWrite = _pendingSessionWrite
+        .catchError((Object _) {})
+        .then((_) => _storage.delete(key: _tokenKey));
+    return _pendingSessionWrite;
+  }
+
+  Future<void> _changePendingOAuth(int generation, String? value) {
+    _pendingOAuthWrite = _pendingOAuthWrite
+        .catchError((Object _) {})
+        .then((_) async {
+      if (generation != _accountGeneration) return;
+      if (value == null) {
+        await _storage.delete(key: _pendingKey);
+      } else {
+        await _storage.write(key: _pendingKey, value: value);
+      }
+    });
+    return _pendingOAuthWrite;
   }
 
   void _onRefreshedToken(String requestToken, String newToken) {
