@@ -126,7 +126,7 @@ class RangeTickStore {
   }
 
   /// Append ordered verified BID ticks, preserving same-millisecond events.
-  /// Returns the number of archived rows in the submitted time interval.
+  /// Returns the number of newly inserted ticks (duplicates excluded).
   /// Repeated pages use the same within-timestamp ordinal for deduplication.
   static Future<int> appendHistorical(
       String accountId, String symbol, List<MarketTick> ticks) async {
@@ -144,7 +144,9 @@ class RangeTickStore {
     if (ticks.isEmpty) return 0;
     final db = await _open();
     return db.transaction((txn) async {
-      var inserted = 0;
+      // total_changes() counts successful INSERTs, not ignored duplicates.
+      final before = await txn.rawQuery('SELECT total_changes() AS count');
+      final changesBefore = (before.first['count'] as num).toInt();
       var lastTimestamp = -1;
       var sequence = 0;
       // Batch inserts to avoid one platform-channel round trip per tick.
@@ -169,17 +171,8 @@ class RangeTickStore {
         // noResult avoids materializing one Dart result per tick.
         await batch.commit(noResult: true);
       }
-      // Return total archive rows for this window, not inserted count:
-      // batch.commit(noResult: true) intentionally omits per-row results.
-      final first = ticks.first.timestamp;
-      final last = ticks.last.timestamp;
-      final rows = await txn.rawQuery('''
-        SELECT COUNT(*) AS total FROM range_tick_archive
-        WHERE account_id = ? AND symbol = ?
-          AND timestamp_ms BETWEEN ? AND ?
-      ''', [accountId, symbol, first, last]);
-      inserted = (rows.first['total'] as int?) ?? 0;
-      return inserted;
+      final after = await txn.rawQuery('SELECT total_changes() AS count');
+      return (after.first['count'] as num).toInt() - changesBefore;
     });
   }
 
