@@ -189,6 +189,42 @@ class RangeTickStore {
             VALUES (?, ?, ?, ?, ?)
           ''', [accountId, symbol, tick.timestamp, sequence, tick.bid]);
         }
+        // Reject conflicting overlaps anywhere in this page, not just at
+        // the first timestamp. The transaction rolls back on a mismatch.
+        final existing = await txn.query('range_tick_archive',
+            columns: ['timestamp_ms', 'sequence_no', 'bid'],
+            where: 'account_id = ? AND symbol = ? AND timestamp_ms BETWEEN ? AND ?',
+            whereArgs: [accountId, symbol, ticks[offset].timestamp,
+                ticks[end - 1].timestamp],
+            orderBy: 'timestamp_ms ASC, sequence_no ASC');
+        final known = <(int, int), double>{
+          for (final row in existing)
+            ((row['timestamp_ms'] as num).toInt(),
+             (row['sequence_no'] as num).toInt()):
+                (row['bid'] as num).toDouble(),
+        };
+        var checkTime = offset == 0 ? -1 : ticks[offset - 1].timestamp;
+        var checkOrdinal = offset == 0 ? -1 : 0;
+        if (offset > 0) {
+          var index = offset - 1;
+          while (index > 0 && ticks[index - 1].timestamp == checkTime) {
+            checkOrdinal++;
+            index--;
+          }
+        }
+        for (var i = offset; i < end; i++) {
+          final tick = ticks[i];
+          if (tick.timestamp != checkTime) {
+            checkTime = tick.timestamp;
+            checkOrdinal = 0;
+          } else {
+            checkOrdinal++;
+          }
+          final prior = known[(tick.timestamp, checkOrdinal)];
+          if (prior != null && prior != tick.bid) {
+            throw StateError('Conflicting BID tick overlap; history unchanged');
+          }
+        }
         // noResult avoids materializing one Dart result per tick.
         await batch.commit(noResult: true);
       }
