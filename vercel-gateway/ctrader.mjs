@@ -255,12 +255,26 @@ class Channel {
         (result.period != null && Number(result.period) !== Number(period)) ||
         (result.trendbar != null && !Array.isArray(result.trendbar)))
       throw Error('ctrader_trendbar_provenance_mismatch');
-    const candles=(result.trendbar||[]).map(normalizeBar)
+    // Some cTrader installations honor "count from toTimestamp" before
+    // applying fromTimestamp. An extra older closed bar is real broker data
+    // but lies outside our requested chart window. Filter it, never
+    // misclassify that valid response as an invalid HTTP request.
+    const ordered=(result.trendbar||[]).map(normalizeBar)
       .sort((a,b)=>a.timestamp-b.timestamp);
-    for(let i=0;i<candles.length;i++) {
-      if(candles[i].timestamp<from || candles[i].timestamp>to ||
-          (i>0 && candles[i].timestamp<=candles[i-1].timestamp))
-        throw Error('invalid_ctrader_trendbar_timestamps');
+    const candles=[];
+    for(const bar of ordered) {
+      if(bar.timestamp<from || bar.timestamp>to)continue;
+      const previous=candles[candles.length-1];
+      if(previous?.timestamp===bar.timestamp) {
+        // Identical duplicate source records may be ignored safely, but
+        // conflicting OHLC for a single broker candle is a hard error.
+        if(previous.open!==bar.open || previous.high!==bar.high ||
+           previous.low!==bar.low || previous.close!==bar.close ||
+           previous.volume!==bar.volume)
+          throw Error('invalid_ctrader_trendbar_timestamps');
+        continue;
+      }
+      candles.push(bar);
     }
     return {candles,hasMore:result.hasMore===true};
   }
