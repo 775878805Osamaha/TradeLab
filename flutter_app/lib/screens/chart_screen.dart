@@ -41,6 +41,9 @@ class _ChartScreenState extends State<ChartScreen> {
   List<TradeCandle> _actualCandles = [];
   List<int> _actualTimestamps = [];
   List<TradeCandle> _actualRange = [];
+  // Ordered provider ticks backing Range mode. Keep their timestamps so older
+  // pages can be requested without using a guessed time boundary.
+  List<MarketTick> _rangeHistoryTicks = [];
   int _loadRevision = 0;
   bool _loading = false;
   bool _olderLoading = false;
@@ -126,6 +129,7 @@ class _ChartScreenState extends State<ChartScreen> {
         _actualCandles = [];
         _actualTimestamps = [];
         _actualRange = [];
+      _rangeHistoryTicks = [];
         _olderCursorMs = null;
         _historyExhausted = false;
         _olderLoading = false;
@@ -159,6 +163,7 @@ class _ChartScreenState extends State<ChartScreen> {
       _actualCandles = [];
       _actualTimestamps = [];
       _actualRange = [];
+      _rangeHistoryTicks = [];
       _patterns.clear();
       _analysisPatterns = [];
       _analysisLevels = [];
@@ -205,6 +210,7 @@ class _ChartScreenState extends State<ChartScreen> {
           }
           // Render verified provider ticks immediately. Archival I/O must not
           // delay the chart or cause a valid market response to disappear.
+          _rangeHistoryTicks = ticks;
           prices = ticks.map((tick) => tick.bid).toList(growable: false);
           unawaited(RangeTickStore.appendHistorical(
             widget.controller.accountId!, _selectedSymbol.code, ticks,
@@ -259,6 +265,68 @@ class _ChartScreenState extends State<ChartScreen> {
       if (revision == _loadRevision) _loadError = 'تعذر تحميل بيانات السوق. أعد المحاولة.';
     } finally {
       if (revision == _loadRevision && mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadOlderRangeHistory() async {
+    if (_olderLoading || _loading || !_liveRequested ||
+        _mode != ChartMode.range || _rangeHistoryTicks.isEmpty ||
+        widget.controller.accountId == null) return;
+    final revision = _loadRevision;
+    final account = widget.controller.accountId!;
+    final symbol = _selectedSymbol;
+    final earliest = _rangeHistoryTicks.first.timestamp;
+    setState(() {
+      _olderLoading = true;
+      _olderLoadError = null;
+    });
+    try {
+      // Fetch the immediately preceding provider window. Do not stitch
+      // arbitrary cached ranges together: gaps would alter Range bar closes.
+      final older = await widget.controller.rangeTicks(
+        symbol, before: DateTime.fromMillisecondsSinceEpoch(earliest, isUtc: true));
+      if (!mounted || revision != _loadRevision) return;
+      final prefix = older.where((tick) => tick.timestamp < earliest).toList();
+      if (prefix.isEmpty) {
+        _olderLoadError = 'لا تتوفر تيكات أقدم في هذه الفترة.';
+        return;
+      }
+      final combined = [...prefix, ..._rangeHistoryTicks];
+      final point = _rangePointCache['$account:${symbol.code}'];
+      if (point == null || !point.isFinite || point <= 0) {
+        throw StateError('Missing verified symbol point size');
+      }
+      final builder = RangeBarBuilder(_rangeTicks * point);
+      for (final tick in combined) {
+        builder.appendBidTick(tick.bid);
+      }
+      if (!mounted || revision != _loadRevision) return;
+      setState(() {
+        _rangeHistoryTicks = combined;
+        _actualRange = builder.snapshot();
+        // Rebuilding from older ticks changes Range bar boundaries. Exit
+        // Replay rather than silently shifting its cutoff to future bars.
+        if (_replay) {
+          _stopPlayback();
+          _replay = false;
+          _levels..clear()..addAll(_analysisLevels);
+          _patterns..clear()..addAll(_analysisPatterns);
+        }
+      });
+      // Archive is best effort; verified cTrader data is already displayed.
+      unawaited(RangeTickStore.appendHistorical(
+        account, symbol.code, prefix,
+      ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    } on MarketDataException catch (error) {
+      if (mounted && revision == _loadRevision) _olderLoadError = error.message;
+    } catch (_) {
+      if (mounted && revision == _loadRevision) {
+        _olderLoadError = 'تعذر تحميل تيكات المدى الأقدم. أعد المحاولة.';
+      }
+    } finally {
+      if (mounted && revision == _loadRevision) {
+        setState(() => _olderLoading = false);
+      }
     }
   }
 
