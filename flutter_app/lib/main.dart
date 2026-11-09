@@ -14,7 +14,8 @@ void main() {
   // Release builds otherwise replace a failed widget with an opaque grey area.
   // Keep a visible recovery message without exposing broker or account data.
   ErrorWidget.builder = (FlutterErrorDetails details) {
-    FlutterError.reportError(details);
+    // Flutter has already reported the build error. Re-reporting here can
+    // duplicate diagnostics and obscure the original exception.
     return const Material(
       color: Color(0xFFF7F8FB),
       child: Center(
