@@ -188,14 +188,11 @@ class _ChartScreenState extends State<ChartScreen> {
           _rangeBidCachedAt.remove(cacheKey);
         }
         if (prices == null) {
-          // A verified snapshot may survive a process restart. Fail open to
-          // the live feed if the device database is unavailable or corrupt.
-          try {
-            prices = await RangeTickStore.readFresh(
-                widget.controller.accountId!, _selectedSymbol.code);
-          } catch (_) {
-            prices = null;
-          }
+          // A price-only snapshot cannot support accurate historical paging.
+          // Prefer fresh provider ticks in Range mode so every displayed
+          // window has a timestamp cursor for loading older BID history.
+          // The archived price snapshot remains a best-effort write cache.
+          prices = null;
           if (revision != _loadRevision || !mounted) return;
           if (prices != null) {
             _rangeBidCache[cacheKey] = prices;
