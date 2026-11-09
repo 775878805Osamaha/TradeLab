@@ -7,9 +7,21 @@ import 'package:sqflite/sqflite.dart';
 /// Account IDs are part of the key to prevent cross-account data reuse.
 class RangeTickStore {
   static Database? _database;
+  static Future<Database>? _opening;
 
-  static Future<Database> _open() async {
-    if (_database != null) return _database!;
+  static Future<Database> _open() {
+    if (_database != null) return Future.value(_database!);
+    // Prevent two simultaneous chart requests from opening separate handles.
+    return _opening ??= _openDatabase().then((db) {
+      _database = db;
+      return db;
+    }).catchError((Object error, StackTrace stack) {
+      _opening = null;
+      Error.throwWithStackTrace(error, stack);
+    });
+  }
+
+  static Future<Database> _openDatabase() async {
     final root = await getDatabasesPath();
     final db = await openDatabase(
       path.join(root, 'tradelab_range_ticks.db'),
