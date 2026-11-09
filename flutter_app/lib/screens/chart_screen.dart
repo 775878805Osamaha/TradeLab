@@ -203,6 +203,13 @@ class _ChartScreenState extends State<ChartScreen> {
           if (ticks.isEmpty) {
             throw const MarketDataException('لم يُرجع cTrader تيكات ضمن الفترة المطلوبة.');
           }
+          // Persist timestamps as well as prices for later historical Replay.
+          // A cache failure must not discard valid ticks returned by cTrader.
+          try {
+            await RangeTickStore.appendHistorical(
+                widget.controller.accountId!, _selectedSymbol.code, ticks);
+          } catch (_) {}
+          if (revision != _loadRevision || !mounted) return;
           prices = ticks.map((tick) => tick.bid).toList(growable: false);
           // Bound the in-memory cache to avoid accumulating symbols indefinitely.
           if (_rangeBidCache.length >= 3) {
