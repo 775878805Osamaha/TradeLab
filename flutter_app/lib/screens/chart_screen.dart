@@ -197,10 +197,17 @@ class _ChartScreenState extends State<ChartScreen> {
       } else {
         final bars = await widget.controller.history(_selectedSymbol, _timeframe);
         if (revision != _loadRevision || !mounted) return;
-        _actualBars = bars;
-        _actualCandles = bars.map((bar) => bar.candle).toList(growable: false);
-        _actualTimestamps = bars.map((bar) => bar.timestamp).toList(growable: false);
-        if (bars.isNotEmpty) _olderCursorMs = bars.first.timestamp;
+        // Apply the same chronological and uniqueness guarantees to the
+        // initial page as to older pages; Replay indices must be monotonic.
+        final byTimestamp = <int, MarketBar>{
+          for (final bar in bars) bar.timestamp: bar,
+        };
+        final ordered = byTimestamp.values.toList()
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        _actualBars = ordered;
+        _actualCandles = ordered.map((bar) => bar.candle).toList(growable: false);
+        _actualTimestamps = ordered.map((bar) => bar.timestamp).toList(growable: false);
+        if (ordered.isNotEmpty) _olderCursorMs = ordered.first.timestamp;
       }
       if (revision == _loadRevision && _totalBars == 0) {
         _loadError = 'لم يُرجع المصدر شموعًا لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
