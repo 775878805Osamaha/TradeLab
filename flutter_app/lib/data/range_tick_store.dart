@@ -117,6 +117,12 @@ class RangeTickStore {
       FROM range_tick_archive_v2
     ''');
     await db.execute('DROP TABLE range_tick_archive_v2');
+    // The old index name is held by the renamed table until it is dropped.
+    // Recreate it against the new archive after dropping the old table.
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_range_tick_archive_lookup
+      ON range_tick_archive (account_id, symbol, timestamp_ms)
+    ''');
   }
 
   /// Append ordered verified BID ticks, preserving same-millisecond events.
