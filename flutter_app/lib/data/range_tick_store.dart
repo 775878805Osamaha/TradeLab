@@ -179,6 +179,28 @@ class RangeTickStore {
               'Overlapping BID tick boundary is ambiguous; refusing to corrupt history');
         }
       }
+      // A later page can overlap an existing millisecond with fewer ticks.
+      // Reject partial groups rather than treating the page as complete.
+      final groupedCounts = <int, int>{};
+      for (final tick in ticks) {
+        groupedCounts.update(tick.timestamp, (count) => count + 1,
+            ifAbsent: () => 1);
+      }
+      final existingCounts = await txn.rawQuery('''
+        SELECT timestamp_ms, COUNT(*) AS total
+        FROM range_tick_archive
+        WHERE account_id = ? AND symbol = ?
+          AND timestamp_ms BETWEEN ? AND ?
+        GROUP BY timestamp_ms
+      ''', [accountId, symbol, ticks.first.timestamp, ticks.last.timestamp]);
+      for (final row in existingCounts) {
+        final timestamp = (row['timestamp_ms'] as num).toInt();
+        final count = (row['total'] as num).toInt();
+        if (groupedCounts[timestamp] != count) {
+          throw StateError(
+              'Incomplete overlapping BID millisecond; archive unchanged');
+        }
+      }
       // Batch inserts to avoid one platform-channel round trip per tick.
       // SQLite changes() distinguishes ignored duplicates from new rows.
       for (var offset = 0; offset < ticks.length; offset += 500) {
