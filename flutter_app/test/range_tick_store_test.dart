@@ -185,11 +185,18 @@ void main() {
       [MarketTick(end - 100, 1950)],
       fromMs: from, toMs: end,
     );
-    final ticks = await RangeTickStore.readLatestVerifiedWindow(
+    final restored = await RangeTickStore.readLatestVerifiedWindowWithCoverage(
       'fresh-account', 'XAUUSD',
     );
-    expect(ticks, hasLength(1));
-    expect(ticks!.single.timestamp, end - 100);
-    expect(ticks.single.bid, 1950);
+    expect(restored, isNotNull);
+    expect(restored!.fromMs, from);
+    expect(restored.toMs, end);
+    expect(restored.ticks, hasLength(1));
+    expect(restored.ticks.single.timestamp, end - 100);
+    expect(restored.ticks.single.bid, 1950);
+    // Even if the first broker event occurs near the end of the window,
+    // paging should begin before its verified six-day coverage, not before
+    // that event. This avoids overlapping cached windows after a restart.
+    expect(restored.fromMs - 1, lessThan(restored.ticks.first.timestamp));
   });
 }
