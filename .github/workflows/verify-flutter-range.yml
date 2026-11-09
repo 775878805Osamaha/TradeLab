@@ -19,7 +19,7 @@ concurrency:
 jobs:
   verify-flutter-range:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     defaults:
       run:
         working-directory: flutter_app
@@ -61,4 +61,30 @@ jobs:
         with:
           name: TradeLab-Range-Verification-APK
           path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+      - name: Enable KVM for Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch on Android 13 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          script: |
+            set -eu
+            adb install "$GITHUB_WORKSPACE/flutter_app/build/app/outputs/flutter-apk/app-release.apk"
+            adb shell monkey -p com.example.tradelab_flutter -c android.intent.category.LAUNCHER 1
+            sleep 5
+            adb shell pidof -s com.example.tradelab_flutter
+            adb exec-out screencap -p > "$GITHUB_WORKSPACE/flutter_app/build/tradelab_range_emulator.png"
+      - name: Upload Android emulator evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Range-Android13-Screenshot
+          path: flutter_app/build/tradelab_range_emulator.png
           if-no-files-found: error
