@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../chart/chart_annotations.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
+import '../data/range_bar_builder.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
