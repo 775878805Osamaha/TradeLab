@@ -126,6 +126,7 @@ class RangeTickStore {
   }
 
   /// Append ordered verified BID ticks, preserving same-millisecond events.
+  /// Returns the number of archived rows in the submitted time interval.
   /// Repeated pages use the same within-timestamp ordinal for deduplication.
   static Future<int> appendHistorical(
       String accountId, String symbol, List<MarketTick> ticks) async {
@@ -146,20 +147,38 @@ class RangeTickStore {
       var inserted = 0;
       var lastTimestamp = -1;
       var sequence = 0;
-      for (final tick in ticks) {
-        if (tick.timestamp != lastTimestamp) {
-          lastTimestamp = tick.timestamp;
-          sequence = 0;
-        } else {
-          sequence++;
+      // Batch inserts to avoid one platform-channel round trip per tick.
+      // SQLite changes() distinguishes ignored duplicates from new rows.
+      for (var offset = 0; offset < ticks.length; offset += 500) {
+        final end = offset + 500 < ticks.length ? offset + 500 : ticks.length;
+        final batch = txn.batch();
+        for (var i = offset; i < end; i++) {
+          final tick = ticks[i];
+          if (tick.timestamp != lastTimestamp) {
+            lastTimestamp = tick.timestamp;
+            sequence = 0;
+          } else {
+            sequence++;
+          }
+          batch.rawInsert('''
+            INSERT OR IGNORE INTO range_tick_archive
+            (account_id, symbol, timestamp_ms, sequence_no, bid)
+            VALUES (?, ?, ?, ?, ?)
+          ''', [accountId, symbol, tick.timestamp, sequence, tick.bid]);
         }
-        final rowId = await txn.rawInsert('''
-          INSERT OR IGNORE INTO range_tick_archive
-          (account_id, symbol, timestamp_ms, sequence_no, bid)
-          VALUES (?, ?, ?, ?, ?)
-        ''', [accountId, symbol, tick.timestamp, sequence, tick.bid]);
-        if (rowId > 0) inserted++;
+        // noResult avoids materializing one Dart result per tick.
+        await batch.commit(noResult: true);
       }
+      // Return total archive rows for this window, not inserted count:
+      // batch.commit(noResult: true) intentionally omits per-row results.
+      final first = ticks.first.timestamp;
+      final last = ticks.last.timestamp;
+      final rows = await txn.rawQuery('''
+        SELECT COUNT(*) AS total FROM range_tick_archive
+        WHERE account_id = ? AND symbol = ?
+          AND timestamp_ms BETWEEN ? AND ?
+      ''', [accountId, symbol, first, last]);
+      inserted = (rows.first['total'] as int?) ?? 0;
       return inserted;
     });
   }
