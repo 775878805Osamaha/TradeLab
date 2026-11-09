@@ -34,6 +34,7 @@ class _ChartScreenState extends State<ChartScreen> {
   // Session-only BID tick cache: switching Range size rebuilds locally.
   // Scoped by account and symbol; not a substitute for persistent history.
   final _rangeBidCache = <String, List<double>>{};
+  final _rangePointCache = <String, double>{};
   List<MarketBar> _actualBars = [];
   List<TradeCandle> _actualCandles = [];
   List<int> _actualTimestamps = [];
@@ -104,6 +105,7 @@ class _ChartScreenState extends State<ChartScreen> {
     final changedAccount = _accountBefore != widget.controller.accountId;
     if (_linkedBefore != linked || changedAccount) {
       _rangeBidCache.clear();
+      _rangePointCache.clear();
       _linkedBefore = linked;
       _accountBefore = widget.controller.accountId;
       // Never carry another broker account's drawings into this account.
@@ -164,7 +166,15 @@ class _ChartScreenState extends State<ChartScreen> {
           if (_rangeBidCache.length >= 3) _rangeBidCache.clear();
           _rangeBidCache[cacheKey] = prices;
         }
-        final point = await widget.controller.pointSize(_selectedSymbol);
+        var point = _rangePointCache[cacheKey];
+        if (point == null) {
+          point = await widget.controller.pointSize(_selectedSymbol);
+          if (revision != _loadRevision || !mounted) return;
+          if (!point.isFinite || point <= 0) {
+            throw const MarketDataException('دقة تسعير الرمز غير صالحة لإنشاء شموع المدى.');
+          }
+          _rangePointCache[cacheKey] = point;
+        }
         if (revision != _loadRevision || !mounted) return;
         final builder = RangeBarBuilder(_rangeTicks * point);
         for (final price in prices) {builder.appendBidTick(price);}
