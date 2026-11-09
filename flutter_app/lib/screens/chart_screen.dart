@@ -77,6 +77,7 @@ class _ChartScreenState extends State<ChartScreen> {
   TradeSymbol get _selectedSymbol => tradeSymbols.firstWhere((s) => s.code == _symbol);
   bool get _liveRequested => _selectedSymbol.source == TradeSource.binance ||
       widget.controller.ctraderConnected;
+  bool get _rangeSourceSupported => _selectedSymbol.source == TradeSource.ctrader;
   int get _totalBars => _mode == ChartMode.range && _liveRequested
       ? _actualRange.length : _liveRequested ? _actualBars.length : _fixture.length;
 
@@ -137,6 +138,9 @@ class _ChartScreenState extends State<ChartScreen> {
     });
     try {
       if (_mode == ChartMode.range) {
+        if (!_rangeSourceSupported) {
+          throw const MarketDataException('شموع المدى الحقيقية متاحة حاليًا لرموز cTrader فقط؛ لا تتوفر تيكات Binance لهذا الوضع.');
+        }
         final ticks = await widget.controller.rangeTicks(_selectedSymbol);
         final point = await widget.controller.pointSize(_selectedSymbol);
         if (ticks.isEmpty) throw const MarketDataException('لم يُرجع cTrader تيكات ضمن الفترة المطلوبة.');
@@ -820,7 +824,7 @@ class _ChartScreenState extends State<ChartScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           color: TradeColors.blue.withValues(alpha: .07),
           child: Text(_liveRequested
-              ? 'مدى $_rangeTicks نقطة · ${_actualRange.isEmpty ? 'انتظار تيكات cTrader' : 'تيكات BID موثقة من cTrader'}'
+              ? 'مدى $_rangeTicks نقطة · ${!_rangeSourceSupported ? 'غير مدعوم لهذا المصدر' : _actualRange.isEmpty ? 'انتظار تيكات cTrader' : 'شموع محسوبة من تيكات BID لـ cTrader'}'
               : 'مدى $_rangeTicks · عرض محسوب من تيكات تجريبية، وليس cTrader',
               style: const TextStyle(fontSize: 11, color: TradeColors.blue)),
         ),
