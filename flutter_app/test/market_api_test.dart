@@ -66,6 +66,66 @@ void main() {
         throwsA(isA<MarketDataException>()));
   });
 
+  test('cTrader excludes a still-forming M15 bar from history and Replay',
+      () async {
+    final completed = DateTime.utc(2026, 11, 9, 12).millisecondsSinceEpoch;
+    final stillForming = DateTime.utc(2026, 11, 9, 12, 15)
+        .millisecondsSinceEpoch;
+    final client = MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      expect(request.url.path, '/v1/candles');
+      expect(request.url.queryParameters['period'], 'M15');
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'period': 'M15', 'symbolId': '42',
+        'candles': [
+          {'timestamp': completed, 'open': 2000, 'high': 2004,
+            'low': 1999, 'close': 2002},
+          {'timestamp': stillForming, 'open': 2002, 'high': 2005,
+            'low': 2000, 'close': 2003},
+        ],
+      }), 200);
+    });
+    final api = MarketApi(client: client);
+    final bars = await api.ctraderCandles(
+      token: 'read-only', accountId: '1', symbol: 'XAUUSD',
+      timeframe: '15m', before: DateTime.utc(2026, 11, 9, 12, 20));
+    expect(bars.map((bar) => bar.timestamp), [completed]);
+    api.close();
+  });
+
+  test('cTrader monthly candles close on the next UTC calendar month',
+      () async {
+    final october = DateTime.utc(2026, 10).millisecondsSinceEpoch;
+    final november = DateTime.utc(2026, 11).millisecondsSinceEpoch;
+    final client = MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      expect(request.url.queryParameters['period'], 'MN1');
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'period': 'MN1', 'symbolId': '42',
+        'candles': [
+          {'timestamp': october, 'open': 2000, 'high': 2020,
+            'low': 1990, 'close': 2010},
+          {'timestamp': november, 'open': 2010, 'high': 2030,
+            'low': 2000, 'close': 2020},
+        ],
+      }), 200);
+    });
+    final api = MarketApi(client: client);
+    final bars = await api.ctraderCandles(
+      token: 'read-only', accountId: '1', symbol: 'XAUUSD',
+      timeframe: '1M', before: DateTime.utc(2026, 11, 9, 12));
+    expect(bars.map((bar) => bar.timestamp), [october]);
+    api.close();
+  });
+
   test('cTrader does not build range candles from incomplete tick pages', () async {
     final client = MockClient((request) async {
       if (request.url.path == '/v1/symbols') {
