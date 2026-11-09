@@ -203,14 +203,12 @@ class _ChartScreenState extends State<ChartScreen> {
           if (ticks.isEmpty) {
             throw const MarketDataException('لم يُرجع cTrader تيكات ضمن الفترة المطلوبة.');
           }
-          // Persist timestamps as well as prices for later historical Replay.
-          // A cache failure must not discard valid ticks returned by cTrader.
-          try {
-            await RangeTickStore.appendHistorical(
-                widget.controller.accountId!, _selectedSymbol.code, ticks);
-          } catch (_) {}
-          if (revision != _loadRevision || !mounted) return;
+          // Render verified provider ticks immediately. Archival I/O must not
+          // delay the chart or cause a valid market response to disappear.
           prices = ticks.map((tick) => tick.bid).toList(growable: false);
+          unawaited(RangeTickStore.appendHistorical(
+            widget.controller.accountId!, _selectedSymbol.code, ticks,
+          ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
           // Bound the in-memory cache to avoid accumulating symbols indefinitely.
           if (_rangeBidCache.length >= 3) {
             _rangeBidCache.clear();
@@ -218,12 +216,10 @@ class _ChartScreenState extends State<ChartScreen> {
           }
           _rangeBidCache[cacheKey] = prices;
           _rangeBidCachedAt[cacheKey] = DateTime.now().toUtc();
-          // Cache failures must never prevent rendering verified market data.
-          try {
-            await RangeTickStore.saveVerified(
-                widget.controller.accountId!, _selectedSymbol.code, prices);
-          } catch (_) {}
-          if (revision != _loadRevision || !mounted) return;
+          // Snapshot persistence is best effort and must not block painting.
+          unawaited(RangeTickStore.saveVerified(
+            widget.controller.accountId!, _selectedSymbol.code, prices,
+          ).catchError((Object _, StackTrace __) {}));
         }
         var point = _rangePointCache[cacheKey];
         if (point == null) {
