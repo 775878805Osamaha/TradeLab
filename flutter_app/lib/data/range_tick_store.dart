@@ -109,6 +109,9 @@ class RangeTickStore {
     // SQLite cannot change a primary key in place. Keep existing history and
     // add an ordinal so multiple ticks within one millisecond are preserved.
     await db.execute('ALTER TABLE range_tick_archive RENAME TO range_tick_archive_v2');
+    // The original index follows the renamed table. Remove it before
+    // creating the replacement so the new archive receives its own index.
+    await db.execute('DROP INDEX IF EXISTS idx_range_tick_archive_lookup');
     await _createArchive(db);
     await db.execute('''
       INSERT INTO range_tick_archive
