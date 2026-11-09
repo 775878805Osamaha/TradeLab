@@ -253,9 +253,9 @@ class Channel {
     if (String(result.ctidTraderAccountId) !== String(accountId) ||
         (result.symbolId != null && String(result.symbolId) !== String(symbolId)) ||
         (result.period != null && Number(result.period) !== Number(period)) ||
-        !Array.isArray(result.trendbar))
+        (result.trendbar != null && !Array.isArray(result.trendbar)))
       throw Error('ctrader_trendbar_provenance_mismatch');
-    const candles=result.trendbar.map(normalizeBar)
+    const candles=(result.trendbar||[]).map(normalizeBar)
       .sort((a,b)=>a.timestamp-b.timestamp);
     for(let i=0;i<candles.length;i++) {
       if(candles[i].timestamp<from || candles[i].timestamp>to ||
