@@ -299,6 +299,14 @@ class _ChartScreenState extends State<ChartScreen> {
         _olderLoadError = 'لا تتوفر تيكات أقدم في هذه الفترة.';
         return;
       }
+      // The new page must end before the current one starts. A missing
+      // timestamp boundary is not proof of contiguous tick coverage; do
+      // not present a stitched Range chart as verified history.
+      final maxGap = const Duration(days: 6).inMilliseconds;
+      if (earliest - prefix.last.timestamp > maxGap) {
+        throw const MarketDataException(
+          'توجد فجوة بين صفحات تيكات cTrader؛ لن ندمج تاريخًا غير متصل.');
+      }
       final combined = [...prefix, ..._rangeHistoryTicks];
       final point = _rangePointCache['$account:${symbol.code}'];
       if (point == null || !point.isFinite || point <= 0) {
