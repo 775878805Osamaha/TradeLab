@@ -134,6 +134,55 @@ void main() {
         [1900.1, 1900.2, 1900.3, 1900.4]);
   });
 
+  test('incremental BID refresh requests exactly the missing milliseconds',
+      () async {
+    final toMs = DateTime.utc(2026, 11, 8).millisecondsSinceEpoch;
+    final fromMs = toMs - const Duration(minutes: 5).inMilliseconds;
+    var brokerCalls = 0;
+    final client = MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      brokerCalls++;
+      expect(request.url.path, '/v1/ticks');
+      expect(request.url.queryParameters['from'], '$fromMs');
+      expect(request.url.queryParameters['to'], '$toMs');
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'quoteType': 'bid',
+        'symbolId': '42', 'hasMore': false, 'ticks': [
+          {'timestamp': fromMs, 'price': 2000.0},
+          {'timestamp': fromMs, 'price': 2000.1},
+          {'timestamp': toMs, 'price': 2000.2},
+        ],
+      }), 200);
+    });
+    final api = MarketApi(client: client);
+    final ticks = await api.ctraderBidTicksRange(
+      token: 'secret', accountId: '1', symbol: 'XAUUSD',
+      fromMs: fromMs, toMs: toMs);
+    expect(brokerCalls, 1);
+    expect(ticks.map((tick) => tick.bid).toList(),
+        [2000.0, 2000.1, 2000.2]);
+  });
+
+  test('incremental BID requests reject invalid or oversized windows', () async {
+    final api = MarketApi(client: MockClient((_) async =>
+        fail('Invalid BID window should never reach a provider')));
+    await expectLater(
+      api.ctraderBidTicksRange(token: 'secret', accountId: '1',
+        symbol: 'XAUUSD', fromMs: 300, toMs: 299),
+      throwsA(isA<MarketDataException>()),
+    );
+    await expectLater(
+      api.ctraderBidTicksRange(token: 'secret', accountId: '1',
+        symbol: 'XAUUSD', fromMs: 1,
+        toMs: 1 + const Duration(days: 7).inMilliseconds),
+      throwsA(isA<MarketDataException>()),
+    );
+  });
+
   test('cTrader symbol metadata is reused for repeated market requests and reset safely', () async {
     var symbolRequests = 0;
     final client = MockClient((request) async {
