@@ -81,8 +81,14 @@ class _ChartScreenState extends State<ChartScreen> {
   bool get _liveRequested => _selectedSymbol.source == TradeSource.binance ||
       widget.controller.ctraderConnected;
   bool get _rangeSourceSupported => _selectedSymbol.source == TradeSource.ctrader;
-  int get _totalBars => _mode == ChartMode.range && _liveRequested
-      ? _actualRange.length : _liveRequested ? _actualBars.length : _fixture.length;
+  int get _totalBars {
+    if (_mode == ChartMode.range) {
+      if (_liveRequested) return _actualRange.length;
+      return _rangeCache.putIfAbsent(
+        _rangeTicks, () => previewRangeCandles(_rangeTicks)).length;
+    }
+    return _liveRequested ? _actualBars.length : _fixture.length;
+  }
 
   @override
   void initState() {
@@ -334,12 +340,11 @@ class _ChartScreenState extends State<ChartScreen> {
             ? CandlePrefix(_actualRange, _visibleThrough) : _actualRange;
         return range;
       }
-      if (!_replay) {
-        return _rangeCache.putIfAbsent(_rangeTicks,
-            () => previewRangeCandles(_rangeTicks));
-      }
-      final throughTick = (_visibleThrough / _fixture.length * 1800).round();
-      return previewRangeCandles(_rangeTicks, throughTick: throughTick);
+      final preview = _rangeCache.putIfAbsent(
+          _rangeTicks, () => previewRangeCandles(_rangeTicks));
+      // Replay counts completed preview bars, not the unrelated time-bar
+      // fixture length. Never expose candles beyond the selected cutoff.
+      return _replay ? CandlePrefix(preview, _visibleThrough) : preview;
     }
     final source = _liveRequested ? _actualCandles : _fixture;
     if (_mode != ChartMode.heikinAshi) {
