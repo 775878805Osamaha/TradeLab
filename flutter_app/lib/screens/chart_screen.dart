@@ -8,6 +8,7 @@ import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_builder.dart';
 import '../data/range_bar_timeline.dart';
+import '../data/range_tick_rollforward.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
@@ -187,33 +188,70 @@ class _ChartScreenState extends State<ChartScreen> {
         final cacheKey = '$account:${symbol.code}';
         // Reuse only a recent *complete* timestamped provider window. The
         // v3 price-only snapshot is not sufficient for historical paging.
+        // A verified six-day window may be older than the short quote TTL.
+        // Keep its complete historical coverage; request only uncovered
+        // milliseconds since its end instead of re-fetching all six days.
+        final windowEnd = DateTime.now().toUtc().millisecondsSinceEpoch;
+        final windowStart = windowEnd -
+            RangeTickStore.verifiedWindowDuration.inMilliseconds;
         VerifiedBidWindow? restored;
         try {
           restored = await RangeTickStore.readLatestVerifiedWindowWithCoverage(
-              account, symbol.code);
+            account, symbol.code, maxAge: const Duration(days: 6));
         } catch (_) {
-          // A damaged or unavailable cache must not block verified cTrader.
+          // A damaged cache never substitutes estimated ticks for cTrader.
           restored = null;
         }
         if (revision != _loadRevision || !mounted) return;
-        var ticks = restored?.ticks;
-        var coveredFromMs = restored?.fromMs;
+
+        List<MarketTick>? ticks;
+        int? coveredFromMs;
+        if (restored != null && restored.ticks.isNotEmpty &&
+            restored.toMs >= windowStart) {
+          if (windowEnd - restored.toMs <=
+              const Duration(minutes: 2).inMilliseconds) {
+            // No extra network traffic for the same fresh broker snapshot.
+            ticks = restored.ticks;
+            coveredFromMs = restored.fromMs;
+          } else {
+            // The old and new six-day windows overlap. Fetch precisely the
+            // missing inclusive suffix; this avoids duplicate same-ms ticks.
+            final suffix = await widget.controller.rangeTicksBetween(
+              symbol,
+              fromMs: restored.toMs + 1,
+              toMs: windowEnd,
+            );
+            if (revision != _loadRevision || !mounted) return;
+            ticks = RangeTickRollforward.merge(
+              cached: restored,
+              newTicks: suffix,
+              newFromMs: windowStart,
+              newToMs: windowEnd,
+            );
+            coveredFromMs = windowStart;
+            // Persist the new complete window after the prices are available.
+            unawaited(RangeTickStore.archiveVerifiedWindow(
+              account, symbol.code, ticks,
+              fromMs: windowStart, toMs: windowEnd,
+            ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+          }
+        }
+
         if (ticks == null || ticks.isEmpty) {
-          final windowEnd = DateTime.now().toUtc().millisecondsSinceEpoch;
-          coveredFromMs = windowEnd -
-              RangeTickStore.verifiedWindowDuration.inMilliseconds;
+          // Missing, expired or empty saved coverage: fall back to a full,
+          // verified broker request rather than treating holes as real ticks.
           ticks = await widget.controller.rangeTicks(symbol,
-              before: DateTime.fromMillisecondsSinceEpoch(windowEnd, isUtc: true));
+              before: DateTime.fromMillisecondsSinceEpoch(
+                  windowEnd, isUtc: true));
           if (revision != _loadRevision || !mounted) return;
           if (ticks.isEmpty) {
             throw const MarketDataException(
                 'لم يُرجع cTrader تيكات ضمن الفترة المطلوبة.');
           }
-          // Save the full provider coverage, including quiet/no-tick time.
-          // Historical paging must use its start rather than ticks.first.
+          coveredFromMs = windowStart;
           unawaited(RangeTickStore.archiveVerifiedWindow(
             account, symbol.code, ticks,
-            fromMs: coveredFromMs, toMs: windowEnd,
+            fromMs: windowStart, toMs: windowEnd,
           ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
         }
         _rangeHistoryTicks = ticks;
