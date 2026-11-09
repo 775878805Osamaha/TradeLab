@@ -159,8 +159,12 @@ void main() {
       fromMs: start, toMs: start + sixDaysMs,
     );
     final root = await getDatabasesPath();
+    // sqflite openDatabase defaults to a shared singleton connection.
+    // Use a separate handle so closing this test writer cannot close the
+    // production RangeTickStore connection.
     final db = await openDatabase(
       path.join(root, 'tradelab_range_ticks.db'),
+      singleInstance: false,
     );
     await db.rawUpdate('''
       UPDATE range_tick_archive SET bid = ?
