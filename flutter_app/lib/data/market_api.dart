@@ -141,16 +141,40 @@ class MarketApi {
   /// cTrader may truncate a page (hasMore=true) at its per-request limit.
   /// Split its time interval into disjoint inclusive halves instead of
   /// paging from oldestTimestamp - 1 (which loses same-ms broker ticks).
-  Future<List<MarketTick>> ctraderBidTicks({required String token,
-    required String accountId, required String symbol,
-    required DateTime before}) async {
-    final id = await symbolId(token: token, accountId: accountId,
-        symbol: symbol);
-    final end = before.toUtc().millisecondsSinceEpoch;
-    final start = end - const Duration(days: 6).inMilliseconds;
-    if (start < 0) {
-      throw const MarketDataException('الفترة المطلوبة لتيكات cTrader غير صالحة.');
+  /// Existing six-day chart window, or a specific validated subrange when
+  /// refreshing only the time elapsed after the last verified SQLite window.
+  Future<List<MarketTick>> ctraderBidTicks({
+    required String token,
+    required String accountId,
+    required String symbol,
+    required DateTime before,
+  }) {
+    final endMs = before.toUtc().millisecondsSinceEpoch;
+    return ctraderBidTicksRange(
+      token: token,
+      accountId: accountId,
+      symbol: symbol,
+      fromMs: endMs - const Duration(days: 6).inMilliseconds,
+      toMs: endMs,
+    );
+  }
+
+  /// Fetch only the missing inclusive milliseconds from cTrader.
+  /// Never infer ticks from candles or accept truncated responses.
+  Future<List<MarketTick>> ctraderBidTicksRange({
+    required String token,
+    required String accountId,
+    required String symbol,
+    required int fromMs,
+    required int toMs,
+  }) async {
+    if (fromMs < 0 || toMs < fromMs ||
+        toMs - fromMs > const Duration(days: 6).inMilliseconds) {
+      throw const MarketDataException(
+          'النطاق الزمني المطلوب لتيكات cTrader غير صالح.');
     }
+    final id = await symbolId(
+      token: token, accountId: accountId, symbol: symbol);
     const maxTicks = 1000000;
     const maxRequests = 4096;
     const maxPageTicks = 100000;
@@ -214,7 +238,7 @@ class MarketApi {
 
     // Left-to-right recursive loading preserves event order and all
     // same-millisecond ticks; never deduplicate genuine broker events.
-    await loadInterval(start, end);
+    await loadInterval(fromMs, toMs);
     return results;
   }
 
