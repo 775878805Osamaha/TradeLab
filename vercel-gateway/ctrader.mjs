@@ -264,29 +264,26 @@ class Channel {
            error?.operation!==2137)throw error;
         if(depth>=10 || toMs-fromMs<120000)
           throw Error('ctrader_candle_history_unusable');
-        return split(fromMs,toMs,depth);
+        const mid=fromMs+Math.floor((toMs-fromMs)/2);
+        // The Flutter chart requests pages newest-first. If the broker rejects
+        // this broad interval, search its newest half before older history.
+        // Never fetch an entire 89-day M1/M3 interval just to show the first
+        // screen: doing so exhausts the per-request safety budget (HTTP 502).
+        const newer=await load(mid+1,toMs,depth+1);
+        if(newer.candles.length) {
+          // The older half was not requested, so this is an incomplete page.
+          // The next chart page uses the earliest returned candle as cursor.
+          return {candles:newer.candles,hasMore:true};
+        }
+        return load(fromMs,mid,depth+1);
       }
-      if(segment.hasMore) {
-        // A capped page is not complete. Never show it as broker history.
-        if(depth>=10 || toMs-fromMs<120000)
-          throw Error('ctrader_candle_history_unusable');
-        return split(fromMs,toMs,depth);
-      }
-      return segment.candles;
+      // A truncated response still contains authenticated, validated broker
+      // OHLC. The hasMore flag marks it as a PAGE, not a complete interval.
+      // Flutter pages backwards with an exclusive cursor and never treats a
+      // partial page as complete Range tick history.
+      return segment;
     };
-    const split=async(fromMs,toMs,depth)=>{
-      const mid=fromMs+Math.floor((toMs-fromMs)/2);
-      // Strictly disjoint inclusive intervals preserve broker bar identity.
-      const left=await load(fromMs,mid,depth+1);
-      const right=await load(mid+1,toMs,depth+1);
-      if(left.length && right.length &&
-         left[left.length-1].timestamp>=right[0].timestamp)
-        throw Error('invalid_ctrader_trendbar_timestamps');
-      if(left.length+right.length>100000)
-        throw Error('ctrader_candle_history_unusable');
-      return [...left,...right];
-    };
-    return {candles:await load(from,to),hasMore:false};
+    return load(from,to);
   }
 
   async trendbarSlice(accountId,symbolId,period,from,to,count) {
