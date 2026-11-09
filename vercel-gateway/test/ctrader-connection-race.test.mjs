@@ -35,7 +35,14 @@ class FakeBrokerSocket extends EventEmitter {
     } else if(packet.payloadType===2114) {
       queueMicrotask(()=>respond(2115,{symbol:[{symbolName:'XAUUSD',symbolId:987}]}));
     } else if(packet.payloadType===2137) {
-      queueMicrotask(()=>respond(2138,{trendbar:[{utcTimestampInMinutes:300,low:400000000}]}));
+      // A broker trendbar response must identify the authorized account,
+      // selected symbol and requested period, not just contain plausible OHLC.
+      queueMicrotask(()=>respond(2138,{
+        ctidTraderAccountId:packet.payload.ctidTraderAccountId,
+        symbolId:packet.payload.symbolId,
+        period:packet.payload.period,
+        trendbar:[{utcTimestampInMinutes:300,low:400000000}],
+      }));
     } else if(packet.payloadType===2127) {
       setTimeout(()=>this.rejectSubscribe
         ?respond(2142,{errorCode:'SUBSCRIPTION_REJECTED'})
