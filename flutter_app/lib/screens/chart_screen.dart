@@ -226,7 +226,7 @@ class _ChartScreenState extends State<ChartScreen> {
           _rangePointCache[cacheKey] = point;
         }
         if (revision != _loadRevision || !mounted) return;
-        final timeline = RangeBarTimeline.build(ticks, _rangeTicks * point);
+        final timeline = await RangeBarTimeline.buildAsync(ticks, _rangeTicks * point);
         if (revision != _loadRevision || !mounted) return;
         _actualRange = timeline.bars;
         _rangeBarEndTickIndices = timeline.endTickIndices;
@@ -326,7 +326,7 @@ class _ChartScreenState extends State<ChartScreen> {
               _visibleThrough <= _rangeBarEndTickIndices.length
           ? _rangeBarEndTickIndices[_visibleThrough - 1]
           : null;
-      final timeline = RangeBarTimeline.build(combined, _rangeTicks * point);
+      final timeline = await RangeBarTimeline.buildAsync(combined, _rangeTicks * point);
       if (!mounted || revision != _loadRevision) return;
       // A different Range origin can move the first new close beyond the
       // Replay cutoff. Never force at least one candle: that would reveal
