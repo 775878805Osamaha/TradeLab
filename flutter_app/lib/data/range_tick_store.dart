@@ -122,11 +122,12 @@ class RangeTickStore {
     return db.transaction((txn) async {
       var inserted = 0;
       for (final tick in ticks) {
-        inserted += await txn.rawInsert('''
+        final rowId = await txn.rawInsert('''
           INSERT OR IGNORE INTO range_tick_archive
           (account_id, symbol, timestamp_ms, bid)
           VALUES (?, ?, ?, ?)
-        ''', [accountId, symbol, tick.timestamp, tick.bid]) > 0 ? 1 : 0;
+        ''', [accountId, symbol, tick.timestamp, tick.bid]);
+        if (rowId > 0) inserted++;
       }
       return inserted;
     });
