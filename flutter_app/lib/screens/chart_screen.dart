@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../chart/chart_annotations.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
-import '../data/range_bar_builder.dart';
+import '../data/range_bar_timeline.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
@@ -44,6 +44,7 @@ class _ChartScreenState extends State<ChartScreen> {
   // Ordered provider ticks backing Range mode. Keep their timestamps so older
   // pages can be requested without using a guessed time boundary.
   List<MarketTick> _rangeHistoryTicks = [];
+  List<int> _rangeBarEndTickIndices = [];
   int? _rangeOlderCursorMs;
   int _loadRevision = 0;
   bool _loading = false;
@@ -131,6 +132,7 @@ class _ChartScreenState extends State<ChartScreen> {
         _actualTimestamps = [];
         _actualRange = [];
         _rangeHistoryTicks = [];
+        _rangeBarEndTickIndices = [];
         _rangeOlderCursorMs = null;
         _olderCursorMs = null;
         _historyExhausted = false;
@@ -166,6 +168,7 @@ class _ChartScreenState extends State<ChartScreen> {
       _actualTimestamps = [];
       _actualRange = [];
       _rangeHistoryTicks = [];
+      _rangeBarEndTickIndices = [];
       _rangeOlderCursorMs = null;
       _patterns.clear();
       _analysisPatterns = [];
@@ -212,7 +215,6 @@ class _ChartScreenState extends State<ChartScreen> {
           ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
         }
         _rangeHistoryTicks = ticks;
-        final prices = ticks.map((tick) => tick.bid).toList(growable: false);
         var point = _rangePointCache[cacheKey];
         if (point == null) {
           point = await widget.controller.pointSize(_selectedSymbol);
@@ -223,10 +225,10 @@ class _ChartScreenState extends State<ChartScreen> {
           _rangePointCache[cacheKey] = point;
         }
         if (revision != _loadRevision || !mounted) return;
-        final builder = RangeBarBuilder(_rangeTicks * point);
-        for (final price in prices) {builder.appendBidTick(price);}
+        final timeline = RangeBarTimeline.build(ticks, _rangeTicks * point);
         if (revision != _loadRevision || !mounted) return;
-        _actualRange = builder.snapshot();
+        _actualRange = timeline.bars;
+        _rangeBarEndTickIndices = timeline.endTickIndices;
       } else {
         final bars = await widget.controller.history(_selectedSymbol, _timeframe);
         if (revision != _loadRevision || !mounted) return;
@@ -315,22 +317,42 @@ class _ChartScreenState extends State<ChartScreen> {
       if (point == null || !point.isFinite || point <= 0) {
         throw StateError('Missing verified symbol point size');
       }
-      final builder = RangeBarBuilder(_rangeTicks * point);
-      for (final tick in combined) {
-        builder.appendBidTick(tick.bid);
-      }
+      // Remember the actual source tick that the Replay cutoff had reached.
+      // This avoids revealing future ticks after the Range bars are rebuilt
+      // with a different start price and thus different historical indices.
+      final replayCutoffTick = _replay &&
+              _visibleThrough > 0 &&
+              _visibleThrough <= _rangeBarEndTickIndices.length
+          ? _rangeBarEndTickIndices[_visibleThrough - 1]
+          : null;
+      final timeline = RangeBarTimeline.build(combined, _rangeTicks * point);
       if (!mounted || revision != _loadRevision) return;
       setState(() {
         _rangeHistoryTicks = combined;
         _rangeOlderCursorMs = fromMs - 1;
-        _actualRange = builder.snapshot();
-        // Rebuilding from older ticks changes Range bar boundaries. Exit
-        // Replay rather than silently shifting its cutoff to future bars.
-        if (_replay) {
+        _actualRange = timeline.bars;
+        _rangeBarEndTickIndices = timeline.endTickIndices;
+        if (_replay && replayCutoffTick != null) {
           _stopPlayback();
-          _replay = false;
-          _levels..clear()..addAll(_analysisLevels);
-          _patterns..clear()..addAll(_analysisPatterns);
+          final previousVisible = _visibleThrough;
+          _visibleThrough = math.max(1,
+              timeline.visibleBarsThroughTick(
+                  prefix.length + replayCutoffTick));
+          // Existing drawing anchors are bar-index based. Shift them with
+          // the Replay cursor as a best-effort visual alignment; the replay
+          // data cutoff itself remains tied to the exact BID event index.
+          final shift = _visibleThrough - previousVisible;
+          if (shift != 0) {
+            for (var i = 0; i < _patterns.length; i++) {
+              _patterns[i] = _patterns[i].shifted(shift);
+            }
+            _analysisPatterns = _analysisPatterns
+                .map((pattern) => pattern.shifted(shift))
+                .toList(growable: false);
+            if (_pendingAnchor != null) {
+              _pendingAnchor = _pendingAnchor!.shifted(shift);
+            }
+          }
         }
       });
     } on MarketDataException catch (error) {
