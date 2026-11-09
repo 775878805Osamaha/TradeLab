@@ -44,6 +44,7 @@ class _ChartScreenState extends State<ChartScreen> {
   // Ordered provider ticks backing Range mode. Keep their timestamps so older
   // pages can be requested without using a guessed time boundary.
   List<MarketTick> _rangeHistoryTicks = [];
+  int? _rangeOlderCursorMs;
   int _loadRevision = 0;
   bool _loading = false;
   bool _olderLoading = false;
@@ -129,7 +130,8 @@ class _ChartScreenState extends State<ChartScreen> {
         _actualCandles = [];
         _actualTimestamps = [];
         _actualRange = [];
-      _rangeHistoryTicks = [];
+        _rangeHistoryTicks = [];
+        _rangeOlderCursorMs = null;
         _olderCursorMs = null;
         _historyExhausted = false;
         _olderLoading = false;
@@ -164,6 +166,7 @@ class _ChartScreenState extends State<ChartScreen> {
       _actualTimestamps = [];
       _actualRange = [];
       _rangeHistoryTicks = [];
+      _rangeOlderCursorMs = null;
       _patterns.clear();
       _analysisPatterns = [];
       _analysisLevels = [];
@@ -175,58 +178,41 @@ class _ChartScreenState extends State<ChartScreen> {
         if (!_rangeSourceSupported) {
           throw const MarketDataException('شموع المدى الحقيقية متاحة حاليًا لرموز cTrader فقط؛ لا تتوفر تيكات Binance لهذا الوضع.');
         }
-        final cacheKey = '${widget.controller.accountId}:${_selectedSymbol.code}';
-        // Reusing prices without their timestamps disables accurate older
-        // paging. Only reuse a cache while its provider tick cursor survives.
-        var prices = _rangeHistoryTicks.isNotEmpty
-            ? _rangeBidCache[cacheKey] : null;
-        final cachedAt = _rangeBidCachedAt[cacheKey];
-        // BID tick snapshots are historical windows, not a live stream.
-        // Expire them so returning to Range mode eventually fetches fresh data.
-        if (cachedAt == null ||
-            DateTime.now().toUtc().difference(cachedAt) >
-                const Duration(minutes: 2)) {
-          prices = null;
-          _rangeBidCache.remove(cacheKey);
-          _rangeBidCachedAt.remove(cacheKey);
+        final account = widget.controller.accountId!;
+        final symbol = _selectedSymbol;
+        final cacheKey = '$account:${symbol.code}';
+        // Reuse only a recent *complete* timestamped provider window. The
+        // v3 price-only snapshot is not sufficient for historical paging.
+        List<MarketTick>? ticks;
+        try {
+          ticks = await RangeTickStore.readLatestVerifiedWindow(
+              account, symbol.code);
+        } catch (_) {
+          // Database faults must not prevent loading verified provider data.
+          ticks = null;
         }
-        if (prices == null) {
-          // A price-only snapshot cannot support accurate historical paging.
-          // Prefer fresh provider ticks in Range mode so every displayed
-          // window has a timestamp cursor for loading older BID history.
-          // The archived price snapshot remains a best-effort write cache.
-          prices = null;
-          if (revision != _loadRevision || !mounted) return;
-          if (prices != null) {
-            _rangeBidCache[cacheKey] = prices;
-            _rangeBidCachedAt[cacheKey] = DateTime.now().toUtc();
-          }
-        }
-        if (prices == null) {
-          final ticks = await widget.controller.rangeTicks(_selectedSymbol);
+        if (revision != _loadRevision || !mounted) return;
+        if (ticks == null || ticks.isEmpty) {
+          final windowEnd = DateTime.now().toUtc().millisecondsSinceEpoch;
+          ticks = await widget.controller.rangeTicks(symbol,
+              before: DateTime.fromMillisecondsSinceEpoch(windowEnd, isUtc: true));
           if (revision != _loadRevision || !mounted) return;
           if (ticks.isEmpty) {
-            throw const MarketDataException('لم يُرجع cTrader تيكات ضمن الفترة المطلوبة.');
+            throw const MarketDataException(
+                'لم يُرجع cTrader تيكات ضمن الفترة المطلوبة.');
           }
-          // Render verified provider ticks immediately. Archival I/O must not
-          // delay the chart or cause a valid market response to disappear.
-          _rangeHistoryTicks = ticks;
-          prices = ticks.map((tick) => tick.bid).toList(growable: false);
-          unawaited(RangeTickStore.appendHistorical(
-            widget.controller.accountId!, _selectedSymbol.code, ticks,
+          // Only non-truncated provider responses reach rangeTicks. Store
+          // their exact six-day coverage, not inferred bounds from first/last
+          // ticks. Writes run after the UI has received the prices.
+          unawaited(RangeTickStore.archiveVerifiedWindow(
+            account, symbol.code, ticks,
+            fromMs: windowEnd -
+                RangeTickStore.verifiedWindowDuration.inMilliseconds,
+            toMs: windowEnd,
           ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-          // Bound the in-memory cache to avoid accumulating symbols indefinitely.
-          if (_rangeBidCache.length >= 3) {
-            _rangeBidCache.clear();
-            _rangeBidCachedAt.clear();
-          }
-          _rangeBidCache[cacheKey] = prices;
-          _rangeBidCachedAt[cacheKey] = DateTime.now().toUtc();
-          // Snapshot persistence is best effort and must not block painting.
-          unawaited(RangeTickStore.saveVerified(
-            widget.controller.accountId!, _selectedSymbol.code, prices,
-          ).catchError((Object _, StackTrace __) {}));
         }
+        _rangeHistoryTicks = ticks;
+        final prices = ticks.map((tick) => tick.bid).toList(growable: false);
         var point = _rangePointCache[cacheKey];
         if (point == null) {
           point = await widget.controller.pointSize(_selectedSymbol);
