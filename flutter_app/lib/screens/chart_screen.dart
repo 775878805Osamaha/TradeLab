@@ -176,7 +176,10 @@ class _ChartScreenState extends State<ChartScreen> {
           throw const MarketDataException('شموع المدى الحقيقية متاحة حاليًا لرموز cTrader فقط؛ لا تتوفر تيكات Binance لهذا الوضع.');
         }
         final cacheKey = '${widget.controller.accountId}:${_selectedSymbol.code}';
-        var prices = _rangeBidCache[cacheKey];
+        // Reusing prices without their timestamps disables accurate older
+        // paging. Only reuse a cache while its provider tick cursor survives.
+        var prices = _rangeHistoryTicks.isNotEmpty
+            ? _rangeBidCache[cacheKey] : null;
         final cachedAt = _rangeBidCachedAt[cacheKey];
         // BID tick snapshots are historical windows, not a live stream.
         // Expire them so returning to Range mode eventually fetches fresh data.
