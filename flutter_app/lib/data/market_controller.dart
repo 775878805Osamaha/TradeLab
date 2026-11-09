@@ -169,6 +169,32 @@ class MarketController extends ChangeNotifier {
         before: before ?? DateTime.now().toUtc());
   }
 
+  /// Poll only closed broker Trendbars since the last displayed candle.
+  /// Includes the last candle so conflicting historical OHLC is detected.
+  Future<List<MarketBar>> closedCandlesSince(
+      TradeSymbol symbol, String timeframe, int lastBarTimestampMs) async {
+    final account = accountId;
+    final token = _token;
+    if (symbol.source != TradeSource.ctrader ||
+        account == null || token == null) {
+      throw const MarketDataException(
+          'تحديث الشموع يتطلب حساب cTrader مرتبطًا.');
+    }
+    final bars = await _api.ctraderCandles(
+      token: token,
+      accountId: account,
+      symbol: symbol.code,
+      timeframe: timeframe,
+      before: DateTime.now().toUtc(),
+      fromTimestampMs: lastBarTimestampMs,
+    );
+    if (accountId != account || _token == null) {
+      throw const MarketDataException(
+          'تغيّر حساب cTrader أثناء تحديث الشموع. أعد المحاولة.');
+    }
+    return bars;
+  }
+
   Future<List<MarketTick>> rangeTicks(TradeSymbol symbol, {DateTime? before}) async {
     if (symbol.source != TradeSource.ctrader || !ctraderConnected) {
       throw const MarketDataException('شموع المدى تتطلب تيكات BID حقيقية من cTrader.');
