@@ -136,6 +136,7 @@ class MarketApi {
     required String symbol,
     required String timeframe,
     required DateTime before,
+    int? fromTimestampMs,
   }) async {
     final period = switch (timeframe) {
       '1m' => 'M1', '2m' => 'M2', '3m' => 'M3',
@@ -160,8 +161,10 @@ class MarketApi {
         ? now
         : (now ~/ (frameMinutes * 60000)) * (frameMinutes * 60000) - 1;
     final endMs = requestedEnd < closedEnd ? requestedEnd : closedEnd;
-    final startMs = endMs - frame.inMilliseconds;
-    if (startMs < 0 || endMs < startMs) {
+    final startMs = fromTimestampMs ??
+        endMs - frame.inMilliseconds;
+    if (startMs < 0 || endMs < startMs ||
+        endMs - startMs > frame.inMilliseconds) {
       throw const MarketDataException('فترة الشموع المطلوبة غير صالحة.');
     }
     final data = await _json(_gateway('/v1/candles', {
