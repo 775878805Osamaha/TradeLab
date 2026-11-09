@@ -84,7 +84,7 @@ class RangeTickStore {
         if (oldVersion < 2) await _createArchive(db);
         if (oldVersion < 3) await _upgradeArchive(db);
         if (oldVersion < 4) await _createWindowIndex(db);
-        if (oldVersion < 5) {
+        if (oldVersion >= 4 && oldVersion < 5) {
           // Old manifests have no cryptographic content verification.
           // Their rows remain archived, but are treated as cache misses.
           await db.execute(
