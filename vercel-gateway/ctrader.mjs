@@ -244,7 +244,52 @@ class Channel {
     return {symbolId:String(symbolId),digits:symbol.digits,pipPosition:symbol.pipPosition};
   }
   async history(accountId,accessToken,symbolId,period,from,to,count) {
+    if(!Number.isSafeInteger(from) || !Number.isSafeInteger(to) ||
+        from<0 || to<from || !Number.isInteger(count) || count<1 || count>1000)
+      throw Error('invalid_trendbar_window');
     await this.account(accountId,accessToken);
+    let requests=0;
+    const load=async(fromMs,toMs,depth=0)=>{
+      if(++requests>32)
+        throw Error('ctrader_candle_history_unusable');
+      let segment;
+      try {
+        segment=await this.trendbarSlice(
+          accountId,symbolId,period,fromMs,toMs,count);
+      } catch(error) {
+        // Backend history boundaries depend on the selected timeframe.
+        // Split only this specific broker rejection; never conceal auth,
+        // symbol, account-provenance or OHLC integrity failures.
+        if(error?.brokerCode!=='INCORRECT_BOUNDARIES' ||
+           error?.operation!==2137)throw error;
+        if(depth>=10 || toMs-fromMs<120000)
+          throw Error('ctrader_candle_history_unusable');
+        return split(fromMs,toMs,depth);
+      }
+      if(segment.hasMore) {
+        // A capped page is not complete. Never show it as broker history.
+        if(depth>=10 || toMs-fromMs<120000)
+          throw Error('ctrader_candle_history_unusable');
+        return split(fromMs,toMs,depth);
+      }
+      return segment.candles;
+    };
+    const split=async(fromMs,toMs,depth)=>{
+      const mid=fromMs+Math.floor((toMs-fromMs)/2);
+      // Strictly disjoint inclusive intervals preserve broker bar identity.
+      const left=await load(fromMs,mid,depth+1);
+      const right=await load(mid+1,toMs,depth+1);
+      if(left.length && right.length &&
+         left[left.length-1].timestamp>=right[0].timestamp)
+        throw Error('invalid_ctrader_trendbar_timestamps');
+      if(left.length+right.length>100000)
+        throw Error('ctrader_candle_history_unusable');
+      return [...left,...right];
+    };
+    return {candles:await load(from,to),hasMore:false};
+  }
+
+  async trendbarSlice(accountId,symbolId,period,from,to,count) {
     const result=await this.queueHistory(2137,{ctidTraderAccountId:accountId,symbolId,period,
       fromTimestamp:from,toTimestamp:to,count});
     // Broker account ID is required by ProtoOAGetTrendbarsRes. A response
