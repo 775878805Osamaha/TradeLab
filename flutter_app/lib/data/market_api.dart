@@ -172,7 +172,8 @@ class MarketApi {
       'from': '$startMs', 'to': '$endMs', 'count': '1000',
     }), token: token);
     if (data['source'] != 'ctrader' || data['period'] != period ||
-        '${data['symbolId']}' != '$id') {
+        '${data['symbolId']}' != '$id' ||
+        '${data['accountId']}' != accountId) {
       throw const MarketDataException('لم يتم التحقق من مصدر شموع cTrader.');
     }
     // A cap hit inside a sub-1000-slot interval indicates the response is
