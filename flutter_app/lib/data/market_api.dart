@@ -137,34 +137,85 @@ class MarketApi {
       minTime: start, maxTime: end);
   }
 
-  Future<List<MarketTick>> ctraderBidTicks({required String token, required String accountId,
-    required String symbol, required DateTime before}) async {
-    final id = await symbolId(token: token, accountId: accountId, symbol: symbol);
+  /// Returns a complete, chronologically ordered six-day BID tick window.
+  /// cTrader may truncate a page (hasMore=true) at its per-request limit.
+  /// Split its time interval into disjoint inclusive halves instead of
+  /// paging from oldestTimestamp - 1 (which loses same-ms broker ticks).
+  Future<List<MarketTick>> ctraderBidTicks({required String token,
+    required String accountId, required String symbol,
+    required DateTime before}) async {
+    final id = await symbolId(token: token, accountId: accountId,
+        symbol: symbol);
     final end = before.toUtc().millisecondsSinceEpoch;
     final start = end - const Duration(days: 6).inMilliseconds;
-    final data = await _json(_gateway('/v1/ticks', {
-      'accountId': accountId, 'symbolId': '$id', 'from': '$start', 'to': '$end',
-    }), token: token);
-    if (data['source'] != 'ctrader' || data['quoteType'] != 'bid' ||
-        '${data['symbolId']}' != '$id' || data['hasMore'] == true) {
-      throw const MarketDataException('تيكات cTrader غير مكتملة؛ لن نكوّن شموع مدى مضللة.');
+    if (start < 0) {
+      throw const MarketDataException('الفترة المطلوبة لتيكات cTrader غير صالحة.');
     }
-    final ticks = data['ticks'];
-    if (ticks is! List) throw const MarketDataException('تيكات cTrader غير صالحة.');
-    final result = <MarketTick>[];
-    var previous = start;
-    for (final entry in ticks) {
-      if (entry is! Map) throw const MarketDataException('تيكات cTrader غير صالحة.');
-      final time = (entry['timestamp'] as num?)?.toInt();
-      final price = (entry['price'] as num?)?.toDouble();
-      if (time == null || time < start || time > end || time < previous ||
-          price == null || !price.isFinite || price <= 0) {
-        throw const MarketDataException('ترتيب تيكات cTrader أو أسعارها غير صالح.');
+    const maxTicks = 1000000;
+    const maxRequests = 4096;
+    const maxPageTicks = 100000;
+    var requests = 0;
+    final results = <MarketTick>[];
+
+    Future<void> loadInterval(int fromMs, int toMs) async {
+      requests++;
+      if (requests > maxRequests) {
+        throw const MarketDataException(
+            'تجاوز تاريخ cTrader عدد الطلبات الآمن؛ جرّب فترة أقصر.');
       }
-      result.add(MarketTick(time, price));
-      previous = time;
+      final data = await _json(_gateway('/v1/ticks', {
+        'accountId': accountId, 'symbolId': '$id',
+        'from': '$fromMs', 'to': '$toMs',
+      }), token: token);
+      if (data['source'] != 'ctrader' ||
+          data['quoteType'] != 'bid' ||
+          '${data['symbolId']}' != '$id' ||
+          data['hasMore'] is! bool) {
+        throw const MarketDataException(
+            'تعذر التحقق من مصدر تيكات BID أو حالة اكتمالها.');
+      }
+
+      if (data['hasMore'] == true) {
+        if (fromMs == toMs) {
+          // The provider cannot disambiguate more ticks within a single
+          // millisecond. No fabricated ordering or partial Range candles.
+          throw const MarketDataException(
+              'cTrader أعاد تيكات غير مكتملة داخل مللي ثانية واحدة.');
+        }
+        final middle = fromMs + (toMs - fromMs) ~/ 2;
+        await loadInterval(fromMs, middle);
+        await loadInterval(middle + 1, toMs);
+        return;
+      }
+
+      final rows = data['ticks'];
+      if (rows is! List || rows.length > maxPageTicks ||
+          results.length + rows.length > maxTicks) {
+        throw const MarketDataException(
+            'تجاوزت تيكات cTrader الحد الآمن للذاكرة أو حجم الصفحة.');
+      }
+      var previous = fromMs;
+      for (final entry in rows) {
+        if (entry is! Map) {
+          throw const MarketDataException('تيكات cTrader غير صالحة.');
+        }
+        final time = (entry['timestamp'] as num?)?.toInt();
+        final price = (entry['price'] as num?)?.toDouble();
+        if (time == null || time < fromMs || time > toMs ||
+            time < previous || price == null ||
+            !price.isFinite || price <= 0) {
+          throw const MarketDataException(
+              'ترتيب تيكات cTrader أو أسعارها غير صالح.');
+        }
+        results.add(MarketTick(time, price));
+        previous = time;
+      }
     }
-    return result;
+
+    // Left-to-right recursive loading preserves event order and all
+    // same-millisecond ticks; never deduplicate genuine broker events.
+    await loadInterval(start, end);
+    return results;
   }
 
   Future<double> ctraderPointSize({required String token, required String accountId,
