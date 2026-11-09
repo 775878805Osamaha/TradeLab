@@ -1,10 +1,23 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+
 import 'package:path/path.dart' as path;
 
 import 'package:sqflite/sqflite.dart';
 
 import 'market_api.dart';
+
+/// Collect a SHA-256 digest without assembling a giant JSON string of ticks.
+class _DigestCollector implements Sink<Digest> {
+  Digest? digest;
+
+  @override
+  void add(Digest value) => digest = value;
+
+  @override
+  void close() {}
+}
 
 /// A stable pagination position, including same-millisecond ordering.
 class ArchivedBidTick {
@@ -20,6 +33,22 @@ class RangeTickStore {
   static Future<Database>? _opening;
 
   static const verifiedWindowDuration = Duration(days: 6);
+
+  static String _windowDigest(Iterable<MarketTick> ticks) {
+    final collector = _DigestCollector();
+    final input = sha256.startChunkedConversion(collector);
+    for (final tick in ticks) {
+      // 17 digits round-trip an IEEE-754 double across SQLite and Dart;
+      // order and same-millisecond multiplicity are part of the checksum.
+      input.add(utf8.encode(
+        '${tick.timestamp}:${tick.bid.toStringAsPrecision(17)}\\n',
+      ));
+    }
+    input.close();
+    final digest = collector.digest;
+    if (digest == null) throw StateError('Unable to hash BID window');
+    return digest.toString();
+  }
 
   static Future<Database> _open() async {
     if (_database != null) return _database!;
@@ -39,7 +68,7 @@ class RangeTickStore {
     final root = await getDatabasesPath();
     final db = await openDatabase(
       path.join(root, 'tradelab_range_ticks.db'),
-      version: 4,
+      version: 5,
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE range_tick_snapshots (
@@ -55,6 +84,12 @@ class RangeTickStore {
         if (oldVersion < 2) await _createArchive(db);
         if (oldVersion < 3) await _upgradeArchive(db);
         if (oldVersion < 4) await _createWindowIndex(db);
+        if (oldVersion < 5) {
+          // Old manifests have no cryptographic content verification.
+          // Their rows remain archived, but are treated as cache misses.
+          await db.execute(
+            'ALTER TABLE range_tick_windows ADD COLUMN tick_digest TEXT');
+        }
       },
     );
     _database = db;
@@ -152,6 +187,7 @@ class RangeTickStore {
         from_ms INTEGER NOT NULL,
         to_ms INTEGER NOT NULL,
         tick_count INTEGER NOT NULL,
+        tick_digest TEXT NOT NULL,
         saved_at_ms INTEGER NOT NULL,
         PRIMARY KEY (account_id, symbol, from_ms, to_ms)
       )
@@ -197,6 +233,7 @@ class RangeTickStore {
         'from_ms': fromMs,
         'to_ms': toMs,
         'tick_count': ticks.length,
+        'tick_digest': _windowDigest(ticks),
         'saved_at_ms': DateTime.now().toUtc().millisecondsSinceEpoch,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
@@ -216,7 +253,7 @@ class RangeTickStore {
     }
     final db = await _open();
     final windows = await db.query('range_tick_windows',
-      columns: ['tick_count'],
+      columns: ['tick_count', 'tick_digest'],
       where: 'account_id = ? AND symbol = ? AND from_ms = ? AND to_ms = ?',
       whereArgs: [accountId, symbol, fromMs, toMs], limit: 1);
     if (windows.isEmpty) return null;
@@ -225,13 +262,20 @@ class RangeTickStore {
       where: 'account_id = ? AND symbol = ? AND timestamp_ms BETWEEN ? AND ?',
       whereArgs: [accountId, symbol, fromMs, toMs],
       orderBy: 'timestamp_ms ASC, sequence_no ASC');
-    if (rows.length != (windows.single['tick_count'] as num).toInt()) {
+    final manifest = windows.single;
+    if (rows.length != (manifest['tick_count'] as num).toInt()) {
       return null;
     }
-    return rows.map((row) => MarketTick(
+    final expectedDigest = manifest['tick_digest'];
+    // A migrated v4 manifest without a digest is intentionally unverified.
+    if (expectedDigest is! String || expectedDigest.length != 64) {
+      return null;
+    }
+    final ticks = rows.map((row) => MarketTick(
       (row['timestamp_ms'] as num).toInt(),
       (row['bid'] as num).toDouble(),
     )).toList(growable: false);
+    return _windowDigest(ticks) == expectedDigest ? ticks : null;
   }
 
   /// A recent complete window can restore an initial chart after restart.
