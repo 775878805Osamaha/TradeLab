@@ -6,6 +6,13 @@ import 'package:sqflite/sqflite.dart';
 
 import 'market_api.dart';
 
+/// A stable pagination position, including same-millisecond ordering.
+class ArchivedBidTick {
+  const ArchivedBidTick(this.tick, this.sequence);
+  final MarketTick tick;
+  final int sequence;
+}
+
 /// Persists a complete, verified BID tick window; never persists partial pages.
 /// Account IDs are part of the key to prevent cross-account data reuse.
 class RangeTickStore {
@@ -253,6 +260,44 @@ class RangeTickStore {
     return rows.reversed.map((row) => MarketTick(
         row['timestamp_ms'] as int, (row['bid'] as num).toDouble()))
         .toList(growable: false);
+  }
+
+  /// Cursor-based archive pagination that never skips same-millisecond ticks.
+  /// The cursor is exclusive. Pass the oldest returned row as the next cursor.
+  static Future<List<ArchivedBidTick>> readHistoricalPage(
+    String accountId,
+    String symbol, {
+    required int beforeMs,
+    int? beforeSequence,
+    int limit = 10000,
+  }) async {
+    if (accountId.isEmpty || symbol.isEmpty) {
+      throw ArgumentError('An account and symbol are required');
+    }
+    if (limit < 1 || limit > 100000) {
+      throw RangeError.range(limit, 1, 100000, 'limit');
+    }
+    if (beforeSequence != null && beforeSequence < 0) {
+      throw RangeError.value(beforeSequence, 'beforeSequence');
+    }
+    final db = await _open();
+    final rows = await db.query('range_tick_archive',
+      columns: ['timestamp_ms', 'sequence_no', 'bid'],
+      where: beforeSequence == null
+          ? 'account_id = ? AND symbol = ? AND timestamp_ms < ?'
+          : 'account_id = ? AND symbol = ? AND '
+            '(timestamp_ms < ? OR (timestamp_ms = ? AND sequence_no < ?))',
+      whereArgs: beforeSequence == null
+          ? [accountId, symbol, beforeMs]
+          : [accountId, symbol, beforeMs, beforeMs, beforeSequence],
+      orderBy: 'timestamp_ms DESC, sequence_no DESC',
+      limit: limit,
+    );
+    return rows.reversed.map((row) => ArchivedBidTick(
+      MarketTick((row['timestamp_ms'] as num).toInt(),
+          (row['bid'] as num).toDouble()),
+      (row['sequence_no'] as num).toInt(),
+    )).toList(growable: false);
   }
 
 }
