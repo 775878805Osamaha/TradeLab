@@ -125,6 +125,8 @@ class _ChartScreenState extends State<ChartScreen> {
         _actualRange = [];
         _olderCursorMs = null;
         _historyExhausted = false;
+        _olderLoading = false;
+        _olderLoadError = null;
         _loadError = null;
         _loading = false;
         if (mounted) setState(() {});
