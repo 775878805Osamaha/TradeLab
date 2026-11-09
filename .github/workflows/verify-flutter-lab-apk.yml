@@ -95,17 +95,12 @@ jobs:
           profile: pixel_5
           disable-animations: true
           script: |
-            set -eu
-            apk="$GITHUB_WORKSPACE/flutter_app/build/app/outputs/flutter-apk/TradeLab-Lab-Test.apk"
-            adb install "$apk"
-            adb shell monkey -p com.example.tradelab_flutter.labtest \
-              -c android.intent.category.LAUNCHER 1
+            adb install "$GITHUB_WORKSPACE/flutter_app/build/app/outputs/flutter-apk/TradeLab-Lab-Test.apk"
+            adb shell monkey -p com.example.tradelab_flutter.labtest -c android.intent.category.LAUNCHER 1
             sleep 5
             adb shell pidof -s com.example.tradelab_flutter.labtest
-            adb exec-out screencap -p \
-              > "$GITHUB_WORKSPACE/flutter_app/tradelab-lab-android13.png"
-            adb logcat -d -b crash \
-              > "$GITHUB_WORKSPACE/flutter_app/tradelab-lab-crash.log"
+            adb exec-out screencap -p > "$GITHUB_WORKSPACE/flutter_app/tradelab-lab-android13.png"
+            adb logcat -d -b crash > "$GITHUB_WORKSPACE/flutter_app/tradelab-lab-crash.log"
       - name: Upload Android 13 installation evidence
         if: always()
         uses: actions/upload-artifact@v4
