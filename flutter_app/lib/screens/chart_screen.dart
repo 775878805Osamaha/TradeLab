@@ -35,6 +35,7 @@ class _ChartScreenState extends State<ChartScreen> {
   // Scoped by account and symbol; not a substitute for persistent history.
   final _rangeBidCache = <String, List<double>>{};
   final _rangePointCache = <String, double>{};
+  final _rangeBidCachedAt = <String, DateTime>{};
   List<MarketBar> _actualBars = [];
   List<TradeCandle> _actualCandles = [];
   List<int> _actualTimestamps = [];
@@ -107,6 +108,7 @@ class _ChartScreenState extends State<ChartScreen> {
     final changedAccount = _accountBefore != widget.controller.accountId;
     if (_linkedBefore != linked || changedAccount) {
       _rangeBidCache.clear();
+      _rangeBidCachedAt.clear();
       _rangePointCache.clear();
       _linkedBefore = linked;
       _accountBefore = widget.controller.accountId;
@@ -169,6 +171,16 @@ class _ChartScreenState extends State<ChartScreen> {
         }
         final cacheKey = '${widget.controller.accountId}:${_selectedSymbol.code}';
         var prices = _rangeBidCache[cacheKey];
+        final cachedAt = _rangeBidCachedAt[cacheKey];
+        // BID tick snapshots are historical windows, not a live stream.
+        // Expire them so returning to Range mode eventually fetches fresh data.
+        if (cachedAt == null ||
+            DateTime.now().toUtc().difference(cachedAt) >
+                const Duration(minutes: 2)) {
+          prices = null;
+          _rangeBidCache.remove(cacheKey);
+          _rangeBidCachedAt.remove(cacheKey);
+        }
         if (prices == null) {
           final ticks = await widget.controller.rangeTicks(_selectedSymbol);
           if (revision != _loadRevision || !mounted) return;
@@ -177,8 +189,12 @@ class _ChartScreenState extends State<ChartScreen> {
           }
           prices = ticks.map((tick) => tick.bid).toList(growable: false);
           // Bound the in-memory cache to avoid accumulating symbols indefinitely.
-          if (_rangeBidCache.length >= 3) _rangeBidCache.clear();
+          if (_rangeBidCache.length >= 3) {
+            _rangeBidCache.clear();
+            _rangeBidCachedAt.clear();
+          }
           _rangeBidCache[cacheKey] = prices;
+          _rangeBidCachedAt[cacheKey] = DateTime.now().toUtc();
         }
         var point = _rangePointCache[cacheKey];
         if (point == null) {
