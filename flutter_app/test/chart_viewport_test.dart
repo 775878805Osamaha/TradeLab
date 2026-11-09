@@ -50,6 +50,34 @@ void main() {
     expect(zoomed.barWidth, 30);
   });
 
+  test('historical Range regrouping keeps the same BID bar at the same x', () {
+    const before = ChartViewport(barWidth: 12, scrollBars: 28.75);
+    const plotWidth = 360.0;
+    const oldCount = 120;
+    const oldAnchor = 90;
+    const newCount = 175;
+    const newAnchor = 141;
+    final oldX = before.chartX(
+        index: oldAnchor, candleCount: oldCount, plotWidth: plotWidth);
+    final restored = before.remapHistoricalAnchor(
+      oldCount: oldCount, oldIndex: oldAnchor,
+      newCount: newCount, newIndex: newAnchor,
+    );
+    expect(restored.barWidth, before.barWidth);
+    expect(restored.chartX(
+        index: newAnchor, candleCount: newCount, plotWidth: plotWidth),
+        closeTo(oldX, .000001));
+  });
+
+  test('historical anchor remap does not disturb future whitespace', () {
+    const preview = ChartViewport(barWidth: 10, scrollBars: -8);
+    final restored = preview.remapHistoricalAnchor(
+      oldCount: 40, oldIndex: 30,
+      newCount: 120, newIndex: 110,
+    );
+    expect(restored, preview);
+  });
+
   test('visible subset never exceeds the known past candles', () {
     const viewport = ChartViewport(scrollBars: 11);
     final (start, end) = viewport.visibleIndices(
