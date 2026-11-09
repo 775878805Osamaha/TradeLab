@@ -24,7 +24,7 @@ function socketForTrendbars({accountId='12345',malformed=false,extraOlder=false,
         : packet.payloadType===2102
         ? {ctidTraderAccountId:12345}
         : packet.payloadType===2137
-          ? {ctidTraderAccountId:accountId,period:1,symbolId:42,
+          ? {ctidTraderAccountId:accountId,period:packet.payload.period,symbolId:42,
              trendbar:[
                ...(extraOlder ? [{
                  utcTimestampInMinutes:29999998,
@@ -121,37 +121,52 @@ test('conflicting duplicate broker bar remains a hard source error',async()=>{
   } finally {socket.close();}
 });
 
-test('cTrader boundary rejection retries smaller non-overlapping historical windows',async()=>{
+test('cTrader boundary rejection loads the newest valid page first',async()=>{
   const {socket,requests}=socketForTrendbars({adaptiveMode:'boundary'});
   const gateway=new CTraderGateway('id','secret',{socketFactory:()=>socket});
   const center=30000000*60000;
   try {
     const data=await gateway.channel(false).history(
-      12345,'readonly',42,1,center-120000,center+120000,900);
-    assert.equal(data.hasMore,false);
+      12345,'readonly',42,1,center-180000,center+60000,900);
+    assert.equal(data.hasMore,true);
     assert.deepEqual(data.candles.map(c=>c.timestamp),[center]);
     assert.equal(data.candles[0].close,4110.5);
     const reqs=requests.filter(p=>p.payloadType===2137).map(p=>p.payload);
-    assert.equal(reqs.length,3);
-    assert.equal(reqs[0].fromTimestamp,center-120000);
-    assert.equal(reqs[0].toTimestamp,center+120000);
-    assert.equal(reqs[1].fromTimestamp,center-120000);
-    assert.equal(reqs[1].toTimestamp+1,reqs[2].fromTimestamp);
-    assert.equal(reqs[2].toTimestamp,center+120000);
+    assert.equal(reqs.length,2);
+    assert.equal(reqs[0].fromTimestamp,center-180000);
+    assert.equal(reqs[0].toTimestamp,center+60000);
+    assert.equal(reqs[1].fromTimestamp,center-60000+1);
+    assert.equal(reqs[1].toTimestamp,center+60000);
   } finally {socket.close();}
 });
 
-test('a truncated broker page is never treated as complete Range/Replay history',async()=>{
+test('a capped cTrader broker page is usable as incomplete chart history',async()=>{
   const {socket,requests}=socketForTrendbars({adaptiveMode:'truncated'});
   const gateway=new CTraderGateway('id','secret',{socketFactory:()=>socket});
   const center=30000000*60000;
   try {
     const data=await gateway.channel(false).history(
       12345,'readonly',42,1,center-120000,center+120000,900);
-    assert.equal(data.hasMore,false);
+    assert.equal(data.hasMore,true);
     assert.deepEqual(data.candles.map(c=>c.timestamp),[center]);
-    assert.equal(requests.filter(p=>p.payloadType===2137).length,3);
+    assert.equal(requests.filter(p=>p.payloadType===2137).length,1);
   } finally {socket.close();}
+});
+
+test('wide 89-day M3 and M15 chart pages do not exhaust the history call budget',async()=>{
+  const from=30000000*60000-89*86400000;
+  const to=30000000*60000+60000;
+  for(const period of [3,7]) {
+    const {socket,requests}=socketForTrendbars({adaptiveMode:'truncated'});
+    const gateway=new CTraderGateway('id','secret',{socketFactory:()=>socket});
+    try {
+      const page=await gateway.channel(false).history(
+        12345,'readonly',42,period,from,to,1000);
+      assert.equal(page.hasMore,true);
+      assert.equal(page.candles.length,1);
+      assert.equal(requests.filter(p=>p.payloadType===2137).length,1);
+    } finally {socket.close();}
+  }
 });
 
 test('account authorization failure must not trigger a hidden history retry',async()=>{
