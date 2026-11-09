@@ -113,28 +113,84 @@ class MarketApi {
     return ids;
   }
 
-  Future<List<MarketBar>> ctraderCandles({required String token, required String accountId,
-    required String symbol, required String timeframe, required DateTime before}) async {
-    final period = switch (timeframe) {
-      '1m' => 'M1', '3m' => 'M3', '5m' => 'M5', '15m' => 'M15',
-      '30m' => 'M30', '1h' => 'H1', '4h' => 'H4', '1D' => 'D1',
-      '1W' => 'W1', '1M' => 'MN1', _ => throw const MarketDataException('إطار زمني غير مدعوم'),
+  /// cTrader Trendbars are broker OHLC, not Range candles or synthetic
+  /// approximations. Fetch a bounded interval of at most 900 bar slots, so
+  /// the broker's 1000-bar response cap cannot silently hide recent M1 data.
+  ///
+  /// Never show the still-forming candle as if its OHLC were finalized.
+  static Duration ctraderCandleLookback(String timeframe) {
+    final minutes = switch (timeframe) {
+      '1m' => 1, '2m' => 2, '3m' => 3, '5m' => 5,
+      '15m' => 15, '30m' => 30, '1h' => 60, '4h' => 240,
+      '1D' => 1440, '1W' => 10080, '1M' => 43200,
+      _ => throw const MarketDataException('إطار زمني غير مدعوم'),
     };
-    final id = await symbolId(token: token, accountId: accountId, symbol: symbol);
-    final end = before.toUtc().millisecondsSinceEpoch;
-    // The gateway rejects windows wider than 90 days. More pages are fetched as
-    // the user scrolls back; an empty page means the broker has no older data.
-    final start = end - const Duration(days: 89).inMilliseconds;
+    final maxWindow = const Duration(days: 89).inMilliseconds;
+    final capped = minutes * 60000 * 900;
+    return Duration(milliseconds: capped < maxWindow ? capped : maxWindow);
+  }
+
+  Future<List<MarketBar>> ctraderCandles({
+    required String token,
+    required String accountId,
+    required String symbol,
+    required String timeframe,
+    required DateTime before,
+  }) async {
+    final period = switch (timeframe) {
+      '1m' => 'M1', '2m' => 'M2', '3m' => 'M3',
+      '5m' => 'M5', '15m' => 'M15', '30m' => 'M30',
+      '1h' => 'H1', '4h' => 'H4',
+      '1D' => 'D1', '1W' => 'W1', '1M' => 'MN1',
+      _ => throw const MarketDataException('إطار زمني غير مدعوم'),
+    };
+    final id = await symbolId(token: token, accountId: accountId,
+        symbol: symbol);
+    final requestedEnd = before.toUtc().millisecondsSinceEpoch;
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final frame = ctraderCandleLookback(timeframe);
+    // Intraday time frames have exact minute boundaries. Historical
+    // Trendbars may include the active bar; exclude it from backtest/Replay.
+    final frameMinutes = switch (timeframe) {
+      '1m' => 1, '2m' => 2, '3m' => 3, '5m' => 5,
+      '15m' => 15, '30m' => 30, '1h' => 60,
+      '4h' => 240, _ => 0,
+    };
+    final closedEnd = frameMinutes == 0
+        ? now
+        : (now ~/ (frameMinutes * 60000)) * (frameMinutes * 60000) - 1;
+    final endMs = requestedEnd < closedEnd ? requestedEnd : closedEnd;
+    final startMs = endMs - frame.inMilliseconds;
+    if (startMs < 0 || endMs < startMs) {
+      throw const MarketDataException('فترة الشموع المطلوبة غير صالحة.');
+    }
     final data = await _json(_gateway('/v1/candles', {
       'accountId': accountId, 'symbolId': '$id', 'period': period,
-      'from': '$start', 'to': '$end', 'count': '1000',
+      'from': '$startMs', 'to': '$endMs', 'count': '1000',
     }), token: token);
     if (data['source'] != 'ctrader' || data['period'] != period ||
         '${data['symbolId']}' != '$id') {
       throw const MarketDataException('لم يتم التحقق من مصدر شموع cTrader.');
     }
-    return parseVerifiedBars(data['candles'], sourceType: TradeSource.ctrader,
-      minTime: start, maxTime: end);
+    // A cap hit inside a sub-1000-slot interval indicates the response is
+    // incomplete, duplicated, or inconsistent with the requested period.
+    if (data['hasMore'] == true) {
+      throw const MarketDataException(
+          'تاريخ cTrader لهذا الإطار غير مكتمل؛ لن نعرض شموعًا ناقصة.');
+    }
+    final bars = parseVerifiedBars(data['candles'],
+        sourceType: TradeSource.ctrader,
+        minTime: startMs, maxTime: endMs);
+    if (frameMinutes > 0) {
+      final stepMs = frameMinutes * 60000;
+      for (final bar in bars) {
+        if (bar.timestamp % stepMs != 0) {
+          throw const MarketDataException(
+              'توقيت شموع cTrader لا يتوافق مع الإطار المختار.');
+        }
+      }
+    }
+    return bars;
   }
 
   /// Returns a complete, chronologically ordered six-day BID tick window.
