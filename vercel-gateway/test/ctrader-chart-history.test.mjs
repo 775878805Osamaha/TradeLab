@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import {CTraderGateway} from '../ctrader.mjs';
 
-function socketForTrendbars({accountId='12345',malformed=false,extraOlder=false,conflictingDuplicate=false}={}) {
+function socketForTrendbars({accountId='12345',malformed=false,extraOlder=false,conflictingDuplicate=false,adaptiveMode=null}={}) {
   const requests=[];
+  let historicalRequests=0;
   class BrokerSocket extends EventEmitter {
     constructor(){
       super();
@@ -15,8 +16,12 @@ function socketForTrendbars({accountId='12345',malformed=false,extraOlder=false,
       const packet=JSON.parse(json);
       requests.push(packet);
       callback();
-      const type={2100:2101,2102:2103,2137:2138}[packet.payloadType];
-      const payload=packet.payloadType===2102
+      const firstTrendbar=packet.payloadType===2137 && ++historicalRequests===1;
+      const rejectFirst=firstTrendbar && ['boundary','unauthorized'].includes(adaptiveMode);
+      const type=rejectFirst?2142:{2100:2101,2102:2103,2137:2138}[packet.payloadType];
+      const payload=rejectFirst
+        ? {errorCode:adaptiveMode==='boundary'?'INCORRECT_BOUNDARIES':'ACCOUNT_NOT_AUTHORIZED'}
+        : packet.payloadType===2102
         ? {ctidTraderAccountId:12345}
         : packet.payloadType===2137
           ? {ctidTraderAccountId:accountId,period:1,symbolId:42,
@@ -42,7 +47,7 @@ function socketForTrendbars({accountId='12345',malformed=false,extraOlder=false,
                  deltaClose:60000,volume:80,
                }] : []),
              ],
-             hasMore:false}
+             hasMore:firstTrendbar && adaptiveMode==='truncated'}
           : {};
       queueMicrotask(()=>this.emit('message',Buffer.from(JSON.stringify({
         clientMsgId:packet.clientMsgId,payloadType:type,payload,
@@ -113,5 +118,50 @@ test('conflicting duplicate broker bar remains a hard source error',async()=>{
     await assert.rejects(gateway.channel(false).history(
       12345,'readonly',42,1,center-60000,center+60000,900),
       /invalid_ctrader_trendbar_timestamps/);
+  } finally {socket.close();}
+});
+
+test('cTrader boundary rejection retries smaller non-overlapping historical windows',async()=>{
+  const {socket,requests}=socketForTrendbars({adaptiveMode:'boundary'});
+  const gateway=new CTraderGateway('id','secret',{socketFactory:()=>socket});
+  const center=30000000*60000;
+  try {
+    const data=await gateway.channel(false).history(
+      12345,'readonly',42,1,center-120000,center+120000,900);
+    assert.equal(data.hasMore,false);
+    assert.deepEqual(data.candles.map(c=>c.timestamp),[center]);
+    assert.equal(data.candles[0].close,4110.5);
+    const reqs=requests.filter(p=>p.payloadType===2137).map(p=>p.payload);
+    assert.equal(reqs.length,3);
+    assert.equal(reqs[0].fromTimestamp,center-120000);
+    assert.equal(reqs[0].toTimestamp,center+120000);
+    assert.equal(reqs[1].fromTimestamp,center-120000);
+    assert.equal(reqs[1].toTimestamp+1,reqs[2].fromTimestamp);
+    assert.equal(reqs[2].toTimestamp,center+120000);
+  } finally {socket.close();}
+});
+
+test('a truncated broker page is never treated as complete Range/Replay history',async()=>{
+  const {socket,requests}=socketForTrendbars({adaptiveMode:'truncated'});
+  const gateway=new CTraderGateway('id','secret',{socketFactory:()=>socket});
+  const center=30000000*60000;
+  try {
+    const data=await gateway.channel(false).history(
+      12345,'readonly',42,1,center-120000,center+120000,900);
+    assert.equal(data.hasMore,false);
+    assert.deepEqual(data.candles.map(c=>c.timestamp),[center]);
+    assert.equal(requests.filter(p=>p.payloadType===2137).length,3);
+  } finally {socket.close();}
+});
+
+test('account authorization failure must not trigger a hidden history retry',async()=>{
+  const {socket,requests}=socketForTrendbars({adaptiveMode:'unauthorized'});
+  const gateway=new CTraderGateway('id','secret',{socketFactory:()=>socket});
+  const center=30000000*60000;
+  try {
+    await assert.rejects(gateway.channel(false).history(
+      12345,'readonly',42,1,center-120000,center+120000,900),
+      error=>error.brokerCode==='ACCOUNT_NOT_AUTHORIZED');
+    assert.equal(requests.filter(p=>p.payloadType===2137).length,1);
   } finally {socket.close();}
 });
