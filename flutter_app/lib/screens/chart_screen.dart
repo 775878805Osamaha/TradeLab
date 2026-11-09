@@ -141,6 +141,9 @@ class _ChartScreenState extends State<ChartScreen> {
       }
       _replay = false;
       _loading = true;
+      // Invalidate the previous history request's UI state. Its finally block
+      // intentionally ignores stale revisions, so reset the spinner here.
+      _olderLoading = false;
       _loadError = null;
       _historyExhausted = false;
       _olderCursorMs = null;
