@@ -1127,7 +1127,10 @@ class _ChartScreenState extends State<ChartScreen> {
             ),
           Row(children: [
             IconButton(tooltip: 'رجوع شمعة',
-              onPressed: _visibleThrough <= 1 ? null : () => setState(() => _visibleThrough--),
+              onPressed: _visibleThrough <= 1 ? null : () => setState(() {
+                _stopPlayback();
+                _visibleThrough--;
+              }),
               icon: const Icon(Icons.skip_previous)),
             IconButton(key: const Key('replay-play-pause'),
               tooltip: _playing ? 'إيقاف' : 'تشغيل',
@@ -1135,7 +1138,10 @@ class _ChartScreenState extends State<ChartScreen> {
               icon: Icon(_playing ? Icons.pause_circle : Icons.play_circle_fill,
                   color: TradeColors.blue)),
             IconButton(tooltip: 'تقدم شمعة',
-              onPressed: _visibleThrough >= _totalBars ? null : () => setState(() => _visibleThrough++),
+              onPressed: _visibleThrough >= _totalBars ? null : () => setState(() {
+                _stopPlayback();
+                _visibleThrough++;
+              }),
               icon: const Icon(Icons.skip_next)),
             Expanded(child: Slider(
               value: _visibleThrough.clamp(1, math.max(2, _totalBars)).toDouble(),
