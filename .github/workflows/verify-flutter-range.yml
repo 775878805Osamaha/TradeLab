@@ -54,17 +54,23 @@ jobs:
             test/market_api_test.dart
       - name: Build Android release preview (no publishing)
         run: flutter build apk --release
-      - name: Validate built APK archive
+      - name: Verify Android APK, signature and ARM64 support
         run: |
           set -euo pipefail
-          test -s build/app/outputs/flutter-apk/app-release.apk
-          unzip -t build/app/outputs/flutter-apk/app-release.apk >/dev/null
-      - name: Upload test APK for manual device validation
-        uses: actions/upload-artifact@v4
-        with:
-          name: TradeLab-Range-Verification-APK
-          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
+          apk="build/app/outputs/flutter-apk/app-release.apk"
+          test -s "$apk"
+          # A truncated or wrong-file download must not pass as an APK.
+          test "$(stat -c%s "$apk")" -gt 25000000
+          unzip -t "$apk" >/dev/null
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$build_tools/apksigner"
+          "$build_tools/apksigner" verify --verbose "$apk"
+          "$build_tools/aapt" dump badging "$apk" | tee build/apk-package-details.txt
+          "$build_tools/aapt" dump badging "$apk" | grep -F "package: name='com.example.tradelab_flutter'"
+          unzip -Z1 "$apk" | grep -Fx 'lib/arm64-v8a/libflutter.so'
+          unzip -Z1 "$apk" | grep -Fx 'lib/arm64-v8a/libapp.so'
+          cp "$apk" build/TradeLab-Flutter-Verified.apk
+          (cd build && sha256sum TradeLab-Flutter-Verified.apk > TradeLab-Flutter-Verified.apk.sha256)
       - name: Enable KVM for Android emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -90,4 +96,13 @@ jobs:
         with:
           name: TradeLab-Range-Android13-Screenshot
           path: flutter_app/build/tradelab_range_emulator.png
+          if-no-files-found: error
+      - name: Upload verified installable APK and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Flutter-Verified-Installable-APK
+          path: |
+            flutter_app/build/TradeLab-Flutter-Verified.apk
+            flutter_app/build/TradeLab-Flutter-Verified.apk.sha256
+            flutter_app/build/apk-package-details.txt
           if-no-files-found: error
