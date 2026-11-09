@@ -152,6 +152,24 @@ class RangeTickStore {
       final changesBefore = (before.first['count'] as num).toInt();
       var lastTimestamp = -1;
       var sequence = 0;
+      // The first page may begin halfway through a millisecond shared
+      // with an older page. Reject that ambiguous overlap rather than
+      // silently assigning a conflicting ordinal to a different BID price.
+      final boundary = await txn.query('range_tick_archive',
+          columns: ['bid'],
+          where: 'account_id = ? AND symbol = ? AND timestamp_ms = ?',
+          whereArgs: [accountId, symbol, ticks.first.timestamp],
+          orderBy: 'sequence_no ASC');
+      if (boundary.isNotEmpty) {
+        final incoming = ticks.takeWhile(
+            (tick) => tick.timestamp == ticks.first.timestamp).toList();
+        if (incoming.length != boundary.length ||
+            incoming.asMap().entries.any((entry) =>
+                (boundary[entry.key]['bid'] as num).toDouble() != entry.value.bid)) {
+          throw StateError(
+              'Overlapping BID tick boundary is ambiguous; refusing to corrupt history');
+        }
+      }
       // Batch inserts to avoid one platform-channel round trip per tick.
       // SQLite changes() distinguishes ignored duplicates from new rows.
       for (var offset = 0; offset < ticks.length; offset += 500) {
