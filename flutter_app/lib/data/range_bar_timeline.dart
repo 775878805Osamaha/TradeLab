@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'market_api.dart';
 import 'range_bar_builder.dart';
 import 'tradelab_data.dart';
@@ -10,6 +12,24 @@ class RangeBarTimeline {
 
   final List<TradeCandle> bars;
   final List<int> endTickIndices;
+
+  /// Small pages build immediately. Large archived BID histories are rebuilt
+  /// off the UI isolate so dragging, gestures and repainting remain responsive.
+  static Future<RangeBarTimeline> buildAsync(
+      List<MarketTick> ticks, double priceDistance) async {
+    if (ticks.length < 5000 || kIsWeb) {
+      return build(ticks, priceDistance);
+    }
+    return compute<(List<MarketTick>, double), RangeBarTimeline>(
+      _buildRangeTimelineWorker,
+      (ticks, priceDistance),
+      debugLabel: 'tradelab-range-bars',
+    );
+  }
+
+  static RangeBarTimeline _buildRangeTimelineWorker(
+      (List<MarketTick>, double) request) =>
+      build(request.$1, request.$2);
 
   static RangeBarTimeline build(List<MarketTick> ticks, double priceDistance) {
     final builder = RangeBarBuilder(priceDistance);
