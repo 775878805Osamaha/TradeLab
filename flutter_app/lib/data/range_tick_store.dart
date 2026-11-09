@@ -66,10 +66,18 @@ class RangeTickStore {
       throw ArgumentError.value(prices, 'prices', 'Invalid BID tick snapshot');
     }
     final db = await _open();
-    await db.insert('range_tick_snapshots', {
-      'cache_key': '$accountId:$symbol',
-      'fetched_at_ms': DateTime.now().toUtc().millisecondsSinceEpoch,
-      'prices_json': jsonEncode(prices),
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      // Old snapshots have no replay value; keep storage bounded while
+      // historical window archiving is implemented separately.
+      await txn.delete('range_tick_snapshots',
+          where: 'fetched_at_ms < ?',
+          whereArgs: [now - const Duration(days: 1).inMilliseconds]);
+      await txn.insert('range_tick_snapshots', {
+        'cache_key': '$accountId:$symbol',
+        'fetched_at_ms': now,
+        'prices_json': jsonEncode(prices),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
   }
 }
