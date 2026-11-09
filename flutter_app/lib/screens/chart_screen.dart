@@ -115,9 +115,16 @@ class _ChartScreenState extends State<ChartScreen> {
       }
       if (!linked && _selectedSymbol.source == TradeSource.ctrader) {
         _loadRevision++;
+        _stopPlayback();
+        _replay = false;
         _actualBars = [];
+        _actualCandles = [];
         _actualTimestamps = [];
         _actualRange = [];
+        _olderCursorMs = null;
+        _historyExhausted = false;
+        _loadError = null;
+        _loading = false;
         if (mounted) setState(() {});
       }
     }
