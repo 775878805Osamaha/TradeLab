@@ -170,7 +170,7 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
         ),
         child: Column(children: [
           SizedBox(
-            height: width * (164 / 691),
+            height: width * (157 / 691),
             child: Stack(children: [
               Positioned(
                 left: 0, right: 0, top: width * (25 / 691),
@@ -184,7 +184,7 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
                 )),
               ),
               Positioned(
-                right: side, top: width * (89 / 691),
+                right: side, top: width * (82 / 691),
                 child: Text('رسومات',
                   key: const Key('drawing-tools-title'),
                   textDirection: TextDirection.rtl,
@@ -278,7 +278,7 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
             ),
             ),
           ),
-          SizedBox(height: width * (30 / 691)),
+          SizedBox(height: width * (24 / 691)),
           Expanded(child: _visibleTools.isEmpty
               ? Center(child: Text('لا توجد أدوات مطابقة',
                   style: TextStyle(color: TradeColors.drawingMutedInk,
@@ -291,7 +291,7 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
                     crossAxisCount: 3,
                     crossAxisSpacing: gap,
                     mainAxisSpacing: gap,
-                    childAspectRatio: 200 / 139,
+                    childAspectRatio: 200 / 135,
                   ),
                   itemCount: _visibleTools.length,
                   itemBuilder: (context, i) {
