@@ -152,7 +152,8 @@ void main() {
     await tester.tap(find.text('BTCUSDT').last);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Binance chart layout');
-    expect(find.text('بيانات فعلية'), findsOneWidget);
+    expect(find.text('شموع Binance'), findsOneWidget);
+    expect(find.textContaining('شموع Binance ·'), findsOneWidget);
     expect(find.textContaining('جارِ تحميل شموع'), findsNothing);
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
     expect(find.byKey(const Key('chart-source-empty')), findsNothing);
