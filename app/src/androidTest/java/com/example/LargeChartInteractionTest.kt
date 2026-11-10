@@ -60,7 +60,10 @@ class LargeChartInteractionTest {
         val visibleTime=series.value[node().config[ChartFirstVisibleIndex]].openTime
         compose.runOnIdle { style.value=ChartDisplayStyle.LINE }
         awaitReady()
+        assertEquals(visibleTime,series.value[node().config[ChartFirstVisibleIndex]].openTime)
         compose.runOnIdle { style.value=ChartDisplayStyle.HEIKIN_ASHI }
+        awaitReady()
+        assertEquals(visibleTime,series.value[node().config[ChartFirstVisibleIndex]].openTime)
         compose.runOnIdle { series.value=List(500) { candle(it-500) }+series.value }
         awaitReady()
         assertEquals(100_501,node().config[ChartLoadedCandleCount])
