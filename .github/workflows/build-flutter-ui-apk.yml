@@ -111,38 +111,8 @@ jobs:
             sleep 25
             adb shell pidof -s com.example.tradelab_flutter
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/flutter_app/build/tradelab_emulator.png"
-            # Find the actual Flutter accessibility node rather than assuming
-            # one coordinate for all Android status/nav bar configurations.
-            adb exec-out uiautomator dump /dev/tty \
-              > "$GITHUB_WORKSPACE/flutter_app/build/chart_toolbar_ui.xml" || true
-            picker_tap="$(python3 - "$GITHUB_WORKSPACE/flutter_app/build/chart_toolbar_ui.xml" <<'PY'
-            import pathlib, re, sys, xml.etree.ElementTree as ET
-            raw = pathlib.Path(sys.argv[1]).read_text(errors='replace')
-            begin = raw.find('<?xml')
-            if begin < 0:
-                begin = raw.find('<hierarchy')
-            if begin >= 0:
-                try:
-                    root = ET.fromstring(raw[begin:])
-                    for node in root.iter('node'):
-                        caption = (node.get('content-desc') or '') + ' ' + (node.get('text') or '')
-                        if 'نوع الشموع' in caption:
-                            bounds = re.findall(r'\d+', node.get('bounds') or '')
-                            if len(bounds) == 4:
-                                x1, y1, x2, y2 = map(int, bounds)
-                                print((x1 + x2) // 2, (y1 + y2) // 2)
-                                break
-                except ET.ParseError:
-                    pass
-            PY
-            )"
-            if [ -n "$picker_tap" ]; then
-              adb shell input tap $picker_tap
-              sleep 3
-              adb exec-out screencap -p > "$GITHUB_WORKSPACE/flutter_app/build/tradelab_chart_type_sheet.png"
-            else
-              echo "Picker semantics not found; chart sheet emulator screenshot unavailable."
-            fi
+            # One command: the emulator runner executes script lines separately.
+            python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_chart_type_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_chart_type_sheet.png"
       - name: Upload real Android emulator screenshot
         uses: actions/upload-artifact@v4
         with:
@@ -162,6 +132,7 @@ jobs:
           path: flutter_app/test/goldens/selected_price_rectangle.png
           if-no-files-found: error
       - name: Upload 21-card chart type sheet golden
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: TradeLab-Chart-Type-Selected-Candles-Golden
