@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 
 import '../chart/chart_annotations.dart';
 import '../chart/chart_short_position.dart';
@@ -41,7 +42,8 @@ class ChartScreen extends StatefulWidget {
   State<ChartScreen> createState() => _ChartScreenState();
 }
 
-class _ChartScreenState extends State<ChartScreen> {
+class _ChartScreenState extends State<ChartScreen>
+    with SingleTickerProviderStateMixin {
   // Session-only BID tick cache: switching Range size rebuilds locally.
   // Scoped by account and symbol; not a substitute for persistent history.
   final _rangeBidCache = <String, List<double>>{};
@@ -89,6 +91,10 @@ class _ChartScreenState extends State<ChartScreen> {
   int _visibleThrough = 60;
   ChartViewport _viewport = const ChartViewport();
   ChartViewport _gestureStart = const ChartViewport();
+  late final AnimationController _momentum;
+  double _previousMomentumX = 0;
+  double _momentumPlotWidth = 1;
+  bool _gestureHadMultiTouch = false;
   double _gestureFocalX = 0;
   Offset? _crosshair;
   Timer? _replayTimer;
@@ -106,6 +112,7 @@ class _ChartScreenState extends State<ChartScreen> {
   bool _draggingLine = false;
   bool _draggingPattern = false;
   ChartPattern? _patternAtDragStart;
+  ChartAnchorEndpoint? _draggedEndpoint;
   double _gestureFocalY = 0;
 
   TradeSymbol get _selectedSymbol => tradeSymbols.firstWhere((s) => s.code == _symbol);
@@ -176,6 +183,8 @@ class _ChartScreenState extends State<ChartScreen> {
   @override
   void initState() {
     super.initState();
+    _momentum = AnimationController.unbounded(vsync: this)
+      ..addListener(_tickMomentum);
     _linkedBefore = widget.controller.ctraderConnected;
     _accountBefore = widget.controller.accountId;
     widget.controller.addListener(_onMarketUpdate);
@@ -190,10 +199,68 @@ class _ChartScreenState extends State<ChartScreen> {
     if (_liveRequested) Future.microtask(_loadRealHistory);
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) _momentum.stop();
+  }
+
+  void _tickMomentum() {
+    if (!mounted || _loading) {
+      _momentum.stop();
+      return;
+    }
+    final deltaX = _momentum.value - _previousMomentumX;
+    _previousMomentumX = _momentum.value;
+    if (deltaX.abs() < 0.000001) return;
+    final count = _displayCandles.length;
+    if (count < 2) {
+      _momentum.stop();
+      return;
+    }
+    final next = _viewport.pan(
+        deltaX: deltaX,
+        plotWidth: _momentumPlotWidth,
+        candleCount: count);
+    if (next == _viewport) {
+      // The chart reached its historical or future-whitespace bound.
+      _momentum.stop();
+      return;
+    }
+    setState(() => _viewport = next);
+    _prefetchOlderAtEdge(_momentumPlotWidth, count);
+  }
+
+  void _startMomentum(double horizontalVelocity, double plotWidth) {
+    _momentum.stop();
+    _previousMomentumX = 0;
+    _momentumPlotWidth = plotWidth;
+    // Pixels/second, signed like the finger. The friction simulation is
+    // cancelable by the next gesture; price data never changes with motion.
+    _momentum.animateWith(FrictionSimulation(
+        0.08, 0, horizontalVelocity.clamp(-5000.0, 5000.0).toDouble()));
+  }
+
+  void _prefetchOlderAtEdge(double plotWidth, int count) {
+    if (!_liveRequested || _loading || _olderLoading || _historyExhausted ||
+        _olderLoadError != null || count <= 0 ||
+        _viewport.scrollBars <= count - plotWidth / _viewport.barWidth - 25) {
+      return;
+    }
+    if (_mode == ChartMode.range) {
+      if (_rangeHistoryTicks.isNotEmpty) {
+        unawaited(_loadOlderRangeHistory());
+      }
+    } else if (_actualBars.isNotEmpty) {
+      unawaited(_loadOlderHistory());
+    }
+  }
+
   void _onMarketUpdate() {
     final linked = widget.controller.ctraderConnected;
     final changedAccount = _accountBefore != widget.controller.accountId;
     if (_linkedBefore != linked || changedAccount) {
+      _momentum.stop();
       _rangeBidCache.clear();
       _rangeBidCachedAt.clear();
       _rangePointCache.clear();
@@ -228,6 +295,7 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   Future<void> _loadRealHistory() async {
+    _momentum.stop();
     final revision = ++_loadRevision;
     if (!mounted) return;
     setState(() {
@@ -695,6 +763,7 @@ class _ChartScreenState extends State<ChartScreen> {
     _loadRevision++;
     _replayTimer?.cancel();
     _closedCandleTimer?.cancel();
+    _momentum.dispose();
     super.dispose();
   }
 
@@ -705,6 +774,7 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   void _toggleReplay() {
+    _momentum.stop();
     if (_totalBars < 2) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('حمّل شموع السوق أولًا لبدء Replay.')));
@@ -821,6 +891,7 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   Future<void> _showSymbolPicker() async {
+    _momentum.stop();
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -857,6 +928,7 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   Future<void> _showTimeframePicker() async {
+    _momentum.stop();
     const frames = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1D', '1W', '1M'];
     await showModalBottomSheet<void>(
       context: context,
@@ -888,6 +960,7 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   Future<void> _showChartTypePicker() async {
+    _momentum.stop();
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -977,6 +1050,7 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   Future<void> _showDrawingTools() async {
+    _momentum.stop();
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -1084,6 +1158,7 @@ class _ChartScreenState extends State<ChartScreen> {
       );
 
   void _zoomBy(double factor) {
+    _momentum.stop();
     final width = math.max(80.0, MediaQuery.sizeOf(context).width - 61);
     final count = _displayCandles.length;
     setState(() => _viewport = _viewport.pinch(
@@ -1174,6 +1249,28 @@ class _ChartScreenState extends State<ChartScreen> {
         if (distance <= 17) return i;
       }
     }
+    return null;
+  }
+
+  ChartAnchorEndpoint? _hitSelectedHandle(Offset position,
+      ChartPriceScale scale, double width, int visibleCount) {
+    final index = _selectedPattern;
+    if (index == null || index < 0 || index >= _patterns.length) return null;
+    final pattern = _patterns[index];
+    if (!pattern.visibleAt(visibleCount)) return null;
+    final start = Offset(
+      _viewport.chartX(index: pattern.start.index,
+          candleCount: visibleCount, plotWidth: width),
+      scale.y(pattern.start.price),
+    );
+    final end = Offset(
+      _viewport.chartX(index: pattern.end.index,
+          candleCount: visibleCount, plotWidth: width),
+      scale.y(pattern.end.price),
+    );
+    // Make the displayed selection handles accessible to a finger.
+    if ((position - start).distance <= 22) return ChartAnchorEndpoint.start;
+    if ((position - end).distance <= 22) return ChartAnchorEndpoint.end;
     return null;
   }
 
@@ -1624,11 +1721,14 @@ class _ChartScreenState extends State<ChartScreen> {
       Expanded(
         child: LayoutBuilder(builder: (context, constraints) {
           final plotWidth = math.max(1.0, constraints.maxWidth - 61);
+          _momentumPlotWidth = plotWidth;
           return Stack(children: [
           Positioned.fill(child: GestureDetector(
             key: const Key('chart-gesture-area'),
             behavior: HitTestBehavior.opaque,
             onScaleStart: (details) {
+              _momentum.stop(); // A new gesture owns the chart immediately.
+              _gestureHadMultiTouch = details.pointerCount > 1;
               _gestureStart = _viewport;
               _gestureFocalX = details.localFocalPoint.dx;
               _gestureFocalY = details.localFocalPoint.dy;
@@ -1638,6 +1738,9 @@ class _ChartScreenState extends State<ChartScreen> {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 final shortHit = _hitShortPosition(details.localFocalPoint,
                     scale, plotWidth, candles.length);
+                _draggedEndpoint = shortHit == null
+                    ? _hitSelectedHandle(details.localFocalPoint,
+                        scale, plotWidth, candles.length) : null;
                 if (shortHit != null) {
                   _selectedShort = shortHit.$1;
                   _draggingShortHandle = shortHit.$2;
@@ -1646,22 +1749,28 @@ class _ChartScreenState extends State<ChartScreen> {
                   _selectedPattern = null;
                   _saveDrawingUndo();
                 }
-                _selectedLine = shortHit == null
+                _selectedLine = shortHit == null && _draggedEndpoint == null
                     ? _hitLine(details.localFocalPoint.dy, scale) : null;
                 _draggingLine = _selectedLine != null;
-                _selectedPattern = shortHit != null || _draggingLine ? null :
-                    _hitPattern(details.localFocalPoint, scale,
-                        plotWidth, candles.length);
-                _draggingPattern = _selectedPattern != null;
+                if (_draggedEndpoint != null) {
+                  _draggingPattern = true;
+                } else {
+                  _selectedPattern = shortHit != null || _draggingLine ? null :
+                      _hitPattern(details.localFocalPoint, scale,
+                          plotWidth, candles.length);
+                  _draggingPattern = _selectedPattern != null;
+                }
                 _patternAtDragStart = _draggingPattern
                     ? _patterns[_selectedPattern!] : null;
                 if (_draggingLine || _draggingPattern) _saveDrawingUndo();
               } else {
                 _draggingLine = false;
                 _draggingPattern = false;
+                _draggedEndpoint = null;
               }
             },
             onScaleUpdate: (details) {
+              if (details.pointerCount > 1) _gestureHadMultiTouch = true;
               setState(() {
               if (_draggingShortHandle != null && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
@@ -1675,16 +1784,25 @@ class _ChartScreenState extends State<ChartScreen> {
                   _patternAtDragStart != null && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 final original = _patternAtDragStart!;
-                final proposedBars = ((details.localFocalPoint.dx -
-                    _gestureFocalX) / _viewport.barWidth).round();
-                final minIndex = math.min(original.start.index, original.end.index);
-                final maxIndex = math.max(original.start.index, original.end.index);
-                final barDelta = proposedBars.clamp(-minIndex,
-                    math.max(0, candles.length - 1 - maxIndex));
-                final change = scale.price(
-                    details.localFocalPoint.dy.clamp(0, scale.height).toDouble()) -
-                    scale.price(_gestureFocalY.clamp(0, scale.height).toDouble());
-                _patterns[_selectedPattern!] = original.moved(barDelta.toInt(), change);
+                if (_draggedEndpoint != null) {
+                  final anchor = _anchorAt(details.localFocalPoint,
+                      scale, plotWidth, candles.length);
+                  if (anchor != null) {
+                    _patterns[_selectedPattern!] = original.withEndpoint(
+                        _draggedEndpoint!, anchor);
+                  }
+                } else {
+                  final proposedBars = ((details.localFocalPoint.dx -
+                      _gestureFocalX) / _viewport.barWidth).round();
+                  final minIndex = math.min(original.start.index, original.end.index);
+                  final maxIndex = math.max(original.start.index, original.end.index);
+                  final barDelta = proposedBars.clamp(-minIndex,
+                      math.max(0, candles.length - 1 - maxIndex));
+                  final change = scale.price(
+                      details.localFocalPoint.dy.clamp(0, scale.height).toDouble()) -
+                      scale.price(_gestureFocalY.clamp(0, scale.height).toDouble());
+                  _patterns[_selectedPattern!] = original.moved(barDelta.toInt(), change);
+                }
               } else if (details.pointerCount > 1) {
                 _viewport = _gestureStart.pinch(
                   scale: details.scale,
@@ -1701,33 +1819,39 @@ class _ChartScreenState extends State<ChartScreen> {
                 );
               }
               });
-              // Historical paging works for both time candles and Range
-              // bars. Avoid requests while a drawing is being dragged.
-              if (_draggingShortHandle == null && !_draggingLine && !_draggingPattern && _liveRequested &&
-                  _viewport.scrollBars >
-                      candles.length - plotWidth / _viewport.barWidth - 25) {
-                if (_mode == ChartMode.range) {
-                  if (_rangeHistoryTicks.isNotEmpty &&
-                      !_historyExhausted && _olderLoadError == null) {
-                    // Replay is safe to prefetch too: the historical merge
-                    // reanchors the cutoff to the source BID tick and refuses
-                    // a rebuild that would reveal future market events.
-                    unawaited(_loadOlderRangeHistory());
-                  }
-                } else if (_actualBars.isNotEmpty) {
-                  unawaited(_loadOlderHistory());
-                }
+              // The same paging threshold also applies during momentum.
+              if (_draggingShortHandle == null &&
+                  !_draggingLine && !_draggingPattern) {
+                _prefetchOlderAtEdge(plotWidth, candles.length);
               }
             },
-            onScaleEnd: (_) {
+            onScaleEnd: (details) {
+              final editing = _draggingLine || _draggingPattern ||
+                  _draggingShortHandle != null;
               _draggingLine = false;
               _draggingPattern = false;
               _patternAtDragStart = null;
+              _draggedEndpoint = null;
               _draggingShortHandle = null;
               _shortAtDragStart = null;
+              final velocity = details.velocity.pixelsPerSecond.dx;
+              if (chartShouldFling(
+                  horizontalVelocity: velocity,
+                  candleCount: candles.length,
+                  multiTouch: _gestureHadMultiTouch,
+                  editingDrawing: editing || _crosshair != null,
+                  reducedMotion: MediaQuery.disableAnimationsOf(context))) {
+                _startMomentum(velocity, plotWidth);
+              }
             },
-            onDoubleTap: () => setState(() { _viewport = const ChartViewport(); _crosshair = null; }),
-            onLongPressStart: (details) => setState(() => _crosshair = details.localPosition),
+            onDoubleTap: () {
+              _momentum.stop();
+              setState(() { _viewport = const ChartViewport(); _crosshair = null; });
+            },
+            onLongPressStart: (details) {
+              _momentum.stop();
+              setState(() => _crosshair = details.localPosition);
+            },
             onLongPressMoveUpdate: (details) => setState(() => _crosshair = details.localPosition),
             onLongPressEnd: (_) => setState(() => _crosshair = null),
             onTapUp: (details) {
@@ -1871,7 +1995,10 @@ class _ChartScreenState extends State<ChartScreen> {
           _iconAction(icon: Icons.zoom_out_outlined, label: 'تصغير الشارت',
             onPressed: () => _zoomBy(.8)),
           _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
-            onPressed: () => setState(() => _viewport = _viewport.jumpToLatest())),
+            onPressed: () {
+              _momentum.stop();
+              setState(() => _viewport = _viewport.jumpToLatest());
+            }),
           const SizedBox(width: 8),
           if (_mode == ChartMode.range)
             TextButton(onPressed: _showRangeSettings, child: Text('مدى $_rangeTicks')),
@@ -1929,6 +2056,13 @@ class _ChartScreenState extends State<ChartScreen> {
           padding: const EdgeInsets.symmetric(vertical: 5),
           child: const Text('المس الشارت لتحديد النقطة الثانية للرسم',
               style: TextStyle(fontSize: 12, color: TradeColors.blue)),
+        ),
+      if (_drawing && _selectedPattern != null)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 3),
+          child: Text('اسحب دائرة البداية أو النهاية لتعديل طرف الرسم فقط',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: TradeColors.blue)),
         ),
       if (_placingShort && candles.isNotEmpty)
         Container(

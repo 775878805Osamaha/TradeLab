@@ -85,4 +85,31 @@ void main() {
     expect(snapDrawingPrice(requestedPrice: 4017, ohlc: prices,
       mode: ChartMagnetMode.strong, weakPriceTolerance: 1), 4020);
   });
+
+  test('dragging one trend/Fibonacci handle preserves its opposite anchor', () {
+    const pattern = ChartPattern(
+      tool: ChartDrawingTool.fibonacci,
+      start: ChartAnchor(12, 4010),
+      end: ChartAnchor(24, 4060),
+      colorValue: 0xFF26A69A,
+      showLabels: false,
+    );
+    final movedStart = pattern.withEndpoint(
+        ChartAnchorEndpoint.start, const ChartAnchor(7, 4035));
+    expect(movedStart.start.index, 7);
+    expect(movedStart.start.price, 4035);
+    expect(movedStart.end.index, 24);
+    expect(movedStart.end.price, 4060);
+    expect(movedStart.fibonacciPrice(.5), 4047.5);
+    expect(movedStart.colorValue, pattern.colorValue);
+    expect(movedStart.showLabels, false);
+
+    final movedEnd = movedStart.withEndpoint(
+        ChartAnchorEndpoint.end, const ChartAnchor(30, 4050));
+    expect(movedEnd.start.index, 7);
+    expect(movedEnd.start.price, 4035);
+    expect(movedEnd.end.index, 30);
+    expect(movedEnd.end.price, 4050);
+    expect(pattern.end.index, 24);
+  });
 }
