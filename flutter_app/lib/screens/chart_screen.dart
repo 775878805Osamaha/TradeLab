@@ -54,6 +54,7 @@ class _ChartScreenState extends State<ChartScreen> {
   // pages can be requested without using a guessed time boundary.
   List<MarketTick> _rangeHistoryTicks = [];
   List<int> _rangeBarEndTickIndices = [];
+  List<int> _rangeBarTimestamps = [];
   int? _rangeOlderCursorMs;
   int _loadRevision = 0;
   bool _loading = false;
@@ -73,6 +74,7 @@ class _ChartScreenState extends State<ChartScreen> {
   bool _replay = false;
   bool _drawing = false;
   ChartDrawingTool _drawingTool = ChartDrawingTool.horizontal;
+  ChartMagnetMode _magnetMode = ChartMagnetMode.off;
   bool _showIndicators = false;
   int _visibleThrough = 60;
   ChartViewport _viewport = const ChartViewport();
@@ -202,6 +204,7 @@ class _ChartScreenState extends State<ChartScreen> {
         _actualRange = [];
         _rangeHistoryTicks = [];
         _rangeBarEndTickIndices = [];
+        _rangeBarTimestamps = [];
         _rangeOlderCursorMs = null;
         _olderCursorMs = null;
         _historyExhausted = false;
@@ -238,6 +241,7 @@ class _ChartScreenState extends State<ChartScreen> {
       _actualRange = [];
       _rangeHistoryTicks = [];
       _rangeBarEndTickIndices = [];
+      _rangeBarTimestamps = [];
       _rangeOlderCursorMs = null;
       _patterns.clear();
       _analysisPatterns = [];
@@ -337,6 +341,7 @@ class _ChartScreenState extends State<ChartScreen> {
         if (revision != _loadRevision || !mounted) return;
         _actualRange = timeline.bars;
         _rangeBarEndTickIndices = timeline.endTickIndices;
+        _rangeBarTimestamps = timeline.endTimestamps;
       } else {
         final bars = await widget.controller.history(_selectedSymbol, _timeframe);
         if (revision != _loadRevision || !mounted) return;
@@ -482,6 +487,27 @@ class _ChartScreenState extends State<ChartScreen> {
           : null;
       final timeline = await RangeBarTimeline.buildAsync(combined, _rangeTicks * point);
       if (!mounted || revision != _loadRevision) return;
+      // Range bars are not time candles: after prepending BID events, a bar's
+      // index can move non-uniformly. Rebase each drawing endpoint to its
+      // original market event while keeping its real price unchanged.
+      int? rebaseAnchor(ChartAnchor anchor) => timeline.rebaseOldBarIndex(
+        oldEndTickIndices: _rangeBarEndTickIndices,
+        oldIndex: anchor.index,
+        prependedTicks: prefix.length,
+        anchorPrice: anchor.price,
+      );
+      ChartPattern? rebasePattern(ChartPattern pattern) {
+        final first = rebaseAnchor(pattern.start);
+        final last = rebaseAnchor(pattern.end);
+        return first == null || last == null
+            ? null : pattern.reanchored(first, last);
+      }
+      final rebasedPatterns = _patterns
+          .map(rebasePattern).whereType<ChartPattern>().toList();
+      final rebasedAnalysis = _analysisPatterns
+          .map(rebasePattern).whereType<ChartPattern>().toList();
+      final pendingIndex = _pendingAnchor == null
+          ? null : rebaseAnchor(_pendingAnchor!);
       final previousDisplayCount = _replay ? _visibleThrough : _actualRange.length;
       final oldViewport = _viewport;
       // Preserve the market event visible near the right edge rather than
@@ -528,25 +554,16 @@ class _ChartScreenState extends State<ChartScreen> {
         _rangeOlderCursorMs = fromMs - 1;
         _actualRange = timeline.bars;
         _rangeBarEndTickIndices = timeline.endTickIndices;
+        _rangeBarTimestamps = timeline.endTimestamps;
+        _patterns..clear()..addAll(rebasedPatterns);
+        _analysisPatterns = rebasedAnalysis;
+        _pendingAnchor = pendingIndex == null ? null
+            : ChartAnchor(pendingIndex, _pendingAnchor!.price);
+        _selectedPattern = null;
+        _lineUndo.clear(); // Undo entries use the previous Range bar indices.
         if (_replay && replayCutoffTick != null) {
           _stopPlayback();
-          final previousVisible = _visibleThrough;
           _visibleThrough = safeReplayBars!;
-          // Existing drawing anchors are bar-index based. Shift them with
-          // the Replay cursor as a best-effort visual alignment; the replay
-          // data cutoff itself remains tied to the exact BID event index.
-          final shift = _visibleThrough - previousVisible;
-          if (shift != 0) {
-            for (var i = 0; i < _patterns.length; i++) {
-              _patterns[i] = _patterns[i].shifted(shift);
-            }
-            _analysisPatterns = _analysisPatterns
-                .map((pattern) => pattern.shifted(shift))
-                .toList(growable: false);
-            if (_pendingAnchor != null) {
-              _pendingAnchor = _pendingAnchor!.shifted(shift);
-            }
-          }
         }
       });
     } on MarketDataException catch (error) {
@@ -921,11 +938,30 @@ class _ChartScreenState extends State<ChartScreen> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, updateSheet) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const TradeSectionTitle('أدوات الرسم'),
+            const SizedBox(height: 6),
+            const Align(alignment: AlignmentDirectional.centerStart,
+                child: Text('مغناطيس الأسعار · تثبيت النقاط على O/H/L/C')),
+            Wrap(spacing: 8, children: [
+              for (final item in const <(ChartMagnetMode, String)>[
+                (ChartMagnetMode.off, 'إيقاف'),
+                (ChartMagnetMode.weak, 'ضعيف'),
+                (ChartMagnetMode.strong, 'قوي'),
+              ])
+                ChoiceChip(
+                  label: Text(item.$2),
+                  selected: _magnetMode == item.$1,
+                  onSelected: (_) {
+                    setState(() => _magnetMode = item.$1);
+                    updateSheet(() {});
+                  },
+                ),
+            ]),
             for (final option in const <(ChartDrawingTool, String, IconData)>[
               (ChartDrawingTool.horizontal, 'خط أفقي', Icons.horizontal_rule),
               (ChartDrawingTool.trendLine, 'خط اتجاه · نقطتان', Icons.trending_up),
@@ -961,6 +997,7 @@ class _ChartScreenState extends State<ChartScreen> {
             ),
           ]),
         ),
+      ),
       ),
     );
   }
@@ -1068,8 +1105,15 @@ class _ChartScreenState extends State<ChartScreen> {
     final index = _viewport.indexAt(
         x: point.dx, plotWidth: plotWidth, candleCount: count);
     if (index == null) return null;
-    return ChartAnchor(index,
-        scale.price(point.dy.clamp(0, scale.height).toDouble()));
+    final rawPrice = scale.price(point.dy.clamp(0, scale.height).toDouble());
+    final bar = _displayCandles[index];
+    return ChartAnchor(index, snapDrawingPrice(
+      requestedPrice: rawPrice,
+      ohlc: [bar.open, bar.high, bar.low, bar.close],
+      mode: _magnetMode,
+      weakPriceTolerance: (scale.maximum - scale.minimum) /
+          scale.height * 12,
+    ));
   }
 
   Future<void> _editSelectedDrawing() async {
@@ -1412,8 +1456,10 @@ class _ChartScreenState extends State<ChartScreen> {
                   return;
                 }
                 _saveDrawingUndo();
-                _levels.add(scale.price(
-                    details.localPosition.dy.clamp(0, scale.height).toDouble()));
+                final anchor = _anchorAt(details.localPosition,
+                    scale, plotWidth, candles.length);
+                if (anchor == null) return;
+                _levels.add(anchor.price);
                 _selectedLine = _levels.length - 1;
                 _selectedPattern = null;
               });
@@ -1423,7 +1469,8 @@ class _ChartScreenState extends State<ChartScreen> {
                 size: Size.infinite,
                 painter: _CandleChartPainter(
                   candles: candles,
-                  timestamps: _mode == ChartMode.range ? const [] : _actualTimestamps,
+                  timestamps: _mode == ChartMode.range
+                      ? _rangeBarTimestamps : _actualTimestamps,
                   dark: Theme.of(context).brightness == Brightness.dark,
                   viewport: _viewport,
                   crosshair: _crosshair,
@@ -1716,8 +1763,8 @@ class _CandleChartPainter extends CustomPainter {
     }
     canvas.restore();
     if (timestamps.length >= candles.length) {
-      // Real UTC dates only. Range bars and design fixtures have no
-      // trustworthy candle timestamps and must not fabricate them.
+      // Real UTC dates only. Range uses the time of the originating BID
+      // tick, NOT a guessed fixed-duration interval per Range bar.
       for (var tick = 1; tick <= 4; tick++) {
         final x = axis * tick / 5;
         final index = viewport.indexAt(x: x, plotWidth: axis,

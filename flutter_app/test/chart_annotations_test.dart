@@ -54,4 +54,35 @@ void main() {
     expect(edited.colorValue, 0xFFE34A4A);
     expect(first.start.price, 12.5);
   });
+
+  test('rebasing a drawing preserves historical prices and style', () {
+    const original = ChartPattern(
+      tool: ChartDrawingTool.fibonacci,
+      start: ChartAnchor(5, 4011.25),
+      end: ChartAnchor(12, 4045.5),
+      colorValue: 0xFFE8A426,
+      strokeWidth: 2.5,
+      showLabels: false,
+    );
+    final rebased = original.reanchored(22, 37);
+    expect(rebased.start.index, 22);
+    expect(rebased.end.index, 37);
+    expect(rebased.start.price, 4011.25);
+    expect(rebased.end.price, 4045.5);
+    expect(rebased.colorValue, 0xFFE8A426);
+    expect(rebased.strokeWidth, 2.5);
+    expect(rebased.showLabels, false);
+  });
+
+  test('weak OHLC magnet only snaps nearby, strong snaps any price', () {
+    const prices = [4010.0, 4020.0, 4000.0, 4012.0];
+    expect(snapDrawingPrice(requestedPrice: 4011.7, ohlc: prices,
+      mode: ChartMagnetMode.off, weakPriceTolerance: 1), 4011.7);
+    expect(snapDrawingPrice(requestedPrice: 4011.7, ohlc: prices,
+      mode: ChartMagnetMode.weak, weakPriceTolerance: 1), 4012);
+    expect(snapDrawingPrice(requestedPrice: 4017, ohlc: prices,
+      mode: ChartMagnetMode.weak, weakPriceTolerance: 1), 4017);
+    expect(snapDrawingPrice(requestedPrice: 4017, ohlc: prices,
+      mode: ChartMagnetMode.strong, weakPriceTolerance: 1), 4020);
+  });
 }

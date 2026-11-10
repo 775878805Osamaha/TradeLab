@@ -13,6 +13,9 @@ void main() {
     final timeline = RangeBarTimeline.build(ticks, 1);
     expect(timeline.bars, hasLength(3));
     expect(timeline.endTickIndices, [1, 1, 3]);
+    // A price gap may close multiple bars on one *real* BID event; do not
+    // manufacture different clock times for the extra price-based bars.
+    expect(timeline.endTimestamps, [101, 101, 103]);
     expect(timeline.visibleBarsThroughTick(-1), 0);
     expect(timeline.visibleBarsThroughTick(0), 0);
     expect(timeline.visibleBarsThroughTick(1), 2);
@@ -78,6 +81,7 @@ void main() {
     final synchronous = RangeBarTimeline.build(ticks, .5);
     final asyncResult = await RangeBarTimeline.buildAsync(ticks, .5);
     expect(asyncResult.endTickIndices, synchronous.endTickIndices);
+    expect(asyncResult.endTimestamps, synchronous.endTimestamps);
     expect(asyncResult.bars.length, synchronous.bars.length);
     for (var index = 0; index < synchronous.bars.length; index++) {
       final expected = synchronous.bars[index];
@@ -93,6 +97,56 @@ void main() {
     final timeline = RangeBarTimeline.build(const <MarketTick>[], 1);
     expect(timeline.bars, isEmpty);
     expect(timeline.endTickIndices, isEmpty);
+    expect(timeline.endTimestamps, isEmpty);
     expect(timeline.visibleBarsThroughTick(100), 0);
+  });
+
+  test('Range drawings rebase using BID event rather than candle shift', () {
+    final originalTicks = [
+      MarketTick(100, 100),
+      MarketTick(101, 101),
+      MarketTick(102, 102),
+      MarketTick(103, 103),
+    ];
+    final previous = RangeBarTimeline.build(originalTicks, 1);
+    final prefix = [
+      MarketTick(90, 100.5),
+      MarketTick(91, 99.5),
+      MarketTick(92, 98.5),
+    ];
+    final rebuilt = RangeBarTimeline.build([...prefix, ...originalTicks], 1);
+    final oldBar = previous.endTickIndices.indexOf(2);
+    final mapped = rebuilt.rebaseOldBarIndex(
+      oldEndTickIndices: previous.endTickIndices,
+      oldIndex: oldBar,
+      prependedTicks: prefix.length,
+      anchorPrice: previous.bars[oldBar].close,
+    );
+    expect(mapped, isNotNull);
+    // No mapped bar can originate from ticks after the anchor market event.
+    expect(rebuilt.endTickIndices[mapped!],
+        lessThanOrEqualTo(prefix.length + previous.endTickIndices[oldBar]));
+    expect(rebuilt.rebaseOldBarIndex(
+      oldEndTickIndices: previous.endTickIndices,
+      oldIndex: -1,
+      prependedTicks: prefix.length,
+      anchorPrice: 100,
+    ), isNull);
+  });
+
+  test('Range drawing rebase never borrows an unrevealed future event', () {
+    final previous = RangeBarTimeline.build([
+      MarketTick(100, 100), MarketTick(101, 101), MarketTick(102, 102),
+    ], 1);
+    final rebuilt = RangeBarTimeline.build([
+      MarketTick(90, 100.5),
+      MarketTick(100, 100), MarketTick(101, 101), MarketTick(102, 102),
+    ], 1);
+    expect(rebuilt.rebaseOldBarIndex(
+      oldEndTickIndices: previous.endTickIndices,
+      oldIndex: 0,
+      prependedTicks: 1,
+      anchorPrice: 101,
+    ), isNull);
   });
 }
