@@ -101,7 +101,10 @@ jobs:
             adb devices
             adb install "$GITHUB_WORKSPACE/flutter_app/build/app/outputs/flutter-apk/TradeLab-Flutter.apk"
             adb shell monkey -p com.example.tradelab_flutter -c android.intent.category.LAUNCHER 1
-            sleep 5
+            # The release app can remain on its Android launch splash while the
+            # emulator finishes its first Flutter engine startup. Allow enough
+            # time for the actual chart shell to render before taking evidence.
+            sleep 25
             adb shell pidof -s com.example.tradelab_flutter
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/flutter_app/build/tradelab_emulator.png"
       - name: Upload real Android emulator screenshot
