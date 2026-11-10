@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../chart/chart_annotations.dart';
+import '../chart/chart_short_position.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_timeline.dart';
@@ -74,8 +75,17 @@ class _ChartScreenState extends State<ChartScreen> {
   bool _replay = false;
   bool _drawing = false;
   ChartDrawingTool _drawingTool = ChartDrawingTool.horizontal;
+  bool _placingShort = false;
+  ChartAnchor? _shortEntryAnchor;
+  double? _shortStopPrice;
+  final List<ChartShortPosition> _shortPositions = [];
+  List<ChartShortPosition> _analysisShortPositions = [];
+  int? _selectedShort;
+  ShortPositionHandle? _draggingShortHandle;
+  ChartShortPosition? _shortAtDragStart;
   ChartMagnetMode _magnetMode = ChartMagnetMode.off;
   bool _showIndicators = false;
+  bool _showShortLabels = true;
   int _visibleThrough = 60;
   ChartViewport _viewport = const ChartViewport();
   ChartViewport _gestureStart = const ChartViewport();
@@ -87,7 +97,7 @@ class _ChartScreenState extends State<ChartScreen> {
   bool _playing = false;
   final List<double> _levels = [];
   final List<ChartPattern> _patterns = [];
-  final List<(List<double>, List<ChartPattern>)> _lineUndo = [];
+  final List<(List<double>, List<ChartPattern>, List<ChartShortPosition>)> _lineUndo = [];
   List<double> _analysisLevels = [];
   List<ChartPattern> _analysisPatterns = [];
   ChartAnchor? _pendingAnchor;
@@ -225,6 +235,7 @@ class _ChartScreenState extends State<ChartScreen> {
       if (_replay) {
         _levels..clear()..addAll(_analysisLevels);
         _patterns..clear()..addAll(_analysisPatterns);
+        _shortPositions..clear()..addAll(_analysisShortPositions);
       }
       _replay = false;
       _loading = true;
@@ -506,6 +517,16 @@ class _ChartScreenState extends State<ChartScreen> {
           .map(rebasePattern).whereType<ChartPattern>().toList();
       final rebasedAnalysis = _analysisPatterns
           .map(rebasePattern).whereType<ChartPattern>().toList();
+      ChartShortPosition? rebaseShort(ChartShortPosition drawing) {
+        final first = rebaseAnchor(ChartAnchor(drawing.startIndex, drawing.entry));
+        final last = rebaseAnchor(ChartAnchor(drawing.endIndex, drawing.entry));
+        return first == null || last == null
+            ? null : drawing.reanchored(first, last);
+      }
+      final rebasedShorts = _shortPositions
+          .map(rebaseShort).whereType<ChartShortPosition>().toList();
+      final rebasedAnalysisShorts = _analysisShortPositions
+          .map(rebaseShort).whereType<ChartShortPosition>().toList();
       final pendingIndex = _pendingAnchor == null
           ? null : rebaseAnchor(_pendingAnchor!);
       final previousDisplayCount = _replay ? _visibleThrough : _actualRange.length;
@@ -557,6 +578,11 @@ class _ChartScreenState extends State<ChartScreen> {
         _rangeBarTimestamps = timeline.endTimestamps;
         _patterns..clear()..addAll(rebasedPatterns);
         _analysisPatterns = rebasedAnalysis;
+        _shortPositions..clear()..addAll(rebasedShorts);
+        _analysisShortPositions = rebasedAnalysisShorts;
+        _selectedShort = null;
+        _shortEntryAnchor = null;
+        _shortStopPrice = null;
         _pendingAnchor = pendingIndex == null ? null
             : ChartAnchor(pendingIndex, _pendingAnchor!.price);
         _selectedPattern = null;
@@ -630,10 +656,19 @@ class _ChartScreenState extends State<ChartScreen> {
         for (var index = 0; index < _patterns.length; index++) {
           _patterns[index] = _patterns[index].shifted(unique.length);
         }
+        for (var index = 0; index < _shortPositions.length; index++) {
+          _shortPositions[index] = _shortPositions[index].shifted(unique.length);
+        }
         if (_replay) {
           _analysisPatterns = _analysisPatterns
               .map((drawing) => drawing.shifted(unique.length))
               .toList(growable: false);
+          _analysisShortPositions = _analysisShortPositions
+              .map((drawing) => drawing.shifted(unique.length))
+              .toList(growable: false);
+        }
+        if (_shortEntryAnchor != null) {
+          _shortEntryAnchor = _shortEntryAnchor!.shifted(unique.length);
         }
         if (_pendingAnchor != null) {
           _pendingAnchor = _pendingAnchor!.shifted(unique.length);
@@ -682,11 +717,14 @@ class _ChartScreenState extends State<ChartScreen> {
           // information. Keep analysis objects separately until Replay ends.
           _analysisLevels = List<double>.of(_levels);
           _analysisPatterns = List<ChartPattern>.of(_patterns);
+          _analysisShortPositions = List<ChartShortPosition>.of(_shortPositions);
           _levels.clear();
           _patterns.clear();
+          _shortPositions.clear();
         } else {
           _levels..clear()..addAll(_analysisLevels);
           _patterns..clear()..addAll(_analysisPatterns);
+          _shortPositions..clear()..addAll(_analysisShortPositions);
         }
         _replay = !_replay;
         _visibleThrough = math.max(1, _totalBars ~/ 2);
@@ -694,6 +732,10 @@ class _ChartScreenState extends State<ChartScreen> {
         _crosshair = null;
         _selectedLine = null;
         _selectedPattern = null;
+        _selectedShort = null;
+        _placingShort = false;
+        _shortEntryAnchor = null;
+        _shortStopPrice = null;
         _pendingAnchor = null;
         _lineUndo.clear();
       });
@@ -976,21 +1018,47 @@ class _ChartScreenState extends State<ChartScreen> {
                 onTap: () {
                   setState(() {
                     _drawing = true;
+                    _placingShort = false;
                     _drawingTool = option.$1;
                     _pendingAnchor = null;
                     _selectedLine = null;
                     _selectedPattern = null;
+                    _selectedShort = null;
                   });
                   Navigator.pop(sheetContext);
                 },
               ),
+            ListTile(
+              key: const Key('short-position-tool'),
+              title: const Text('مركز بيع · الدخول ثم الإيقاف ثم الهدف'),
+              leading: const Icon(Icons.south_east),
+              trailing: _placingShort
+                  ? const Icon(Icons.check_circle, color: TradeColors.blue)
+                  : null,
+              onTap: () {
+                setState(() {
+                  _drawing = true;
+                  _placingShort = true;
+                  _shortEntryAnchor = null;
+                  _shortStopPrice = null;
+                  _selectedShort = null;
+                  _selectedLine = null;
+                  _selectedPattern = null;
+                  _pendingAnchor = null;
+                });
+                Navigator.pop(sheetContext);
+              },
+            ),
             ListTile(
               title: const Text('إنهاء الرسم والعودة إلى تحريك الشارت'),
               leading: const Icon(Icons.pan_tool_outlined),
               onTap: () {
                 setState(() {
                   _drawing = false;
+                  _placingShort = false;
                   _pendingAnchor = null;
+                  _shortEntryAnchor = null;
+                  _shortStopPrice = null;
                 });
                 Navigator.pop(sheetContext);
               },
@@ -1028,7 +1096,8 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   void _saveDrawingUndo() {
-    _lineUndo.add((List<double>.of(_levels), List<ChartPattern>.of(_patterns)));
+    _lineUndo.add((List<double>.of(_levels), List<ChartPattern>.of(_patterns),
+        List<ChartShortPosition>.of(_shortPositions)));
     if (_lineUndo.length > 30) _lineUndo.removeAt(0);
   }
 
@@ -1038,8 +1107,10 @@ class _ChartScreenState extends State<ChartScreen> {
       final previous = _lineUndo.removeLast();
       _levels..clear()..addAll(previous.$1);
       _patterns..clear()..addAll(previous.$2);
+      _shortPositions..clear()..addAll(previous.$3);
       _selectedLine = null;
       _selectedPattern = null;
+      _selectedShort = null;
       _pendingAnchor = null;
     });
   }
@@ -1047,12 +1118,18 @@ class _ChartScreenState extends State<ChartScreen> {
   void _resetDrawingObjects() {
     _levels.clear();
     _patterns.clear();
+    _shortPositions.clear();
     _analysisLevels = [];
     _analysisPatterns = [];
+    _analysisShortPositions = [];
     _lineUndo.clear();
     _pendingAnchor = null;
     _selectedLine = null;
     _selectedPattern = null;
+    _selectedShort = null;
+    _placingShort = false;
+    _shortEntryAnchor = null;
+    _shortStopPrice = null;
   }
 
   ChartPriceScale _priceScale(List<TradeCandle> candles, double width, double height) =>
@@ -1099,6 +1176,255 @@ class _ChartScreenState extends State<ChartScreen> {
     }
     return null;
   }
+
+  /// Price/viewport geometry is shared with the painter; only the small
+  /// hit-target tolerance is expressed in logical screen units.
+  (int, ShortPositionHandle)? _hitShortPosition(Offset point,
+      ChartPriceScale scale, double plotWidth, int count) {
+    for (var i = _shortPositions.length - 1; i >= 0; i--) {
+      final item = _shortPositions[i];
+      if (!item.visibleAt(count)) continue;
+      final left = _viewport.chartX(index: item.startIndex,
+          candleCount: count, plotWidth: plotWidth);
+      final right = _viewport.chartX(index: item.endIndex,
+          candleCount: count, plotWidth: plotWidth);
+      final top = scale.y(item.stop);
+      final entry = scale.y(item.entry);
+      final bottom = scale.y(item.target);
+      final targets = <(ShortPositionHandle, Offset)>[
+        (ShortPositionHandle.stop, Offset(left, top)),
+        (ShortPositionHandle.target, Offset(left, bottom)),
+        (ShortPositionHandle.entry, Offset(left, entry)),
+        (ShortPositionHandle.end, Offset(right, entry)),
+      ];
+      for (final target in targets) {
+        if ((point - target.$2).distance <= 22) return (i, target.$1);
+      }
+      if (point.dx >= left - 12 && point.dx <= right + 12 &&
+          point.dy >= top && point.dy <= bottom) {
+        return (i, ShortPositionHandle.body);
+      }
+    }
+    return null;
+  }
+
+  void _placeShortAt(ChartAnchor anchor) {
+    if (_shortEntryAnchor == null) {
+      _shortEntryAnchor = anchor;
+      _shortStopPrice = null;
+    } else if (_shortStopPrice == null) {
+      if (anchor.price <= _shortEntryAnchor!.price) return;
+      _shortStopPrice = anchor.price;
+    } else {
+      if (anchor.price >= _shortEntryAnchor!.price) return;
+      _saveDrawingUndo();
+      _shortPositions.add(ChartShortPosition(
+        startIndex: math.min(_shortEntryAnchor!.index, anchor.index),
+        endIndex: math.max(_shortEntryAnchor!.index, anchor.index),
+        entry: _shortEntryAnchor!.price,
+        stop: _shortStopPrice!,
+        target: anchor.price,
+      ));
+      _selectedShort = _shortPositions.length - 1;
+      _placingShort = false;
+      _shortEntryAnchor = null;
+      _shortStopPrice = null;
+    }
+  }
+
+  void _updateShortDrag(Offset current, ChartPriceScale scale,
+      double width, int count) {
+    final index = _selectedShort;
+    final handle = _draggingShortHandle;
+    final original = _shortAtDragStart;
+    if (index == null || handle == null || original == null ||
+        index >= _shortPositions.length) return;
+    final price = scale.price(current.dy.clamp(0, scale.height).toDouble());
+    final bar = _viewport.indexAt(x: current.dx.clamp(0, width).toDouble(),
+        plotWidth: width, candleCount: count);
+    ChartShortPosition? updated;
+    switch (handle) {
+      case ShortPositionHandle.stop:
+        updated = original.edited(stop: price);
+        break;
+      case ShortPositionHandle.entry:
+        updated = original.edited(entry: price);
+        break;
+      case ShortPositionHandle.target:
+        updated = original.edited(target: price);
+        break;
+      case ShortPositionHandle.start:
+        if (bar != null) updated = original.edited(startIndex: bar);
+        break;
+      case ShortPositionHandle.end:
+        if (bar != null) updated = original.edited(endIndex: bar);
+        break;
+      case ShortPositionHandle.body:
+        final priceDelta = price - scale.price(
+            _gestureFocalY.clamp(0, scale.height).toDouble());
+        final proposed = ((current.dx - _gestureFocalX) /
+            _viewport.barWidth).round();
+        final bars = proposed.clamp(-original.startIndex,
+            math.max(0, count - 1 - original.endIndex)).toInt();
+        final moved = original.moved(bars, priceDelta);
+        if (moved.target > 0) updated = moved;
+        break;
+    }
+    if (updated != null) _shortPositions[index] = updated;
+  }
+
+  void _selectDrawingMode({ChartDrawingTool? tool, bool short = false}) {
+    setState(() {
+      _drawing = true;
+      _placingShort = short;
+      if (tool != null) _drawingTool = tool;
+      _shortEntryAnchor = null;
+      _shortStopPrice = null;
+      _pendingAnchor = null;
+      _selectedShort = null;
+      _selectedLine = null;
+      _selectedPattern = null;
+    });
+  }
+
+  Widget _buildDrawingRail(double height) => Positioned(
+    left: 0, top: math.min(100.0, height * .16), bottom: 15, width: 46,
+    child: Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.horizontal(right: Radius.circular(12)),
+        border: Border.all(color: Theme.of(context).dividerColor),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
+      ),
+      child: SingleChildScrollView(
+        child: Column(children: [
+          IconButton(
+            key: const Key('drawing-rail-cursor'),
+            tooltip: 'تحريك الشارت',
+            onPressed: () => setState(() {
+              _drawing = false;
+              _placingShort = false;
+              _pendingAnchor = null;
+            }),
+            icon: const Icon(Icons.near_me_outlined, size: 23),
+          ),
+          const Divider(height: 1),
+          IconButton(
+            tooltip: 'خط اتجاه',
+            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.trendLine),
+            icon: const Icon(Icons.show_chart, size: 23),
+          ),
+          IconButton(
+            tooltip: 'تصحيح فيبوناتشي',
+            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.fibonacci),
+            icon: const Icon(Icons.tune, size: 23),
+          ),
+          IconButton(
+            tooltip: 'خط أفقي',
+            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.horizontal),
+            icon: const Icon(Icons.horizontal_rule, size: 23),
+          ),
+          IconButton(
+            key: const Key('drawing-rail-short'),
+            tooltip: 'أداة مركز بيع',
+            onPressed: () => _selectDrawingMode(short: true),
+            icon: Icon(Icons.south_east, size: 23,
+              color: _placingShort || _selectedShort != null
+                  ? TradeColors.shortHandle : null),
+          ),
+          IconButton(
+            tooltip: 'مغناطيس الأسعار',
+            onPressed: _showDrawingTools,
+            icon: const Icon(Icons.tune_outlined, size: 23),
+          ),
+        ]),
+      ),
+    ),
+  );
+
+  void _deleteSelectedShort() {
+    final index = _selectedShort;
+    if (index == null || index >= _shortPositions.length) return;
+    setState(() {
+      _saveDrawingUndo();
+      _shortPositions.removeAt(index);
+      _selectedShort = null;
+    });
+  }
+
+  Future<void> _shortProperties() async {
+    final index = _selectedShort;
+    if (index == null || index >= _shortPositions.length) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const TradeSectionTitle('خصائص مركز البيع'),
+          const SizedBox(height: 8),
+          Text('الدخول: ${_shortPositions[index].entry.toStringAsFixed(5)}',
+            textDirection: TextDirection.ltr),
+          Text('وقف الخسارة: ${_shortPositions[index].stop.toStringAsFixed(5)}',
+            textDirection: TextDirection.ltr),
+          Text('الهدف: ${_shortPositions[index].target.toStringAsFixed(5)}',
+            textDirection: TextDirection.ltr),
+          Text('العائد / المخاطرة: ${_shortPositions[index].rewardRisk.toStringAsFixed(2)}',
+            textDirection: TextDirection.ltr),
+          const SizedBox(height: 8),
+          const Text('هذه أداة رسم تحليلية، وليست أمر بيع أو نتيجة صفقة منفّذة.',
+            textAlign: TextAlign.center),
+          TextButton.icon(onPressed: () {
+            setState(() => _showShortLabels = !_showShortLabels);
+            Navigator.pop(sheetContext);
+          }, icon: const Icon(Icons.text_fields),
+            label: Text(_showShortLabels ? 'إخفاء التسميات' : 'إظهار التسميات')),
+        ]),
+      )),
+    );
+  }
+
+  Widget _buildShortFloatingToolbar(double width) => Positioned(
+    top: 12,
+    left: math.max(4, (width - 296) / 2),
+    child: Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Theme.of(context).dividerColor),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 9,
+          offset: Offset(0, 3))],
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        _shortToolbarButton(Icons.more_horiz, 'خصائص المركز', _shortProperties),
+        _shortToolbarButton(Icons.delete_outline, 'حذف مركز البيع', _deleteSelectedShort),
+        _shortToolbarButton(Icons.format_color_fill_outlined,
+            'تفاصيل وقف الخسارة', _shortProperties,
+            color: TradeColors.shortLabelRed),
+        _shortToolbarButton(Icons.format_color_fill_outlined,
+            'تفاصيل الهدف', _shortProperties,
+            color: TradeColors.shortLabelBlue),
+        _shortToolbarButton(Icons.text_fields,
+            _showShortLabels ? 'إخفاء التسميات' : 'إظهار التسميات',
+            () => setState(() => _showShortLabels = !_showShortLabels)),
+        _shortToolbarButton(Icons.add_box_outlined, 'إضافة مركز بيع',
+            () => _selectDrawingMode(short: true)),
+        _shortToolbarButton(Icons.more_vert, 'المزيد', _shortProperties),
+      ]),
+    ),
+  );
+
+  Widget _shortToolbarButton(IconData icon, String tooltip,
+      VoidCallback onPressed, {Color? color}) => SizedBox(
+    width: 40, height: 44,
+    child: IconButton(
+      key: ValueKey('short-toolbar-$tooltip'),
+      tooltip: tooltip,
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      icon: Icon(icon, size: 22, color: color),
+    ),
+  );
 
   ChartAnchor? _anchorAt(Offset point, ChartPriceScale scale,
       double plotWidth, int count) {
@@ -1265,38 +1591,6 @@ class _ChartScreenState extends State<ChartScreen> {
         ]),
       ),
       const Divider(height: 1),
-      Container(
-        color: surface,
-        height: 50,
-        child: SingleChildScrollView(
-         scrollDirection: Axis.horizontal,
-         child: Row(children: [
-          TextButton.icon(
-            key: const Key('timeframe-picker'),
-            onPressed: _showTimeframePicker,
-            label: Text(_timeframe, textDirection: TextDirection.ltr),
-            icon: const Icon(Icons.keyboard_arrow_down, size: 18),
-          ),
-          _iconAction(icon: Icons.candlestick_chart, label: 'نوع الشموع', onPressed: _showChartTypePicker),
-          _iconAction(icon: Icons.replay_circle_filled_outlined,
-              label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
-              active: _replay, onPressed: _toggleReplay),
-          _iconAction(icon: Icons.functions, label: 'المؤشرات', active: _showIndicators,
-            onPressed: () => setState(() => _showIndicators = !_showIndicators)),
-          _iconAction(icon: Icons.edit_outlined, label: 'أدوات الرسم', active: _drawing,
-            onPressed: _showDrawingTools),
-          _iconAction(icon: Icons.zoom_in_outlined, label: 'تكبير الشارت',
-            onPressed: () => _zoomBy(1.25)),
-          _iconAction(icon: Icons.zoom_out_outlined, label: 'تصغير الشارت',
-            onPressed: () => _zoomBy(.8)),
-          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
-            onPressed: () => setState(() => _viewport = _viewport.jumpToLatest())),
-          const SizedBox(width: 8),
-          if (_mode == ChartMode.range)
-            TextButton(onPressed: _showRangeSettings, child: Text('مدى $_rangeTicks')),
-         ])),
-      ),
-      const Divider(height: 1),
       if (_mode == ChartMode.range)
         Container(
           width: double.infinity,
@@ -1338,11 +1632,24 @@ class _ChartScreenState extends State<ChartScreen> {
               _gestureStart = _viewport;
               _gestureFocalX = details.localFocalPoint.dx;
               _gestureFocalY = details.localFocalPoint.dy;
+              _draggingShortHandle = null;
+              _shortAtDragStart = null;
               if (_drawing && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
-                _selectedLine = _hitLine(details.localFocalPoint.dy, scale);
+                final shortHit = _hitShortPosition(details.localFocalPoint,
+                    scale, plotWidth, candles.length);
+                if (shortHit != null) {
+                  _selectedShort = shortHit.$1;
+                  _draggingShortHandle = shortHit.$2;
+                  _shortAtDragStart = _shortPositions[shortHit.$1];
+                  _selectedLine = null;
+                  _selectedPattern = null;
+                  _saveDrawingUndo();
+                }
+                _selectedLine = shortHit == null
+                    ? _hitLine(details.localFocalPoint.dy, scale) : null;
                 _draggingLine = _selectedLine != null;
-                _selectedPattern = _draggingLine ? null :
+                _selectedPattern = shortHit != null || _draggingLine ? null :
                     _hitPattern(details.localFocalPoint, scale,
                         plotWidth, candles.length);
                 _draggingPattern = _selectedPattern != null;
@@ -1356,7 +1663,11 @@ class _ChartScreenState extends State<ChartScreen> {
             },
             onScaleUpdate: (details) {
               setState(() {
-              if (_draggingLine && _selectedLine != null && details.pointerCount == 1) {
+              if (_draggingShortHandle != null && details.pointerCount == 1) {
+                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
+                _updateShortDrag(details.localFocalPoint, scale,
+                    plotWidth, candles.length);
+              } else if (_draggingLine && _selectedLine != null && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 _levels[_selectedLine!] = scale.price(
                     details.localFocalPoint.dy.clamp(0, scale.height).toDouble());
@@ -1392,7 +1703,7 @@ class _ChartScreenState extends State<ChartScreen> {
               });
               // Historical paging works for both time candles and Range
               // bars. Avoid requests while a drawing is being dragged.
-              if (!_draggingLine && !_draggingPattern && _liveRequested &&
+              if (_draggingShortHandle == null && !_draggingLine && !_draggingPattern && _liveRequested &&
                   _viewport.scrollBars >
                       candles.length - plotWidth / _viewport.barWidth - 25) {
                 if (_mode == ChartMode.range) {
@@ -1412,6 +1723,8 @@ class _ChartScreenState extends State<ChartScreen> {
               _draggingLine = false;
               _draggingPattern = false;
               _patternAtDragStart = null;
+              _draggingShortHandle = null;
+              _shortAtDragStart = null;
             },
             onDoubleTap: () => setState(() { _viewport = const ChartViewport(); _crosshair = null; }),
             onLongPressStart: (details) => setState(() => _crosshair = details.localPosition),
@@ -1422,9 +1735,25 @@ class _ChartScreenState extends State<ChartScreen> {
               final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
               final hit = _hitLine(details.localPosition.dy, scale);
               setState(() {
+                final shortHit = _hitShortPosition(details.localPosition,
+                    scale, plotWidth, candles.length);
+                if (shortHit != null) {
+                  _selectedShort = shortHit.$1;
+                  _selectedLine = null;
+                  _selectedPattern = null;
+                  _pendingAnchor = null;
+                  return;
+                }
+                if (_placingShort) {
+                  final anchor = _anchorAt(details.localPosition,
+                      scale, plotWidth, candles.length);
+                  if (anchor != null) _placeShortAt(anchor);
+                  return;
+                }
                 if (hit != null) {
                   _selectedLine = hit;
                   _selectedPattern = null;
+                  _selectedShort = null;
                   _pendingAnchor = null;
                   return;
                 }
@@ -1433,6 +1762,7 @@ class _ChartScreenState extends State<ChartScreen> {
                 if (hitPattern != null) {
                   _selectedPattern = hitPattern;
                   _selectedLine = null;
+                  _selectedShort = null;
                   _pendingAnchor = null;
                   return;
                 }
@@ -1451,6 +1781,7 @@ class _ChartScreenState extends State<ChartScreen> {
                     ));
                     _selectedPattern = _patterns.length - 1;
                     _selectedLine = null;
+                    _selectedShort = null;
                     _pendingAnchor = null;
                   }
                   return;
@@ -1462,6 +1793,7 @@ class _ChartScreenState extends State<ChartScreen> {
                 _levels.add(anchor.price);
                 _selectedLine = _levels.length - 1;
                 _selectedPattern = null;
+                _selectedShort = null;
               });
             },
             child: RepaintBoundary(
@@ -1476,8 +1808,11 @@ class _ChartScreenState extends State<ChartScreen> {
                   crosshair: _crosshair,
                   levels: List<double>.unmodifiable(_levels),
                   patterns: List<ChartPattern>.unmodifiable(_patterns),
+                  shortPositions: List<ChartShortPosition>.unmodifiable(_shortPositions),
                   selectedLine: _drawing ? _selectedLine : null,
                   selectedPattern: _drawing ? _selectedPattern : null,
+                  selectedShort: _drawing ? _selectedShort : null,
+                  showShortLabels: _showShortLabels,
                   indicator: _showIndicators,
                 ),
               ),
@@ -1501,8 +1836,46 @@ class _ChartScreenState extends State<ChartScreen> {
                 ]),
               ),
             ))),
+          if (candles.isNotEmpty && _drawing)
+            _buildDrawingRail(constraints.maxHeight),
+          if (_drawing && _selectedShort != null &&
+              _selectedShort! < _shortPositions.length && candles.isNotEmpty)
+            _buildShortFloatingToolbar(constraints.maxWidth),
           ]);
         }),
+      ),
+      // The chart stays the dominant surface; its tool strip sits below the
+      // time axis, as in the supplied mobile reference.
+      Container(
+        color: surface,
+        height: 50,
+        child: SingleChildScrollView(
+         scrollDirection: Axis.horizontal,
+         child: Row(children: [
+          TextButton.icon(
+            key: const Key('timeframe-picker'),
+            onPressed: _showTimeframePicker,
+            label: Text(_timeframe, textDirection: TextDirection.ltr),
+            icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+          ),
+          _iconAction(icon: Icons.candlestick_chart, label: 'نوع الشموع', onPressed: _showChartTypePicker),
+          _iconAction(icon: Icons.replay_circle_filled_outlined,
+              label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
+              active: _replay, onPressed: _toggleReplay),
+          _iconAction(icon: Icons.functions, label: 'المؤشرات', active: _showIndicators,
+            onPressed: () => setState(() => _showIndicators = !_showIndicators)),
+          _iconAction(icon: Icons.edit_outlined, label: 'أدوات الرسم', active: _drawing,
+            onPressed: _showDrawingTools),
+          _iconAction(icon: Icons.zoom_in_outlined, label: 'تكبير الشارت',
+            onPressed: () => _zoomBy(1.25)),
+          _iconAction(icon: Icons.zoom_out_outlined, label: 'تصغير الشارت',
+            onPressed: () => _zoomBy(.8)),
+          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
+            onPressed: () => setState(() => _viewport = _viewport.jumpToLatest())),
+          const SizedBox(width: 8),
+          if (_mode == ChartMode.range)
+            TextButton(onPressed: _showRangeSettings, child: Text('مدى $_rangeTicks')),
+         ])),
       ),
       Container(
         padding: const EdgeInsetsDirectional.only(start: 12, end: 8, top: 6, bottom: 6),
@@ -1513,20 +1886,23 @@ class _ChartScreenState extends State<ChartScreen> {
           Expanded(child: Text(_marketEvidenceLabel,
               maxLines: 2, overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 11))),
-          if (_drawing && (_selectedLine != null || _selectedPattern != null))
+          if (_drawing && (_selectedLine != null || _selectedPattern != null || _selectedShort != null))
             IconButton(tooltip: 'خصائص الرسم المحدد',
-              onPressed: _editSelectedDrawing,
+              onPressed: _selectedShort != null ? _shortProperties : _editSelectedDrawing,
               icon: const Icon(Icons.tune)),
-          if (_drawing && (_selectedLine != null || _selectedPattern != null))
+          if (_drawing && (_selectedLine != null || _selectedPattern != null || _selectedShort != null))
             IconButton(tooltip: 'حذف الرسم المحدد', onPressed: () => setState(() {
               _saveDrawingUndo();
-              if (_selectedLine != null && _selectedLine! < _levels.length) {
+              if (_selectedShort != null && _selectedShort! < _shortPositions.length) {
+                _shortPositions.removeAt(_selectedShort!);
+              } else if (_selectedLine != null && _selectedLine! < _levels.length) {
                 _levels.removeAt(_selectedLine!);
               } else if (_selectedPattern != null && _selectedPattern! < _patterns.length) {
                 _patterns.removeAt(_selectedPattern!);
               }
               _selectedLine = null;
               _selectedPattern = null;
+              _selectedShort = null;
             }), icon: const Icon(Icons.delete_outline)),
           if (_lineUndo.isNotEmpty)
             TextButton.icon(
@@ -1553,6 +1929,19 @@ class _ChartScreenState extends State<ChartScreen> {
           padding: const EdgeInsets.symmetric(vertical: 5),
           child: const Text('المس الشارت لتحديد النقطة الثانية للرسم',
               style: TextStyle(fontSize: 12, color: TradeColors.blue)),
+        ),
+      if (_placingShort && candles.isNotEmpty)
+        Container(
+          alignment: Alignment.center,
+          color: TradeColors.shortHandle.withValues(alpha: .06),
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Text(_shortEntryAnchor == null
+              ? 'مركز بيع: المس الشارت لتحديد سعر الدخول'
+              : _shortStopPrice == null
+                  ? 'حدد وقف الخسارة فوق سعر الدخول'
+                  : 'حدد الهدف أسفل سعر الدخول',
+              key: const Key('short-position-placement-hint'),
+              style: const TextStyle(fontSize: 12, color: TradeColors.shortHandle)),
         ),
       if (_replay) _replayControls(context),
     ]);
@@ -1628,8 +2017,11 @@ class _CandleChartPainter extends CustomPainter {
     required this.crosshair,
     required this.levels,
     required this.patterns,
+    required this.shortPositions,
     required this.selectedLine,
     required this.selectedPattern,
+    required this.selectedShort,
+    required this.showShortLabels,
     required this.indicator,
   });
 
@@ -1640,8 +2032,11 @@ class _CandleChartPainter extends CustomPainter {
   final Offset? crosshair;
   final List<double> levels;
   final List<ChartPattern> patterns;
+  final List<ChartShortPosition> shortPositions;
   final int? selectedLine;
   final int? selectedPattern;
+  final int? selectedShort;
+  final bool showShortLabels;
   final bool indicator;
 
   @override
@@ -1761,7 +2156,33 @@ class _CandleChartPainter extends CustomPainter {
         canvas.drawCircle(Offset(x2, y2), 4.2, handle);
       }
     }
+    _paintShortPositions(canvas, scale, axis, candles.length, decimals);
     canvas.restore();
+    // A source-derived last-close marker, not a simulated tick or countdown.
+    final lastClose = candles.last.close;
+    final lastY = y(lastClose);
+    if (lastY >= 0 && lastY <= chartHeight) {
+      final marker = Paint()
+        ..color = TradeColors.positive
+        ..strokeWidth = .9;
+      for (var x = 0.0; x < axis; x += 6) {
+        canvas.drawLine(Offset(x, lastY),
+            Offset(math.min(axis, x + 2.2), lastY), marker);
+      }
+      final tagY = (lastY - 10).clamp(0, chartHeight - 20).toDouble();
+      canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 20),
+          Paint()..color = TradeColors.positive);
+      _text(canvas, _price(lastClose, decimals),
+          Offset(axis + 2, tagY + 3), Colors.white, 10);
+    }
+    for (var i = 0; i < shortPositions.length; i++) {
+      final item = shortPositions[i];
+      if (!item.visibleAt(candles.length)) continue;
+      _shortAxisTag(canvas, axis, chartHeight, scale.y(item.stop),
+          _price(item.stop, decimals), TradeColors.shortLabelRed);
+      _shortAxisTag(canvas, axis, chartHeight, scale.y(item.target),
+          _price(item.target, decimals), TradeColors.shortLabelBlue);
+    }
     if (timestamps.length >= candles.length) {
       // Real UTC dates only. Range uses the time of the originating BID
       // tick, NOT a guessed fixed-duration interval per Range bar.
@@ -1825,6 +2246,101 @@ class _CandleChartPainter extends CustomPainter {
     painter.paint(canvas, offset);
   }
 
+  void _paintShortPositions(Canvas canvas, ChartPriceScale scale,
+      double axis, int count, int decimals) {
+    for (var i = 0; i < shortPositions.length; i++) {
+      final item = shortPositions[i];
+      if (!item.visibleAt(count)) continue;
+      final x1 = viewport.chartX(index: item.startIndex,
+          candleCount: count, plotWidth: axis);
+      final x2 = viewport.chartX(index: item.endIndex,
+          candleCount: count, plotWidth: axis);
+      final left = math.min(x1, x2);
+      final right = math.max(x1, x2);
+      final yStop = scale.y(item.stop);
+      final yEntry = scale.y(item.entry);
+      final yTarget = scale.y(item.target);
+      if (right < 0 || left > axis) continue;
+      canvas.drawRect(Rect.fromLTRB(left, yStop, right, yEntry),
+        Paint()..color = TradeColors.shortStopFill.withValues(alpha: .75));
+      canvas.drawRect(Rect.fromLTRB(left, yEntry, right, yTarget),
+        Paint()..color = TradeColors.shortTargetFill.withValues(alpha: .75));
+      canvas.drawLine(Offset(left, yEntry), Offset(right, yEntry),
+          Paint()..color = TradeColors.shortHandle..strokeWidth = 1.4);
+      if (selectedShort == i) {
+        final outline = Paint()
+          ..color = TradeColors.shortHandle
+          ..strokeWidth = 2
+          ..style = PaintingStyle.stroke;
+        canvas.drawRect(Rect.fromLTRB(left, yStop, right, yTarget), outline);
+        for (final handle in <(Offset, bool)>[
+          (Offset(left, yStop), false),
+          (Offset(left, yEntry), true),
+          (Offset(right, yEntry), false),
+          (Offset(left, yTarget), false),
+        ]) {
+          canvas.drawRRect(RRect.fromRectAndRadius(
+              Rect.fromCenter(center: handle.$1, width: 20, height: 20),
+              Radius.circular(handle.$2 ? 10 : 5)),
+              Paint()..color = Colors.white);
+          canvas.drawRRect(RRect.fromRectAndRadius(
+              Rect.fromCenter(center: handle.$1, width: 20, height: 20),
+              Radius.circular(handle.$2 ? 10 : 5)),
+              Paint()..color = TradeColors.shortHandle
+                ..style = PaintingStyle.stroke..strokeWidth = 3);
+        }
+      }
+      if (selectedShort != i || !showShortLabels) continue;
+      final risk = _price(item.risk, decimals);
+      final reward = _price(item.reward, decimals);
+      _shortPill(canvas,
+          'الإيقاف: \u2066$risk\u2069 (\u2066${item.riskPercent.toStringAsFixed(3)}%\u2069)',
+          Offset(left, yStop - 39), TradeColors.shortLabelRed, axis);
+      _shortPill(canvas,
+          'العائد المحتمل: \u2066$reward\u2069   نسبة العائد/المخاطرة: '
+          '\u2066${item.rewardRisk.toStringAsFixed(2)}\u2069',
+          Offset(left, yEntry + 12), TradeColors.shortLabelBlue, axis,
+          twoLines: true);
+      _shortPill(canvas,
+          'الهدف: \u2066$reward\u2069 (\u2066${item.rewardPercent.toStringAsFixed(3)}%\u2069)',
+          Offset(left, yTarget + 19), TradeColors.shortLabelBlue, axis);
+    }
+  }
+
+  static void _shortAxisTag(Canvas canvas, double axis, double height,
+      double y, String value, Color color) {
+    if (y < 0 || y > height) return;
+    final top = (y - 9).clamp(0, height - 18).toDouble();
+    canvas.drawRect(Rect.fromLTWH(axis, top, 61, 18), Paint()..color = color);
+    _text(canvas, value, Offset(axis + 2, top + 2), Colors.white, 10);
+  }
+
+  static void _shortPill(Canvas canvas, String value, Offset location,
+      Color fill, double axis, {bool twoLines = false}) {
+    final span = TextSpan(text: value, style: const TextStyle(
+      fontSize: 11, color: Colors.white, height: 1.18));
+    final painter = TextPainter(
+      text: span, textDirection: TextDirection.rtl,
+      textAlign: TextAlign.center,
+      maxLines: twoLines ? 2 : 1,
+    )..layout(maxWidth: math.max(40, axis - 16));
+    final rectWidth = painter.width + 12;
+    final left = (location.dx - rectWidth + 10)
+        .clamp(3.0, math.max(3.0, axis - rectWidth - 3)).toDouble();
+    final top = location.dy.clamp(0.0, double.infinity).toDouble();
+    canvas.drawRRect(RRect.fromRectAndRadius(
+      Rect.fromLTWH(left, top, rectWidth, painter.height + 8),
+      const Radius.circular(4)), Paint()..color = fill);
+    painter.paint(canvas, Offset(left + 6, top + 4));
+  }
+
+  static String _price(double value, int digits) {
+    final parts = value.toStringAsFixed(digits).split('.');
+    final integer = parts.first.replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+    return digits == 0 ? integer : '$integer.${parts.last}';
+  }
+
   static String _formatUtc(DateTime date) =>
       '${date.day.toString().padLeft(2, '0')}/'
       '${date.month.toString().padLeft(2, '0')} '
@@ -1837,5 +2353,7 @@ class _CandleChartPainter extends CustomPainter {
       old.dark != dark || old.viewport != viewport ||
       old.crosshair != crosshair || old.indicator != indicator ||
       old.levels != levels || old.patterns != patterns ||
-      old.selectedLine != selectedLine || old.selectedPattern != selectedPattern;
+      old.shortPositions != shortPositions ||
+      old.selectedLine != selectedLine || old.selectedPattern != selectedPattern ||
+      old.selectedShort != selectedShort || old.showShortLabels != showShortLabels;
 }

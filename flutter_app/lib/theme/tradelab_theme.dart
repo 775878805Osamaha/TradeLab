@@ -6,6 +6,13 @@ abstract final class TradeColors {
   static const blueLight = Color(0xFF5C85FF);
   static const positive = Color(0xFF26A69A);
   static const negative = Color(0xFFEF5350);
+  // Short-position drawing palette, measured against PROMPT 01 reference.
+  // These are presentation colors and never encode an executed trade.
+  static const shortStopFill = Color(0xFFF88F96);
+  static const shortTargetFill = Color(0xFF6CA3F5);
+  static const shortHandle = Color(0xFF2351E2);
+  static const shortLabelBlue = Color(0xFF3374F4);
+  static const shortLabelRed = Color(0xFFE9344F);
   static const gold = Color(0xFFF5A623);
 
   static const lightCanvas = Color(0xFFF4F6FA);

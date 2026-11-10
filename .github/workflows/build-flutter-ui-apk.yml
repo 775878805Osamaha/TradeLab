@@ -2,6 +2,11 @@ name: TradeLab Flutter UI Preview APK
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - flutter_app/**
+      - .github/workflows/build-flutter-ui-apk.yml
   push:
     branches:
       - feat/tradelab-flutter-ui-20261108
@@ -48,7 +53,7 @@ jobs:
       - name: Static analysis
         run: flutter analyze --no-fatal-infos
       - name: Interaction tests
-        run: flutter test test/widget_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/chart_annotations_test.dart test/candle_prefix_test.dart test/results_connection_test.dart test/market_api_test.dart test/paper_ledger_test.dart test/paper_journal_controller_test.dart test/paper_trade_service_test.dart
+        run: flutter test test/widget_test.dart test/chart_short_position_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/chart_annotations_test.dart test/candle_prefix_test.dart test/results_connection_test.dart test/market_api_test.dart test/paper_ledger_test.dart test/paper_journal_controller_test.dart test/paper_trade_service_test.dart
       - name: Verify native OAuth compatibility
         run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs
       - name: Capture chart design snapshot
@@ -112,6 +117,7 @@ jobs:
           path: flutter_app/test/goldens/tradelab_chart_flutter.png
           if-no-files-found: error
       - name: Publish direct APK as GitHub prerelease
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

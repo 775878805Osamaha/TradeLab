@@ -114,6 +114,21 @@ void main() {
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
   });
 
+  testWidgets('sell-position drawing is offered but never seeded on an empty feed',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('short-position-tool')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('short-position-tool')));
+    await tester.pumpAndSettle();
+    // With no authorized cTrader candles, the screenshot's sample prices
+    // must never appear as an invented position or market feed.
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    expect(find.byKey(const Key('short-position-placement-hint')), findsNothing);
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+  });
+
   testWidgets('navigation retains results and account screens', (tester) async {
     await openAtPhoneSize(tester);
     await tester.tap(find.text('النتائج').last);
