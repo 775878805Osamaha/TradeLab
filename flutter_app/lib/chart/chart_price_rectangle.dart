@@ -209,7 +209,7 @@ class ChartPriceRectanglePainter extends CustomPainter {
         math.max(0.0, plotWidth - painter.width - 16)).toDouble();
     canvas.drawRRect(RRect.fromRectAndRadius(
       Rect.fromLTWH(left, scale.height + 1,
-          painter.width + 16, math.min(21, size.height - scale.height)),
+          painter.width + 16, math.min(21.0, size.height - scale.height)),
       const Radius.circular(2)), Paint()..color = TradeColors.rectangleAxisTag);
     painter.paint(canvas, Offset(left + 8, scale.height + 3));
   }
@@ -221,9 +221,9 @@ class ChartPriceRectanglePainter extends CustomPainter {
     final label = _price(value, decimals);
     const height = 19.0;
     final top = (y - height / 2)
-        .clamp(0.0, math.max(0, scale.height - height)).toDouble();
+        .clamp(0.0, math.max(0.0, scale.height - height)).toDouble();
     canvas.drawRect(Rect.fromLTWH(plotWidth, top,
-        math.max(0, size.width - plotWidth), height),
+        math.max(0.0, size.width - plotWidth), height),
       Paint()..color = TradeColors.rectangleAxisTag);
     final painter = TextPainter(text: TextSpan(text: label,
       style: const TextStyle(fontSize: 10.5, color: Colors.white,
