@@ -8,6 +8,10 @@ on:
     paths:
       - vercel-gateway/**
       - .github/workflows/verify-flutter-ctrader-gateway.yml
+  pull_request:
+    paths:
+      - vercel-gateway/**
+      - .github/workflows/verify-flutter-ctrader-gateway.yml
   workflow_dispatch:
 
 permissions:

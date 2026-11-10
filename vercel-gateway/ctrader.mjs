@@ -248,47 +248,25 @@ class Channel {
         from<0 || to<from || !Number.isInteger(count) || count<1 || count>1000)
       throw Error('invalid_trendbar_window');
     await this.account(accountId,accessToken);
-    let requests=0;
-    const load=async(fromMs,toMs,depth=0)=>{
-      if(++requests>32)
-        throw Error('ctrader_candle_history_unusable');
-      let segment;
-      try {
-        segment=await this.trendbarSlice(
-          accountId,symbolId,period,fromMs,toMs,count);
-      } catch(error) {
-        // Backend history boundaries depend on the selected timeframe.
-        // Split only this specific broker rejection; never conceal auth,
-        // symbol, account-provenance or OHLC integrity failures.
-        if(error?.brokerCode!=='INCORRECT_BOUNDARIES' ||
-           error?.operation!==2137)throw error;
-        if(depth>=10 || toMs-fromMs<120000)
-          throw Error('ctrader_candle_history_unusable');
-        const mid=fromMs+Math.floor((toMs-fromMs)/2);
-        // The Flutter chart requests pages newest-first. If the broker rejects
-        // this broad interval, search its newest half before older history.
-        // Never fetch an entire 89-day M1/M3 interval just to show the first
-        // screen: doing so exhausts the per-request safety budget (HTTP 502).
-        const newer=await load(mid+1,toMs,depth+1);
-        if(newer.candles.length) {
-          // The older half was not requested, so this is an incomplete page.
-          // The next chart page uses the earliest returned candle as cursor.
-          return {candles:newer.candles,hasMore:true};
-        }
-        return load(fromMs,mid,depth+1);
-      }
-      // A truncated response still contains authenticated, validated broker
-      // OHLC. The hasMore flag marks it as a PAGE, not a complete interval.
-      // Flutter pages backwards with an exclusive cursor and never treats a
-      // partial page as complete Range tick history.
-      return segment;
-    };
-    return load(from,to);
+    try {
+      return await this.trendbarSlice(accountId,symbolId,period,from,to,count);
+    } catch(error) {
+      // cTrader's allowed timestamp span is broker- and timeframe-specific.
+      // Its documented Trendbars request permits omitting fromTimestamp when
+      // count and toTimestamp are provided: retrieve the most recent verified
+      // broker bars directly instead of recursively exhausting the rate and
+      // request budgets on weekends or a thinly traded symbol.
+      if(error?.brokerCode!=='INCORRECT_BOUNDARIES' ||
+         error?.operation!==2137)throw error;
+      const page=await this.trendbarSlice(accountId,symbolId,period,from,to,
+        count,{countBack:true});
+      return {...page,queryMode:'count_back'};
+    }
   }
 
-  async trendbarSlice(accountId,symbolId,period,from,to,count) {
+  async trendbarSlice(accountId,symbolId,period,from,to,count,{countBack=false}={}) {
     const result=await this.queueHistory(2137,{ctidTraderAccountId:accountId,symbolId,period,
-      fromTimestamp:from,toTimestamp:to,count});
+      ...(countBack?{}:{fromTimestamp:from}),toTimestamp:to,count});
     // Broker account ID is required by ProtoOAGetTrendbarsRes. A response
     // belonging to another account must never be labeled as this user's
     // XAUUSD chart, even when prices and symbol names look plausible.
@@ -297,10 +275,9 @@ class Channel {
         (result.period != null && Number(result.period) !== Number(period)) ||
         (result.trendbar != null && !Array.isArray(result.trendbar)))
       throw Error('ctrader_trendbar_provenance_mismatch');
-    // Some cTrader installations honor "count from toTimestamp" before
-    // applying fromTimestamp. An extra older closed bar is real broker data
-    // but lies outside our requested chart window. Filter it, never
-    // misclassify that valid response as an invalid HTTP request.
+    // The count-only fallback is explicitly allowed to return broker candles
+    // before the original lower bound (e.g. during a market closure). All
+    // candles must still be at or before the requested end timestamp.
     const relevant=[];
     for(const raw of result.trendbar||[]) {
       // Inspect only the broker's UTC open time to identify out-of-range
@@ -311,7 +288,7 @@ class Channel {
       if(!Number.isSafeInteger(minute) || minute<=0 ||
          !Number.isSafeInteger(timestamp))
         throw Error('invalid_ctrader_trendbar_timestamps');
-      if(timestamp<from || timestamp>to)continue;
+      if(timestamp>to || (!countBack && timestamp<from))continue;
       relevant.push(normalizeBar(raw));
     }
     const ordered=relevant.sort((a,b)=>a.timestamp-b.timestamp);
