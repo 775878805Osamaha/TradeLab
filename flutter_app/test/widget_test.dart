@@ -51,14 +51,30 @@ void main() {
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     await tester.tap(find.byTooltip('نوع الشموع'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('هيكن آشي').last);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('chart-kind-heikinAshi')),
+      160,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('chart-type-grid')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('chart-kind-heikinAshi')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);
 
     await tester.tap(find.byTooltip('نوع الشموع'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('شموع المدى').last);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('chart-kind-range')),
+      160,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('chart-type-grid')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('chart-kind-range')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     expect(find.textContaining('تيكات تجريبية'), findsNothing);
@@ -92,7 +108,15 @@ void main() {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('نوع الشموع'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('شموع المدى').last);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('chart-kind-range')),
+      160,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('chart-type-grid')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('chart-kind-range')));
     await tester.pumpAndSettle();
     expect(find.text('إعدادات شموع المدى'), findsOneWidget);
     expect(find.text('1000'), findsOneWidget);
@@ -106,11 +130,73 @@ void main() {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('أدوات الرسم'));
     await tester.pumpAndSettle();
-    expect(find.text('خط أفقي'), findsOneWidget);
-    expect(find.text('خط اتجاه · نقطتان'), findsOneWidget);
-    expect(find.text('تصحيح فيبوناتشي · نقطتان'), findsOneWidget);
-    await tester.tap(find.text('خط اتجاه · نقطتان'));
+    expect(find.text('رسومات'), findsOneWidget);
+    expect(find.byKey(const Key('drawing-tool-trendLine')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('drawing-category-gann')));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('drawing-tool-fibonacciRetracement')),
+        findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('drawing-category-trend')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('drawing-category-trend')));
+    await tester.pumpAndSettle();
+    expect(find.text('خط اتجاه'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('drawing-tool-trendLine')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+  });
+
+  testWidgets('ray selection does not seed prices before cTrader is linked',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('drawing-tool-ray')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('drawing-tool-ray')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
+  });
+
+  testWidgets('sell-position drawing is offered but never seeded on an empty feed',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('drawing-category-tools')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('drawing-category-tools')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('drawing-tool-shortPosition')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('drawing-tool-shortPosition')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('drawing-tool-shortPosition')));
+    await tester.pumpAndSettle();
+    // With no authorized cTrader candles, the screenshot's sample prices
+    // must never appear as an invented position or market feed.
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    expect(find.byKey(const Key('short-position-placement-hint')), findsNothing);
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+  });
+
+  testWidgets('price rectangle is selectable without inventing XAUUSD candles',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('drawing-category-tools')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('drawing-category-tools')));
+    await tester.pumpAndSettle();
+    final option = find.byKey(const Key('drawing-tool-priceRectangle'));
+    expect(option, findsOneWidget);
+    await tester.ensureVisible(option);
+    await tester.pump();
+    await tester.tap(option);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    expect(find.byKey(const Key('price-rectangle-placement-hint')), findsNothing);
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
   });
 

@@ -1,10 +1,17 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../chart/chart_annotations.dart';
+import '../chart/chart_line_geometry.dart';
+import '../chart/chart_short_position.dart';
+import '../chart/chart_price_rectangle.dart';
+import '../chart/chart_type_sheet.dart';
+import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_timeline.dart';
@@ -31,6 +38,9 @@ enum ChartMode {
   bool requiresHistoryReload(ChartMode next) =>
       (this == ChartMode.range) != (next == ChartMode.range);
 }
+
+typedef _DrawingSnapshot = (List<double>, List<ChartPattern>,
+    List<ChartShortPosition>, List<ChartPriceRectangle>);
 
 class ChartScreen extends StatefulWidget {
   const ChartScreen({required this.controller, this.journal, super.key});
@@ -76,8 +86,36 @@ class _ChartScreenState extends State<ChartScreen>
   bool _replay = false;
   bool _drawing = false;
   ChartDrawingTool _drawingTool = ChartDrawingTool.horizontal;
+  // The catalog owns visual selection; chart coordinates and history do not
+  // change until the user deliberately chooses an implemented tool.
+  final Set<DrawingCatalogKind> _favoriteDrawingTools = {
+    DrawingCatalogKind.fibonacciRetracement,
+    DrawingCatalogKind.trendLine,
+    DrawingCatalogKind.horizontal,
+    DrawingCatalogKind.horizontalRay,
+    DrawingCatalogKind.verticalLine,
+  };
+  static const _drawingFavoritesKey = 'tradelab-drawing-favorites-v1';
+  final _drawingFavoritesStorage = const FlutterSecureStorage();
+  bool _placingShort = false;
+  bool _placingRectangle = false;
+  ChartAnchor? _rectangleFirstCorner;
+  final List<ChartPriceRectangle> _rectangles = [];
+  List<ChartPriceRectangle> _analysisRectangles = [];
+  int? _selectedRectangle;
+  bool _draggingRectangle = false;
+  PriceRectangleHandle? _rectangleDragHandle;
+  ChartPriceRectangle? _rectangleAtDragStart;
+  ChartAnchor? _shortEntryAnchor;
+  double? _shortStopPrice;
+  final List<ChartShortPosition> _shortPositions = [];
+  List<ChartShortPosition> _analysisShortPositions = [];
+  int? _selectedShort;
+  ShortPositionHandle? _draggingShortHandle;
+  ChartShortPosition? _shortAtDragStart;
   ChartMagnetMode _magnetMode = ChartMagnetMode.off;
   bool _showIndicators = false;
+  bool _showShortLabels = true;
   int _visibleThrough = 60;
   ChartViewport _viewport = const ChartViewport();
   ChartViewport _gestureStart = const ChartViewport();
@@ -93,10 +131,12 @@ class _ChartScreenState extends State<ChartScreen>
   bool _playing = false;
   final List<double> _levels = [];
   final List<ChartPattern> _patterns = [];
-  final List<(List<double>, List<ChartPattern>)> _lineUndo = [];
+  final List<_DrawingSnapshot> _lineUndo = [];
+  final List<_DrawingSnapshot> _lineRedo = [];
   List<double> _analysisLevels = [];
   List<ChartPattern> _analysisPatterns = [];
   ChartAnchor? _pendingAnchor;
+  ChartAnchor? _secondChannelAnchor;
   int? _selectedLine;
   int? _selectedPattern;
   bool _draggingLine = false;
@@ -173,6 +213,7 @@ class _ChartScreenState extends State<ChartScreen>
   @override
   void initState() {
     super.initState();
+    unawaited(_loadDrawingFavorites());
     _momentum = AnimationController.unbounded(vsync: this)
       ..addListener(_tickMomentum);
     _linkedBefore = widget.controller.ctraderConnected;
@@ -187,6 +228,31 @@ class _ChartScreenState extends State<ChartScreen>
     // Binance does not require a cTrader session. Load its chart immediately
     // when selected, even on a device that has never linked a broker.
     if (_liveRequested) Future.microtask(_loadRealHistory);
+  }
+
+  Future<void> _loadDrawingFavorites() async {
+    try {
+      final stored = await _drawingFavoritesStorage.read(
+          key: _drawingFavoritesKey);
+      if (!mounted || stored == null) return;
+      final favorites = DrawingFavoritesCodec.decode(stored);
+      setState(() => _favoriteDrawingTools
+        ..clear()
+        ..addAll(favorites));
+    } catch (_) {
+      // Drawing access must remain usable on devices without a secure store.
+    }
+  }
+
+  Future<void> _persistDrawingFavorites() async {
+    try {
+      await _drawingFavoritesStorage.write(
+        key: _drawingFavoritesKey,
+        value: DrawingFavoritesCodec.encode(_favoriteDrawingTools),
+      );
+    } catch (_) {
+      // A storage error must not interrupt chart gestures or drawing selection.
+    }
   }
 
   @override
@@ -293,6 +359,8 @@ class _ChartScreenState extends State<ChartScreen>
       if (_replay) {
         _levels..clear()..addAll(_analysisLevels);
         _patterns..clear()..addAll(_analysisPatterns);
+        _shortPositions..clear()..addAll(_analysisShortPositions);
+        _rectangles..clear()..addAll(_analysisRectangles);
       }
       _replay = false;
       _loading = true;
@@ -315,6 +383,7 @@ class _ChartScreenState extends State<ChartScreen>
       _analysisPatterns = [];
       _analysisLevels = [];
       _pendingAnchor = null;
+      _secondChannelAnchor = null;
       _selectedPattern = null;
     });
     try {
@@ -567,15 +636,44 @@ class _ChartScreenState extends State<ChartScreen>
       ChartPattern? rebasePattern(ChartPattern pattern) {
         final first = rebaseAnchor(pattern.start);
         final last = rebaseAnchor(pattern.end);
-        return first == null || last == null
-            ? null : pattern.reanchored(first, last);
+        final offset = pattern.offsetAnchor == null
+            ? null : rebaseAnchor(pattern.offsetAnchor!);
+        return first == null || last == null ||
+                (pattern.offsetAnchor != null && offset == null)
+            ? null : pattern.reanchored(first, last, offsetIndex: offset);
       }
       final rebasedPatterns = _patterns
           .map(rebasePattern).whereType<ChartPattern>().toList();
       final rebasedAnalysis = _analysisPatterns
           .map(rebasePattern).whereType<ChartPattern>().toList();
+      ChartShortPosition? rebaseShort(ChartShortPosition drawing) {
+        final first = rebaseAnchor(ChartAnchor(drawing.startIndex, drawing.entry));
+        final last = rebaseAnchor(ChartAnchor(drawing.endIndex, drawing.entry));
+        return first == null || last == null
+            ? null : drawing.reanchored(first, last);
+      }
+      final rebasedShorts = _shortPositions
+          .map(rebaseShort).whereType<ChartShortPosition>().toList();
+      final rebasedAnalysisShorts = _analysisShortPositions
+          .map(rebaseShort).whereType<ChartShortPosition>().toList();
+      ChartPriceRectangle? rebaseRectangle(ChartPriceRectangle drawing) {
+        final first = rebaseAnchor(ChartAnchor(drawing.startIndex, drawing.upper));
+        final last = rebaseAnchor(ChartAnchor(drawing.endIndex, drawing.upper));
+        if (first == null || last == null || first == last) return null;
+        return drawing.reanchored(first, last);
+      }
+      final rebasedRectangles = _rectangles
+          .map(rebaseRectangle).whereType<ChartPriceRectangle>().toList();
+      final rebasedAnalysisRectangles = _analysisRectangles
+          .map(rebaseRectangle).whereType<ChartPriceRectangle>().toList();
       final pendingIndex = _pendingAnchor == null
           ? null : rebaseAnchor(_pendingAnchor!);
+      final secondChannelIndex = _secondChannelAnchor == null
+          ? null : rebaseAnchor(_secondChannelAnchor!);
+      final shortEntryIndex = _shortEntryAnchor == null
+          ? null : rebaseAnchor(_shortEntryAnchor!);
+      final rectangleFirstIndex = _rectangleFirstCorner == null
+          ? null : rebaseAnchor(_rectangleFirstCorner!);
       final previousDisplayCount = _replay ? _visibleThrough : _actualRange.length;
       final oldViewport = _viewport;
       // Preserve the market event visible near the right edge rather than
@@ -625,10 +723,28 @@ class _ChartScreenState extends State<ChartScreen>
         _rangeBarTimestamps = timeline.endTimestamps;
         _patterns..clear()..addAll(rebasedPatterns);
         _analysisPatterns = rebasedAnalysis;
+        _shortPositions..clear()..addAll(rebasedShorts);
+        _analysisShortPositions = rebasedAnalysisShorts;
+        _rectangles..clear()..addAll(rebasedRectangles);
+        _analysisRectangles = rebasedAnalysisRectangles;
+        _selectedRectangle = null;
+        _selectedShort = null;
         _pendingAnchor = pendingIndex == null ? null
             : ChartAnchor(pendingIndex, _pendingAnchor!.price);
+        _secondChannelAnchor = secondChannelIndex == null ? null
+            : ChartAnchor(secondChannelIndex, _secondChannelAnchor!.price);
+        if (_shortEntryAnchor != null) {
+          _shortEntryAnchor = shortEntryIndex == null ? null
+              : ChartAnchor(shortEntryIndex, _shortEntryAnchor!.price);
+          if (_shortEntryAnchor == null) _shortStopPrice = null;
+        }
+        if (_rectangleFirstCorner != null) {
+          _rectangleFirstCorner = rectangleFirstIndex == null ? null
+              : ChartAnchor(rectangleFirstIndex, _rectangleFirstCorner!.price);
+        }
         _selectedPattern = null;
         _lineUndo.clear(); // Undo entries use the previous Range bar indices.
+        _lineRedo.clear();
         if (_replay && replayCutoffTick != null) {
           _stopPlayback();
           _visibleThrough = safeReplayBars!;
@@ -698,14 +814,40 @@ class _ChartScreenState extends State<ChartScreen>
         for (var index = 0; index < _patterns.length; index++) {
           _patterns[index] = _patterns[index].shifted(unique.length);
         }
+        for (var index = 0; index < _shortPositions.length; index++) {
+          _shortPositions[index] = _shortPositions[index].shifted(unique.length);
+        }
+        for (var index = 0; index < _rectangles.length; index++) {
+          _rectangles[index] = _rectangles[index].shifted(unique.length);
+        }
         if (_replay) {
           _analysisPatterns = _analysisPatterns
               .map((drawing) => drawing.shifted(unique.length))
               .toList(growable: false);
+          _analysisShortPositions = _analysisShortPositions
+              .map((drawing) => drawing.shifted(unique.length))
+              .toList(growable: false);
+          _analysisRectangles = _analysisRectangles
+              .map((drawing) => drawing.shifted(unique.length))
+              .toList(growable: false);
+        }
+        if (_shortEntryAnchor != null) {
+          _shortEntryAnchor = _shortEntryAnchor!.shifted(unique.length);
+        }
+        if (_rectangleFirstCorner != null) {
+          _rectangleFirstCorner = _rectangleFirstCorner!.shifted(unique.length);
         }
         if (_pendingAnchor != null) {
           _pendingAnchor = _pendingAnchor!.shifted(unique.length);
         }
+        if (_secondChannelAnchor != null) {
+          _secondChannelAnchor =
+              _secondChannelAnchor!.shifted(unique.length);
+        }
+        // Undo snapshots contain bar indices from before historical prepend.
+        // Keep current drawings but never replay an obsolete anchor snapshot.
+        _lineUndo.clear();
+        _lineRedo.clear();
         // The Replay cutoff must stay at the SAME historical candle when
         // older candles are prepended. Never reveal new future candles.
         if (_replay) _visibleThrough += unique.length;
@@ -752,11 +894,17 @@ class _ChartScreenState extends State<ChartScreen>
           // information. Keep analysis objects separately until Replay ends.
           _analysisLevels = List<double>.of(_levels);
           _analysisPatterns = List<ChartPattern>.of(_patterns);
+          _analysisShortPositions = List<ChartShortPosition>.of(_shortPositions);
+          _analysisRectangles = List<ChartPriceRectangle>.of(_rectangles);
           _levels.clear();
           _patterns.clear();
+          _shortPositions.clear();
+          _rectangles.clear();
         } else {
           _levels..clear()..addAll(_analysisLevels);
           _patterns..clear()..addAll(_analysisPatterns);
+          _shortPositions..clear()..addAll(_analysisShortPositions);
+          _rectangles..clear()..addAll(_analysisRectangles);
         }
         _replay = !_replay;
         _visibleThrough = math.max(1, _totalBars ~/ 2);
@@ -764,8 +912,17 @@ class _ChartScreenState extends State<ChartScreen>
         _crosshair = null;
         _selectedLine = null;
         _selectedPattern = null;
+        _selectedShort = null;
+        _selectedRectangle = null;
+        _placingShort = false;
+        _placingRectangle = false;
+        _rectangleFirstCorner = null;
+        _shortEntryAnchor = null;
+        _shortStopPrice = null;
         _pendingAnchor = null;
+        _secondChannelAnchor = null;
         _lineUndo.clear();
+        _lineRedo.clear();
       });
   }
 
@@ -921,49 +1078,60 @@ class _ChartScreenState extends State<ChartScreen>
     _momentum.stop();
     await showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const TradeSectionTitle('نوع الشموع'),
-            for (final item in const <(ChartMode, String, IconData)>[
-              (ChartMode.candles, 'الشموع اليابانية', Icons.candlestick_chart),
-              (ChartMode.heikinAshi, 'هيكن آشي', Icons.stacked_line_chart),
-              (ChartMode.range, 'شموع المدى', Icons.tune),
-            ])
-              ListTile(
-                leading: Icon(item.$3),
-                title: Text(item.$2),
-                trailing: _mode == item.$1
-                    ? const Icon(Icons.check_circle, color: TradeColors.blue)
-                    : null,
-                onTap: () async {
-                  final nextMode = item.$1;
-                  final reload = _mode.requiresHistoryReload(nextMode);
-                  if (nextMode != _mode) {
-                    setState(() {
-                      _mode = nextMode;
-                      if (reload) {
-                        // Crossing the Range boundary changes bar identities.
-                        // A presentation-only switch must preserve drawings,
-                        // zoom, Replay position and the broker candle cache.
-                        _viewport = const ChartViewport();
-                        _resetDrawingObjects();
-                      }
-                    });
-                  }
-                  Navigator.pop(sheetContext);
-                  if (nextMode == ChartMode.range) {
-                    // Wait for the selected size before requesting BID ticks.
-                    // Otherwise entering Range performs two competing fetches.
-                    await _showRangeSettings(reloadOnChange: !reload);
-                  }
-                  if (mounted && reload && _liveRequested) _loadRealHistory();
-                },
+      isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
+      // The reference leaves the small chart header and system status bar
+      // undimmed above this nearly full-height bottom sheet.
+      barrierColor: Colors.transparent,
+      builder: (sheetContext) => ChartTypeSheet(
+        selected: switch (_mode) {
+          ChartMode.candles => ChartKind.candles,
+          ChartMode.heikinAshi => ChartKind.heikinAshi,
+          ChartMode.range => ChartKind.range,
+        },
+        onUnavailable: (kind) => showDialog<void>(
+          context: sheetContext,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(kind.label, textDirection: TextDirection.rtl),
+            content: const Text(
+              'هذا النوع ظاهر في المرجع البصري، لكن محركه غير منفذ في TradeLab بعد. '
+              'لن يتم عرضه على أنه شموع عادية أو بيانات سوق وهمية.',
+              textDirection: TextDirection.rtl,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('حسنًا'),
               ),
-          ]),
+            ],
+          ),
         ),
+        onSelect: (kind) async {
+          final nextMode = switch (kind) {
+            ChartKind.heikinAshi => ChartMode.heikinAshi,
+            ChartKind.range => ChartMode.range,
+            _ => ChartMode.candles,
+          };
+          final reload = _mode.requiresHistoryReload(nextMode);
+          if (nextMode != _mode) {
+            setState(() {
+              _mode = nextMode;
+              if (reload) {
+                // Range has different bar identities; merely opening or
+                // dismissing this sheet never resets zoom, Replay or cache.
+                _viewport = const ChartViewport();
+                _resetDrawingObjects();
+              }
+            });
+          }
+          Navigator.pop(sheetContext);
+          if (nextMode == ChartMode.range) {
+            // Preserve the established BID tick sizing and fetch sequence.
+            await _showRangeSettings(reloadOnChange: !reload);
+          }
+          if (mounted && reload && _liveRequested) _loadRealHistory();
+        },
       ),
     );
   }
@@ -1007,71 +1175,87 @@ class _ChartScreenState extends State<ChartScreen>
     );
   }
 
+  Future<void> _showMagnetSettings() async {
+    await showDialog<void>(context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('مغناطيس الأسعار', textDirection: TextDirection.rtl),
+        children: [
+          for (final option in const <(ChartMagnetMode, String)>[
+            (ChartMagnetMode.off, 'إيقاف'),
+            (ChartMagnetMode.weak, 'ضعيف'),
+            (ChartMagnetMode.strong, 'قوي'),
+          ]) SimpleDialogOption(
+            onPressed: () {
+              setState(() => _magnetMode = option.$1);
+              Navigator.pop(dialogContext);
+            },
+            child: Text(option.$2, textDirection: TextDirection.rtl),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showDrawingTools() async {
     _momentum.stop();
     await showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, updateSheet) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const TradeSectionTitle('أدوات الرسم'),
-            const SizedBox(height: 6),
-            const Align(alignment: AlignmentDirectional.centerStart,
-                child: Text('مغناطيس الأسعار · تثبيت النقاط على O/H/L/C')),
-            Wrap(spacing: 8, children: [
-              for (final item in const <(ChartMagnetMode, String)>[
-                (ChartMagnetMode.off, 'إيقاف'),
-                (ChartMagnetMode.weak, 'ضعيف'),
-                (ChartMagnetMode.strong, 'قوي'),
-              ])
-                ChoiceChip(
-                  label: Text(item.$2),
-                  selected: _magnetMode == item.$1,
-                  onSelected: (_) {
-                    setState(() => _magnetMode = item.$1);
-                    updateSheet(() {});
-                  },
-                ),
-            ]),
-            for (final option in const <(ChartDrawingTool, String, IconData)>[
-              (ChartDrawingTool.horizontal, 'خط أفقي', Icons.horizontal_rule),
-              (ChartDrawingTool.trendLine, 'خط اتجاه · نقطتان', Icons.trending_up),
-              (ChartDrawingTool.fibonacci, 'تصحيح فيبوناتشي · نقطتان', Icons.stacked_line_chart),
-            ])
-              ListTile(
-                title: Text(option.$2),
-                leading: Icon(option.$3),
-                trailing: _drawing && _drawingTool == option.$1
-                    ? const Icon(Icons.check_circle, color: TradeColors.blue)
-                    : null,
-                onTap: () {
-                  setState(() {
-                    _drawing = true;
-                    _drawingTool = option.$1;
-                    _pendingAnchor = null;
-                    _selectedLine = null;
-                    _selectedPattern = null;
-                  });
-                  Navigator.pop(sheetContext);
-                },
-              ),
-            ListTile(
-              title: const Text('إنهاء الرسم والعودة إلى تحريك الشارت'),
-              leading: const Icon(Icons.pan_tool_outlined),
-              onTap: () {
-                setState(() {
-                  _drawing = false;
-                  _pendingAnchor = null;
-                });
-                Navigator.pop(sheetContext);
-              },
+      isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.transparent,
+      builder: (sheetContext) => DrawingToolsSheet(
+        initialCategory: DrawingCategory.trend,
+        favorites: _favoriteDrawingTools,
+        onFavoritesChanged: (favorites) {
+          _favoriteDrawingTools..clear()..addAll(favorites);
+          unawaited(_persistDrawingFavorites());
+        },
+        onUnavailable: (tool) => showDialog<void>(
+          context: sheetContext,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(tool.label, textDirection: TextDirection.rtl),
+            content: const Text(
+              'هذه الأداة ظاهرة في المرجع، لكن محرك رسمها غير متوفر في TradeLab بعد. '
+              'لن يتم وضع رسم وهمي على الشارت.',
+              textDirection: TextDirection.rtl,
             ),
-          ]),
+            actions: [TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('حسنًا'),
+            )],
+          ),
         ),
-      ),
+        onSelect: (tool) {
+          Navigator.pop(sheetContext);
+          switch (tool) {
+            case DrawingCatalogKind.fibonacciRetracement:
+              _selectDrawingMode(tool: ChartDrawingTool.fibonacci);
+            case DrawingCatalogKind.trendLine:
+              _selectDrawingMode(tool: ChartDrawingTool.trendLine);
+            case DrawingCatalogKind.ray:
+              _selectDrawingMode(tool: ChartDrawingTool.ray);
+            case DrawingCatalogKind.extendedLine:
+              _selectDrawingMode(tool: ChartDrawingTool.extendedLine);
+            case DrawingCatalogKind.horizontal:
+              _selectDrawingMode(tool: ChartDrawingTool.horizontal);
+            case DrawingCatalogKind.horizontalRay:
+              _selectDrawingMode(tool: ChartDrawingTool.horizontalRay);
+            case DrawingCatalogKind.verticalLine:
+              _selectDrawingMode(tool: ChartDrawingTool.verticalLine);
+            case DrawingCatalogKind.parallelChannel:
+              _selectDrawingMode(tool: ChartDrawingTool.parallelChannel);
+            case DrawingCatalogKind.shortPosition:
+              _selectDrawingMode(short: true);
+            case DrawingCatalogKind.priceRectangle:
+              _selectDrawingMode(rectangle: true);
+            case DrawingCatalogKind.magnet:
+              _showMagnetSettings();
+            default:
+              // These entries are guarded by DrawingCatalogKind.implemented.
+              break;
+          }
+        },
       ),
     );
   }
@@ -1102,32 +1286,69 @@ class _ChartScreenState extends State<ChartScreen>
         ));
   }
 
+  _DrawingSnapshot _snapshotDrawings() => (
+    List<double>.of(_levels), List<ChartPattern>.of(_patterns),
+    List<ChartShortPosition>.of(_shortPositions),
+    List<ChartPriceRectangle>.of(_rectangles));
+
+  void _restoreDrawings(_DrawingSnapshot snapshot) {
+    _levels..clear()..addAll(snapshot.$1);
+    _patterns..clear()..addAll(snapshot.$2);
+    _shortPositions..clear()..addAll(snapshot.$3);
+    _rectangles..clear()..addAll(snapshot.$4);
+    _selectedLine = null;
+    _selectedPattern = null;
+    _selectedShort = null;
+    _selectedRectangle = null;
+    _pendingAnchor = null;
+    _secondChannelAnchor = null;
+    _rectangleFirstCorner = null;
+  }
+
   void _saveDrawingUndo() {
-    _lineUndo.add((List<double>.of(_levels), List<ChartPattern>.of(_patterns)));
+    _lineUndo.add(_snapshotDrawings());
     if (_lineUndo.length > 30) _lineUndo.removeAt(0);
+    _lineRedo.clear();
   }
 
   void _undoDrawing() {
     if (_lineUndo.isEmpty) return;
     setState(() {
-      final previous = _lineUndo.removeLast();
-      _levels..clear()..addAll(previous.$1);
-      _patterns..clear()..addAll(previous.$2);
-      _selectedLine = null;
-      _selectedPattern = null;
-      _pendingAnchor = null;
+      _lineRedo.add(_snapshotDrawings());
+      _restoreDrawings(_lineUndo.removeLast());
+    });
+  }
+
+  void _redoDrawing() {
+    if (_lineRedo.isEmpty) return;
+    setState(() {
+      _lineUndo.add(_snapshotDrawings());
+      _restoreDrawings(_lineRedo.removeLast());
     });
   }
 
   void _resetDrawingObjects() {
     _levels.clear();
     _patterns.clear();
+    _shortPositions.clear();
+    _rectangles.clear();
     _analysisLevels = [];
     _analysisPatterns = [];
+    _analysisShortPositions = [];
+    _analysisRectangles = [];
     _lineUndo.clear();
+    _lineRedo.clear();
     _pendingAnchor = null;
+    _secondChannelAnchor = null;
     _selectedLine = null;
     _selectedPattern = null;
+    _selectedShort = null;
+    _selectedRectangle = null;
+    _placingShort = false;
+    _shortEntryAnchor = null;
+    _shortStopPrice = null;
+    _placingRectangle = false;
+    _rectangleFirstCorner = null;
   }
 
   ChartPriceScale _priceScale(List<TradeCandle> candles, double width, double height) =>
@@ -1159,17 +1380,20 @@ class _ChartScreenState extends State<ChartScreen>
           return i;
         }
       } else {
-        final dx = x2 - x1;
-        final dy = y2 - y1;
-        final lengthSquared = dx * dx + dy * dy;
-        final projection = lengthSquared == 0 ? 0.0 :
-            ((position.dx - x1) * dx + (position.dy - y1) * dy) /
-                lengthSquared;
-        final t = projection.clamp(0.0, 1.0);
-        final distance = math.sqrt(
-          math.pow(position.dx - (x1 + dx * t), 2) +
-          math.pow(position.dy - (y1 + dy * t), 2));
-        if (distance <= 17) return i;
+        final offset = pattern.offsetAnchor == null ? null : Offset(
+          _viewport.chartX(index: pattern.offsetAnchor!.index,
+              candleCount: visibleCount, plotWidth: width),
+          scale.y(pattern.offsetAnchor!.price));
+        final strokes = ChartLineGeometry.strokes(
+          tool: pattern.tool,
+          start: Offset(x1, y1),
+          end: Offset(x2, y2),
+          offset: offset,
+          bounds: Rect.fromLTWH(0, 0, width, scale.height),
+        );
+        if (strokes.any(
+            (stroke) => ChartLineGeometry.distanceToStroke(
+                position, stroke) <= 17)) return i;
       }
     }
     return null;
@@ -1191,11 +1415,468 @@ class _ChartScreenState extends State<ChartScreen>
           candleCount: visibleCount, plotWidth: width),
       scale.y(pattern.end.price),
     );
+    final channelOffset = pattern.offsetAnchor;
+    if (channelOffset != null) {
+      final offsetHandle = Offset(
+        _viewport.chartX(index: channelOffset.index,
+            candleCount: visibleCount, plotWidth: width),
+        scale.y(channelOffset.price),
+      );
+      if ((position - offsetHandle).distance <= 22) {
+        return ChartAnchorEndpoint.offset;
+      }
+    }
     // Make the displayed selection handles accessible to a finger.
     if ((position - start).distance <= 22) return ChartAnchorEndpoint.start;
+    if (pattern.tool.oneAnchor) return null;
     if ((position - end).distance <= 22) return ChartAnchorEndpoint.end;
     return null;
   }
+
+  /// Price/viewport geometry is shared with the painter; only the small
+  /// hit-target tolerance is expressed in logical screen units.
+  (int, ShortPositionHandle)? _hitShortPosition(Offset point,
+      ChartPriceScale scale, double plotWidth, int count) {
+    for (var i = _shortPositions.length - 1; i >= 0; i--) {
+      final item = _shortPositions[i];
+      if (!item.visibleAt(count)) continue;
+      final left = _viewport.chartX(index: item.startIndex,
+          candleCount: count, plotWidth: plotWidth);
+      final right = _viewport.chartX(index: item.endIndex,
+          candleCount: count, plotWidth: plotWidth);
+      final top = scale.y(item.stop);
+      final entry = scale.y(item.entry);
+      final bottom = scale.y(item.target);
+      final targets = <(ShortPositionHandle, Offset)>[
+        (ShortPositionHandle.stop, Offset(left, top)),
+        (ShortPositionHandle.target, Offset(left, bottom)),
+        (ShortPositionHandle.entry, Offset(left, entry)),
+        (ShortPositionHandle.end, Offset(right, entry)),
+      ];
+      for (final target in targets) {
+        if ((point - target.$2).distance <= 22) return (i, target.$1);
+      }
+      if (point.dx >= left - 12 && point.dx <= right + 12 &&
+          point.dy >= top && point.dy <= bottom) {
+        return (i, ShortPositionHandle.body);
+      }
+    }
+    return null;
+  }
+
+  void _placeShortAt(ChartAnchor anchor) {
+    if (_shortEntryAnchor == null) {
+      _shortEntryAnchor = anchor;
+      _shortStopPrice = null;
+    } else if (_shortStopPrice == null) {
+      if (anchor.price <= _shortEntryAnchor!.price) return;
+      _shortStopPrice = anchor.price;
+    } else {
+      if (anchor.price >= _shortEntryAnchor!.price) return;
+      _saveDrawingUndo();
+      _shortPositions.add(ChartShortPosition(
+        startIndex: math.min(_shortEntryAnchor!.index, anchor.index),
+        endIndex: math.max(_shortEntryAnchor!.index, anchor.index),
+        entry: _shortEntryAnchor!.price,
+        stop: _shortStopPrice!,
+        target: anchor.price,
+      ));
+      _selectedShort = _shortPositions.length - 1;
+      _placingShort = false;
+      _shortEntryAnchor = null;
+      _shortStopPrice = null;
+    }
+  }
+
+  void _placeRectangleAt(ChartAnchor anchor) {
+    final first = _rectangleFirstCorner;
+    if (first == null) {
+      _rectangleFirstCorner = anchor;
+      return;
+    }
+    if (first.index == anchor.index || first.price == anchor.price) return;
+    _saveDrawingUndo();
+    _rectangles.add(ChartPriceRectangle(
+      startIndex: math.min(first.index, anchor.index),
+      endIndex: math.max(first.index, anchor.index),
+      upper: math.max(first.price, anchor.price),
+      lower: math.min(first.price, anchor.price),
+    ));
+    _selectedRectangle = _rectangles.length - 1;
+    _placingRectangle = false;
+    _rectangleFirstCorner = null;
+  }
+
+  void _updateRectangleDrag(Offset current, ChartPriceScale scale,
+      double plotWidth, int count) {
+    final index = _selectedRectangle;
+    final original = _rectangleAtDragStart;
+    if (!_draggingRectangle || index == null || original == null ||
+        index >= _rectangles.length) return;
+    final price = scale.price(current.dy.clamp(0.0, scale.height).toDouble());
+    final bar = _viewport.indexAt(
+      x: current.dx.clamp(0.0, plotWidth).toDouble(),
+      plotWidth: plotWidth, candleCount: count);
+    if (bar == null) return;
+    ChartPriceRectangle? next;
+    if (_rectangleDragHandle != null) {
+      next = original.withHandle(_rectangleDragHandle!, bar, price);
+    } else {
+      final proposedBars = ((current.dx - _gestureFocalX) /
+          _viewport.barWidth).round();
+      final deltaBars = proposedBars.clamp(-original.startIndex,
+          math.max(0, count - 1 - original.endIndex)).toInt();
+      final initialPrice = scale.price(
+          _gestureFocalY.clamp(0.0, scale.height).toDouble());
+      next = original.moved(deltaBars, price - initialPrice);
+    }
+    if (next != null) _rectangles[index] = next;
+  }
+
+  void _updateShortDrag(Offset current, ChartPriceScale scale,
+      double width, int count) {
+    final index = _selectedShort;
+    final handle = _draggingShortHandle;
+    final original = _shortAtDragStart;
+    if (index == null || handle == null || original == null ||
+        index >= _shortPositions.length) return;
+    final price = scale.price(current.dy.clamp(0, scale.height).toDouble());
+    final bar = _viewport.indexAt(x: current.dx.clamp(0, width).toDouble(),
+        plotWidth: width, candleCount: count);
+    ChartShortPosition? updated;
+    switch (handle) {
+      case ShortPositionHandle.stop:
+        updated = original.edited(stop: price);
+        break;
+      case ShortPositionHandle.entry:
+        updated = original.edited(entry: price);
+        break;
+      case ShortPositionHandle.target:
+        updated = original.edited(target: price);
+        break;
+      case ShortPositionHandle.start:
+        if (bar != null) updated = original.edited(startIndex: bar);
+        break;
+      case ShortPositionHandle.end:
+        if (bar != null) updated = original.edited(endIndex: bar);
+        break;
+      case ShortPositionHandle.body:
+        final priceDelta = price - scale.price(
+            _gestureFocalY.clamp(0, scale.height).toDouble());
+        final proposed = ((current.dx - _gestureFocalX) /
+            _viewport.barWidth).round();
+        final bars = proposed.clamp(-original.startIndex,
+            math.max(0, count - 1 - original.endIndex)).toInt();
+        final moved = original.moved(bars, priceDelta);
+        if (moved.target > 0) updated = moved;
+        break;
+    }
+    if (updated != null) _shortPositions[index] = updated;
+  }
+
+  void _selectDrawingMode({ChartDrawingTool? tool, bool short = false,
+      bool rectangle = false}) {
+    setState(() {
+      _drawing = true;
+      _placingShort = short;
+      _placingRectangle = rectangle;
+      if (tool != null) _drawingTool = tool;
+      _shortEntryAnchor = null;
+      _shortStopPrice = null;
+      _rectangleFirstCorner = null;
+      _pendingAnchor = null;
+      _secondChannelAnchor = null;
+      _selectedShort = null;
+      _selectedRectangle = null;
+      _selectedLine = null;
+      _selectedPattern = null;
+    });
+  }
+
+  Widget _buildDrawingRail(double height) => Positioned(
+    left: 0, top: math.min(100.0, height * .16), bottom: 15, width: 46,
+    child: Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.horizontal(right: Radius.circular(12)),
+        border: Border.all(color: Theme.of(context).dividerColor),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
+      ),
+      child: SingleChildScrollView(
+        child: Column(children: [
+          IconButton(
+            key: const Key('drawing-rail-cursor'),
+            tooltip: 'تحريك الشارت',
+            onPressed: () => setState(() {
+              _drawing = false;
+              _placingShort = false;
+              _placingRectangle = false;
+              _pendingAnchor = null;
+              _secondChannelAnchor = null;
+              _rectangleFirstCorner = null;
+            }),
+            icon: const Icon(Icons.near_me_outlined, size: 23),
+          ),
+          const Divider(height: 1),
+          IconButton(
+            tooltip: 'خط اتجاه',
+            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.trendLine),
+            icon: const Icon(Icons.show_chart, size: 23),
+          ),
+          IconButton(
+            tooltip: 'تصحيح فيبوناتشي',
+            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.fibonacci),
+            icon: const Icon(Icons.tune, size: 23),
+          ),
+          IconButton(
+            tooltip: 'خط أفقي',
+            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.horizontal),
+            icon: const Icon(Icons.horizontal_rule, size: 23),
+          ),
+          IconButton(
+            key: const Key('drawing-rail-short'),
+            tooltip: 'أداة مركز بيع',
+            onPressed: () => _selectDrawingMode(short: true),
+            icon: Icon(Icons.south_east, size: 23,
+              color: _placingShort || _selectedShort != null
+                  ? TradeColors.shortHandle : null),
+          ),
+          IconButton(
+            key: const Key('drawing-rail-rectangle'),
+            tooltip: 'مستطيل نطاق سعري',
+            onPressed: () => _selectDrawingMode(rectangle: true),
+            icon: Icon(Icons.crop_square_outlined, size: 23,
+              color: _placingRectangle || _selectedRectangle != null
+                  ? TradeColors.rectangleHandle : null),
+          ),
+          IconButton(
+            tooltip: 'مغناطيس الأسعار',
+            onPressed: _showDrawingTools,
+            icon: const Icon(Icons.tune_outlined, size: 23),
+          ),
+        ]),
+      ),
+    ),
+  );
+
+  void _deleteSelectedShort() {
+    final index = _selectedShort;
+    if (index == null || index >= _shortPositions.length) return;
+    setState(() {
+      _saveDrawingUndo();
+      _shortPositions.removeAt(index);
+      _selectedShort = null;
+    });
+  }
+
+  void _deleteSelectedRectangle() {
+    final index = _selectedRectangle;
+    if (index == null || index >= _rectangles.length) return;
+    setState(() {
+      _saveDrawingUndo();
+      _rectangles.removeAt(index);
+      _selectedRectangle = null;
+    });
+  }
+
+  void _styleSelectedRectangle({double? strokeWidth, int? borderColor,
+      int? fillColor}) {
+    final index = _selectedRectangle;
+    if (index == null || index >= _rectangles.length) return;
+    final updated = _rectangles[index].edited(strokeWidth: strokeWidth,
+      borderColorValue: borderColor, fillColorValue: fillColor);
+    if (updated == null) return;
+    setState(() {
+      _saveDrawingUndo();
+      _rectangles[index] = updated;
+    });
+  }
+
+  Future<void> _rectangleProperties() async {
+    if (_selectedRectangle == null) return;
+    await showModalBottomSheet<void>(context: context, showDragHandle: true,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const TradeSectionTitle('خصائص المستطيل السعري'),
+          const SizedBox(height: 12),
+          const Align(alignment: AlignmentDirectional.centerStart,
+            child: Text('سمك الحدود', textDirection: TextDirection.rtl)),
+          Wrap(spacing: 10, children: [
+            for (final px in const [1.0, 2.0, 3.0])
+              OutlinedButton(onPressed: () {
+                _styleSelectedRectangle(strokeWidth: px);
+                Navigator.pop(sheetContext);
+              }, child: Text('${px.toInt()}px', textDirection: TextDirection.ltr)),
+          ]),
+          const SizedBox(height: 8),
+          const Align(alignment: AlignmentDirectional.centerStart,
+            child: Text('لون الحدود', textDirection: TextDirection.rtl)),
+          Wrap(spacing: 10, children: [
+            for (final color in const [0xFFD5A63C, 0xFFFFA41D,
+              0xFF2962FF, 0xFFE95454, 0xFF212121])
+              IconButton(
+                tooltip: 'تغيير لون الحدود',
+                onPressed: () {
+                  _styleSelectedRectangle(borderColor: color);
+                  Navigator.pop(sheetContext);
+                },
+                icon: Icon(Icons.circle_outlined, color: Color(color), size: 27)),
+          ]),
+          const SizedBox(height: 8),
+          const Align(alignment: AlignmentDirectional.centerStart,
+            child: Text('لون التعبئة', textDirection: TextDirection.rtl)),
+          Wrap(spacing: 10, children: [
+            for (final color in const [0xFF5BAD6F, 0xFF4A9DE8,
+              0xFFF2AB61, 0xFFE78BA1])
+              IconButton(
+                tooltip: 'تغيير لون التعبئة',
+                onPressed: () {
+                  _styleSelectedRectangle(fillColor: color);
+                  Navigator.pop(sheetContext);
+                },
+                icon: Icon(Icons.circle, color: Color(color), size: 27)),
+          ]),
+        ]),
+      )));
+  }
+
+  Widget _rectangleToolbarItem(Widget visual, String tooltip,
+      VoidCallback callback, {double width = 38}) => SizedBox(
+    width: width, height: 43,
+    child: IconButton(
+      key: ValueKey('rect-toolbar-$tooltip'), tooltip: tooltip,
+      onPressed: callback, padding: EdgeInsets.zero,
+      icon: visual,
+    ),
+  );
+
+  Widget _rectangleUnderlinedIcon(IconData data, Color stripe) =>
+      Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(data, size: 23, color: Theme.of(context).colorScheme.onSurface),
+        Container(width: 20, height: 3, margin: const EdgeInsets.only(top: 1),
+          decoration: BoxDecoration(color: stripe,
+            borderRadius: BorderRadius.circular(2))),
+      ]);
+
+  Widget _buildRectangleFloatingToolbar(double width) {
+    final selected = _selectedRectangle;
+    final stroke = selected != null && selected < _rectangles.length
+        ? _rectangles[selected].strokeWidth : 1.0;
+    return Positioned(top: 12, left: 0,
+      child: Container(
+        constraints: BoxConstraints(maxWidth: width),
+        height: 48,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Theme.of(context).dividerColor),
+          boxShadow: const [BoxShadow(color: Colors.black12,
+            blurRadius: 5, offset: Offset(0, 2))],
+        ),
+        child: SingleChildScrollView(scrollDirection: Axis.horizontal,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            _rectangleToolbarItem(const Icon(Icons.more_horiz, size: 24),
+                'خصائص المستطيل', _rectangleProperties),
+            _rectangleToolbarItem(const Icon(Icons.delete_outline, size: 25),
+                'حذف المستطيل', _deleteSelectedRectangle),
+            _rectangleToolbarItem(const _RectangleToolbarAngle(),
+                'ضبط زوايا المستطيل', _rectangleProperties),
+            _rectangleToolbarItem(const Icon(Icons.remove, size: 26),
+                'تغيير لون الحدود', _rectangleProperties),
+            _rectangleToolbarItem(Text('${stroke.toStringAsFixed(0)}px',
+                textDirection: TextDirection.ltr,
+                style: const TextStyle(fontSize: 14)),
+                'سمك الخط', _rectangleProperties, width: 40),
+            _rectangleToolbarItem(_rectangleUnderlinedIcon(
+                Icons.text_fields, TradeColors.shortLabelRed),
+                'خصائص النص', _rectangleProperties),
+            _rectangleToolbarItem(_rectangleUnderlinedIcon(
+                Icons.format_color_fill_outlined,
+                TradeColors.rectangleAccentGreen),
+                'لون التعبئة', _rectangleProperties),
+            _rectangleToolbarItem(_rectangleUnderlinedIcon(
+                Icons.edit_outlined, TradeColors.rectangleAccentOrange),
+                'لون القلم', _rectangleProperties),
+            _rectangleToolbarItem(const Icon(Icons.grid_view_outlined, size: 24),
+                'إضافة مستطيل', () => _selectDrawingMode(rectangle: true)),
+          ])),
+      ));
+  }
+
+  Future<void> _shortProperties() async {
+    final index = _selectedShort;
+    if (index == null || index >= _shortPositions.length) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const TradeSectionTitle('خصائص مركز البيع'),
+          const SizedBox(height: 8),
+          Text('الدخول: ${_shortPositions[index].entry.toStringAsFixed(5)}',
+            textDirection: TextDirection.ltr),
+          Text('وقف الخسارة: ${_shortPositions[index].stop.toStringAsFixed(5)}',
+            textDirection: TextDirection.ltr),
+          Text('الهدف: ${_shortPositions[index].target.toStringAsFixed(5)}',
+            textDirection: TextDirection.ltr),
+          Text('العائد / المخاطرة: ${_shortPositions[index].rewardRisk.toStringAsFixed(2)}',
+            textDirection: TextDirection.ltr),
+          const SizedBox(height: 8),
+          const Text('هذه أداة رسم تحليلية، وليست أمر بيع أو نتيجة صفقة منفّذة.',
+            textAlign: TextAlign.center),
+          TextButton.icon(onPressed: () {
+            setState(() => _showShortLabels = !_showShortLabels);
+            Navigator.pop(sheetContext);
+          }, icon: const Icon(Icons.text_fields),
+            label: Text(_showShortLabels ? 'إخفاء التسميات' : 'إظهار التسميات')),
+        ]),
+      )),
+    );
+  }
+
+  Widget _buildShortFloatingToolbar(double width) => Positioned(
+    top: 12,
+    left: math.max(4, (width - 296) / 2),
+    child: Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Theme.of(context).dividerColor),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 9,
+          offset: Offset(0, 3))],
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        _shortToolbarButton(Icons.more_horiz, 'خصائص المركز', _shortProperties),
+        _shortToolbarButton(Icons.delete_outline, 'حذف مركز البيع', _deleteSelectedShort),
+        _shortToolbarButton(Icons.format_color_fill_outlined,
+            'تفاصيل وقف الخسارة', _shortProperties,
+            color: TradeColors.shortLabelRed),
+        _shortToolbarButton(Icons.format_color_fill_outlined,
+            'تفاصيل الهدف', _shortProperties,
+            color: TradeColors.shortLabelBlue),
+        _shortToolbarButton(Icons.text_fields,
+            _showShortLabels ? 'إخفاء التسميات' : 'إظهار التسميات',
+            () => setState(() => _showShortLabels = !_showShortLabels)),
+        _shortToolbarButton(Icons.add_box_outlined, 'إضافة مركز بيع',
+            () => _selectDrawingMode(short: true)),
+        _shortToolbarButton(Icons.more_vert, 'المزيد', _shortProperties),
+      ]),
+    ),
+  );
+
+  Widget _shortToolbarButton(IconData icon, String tooltip,
+      VoidCallback onPressed, {Color? color}) => SizedBox(
+    width: 40, height: 44,
+    child: IconButton(
+      key: ValueKey('short-toolbar-$tooltip'),
+      tooltip: tooltip,
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      icon: Icon(icon, size: 22, color: color),
+    ),
+  );
 
   ChartAnchor? _anchorAt(Offset point, ChartPriceScale scale,
       double plotWidth, int count) {
@@ -1362,41 +2043,6 @@ class _ChartScreenState extends State<ChartScreen>
         ]),
       ),
       const Divider(height: 1),
-      Container(
-        color: surface,
-        height: 50,
-        child: SingleChildScrollView(
-         scrollDirection: Axis.horizontal,
-         child: Row(children: [
-          TextButton.icon(
-            key: const Key('timeframe-picker'),
-            onPressed: _showTimeframePicker,
-            label: Text(_timeframe, textDirection: TextDirection.ltr),
-            icon: const Icon(Icons.keyboard_arrow_down, size: 18),
-          ),
-          _iconAction(icon: Icons.candlestick_chart, label: 'نوع الشموع', onPressed: _showChartTypePicker),
-          _iconAction(icon: Icons.replay_circle_filled_outlined,
-              label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
-              active: _replay, onPressed: _toggleReplay),
-          _iconAction(icon: Icons.functions, label: 'المؤشرات', active: _showIndicators,
-            onPressed: () => setState(() => _showIndicators = !_showIndicators)),
-          _iconAction(icon: Icons.edit_outlined, label: 'أدوات الرسم', active: _drawing,
-            onPressed: _showDrawingTools),
-          _iconAction(icon: Icons.zoom_in_outlined, label: 'تكبير الشارت',
-            onPressed: () => _zoomBy(1.25)),
-          _iconAction(icon: Icons.zoom_out_outlined, label: 'تصغير الشارت',
-            onPressed: () => _zoomBy(.8)),
-          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
-            onPressed: () {
-              _momentum.stop();
-              setState(() => _viewport = _viewport.jumpToLatest());
-            }),
-          const SizedBox(width: 8),
-          if (_mode == ChartMode.range)
-            TextButton(onPressed: _showRangeSettings, child: Text('مدى $_rangeTicks')),
-         ])),
-      ),
-      const Divider(height: 1),
       if (_mode == ChartMode.range)
         Container(
           width: double.infinity,
@@ -1441,18 +2087,49 @@ class _ChartScreenState extends State<ChartScreen>
               _gestureStart = _viewport;
               _gestureFocalX = details.localFocalPoint.dx;
               _gestureFocalY = details.localFocalPoint.dy;
+              _draggingShortHandle = null;
+              _shortAtDragStart = null;
+              _draggingRectangle = false;
+              _rectangleDragHandle = null;
+              _rectangleAtDragStart = null;
               if (_drawing && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
-                _draggedEndpoint = _hitSelectedHandle(
-                    details.localFocalPoint, scale, plotWidth, candles.length);
-                if (_draggedEndpoint != null) {
+                final rectangleHit = PriceRectangleGeometry.hitTest(
+                    details.localFocalPoint, _rectangles, _viewport,
+                    scale, candles.length, plotWidth);
+                final shortHit = rectangleHit == null
+                    ? _hitShortPosition(details.localFocalPoint,
+                        scale, plotWidth, candles.length) : null;
+                if (rectangleHit != null) {
+                  _selectedRectangle = rectangleHit.$1;
+                  _rectangleDragHandle = rectangleHit.$2;
+                  _rectangleAtDragStart = _rectangles[rectangleHit.$1];
+                  _draggingRectangle = true;
+                  _selectedShort = null;
                   _selectedLine = null;
-                  _draggingLine = false;
+                  _selectedPattern = null;
+                  _saveDrawingUndo();
+                }
+                _draggedEndpoint = rectangleHit == null && shortHit == null
+                    ? _hitSelectedHandle(details.localFocalPoint,
+                        scale, plotWidth, candles.length) : null;
+                if (shortHit != null) {
+                  _selectedShort = shortHit.$1;
+                  _draggingShortHandle = shortHit.$2;
+                  _shortAtDragStart = _shortPositions[shortHit.$1];
+                  _selectedLine = null;
+                  _selectedPattern = null;
+                  _saveDrawingUndo();
+                }
+                _selectedLine = rectangleHit == null && shortHit == null &&
+                    _draggedEndpoint == null
+                    ? _hitLine(details.localFocalPoint.dy, scale) : null;
+                _draggingLine = _selectedLine != null;
+                if (_draggedEndpoint != null) {
                   _draggingPattern = true;
                 } else {
-                  _selectedLine = _hitLine(details.localFocalPoint.dy, scale);
-                  _draggingLine = _selectedLine != null;
-                  _selectedPattern = _draggingLine ? null :
+                  _selectedPattern = rectangleHit != null || shortHit != null ||
+                      _draggingLine ? null :
                       _hitPattern(details.localFocalPoint, scale,
                           plotWidth, candles.length);
                   _draggingPattern = _selectedPattern != null;
@@ -1469,7 +2146,15 @@ class _ChartScreenState extends State<ChartScreen>
             onScaleUpdate: (details) {
               if (details.pointerCount > 1) _gestureHadMultiTouch = true;
               setState(() {
-              if (_draggingLine && _selectedLine != null && details.pointerCount == 1) {
+              if (_draggingRectangle && details.pointerCount == 1) {
+                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
+                _updateRectangleDrag(details.localFocalPoint, scale,
+                    plotWidth, candles.length);
+              } else if (_draggingShortHandle != null && details.pointerCount == 1) {
+                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
+                _updateShortDrag(details.localFocalPoint, scale,
+                    plotWidth, candles.length);
+              } else if (_draggingLine && _selectedLine != null && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 _levels[_selectedLine!] = scale.price(
                     details.localFocalPoint.dy.clamp(0, scale.height).toDouble());
@@ -1487,8 +2172,14 @@ class _ChartScreenState extends State<ChartScreen>
                 } else {
                   final proposedBars = ((details.localFocalPoint.dx -
                       _gestureFocalX) / _viewport.barWidth).round();
-                  final minIndex = math.min(original.start.index, original.end.index);
-                  final maxIndex = math.max(original.start.index, original.end.index);
+                  final indices = [
+                    original.start.index,
+                    original.end.index,
+                    if (original.offsetAnchor != null)
+                      original.offsetAnchor!.index,
+                  ];
+                  final minIndex = indices.reduce(math.min);
+                  final maxIndex = indices.reduce(math.max);
                   final barDelta = proposedBars.clamp(-minIndex,
                       math.max(0, candles.length - 1 - maxIndex));
                   final change = scale.price(
@@ -1513,16 +2204,23 @@ class _ChartScreenState extends State<ChartScreen>
               }
               });
               // The same paging threshold also applies during momentum.
-              if (!_draggingLine && !_draggingPattern) {
+              if (_draggingShortHandle == null &&
+                  !_draggingLine && !_draggingPattern && !_draggingRectangle) {
                 _prefetchOlderAtEdge(plotWidth, candles.length);
               }
             },
             onScaleEnd: (details) {
-              final editing = _draggingLine || _draggingPattern;
+              final editing = _draggingLine || _draggingPattern ||
+                  _draggingShortHandle != null || _draggingRectangle;
               _draggingLine = false;
               _draggingPattern = false;
               _patternAtDragStart = null;
               _draggedEndpoint = null;
+              _draggingShortHandle = null;
+              _shortAtDragStart = null;
+              _draggingRectangle = false;
+              _rectangleDragHandle = null;
+              _rectangleAtDragStart = null;
               final velocity = details.velocity.pixelsPerSecond.dx;
               if (chartShouldFling(
                   horizontalVelocity: velocity,
@@ -1548,9 +2246,46 @@ class _ChartScreenState extends State<ChartScreen>
               final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
               final hit = _hitLine(details.localPosition.dy, scale);
               setState(() {
+                final rectangleHit = PriceRectangleGeometry.hitTest(
+                    details.localPosition, _rectangles, _viewport,
+                    scale, candles.length, plotWidth);
+                if (rectangleHit != null) {
+                  _selectedRectangle = rectangleHit.$1;
+                  _selectedShort = null;
+                  _selectedLine = null;
+                  _selectedPattern = null;
+                  _pendingAnchor = null;
+                  return;
+                }
+                if (_placingRectangle) {
+                  final anchor = _anchorAt(details.localPosition,
+                      scale, plotWidth, candles.length);
+                  if (anchor != null) _placeRectangleAt(anchor);
+                  return;
+                }
+                if (_selectedRectangle != null) {
+                  _selectedRectangle = null;
+                  return;
+                }
+                final shortHit = _hitShortPosition(details.localPosition,
+                    scale, plotWidth, candles.length);
+                if (shortHit != null) {
+                  _selectedShort = shortHit.$1;
+                  _selectedLine = null;
+                  _selectedPattern = null;
+                  _pendingAnchor = null;
+                  return;
+                }
+                if (_placingShort) {
+                  final anchor = _anchorAt(details.localPosition,
+                      scale, plotWidth, candles.length);
+                  if (anchor != null) _placeShortAt(anchor);
+                  return;
+                }
                 if (hit != null) {
                   _selectedLine = hit;
                   _selectedPattern = null;
+                  _selectedShort = null;
                   _pendingAnchor = null;
                   return;
                 }
@@ -1559,6 +2294,7 @@ class _ChartScreenState extends State<ChartScreen>
                 if (hitPattern != null) {
                   _selectedPattern = hitPattern;
                   _selectedLine = null;
+                  _selectedShort = null;
                   _pendingAnchor = null;
                   return;
                 }
@@ -1566,18 +2302,34 @@ class _ChartScreenState extends State<ChartScreen>
                   final anchor = _anchorAt(details.localPosition, scale,
                       plotWidth, candles.length);
                   if (anchor == null) return;
-                  if (_pendingAnchor == null) {
+                  if (_drawingTool.oneAnchor) {
+                    _saveDrawingUndo();
+                    _patterns.add(ChartPattern(
+                      tool: _drawingTool, start: anchor, end: anchor));
+                    _selectedPattern = _patterns.length - 1;
+                    _selectedLine = null;
+                    _selectedShort = null;
+                    _pendingAnchor = null;
+                    _secondChannelAnchor = null;
+                  } else if (_pendingAnchor == null) {
                     _pendingAnchor = anchor;
+                  } else if (_drawingTool.threeAnchors &&
+                      _secondChannelAnchor == null) {
+                    _secondChannelAnchor = anchor;
                   } else {
                     _saveDrawingUndo();
                     _patterns.add(ChartPattern(
                       tool: _drawingTool,
                       start: _pendingAnchor!,
-                      end: anchor,
+                      end: _secondChannelAnchor ?? anchor,
+                      offsetAnchor: _secondChannelAnchor == null
+                          ? null : anchor,
                     ));
                     _selectedPattern = _patterns.length - 1;
                     _selectedLine = null;
+                    _selectedShort = null;
                     _pendingAnchor = null;
+                    _secondChannelAnchor = null;
                   }
                   return;
                 }
@@ -1588,6 +2340,7 @@ class _ChartScreenState extends State<ChartScreen>
                 _levels.add(anchor.price);
                 _selectedLine = _levels.length - 1;
                 _selectedPattern = null;
+                _selectedShort = null;
               });
             },
             child: RepaintBoundary(
@@ -1602,13 +2355,33 @@ class _ChartScreenState extends State<ChartScreen>
                   crosshair: _crosshair,
                   levels: List<double>.unmodifiable(_levels),
                   patterns: List<ChartPattern>.unmodifiable(_patterns),
+                  shortPositions: List<ChartShortPosition>.unmodifiable(_shortPositions),
                   selectedLine: _drawing ? _selectedLine : null,
                   selectedPattern: _drawing ? _selectedPattern : null,
+                  selectedShort: _drawing ? _selectedShort : null,
+                  showShortLabels: _showShortLabels,
                   indicator: _showIndicators,
                 ),
               ),
             ),
           )),
+          if (candles.isNotEmpty && _rectangles.isNotEmpty)
+            Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
+              child: CustomPaint(
+                painter: ChartPriceRectanglePainter(
+                  drawings: List<ChartPriceRectangle>.unmodifiable(_rectangles),
+                  selectedIndex: _drawing ? _selectedRectangle : null,
+                  viewport: _viewport,
+                  scale: _priceScale(candles, plotWidth, constraints.maxHeight),
+                  candleCount: candles.length,
+                  plotWidth: plotWidth,
+                  dark: Theme.of(context).brightness == Brightness.dark,
+                  timestamps: _mode == ChartMode.range
+                      ? _rangeBarTimestamps : _actualTimestamps,
+                ),
+                size: Size.infinite,
+              ),
+            ))),
           if (candles.isEmpty)
             Positioned.fill(child: IgnorePointer(child: Center(
               child: Padding(
@@ -1627,8 +2400,52 @@ class _ChartScreenState extends State<ChartScreen>
                 ]),
               ),
             ))),
+          if (candles.isNotEmpty && _drawing)
+            _buildDrawingRail(constraints.maxHeight),
+          if (_drawing && _selectedShort != null &&
+              _selectedShort! < _shortPositions.length && candles.isNotEmpty)
+            _buildShortFloatingToolbar(constraints.maxWidth),
+          if (_drawing && _selectedRectangle != null &&
+              _selectedRectangle! < _rectangles.length && candles.isNotEmpty)
+            _buildRectangleFloatingToolbar(constraints.maxWidth),
           ]);
         }),
+      ),
+      // The chart stays the dominant surface; its tool strip sits below the
+      // time axis, as in the supplied mobile reference.
+      Container(
+        color: surface,
+        height: 50,
+        child: SingleChildScrollView(
+         scrollDirection: Axis.horizontal,
+         child: Row(children: [
+          TextButton.icon(
+            key: const Key('timeframe-picker'),
+            onPressed: _showTimeframePicker,
+            label: Text(_timeframe, textDirection: TextDirection.ltr),
+            icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+          ),
+          _iconAction(icon: Icons.candlestick_chart, label: 'نوع الشموع', onPressed: _showChartTypePicker),
+          _iconAction(icon: Icons.replay_circle_filled_outlined,
+              label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
+              active: _replay, onPressed: _toggleReplay),
+          _iconAction(icon: Icons.functions, label: 'المؤشرات', active: _showIndicators,
+            onPressed: () => setState(() => _showIndicators = !_showIndicators)),
+          _iconAction(icon: Icons.edit_outlined, label: 'أدوات الرسم', active: _drawing,
+            onPressed: _showDrawingTools),
+          _iconAction(icon: Icons.zoom_in_outlined, label: 'تكبير الشارت',
+            onPressed: () => _zoomBy(1.25)),
+          _iconAction(icon: Icons.zoom_out_outlined, label: 'تصغير الشارت',
+            onPressed: () => _zoomBy(.8)),
+          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
+            onPressed: () {
+              _momentum.stop();
+              setState(() => _viewport = _viewport.jumpToLatest());
+            }),
+          const SizedBox(width: 8),
+          if (_mode == ChartMode.range)
+            TextButton(onPressed: _showRangeSettings, child: Text('مدى $_rangeTicks')),
+         ])),
       ),
       Container(
         padding: const EdgeInsetsDirectional.only(start: 12, end: 8, top: 6, bottom: 6),
@@ -1639,20 +2456,29 @@ class _ChartScreenState extends State<ChartScreen>
           Expanded(child: Text(_marketEvidenceLabel,
               maxLines: 2, overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 11))),
-          if (_drawing && (_selectedLine != null || _selectedPattern != null))
+          if (_drawing && (_selectedLine != null || _selectedPattern != null ||
+              _selectedShort != null || _selectedRectangle != null))
             IconButton(tooltip: 'خصائص الرسم المحدد',
-              onPressed: _editSelectedDrawing,
+              onPressed: _selectedRectangle != null ? _rectangleProperties :
+                  _selectedShort != null ? _shortProperties : _editSelectedDrawing,
               icon: const Icon(Icons.tune)),
-          if (_drawing && (_selectedLine != null || _selectedPattern != null))
+          if (_drawing && (_selectedLine != null || _selectedPattern != null ||
+              _selectedShort != null || _selectedRectangle != null))
             IconButton(tooltip: 'حذف الرسم المحدد', onPressed: () => setState(() {
               _saveDrawingUndo();
-              if (_selectedLine != null && _selectedLine! < _levels.length) {
+              if (_selectedRectangle != null && _selectedRectangle! < _rectangles.length) {
+                _rectangles.removeAt(_selectedRectangle!);
+              } else if (_selectedShort != null && _selectedShort! < _shortPositions.length) {
+                _shortPositions.removeAt(_selectedShort!);
+              } else if (_selectedLine != null && _selectedLine! < _levels.length) {
                 _levels.removeAt(_selectedLine!);
               } else if (_selectedPattern != null && _selectedPattern! < _patterns.length) {
                 _patterns.removeAt(_selectedPattern!);
               }
               _selectedLine = null;
               _selectedPattern = null;
+              _selectedShort = null;
+              _selectedRectangle = null;
             }), icon: const Icon(Icons.delete_outline)),
           if (_lineUndo.isNotEmpty)
             TextButton.icon(
@@ -1660,6 +2486,10 @@ class _ChartScreenState extends State<ChartScreen>
               icon: const Icon(Icons.undo, size: 18),
               label: const Text('تراجع'),
             ),
+          if (_lineRedo.isNotEmpty)
+            IconButton(
+              key: const Key('drawing-redo'), tooltip: 'إعادة الرسم',
+              onPressed: _redoDrawing, icon: const Icon(Icons.redo, size: 19)),
         ]),
       ),
       if (widget.journal != null && !_replay)
@@ -1677,7 +2507,9 @@ class _ChartScreenState extends State<ChartScreen>
           alignment: Alignment.center,
           color: TradeColors.blue.withValues(alpha: .06),
           padding: const EdgeInsets.symmetric(vertical: 5),
-          child: const Text('المس الشارت لتحديد النقطة الثانية للرسم',
+          child: Text(_secondChannelAnchor != null
+                  ? 'القناة المتوازية: حدد النقطة الثالثة لضبط عرض القناة'
+                  : 'المس الشارت لتحديد النقطة الثانية للرسم',
               style: TextStyle(fontSize: 12, color: TradeColors.blue)),
         ),
       if (_drawing && _selectedPattern != null)
@@ -1686,6 +2518,30 @@ class _ChartScreenState extends State<ChartScreen>
           child: Text('اسحب دائرة البداية أو النهاية لتعديل طرف الرسم فقط',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11, color: TradeColors.blue)),
+        ),
+      if (_placingShort && candles.isNotEmpty)
+        Container(
+          alignment: Alignment.center,
+          color: TradeColors.shortHandle.withValues(alpha: .06),
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Text(_shortEntryAnchor == null
+              ? 'مركز بيع: المس الشارت لتحديد سعر الدخول'
+              : _shortStopPrice == null
+                  ? 'حدد وقف الخسارة فوق سعر الدخول'
+                  : 'حدد الهدف أسفل سعر الدخول',
+              key: const Key('short-position-placement-hint'),
+              style: const TextStyle(fontSize: 12, color: TradeColors.shortHandle)),
+        ),
+      if (_placingRectangle && candles.isNotEmpty)
+        Container(alignment: Alignment.center,
+          color: TradeColors.rectangleHandle.withValues(alpha: .06),
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Text(_rectangleFirstCorner == null
+            ? 'المستطيل: اختر الزاوية الأولى على الشارت'
+            : 'المستطيل: اختر الزاوية المقابلة لتحديد السعر والزمن',
+            key: const Key('price-rectangle-placement-hint'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, color: TradeColors.rectangleHandle)),
         ),
       if (_replay) _replayControls(context),
     ]);
@@ -1752,6 +2608,38 @@ class _ChartScreenState extends State<ChartScreen>
       );
 }
 
+/// Line-only angle glyph; keeps the reference toolbar's outlined style.
+class _RectangleToolbarAngle extends StatelessWidget {
+  const _RectangleToolbarAngle();
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _RectangleAnglePainter(
+      Theme.of(context).colorScheme.onSurface),
+    size: const Size(25, 25));
+}
+
+class _RectangleAnglePainter extends CustomPainter {
+  _RectangleAnglePainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final ink = Paint()..color = color..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+    final base = size.height * .78;
+    canvas.drawLine(Offset(2, base), Offset(size.width - 1, base), ink);
+    canvas.drawLine(Offset(2, base),
+      Offset(size.width * .78, size.height * .13), ink);
+    canvas.drawArc(Rect.fromLTWH(4, size.height * .49, 10, 10),
+      math.pi * 1.5, math.pi * .48, false, ink);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RectangleAnglePainter old) =>
+    old.color != color;
+}
+
 class _CandleChartPainter extends CustomPainter {
   _CandleChartPainter({
     required this.candles,
@@ -1761,8 +2649,11 @@ class _CandleChartPainter extends CustomPainter {
     required this.crosshair,
     required this.levels,
     required this.patterns,
+    required this.shortPositions,
     required this.selectedLine,
     required this.selectedPattern,
+    required this.selectedShort,
+    required this.showShortLabels,
     required this.indicator,
   });
 
@@ -1773,8 +2664,11 @@ class _CandleChartPainter extends CustomPainter {
   final Offset? crosshair;
   final List<double> levels;
   final List<ChartPattern> patterns;
+  final List<ChartShortPosition> shortPositions;
   final int? selectedLine;
   final int? selectedPattern;
+  final int? selectedShort;
+  final bool showShortLabels;
   final bool indicator;
 
   @override
@@ -1886,15 +2780,67 @@ class _CandleChartPainter extends CustomPainter {
           }
         }
       } else {
-        canvas.drawLine(Offset(x1, y1), Offset(x2, y2), drawingPaint);
+        final offsetAnchor = drawing.offsetAnchor;
+        final offset = offsetAnchor == null ? null : Offset(
+          viewport.chartX(index: offsetAnchor.index,
+              candleCount: candles.length, plotWidth: axis),
+          y(offsetAnchor.price),
+        );
+        final strokes = ChartLineGeometry.strokes(
+          tool: drawing.tool,
+          start: Offset(x1, y1),
+          end: Offset(x2, y2),
+          offset: offset,
+          bounds: Rect.fromLTWH(0, 0, axis, chartHeight),
+        );
+        for (final stroke in strokes) {
+          canvas.drawLine(stroke.start, stroke.end, drawingPaint);
+        }
       }
       if (selected) {
         final handle = Paint()..color = color;
         canvas.drawCircle(Offset(x1, y1), 4.2, handle);
-        canvas.drawCircle(Offset(x2, y2), 4.2, handle);
+        if (!drawing.tool.oneAnchor) {
+          canvas.drawCircle(Offset(x2, y2), 4.2, handle);
+        }
+        final offsetAnchor = drawing.offsetAnchor;
+        if (offsetAnchor != null) {
+          canvas.drawCircle(Offset(
+            viewport.chartX(index: offsetAnchor.index,
+                candleCount: candles.length, plotWidth: axis),
+            y(offsetAnchor.price)), 4.2, handle);
+        }
       }
     }
+    _paintShortPositions(canvas, scale, axis, candles.length, decimals);
     canvas.restore();
+    // A source-derived last-close marker, not a simulated tick or countdown.
+    final lastClose = candles.last.close;
+    final lastY = y(lastClose);
+    if (lastY >= 0 && lastY <= chartHeight) {
+      final lastColor = candles.last.positive
+          ? TradeColors.positive : TradeColors.negative;
+      final marker = Paint()
+        ..color = lastColor
+        ..strokeWidth = .9;
+      for (var x = 0.0; x < axis; x += 6) {
+        canvas.drawLine(Offset(x, lastY),
+            Offset(math.min(axis, x + 2.2), lastY), marker);
+      }
+      final tagY = (lastY - 10).clamp(0, chartHeight - 20).toDouble();
+      canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 20),
+          Paint()..color = lastColor);
+      _text(canvas, _price(lastClose, decimals),
+          Offset(axis + 2, tagY + 3), Colors.white, 10);
+    }
+    for (var i = 0; i < shortPositions.length; i++) {
+      final item = shortPositions[i];
+      if (!item.visibleAt(candles.length)) continue;
+      _shortAxisTag(canvas, axis, chartHeight, scale.y(item.stop),
+          _price(item.stop, decimals), TradeColors.shortLabelRed);
+      _shortAxisTag(canvas, axis, chartHeight, scale.y(item.target),
+          _price(item.target, decimals), TradeColors.shortLabelBlue);
+    }
     if (timestamps.length >= candles.length) {
       // Real UTC dates only. Range uses the time of the originating BID
       // tick, NOT a guessed fixed-duration interval per Range bar.
@@ -1958,6 +2904,105 @@ class _CandleChartPainter extends CustomPainter {
     painter.paint(canvas, offset);
   }
 
+  void _paintShortPositions(Canvas canvas, ChartPriceScale scale,
+      double axis, int count, int decimals) {
+    for (var i = 0; i < shortPositions.length; i++) {
+      final item = shortPositions[i];
+      if (!item.visibleAt(count)) continue;
+      final x1 = viewport.chartX(index: item.startIndex,
+          candleCount: count, plotWidth: axis);
+      final x2 = viewport.chartX(index: item.endIndex,
+          candleCount: count, plotWidth: axis);
+      final left = math.min(x1, x2);
+      final right = math.max(x1, x2);
+      final yStop = scale.y(item.stop);
+      final yEntry = scale.y(item.entry);
+      final yTarget = scale.y(item.target);
+      if (right < 0 || left > axis) continue;
+      canvas.drawRect(Rect.fromLTRB(left, yStop, right, yEntry),
+        Paint()..color = TradeColors.shortStopFill.withValues(alpha: .75));
+      canvas.drawRect(Rect.fromLTRB(left, yEntry, right, yTarget),
+        Paint()..color = TradeColors.shortTargetFill.withValues(alpha: .75));
+      canvas.drawLine(Offset(left, yEntry), Offset(right, yEntry),
+          Paint()..color = TradeColors.shortHandle..strokeWidth = 1.4);
+      if (selectedShort == i) {
+        final outline = Paint()
+          ..color = TradeColors.shortHandle
+          ..strokeWidth = 2
+          ..style = PaintingStyle.stroke;
+        canvas.drawRect(Rect.fromLTRB(left, yStop, right, yTarget), outline);
+        for (final handle in <(Offset, bool)>[
+          (Offset(left, yStop), false),
+          (Offset(left, yEntry), true),
+          (Offset(right, yEntry), false),
+          (Offset(left, yTarget), false),
+        ]) {
+          canvas.drawRRect(RRect.fromRectAndRadius(
+              Rect.fromCenter(center: handle.$1, width: 20, height: 20),
+              Radius.circular(handle.$2 ? 10 : 5)),
+              Paint()..color = Colors.white);
+          canvas.drawRRect(RRect.fromRectAndRadius(
+              Rect.fromCenter(center: handle.$1, width: 20, height: 20),
+              Radius.circular(handle.$2 ? 10 : 5)),
+              Paint()..color = TradeColors.shortHandle
+                ..style = PaintingStyle.stroke..strokeWidth = 3);
+        }
+      }
+      if (selectedShort != i || !showShortLabels) continue;
+      final risk = _price(item.risk, decimals);
+      final reward = _price(item.reward, decimals);
+      _shortPill(canvas,
+          'الإيقاف: \u2066$risk\u2069 (\u2066${item.riskPercent.toStringAsFixed(3)}%\u2069)',
+          Offset(axis - 8, yStop - 39), TradeColors.shortLabelRed,
+          axis, scale.height);
+      _shortPill(canvas,
+          'العائد المحتمل: \u2066$reward\u2069   نسبة العائد/المخاطرة: '
+          '\u2066${item.rewardRisk.toStringAsFixed(2)}\u2069',
+          Offset(axis - 8, yEntry + 20), TradeColors.shortLabelBlue,
+          axis, scale.height,
+          twoLines: true);
+      _shortPill(canvas,
+          'الهدف: \u2066$reward\u2069 (\u2066${item.rewardPercent.toStringAsFixed(3)}%\u2069)',
+          Offset(axis - 8, yTarget + 19), TradeColors.shortLabelBlue,
+          axis, scale.height);
+    }
+  }
+
+  static void _shortAxisTag(Canvas canvas, double axis, double height,
+      double y, String value, Color color) {
+    if (y < 0 || y > height) return;
+    final top = (y - 9).clamp(0, height - 18).toDouble();
+    canvas.drawRect(Rect.fromLTWH(axis, top, 61, 18), Paint()..color = color);
+    _text(canvas, value, Offset(axis + 2, top + 2), Colors.white, 10);
+  }
+
+  static void _shortPill(Canvas canvas, String value, Offset location,
+      Color fill, double axis, double chartHeight, {bool twoLines = false}) {
+    final span = TextSpan(text: value, style: const TextStyle(
+      fontSize: 11, color: Colors.white, height: 1.18));
+    final painter = TextPainter(
+      text: span, textDirection: TextDirection.rtl,
+      textAlign: TextAlign.center,
+      maxLines: twoLines ? 2 : 1,
+    )..layout(maxWidth: math.max(40, axis - 16));
+    final rectWidth = painter.width + 12;
+    final left = (location.dx - rectWidth + 10)
+        .clamp(3.0, math.max(3.0, axis - rectWidth - 3)).toDouble();
+    final top = location.dy.clamp(1.0,
+        math.max(1.0, chartHeight - painter.height - 9)).toDouble();
+    canvas.drawRRect(RRect.fromRectAndRadius(
+      Rect.fromLTWH(left, top, rectWidth, painter.height + 8),
+      const Radius.circular(4)), Paint()..color = fill);
+    painter.paint(canvas, Offset(left + 6, top + 4));
+  }
+
+  static String _price(double value, int digits) {
+    final parts = value.toStringAsFixed(digits).split('.');
+    final integer = parts.first.replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+    return digits == 0 ? integer : '$integer.${parts.last}';
+  }
+
   static String _formatUtc(DateTime date) =>
       '${date.day.toString().padLeft(2, '0')}/'
       '${date.month.toString().padLeft(2, '0')} '
@@ -1969,6 +3014,9 @@ class _CandleChartPainter extends CustomPainter {
       old.candles != candles || old.timestamps != timestamps ||
       old.dark != dark || old.viewport != viewport ||
       old.crosshair != crosshair || old.indicator != indicator ||
-      old.levels != levels || old.patterns != patterns ||
-      old.selectedLine != selectedLine || old.selectedPattern != selectedPattern;
+      !listEquals(old.levels, levels) ||
+      !listEquals(old.patterns, patterns) ||
+      !listEquals(old.shortPositions, shortPositions) ||
+      old.selectedLine != selectedLine || old.selectedPattern != selectedPattern ||
+      old.selectedShort != selectedShort || old.showShortLabels != showShortLabels;
 }

@@ -2,6 +2,11 @@ name: TradeLab Flutter UI Preview APK
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - flutter_app/**
+      - .github/workflows/build-flutter-ui-apk.yml
   push:
     branches:
       - feat/tradelab-flutter-ui-20261108
@@ -48,11 +53,17 @@ jobs:
       - name: Static analysis
         run: flutter analyze --no-fatal-infos
       - name: Interaction tests
-        run: flutter test test/widget_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/chart_annotations_test.dart test/candle_prefix_test.dart test/results_connection_test.dart test/market_api_test.dart test/paper_ledger_test.dart test/paper_journal_controller_test.dart test/paper_trade_service_test.dart
+        run: flutter test test/widget_test.dart test/chart_short_position_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/chart_annotations_test.dart test/chart_line_geometry_test.dart test/candle_prefix_test.dart test/results_connection_test.dart test/market_api_test.dart test/paper_ledger_test.dart test/paper_journal_controller_test.dart test/paper_trade_service_test.dart
       - name: Verify native OAuth compatibility
         run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs
       - name: Capture chart design snapshot
         run: flutter test --update-goldens test/golden_test.dart
+      - name: Verify eight-handle price rectangle and render isolated preview
+        run: flutter test --update-goldens test/chart_price_rectangle_test.dart
+      - name: Verify 21 chart-kind cards and capture selected-candles sheet
+        run: flutter test --update-goldens test/chart_type_sheet_test.dart
+      - name: Verify Gann and trend catalogs, search, favorites, RTL and goldens
+        run: flutter test --update-goldens test/drawing_tools_sheet_test.dart
       - name: Build optimized Flutter preview APK
         # Flutter's generated Android host signs this preview using its
         # ephemeral debug certificate; this is NOT a Play Store release.
@@ -96,9 +107,16 @@ jobs:
             adb devices
             adb install "$GITHUB_WORKSPACE/flutter_app/build/app/outputs/flutter-apk/TradeLab-Flutter.apk"
             adb shell monkey -p com.example.tradelab_flutter -c android.intent.category.LAUNCHER 1
-            sleep 5
+            # The release app can remain on its Android launch splash while the
+            # emulator finishes its first Flutter engine startup. Allow enough
+            # time for the actual chart shell to render before taking evidence.
+            sleep 25
             adb shell pidof -s com.example.tradelab_flutter
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/flutter_app/build/tradelab_emulator.png"
+            # One command: the emulator runner executes script lines separately.
+            python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_chart_type_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_chart_type_sheet.png"
+            python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_drawing_tools_sheet.png"
+            python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_trend_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_trend_drawing_tools_sheet.png"
       - name: Upload real Android emulator screenshot
         uses: actions/upload-artifact@v4
         with:
@@ -111,7 +129,51 @@ jobs:
           name: TradeLab-Flutter-Chart-Snapshot
           path: flutter_app/test/goldens/tradelab_chart_flutter.png
           if-no-files-found: error
+      - name: Upload isolated price rectangle screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Price-Rectangle-Component-Preview
+          path: flutter_app/test/goldens/selected_price_rectangle.png
+          if-no-files-found: error
+      - name: Upload 21-card chart type sheet golden
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Chart-Type-Selected-Candles-Golden
+          path: flutter_app/test/goldens/chart_type_sheet_selected_candles.png
+          if-no-files-found: error
+      - name: Upload Android chart type sheet screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Android-Chart-Type-Sheet
+          path: flutter_app/build/tradelab_chart_type_sheet.png
+          if-no-files-found: warn
+      - name: Upload Gann Fibonacci drawing catalog golden
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Gann-Fibonacci-Drawing-Catalog-Golden
+          path: flutter_app/test/goldens/gann_fibonacci_drawing_tools.png
+          if-no-files-found: error
+      - name: Upload real Android drawing tools screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Android-Gann-Fibonacci-Drawings
+          path: flutter_app/build/tradelab_drawing_tools_sheet.png
+          if-no-files-found: error
+      - name: Upload PROMPT 05 trend drawing tools golden
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Trend-Drawing-Catalog-Golden
+          path: flutter_app/test/goldens/trend_drawing_tools.png
+          if-no-files-found: error
+      - name: Upload real Android trend drawing screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Android-Trend-Drawings
+          path: flutter_app/build/tradelab_trend_drawing_tools_sheet.png
+          if-no-files-found: error
       - name: Publish direct APK as GitHub prerelease
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

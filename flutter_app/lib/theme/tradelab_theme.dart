@@ -6,6 +6,32 @@ abstract final class TradeColors {
   static const blueLight = Color(0xFF5C85FF);
   static const positive = Color(0xFF26A69A);
   static const negative = Color(0xFFEF5350);
+  // Short-position drawing palette, measured against PROMPT 01 reference.
+  // These are presentation colors and never encode an executed trade.
+  static const shortStopFill = Color(0xFFF88F96);
+  static const shortTargetFill = Color(0xFF6CA3F5);
+  static const shortHandle = Color(0xFF2351E2);
+  static const shortLabelBlue = Color(0xFF3374F4);
+  static const shortLabelRed = Color(0xFFE9344F);
+  // Selected price-range rectangle in PROMPT 02; annotation UI only.
+  static const rectangleHandle = Color(0xFF2556E4);
+  static const rectangleAxisTag = Color(0xFF2962FF);
+  static const rectangleAccentGreen = Color(0xFF5BAD6F);
+  static const rectangleAccentOrange = Color(0xFFFFA41D);
+  // TradingView-reference chart type picker: isolated white sheet, not the
+  // app-wide Material cards or a replacement global light theme.
+  static const chartTypeSheet = Color(0xFFFFFFFF);
+  static const chartTypeTile = Color(0xFFF2F2F2);
+  static const chartTypeSelected = Color(0xFF2E2E2E);
+  static const chartTypeInk = Color(0xFF101010);
+  static const chartTypeDragHandle = Color(0xFFE3E3E3);
+  // PROMPT 04 reference: white drawing catalog, light tiles, amber favorites.
+  static const drawingSheet = Color(0xFFFFFFFF);
+  static const drawingTile = Color(0xFFF2F2F2);
+  static const drawingInk = Color(0xFF101010);
+  static const drawingMutedInk = Color(0xFF777777);
+  static const drawingHandle = Color(0xFFE3E3E3);
+  static const drawingFavorite = Color(0xFFFF9800);
   static const gold = Color(0xFFF5A623);
 
   static const lightCanvas = Color(0xFFF4F6FA);

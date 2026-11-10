@@ -112,4 +112,46 @@ void main() {
     expect(movedEnd.end.price, 4050);
     expect(pattern.end.index, 24);
   });
+
+  test('parallel channel keeps its third market anchor through history changes', () {
+    const channel = ChartPattern(
+      tool: ChartDrawingTool.parallelChannel,
+      start: ChartAnchor(10, 4050),
+      end: ChartAnchor(20, 4060),
+      offsetAnchor: ChartAnchor(15, 4070),
+    );
+    expect(channel.visibleAt(15), isFalse);
+    expect(channel.visibleAt(21), isTrue);
+    final shifted = channel.shifted(100);
+    expect(shifted.offsetAnchor!.index, 115);
+    expect(shifted.offsetAnchor!.price, 4070);
+    final changed = shifted.withEndpoint(
+        ChartAnchorEndpoint.offset, const ChartAnchor(130, 4080));
+    expect(changed.start.index, 110);
+    expect(changed.end.index, 120);
+    expect(changed.offsetAnchor!.index, 130);
+    expect(changed.offsetAnchor!.price, 4080);
+    final dragged = changed.moved(-5, -10);
+    expect(dragged.start.index, 105);
+    expect(dragged.end.index, 115);
+    expect(dragged.offsetAnchor!.index, 125);
+    expect(dragged.offsetAnchor!.price, 4070);
+    final rebased = dragged.reanchored(12, 24, offsetIndex: 19);
+    expect(rebased.offsetAnchor!.index, 19);
+    expect(rebased.offsetAnchor!.price, 4070);
+  });
+
+  test('one-anchor vertical lines move their only handle as a unit', () {
+    const vertical = ChartPattern(
+      tool: ChartDrawingTool.verticalLine,
+      start: ChartAnchor(8, 4040),
+      end: ChartAnchor(8, 4040),
+    );
+    final moved = vertical.withEndpoint(
+        ChartAnchorEndpoint.start, const ChartAnchor(22, 4080));
+    expect(moved.start.index, 22);
+    expect(moved.end.index, 22);
+    expect(moved.start.price, 4080);
+    expect(moved.end.price, 4080);
+  });
 }
