@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
 import '../chart/chart_annotations.dart';
 import '../chart/chart_short_position.dart';
+import '../chart/chart_price_rectangle.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_timeline.dart';
@@ -32,6 +34,9 @@ enum ChartMode {
   bool requiresHistoryReload(ChartMode next) =>
       (this == ChartMode.range) != (next == ChartMode.range);
 }
+
+typedef _DrawingSnapshot = (List<double>, List<ChartPattern>,
+    List<ChartShortPosition>, List<ChartPriceRectangle>);
 
 class ChartScreen extends StatefulWidget {
   const ChartScreen({required this.controller, this.journal, super.key});
@@ -78,6 +83,14 @@ class _ChartScreenState extends State<ChartScreen>
   bool _drawing = false;
   ChartDrawingTool _drawingTool = ChartDrawingTool.horizontal;
   bool _placingShort = false;
+  bool _placingRectangle = false;
+  ChartAnchor? _rectangleFirstCorner;
+  final List<ChartPriceRectangle> _rectangles = [];
+  List<ChartPriceRectangle> _analysisRectangles = [];
+  int? _selectedRectangle;
+  bool _draggingRectangle = false;
+  PriceRectangleHandle? _rectangleDragHandle;
+  ChartPriceRectangle? _rectangleAtDragStart;
   ChartAnchor? _shortEntryAnchor;
   double? _shortStopPrice;
   final List<ChartShortPosition> _shortPositions = [];
@@ -103,7 +116,8 @@ class _ChartScreenState extends State<ChartScreen>
   bool _playing = false;
   final List<double> _levels = [];
   final List<ChartPattern> _patterns = [];
-  final List<(List<double>, List<ChartPattern>, List<ChartShortPosition>)> _lineUndo = [];
+  final List<_DrawingSnapshot> _lineUndo = [];
+  final List<_DrawingSnapshot> _lineRedo = [];
   List<double> _analysisLevels = [];
   List<ChartPattern> _analysisPatterns = [];
   ChartAnchor? _pendingAnchor;
@@ -304,6 +318,7 @@ class _ChartScreenState extends State<ChartScreen>
         _levels..clear()..addAll(_analysisLevels);
         _patterns..clear()..addAll(_analysisPatterns);
         _shortPositions..clear()..addAll(_analysisShortPositions);
+        _rectangles..clear()..addAll(_analysisRectangles);
       }
       _replay = false;
       _loading = true;
@@ -595,10 +610,22 @@ class _ChartScreenState extends State<ChartScreen>
           .map(rebaseShort).whereType<ChartShortPosition>().toList();
       final rebasedAnalysisShorts = _analysisShortPositions
           .map(rebaseShort).whereType<ChartShortPosition>().toList();
+      ChartPriceRectangle? rebaseRectangle(ChartPriceRectangle drawing) {
+        final first = rebaseAnchor(ChartAnchor(drawing.startIndex, drawing.upper));
+        final last = rebaseAnchor(ChartAnchor(drawing.endIndex, drawing.upper));
+        if (first == null || last == null || first == last) return null;
+        return drawing.reanchored(first, last);
+      }
+      final rebasedRectangles = _rectangles
+          .map(rebaseRectangle).whereType<ChartPriceRectangle>().toList();
+      final rebasedAnalysisRectangles = _analysisRectangles
+          .map(rebaseRectangle).whereType<ChartPriceRectangle>().toList();
       final pendingIndex = _pendingAnchor == null
           ? null : rebaseAnchor(_pendingAnchor!);
       final shortEntryIndex = _shortEntryAnchor == null
           ? null : rebaseAnchor(_shortEntryAnchor!);
+      final rectangleFirstIndex = _rectangleFirstCorner == null
+          ? null : rebaseAnchor(_rectangleFirstCorner!);
       final previousDisplayCount = _replay ? _visibleThrough : _actualRange.length;
       final oldViewport = _viewport;
       // Preserve the market event visible near the right edge rather than
@@ -650,6 +677,9 @@ class _ChartScreenState extends State<ChartScreen>
         _analysisPatterns = rebasedAnalysis;
         _shortPositions..clear()..addAll(rebasedShorts);
         _analysisShortPositions = rebasedAnalysisShorts;
+        _rectangles..clear()..addAll(rebasedRectangles);
+        _analysisRectangles = rebasedAnalysisRectangles;
+        _selectedRectangle = null;
         _selectedShort = null;
         _pendingAnchor = pendingIndex == null ? null
             : ChartAnchor(pendingIndex, _pendingAnchor!.price);
@@ -658,8 +688,13 @@ class _ChartScreenState extends State<ChartScreen>
               : ChartAnchor(shortEntryIndex, _shortEntryAnchor!.price);
           if (_shortEntryAnchor == null) _shortStopPrice = null;
         }
+        if (_rectangleFirstCorner != null) {
+          _rectangleFirstCorner = rectangleFirstIndex == null ? null
+              : ChartAnchor(rectangleFirstIndex, _rectangleFirstCorner!.price);
+        }
         _selectedPattern = null;
         _lineUndo.clear(); // Undo entries use the previous Range bar indices.
+        _lineRedo.clear();
         if (_replay && replayCutoffTick != null) {
           _stopPlayback();
           _visibleThrough = safeReplayBars!;
@@ -732,6 +767,9 @@ class _ChartScreenState extends State<ChartScreen>
         for (var index = 0; index < _shortPositions.length; index++) {
           _shortPositions[index] = _shortPositions[index].shifted(unique.length);
         }
+        for (var index = 0; index < _rectangles.length; index++) {
+          _rectangles[index] = _rectangles[index].shifted(unique.length);
+        }
         if (_replay) {
           _analysisPatterns = _analysisPatterns
               .map((drawing) => drawing.shifted(unique.length))
@@ -739,13 +777,23 @@ class _ChartScreenState extends State<ChartScreen>
           _analysisShortPositions = _analysisShortPositions
               .map((drawing) => drawing.shifted(unique.length))
               .toList(growable: false);
+          _analysisRectangles = _analysisRectangles
+              .map((drawing) => drawing.shifted(unique.length))
+              .toList(growable: false);
         }
         if (_shortEntryAnchor != null) {
           _shortEntryAnchor = _shortEntryAnchor!.shifted(unique.length);
         }
+        if (_rectangleFirstCorner != null) {
+          _rectangleFirstCorner = _rectangleFirstCorner!.shifted(unique.length);
+        }
         if (_pendingAnchor != null) {
           _pendingAnchor = _pendingAnchor!.shifted(unique.length);
         }
+        // Undo snapshots contain bar indices from before historical prepend.
+        // Keep current drawings but never replay an obsolete anchor snapshot.
+        _lineUndo.clear();
+        _lineRedo.clear();
         // The Replay cutoff must stay at the SAME historical candle when
         // older candles are prepended. Never reveal new future candles.
         if (_replay) _visibleThrough += unique.length;
@@ -793,13 +841,16 @@ class _ChartScreenState extends State<ChartScreen>
           _analysisLevels = List<double>.of(_levels);
           _analysisPatterns = List<ChartPattern>.of(_patterns);
           _analysisShortPositions = List<ChartShortPosition>.of(_shortPositions);
+          _analysisRectangles = List<ChartPriceRectangle>.of(_rectangles);
           _levels.clear();
           _patterns.clear();
           _shortPositions.clear();
+          _rectangles.clear();
         } else {
           _levels..clear()..addAll(_analysisLevels);
           _patterns..clear()..addAll(_analysisPatterns);
           _shortPositions..clear()..addAll(_analysisShortPositions);
+          _rectangles..clear()..addAll(_analysisRectangles);
         }
         _replay = !_replay;
         _visibleThrough = math.max(1, _totalBars ~/ 2);
@@ -808,11 +859,15 @@ class _ChartScreenState extends State<ChartScreen>
         _selectedLine = null;
         _selectedPattern = null;
         _selectedShort = null;
+        _selectedRectangle = null;
         _placingShort = false;
+        _placingRectangle = false;
+        _rectangleFirstCorner = null;
         _shortEntryAnchor = null;
         _shortStopPrice = null;
         _pendingAnchor = null;
         _lineUndo.clear();
+        _lineRedo.clear();
       });
   }
 
@@ -1098,11 +1153,13 @@ class _ChartScreenState extends State<ChartScreen>
                   setState(() {
                     _drawing = true;
                     _placingShort = false;
+                    _placingRectangle = false;
                     _drawingTool = option.$1;
                     _pendingAnchor = null;
                     _selectedLine = null;
                     _selectedPattern = null;
                     _selectedShort = null;
+                    _selectedRectangle = null;
                   });
                   Navigator.pop(sheetContext);
                 },
@@ -1118,13 +1175,27 @@ class _ChartScreenState extends State<ChartScreen>
                 setState(() {
                   _drawing = true;
                   _placingShort = true;
+                  _placingRectangle = false;
                   _shortEntryAnchor = null;
                   _shortStopPrice = null;
                   _selectedShort = null;
+                  _selectedRectangle = null;
                   _selectedLine = null;
                   _selectedPattern = null;
                   _pendingAnchor = null;
                 });
+                Navigator.pop(sheetContext);
+              },
+            ),
+            ListTile(
+              key: const Key('price-rectangle-tool'),
+              title: const Text('مستطيل نطاق سعري · زاويتان'),
+              leading: const Icon(Icons.crop_square_outlined),
+              trailing: _placingRectangle
+                  ? const Icon(Icons.check_circle, color: TradeColors.blue)
+                  : null,
+              onTap: () {
+                _selectDrawingMode(rectangle: true);
                 Navigator.pop(sheetContext);
               },
             ),
@@ -1135,7 +1206,9 @@ class _ChartScreenState extends State<ChartScreen>
                 setState(() {
                   _drawing = false;
                   _placingShort = false;
+                  _placingRectangle = false;
                   _pendingAnchor = null;
+                  _rectangleFirstCorner = null;
                   _shortEntryAnchor = null;
                   _shortStopPrice = null;
                 });
@@ -1176,23 +1249,43 @@ class _ChartScreenState extends State<ChartScreen>
         ));
   }
 
+  _DrawingSnapshot _snapshotDrawings() => (
+    List<double>.of(_levels), List<ChartPattern>.of(_patterns),
+    List<ChartShortPosition>.of(_shortPositions),
+    List<ChartPriceRectangle>.of(_rectangles));
+
+  void _restoreDrawings(_DrawingSnapshot snapshot) {
+    _levels..clear()..addAll(snapshot.$1);
+    _patterns..clear()..addAll(snapshot.$2);
+    _shortPositions..clear()..addAll(snapshot.$3);
+    _rectangles..clear()..addAll(snapshot.$4);
+    _selectedLine = null;
+    _selectedPattern = null;
+    _selectedShort = null;
+    _selectedRectangle = null;
+    _pendingAnchor = null;
+    _rectangleFirstCorner = null;
+  }
+
   void _saveDrawingUndo() {
-    _lineUndo.add((List<double>.of(_levels), List<ChartPattern>.of(_patterns),
-        List<ChartShortPosition>.of(_shortPositions)));
+    _lineUndo.add(_snapshotDrawings());
     if (_lineUndo.length > 30) _lineUndo.removeAt(0);
+    _lineRedo.clear();
   }
 
   void _undoDrawing() {
     if (_lineUndo.isEmpty) return;
     setState(() {
-      final previous = _lineUndo.removeLast();
-      _levels..clear()..addAll(previous.$1);
-      _patterns..clear()..addAll(previous.$2);
-      _shortPositions..clear()..addAll(previous.$3);
-      _selectedLine = null;
-      _selectedPattern = null;
-      _selectedShort = null;
-      _pendingAnchor = null;
+      _lineRedo.add(_snapshotDrawings());
+      _restoreDrawings(_lineUndo.removeLast());
+    });
+  }
+
+  void _redoDrawing() {
+    if (_lineRedo.isEmpty) return;
+    setState(() {
+      _lineUndo.add(_snapshotDrawings());
+      _restoreDrawings(_lineRedo.removeLast());
     });
   }
 
@@ -1200,17 +1293,23 @@ class _ChartScreenState extends State<ChartScreen>
     _levels.clear();
     _patterns.clear();
     _shortPositions.clear();
+    _rectangles.clear();
     _analysisLevels = [];
     _analysisPatterns = [];
     _analysisShortPositions = [];
+    _analysisRectangles = [];
     _lineUndo.clear();
+    _lineRedo.clear();
     _pendingAnchor = null;
     _selectedLine = null;
     _selectedPattern = null;
     _selectedShort = null;
+    _selectedRectangle = null;
     _placingShort = false;
     _shortEntryAnchor = null;
     _shortStopPrice = null;
+    _placingRectangle = false;
+    _rectangleFirstCorner = null;
   }
 
   ChartPriceScale _priceScale(List<TradeCandle> candles, double width, double height) =>
@@ -1335,6 +1434,51 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  void _placeRectangleAt(ChartAnchor anchor) {
+    final first = _rectangleFirstCorner;
+    if (first == null) {
+      _rectangleFirstCorner = anchor;
+      return;
+    }
+    if (first.index == anchor.index || first.price == anchor.price) return;
+    _saveDrawingUndo();
+    _rectangles.add(ChartPriceRectangle(
+      startIndex: math.min(first.index, anchor.index),
+      endIndex: math.max(first.index, anchor.index),
+      upper: math.max(first.price, anchor.price),
+      lower: math.min(first.price, anchor.price),
+    ));
+    _selectedRectangle = _rectangles.length - 1;
+    _placingRectangle = false;
+    _rectangleFirstCorner = null;
+  }
+
+  void _updateRectangleDrag(Offset current, ChartPriceScale scale,
+      double plotWidth, int count) {
+    final index = _selectedRectangle;
+    final original = _rectangleAtDragStart;
+    if (!_draggingRectangle || index == null || original == null ||
+        index >= _rectangles.length) return;
+    final price = scale.price(current.dy.clamp(0.0, scale.height).toDouble());
+    final bar = _viewport.indexAt(
+      x: current.dx.clamp(0.0, plotWidth).toDouble(),
+      plotWidth: plotWidth, candleCount: count);
+    if (bar == null) return;
+    ChartPriceRectangle? next;
+    if (_rectangleDragHandle != null) {
+      next = original.withHandle(_rectangleDragHandle!, bar, price);
+    } else {
+      final proposedBars = ((current.dx - _gestureFocalX) /
+          _viewport.barWidth).round();
+      final deltaBars = proposedBars.clamp(-original.startIndex,
+          math.max(0, count - 1 - original.endIndex)).toInt();
+      final initialPrice = scale.price(
+          _gestureFocalY.clamp(0.0, scale.height).toDouble());
+      next = original.moved(deltaBars, price - initialPrice);
+    }
+    if (next != null) _rectangles[index] = next;
+  }
+
   void _updateShortDrag(Offset current, ChartPriceScale scale,
       double width, int count) {
     final index = _selectedShort;
@@ -1376,15 +1520,19 @@ class _ChartScreenState extends State<ChartScreen>
     if (updated != null) _shortPositions[index] = updated;
   }
 
-  void _selectDrawingMode({ChartDrawingTool? tool, bool short = false}) {
+  void _selectDrawingMode({ChartDrawingTool? tool, bool short = false,
+      bool rectangle = false}) {
     setState(() {
       _drawing = true;
       _placingShort = short;
+      _placingRectangle = rectangle;
       if (tool != null) _drawingTool = tool;
       _shortEntryAnchor = null;
       _shortStopPrice = null;
+      _rectangleFirstCorner = null;
       _pendingAnchor = null;
       _selectedShort = null;
+      _selectedRectangle = null;
       _selectedLine = null;
       _selectedPattern = null;
     });
@@ -1407,7 +1555,9 @@ class _ChartScreenState extends State<ChartScreen>
             onPressed: () => setState(() {
               _drawing = false;
               _placingShort = false;
+              _placingRectangle = false;
               _pendingAnchor = null;
+              _rectangleFirstCorner = null;
             }),
             icon: const Icon(Icons.near_me_outlined, size: 23),
           ),
@@ -1436,6 +1586,14 @@ class _ChartScreenState extends State<ChartScreen>
                   ? TradeColors.shortHandle : null),
           ),
           IconButton(
+            key: const Key('drawing-rail-rectangle'),
+            tooltip: 'مستطيل نطاق سعري',
+            onPressed: () => _selectDrawingMode(rectangle: true),
+            icon: Icon(Icons.crop_square_outlined, size: 23,
+              color: _placingRectangle || _selectedRectangle != null
+                  ? TradeColors.rectangleHandle : null),
+          ),
+          IconButton(
             tooltip: 'مغناطيس الأسعار',
             onPressed: _showDrawingTools,
             icon: const Icon(Icons.tune_outlined, size: 23),
@@ -1453,6 +1611,141 @@ class _ChartScreenState extends State<ChartScreen>
       _shortPositions.removeAt(index);
       _selectedShort = null;
     });
+  }
+
+  void _deleteSelectedRectangle() {
+    final index = _selectedRectangle;
+    if (index == null || index >= _rectangles.length) return;
+    setState(() {
+      _saveDrawingUndo();
+      _rectangles.removeAt(index);
+      _selectedRectangle = null;
+    });
+  }
+
+  void _styleSelectedRectangle({double? strokeWidth, int? borderColor,
+      int? fillColor}) {
+    final index = _selectedRectangle;
+    if (index == null || index >= _rectangles.length) return;
+    final updated = _rectangles[index].edited(strokeWidth: strokeWidth,
+      borderColorValue: borderColor, fillColorValue: fillColor);
+    if (updated == null) return;
+    setState(() {
+      _saveDrawingUndo();
+      _rectangles[index] = updated;
+    });
+  }
+
+  Future<void> _rectangleProperties() async {
+    if (_selectedRectangle == null) return;
+    await showModalBottomSheet<void>(context: context, showDragHandle: true,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const TradeSectionTitle('خصائص المستطيل السعري'),
+          const SizedBox(height: 12),
+          const Align(alignment: AlignmentDirectional.centerStart,
+            child: Text('سمك الحدود', textDirection: TextDirection.rtl)),
+          Wrap(spacing: 10, children: [
+            for (final px in const [1.0, 2.0, 3.0])
+              OutlinedButton(onPressed: () {
+                _styleSelectedRectangle(strokeWidth: px);
+                Navigator.pop(sheetContext);
+              }, child: Text('${px.toInt()}px', textDirection: TextDirection.ltr)),
+          ]),
+          const SizedBox(height: 8),
+          const Align(alignment: AlignmentDirectional.centerStart,
+            child: Text('لون الحدود', textDirection: TextDirection.rtl)),
+          Wrap(spacing: 10, children: [
+            for (final color in const [0xFFD5A63C, 0xFFFFA41D,
+              0xFF2962FF, 0xFFE95454, 0xFF212121])
+              IconButton(
+                tooltip: 'تغيير لون الحدود',
+                onPressed: () {
+                  _styleSelectedRectangle(borderColor: color);
+                  Navigator.pop(sheetContext);
+                },
+                icon: Icon(Icons.circle_outlined, color: Color(color), size: 27)),
+          ]),
+          const SizedBox(height: 8),
+          const Align(alignment: AlignmentDirectional.centerStart,
+            child: Text('لون التعبئة', textDirection: TextDirection.rtl)),
+          Wrap(spacing: 10, children: [
+            for (final color in const [0xFF5BAD6F, 0xFF4A9DE8,
+              0xFFF2AB61, 0xFFE78BA1])
+              IconButton(
+                tooltip: 'تغيير لون التعبئة',
+                onPressed: () {
+                  _styleSelectedRectangle(fillColor: color);
+                  Navigator.pop(sheetContext);
+                },
+                icon: Icon(Icons.circle, color: Color(color), size: 27)),
+          ]),
+        ]),
+      )));
+  }
+
+  Widget _rectangleToolbarItem(Widget visual, String tooltip,
+      VoidCallback callback, {double width = 38}) => SizedBox(
+    width: width, height: 43,
+    child: IconButton(
+      key: ValueKey('rect-toolbar-$tooltip'), tooltip: tooltip,
+      onPressed: callback, padding: EdgeInsets.zero,
+      icon: visual,
+    ),
+  );
+
+  Widget _rectangleUnderlinedIcon(IconData data, Color stripe) =>
+      Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(data, size: 23, color: Theme.of(context).colorScheme.onSurface),
+        Container(width: 20, height: 3, margin: const EdgeInsets.only(top: 1),
+          decoration: BoxDecoration(color: stripe,
+            borderRadius: BorderRadius.circular(2))),
+      ]);
+
+  Widget _buildRectangleFloatingToolbar(double width) {
+    final selected = _selectedRectangle;
+    final stroke = selected != null && selected < _rectangles.length
+        ? _rectangles[selected].strokeWidth : 1.0;
+    return Positioned(top: 12, left: 0,
+      child: Container(
+        constraints: BoxConstraints(maxWidth: width),
+        height: 48,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Theme.of(context).dividerColor),
+          boxShadow: const [BoxShadow(color: Colors.black12,
+            blurRadius: 5, offset: Offset(0, 2))],
+        ),
+        child: SingleChildScrollView(scrollDirection: Axis.horizontal,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            _rectangleToolbarItem(const Icon(Icons.more_horiz, size: 24),
+                'خصائص المستطيل', _rectangleProperties),
+            _rectangleToolbarItem(const Icon(Icons.delete_outline, size: 25),
+                'حذف المستطيل', _deleteSelectedRectangle),
+            _rectangleToolbarItem(const _RectangleToolbarAngle(),
+                'ضبط زوايا المستطيل', _rectangleProperties),
+            _rectangleToolbarItem(const Icon(Icons.remove, size: 26),
+                'تغيير لون الحدود', _rectangleProperties),
+            _rectangleToolbarItem(Text('${stroke.toStringAsFixed(0)}px',
+                textDirection: TextDirection.ltr,
+                style: const TextStyle(fontSize: 14)),
+                'سمك الخط', _rectangleProperties, width: 40),
+            _rectangleToolbarItem(_rectangleUnderlinedIcon(
+                Icons.text_fields, TradeColors.shortLabelRed),
+                'خصائص النص', _rectangleProperties),
+            _rectangleToolbarItem(_rectangleUnderlinedIcon(
+                Icons.format_color_fill_outlined,
+                TradeColors.rectangleAccentGreen),
+                'لون التعبئة', _rectangleProperties),
+            _rectangleToolbarItem(_rectangleUnderlinedIcon(
+                Icons.edit_outlined, TradeColors.rectangleAccentOrange),
+                'لون القلم', _rectangleProperties),
+            _rectangleToolbarItem(const Icon(Icons.grid_view_outlined, size: 24),
+                'إضافة مستطيل', () => _selectDrawingMode(rectangle: true)),
+          ])),
+      ));
   }
 
   Future<void> _shortProperties() async {
@@ -1740,11 +2033,28 @@ class _ChartScreenState extends State<ChartScreen>
               _gestureFocalY = details.localFocalPoint.dy;
               _draggingShortHandle = null;
               _shortAtDragStart = null;
+              _draggingRectangle = false;
+              _rectangleDragHandle = null;
+              _rectangleAtDragStart = null;
               if (_drawing && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
-                final shortHit = _hitShortPosition(details.localFocalPoint,
-                    scale, plotWidth, candles.length);
-                _draggedEndpoint = shortHit == null
+                final rectangleHit = PriceRectangleGeometry.hitTest(
+                    details.localFocalPoint, _rectangles, _viewport,
+                    scale, candles.length, plotWidth);
+                final shortHit = rectangleHit == null
+                    ? _hitShortPosition(details.localFocalPoint,
+                        scale, plotWidth, candles.length) : null;
+                if (rectangleHit != null) {
+                  _selectedRectangle = rectangleHit.$1;
+                  _rectangleDragHandle = rectangleHit.$2;
+                  _rectangleAtDragStart = _rectangles[rectangleHit.$1];
+                  _draggingRectangle = true;
+                  _selectedShort = null;
+                  _selectedLine = null;
+                  _selectedPattern = null;
+                  _saveDrawingUndo();
+                }
+                _draggedEndpoint = rectangleHit == null && shortHit == null
                     ? _hitSelectedHandle(details.localFocalPoint,
                         scale, plotWidth, candles.length) : null;
                 if (shortHit != null) {
@@ -1755,13 +2065,15 @@ class _ChartScreenState extends State<ChartScreen>
                   _selectedPattern = null;
                   _saveDrawingUndo();
                 }
-                _selectedLine = shortHit == null && _draggedEndpoint == null
+                _selectedLine = rectangleHit == null && shortHit == null &&
+                    _draggedEndpoint == null
                     ? _hitLine(details.localFocalPoint.dy, scale) : null;
                 _draggingLine = _selectedLine != null;
                 if (_draggedEndpoint != null) {
                   _draggingPattern = true;
                 } else {
-                  _selectedPattern = shortHit != null || _draggingLine ? null :
+                  _selectedPattern = rectangleHit != null || shortHit != null ||
+                      _draggingLine ? null :
                       _hitPattern(details.localFocalPoint, scale,
                           plotWidth, candles.length);
                   _draggingPattern = _selectedPattern != null;
@@ -1778,7 +2090,11 @@ class _ChartScreenState extends State<ChartScreen>
             onScaleUpdate: (details) {
               if (details.pointerCount > 1) _gestureHadMultiTouch = true;
               setState(() {
-              if (_draggingShortHandle != null && details.pointerCount == 1) {
+              if (_draggingRectangle && details.pointerCount == 1) {
+                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
+                _updateRectangleDrag(details.localFocalPoint, scale,
+                    plotWidth, candles.length);
+              } else if (_draggingShortHandle != null && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 _updateShortDrag(details.localFocalPoint, scale,
                     plotWidth, candles.length);
@@ -1827,19 +2143,22 @@ class _ChartScreenState extends State<ChartScreen>
               });
               // The same paging threshold also applies during momentum.
               if (_draggingShortHandle == null &&
-                  !_draggingLine && !_draggingPattern) {
+                  !_draggingLine && !_draggingPattern && !_draggingRectangle) {
                 _prefetchOlderAtEdge(plotWidth, candles.length);
               }
             },
             onScaleEnd: (details) {
               final editing = _draggingLine || _draggingPattern ||
-                  _draggingShortHandle != null;
+                  _draggingShortHandle != null || _draggingRectangle;
               _draggingLine = false;
               _draggingPattern = false;
               _patternAtDragStart = null;
               _draggedEndpoint = null;
               _draggingShortHandle = null;
               _shortAtDragStart = null;
+              _draggingRectangle = false;
+              _rectangleDragHandle = null;
+              _rectangleAtDragStart = null;
               final velocity = details.velocity.pixelsPerSecond.dx;
               if (chartShouldFling(
                   horizontalVelocity: velocity,
@@ -1865,6 +2184,27 @@ class _ChartScreenState extends State<ChartScreen>
               final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
               final hit = _hitLine(details.localPosition.dy, scale);
               setState(() {
+                final rectangleHit = PriceRectangleGeometry.hitTest(
+                    details.localPosition, _rectangles, _viewport,
+                    scale, candles.length, plotWidth);
+                if (rectangleHit != null) {
+                  _selectedRectangle = rectangleHit.$1;
+                  _selectedShort = null;
+                  _selectedLine = null;
+                  _selectedPattern = null;
+                  _pendingAnchor = null;
+                  return;
+                }
+                if (_placingRectangle) {
+                  final anchor = _anchorAt(details.localPosition,
+                      scale, plotWidth, candles.length);
+                  if (anchor != null) _placeRectangleAt(anchor);
+                  return;
+                }
+                if (_selectedRectangle != null) {
+                  _selectedRectangle = null;
+                  return;
+                }
                 final shortHit = _hitShortPosition(details.localPosition,
                     scale, plotWidth, candles.length);
                 if (shortHit != null) {
@@ -1948,6 +2288,23 @@ class _ChartScreenState extends State<ChartScreen>
               ),
             ),
           )),
+          if (candles.isNotEmpty && _rectangles.isNotEmpty)
+            Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
+              child: CustomPaint(
+                painter: ChartPriceRectanglePainter(
+                  drawings: List<ChartPriceRectangle>.unmodifiable(_rectangles),
+                  selectedIndex: _drawing ? _selectedRectangle : null,
+                  viewport: _viewport,
+                  scale: _priceScale(candles, plotWidth, constraints.maxHeight),
+                  candleCount: candles.length,
+                  plotWidth: plotWidth,
+                  dark: Theme.of(context).brightness == Brightness.dark,
+                  timestamps: _mode == ChartMode.range
+                      ? _rangeBarTimestamps : _actualTimestamps,
+                ),
+                size: Size.infinite,
+              ),
+            ))),
           if (candles.isEmpty)
             Positioned.fill(child: IgnorePointer(child: Center(
               child: Padding(
@@ -1971,6 +2328,9 @@ class _ChartScreenState extends State<ChartScreen>
           if (_drawing && _selectedShort != null &&
               _selectedShort! < _shortPositions.length && candles.isNotEmpty)
             _buildShortFloatingToolbar(constraints.maxWidth),
+          if (_drawing && _selectedRectangle != null &&
+              _selectedRectangle! < _rectangles.length && candles.isNotEmpty)
+            _buildRectangleFloatingToolbar(constraints.maxWidth),
           ]);
         }),
       ),
@@ -2019,14 +2379,19 @@ class _ChartScreenState extends State<ChartScreen>
           Expanded(child: Text(_marketEvidenceLabel,
               maxLines: 2, overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 11))),
-          if (_drawing && (_selectedLine != null || _selectedPattern != null || _selectedShort != null))
+          if (_drawing && (_selectedLine != null || _selectedPattern != null ||
+              _selectedShort != null || _selectedRectangle != null))
             IconButton(tooltip: 'خصائص الرسم المحدد',
-              onPressed: _selectedShort != null ? _shortProperties : _editSelectedDrawing,
+              onPressed: _selectedRectangle != null ? _rectangleProperties :
+                  _selectedShort != null ? _shortProperties : _editSelectedDrawing,
               icon: const Icon(Icons.tune)),
-          if (_drawing && (_selectedLine != null || _selectedPattern != null || _selectedShort != null))
+          if (_drawing && (_selectedLine != null || _selectedPattern != null ||
+              _selectedShort != null || _selectedRectangle != null))
             IconButton(tooltip: 'حذف الرسم المحدد', onPressed: () => setState(() {
               _saveDrawingUndo();
-              if (_selectedShort != null && _selectedShort! < _shortPositions.length) {
+              if (_selectedRectangle != null && _selectedRectangle! < _rectangles.length) {
+                _rectangles.removeAt(_selectedRectangle!);
+              } else if (_selectedShort != null && _selectedShort! < _shortPositions.length) {
                 _shortPositions.removeAt(_selectedShort!);
               } else if (_selectedLine != null && _selectedLine! < _levels.length) {
                 _levels.removeAt(_selectedLine!);
@@ -2036,6 +2401,7 @@ class _ChartScreenState extends State<ChartScreen>
               _selectedLine = null;
               _selectedPattern = null;
               _selectedShort = null;
+              _selectedRectangle = null;
             }), icon: const Icon(Icons.delete_outline)),
           if (_lineUndo.isNotEmpty)
             TextButton.icon(
@@ -2043,6 +2409,10 @@ class _ChartScreenState extends State<ChartScreen>
               icon: const Icon(Icons.undo, size: 18),
               label: const Text('تراجع'),
             ),
+          if (_lineRedo.isNotEmpty)
+            IconButton(
+              key: const Key('drawing-redo'), tooltip: 'إعادة الرسم',
+              onPressed: _redoDrawing, icon: const Icon(Icons.redo, size: 19)),
         ]),
       ),
       if (widget.journal != null && !_replay)
@@ -2082,6 +2452,17 @@ class _ChartScreenState extends State<ChartScreen>
                   : 'حدد الهدف أسفل سعر الدخول',
               key: const Key('short-position-placement-hint'),
               style: const TextStyle(fontSize: 12, color: TradeColors.shortHandle)),
+        ),
+      if (_placingRectangle && candles.isNotEmpty)
+        Container(alignment: Alignment.center,
+          color: TradeColors.rectangleHandle.withValues(alpha: .06),
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Text(_rectangleFirstCorner == null
+            ? 'المستطيل: اختر الزاوية الأولى على الشارت'
+            : 'المستطيل: اختر الزاوية المقابلة لتحديد السعر والزمن',
+            key: const Key('price-rectangle-placement-hint'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, color: TradeColors.rectangleHandle)),
         ),
       if (_replay) _replayControls(context),
     ]);
@@ -2146,6 +2527,38 @@ class _ChartScreenState extends State<ChartScreen>
           ]),
         ]),
       );
+}
+
+/// Line-only angle glyph; keeps the reference toolbar's outlined style.
+class _RectangleToolbarAngle extends StatelessWidget {
+  const _RectangleToolbarAngle();
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _RectangleAnglePainter(
+      Theme.of(context).colorScheme.onSurface),
+    size: const Size(25, 25));
+}
+
+class _RectangleAnglePainter extends CustomPainter {
+  _RectangleAnglePainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final ink = Paint()..color = color..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+    final base = size.height * .78;
+    canvas.drawLine(Offset(2, base), Offset(size.width - 1, base), ink);
+    canvas.drawLine(Offset(2, base),
+      Offset(size.width * .78, size.height * .13), ink);
+    canvas.drawArc(Rect.fromLTWH(4, size.height * .49, 10, 10),
+      math.pi * 1.5, math.pi * .48, false, ink);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RectangleAnglePainter old) =>
+    old.color != color;
 }
 
 class _CandleChartPainter extends CustomPainter {
@@ -2498,8 +2911,9 @@ class _CandleChartPainter extends CustomPainter {
       old.candles != candles || old.timestamps != timestamps ||
       old.dark != dark || old.viewport != viewport ||
       old.crosshair != crosshair || old.indicator != indicator ||
-      old.levels != levels || old.patterns != patterns ||
-      old.shortPositions != shortPositions ||
+      !listEquals(old.levels, levels) ||
+      !listEquals(old.patterns, patterns) ||
+      !listEquals(old.shortPositions, shortPositions) ||
       old.selectedLine != selectedLine || old.selectedPattern != selectedPattern ||
       old.selectedShort != selectedShort || old.showShortLabels != showShortLabels;
 }

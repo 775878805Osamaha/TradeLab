@@ -13,6 +13,11 @@ abstract final class TradeColors {
   static const shortHandle = Color(0xFF2351E2);
   static const shortLabelBlue = Color(0xFF3374F4);
   static const shortLabelRed = Color(0xFFE9344F);
+  // Selected price-range rectangle in PROMPT 02; annotation UI only.
+  static const rectangleHandle = Color(0xFF2556E4);
+  static const rectangleAxisTag = Color(0xFF2962FF);
+  static const rectangleAccentGreen = Color(0xFF5BAD6F);
+  static const rectangleAccentOrange = Color(0xFFFFA41D);
   static const gold = Color(0xFFF5A623);
 
   static const lightCanvas = Color(0xFFF4F6FA);

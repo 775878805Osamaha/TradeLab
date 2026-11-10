@@ -131,6 +131,22 @@ void main() {
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
   });
 
+  testWidgets('price rectangle is selectable without inventing XAUUSD candles',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    final option = find.byKey(const Key('price-rectangle-tool'));
+    expect(option, findsOneWidget);
+    await tester.ensureVisible(option);
+    await tester.pump();
+    await tester.tap(option);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    expect(find.byKey(const Key('price-rectangle-placement-hint')), findsNothing);
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+  });
+
   testWidgets('navigation retains results and account screens', (tester) async {
     await openAtPhoneSize(tester);
     await tester.tap(find.text('النتائج').last);

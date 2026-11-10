@@ -58,6 +58,8 @@ jobs:
         run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs
       - name: Capture chart design snapshot
         run: flutter test --update-goldens test/golden_test.dart
+      - name: Verify eight-handle price rectangle and render isolated preview
+        run: flutter test --update-goldens test/chart_price_rectangle_test.dart
       - name: Build optimized Flutter preview APK
         # Flutter's generated Android host signs this preview using its
         # ephemeral debug certificate; this is NOT a Play Store release.
@@ -118,6 +120,12 @@ jobs:
         with:
           name: TradeLab-Flutter-Chart-Snapshot
           path: flutter_app/test/goldens/tradelab_chart_flutter.png
+          if-no-files-found: error
+      - name: Upload isolated price rectangle screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Price-Rectangle-Component-Preview
+          path: flutter_app/test/goldens/selected_price_rectangle.png
           if-no-files-found: error
       - name: Publish direct APK as GitHub prerelease
         if: github.event_name != 'pull_request'
