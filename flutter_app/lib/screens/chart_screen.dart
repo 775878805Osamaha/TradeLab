@@ -4,8 +4,10 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../chart/chart_annotations.dart';
+import '../chart/chart_line_geometry.dart';
 import '../chart/chart_short_position.dart';
 import '../chart/chart_price_rectangle.dart';
 import '../chart/chart_type_sheet.dart';
@@ -88,7 +90,13 @@ class _ChartScreenState extends State<ChartScreen>
   // change until the user deliberately chooses an implemented tool.
   final Set<DrawingCatalogKind> _favoriteDrawingTools = {
     DrawingCatalogKind.fibonacciRetracement,
+    DrawingCatalogKind.trendLine,
+    DrawingCatalogKind.horizontal,
+    DrawingCatalogKind.horizontalRay,
+    DrawingCatalogKind.verticalLine,
   };
+  static const _drawingFavoritesKey = 'tradelab-drawing-favorites-v1';
+  final _drawingFavoritesStorage = const FlutterSecureStorage();
   bool _placingShort = false;
   bool _placingRectangle = false;
   ChartAnchor? _rectangleFirstCorner;
@@ -128,6 +136,7 @@ class _ChartScreenState extends State<ChartScreen>
   List<double> _analysisLevels = [];
   List<ChartPattern> _analysisPatterns = [];
   ChartAnchor? _pendingAnchor;
+  ChartAnchor? _secondChannelAnchor;
   int? _selectedLine;
   int? _selectedPattern;
   bool _draggingLine = false;
@@ -204,6 +213,7 @@ class _ChartScreenState extends State<ChartScreen>
   @override
   void initState() {
     super.initState();
+    unawaited(_loadDrawingFavorites());
     _momentum = AnimationController.unbounded(vsync: this)
       ..addListener(_tickMomentum);
     _linkedBefore = widget.controller.ctraderConnected;
@@ -218,6 +228,31 @@ class _ChartScreenState extends State<ChartScreen>
     // Binance does not require a cTrader session. Load its chart immediately
     // when selected, even on a device that has never linked a broker.
     if (_liveRequested) Future.microtask(_loadRealHistory);
+  }
+
+  Future<void> _loadDrawingFavorites() async {
+    try {
+      final stored = await _drawingFavoritesStorage.read(
+          key: _drawingFavoritesKey);
+      if (!mounted || stored == null) return;
+      final favorites = DrawingFavoritesCodec.decode(stored);
+      setState(() => _favoriteDrawingTools
+        ..clear()
+        ..addAll(favorites));
+    } catch (_) {
+      // Drawing access must remain usable on devices without a secure store.
+    }
+  }
+
+  Future<void> _persistDrawingFavorites() async {
+    try {
+      await _drawingFavoritesStorage.write(
+        key: _drawingFavoritesKey,
+        value: DrawingFavoritesCodec.encode(_favoriteDrawingTools),
+      );
+    } catch (_) {
+      // A storage error must not interrupt chart gestures or drawing selection.
+    }
   }
 
   @override
@@ -348,6 +383,7 @@ class _ChartScreenState extends State<ChartScreen>
       _analysisPatterns = [];
       _analysisLevels = [];
       _pendingAnchor = null;
+      _secondChannelAnchor = null;
       _selectedPattern = null;
     });
     try {
@@ -600,8 +636,11 @@ class _ChartScreenState extends State<ChartScreen>
       ChartPattern? rebasePattern(ChartPattern pattern) {
         final first = rebaseAnchor(pattern.start);
         final last = rebaseAnchor(pattern.end);
-        return first == null || last == null
-            ? null : pattern.reanchored(first, last);
+        final offset = pattern.offsetAnchor == null
+            ? null : rebaseAnchor(pattern.offsetAnchor!);
+        return first == null || last == null ||
+                (pattern.offsetAnchor != null && offset == null)
+            ? null : pattern.reanchored(first, last, offsetIndex: offset);
       }
       final rebasedPatterns = _patterns
           .map(rebasePattern).whereType<ChartPattern>().toList();
@@ -629,6 +668,8 @@ class _ChartScreenState extends State<ChartScreen>
           .map(rebaseRectangle).whereType<ChartPriceRectangle>().toList();
       final pendingIndex = _pendingAnchor == null
           ? null : rebaseAnchor(_pendingAnchor!);
+      final secondChannelIndex = _secondChannelAnchor == null
+          ? null : rebaseAnchor(_secondChannelAnchor!);
       final shortEntryIndex = _shortEntryAnchor == null
           ? null : rebaseAnchor(_shortEntryAnchor!);
       final rectangleFirstIndex = _rectangleFirstCorner == null
@@ -690,6 +731,8 @@ class _ChartScreenState extends State<ChartScreen>
         _selectedShort = null;
         _pendingAnchor = pendingIndex == null ? null
             : ChartAnchor(pendingIndex, _pendingAnchor!.price);
+        _secondChannelAnchor = secondChannelIndex == null ? null
+            : ChartAnchor(secondChannelIndex, _secondChannelAnchor!.price);
         if (_shortEntryAnchor != null) {
           _shortEntryAnchor = shortEntryIndex == null ? null
               : ChartAnchor(shortEntryIndex, _shortEntryAnchor!.price);
@@ -797,6 +840,10 @@ class _ChartScreenState extends State<ChartScreen>
         if (_pendingAnchor != null) {
           _pendingAnchor = _pendingAnchor!.shifted(unique.length);
         }
+        if (_secondChannelAnchor != null) {
+          _secondChannelAnchor =
+              _secondChannelAnchor!.shifted(unique.length);
+        }
         // Undo snapshots contain bar indices from before historical prepend.
         // Keep current drawings but never replay an obsolete anchor snapshot.
         _lineUndo.clear();
@@ -873,6 +920,7 @@ class _ChartScreenState extends State<ChartScreen>
         _shortEntryAnchor = null;
         _shortStopPrice = null;
         _pendingAnchor = null;
+        _secondChannelAnchor = null;
         _lineUndo.clear();
         _lineRedo.clear();
       });
@@ -1157,9 +1205,11 @@ class _ChartScreenState extends State<ChartScreen>
       backgroundColor: Colors.transparent,
       barrierColor: Colors.transparent,
       builder: (sheetContext) => DrawingToolsSheet(
+        initialCategory: DrawingCategory.trend,
         favorites: _favoriteDrawingTools,
         onFavoritesChanged: (favorites) {
           _favoriteDrawingTools..clear()..addAll(favorites);
+          unawaited(_persistDrawingFavorites());
         },
         onUnavailable: (tool) => showDialog<void>(
           context: sheetContext,
@@ -1183,8 +1233,18 @@ class _ChartScreenState extends State<ChartScreen>
               _selectDrawingMode(tool: ChartDrawingTool.fibonacci);
             case DrawingCatalogKind.trendLine:
               _selectDrawingMode(tool: ChartDrawingTool.trendLine);
+            case DrawingCatalogKind.ray:
+              _selectDrawingMode(tool: ChartDrawingTool.ray);
+            case DrawingCatalogKind.extendedLine:
+              _selectDrawingMode(tool: ChartDrawingTool.extendedLine);
             case DrawingCatalogKind.horizontal:
               _selectDrawingMode(tool: ChartDrawingTool.horizontal);
+            case DrawingCatalogKind.horizontalRay:
+              _selectDrawingMode(tool: ChartDrawingTool.horizontalRay);
+            case DrawingCatalogKind.verticalLine:
+              _selectDrawingMode(tool: ChartDrawingTool.verticalLine);
+            case DrawingCatalogKind.parallelChannel:
+              _selectDrawingMode(tool: ChartDrawingTool.parallelChannel);
             case DrawingCatalogKind.shortPosition:
               _selectDrawingMode(short: true);
             case DrawingCatalogKind.priceRectangle:
@@ -1241,6 +1301,7 @@ class _ChartScreenState extends State<ChartScreen>
     _selectedShort = null;
     _selectedRectangle = null;
     _pendingAnchor = null;
+    _secondChannelAnchor = null;
     _rectangleFirstCorner = null;
   }
 
@@ -1278,6 +1339,7 @@ class _ChartScreenState extends State<ChartScreen>
     _lineUndo.clear();
     _lineRedo.clear();
     _pendingAnchor = null;
+    _secondChannelAnchor = null;
     _selectedLine = null;
     _selectedPattern = null;
     _selectedShort = null;
@@ -1318,17 +1380,20 @@ class _ChartScreenState extends State<ChartScreen>
           return i;
         }
       } else {
-        final dx = x2 - x1;
-        final dy = y2 - y1;
-        final lengthSquared = dx * dx + dy * dy;
-        final projection = lengthSquared == 0 ? 0.0 :
-            ((position.dx - x1) * dx + (position.dy - y1) * dy) /
-                lengthSquared;
-        final t = projection.clamp(0.0, 1.0);
-        final distance = math.sqrt(
-          math.pow(position.dx - (x1 + dx * t), 2) +
-          math.pow(position.dy - (y1 + dy * t), 2));
-        if (distance <= 17) return i;
+        final offset = pattern.offsetAnchor == null ? null : Offset(
+          _viewport.chartX(index: pattern.offsetAnchor!.index,
+              candleCount: visibleCount, plotWidth: width),
+          scale.y(pattern.offsetAnchor!.price));
+        final strokes = ChartLineGeometry.strokes(
+          tool: pattern.tool,
+          start: Offset(x1, y1),
+          end: Offset(x2, y2),
+          offset: offset,
+          bounds: Rect.fromLTWH(0, 0, width, scale.height),
+        );
+        if (strokes.any(
+            (stroke) => ChartLineGeometry.distanceToStroke(
+                position, stroke) <= 17)) return i;
       }
     }
     return null;
@@ -1350,8 +1415,20 @@ class _ChartScreenState extends State<ChartScreen>
           candleCount: visibleCount, plotWidth: width),
       scale.y(pattern.end.price),
     );
+    final channelOffset = pattern.offsetAnchor;
+    if (channelOffset != null) {
+      final offsetHandle = Offset(
+        _viewport.chartX(index: channelOffset.index,
+            candleCount: visibleCount, plotWidth: width),
+        scale.y(channelOffset.price),
+      );
+      if ((position - offsetHandle).distance <= 22) {
+        return ChartAnchorEndpoint.offset;
+      }
+    }
     // Make the displayed selection handles accessible to a finger.
     if ((position - start).distance <= 22) return ChartAnchorEndpoint.start;
+    if (pattern.tool.oneAnchor) return null;
     if ((position - end).distance <= 22) return ChartAnchorEndpoint.end;
     return null;
   }
@@ -1508,6 +1585,7 @@ class _ChartScreenState extends State<ChartScreen>
       _shortStopPrice = null;
       _rectangleFirstCorner = null;
       _pendingAnchor = null;
+      _secondChannelAnchor = null;
       _selectedShort = null;
       _selectedRectangle = null;
       _selectedLine = null;
@@ -1534,6 +1612,7 @@ class _ChartScreenState extends State<ChartScreen>
               _placingShort = false;
               _placingRectangle = false;
               _pendingAnchor = null;
+              _secondChannelAnchor = null;
               _rectangleFirstCorner = null;
             }),
             icon: const Icon(Icons.near_me_outlined, size: 23),
@@ -2093,8 +2172,14 @@ class _ChartScreenState extends State<ChartScreen>
                 } else {
                   final proposedBars = ((details.localFocalPoint.dx -
                       _gestureFocalX) / _viewport.barWidth).round();
-                  final minIndex = math.min(original.start.index, original.end.index);
-                  final maxIndex = math.max(original.start.index, original.end.index);
+                  final indices = [
+                    original.start.index,
+                    original.end.index,
+                    if (original.offsetAnchor != null)
+                      original.offsetAnchor!.index,
+                  ];
+                  final minIndex = indices.reduce(math.min);
+                  final maxIndex = indices.reduce(math.max);
                   final barDelta = proposedBars.clamp(-minIndex,
                       math.max(0, candles.length - 1 - maxIndex));
                   final change = scale.price(
@@ -2217,19 +2302,34 @@ class _ChartScreenState extends State<ChartScreen>
                   final anchor = _anchorAt(details.localPosition, scale,
                       plotWidth, candles.length);
                   if (anchor == null) return;
-                  if (_pendingAnchor == null) {
+                  if (_drawingTool.oneAnchor) {
+                    _saveDrawingUndo();
+                    _patterns.add(ChartPattern(
+                      tool: _drawingTool, start: anchor, end: anchor));
+                    _selectedPattern = _patterns.length - 1;
+                    _selectedLine = null;
+                    _selectedShort = null;
+                    _pendingAnchor = null;
+                    _secondChannelAnchor = null;
+                  } else if (_pendingAnchor == null) {
                     _pendingAnchor = anchor;
+                  } else if (_drawingTool.threeAnchors &&
+                      _secondChannelAnchor == null) {
+                    _secondChannelAnchor = anchor;
                   } else {
                     _saveDrawingUndo();
                     _patterns.add(ChartPattern(
                       tool: _drawingTool,
                       start: _pendingAnchor!,
-                      end: anchor,
+                      end: _secondChannelAnchor ?? anchor,
+                      offsetAnchor: _secondChannelAnchor == null
+                          ? null : anchor,
                     ));
                     _selectedPattern = _patterns.length - 1;
                     _selectedLine = null;
                     _selectedShort = null;
                     _pendingAnchor = null;
+                    _secondChannelAnchor = null;
                   }
                   return;
                 }
@@ -2407,7 +2507,9 @@ class _ChartScreenState extends State<ChartScreen>
           alignment: Alignment.center,
           color: TradeColors.blue.withValues(alpha: .06),
           padding: const EdgeInsets.symmetric(vertical: 5),
-          child: const Text('المس الشارت لتحديد النقطة الثانية للرسم',
+          child: Text(_secondChannelAnchor != null
+                  ? 'القناة المتوازية: حدد النقطة الثالثة لضبط عرض القناة'
+                  : 'المس الشارت لتحديد النقطة الثانية للرسم',
               style: TextStyle(fontSize: 12, color: TradeColors.blue)),
         ),
       if (_drawing && _selectedPattern != null)
@@ -2678,12 +2780,36 @@ class _CandleChartPainter extends CustomPainter {
           }
         }
       } else {
-        canvas.drawLine(Offset(x1, y1), Offset(x2, y2), drawingPaint);
+        final offsetAnchor = drawing.offsetAnchor;
+        final offset = offsetAnchor == null ? null : Offset(
+          viewport.chartX(index: offsetAnchor.index,
+              candleCount: candles.length, plotWidth: axis),
+          y(offsetAnchor.price),
+        );
+        final strokes = ChartLineGeometry.strokes(
+          tool: drawing.tool,
+          start: Offset(x1, y1),
+          end: Offset(x2, y2),
+          offset: offset,
+          bounds: Rect.fromLTWH(0, 0, axis, chartHeight),
+        );
+        for (final stroke in strokes) {
+          canvas.drawLine(stroke.start, stroke.end, drawingPaint);
+        }
       }
       if (selected) {
         final handle = Paint()..color = color;
         canvas.drawCircle(Offset(x1, y1), 4.2, handle);
-        canvas.drawCircle(Offset(x2, y2), 4.2, handle);
+        if (!drawing.tool.oneAnchor) {
+          canvas.drawCircle(Offset(x2, y2), 4.2, handle);
+        }
+        final offsetAnchor = drawing.offsetAnchor;
+        if (offsetAnchor != null) {
+          canvas.drawCircle(Offset(
+            viewport.chartX(index: offsetAnchor.index,
+                candleCount: candles.length, plotWidth: axis),
+            y(offsetAnchor.price)), 4.2, handle);
+        }
       }
     }
     _paintShortPositions(canvas, scale, axis, candles.length, decimals);

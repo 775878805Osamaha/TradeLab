@@ -22,10 +22,59 @@ void main() {
         [DrawingCatalogKind.fibonacciRetracement]);
   });
 
+  test('trend tools preserve the exact 17-card RTL order and support flags', () {
+    final trend = DrawingCatalogKind.values
+        .where((tool) => tool.category == DrawingCategory.trend).toList();
+    expect(trend, [
+      DrawingCatalogKind.trendLine,
+      DrawingCatalogKind.ray,
+      DrawingCatalogKind.infoLine,
+      DrawingCatalogKind.extendedLine,
+      DrawingCatalogKind.trendAngle,
+      DrawingCatalogKind.horizontal,
+      DrawingCatalogKind.horizontalRay,
+      DrawingCatalogKind.verticalLine,
+      DrawingCatalogKind.crossLine,
+      DrawingCatalogKind.parallelChannel,
+      DrawingCatalogKind.regressionTrend,
+      DrawingCatalogKind.flatTopBottom,
+      DrawingCatalogKind.disjointChannel,
+      DrawingCatalogKind.pitchfork,
+      DrawingCatalogKind.schiffPitchfork,
+      DrawingCatalogKind.modifiedSchiffPitchfork,
+      DrawingCatalogKind.insidePitchfork,
+    ]);
+    expect(trend.where((tool) => tool.implemented).toList(), [
+      DrawingCatalogKind.trendLine,
+      DrawingCatalogKind.ray,
+      DrawingCatalogKind.extendedLine,
+      DrawingCatalogKind.horizontal,
+      DrawingCatalogKind.horizontalRay,
+      DrawingCatalogKind.verticalLine,
+      DrawingCatalogKind.parallelChannel,
+    ]);
+  });
+
+  test('favorites codec preserves selection across process restart', () {
+    final original = {
+      DrawingCatalogKind.trendLine,
+      DrawingCatalogKind.horizontalRay,
+      DrawingCatalogKind.verticalLine,
+    };
+    final encoded = DrawingFavoritesCodec.encode(original);
+    expect(DrawingFavoritesCodec.decode(encoded), original);
+    expect(DrawingFavoritesCodec.decode(
+        '["trendLine","unknownFutureTool","ray"]'), {
+      DrawingCatalogKind.trendLine, DrawingCatalogKind.ray,
+    });
+  });
+
   Future<void> pumpCatalog(WidgetTester tester, {
     Size size = const Size(345.5, 768),
+    DrawingCategory initialCategory = DrawingCategory.gann,
     ValueChanged<DrawingCatalogKind>? onSelect,
     ValueChanged<DrawingCatalogKind>? onUnavailable,
+    ValueChanged<Set<DrawingCatalogKind>>? onFavoritesChanged,
   }) async {
     tester.view.devicePixelRatio = 2;
     tester.view.physicalSize = size * 2;
@@ -40,8 +89,15 @@ void main() {
             isScrollControlled: true,
             backgroundColor: Colors.transparent,
             builder: (_) => DrawingToolsSheet(
-              favorites: {DrawingCatalogKind.fibonacciRetracement},
-              onFavoritesChanged: (_) {},
+              initialCategory: initialCategory,
+              favorites: {
+                DrawingCatalogKind.fibonacciRetracement,
+                DrawingCatalogKind.trendLine,
+                DrawingCatalogKind.horizontal,
+                DrawingCatalogKind.horizontalRay,
+                DrawingCatalogKind.verticalLine,
+              },
+              onFavoritesChanged: onFavoritesChanged ?? (_) {},
               onSelect: onSelect ?? (_) {},
               onUnavailable: onUnavailable ?? (_) {},
             ),
@@ -122,6 +178,91 @@ void main() {
     await expectLater(find.byKey(const Key('drawing-tools-bottom-sheet')),
         matchesGoldenFile('goldens/gann_fibonacci_drawing_tools.png'));
   });
+
+  testWidgets('PROMPT 05: selected trend tab, 3 RTL columns and 2 last tiles',
+      (tester) async {
+    await pumpCatalog(tester, initialCategory: DrawingCategory.trend);
+    final right = tester.getRect(
+        find.byKey(const Key('drawing-tool-trendLine')));
+    final center = tester.getRect(
+        find.byKey(const Key('drawing-tool-ray')));
+    final left = tester.getRect(
+        find.byKey(const Key('drawing-tool-infoLine')));
+    expect(right.left, greaterThan(center.right));
+    expect(center.left, greaterThan(left.right));
+    expect(right.top, moreOrLessEquals(left.top, epsilon: .5));
+    final lastRight = tester.getRect(
+        find.byKey(const Key('drawing-tool-modifiedSchiffPitchfork')));
+    final lastCenter = tester.getRect(
+        find.byKey(const Key('drawing-tool-insidePitchfork')));
+    expect(lastRight.left, greaterThan(lastCenter.right));
+    expect(lastRight.top, greaterThan(right.top));
+    for (final favorite in [
+      DrawingCatalogKind.trendLine,
+      DrawingCatalogKind.horizontal,
+      DrawingCatalogKind.horizontalRay,
+      DrawingCatalogKind.verticalLine,
+    ]) {
+      expect(find.byKey(Key('drawing-favorite-${favorite.name}')),
+          findsOneWidget);
+    }
+    expect(find.byKey(const Key('drawing-favorite-ray')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('PROMPT 05: ray selected; unsupported fork shows unavailable',
+      (tester) async {
+    final selected = <DrawingCatalogKind>[];
+    final unsupported = <DrawingCatalogKind>[];
+    await pumpCatalog(tester, initialCategory: DrawingCategory.trend,
+      onSelect: selected.add, onUnavailable: unsupported.add);
+    await tester.tap(find.byKey(const Key('drawing-tool-ray')));
+    await tester.pump();
+    expect(selected, [DrawingCatalogKind.ray]);
+    await tester.drag(find.byKey(const Key('drawing-tools-grid')),
+        const Offset(0, -650));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('drawing-tool-insidePitchfork')));
+    await tester.pump();
+    expect(unsupported, [DrawingCatalogKind.insidePitchfork]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('PROMPT 05: search, toggle favorite, and notify persistence',
+      (tester) async {
+    Set<DrawingCatalogKind>? changed;
+    await pumpCatalog(tester, initialCategory: DrawingCategory.trend,
+      onFavoritesChanged: (value) => changed = value);
+    await tester.enterText(find.byKey(const Key('drawing-tools-search')),
+        'شعاع');
+    await tester.pump();
+    expect(find.byKey(const Key('drawing-tool-ray')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-tool-horizontalRay')),
+        findsOneWidget);
+    await tester.longPress(find.byKey(const Key('drawing-tool-ray')));
+    await tester.pump();
+    expect(changed, contains(DrawingCatalogKind.ray));
+    expect(find.byKey(const Key('drawing-favorite-ray')), findsOneWidget);
+  });
+
+  testWidgets('PROMPT 05: 17 trend tiles golden reference',
+      (tester) async {
+    await pumpCatalog(tester, initialCategory: DrawingCategory.trend);
+    await expectLater(find.byKey(const Key('drawing-tools-bottom-sheet')),
+        matchesGoldenFile('goldens/trend_drawing_tools.png'));
+  });
+
+  for (final size in const [Size(320,640), Size(360,800), Size(390,844)]) {
+    testWidgets('PROMPT 05 no overflow on trend grid ${size.width}x${size.height}',
+        (tester) async {
+      await pumpCatalog(tester, size:size,
+          initialCategory: DrawingCategory.trend);
+      await tester.drag(find.byKey(const Key('drawing-tools-grid')),
+          const Offset(0,-450));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   for (final size in const [Size(320,640), Size(360,800), Size(390,844)]) {
     testWidgets('no overflow on phone ${size.width}x${size.height}',

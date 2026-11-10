@@ -65,8 +65,17 @@ def main():
                     str(target[0]), str(target[1])], check=True, timeout=20)
     time.sleep(3)
     root = ui_tree()
-    if not center_of(root, "جان وفيبوناتشي"):
+    category = center_of(root, "جان وفيبوناتشي")
+    if not category:
         print("Gann/Fibonacci category not visible after opening drawings.")
+        return 1
+    # PROMPT 05 opens the trend tab by default. Select Gann explicitly
+    # so the earlier PROMPT 04 screenshot remains an honest Gann capture.
+    subprocess.run(["adb", "shell", "input", "tap",
+                    str(category[0]), str(category[1])], check=True, timeout=20)
+    time.sleep(2)
+    if not center_of(ui_tree(), "تصحيحات فيبوناتشي"):
+        print("Gann/Fibonacci tool grid did not become visible.")
         return 1
     destination = Path(sys.argv[1])
     destination.parent.mkdir(parents=True, exist_ok=True)

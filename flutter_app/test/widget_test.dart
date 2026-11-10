@@ -131,16 +131,32 @@ void main() {
     await tester.tap(find.byTooltip('أدوات الرسم'));
     await tester.pumpAndSettle();
     expect(find.text('رسومات'), findsOneWidget);
+    expect(find.byKey(const Key('drawing-tool-trendLine')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('drawing-category-gann')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('drawing-tool-fibonacciRetracement')),
         findsOneWidget);
     await tester.ensureVisible(find.byKey(const Key('drawing-category-trend')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('drawing-category-trend')));
     await tester.pumpAndSettle();
-    expect(find.text('خط اتجاه · نقطتان'), findsOneWidget);
+    expect(find.text('خط اتجاه'), findsOneWidget);
     await tester.tap(find.byKey(const Key('drawing-tool-trendLine')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+  });
+
+  testWidgets('ray selection does not seed prices before cTrader is linked',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('drawing-tool-ray')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('drawing-tool-ray')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
   });
 
   testWidgets('sell-position drawing is offered but never seeded on an empty feed',

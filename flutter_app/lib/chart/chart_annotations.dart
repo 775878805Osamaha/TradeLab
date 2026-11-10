@@ -1,7 +1,14 @@
 /// Drawing objects use candle positions and real market prices, not pixel
 /// coordinates. Historical pagination shifts indices but never prices.
-enum ChartDrawingTool { horizontal, trendLine, fibonacci }
-enum ChartAnchorEndpoint { start, end }
+enum ChartDrawingTool {
+  horizontal, trendLine, fibonacci,
+  ray, extendedLine, horizontalRay, verticalLine, parallelChannel;
+
+  bool get oneAnchor =>
+      this == horizontalRay || this == verticalLine;
+  bool get threeAnchors => this == parallelChannel;
+}
+enum ChartAnchorEndpoint { start, end, offset }
 
 /// Match TradingView's optional OHLC magnet while retaining free placement.
 enum ChartMagnetMode { off, weak, strong }
@@ -45,6 +52,7 @@ class ChartPattern {
     required this.tool,
     required this.start,
     required this.end,
+    this.offsetAnchor,
     this.colorValue = 0xFF3467E9,
     this.strokeWidth = 1.5,
     this.showLabels = true,
@@ -53,6 +61,8 @@ class ChartPattern {
   final ChartDrawingTool tool;
   final ChartAnchor start;
   final ChartAnchor end;
+  /// Third source-price/bar anchor, only for a parallel channel.
+  final ChartAnchor? offsetAnchor;
   final int colorValue;
   final double strokeWidth;
   final bool showLabels;
@@ -70,14 +80,18 @@ class ChartPattern {
       tool: tool,
       start: start.shifted(olderCount),
       end: end.shifted(olderCount),
+      offsetAnchor: offsetAnchor?.shifted(olderCount),
       colorValue: colorValue,
       strokeWidth: strokeWidth,
       showLabels: showLabels);
 
-  ChartPattern reanchored(int startIndex, int endIndex) => ChartPattern(
+  ChartPattern reanchored(int startIndex, int endIndex,
+      {int? offsetIndex}) => ChartPattern(
       tool: tool,
       start: ChartAnchor(startIndex, start.price),
       end: ChartAnchor(endIndex, end.price),
+      offsetAnchor: offsetAnchor == null ? null
+          : ChartAnchor(offsetIndex ?? offsetAnchor!.index, offsetAnchor!.price),
       colorValue: colorValue,
       strokeWidth: strokeWidth,
       showLabels: showLabels);
@@ -86,6 +100,7 @@ class ChartPattern {
       tool: tool,
       start: start.moved(bars, priceDelta),
       end: end.moved(bars, priceDelta),
+      offsetAnchor: offsetAnchor?.moved(bars, priceDelta),
       colorValue: colorValue,
       strokeWidth: strokeWidth,
       showLabels: showLabels);
@@ -96,7 +111,11 @@ class ChartPattern {
       ChartPattern(
         tool: tool,
         start: endpoint == ChartAnchorEndpoint.start ? anchor : start,
-        end: endpoint == ChartAnchorEndpoint.end ? anchor : end,
+        end: endpoint == ChartAnchorEndpoint.end ||
+                (tool.oneAnchor && endpoint == ChartAnchorEndpoint.start)
+            ? anchor : end,
+        offsetAnchor: endpoint == ChartAnchorEndpoint.offset
+            ? anchor : offsetAnchor,
         colorValue: colorValue,
         strokeWidth: strokeWidth,
         showLabels: showLabels,
@@ -107,6 +126,7 @@ class ChartPattern {
         tool: tool,
         start: start,
         end: end,
+        offsetAnchor: offsetAnchor,
         colorValue: colorValue ?? this.colorValue,
         strokeWidth: strokeWidth ?? this.strokeWidth,
         showLabels: showLabels ?? this.showLabels,
@@ -115,5 +135,6 @@ class ChartPattern {
   /// A replayed historical series may show only a prefix. Never display an
   /// annotation whose endpoint refers to an as-yet-unrevealed candle.
   bool visibleAt(int revealedCount) =>
-      start.index < revealedCount && end.index < revealedCount;
+      start.index < revealedCount && end.index < revealedCount &&
+      (offsetAnchor == null || offsetAnchor!.index < revealedCount);
 }

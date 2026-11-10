@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -22,8 +23,24 @@ enum DrawingCatalogKind {
   fixedGannSquare('مربع جان الثابت', DrawingCategory.gann),
   gannSquare('مربع جان', DrawingCategory.gann),
   gannFan('مروحة جان', DrawingCategory.gann),
-  trendLine('خط اتجاه · نقطتان', DrawingCategory.trend),
-  horizontal('خط أفقي', DrawingCategory.tools),
+  // PROMPT 05: exact RTL grid order, seven rows are not inferred: 3+3+3+3+3+2.
+  trendLine('خط اتجاه', DrawingCategory.trend),
+  ray('شعاع', DrawingCategory.trend),
+  infoLine('خط معلومات', DrawingCategory.trend),
+  extendedLine('خط ممتد', DrawingCategory.trend),
+  trendAngle('زاوية الاتجاه', DrawingCategory.trend),
+  horizontal('خط أفقي', DrawingCategory.trend),
+  horizontalRay('شعاع أفقي', DrawingCategory.trend),
+  verticalLine('خط رأسي', DrawingCategory.trend),
+  crossLine('خط عرضي', DrawingCategory.trend),
+  parallelChannel('قناة متوازية', DrawingCategory.trend),
+  regressionTrend('اتجاه الانحدار', DrawingCategory.trend),
+  flatTopBottom('قمة/قاع مسطح', DrawingCategory.trend),
+  disjointChannel('قناة منفصلة', DrawingCategory.trend),
+  pitchfork('بيتش فورك', DrawingCategory.trend),
+  schiffPitchfork('شوكة شيف', DrawingCategory.trend),
+  modifiedSchiffPitchfork('شوكة شيف المعدلة', DrawingCategory.trend),
+  insidePitchfork('شوكة داخلية', DrawingCategory.trend),
   shortPosition('مركز بيع · الدخول ثم الوقف والهدف', DrawingCategory.tools),
   priceRectangle('مستطيل نطاق سعري · زاويتان', DrawingCategory.tools),
   magnet('مغناطيس الأسعار', DrawingCategory.tools);
@@ -33,7 +50,8 @@ enum DrawingCatalogKind {
   final DrawingCategory category;
 
   bool get implemented => switch (this) {
-    fibonacciRetracement || trendLine || horizontal || shortPosition ||
+    fibonacciRetracement || trendLine || ray || extendedLine || horizontal ||
+      horizontalRay || verticalLine || parallelChannel || shortPosition ||
       priceRectangle || magnet => true,
     _ => false,
   };
@@ -49,12 +67,31 @@ enum DrawingCategory {
   final String label;
 }
 
+/// Unknown IDs are ignored so stored favorites survive catalog upgrades.
+class DrawingFavoritesCodec {
+  const DrawingFavoritesCodec._();
+
+  static String encode(Set<DrawingCatalogKind> favorites) =>
+      jsonEncode(favorites.map((tool) => tool.name).toList());
+
+  static Set<DrawingCatalogKind> decode(String value) {
+    final decoded = jsonDecode(value);
+    if (decoded is! List) return {};
+    final valid = {for (final tool in DrawingCatalogKind.values) tool.name: tool};
+    return {
+      for (final item in decoded)
+        if (item is String && valid.containsKey(item)) valid[item]!,
+    };
+  }
+}
+
 class DrawingToolsSheet extends StatefulWidget {
   const DrawingToolsSheet({
     required this.favorites,
     required this.onFavoritesChanged,
     required this.onSelect,
     required this.onUnavailable,
+    this.initialCategory = DrawingCategory.gann,
     super.key,
   });
 
@@ -62,6 +99,7 @@ class DrawingToolsSheet extends StatefulWidget {
   final ValueChanged<Set<DrawingCatalogKind>> onFavoritesChanged;
   final ValueChanged<DrawingCatalogKind> onSelect;
   final ValueChanged<DrawingCatalogKind> onUnavailable;
+  final DrawingCategory initialCategory;
 
   @override
   State<DrawingToolsSheet> createState() => _DrawingToolsSheetState();
@@ -71,11 +109,12 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
   late Set<DrawingCatalogKind> _favorites;
   final TextEditingController _search = TextEditingController();
   final ScrollController _categories = ScrollController();
-  DrawingCategory _category = DrawingCategory.gann;
+  late DrawingCategory _category;
 
   @override
   void initState() {
     super.initState();
+    _category = widget.initialCategory;
     _favorites = {...widget.favorites};
   }
 
@@ -523,8 +562,54 @@ class DrawingToolGlyphPainter extends CustomPainter {
         spokes(6,from:7,to:46);dot(26,23,3);
       case DrawingCatalogKind.trendLine:
         line(5,44,46,7);dot(5,44);dot(46,7);
+      case DrawingCatalogKind.ray:
+        line(6,45,45,6);dot(6,45);dot(25,26,3);
+      case DrawingCatalogKind.infoLine:
+        line(8,43,42,7);dot(8,43,3.4);dot(42,7,3.4);
+        canvas.drawRRect(RRect.fromRectAndRadius(
+          const Rect.fromLTWH(25,33,17,12),const Radius.circular(3)),linePaint);
+      case DrawingCatalogKind.extendedLine:
+        line(4,46,48,2);dot(23,27,3);dot(33,17,3);
+      case DrawingCatalogKind.trendAngle:
+        line(7,45,45,45);line(7,45,44,6);
+        line(7,45,33,34,thin);dot(7,45);dot(44,6);
       case DrawingCatalogKind.horizontal:
         line(5,26,47,26);dot(26,26,3);
+      case DrawingCatalogKind.horizontalRay:
+        line(7,26,48,26);dot(7,26,3);
+      case DrawingCatalogKind.verticalLine:
+        line(26,5,26,47);dot(26,26,3);
+      case DrawingCatalogKind.crossLine:
+        line(26,4,26,48);line(4,26,48,26);dot(26,26,3);
+      case DrawingCatalogKind.parallelChannel:
+        line(7,34,42,7);line(11,46,46,19);
+        dot(7,34,3);dot(42,7,3);dot(30,32,3);
+      case DrawingCatalogKind.regressionTrend:
+        line(9,31,42,12);line(9,45,42,26);line(9,31,9,45);
+        line(42,12,42,26);dot(9,38,3);dot(42,19,3);
+      case DrawingCatalogKind.flatTopBottom:
+        poly(const [Offset(8,19),Offset(43,6)]);
+        line(8,43,43,43);dot(8,19,3);dot(43,6,3);
+        dot(8,43,3);dot(43,43,3);
+      case DrawingCatalogKind.disjointChannel:
+        line(7,18,44,8);line(7,34,44,44);
+        dot(7,18,3);dot(44,8,3);dot(7,34,3);dot(44,44,3);
+      case DrawingCatalogKind.pitchfork:
+        poly(const [Offset(8,13),Offset(26,32),Offset(45,14)]);
+        poly(const [Offset(8,32),Offset(26,45),Offset(45,26)]);
+        line(18,38,42,8);dot(8,13,3);dot(8,32,3);dot(26,45,3);
+      case DrawingCatalogKind.schiffPitchfork:
+        line(11,14,43,46);line(6,35,34,5);line(18,44,47,15);
+        poly(const [Offset(6,35),Offset(31,45),Offset(47,29)]);
+        dot(11,14,3);dot(6,35,3);dot(31,45,3);
+      case DrawingCatalogKind.modifiedSchiffPitchfork:
+        line(11,6,44,43);line(7,30,30,8);line(21,44,46,20);
+        poly(const [Offset(7,30),Offset(26,45),Offset(46,28)]);
+        dot(11,6,3);dot(7,30,3);dot(26,45,3);
+      case DrawingCatalogKind.insidePitchfork:
+        line(23,6,8,46);line(35,12,23,46);line(46,20,39,46);
+        poly(const [Offset(8,46),Offset(23,28),Offset(39,46)]);
+        dot(8,46,3);dot(23,28,3);dot(39,46,3);
       case DrawingCatalogKind.shortPosition:
         rectangle(10,9,31,13);rectangle(10,22,31,21);
         line(7,22,45,22);dot(10,22,3);

@@ -53,7 +53,7 @@ jobs:
       - name: Static analysis
         run: flutter analyze --no-fatal-infos
       - name: Interaction tests
-        run: flutter test test/widget_test.dart test/chart_short_position_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/chart_annotations_test.dart test/candle_prefix_test.dart test/results_connection_test.dart test/market_api_test.dart test/paper_ledger_test.dart test/paper_journal_controller_test.dart test/paper_trade_service_test.dart
+        run: flutter test test/widget_test.dart test/chart_short_position_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/chart_annotations_test.dart test/chart_line_geometry_test.dart test/candle_prefix_test.dart test/results_connection_test.dart test/market_api_test.dart test/paper_ledger_test.dart test/paper_journal_controller_test.dart test/paper_trade_service_test.dart
       - name: Verify native OAuth compatibility
         run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs
       - name: Capture chart design snapshot
@@ -62,7 +62,7 @@ jobs:
         run: flutter test --update-goldens test/chart_price_rectangle_test.dart
       - name: Verify 21 chart-kind cards and capture selected-candles sheet
         run: flutter test --update-goldens test/chart_type_sheet_test.dart
-      - name: Verify 15 Gann Fibonacci tools, search, favorites, RTL and golden
+      - name: Verify Gann and trend catalogs, search, favorites, RTL and goldens
         run: flutter test --update-goldens test/drawing_tools_sheet_test.dart
       - name: Build optimized Flutter preview APK
         # Flutter's generated Android host signs this preview using its
@@ -116,6 +116,7 @@ jobs:
             # One command: the emulator runner executes script lines separately.
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_chart_type_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_chart_type_sheet.png"
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_drawing_tools_sheet.png"
+            python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_trend_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_trend_drawing_tools_sheet.png"
       - name: Upload real Android emulator screenshot
         uses: actions/upload-artifact@v4
         with:
@@ -158,6 +159,18 @@ jobs:
         with:
           name: TradeLab-Android-Gann-Fibonacci-Drawings
           path: flutter_app/build/tradelab_drawing_tools_sheet.png
+          if-no-files-found: error
+      - name: Upload PROMPT 05 trend drawing tools golden
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Trend-Drawing-Catalog-Golden
+          path: flutter_app/test/goldens/trend_drawing_tools.png
+          if-no-files-found: error
+      - name: Upload real Android trend drawing screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Android-Trend-Drawings
+          path: flutter_app/build/tradelab_trend_drawing_tools_sheet.png
           if-no-files-found: error
       - name: Publish direct APK as GitHub prerelease
         if: github.event_name != 'pull_request'
