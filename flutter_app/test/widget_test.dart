@@ -54,7 +54,10 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('chart-kind-heikinAshi')),
       160,
-      scrollable: find.byKey(const Key('chart-type-grid')),
+      scrollable: find.descendant(
+        of: find.byKey(const Key('chart-type-grid')),
+        matching: find.byType(Scrollable),
+      ),
     );
     await tester.tap(find.byKey(const Key('chart-kind-heikinAshi')));
     await tester.pumpAndSettle();
@@ -66,7 +69,10 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('chart-kind-range')),
       160,
-      scrollable: find.byKey(const Key('chart-type-grid')),
+      scrollable: find.descendant(
+        of: find.byKey(const Key('chart-type-grid')),
+        matching: find.byType(Scrollable),
+      ),
     );
     await tester.tap(find.byKey(const Key('chart-kind-range')));
     await tester.pumpAndSettle();
@@ -105,7 +111,10 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('chart-kind-range')),
       160,
-      scrollable: find.byKey(const Key('chart-type-grid')),
+      scrollable: find.descendant(
+        of: find.byKey(const Key('chart-type-grid')),
+        matching: find.byType(Scrollable),
+      ),
     );
     await tester.tap(find.byKey(const Key('chart-kind-range')));
     await tester.pumpAndSettle();
