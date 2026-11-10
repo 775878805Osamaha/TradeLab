@@ -216,11 +216,13 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
               key: const Key('drawing-tools-category-scroll'),
               scrollDirection: Axis.horizontal,
               controller: _categories,
-              padding: EdgeInsets.symmetric(horizontal: side),
+              padding: EdgeInsets.symmetric(
+                horizontal: width * (34 / 691),
+              ),
               child: Row(children: [
                 for (final category in DrawingCategory.values.toList().reversed)
                   Padding(
-                    padding: EdgeInsets.only(right: width * (14 / 691)),
+                    padding: EdgeInsets.only(right: width * (22 / 691)),
                     child: DrawingCategoryTab(
                       category: category,
                       selected: _category == category,
@@ -295,7 +297,9 @@ class DrawingCategoryTab extends StatelessWidget {
       onTap: onTap,
       child: Container(
         height: referenceWidth * (62 / 691),
-        padding: EdgeInsets.symmetric(horizontal: referenceWidth * (18 / 691)),
+        padding: EdgeInsets.symmetric(
+          horizontal: referenceWidth * ((selected ? 27 : 18) / 691),
+        ),
         decoration: BoxDecoration(
           color: selected ? TradeColors.drawingTile : Colors.transparent,
           borderRadius: BorderRadius.circular(referenceWidth * (16 / 691)),
