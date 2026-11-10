@@ -56,14 +56,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('نوع الشموع'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('هيكن آشي').last);
+    await tester.tap(find.text('هايكين آشي').last);
     await tester.pumpAndSettle();
     expect(requests, 1);
     expect(find.textContaining('جارِ تحميل شموع'), findsNothing);
 
     await tester.tap(find.byTooltip('نوع الشموع'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('الشموع اليابانية').last);
+    await tester.tap(find.text('شموع').last);
     await tester.pumpAndSettle();
     expect(requests, 1);
     expect(tester.takeException(), isNull);
