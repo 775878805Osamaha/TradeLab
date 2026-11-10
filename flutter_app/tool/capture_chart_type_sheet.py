@@ -28,12 +28,15 @@ def main() -> int:
     start = raw.find("<?xml")
     if start < 0:
         start = raw.find("<hierarchy")
-    if start < 0:
+    end = raw.rfind("</hierarchy>")
+    if start < 0 or end < 0:
         print("No Android UI XML available; skipped screenshot.")
         return 0
 
     try:
-        root = ET.fromstring(raw[start:])
+        # Some Android versions append the diagnostic line
+        # "UI hierchary dumped to: /dev/tty" after the XML payload.
+        root = ET.fromstring(raw[start:end + len("</hierarchy>")])
     except ET.ParseError:
         print("Android UI XML could not be parsed; skipped screenshot.")
         return 0
