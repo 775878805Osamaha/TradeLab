@@ -203,15 +203,23 @@ class MarketApi {
         '${data['accountId']}' != accountId) {
       throw const MarketDataException('لم يتم التحقق من مصدر شموع cTrader.');
     }
-    // A cap hit inside a sub-1000-slot interval indicates the response is
-    // incomplete, duplicated, or inconsistent with the requested period.
-    if (data['hasMore'] == true) {
+    if (data['hasMore'] is! bool) {
       throw const MarketDataException(
-          'تاريخ cTrader لهذا الإطار غير مكتمل؛ لن نعرض شموعًا ناقصة.');
+          'لم يتم التحقق من حالة صفحات شموع cTrader.');
     }
     final bars = parseVerifiedBars(data['candles'],
         sourceType: TradeSource.ctrader,
         minTime: startMs, maxTime: endMs);
+    // cTrader can return an authenticated newest-first PAGE when the broker
+    // rejects a wide window or reaches its count limit. The chart already
+    // loads older history using an exclusive cursor (earliest bar - 1ms).
+    // Keep these genuine verified candles visible without claiming the whole
+    // requested interval is complete. Never accept an empty truncated page:
+    // it has no cursor with which the chart could recover older history.
+    if (data['hasMore'] == true && bars.isEmpty) {
+      throw const MarketDataException(
+          'صفحة cTrader غير مكتملة ولا تحتوي شموعًا للتحقق منها.');
+    }
     if (frameMinutes > 0) {
       final stepMs = frameMinutes * 60000;
       for (final bar in bars) {
