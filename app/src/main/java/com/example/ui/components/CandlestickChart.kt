@@ -322,9 +322,11 @@ fun CandlestickChart(
     // provider failure. Back off repeated attempts while the user remains
     // parked at the same historical edge; a new drag can retry.
     var lastBackfillScrollOffset by viewport.lastBackfillScrollOffset
-    // Re-arm pagination after switching symbols/timeframes, even if the
-    // newly loaded history happens to begin at the same timestamp.
-    LaunchedEffect(candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe, displayStyle) {
+    // Re-arm pagination after switching symbols/timeframes or crossing the
+    // Range chart boundary. Ordinary visual style changes (Candles, Heikin
+    // Ashi, Line) must keep the user's historical scroll position intact.
+    LaunchedEffect(candles.firstOrNull()?.symbol, candles.firstOrNull()?.timeframe,
+        displayStyle == ChartDisplayStyle.RANGE) {
         // Range sessions reset on real symbol/size/account changes upstream.
         // Do not re-arm backfill or overwrite saved pan just because this
         // Canvas remounted during a bottom-tab switch.
@@ -1246,4 +1248,3 @@ fun CandlestickChart(
             }
         }
     }
-}
