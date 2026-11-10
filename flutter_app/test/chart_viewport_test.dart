@@ -78,6 +78,32 @@ void main() {
     expect(restored, preview);
   });
 
+  test('closed candles keep the same historical bar at the same x', () {
+    const viewport = ChartViewport(barWidth: 12, scrollBars: 18.5);
+    final originalX = viewport.chartX(
+        index: 75, candleCount: 100, plotWidth: 360);
+    final appended = viewport.afterAppending(3);
+    expect(appended.barWidth, 12);
+    expect(appended.chartX(index: 75, candleCount: 103, plotWidth: 360),
+        closeTo(originalX, .000001));
+  });
+
+  test('closed candles preserve intentional right-side chart whitespace', () {
+    const viewport = ChartViewport(barWidth: 10, scrollBars: -9);
+    final originalX = viewport.chartX(
+        index: 99, candleCount: 100, plotWidth: 300);
+    final appended = viewport.afterAppending(2);
+    expect(appended.scrollBars, -7);
+    expect(appended.chartX(index: 99, candleCount: 102, plotWidth: 300),
+        closeTo(originalX, .000001));
+  });
+
+  test('closed candles follow latest only at the live edge', () {
+    const viewport = ChartViewport(barWidth: 10);
+    expect(identical(viewport.afterAppending(2), viewport), isTrue);
+    expect(identical(viewport.afterAppending(0), viewport), isTrue);
+  });
+
   test('visible subset never exceeds the known past candles', () {
     const viewport = ChartViewport(scrollBars: 11);
     final (start, end) = viewport.visibleIndices(

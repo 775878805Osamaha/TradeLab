@@ -52,6 +52,7 @@ jobs:
             test/range_bar_timeline_test.dart \
             test/range_bar_builder_test.dart \
             test/chart_viewport_test.dart \
+            test/chart_mode_transition_test.dart \
             test/chart_annotations_test.dart \
             test/ctrader_candle_stitcher_test.dart \
             test/ctrader_account_selection_test.dart \

@@ -21,7 +21,16 @@ import '../paper/paper_trade_service.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
 
-enum ChartMode { candles, heikinAshi, range }
+enum ChartMode {
+  candles,
+  heikinAshi,
+  range;
+
+  // Time candles and Heikin Ashi use the same source and timestamps.
+  // Range bars use BID ticks, different indices and a separate history.
+  bool requiresHistoryReload(ChartMode next) =>
+      (this == ChartMode.range) != (next == ChartMode.range);
+}
 
 class ChartScreen extends StatefulWidget {
   const ChartScreen({required this.controller, this.journal, super.key});
@@ -390,14 +399,9 @@ class _ChartScreenState extends State<ChartScreen> {
             combined.map((bar) => bar.candle).toList(growable: false);
         _actualTimestamps =
             combined.map((bar) => bar.timestamp).toList(growable: false);
-        // Hold the same historical bar at the same x position if the user
-        // is inspecting older candles; at the latest edge, follow new bars.
-        if (_viewport.scrollBars > 0) {
-          _viewport = ChartViewport(
-            barWidth: _viewport.barWidth,
-            scrollBars: _viewport.scrollBars + appended,
-          );
-        }
+        // Keep the visible candle anchored during historical inspection or
+        // deliberate right-side whitespace; follow new bars at the live edge.
+        _viewport = _viewport.afterAppending(appended);
       });
     } on MarketDataException catch (error) {
       if (mounted && revision == _loadRevision) {
@@ -856,15 +860,28 @@ class _ChartScreenState extends State<ChartScreen> {
                 trailing: _mode == item.$1
                     ? const Icon(Icons.check_circle, color: TradeColors.blue)
                     : null,
-                onTap: () {
-                  setState(() {
-                    _mode = item.$1;
-                    _viewport = const ChartViewport();
-                    _resetDrawingObjects();
-                  });
+                onTap: () async {
+                  final nextMode = item.$1;
+                  final reload = _mode.requiresHistoryReload(nextMode);
+                  if (nextMode != _mode) {
+                    setState(() {
+                      _mode = nextMode;
+                      if (reload) {
+                        // Crossing the Range boundary changes bar identities.
+                        // A presentation-only switch must preserve drawings,
+                        // zoom, Replay position and the broker candle cache.
+                        _viewport = const ChartViewport();
+                        _resetDrawingObjects();
+                      }
+                    });
+                  }
                   Navigator.pop(sheetContext);
-                  if (item.$1 == ChartMode.range) _showRangeSettings();
-                  if (_liveRequested) _loadRealHistory();
+                  if (nextMode == ChartMode.range) {
+                    // Wait for the selected size before requesting BID ticks.
+                    // Otherwise entering Range performs two competing fetches.
+                    await _showRangeSettings(reloadOnChange: !reload);
+                  }
+                  if (mounted && reload && _liveRequested) _loadRealHistory();
                 },
               ),
           ]),
@@ -873,7 +890,7 @@ class _ChartScreenState extends State<ChartScreen> {
     );
   }
 
-  Future<void> _showRangeSettings() async {
+  Future<void> _showRangeSettings({bool reloadOnChange = true}) async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -890,9 +907,18 @@ class _ChartScreenState extends State<ChartScreen> {
                   label: Text('$size'),
                   selected: _rangeTicks == size,
                   onSelected: (_) {
-                    setState(() => _rangeTicks = size);
+                    final changed = _rangeTicks != size;
+                    if (changed) {
+                      setState(() {
+                        _rangeTicks = size;
+                        _viewport = const ChartViewport();
+                        _resetDrawingObjects();
+                      });
+                    }
                     Navigator.pop(sheetContext);
-                    if (_liveRequested) _loadRealHistory();
+                    if (changed && reloadOnChange && _liveRequested) {
+                      _loadRealHistory();
+                    }
                   },
                 ),
             ]),
