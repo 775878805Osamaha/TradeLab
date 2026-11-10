@@ -2439,15 +2439,18 @@ class _CandleChartPainter extends CustomPainter {
       final reward = _price(item.reward, decimals);
       _shortPill(canvas,
           'الإيقاف: \u2066$risk\u2069 (\u2066${item.riskPercent.toStringAsFixed(3)}%\u2069)',
-          Offset(left, yStop - 39), TradeColors.shortLabelRed, axis);
+          Offset(axis - 8, yStop - 39), TradeColors.shortLabelRed,
+          axis, scale.height);
       _shortPill(canvas,
           'العائد المحتمل: \u2066$reward\u2069   نسبة العائد/المخاطرة: '
           '\u2066${item.rewardRisk.toStringAsFixed(2)}\u2069',
-          Offset(left, yEntry + 12), TradeColors.shortLabelBlue, axis,
+          Offset(axis - 8, yEntry + 20), TradeColors.shortLabelBlue,
+          axis, scale.height,
           twoLines: true);
       _shortPill(canvas,
           'الهدف: \u2066$reward\u2069 (\u2066${item.rewardPercent.toStringAsFixed(3)}%\u2069)',
-          Offset(left, yTarget + 19), TradeColors.shortLabelBlue, axis);
+          Offset(axis - 8, yTarget + 19), TradeColors.shortLabelBlue,
+          axis, scale.height);
     }
   }
 
@@ -2460,7 +2463,7 @@ class _CandleChartPainter extends CustomPainter {
   }
 
   static void _shortPill(Canvas canvas, String value, Offset location,
-      Color fill, double axis, {bool twoLines = false}) {
+      Color fill, double axis, double chartHeight, {bool twoLines = false}) {
     final span = TextSpan(text: value, style: const TextStyle(
       fontSize: 11, color: Colors.white, height: 1.18));
     final painter = TextPainter(
@@ -2471,7 +2474,8 @@ class _CandleChartPainter extends CustomPainter {
     final rectWidth = painter.width + 12;
     final left = (location.dx - rectWidth + 10)
         .clamp(3.0, math.max(3.0, axis - rectWidth - 3)).toDouble();
-    final top = location.dy.clamp(0.0, double.infinity).toDouble();
+    final top = location.dy.clamp(1.0,
+        math.max(1.0, chartHeight - painter.height - 9)).toDouble();
     canvas.drawRRect(RRect.fromRectAndRadius(
       Rect.fromLTWH(left, top, rectWidth, painter.height + 8),
       const Radius.circular(4)), Paint()..color = fill);
