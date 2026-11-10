@@ -62,6 +62,8 @@ jobs:
         run: flutter test --update-goldens test/chart_price_rectangle_test.dart
       - name: Verify 21 chart-kind cards and capture selected-candles sheet
         run: flutter test --update-goldens test/chart_type_sheet_test.dart
+      - name: Verify 15 Gann Fibonacci tools, search, favorites, RTL and golden
+        run: flutter test --update-goldens test/drawing_tools_sheet_test.dart
       - name: Build optimized Flutter preview APK
         # Flutter's generated Android host signs this preview using its
         # ephemeral debug certificate; this is NOT a Play Store release.
@@ -113,6 +115,7 @@ jobs:
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/flutter_app/build/tradelab_emulator.png"
             # One command: the emulator runner executes script lines separately.
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_chart_type_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_chart_type_sheet.png"
+            python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_drawing_tools_sheet.png"
       - name: Upload real Android emulator screenshot
         uses: actions/upload-artifact@v4
         with:
@@ -144,6 +147,18 @@ jobs:
           name: TradeLab-Android-Chart-Type-Sheet
           path: flutter_app/build/tradelab_chart_type_sheet.png
           if-no-files-found: warn
+      - name: Upload Gann Fibonacci drawing catalog golden
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Gann-Fibonacci-Drawing-Catalog-Golden
+          path: flutter_app/test/goldens/gann_fibonacci_drawing_tools.png
+          if-no-files-found: error
+      - name: Upload real Android drawing tools screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Android-Gann-Fibonacci-Drawings
+          path: flutter_app/build/tradelab_drawing_tools_sheet.png
+          if-no-files-found: error
       - name: Publish direct APK as GitHub prerelease
         if: github.event_name != 'pull_request'
         env:
