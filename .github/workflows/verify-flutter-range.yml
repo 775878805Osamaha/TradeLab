@@ -48,6 +48,7 @@ jobs:
       - name: Verify historical tick archive and chart interactions
         run: |
           flutter test test/range_tick_store_test.dart \
+            test/widget_test.dart \
             test/range_tick_rollforward_test.dart \
             test/range_bar_timeline_test.dart \
             test/range_bar_builder_test.dart \

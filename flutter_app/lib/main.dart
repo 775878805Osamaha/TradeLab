@@ -164,7 +164,7 @@ class _TradeLabShellState extends State<TradeLabShell> {
         child: Column(
           children: [
             AnimatedBuilder(animation: _market,
-              builder: (context, _) => FlutterPreviewNotice(controller: _market)),
+              builder: (context, _) => MarketSourceNotice(controller: _market)),
             Expanded(
               child: IndexedStack(
                 index: _selectedIndex,
@@ -195,8 +195,8 @@ class _TradeLabShellState extends State<TradeLabShell> {
   }
 }
 
-class FlutterPreviewNotice extends StatelessWidget {
-  const FlutterPreviewNotice({required this.controller, super.key});
+class MarketSourceNotice extends StatelessWidget {
+  const MarketSourceNotice({required this.controller, super.key});
 
   final MarketController controller;
 
@@ -210,7 +210,7 @@ class FlutterPreviewNotice extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.design_services_outlined,
+              const Icon(Icons.link_outlined,
                   size: 15, color: TradeColors.blue),
               const SizedBox(width: 7),
               Flexible(
@@ -219,7 +219,7 @@ class FlutterPreviewNotice extends StatelessWidget {
                     ? 'cTrader مرتبط للقراءة فقط · بيانات الرموز الأخرى حسب مصدرها'
                     : controller.binanceConnected
                       ? 'Binance متصل · cTrader يتطلب ربط حسابك'
-                      : 'معاينة تصميم Flutter · الذهب والفوركس يتطلبان ربط cTrader',
+                      : 'cTrader غير مرتبط · لا تُعرض شموع الذهب والفوركس قبل تسجيل الدخول',
                   maxLines: 2,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(

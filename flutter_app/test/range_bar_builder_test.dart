@@ -33,10 +33,15 @@ void main() {
     expect(bars.closed.first.close, first.close);
   });
 
-  test('previews respond to different range configurations', () {
-    final small = previewRangeCandles(100);
-    final large = previewRangeCandles(1000);
-    expect(small.length, greaterThan(large.length));
-    expect(previewRangeCandles(100), hasLength(small.length));
+  test('the same supplied BID ticks produce different range sizes', () {
+    const ticks = [100.0, 100.4, 100.8, 101.3, 101.9, 102.5];
+    final small = RangeBarBuilder(.5);
+    final large = RangeBarBuilder(2);
+    for (final tick in ticks) {
+      small.appendBidTick(tick);
+      large.appendBidTick(tick);
+    }
+    expect(small.closed.length, greaterThan(large.closed.length));
+    expect(small.closed.first.close, 100.5);
   });
 }

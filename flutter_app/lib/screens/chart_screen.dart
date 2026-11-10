@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../chart/chart_annotations.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
-import '../data/range_bar_builder.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_tick_rollforward.dart';
 import '../data/range_tick_store.dart';
@@ -42,8 +41,6 @@ class ChartScreen extends StatefulWidget {
 }
 
 class _ChartScreenState extends State<ChartScreen> {
-  final _fixture = previewCandles();
-  final _rangeCache = <int, List<TradeCandle>>{};
   // Session-only BID tick cache: switching Range size rebuilds locally.
   // Scoped by account and symbol; not a substitute for persistent history.
   final _rangeBidCache = <String, List<double>>{};
@@ -138,7 +135,7 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   String get _marketEvidenceLabel {
-    if (!_liveRequested) return 'بيانات معاينة فقط';
+    if (!_liveRequested) return 'اربط حساب cTrader لعرض شموع الذهب والفوركس الحقيقية';
     if (_loading) return 'جار تحميل الأسعار من المصدر';
     if (_loadError != null) return 'تعذر التحقق من مصدر الأسعار';
     if (_selectedSymbol.source == TradeSource.ctrader) {
@@ -160,12 +157,8 @@ class _ChartScreenState extends State<ChartScreen> {
     return 'شموع Binance · آخر بيانات مصدر موثق';
   }
   int get _totalBars {
-    if (_mode == ChartMode.range) {
-      if (_liveRequested) return _actualRange.length;
-      return _rangeCache.putIfAbsent(
-        _rangeTicks, () => previewRangeCandles(_rangeTicks)).length;
-    }
-    return _liveRequested ? _actualBars.length : _fixture.length;
+    if (!_liveRequested) return 0;
+    return _mode == ChartMode.range ? _actualRange.length : _actualBars.length;
   }
 
   @override
@@ -660,7 +653,7 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   void _toggleReplay() {
-    if (_liveRequested && _totalBars < 2) {
+    if (_totalBars < 2) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('حمّل شموع السوق أولًا لبدء Replay.')));
       return;
@@ -707,7 +700,7 @@ class _ChartScreenState extends State<ChartScreen> {
 
   void _notifyUnconnected() => ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('هذه معاينة للواجهة. ربط cTrader وبيانات Room بالنسخة الجديدة لم يكتمل بعد.'),
+          content: Text('اربط حساب cTrader من شاشة الحساب أولًا لعرض شموع الذهب والفوركس الحقيقية.'),
         ),
       );
 
@@ -731,19 +724,14 @@ class _ChartScreenState extends State<ChartScreen> {
   }
 
   List<TradeCandle> get _displayCandles {
+    // No synthetic or demo chart may be rendered before broker authorization.
+    // Binance crypto candles are allowed independently of cTrader.
+    if (!_liveRequested) return const [];
     if (_mode == ChartMode.range) {
-      if (_liveRequested) {
-        final range = _replay
-            ? CandlePrefix(_actualRange, _visibleThrough) : _actualRange;
-        return range;
-      }
-      final preview = _rangeCache.putIfAbsent(
-          _rangeTicks, () => previewRangeCandles(_rangeTicks));
-      // Replay counts completed preview bars, not the unrelated time-bar
-      // fixture length. Never expose candles beyond the selected cutoff.
-      return _replay ? CandlePrefix(preview, _visibleThrough) : preview;
+      return _replay
+          ? CandlePrefix(_actualRange, _visibleThrough) : _actualRange;
     }
-    final source = _liveRequested ? _actualCandles : _fixture;
+    final source = _actualCandles;
     if (_mode != ChartMode.heikinAshi) {
       return _replay ? CandlePrefix(source, _visibleThrough) : source;
     }
@@ -1224,7 +1212,7 @@ class _ChartScreenState extends State<ChartScreen> {
                   ? 'خطأ في المصدر' : _ctraderTimeCandlesStale
                   ? 'بيانات متأخرة' : _selectedSymbol.source == TradeSource.ctrader
                   ? 'شموع cTrader' : 'شموع Binance')
-              : 'معاينة', connected: _liveRequested && !_loading &&
+              : 'غير مرتبط', connected: _liveRequested && !_loading &&
                   _loadError == null && !_ctraderTimeCandlesStale &&
                   candles.isNotEmpty)),
           _iconAction(icon: Icons.fullscreen, label: 'ملء الشاشة', onPressed: _notifyUnconnected),
@@ -1272,7 +1260,7 @@ class _ChartScreenState extends State<ChartScreen> {
           color: TradeColors.blue.withValues(alpha: .07),
           child: Text(_liveRequested
               ? 'مدى $_rangeTicks نقطة · ${!_rangeSourceSupported ? 'غير مدعوم لهذا المصدر' : _actualRange.isEmpty ? 'انتظار تيكات cTrader' : 'شموع محسوبة من تيكات BID لـ cTrader'}'
-              : 'مدى $_rangeTicks · عرض محسوب من تيكات تجريبية، وليس cTrader',
+              : 'مدى $_rangeTicks · اربط حساب cTrader للحصول على تيكات BID الحقيقية',
               style: const TextStyle(fontSize: 11, color: TradeColors.blue)),
         ),
       if (_loading) const LinearProgressIndicator(minHeight: 2),
@@ -1444,12 +1432,11 @@ class _ChartScreenState extends State<ChartScreen> {
                   selectedLine: _drawing ? _selectedLine : null,
                   selectedPattern: _drawing ? _selectedPattern : null,
                   indicator: _showIndicators,
-                  isPreview: !_liveRequested,
                 ),
               ),
             ),
           )),
-          if (_liveRequested && candles.isEmpty)
+          if (candles.isEmpty)
             Positioned.fill(child: IgnorePointer(child: Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 30),
@@ -1458,7 +1445,10 @@ class _ChartScreenState extends State<ChartScreen> {
                     const CircularProgressIndicator(strokeWidth: 2),
                   if (_loading) const SizedBox(height: 14),
                   Text(_loading ? 'جارِ تحميل شموع السوق الفعلية…'
-                    : _loadError ?? 'لا توجد شموع متاحة من المصدر.',
+                    : !_liveRequested
+                        ? 'اربط حساب cTrader من شاشة الحساب لعرض شموع الذهب والفوركس الحقيقية.'
+                        : _loadError ?? 'لا توجد شموع متاحة من المصدر.',
+                    key: const Key('chart-source-empty'),
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant)),
                 ]),
@@ -1528,7 +1518,7 @@ class _ChartScreenState extends State<ChartScreen> {
           Row(children: [
             const Text('Replay', style: TextStyle(fontWeight: FontWeight.w800)),
             const Spacer(),
-            Text('$_visibleThrough / $_totalBars ${_liveRequested ? 'شمعة' : 'شمعة توضيحية'}',
+            Text('$_visibleThrough / $_totalBars شمعة',
                 style: Theme.of(context).textTheme.labelSmall),
           ]),
           if (_liveRequested && (_mode == ChartMode.range
@@ -1594,7 +1584,6 @@ class _CandleChartPainter extends CustomPainter {
     required this.selectedLine,
     required this.selectedPattern,
     required this.indicator,
-    required this.isPreview,
   });
 
   final List<TradeCandle> candles;
@@ -1607,7 +1596,6 @@ class _CandleChartPainter extends CustomPainter {
   final int? selectedLine;
   final int? selectedPattern;
   final bool indicator;
-  final bool isPreview;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1773,7 +1761,7 @@ class _CandleChartPainter extends CustomPainter {
     }
     // A separate LTR price axis keeps digits and decimal points predictable in RTL.
     if (timestamps.length < candles.length) {
-      _text(canvas, isPreview ? 'معاينة' : 'شموع مدى',
+      _text(canvas, 'شموع مدى',
           Offset(axis / 2 - 18, chartHeight + 3), text, 10);
     } else {
       _text(canvas, 'UTC', Offset(3, chartHeight + 4), text, 9);
@@ -1802,6 +1790,5 @@ class _CandleChartPainter extends CustomPainter {
       old.dark != dark || old.viewport != viewport ||
       old.crosshair != crosshair || old.indicator != indicator ||
       old.levels != levels || old.patterns != patterns ||
-      old.selectedLine != selectedLine || old.selectedPattern != selectedPattern ||
-      old.isPreview != isPreview;
+      old.selectedLine != selectedLine || old.selectedPattern != selectedPattern;
 }
