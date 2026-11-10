@@ -136,4 +136,35 @@ void main() {
     expect(viewport.indexAt(x: -1, plotWidth: 300, candleCount: 90),
         isNull);
   });
+
+  test('momentum is limited to deliberate one-finger chart pans', () {
+    bool eligible(double speed, {int count = 100, bool pinch = false,
+        bool draw = false, bool reduce = false}) => chartShouldFling(
+          horizontalVelocity: speed,
+          candleCount: count,
+          multiTouch: pinch,
+          editingDrawing: draw,
+          reducedMotion: reduce,
+        );
+    expect(eligible(1200), isTrue);
+    expect(eligible(-1200), isTrue);
+    expect(eligible(150), isFalse);
+    expect(eligible(double.nan), isFalse);
+    expect(eligible(double.infinity), isFalse);
+    expect(eligible(800, count: 1), isFalse);
+    expect(eligible(800, pinch: true), isFalse);
+    expect(eligible(800, draw: true), isFalse);
+    expect(eligible(800, reduce: true), isFalse);
+  });
+
+  test('momentum displacement preserves direction and viewport bounds', () {
+    const viewport = ChartViewport(barWidth: 10, scrollBars: 30);
+    final right = viewport.pan(deltaX: 42, plotWidth: 300, candleCount: 200);
+    final left = viewport.pan(deltaX: -42, plotWidth: 300, candleCount: 200);
+    expect(right.scrollBars, greaterThan(viewport.scrollBars));
+    expect(left.scrollBars, lessThan(viewport.scrollBars));
+    final nearEnd = const ChartViewport(scrollBars: 199).pan(
+        deltaX: 5000, plotWidth: 300, candleCount: 200);
+    expect(nearEnd.scrollBars, lessThanOrEqualTo(199));
+  });
 }

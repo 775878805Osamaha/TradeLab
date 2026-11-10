@@ -155,3 +155,16 @@ class ChartViewport {
   @override
   int get hashCode => Object.hash(barWidth, scrollBars);
 }
+
+/// Only a deliberate one-finger pan can carry momentum into a chart fling.
+/// Editing a drawing, pinching, empty history and reduced-motion settings
+/// must never trigger a new autonomous scroll.
+bool chartShouldFling({
+  required double horizontalVelocity,
+  required int candleCount,
+  required bool multiTouch,
+  required bool editingDrawing,
+  required bool reducedMotion,
+}) => horizontalVelocity.isFinite &&
+    horizontalVelocity.abs() >= 180 && candleCount > 1 &&
+    !multiTouch && !editingDrawing && !reducedMotion;
