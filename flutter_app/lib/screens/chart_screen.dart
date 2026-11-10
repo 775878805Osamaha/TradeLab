@@ -597,6 +597,8 @@ class _ChartScreenState extends State<ChartScreen>
           .map(rebaseShort).whereType<ChartShortPosition>().toList();
       final pendingIndex = _pendingAnchor == null
           ? null : rebaseAnchor(_pendingAnchor!);
+      final shortEntryIndex = _shortEntryAnchor == null
+          ? null : rebaseAnchor(_shortEntryAnchor!);
       final previousDisplayCount = _replay ? _visibleThrough : _actualRange.length;
       final oldViewport = _viewport;
       // Preserve the market event visible near the right edge rather than
@@ -653,6 +655,11 @@ class _ChartScreenState extends State<ChartScreen>
         _shortStopPrice = null;
         _pendingAnchor = pendingIndex == null ? null
             : ChartAnchor(pendingIndex, _pendingAnchor!.price);
+        if (_shortEntryAnchor != null) {
+          _shortEntryAnchor = shortEntryIndex == null ? null
+              : ChartAnchor(shortEntryIndex, _shortEntryAnchor!.price);
+          if (_shortEntryAnchor == null) _shortStopPrice = null;
+        }
         _selectedPattern = null;
         _lineUndo.clear(); // Undo entries use the previous Range bar indices.
         if (_replay && replayCutoffTick != null) {
@@ -2297,8 +2304,10 @@ class _CandleChartPainter extends CustomPainter {
     final lastClose = candles.last.close;
     final lastY = y(lastClose);
     if (lastY >= 0 && lastY <= chartHeight) {
+      final lastColor = candles.last.positive
+          ? TradeColors.positive : TradeColors.negative;
       final marker = Paint()
-        ..color = TradeColors.positive
+        ..color = lastColor
         ..strokeWidth = .9;
       for (var x = 0.0; x < axis; x += 6) {
         canvas.drawLine(Offset(x, lastY),
@@ -2306,7 +2315,7 @@ class _CandleChartPainter extends CustomPainter {
       }
       final tagY = (lastY - 10).clamp(0, chartHeight - 20).toDouble();
       canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 20),
-          Paint()..color = TradeColors.positive);
+          Paint()..color = lastColor);
       _text(canvas, _price(lastClose, decimals),
           Offset(axis + 2, tagY + 3), Colors.white, 10);
     }
