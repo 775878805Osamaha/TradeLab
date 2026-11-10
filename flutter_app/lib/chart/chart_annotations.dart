@@ -1,6 +1,7 @@
 /// Drawing objects use candle positions and real market prices, not pixel
 /// coordinates. Historical pagination shifts indices but never prices.
 enum ChartDrawingTool { horizontal, trendLine, fibonacci }
+enum ChartAnchorEndpoint { start, end }
 
 /// Match TradingView's optional OHLC magnet while retaining free placement.
 enum ChartMagnetMode { off, weak, strong }
@@ -88,6 +89,18 @@ class ChartPattern {
       colorValue: colorValue,
       strokeWidth: strokeWidth,
       showLabels: showLabels);
+
+  /// Edit one real price/bar anchor without shifting the other endpoint.
+  /// This also preserves the drawing style and Fibonacci level direction.
+  ChartPattern withEndpoint(ChartAnchorEndpoint endpoint, ChartAnchor anchor) =>
+      ChartPattern(
+        tool: tool,
+        start: endpoint == ChartAnchorEndpoint.start ? anchor : start,
+        end: endpoint == ChartAnchorEndpoint.end ? anchor : end,
+        colorValue: colorValue,
+        strokeWidth: strokeWidth,
+        showLabels: showLabels,
+      );
 
   ChartPattern styled({int? colorValue, double? strokeWidth, bool? showLabels}) =>
       ChartPattern(
