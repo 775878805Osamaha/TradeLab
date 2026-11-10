@@ -1027,7 +1027,9 @@ class _ChartScreenState extends State<ChartScreen>
       isScrollControlled: true,
       showDragHandle: false,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: .13),
+      // The reference leaves the small chart header and system status bar
+      // undimmed above this nearly full-height bottom sheet.
+      barrierColor: Colors.transparent,
       builder: (sheetContext) => ChartTypeSheet(
         selected: switch (_mode) {
           ChartMode.candles => ChartKind.candles,
