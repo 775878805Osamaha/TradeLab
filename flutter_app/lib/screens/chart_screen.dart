@@ -8,6 +8,7 @@ import 'package:flutter/physics.dart';
 import '../chart/chart_annotations.dart';
 import '../chart/chart_short_position.dart';
 import '../chart/chart_price_rectangle.dart';
+import '../chart/chart_type_sheet.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_timeline.dart';
@@ -1023,49 +1024,58 @@ class _ChartScreenState extends State<ChartScreen>
     _momentum.stop();
     await showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const TradeSectionTitle('نوع الشموع'),
-            for (final item in const <(ChartMode, String, IconData)>[
-              (ChartMode.candles, 'الشموع اليابانية', Icons.candlestick_chart),
-              (ChartMode.heikinAshi, 'هيكن آشي', Icons.stacked_line_chart),
-              (ChartMode.range, 'شموع المدى', Icons.tune),
-            ])
-              ListTile(
-                leading: Icon(item.$3),
-                title: Text(item.$2),
-                trailing: _mode == item.$1
-                    ? const Icon(Icons.check_circle, color: TradeColors.blue)
-                    : null,
-                onTap: () async {
-                  final nextMode = item.$1;
-                  final reload = _mode.requiresHistoryReload(nextMode);
-                  if (nextMode != _mode) {
-                    setState(() {
-                      _mode = nextMode;
-                      if (reload) {
-                        // Crossing the Range boundary changes bar identities.
-                        // A presentation-only switch must preserve drawings,
-                        // zoom, Replay position and the broker candle cache.
-                        _viewport = const ChartViewport();
-                        _resetDrawingObjects();
-                      }
-                    });
-                  }
-                  Navigator.pop(sheetContext);
-                  if (nextMode == ChartMode.range) {
-                    // Wait for the selected size before requesting BID ticks.
-                    // Otherwise entering Range performs two competing fetches.
-                    await _showRangeSettings(reloadOnChange: !reload);
-                  }
-                  if (mounted && reload && _liveRequested) _loadRealHistory();
-                },
+      isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: .13),
+      builder: (sheetContext) => ChartTypeSheet(
+        selected: switch (_mode) {
+          ChartMode.candles => ChartKind.candles,
+          ChartMode.heikinAshi => ChartKind.heikinAshi,
+          ChartMode.range => ChartKind.range,
+        },
+        onUnavailable: (kind) => showDialog<void>(
+          context: sheetContext,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(kind.label, textDirection: TextDirection.rtl),
+            content: const Text(
+              'هذا النوع ظاهر في المرجع البصري، لكن محركه غير منفذ في TradeLab بعد. '
+              'لن يتم عرضه على أنه شموع عادية أو بيانات سوق وهمية.',
+              textDirection: TextDirection.rtl,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('حسنًا'),
               ),
-          ]),
+            ],
+          ),
         ),
+        onSelect: (kind) async {
+          final nextMode = switch (kind) {
+            ChartKind.heikinAshi => ChartMode.heikinAshi,
+            ChartKind.range => ChartMode.range,
+            _ => ChartMode.candles,
+          };
+          final reload = _mode.requiresHistoryReload(nextMode);
+          if (nextMode != _mode) {
+            setState(() {
+              _mode = nextMode;
+              if (reload) {
+                // Range has different bar identities; merely opening or
+                // dismissing this sheet never resets zoom, Replay or cache.
+                _viewport = const ChartViewport();
+                _resetDrawingObjects();
+              }
+            });
+          }
+          Navigator.pop(sheetContext);
+          if (nextMode == ChartMode.range) {
+            // Preserve the established BID tick sizing and fetch sequence.
+            await _showRangeSettings(reloadOnChange: !reload);
+          }
+          if (mounted && reload && _liveRequested) _loadRealHistory();
+        },
       ),
     );
   }

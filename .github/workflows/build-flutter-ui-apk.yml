@@ -60,6 +60,8 @@ jobs:
         run: flutter test --update-goldens test/golden_test.dart
       - name: Verify eight-handle price rectangle and render isolated preview
         run: flutter test --update-goldens test/chart_price_rectangle_test.dart
+      - name: Verify 21 chart-kind cards and capture selected-candles sheet
+        run: flutter test --update-goldens test/chart_type_sheet_test.dart
       - name: Build optimized Flutter preview APK
         # Flutter's generated Android host signs this preview using its
         # ephemeral debug certificate; this is NOT a Play Store release.
@@ -109,6 +111,38 @@ jobs:
             sleep 25
             adb shell pidof -s com.example.tradelab_flutter
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/flutter_app/build/tradelab_emulator.png"
+            # Find the actual Flutter accessibility node rather than assuming
+            # one coordinate for all Android status/nav bar configurations.
+            adb exec-out uiautomator dump /dev/tty \
+              > "$GITHUB_WORKSPACE/flutter_app/build/chart_toolbar_ui.xml" || true
+            picker_tap="$(python3 - "$GITHUB_WORKSPACE/flutter_app/build/chart_toolbar_ui.xml" <<'PY'
+            import pathlib, re, sys, xml.etree.ElementTree as ET
+            raw = pathlib.Path(sys.argv[1]).read_text(errors='replace')
+            begin = raw.find('<?xml')
+            if begin < 0:
+                begin = raw.find('<hierarchy')
+            if begin >= 0:
+                try:
+                    root = ET.fromstring(raw[begin:])
+                    for node in root.iter('node'):
+                        caption = (node.get('content-desc') or '') + ' ' + (node.get('text') or '')
+                        if 'نوع الشموع' in caption:
+                            bounds = re.findall(r'\d+', node.get('bounds') or '')
+                            if len(bounds) == 4:
+                                x1, y1, x2, y2 = map(int, bounds)
+                                print((x1 + x2) // 2, (y1 + y2) // 2)
+                                break
+                except ET.ParseError:
+                    pass
+            PY
+            )"
+            if [ -n "$picker_tap" ]; then
+              adb shell input tap $picker_tap
+              sleep 3
+              adb exec-out screencap -p > "$GITHUB_WORKSPACE/flutter_app/build/tradelab_chart_type_sheet.png"
+            else
+              echo "Picker semantics not found; chart sheet emulator screenshot unavailable."
+            fi
       - name: Upload real Android emulator screenshot
         uses: actions/upload-artifact@v4
         with:
@@ -127,6 +161,18 @@ jobs:
           name: TradeLab-Price-Rectangle-Component-Preview
           path: flutter_app/test/goldens/selected_price_rectangle.png
           if-no-files-found: error
+      - name: Upload 21-card chart type sheet golden
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Chart-Type-Selected-Candles-Golden
+          path: flutter_app/test/goldens/chart_type_sheet_selected_candles.png
+          if-no-files-found: error
+      - name: Upload Android chart type sheet screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Android-Chart-Type-Sheet
+          path: flutter_app/build/tradelab_chart_type_sheet.png
+          if-no-files-found: warn
       - name: Publish direct APK as GitHub prerelease
         if: github.event_name != 'pull_request'
         env:

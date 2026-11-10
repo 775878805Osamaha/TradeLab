@@ -18,6 +18,13 @@ abstract final class TradeColors {
   static const rectangleAxisTag = Color(0xFF2962FF);
   static const rectangleAccentGreen = Color(0xFF5BAD6F);
   static const rectangleAccentOrange = Color(0xFFFFA41D);
+  // TradingView-reference chart type picker: isolated white sheet, not the
+  // app-wide Material cards or a replacement global light theme.
+  static const chartTypeSheet = Color(0xFFFFFFFF);
+  static const chartTypeTile = Color(0xFFF2F2F2);
+  static const chartTypeSelected = Color(0xFF2E2E2E);
+  static const chartTypeInk = Color(0xFF101010);
+  static const chartTypeDragHandle = Color(0xFFE3E3E3);
   static const gold = Color(0xFFF5A623);
 
   static const lightCanvas = Color(0xFFF4F6FA);

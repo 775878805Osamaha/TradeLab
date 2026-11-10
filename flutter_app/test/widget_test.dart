@@ -51,14 +51,15 @@ void main() {
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     await tester.tap(find.byTooltip('نوع الشموع'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('هيكن آشي').last);
+    await tester.tap(find.text('هايكين آشي').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);
 
     await tester.tap(find.byTooltip('نوع الشموع'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('شموع المدى').last);
+    await tester.ensureVisible(find.byKey(const Key('chart-kind-range')));
+    await tester.tap(find.byKey(const Key('chart-kind-range')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     expect(find.textContaining('تيكات تجريبية'), findsNothing);
@@ -92,7 +93,8 @@ void main() {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('نوع الشموع'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('شموع المدى').last);
+    await tester.ensureVisible(find.byKey(const Key('chart-kind-range')));
+    await tester.tap(find.byKey(const Key('chart-kind-range')));
     await tester.pumpAndSettle();
     expect(find.text('إعدادات شموع المدى'), findsOneWidget);
     expect(find.text('1000'), findsOneWidget);
