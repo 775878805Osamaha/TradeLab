@@ -1248,3 +1248,4 @@ fun CandlestickChart(
             }
         }
     }
+}
