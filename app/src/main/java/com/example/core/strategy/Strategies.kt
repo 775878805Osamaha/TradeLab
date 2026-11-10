@@ -4,8 +4,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * StrategyRegistry manages active trading strategies and user presets.
- * All built-in strategies and presets have been removed.
- * It provides empty registry storage and dynamic registration/unregistration for custom strategies.
+ * Provides one explicitly educational starter strategy and dynamic registration
+ * for user-defined strategies. No profitability assumptions are embedded.
  */
 object StrategyRegistry {
     private val strategies = ConcurrentHashMap<String, Strategy>()
@@ -18,13 +18,13 @@ object StrategyRegistry {
     fun resetToDefaults() {
         strategies.clear()
         presets.clear()
-        // No built-in strategies or presets registered
+        register(SmaCrossoverExample())
     }
 
     val AVAILABLE_STRATEGIES: List<Strategy>
         get() = getAllStrategies()
 
-    fun getAllStrategies(): List<Strategy> = strategies.values.toList()
+    fun getAllStrategies(): List<Strategy> = strategies.values.sortedBy { it.id }
 
     fun getStrategy(id: String): Strategy? {
         return strategies.values.firstOrNull { it.id.equals(id, ignoreCase = true) }
