@@ -2,6 +2,30 @@
 /// coordinates. Historical pagination shifts indices but never prices.
 enum ChartDrawingTool { horizontal, trendLine, fibonacci }
 
+/// Match TradingView's optional OHLC magnet while retaining free placement.
+enum ChartMagnetMode { off, weak, strong }
+
+/// Price-axis snapping is based on the *displayed* real candle, not a made-up
+/// price grid. Weak magnet only engages within [weakPriceTolerance].
+double snapDrawingPrice({
+  required double requestedPrice,
+  required List<double> ohlc,
+  required ChartMagnetMode mode,
+  required double weakPriceTolerance,
+}) {
+  if (mode == ChartMagnetMode.off || ohlc.isEmpty) return requestedPrice;
+  var nearest = ohlc.first;
+  for (final value in ohlc.skip(1)) {
+    if ((value - requestedPrice).abs() <
+        (nearest - requestedPrice).abs()) nearest = value;
+  }
+  if (mode == ChartMagnetMode.weak &&
+      (nearest - requestedPrice).abs() > weakPriceTolerance) {
+    return requestedPrice;
+  }
+  return nearest;
+}
+
 class ChartAnchor {
   const ChartAnchor(this.index, this.price);
 
@@ -45,6 +69,14 @@ class ChartPattern {
       tool: tool,
       start: start.shifted(olderCount),
       end: end.shifted(olderCount),
+      colorValue: colorValue,
+      strokeWidth: strokeWidth,
+      showLabels: showLabels);
+
+  ChartPattern reanchored(int startIndex, int endIndex) => ChartPattern(
+      tool: tool,
+      start: ChartAnchor(startIndex, start.price),
+      end: ChartAnchor(endIndex, end.price),
       colorValue: colorValue,
       strokeWidth: strokeWidth,
       showLabels: showLabels);
