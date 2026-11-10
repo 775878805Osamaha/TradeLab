@@ -25,6 +25,13 @@ abstract final class TradeColors {
   static const chartTypeSelected = Color(0xFF2E2E2E);
   static const chartTypeInk = Color(0xFF101010);
   static const chartTypeDragHandle = Color(0xFFE3E3E3);
+  // PROMPT 04 reference: white drawing catalog, light tiles, amber favorites.
+  static const drawingSheet = Color(0xFFFFFFFF);
+  static const drawingTile = Color(0xFFF2F2F2);
+  static const drawingInk = Color(0xFF101010);
+  static const drawingMutedInk = Color(0xFF777777);
+  static const drawingHandle = Color(0xFFE3E3E3);
+  static const drawingFavorite = Color(0xFFFF9800);
   static const gold = Color(0xFFF5A623);
 
   static const lightCanvas = Color(0xFFF4F6FA);
