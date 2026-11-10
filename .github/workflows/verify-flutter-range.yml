@@ -2,6 +2,10 @@ name: Verify TradeLab Flutter Range History
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'flutter_app/**'
+      - '.github/workflows/verify-flutter-range.yml'
   push:
     branches: [main]
     paths:
