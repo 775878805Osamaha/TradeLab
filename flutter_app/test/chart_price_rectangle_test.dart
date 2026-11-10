@@ -81,9 +81,9 @@ void main() {
           key: const Key('selected-rectangle-preview'),
           painter: ChartPriceRectanglePainter(
             drawings: const [ChartPriceRectangle(
-              startIndex: 88, endIndex: 97, upper: 142, lower: 137)],
+              startIndex: 88, endIndex: 97, upper: 144.3, lower: 139.7)],
             selectedIndex: 0,
-            viewport: const ChartViewport(barWidth: 10),
+            viewport: const ChartViewport(barWidth: 10, scrollBars: .5),
             scale: const ChartPriceScale(100, 180, 666),
             candleCount: 100, plotWidth: 284.5, dark: false,
           ),
