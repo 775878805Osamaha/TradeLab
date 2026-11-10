@@ -35,6 +35,7 @@ enum class BacktestTab {
 data class BacktestUiState(
     val availableStrategies: List<Strategy> = StrategyRegistry.AVAILABLE_STRATEGIES,
     val selectedStrategy: Strategy? = StrategyRegistry.AVAILABLE_STRATEGIES.firstOrNull(),
+    val strategyParameters: Map<String, Any> = selectedStrategy?.defaultParameters ?: emptyMap(),
     val symbol: String = "XAUUSD",
     val timeframe: Timeframe = Timeframe.M15,
     val initialBalance: String = "50.0",
@@ -84,7 +85,8 @@ class BacktestViewModel(
         }
     }
 
-    fun selectStrategy(strategy: Strategy?) = _uiState.update { it.copy(selectedStrategy = strategy) }
+    fun selectStrategy(strategy: Strategy?, parameters: Map<String, Any> = strategy?.defaultParameters ?: emptyMap()) =
+        _uiState.update { it.copy(selectedStrategy = strategy, strategyParameters = parameters.toMap()) }
     fun selectSymbol(symbol: String) = _uiState.update { it.copy(symbol = symbol) }
     fun selectTimeframe(tf: Timeframe) = _uiState.update { it.copy(timeframe = tf) }
 
@@ -138,6 +140,7 @@ class BacktestViewModel(
         val config = try {
             BacktestConfig(
                 strategy = strategy,
+                parameters = state.strategyParameters,
                 symbol = state.symbol,
                 timeframe = state.timeframe,
                 initialBalance = parseBacktestNumber("رأس المال", state.initialBalance),

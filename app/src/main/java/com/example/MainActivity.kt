@@ -191,7 +191,7 @@ class MainActivity : ComponentActivity() {
                                 ResultsScreen(
                                     viewModel = resultsViewModel,
                                     onNavigateToHistory = { resultsViewModel.setSelectedTab(com.example.feature.results.ResultsTab.JOURNAL) },
-                                    onNavigateToBacktest = openReplayOnChart
+                                    onNavigateToBacktest = { navController.navigate(Screen.Trade.route) }
                                 )
                             }
 
@@ -225,10 +225,10 @@ class MainActivity : ComponentActivity() {
                             // Sub-Screen: Strategies
                             composable(Screen.Strategies.route) {
                                 StrategyScreen(
-                                    onNavigateToBacktest = { strategyId ->
+                                    onNavigateToBacktest = { strategyId, parameters ->
                                         val strat = com.example.core.strategy.StrategyRegistry.getStrategy(strategyId)
                                         if (strat != null) {
-                                            backtestViewModel.selectStrategy(strat)
+                                            backtestViewModel.selectStrategy(strat, parameters)
                                         }
                                         navController.navigate(Screen.Backtest.route)
                                     },
