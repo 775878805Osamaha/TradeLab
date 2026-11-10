@@ -651,8 +651,6 @@ class _ChartScreenState extends State<ChartScreen>
         _shortPositions..clear()..addAll(rebasedShorts);
         _analysisShortPositions = rebasedAnalysisShorts;
         _selectedShort = null;
-        _shortEntryAnchor = null;
-        _shortStopPrice = null;
         _pendingAnchor = pendingIndex == null ? null
             : ChartAnchor(pendingIndex, _pendingAnchor!.price);
         if (_shortEntryAnchor != null) {
