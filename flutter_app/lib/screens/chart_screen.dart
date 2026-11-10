@@ -9,6 +9,7 @@ import '../chart/chart_annotations.dart';
 import '../chart/chart_short_position.dart';
 import '../chart/chart_price_rectangle.dart';
 import '../chart/chart_type_sheet.dart';
+import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_timeline.dart';
@@ -83,6 +84,11 @@ class _ChartScreenState extends State<ChartScreen>
   bool _replay = false;
   bool _drawing = false;
   ChartDrawingTool _drawingTool = ChartDrawingTool.horizontal;
+  // The catalog owns visual selection; chart coordinates and history do not
+  // change until the user deliberately chooses an implemented tool.
+  final Set<DrawingCatalogKind> _favoriteDrawingTools = {
+    DrawingCatalogKind.fibonacciRetracement,
+  };
   bool _placingShort = false;
   bool _placingRectangle = false;
   ChartAnchor? _rectangleFirstCorner;
@@ -1121,116 +1127,75 @@ class _ChartScreenState extends State<ChartScreen>
     );
   }
 
+  Future<void> _showMagnetSettings() async {
+    await showDialog<void>(context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('مغناطيس الأسعار', textDirection: TextDirection.rtl),
+        children: [
+          for (final option in const <(ChartMagnetMode, String)>[
+            (ChartMagnetMode.off, 'إيقاف'),
+            (ChartMagnetMode.weak, 'ضعيف'),
+            (ChartMagnetMode.strong, 'قوي'),
+          ]) SimpleDialogOption(
+            onPressed: () {
+              setState(() => _magnetMode = option.$1);
+              Navigator.pop(dialogContext);
+            },
+            child: Text(option.$2, textDirection: TextDirection.rtl),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showDrawingTools() async {
     _momentum.stop();
     await showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, updateSheet) => SafeArea(
-        child: SingleChildScrollView(child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const TradeSectionTitle('أدوات الرسم'),
-            const SizedBox(height: 6),
-            const Align(alignment: AlignmentDirectional.centerStart,
-                child: Text('مغناطيس الأسعار · تثبيت النقاط على O/H/L/C')),
-            Wrap(spacing: 8, children: [
-              for (final item in const <(ChartMagnetMode, String)>[
-                (ChartMagnetMode.off, 'إيقاف'),
-                (ChartMagnetMode.weak, 'ضعيف'),
-                (ChartMagnetMode.strong, 'قوي'),
-              ])
-                ChoiceChip(
-                  label: Text(item.$2),
-                  selected: _magnetMode == item.$1,
-                  onSelected: (_) {
-                    setState(() => _magnetMode = item.$1);
-                    updateSheet(() {});
-                  },
-                ),
-            ]),
-            for (final option in const <(ChartDrawingTool, String, IconData)>[
-              (ChartDrawingTool.horizontal, 'خط أفقي', Icons.horizontal_rule),
-              (ChartDrawingTool.trendLine, 'خط اتجاه · نقطتان', Icons.trending_up),
-              (ChartDrawingTool.fibonacci, 'تصحيح فيبوناتشي · نقطتان', Icons.stacked_line_chart),
-            ])
-              ListTile(
-                title: Text(option.$2),
-                leading: Icon(option.$3),
-                trailing: _drawing && _drawingTool == option.$1
-                    ? const Icon(Icons.check_circle, color: TradeColors.blue)
-                    : null,
-                onTap: () {
-                  setState(() {
-                    _drawing = true;
-                    _placingShort = false;
-                    _placingRectangle = false;
-                    _drawingTool = option.$1;
-                    _pendingAnchor = null;
-                    _selectedLine = null;
-                    _selectedPattern = null;
-                    _selectedShort = null;
-                    _selectedRectangle = null;
-                  });
-                  Navigator.pop(sheetContext);
-                },
-              ),
-            ListTile(
-              key: const Key('short-position-tool'),
-              title: const Text('مركز بيع · الدخول ثم الإيقاف ثم الهدف'),
-              leading: const Icon(Icons.south_east),
-              trailing: _placingShort
-                  ? const Icon(Icons.check_circle, color: TradeColors.blue)
-                  : null,
-              onTap: () {
-                setState(() {
-                  _drawing = true;
-                  _placingShort = true;
-                  _placingRectangle = false;
-                  _shortEntryAnchor = null;
-                  _shortStopPrice = null;
-                  _selectedShort = null;
-                  _selectedRectangle = null;
-                  _selectedLine = null;
-                  _selectedPattern = null;
-                  _pendingAnchor = null;
-                });
-                Navigator.pop(sheetContext);
-              },
+      isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.transparent,
+      builder: (sheetContext) => DrawingToolsSheet(
+        favorites: _favoriteDrawingTools,
+        onFavoritesChanged: (favorites) {
+          _favoriteDrawingTools..clear()..addAll(favorites);
+        },
+        onUnavailable: (tool) => showDialog<void>(
+          context: sheetContext,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(tool.label, textDirection: TextDirection.rtl),
+            content: const Text(
+              'هذه الأداة ظاهرة في المرجع، لكن محرك رسمها غير متوفر في TradeLab بعد. '
+              'لن يتم وضع رسم وهمي على الشارت.',
+              textDirection: TextDirection.rtl,
             ),
-            ListTile(
-              key: const Key('price-rectangle-tool'),
-              title: const Text('مستطيل نطاق سعري · زاويتان'),
-              leading: const Icon(Icons.crop_square_outlined),
-              trailing: _placingRectangle
-                  ? const Icon(Icons.check_circle, color: TradeColors.blue)
-                  : null,
-              onTap: () {
-                _selectDrawingMode(rectangle: true);
-                Navigator.pop(sheetContext);
-              },
-            ),
-            ListTile(
-              title: const Text('إنهاء الرسم والعودة إلى تحريك الشارت'),
-              leading: const Icon(Icons.pan_tool_outlined),
-              onTap: () {
-                setState(() {
-                  _drawing = false;
-                  _placingShort = false;
-                  _placingRectangle = false;
-                  _pendingAnchor = null;
-                  _rectangleFirstCorner = null;
-                  _shortEntryAnchor = null;
-                  _shortStopPrice = null;
-                });
-                Navigator.pop(sheetContext);
-              },
-            ),
-          ]),
+            actions: [TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('حسنًا'),
+            )],
+          ),
         ),
-        ),
-      ),
+        onSelect: (tool) {
+          Navigator.pop(sheetContext);
+          switch (tool) {
+            case DrawingCatalogKind.fibonacciRetracement:
+              _selectDrawingMode(tool: ChartDrawingTool.fibonacci);
+            case DrawingCatalogKind.trendLine:
+              _selectDrawingMode(tool: ChartDrawingTool.trendLine);
+            case DrawingCatalogKind.horizontal:
+              _selectDrawingMode(tool: ChartDrawingTool.horizontal);
+            case DrawingCatalogKind.shortPosition:
+              _selectDrawingMode(short: true);
+            case DrawingCatalogKind.priceRectangle:
+              _selectDrawingMode(rectangle: true);
+            case DrawingCatalogKind.magnet:
+              _showMagnetSettings();
+            default:
+              // These entries are guarded by DrawingCatalogKind.implemented.
+              break;
+          }
+        },
       ),
     );
   }
