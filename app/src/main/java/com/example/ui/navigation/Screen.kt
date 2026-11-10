@@ -35,8 +35,8 @@ sealed class Screen(
     object Trade : Screen(
         route = "trade",
         titleResId = com.example.R.string.nav_trade,
-        selectedIcon = Icons.Filled.SwapVert,
-        unselectedIcon = Icons.Outlined.SwapVert
+        selectedIcon = Icons.Filled.Science,
+        unselectedIcon = Icons.Outlined.Science
     )
 
     object Results : Screen(
@@ -97,7 +97,8 @@ sealed class Screen(
     )
 
     companion object {
-        // Trading remains accessible through its existing routes; only the bottom tab is removed.
-        val bottomNavItems = listOf(Market, Chart, Results, Account)
+        // The laboratory is a first-class destination: users must be able to
+        // reach manual Replay and automated Backtest from the bottom bar.
+        val bottomNavItems = listOf(Market, Chart, Results, Trade, Account)
     }
 }
