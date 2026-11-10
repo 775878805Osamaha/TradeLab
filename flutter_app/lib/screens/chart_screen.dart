@@ -1056,7 +1056,7 @@ class _ChartScreenState extends State<ChartScreen>
       showDragHandle: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, updateSheet) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const TradeSectionTitle('أدوات الرسم'),
@@ -1138,6 +1138,7 @@ class _ChartScreenState extends State<ChartScreen>
               },
             ),
           ]),
+        ),
         ),
       ),
       ),

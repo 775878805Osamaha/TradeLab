@@ -120,6 +120,8 @@ void main() {
     await tester.tap(find.byTooltip('أدوات الرسم'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('short-position-tool')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('short-position-tool')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('short-position-tool')));
     await tester.pumpAndSettle();
     // With no authorized cTrader candles, the screenshot's sample prices
