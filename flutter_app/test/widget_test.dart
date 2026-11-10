@@ -130,10 +130,13 @@ void main() {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('أدوات الرسم'));
     await tester.pumpAndSettle();
-    expect(find.text('خط أفقي'), findsOneWidget);
+    expect(find.text('رسومات'), findsOneWidget);
+    expect(find.byKey(const Key('drawing-tool-fibonacciRetracement')),
+        findsOneWidget);
+    await tester.tap(find.byKey(const Key('drawing-category-trend')));
+    await tester.pumpAndSettle();
     expect(find.text('خط اتجاه · نقطتان'), findsOneWidget);
-    expect(find.text('تصحيح فيبوناتشي · نقطتان'), findsOneWidget);
-    await tester.tap(find.text('خط اتجاه · نقطتان'));
+    await tester.tap(find.byKey(const Key('drawing-tool-trendLine')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
   });
@@ -143,10 +146,12 @@ void main() {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('أدوات الرسم'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('short-position-tool')), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('short-position-tool')));
+    await tester.tap(find.byKey(const Key('drawing-category-tools')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('drawing-tool-shortPosition')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('drawing-tool-shortPosition')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('short-position-tool')));
+    await tester.tap(find.byKey(const Key('drawing-tool-shortPosition')));
     await tester.pumpAndSettle();
     // With no authorized cTrader candles, the screenshot's sample prices
     // must never appear as an invented position or market feed.
@@ -160,7 +165,9 @@ void main() {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('أدوات الرسم'));
     await tester.pumpAndSettle();
-    final option = find.byKey(const Key('price-rectangle-tool'));
+    await tester.tap(find.byKey(const Key('drawing-category-tools')));
+    await tester.pumpAndSettle();
+    final option = find.byKey(const Key('drawing-tool-priceRectangle'));
     expect(option, findsOneWidget);
     await tester.ensureVisible(option);
     await tester.pump();
