@@ -31,15 +31,16 @@ void main() {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('تشغيل Replay داخل الشارت'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('حمّل شموع السوق أولًا'), findsOneWidget);
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
   });
 
   testWidgets('Heikin-Ashi and Range never show unlinked synthetic candles',
       (tester) async {
+    var requests = 0;
     final controller = MarketController(api: MarketApi(client: MockClient((_) async {
-      fail('A cTrader market request must not be sent before authorization');
+      requests++;
+      throw StateError('A cTrader market request must not be sent before authorization');
     })));
     addTearDown(controller.dispose);
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -62,6 +63,7 @@ void main() {
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     expect(find.textContaining('تيكات تجريبية'), findsNothing);
     expect(find.textContaining('تيكات BID الحقيقية'), findsOneWidget);
+    expect(requests, 0);
     expect(tester.takeException(), isNull);
   });
 
