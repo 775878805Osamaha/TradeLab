@@ -100,7 +100,8 @@ void main() {
       ),
     )));
     final renko = find.byKey(const Key('chart-kind-renko'));
-    await tester.ensureVisible(renko);
+    await tester.scrollUntilVisible(renko, 160,
+        scrollable: find.byKey(const Key('chart-type-grid')));
     await tester.pump();
     await tester.tap(renko);
     await tester.pump();

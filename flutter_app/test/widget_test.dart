@@ -51,14 +51,23 @@ void main() {
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     await tester.tap(find.byTooltip('نوع الشموع'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('هايكين آشي').last);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('chart-kind-heikinAshi')),
+      160,
+      scrollable: find.byKey(const Key('chart-type-grid')),
+    );
+    await tester.tap(find.byKey(const Key('chart-kind-heikinAshi')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);
 
     await tester.tap(find.byTooltip('نوع الشموع'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('chart-kind-range')));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('chart-kind-range')),
+      160,
+      scrollable: find.byKey(const Key('chart-type-grid')),
+    );
     await tester.tap(find.byKey(const Key('chart-kind-range')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
@@ -93,7 +102,11 @@ void main() {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('نوع الشموع'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('chart-kind-range')));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('chart-kind-range')),
+      160,
+      scrollable: find.byKey(const Key('chart-type-grid')),
+    );
     await tester.tap(find.byKey(const Key('chart-kind-range')));
     await tester.pumpAndSettle();
     expect(find.text('إعدادات شموع المدى'), findsOneWidget);
