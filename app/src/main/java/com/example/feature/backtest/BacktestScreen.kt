@@ -123,7 +123,7 @@ fun BacktestScreen(
                     colors = CardDefaults.cardColors(containerColor = TradingNegativeBg)
                 ) {
                     Text(
-                        text = uiState.failureReason,
+                        text = uiState.failureReason.orEmpty(),
                         modifier = Modifier.padding(12.dp),
                         color = TradingNegative,
                         style = MaterialTheme.typography.bodyMedium
