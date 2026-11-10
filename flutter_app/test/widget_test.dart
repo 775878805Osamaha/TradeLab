@@ -133,6 +133,8 @@ void main() {
     expect(find.text('رسومات'), findsOneWidget);
     expect(find.byKey(const Key('drawing-tool-fibonacciRetracement')),
         findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('drawing-category-trend')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('drawing-category-trend')));
     await tester.pumpAndSettle();
     expect(find.text('خط اتجاه · نقطتان'), findsOneWidget);
@@ -145,6 +147,8 @@ void main() {
       (tester) async {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('drawing-category-tools')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('drawing-category-tools')));
     await tester.pumpAndSettle();
@@ -164,6 +168,8 @@ void main() {
       (tester) async {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('drawing-category-tools')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('drawing-category-tools')));
     await tester.pumpAndSettle();
