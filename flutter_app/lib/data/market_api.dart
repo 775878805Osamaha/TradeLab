@@ -207,9 +207,18 @@ class MarketApi {
       throw const MarketDataException(
           'لم يتم التحقق من حالة صفحات شموع cTrader.');
     }
+    // cTrader may reject the requested time span and accept the documented
+    // count-back form (count + toTimestamp without fromTimestamp). Genuine
+    // weekend/holiday candles can then precede our requested lower bound.
+    // The gateway explicitly marks that fallback; all broker provenance,
+    // strict chronological order and the upper time limit still apply.
+    if (data['queryMode'] != null && data['queryMode'] != 'count_back') {
+      throw const MarketDataException('صيغة صفحة شموع cTrader غير معروفة.');
+    }
     final bars = parseVerifiedBars(data['candles'],
         sourceType: TradeSource.ctrader,
-        minTime: startMs, maxTime: endMs);
+        minTime: data['queryMode'] == 'count_back' ? 0 : startMs,
+        maxTime: endMs);
     // cTrader can return an authenticated newest-first PAGE when the broker
     // rejects a wide window or reaches its count limit. The chart already
     // loads older history using an exclusive cursor (earliest bar - 1ms).
