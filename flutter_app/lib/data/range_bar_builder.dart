@@ -60,27 +60,3 @@ class RangeBarBuilder {
         if (includeForming && forming != null) forming!,
       ];
 }
-
-/// Deterministic synthetic tick prices. VISUAL PREVIEW ONLY.
-List<double> previewBidTicks() {
-  var price = 55.0;
-  return List<double>.generate(1800, (index) {
-    price += math.sin(index * .24) * .155 +
-        math.sin(index * .047) * .095 +
-        (index % 87 == 0 ? -.18 : .005);
-    return price;
-  });
-}
-
-/// Display sizes are UI-configurable until symbol-specific cTrader pip/tick
-/// parameters can be supplied. The 0.001 multiplier is NOT a broker tick size.
-List<TradeCandle> previewRangeCandles(int displaySize,
-    {int? throughTick}) {
-  final builder = RangeBarBuilder(displaySize * .001);
-  final ticks = previewBidTicks();
-  final cutoff = (throughTick ?? ticks.length).clamp(1, ticks.length);
-  for (final tick in ticks.take(cutoff)) {
-    builder.appendBidTick(tick);
-  }
-  return builder.snapshot();
-}

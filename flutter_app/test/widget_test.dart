@@ -19,20 +19,50 @@ void main() {
   testWidgets('opens approved RTL chart in analysis mode', (tester) async {
     await openAtPhoneSize(tester);
     expect(find.text('XAUUSD'), findsWidgets);
-    expect(find.textContaining('معاينة تصميم Flutter'), findsOneWidget);
+    expect(find.textContaining('cTrader غير مرتبط'), findsOneWidget);
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    expect(find.textContaining('اربط حساب cTrader من شاشة الحساب'), findsOneWidget);
+    expect(find.text('معاينة'), findsNothing);
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
   });
 
-  testWidgets('Replay controls stay inside the chart', (tester) async {
+  testWidgets('Replay cannot start without verified broker candles', (tester) async {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('تشغيل Replay داخل الشارت'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
-    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
-    await tester.tap(find.byTooltip('إغلاق Replay'));
-    await tester.pumpAndSettle();
+    expect(find.textContaining('حمّل شموع السوق أولًا'), findsOneWidget);
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+  });
+
+  testWidgets('Heikin-Ashi and Range never show unlinked synthetic candles',
+      (tester) async {
+    final controller = MarketController(api: MarketApi(client: MockClient((_) async {
+      fail('A cTrader market request must not be sent before authorization');
+    })));
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(TradeLabApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    await tester.tap(find.byTooltip('نوع الشموع'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('هيكن آشي').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
+
+    await tester.tap(find.byTooltip('نوع الشموع'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('شموع المدى').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    expect(find.textContaining('تيكات تجريبية'), findsNothing);
+    expect(find.textContaining('تيكات BID الحقيقية'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('chart accepts one-finger drag and returns to latest', (tester) async {
@@ -123,6 +153,13 @@ void main() {
     expect(find.text('بيانات فعلية'), findsOneWidget);
     expect(find.textContaining('جارِ تحميل شموع'), findsNothing);
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+    expect(find.byKey(const Key('chart-source-empty')), findsNothing);
+    await tester.tap(find.byTooltip('تشغيل Replay داخل الشارت'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+    await tester.tap(find.byTooltip('إغلاق Replay'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
