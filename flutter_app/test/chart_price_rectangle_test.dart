@@ -77,15 +77,18 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: Center(child: SizedBox(
         width: 345.5, height: 690,
-        child: RepaintBoundary(child: CustomPaint(
+        child: RepaintBoundary(child: ColoredBox(
           key: const Key('selected-rectangle-preview'),
-          painter: ChartPriceRectanglePainter(
-            drawings: const [ChartPriceRectangle(
-              startIndex: 88, endIndex: 97, upper: 144.3, lower: 139.7)],
-            selectedIndex: 0,
-            viewport: const ChartViewport(barWidth: 10, scrollBars: .5),
-            scale: const ChartPriceScale(100, 180, 666),
-            candleCount: 100, plotWidth: 284.5, dark: false,
+          color: Colors.white,
+          child: CustomPaint(
+            painter: ChartPriceRectanglePainter(
+              drawings: const [ChartPriceRectangle(
+                startIndex: 88, endIndex: 97, upper: 144.3, lower: 139.7)],
+              selectedIndex: 0,
+              viewport: const ChartViewport(barWidth: 10, scrollBars: .5),
+              scale: const ChartPriceScale(100, 180, 666),
+              candleCount: 100, plotWidth: 284.5, dark: false,
+            ),
           ),
         )),
       ))),
