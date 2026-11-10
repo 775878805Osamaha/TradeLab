@@ -123,6 +123,18 @@ class ChartViewport {
 
   ChartViewport jumpToLatest() => ChartViewport(barWidth: barWidth);
 
+  /// A new broker-closed bar should follow the right edge only when the user
+  /// is already at the latest candle. Preserve the visible time anchor both
+  /// when inspecting history (positive scroll) and when the user deliberately
+  /// leaves whitespace to the right of the final candle (negative scroll).
+  ChartViewport afterAppending(int appended) {
+    if (appended <= 0 || scrollBars == 0) return this;
+    return ChartViewport(
+      barWidth: barWidth,
+      scrollBars: scrollBars + appended,
+    );
+  }
+
   /// Inclusive first and exclusive last candidate indices, with a small
   /// overdraw margin so thin wicks never pop in at the boundaries.
   (int, int) visibleIndices({
