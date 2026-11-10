@@ -331,7 +331,10 @@ class DrawingToolTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
+    // Use the *actual grid cell*, not MediaQuery width: the legacy chart can
+    // be narrower than the window, and fixed icon heights then overflow.
+    return LayoutBuilder(builder: (context, constraints) {
+    final unit = constraints.maxWidth / 200;
     return Semantics(
       button: true,
       label: tool.label,
@@ -346,21 +349,21 @@ class DrawingToolTile extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             color: TradeColors.drawingTile,
-            borderRadius: BorderRadius.circular(width * (19 / 691)),
+            borderRadius: BorderRadius.circular(19 * unit),
           ),
           child: Stack(children: [
             Column(children: [
-              SizedBox(height: width * (13 / 691)),
+              SizedBox(height: 13 * unit),
               SizedBox(
-                height: width * (61 / 691),
+                height: 61 * unit,
                 child: Center(child: SizedBox(
-                  width: width * (54 / 691),
-                  height: width * (54 / 691),
+                  width: 54 * unit,
+                  height: 54 * unit,
                   child: CustomPaint(painter: DrawingToolGlyphPainter(tool)),
                 )),
               ),
               Expanded(child: Center(child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: width * (5 / 691)),
+                padding: EdgeInsets.symmetric(horizontal: 5 * unit),
                 child: Text(tool.label,
                   textDirection: TextDirection.rtl,
                   textAlign: TextAlign.center,
@@ -368,7 +371,7 @@ class DrawingToolTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   softWrap: false,
                   style: TextStyle(
-                    fontSize: (width * (24 / 691)).clamp(11.0, 14.0),
+                    fontSize: (24 * unit).clamp(10.5, 14.0),
                     fontWeight: FontWeight.w700,
                     color: TradeColors.drawingInk,
                   ),
@@ -376,8 +379,8 @@ class DrawingToolTile extends StatelessWidget {
               ))),
             ]),
             if (isFavorite) Positioned(
-              top: width * (8 / 691),
-              left: width * (8 / 691),
+              top: 8 * unit,
+              left: 8 * unit,
               child: Semantics(
                 button: true,
                 label: 'إزالة ${tool.label} من المفضلة',
@@ -386,7 +389,7 @@ class DrawingToolTile extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   onTap: onToggleFavorite,
                   child: Icon(Icons.star,
-                    size: width * (27 / 691),
+                    size: 27 * unit,
                     color: TradeColors.drawingFavorite),
                 ),
               ),
@@ -395,6 +398,7 @@ class DrawingToolTile extends StatelessWidget {
         ),
       ),
     );
+    });
   }
 }
 
