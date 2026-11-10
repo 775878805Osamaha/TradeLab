@@ -72,19 +72,11 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
   final TextEditingController _search = TextEditingController();
   final ScrollController _categories = ScrollController();
   DrawingCategory _category = DrawingCategory.gann;
-  bool _initialCategoryPositioned = false;
 
   @override
   void initState() {
     super.initState();
     _favorites = {...widget.favorites};
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_categories.hasClients || _initialCategoryPositioned) {
-        return;
-      }
-      _initialCategoryPositioned = true;
-      _categories.jumpTo(_categories.position.maxScrollExtent);
-    });
   }
 
   @override
@@ -215,15 +207,20 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
           SizedBox(height: width * (22 / 691)),
           SizedBox(
             height: width * (62 / 691),
-            child: SingleChildScrollView(
+            // The reference presents the selected final RTL category at the
+            // *left* edge, with Favorites partially clipped on the right.
+            // A physical LTR scrolling row keeps this initial offset stable;
+            // every category label itself remains Arabic/RTL.
+            child: Directionality(textDirection: TextDirection.ltr,
+              child: SingleChildScrollView(
               key: const Key('drawing-tools-category-scroll'),
               scrollDirection: Axis.horizontal,
               controller: _categories,
               padding: EdgeInsets.symmetric(horizontal: side),
               child: Row(children: [
-                for (final category in DrawingCategory.values)
+                for (final category in DrawingCategory.values.toList().reversed)
                   Padding(
-                    padding: EdgeInsets.only(left: width * (14 / 691)),
+                    padding: EdgeInsets.only(right: width * (14 / 691)),
                     child: DrawingCategoryTab(
                       category: category,
                       selected: _category == category,
@@ -237,6 +234,7 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
                     ),
                   ),
               ]),
+            ),
             ),
           ),
           SizedBox(height: width * (30 / 691)),
