@@ -47,7 +47,11 @@ class AnalysisHubSheet extends StatelessWidget {
     final available = math.max(260.0,
         media.size.height - media.padding.top - media.padding.bottom);
     final idealHeight = width * (1310 / 691);
-    final height = math.min(idealHeight, available - media.viewInsets.bottom);
+    // Preserve the reference's visible chart strip on taller Android displays.
+    // The screenshot's sheet occupies roughly 84.6% of the display height.
+    final height = math.min(idealHeight,
+      math.min(available - media.viewInsets.bottom,
+        media.size.height * .846));
 
     Widget row(List<AnalysisHubAction> actions, double height) {
       return Row(children: [
@@ -68,7 +72,7 @@ class AnalysisHubSheet extends StatelessWidget {
     }
 
     Widget sectionTitle(String label) => Padding(
-      padding: EdgeInsetsDirectional.only(end: 22 * unit),
+      padding: EdgeInsetsDirectional.only(start: side, end: side),
       child: Align(alignment: AlignmentDirectional.centerStart,
         child: Text(label, textDirection: TextDirection.rtl,
           style: TextStyle(color: TradeColors.analysisMuted,
@@ -212,7 +216,7 @@ class AnalysisActionTile extends StatelessWidget {
                 key: Key('analysis-action-label-${action.name}'),
                 textDirection: TextDirection.rtl,
                 textAlign: TextAlign.center,
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: ink,
                   fontWeight: FontWeight.w700,
@@ -242,7 +246,7 @@ class AnalysisBrokerCard extends StatelessWidget {
         key: const Key('analysis-action-tradeWithBroker'),
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(height: height,
+        child: Container(height: height, width: double.infinity,
           padding: EdgeInsets.all(math.max(1.1, 2.5 * unit)),
           decoration: BoxDecoration(
             gradient: const LinearGradient(colors: [
