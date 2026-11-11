@@ -297,4 +297,58 @@ void main() {
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('analysis hub retains Binance candles and starts Replay without refetch',
+      (tester) async {
+    var historyRequests = 0;
+    final client = MockClient((request) async {
+      expect(request.url.host, 'api.binance.com');
+      expect(request.url.path, '/api/v3/klines');
+      expect(request.url.queryParameters['symbol'], 'BTCUSDT');
+      historyRequests++;
+      return http.Response(jsonEncode([
+        [1700000000000, '35000', '35200', '34700', '35100', '1', 1700000899999],
+        [1700000900000, '35100', '35300', '35000', '35250', '1', 1700001799999],
+      ]), 200);
+    });
+    final controller = MarketController(api: MarketApi(client: client));
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(TradeLabApp(controller: controller));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('symbol-picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('BTCUSDT').last);
+    await tester.pumpAndSettle();
+    expect(historyRequests, 1);
+    expect(find.text('شموع Binance'), findsOneWidget);
+    final chart = find.byKey(const Key('chart-gesture-area'));
+    expect(chart, findsOneWidget);
+
+    for (var index = 0; index < 2; index++) {
+      await tester.tap(find.byTooltip('محور التحليل'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('analysis-hub-sheet')), findsOneWidget);
+      expect(chart, findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(chart, findsOneWidget);
+      expect(historyRequests, 1);
+    }
+
+    await tester.tap(find.byTooltip('محور التحليل'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('analysis-action-replay')));
+    await tester.tap(find.byKey(const Key('analysis-action-replay')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+    expect(chart, findsOneWidget);
+    expect(historyRequests, 1);
+    await tester.tap(find.byTooltip('إغلاق Replay'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
+    expect(historyRequests, 1);
+    expect(tester.takeException(), isNull);
+  });
 }
