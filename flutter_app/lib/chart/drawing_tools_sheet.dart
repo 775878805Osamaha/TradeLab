@@ -41,7 +41,7 @@ enum DrawingCatalogKind {
   schiffPitchfork('شوكة شيف', DrawingCategory.trend),
   modifiedSchiffPitchfork('شوكة شيف المعدلة', DrawingCategory.trend),
   insidePitchfork('شوكة داخلية', DrawingCategory.trend),
-  shortPosition('مركز بيع · الدخول ثم الوقف والهدف', DrawingCategory.tools),
+  shortPosition('مركز بيع على المكشوف', DrawingCategory.tools),
   longPosition('مركز شراء', DrawingCategory.tools),
   fixedVolumeProfile('بروفايل الحجم بنطاق ثابت', DrawingCategory.tools),
   priceRectangle('مستطيل نطاق سعري · زاويتان', DrawingCategory.tools),
@@ -476,7 +476,7 @@ class DrawingFavoritesList extends StatelessWidget {
         for (final entry in groups.entries) ...[
           Padding(
             padding: EdgeInsetsDirectional.only(
-              start: side, end: side, top: 17 * unit, bottom: 18 * unit,
+              start: side, end: side, top: 9 * unit, bottom: 18 * unit,
             ),
             child: SizedBox(
               height: 37 * unit,
@@ -518,7 +518,7 @@ class DrawingFavoritesList extends StatelessWidget {
               );
             }),
           ),
-          SizedBox(height: 12 * unit),
+          SizedBox(height: 6 * unit),
         ],
       ],
     );
@@ -1082,15 +1082,25 @@ class DrawingToolGlyphPainter extends CustomPainter {
         poly(const [Offset(8,46),Offset(23,28),Offset(39,46)]);
         dot(8,46,3);dot(23,28,3);dot(39,46,3);
       case DrawingCatalogKind.shortPosition:
-        line(8,14,46,14);line(8,29,46,29);
-        dot(8,14,3);dot(8,29,3);
-        line(34,10,34,19,thin);line(33,26,33,35,thin);
-        line(38,6,38,23,thin);
+        line(8,15,46,15);line(8,34,46,34);
+        dot(8,15,3);dot(8,34,3);
+        final shortLabel = TextPainter(
+          text: const TextSpan(text: 'S', style: TextStyle(
+            fontSize: 15, fontWeight: FontWeight.w700,
+            color: TradeColors.drawingInk)),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        shortLabel.paint(canvas, const Offset(29,18));
       case DrawingCatalogKind.longPosition:
-        line(8,14,46,14);line(8,29,46,29);
-        dot(8,14,3);dot(8,29,3);
-        line(34,10,34,19,thin);line(33,26,33,35,thin);
-        line(38,6,38,23,thin);
+        line(8,15,46,15);line(8,34,46,34);
+        dot(8,15,3);dot(8,34,3);
+        final longLabel = TextPainter(
+          text: const TextSpan(text: 'L', style: TextStyle(
+            fontSize: 15, fontWeight: FontWeight.w700,
+            color: TradeColors.drawingInk)),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        longLabel.paint(canvas, const Offset(29,18));
       case DrawingCatalogKind.fixedVolumeProfile:
         line(37,5,37,46);dot(37,5,3);dot(37,46,3);
         line(6,10,6,42);dot(6,42,3);
