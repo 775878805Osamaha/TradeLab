@@ -19,7 +19,10 @@ void main() {
   testWidgets('opens approved RTL chart in analysis mode', (tester) async {
     await openAtPhoneSize(tester);
     expect(find.text('XAUUSD'), findsWidgets);
-    expect(find.textContaining('cTrader غير مرتبط'), findsOneWidget);
+    expect(find.byKey(const Key('chart-reference-header')), findsOneWidget);
+    expect(find.byKey(const Key('chart-reference-toolbar')), findsOneWidget);
+    expect(find.textContaining('لا توجد أسعار موثقة'), findsOneWidget);
+    expect(find.text('1 دق'), findsOneWidget);
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     expect(find.textContaining('اربط حساب cTrader من شاشة الحساب'), findsOneWidget);
     expect(find.text('معاينة'), findsNothing);

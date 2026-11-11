@@ -14,12 +14,14 @@ import '../chart/chart_type_sheet.dart';
 import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
+import '../chart/chart_axis_ticks.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_tick_rollforward.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
+import '../data/market_candle_store.dart';
 import '../data/ctrader_candle_stitcher.dart';
 import '../data/market_controller.dart';
 import '../paper/paper_journal_controller.dart';
@@ -83,7 +85,7 @@ class _ChartScreenState extends State<ChartScreen>
   bool _linkedBefore = false;
   String? _accountBefore;
   String _symbol = 'XAUUSD';
-  String _timeframe = '15m';
+  String _timeframe = '1m';
   ChartMode _mode = ChartMode.candles;
   int _rangeTicks = 1000;
   bool _replay = false;
@@ -126,7 +128,7 @@ class _ChartScreenState extends State<ChartScreen>
   bool _showIndicators = false;
   bool _showShortLabels = true;
   int _visibleThrough = 60;
-  ChartViewport _viewport = const ChartViewport();
+  ChartViewport _viewport = const ChartViewport(barWidth: 5.5, scrollBars: -5);
   ChartViewport _gestureStart = const ChartViewport();
   late final AnimationController _momentum;
   double _previousMomentumX = 0;
@@ -363,6 +365,10 @@ class _ChartScreenState extends State<ChartScreen>
     _momentum.stop();
     final revision = ++_loadRevision;
     if (!mounted) return;
+    final sourceSymbol = _selectedSymbol;
+    final sourceTimeframe = _timeframe;
+    final sourceAccount = sourceSymbol.source == TradeSource.ctrader
+        ? widget.controller.accountId : null;
     setState(() {
       _stopPlayback();
       if (_replay) {
@@ -489,16 +495,44 @@ class _ChartScreenState extends State<ChartScreen>
         _rangeBarEndTickIndices = timeline.endTickIndices;
         _rangeBarTimestamps = timeline.endTimestamps;
       } else {
-        final bars = await widget.controller.history(_selectedSymbol, _timeframe);
+        // Render verified, account-scoped history immediately on a return to
+        // this symbol. A recently synchronized cache needs no new OHLC call.
+        List<MarketBar> cached = const [];
+        var fresh = false;
+        try {
+          cached = await MarketCandleStore.read(
+              sourceSymbol, sourceTimeframe, sourceAccount);
+          fresh = cached.isNotEmpty && await MarketCandleStore.isFresh(
+              sourceSymbol, sourceTimeframe, sourceAccount);
+        } catch (_) {
+          // SQLite can be unavailable in some test hosts. The verified source
+          // remains authoritative, never an invented fallback.
+        }
+        if (revision != _loadRevision || !mounted) return;
+        if (cached.isNotEmpty) {
+          setState(() {
+            _actualBars = cached;
+            _actualCandles = cached.map((bar) => bar.candle).toList(growable: false);
+            _actualTimestamps = cached.map((bar) => bar.timestamp).toList(growable: false);
+            _olderCursorMs = cached.first.timestamp;
+          });
+        }
+        if (fresh) return;
+        final bars = await widget.controller.history(sourceSymbol, sourceTimeframe);
         if (revision != _loadRevision || !mounted) return;
         // MarketApi already validated strictly ascending broker timestamps
         // and OHLC. Do not sort or deduplicate again in the UI: doing so
         // would conceal a source/protocol defect behind plausible candles.
-        _actualBars = List<MarketBar>.unmodifiable(bars);
-        _actualCandles = bars.map((bar) => bar.candle).toList(growable: false);
+        final merged = MarketCandleStore.mergeVerified(cached, bars);
+        _actualBars = merged;
+        _actualCandles = merged.map((bar) => bar.candle).toList(growable: false);
         _actualTimestamps =
-            bars.map((bar) => bar.timestamp).toList(growable: false);
-        if (bars.isNotEmpty) _olderCursorMs = bars.first.timestamp;
+            merged.map((bar) => bar.timestamp).toList(growable: false);
+        if (merged.isNotEmpty) _olderCursorMs = merged.first.timestamp;
+        if (bars.isNotEmpty) {
+          unawaited(MarketCandleStore.archive(sourceSymbol, sourceTimeframe,
+              sourceAccount, bars, markFresh: true).catchError((Object _) {}));
+        }
       }
       if (revision == _loadRevision && _totalBars == 0) {
         _loadError = 'لم يُرجع المصدر شموعًا لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
@@ -547,6 +581,9 @@ class _ChartScreenState extends State<ChartScreen>
         // deliberate right-side whitespace; follow new bars at the live edge.
         _viewport = _viewport.afterAppending(appended);
       });
+      unawaited(MarketCandleStore.archive(symbol, timeframe,
+          widget.controller.accountId, recent, markFresh: true)
+          .catchError((Object _) {}));
     } on MarketDataException catch (error) {
       if (mounted && revision == _loadRevision) {
         setState(() => _loadError = error.message);
@@ -816,6 +853,10 @@ class _ChartScreenState extends State<ChartScreen>
         }
       } else {
         _olderCursorMs = unique.first.timestamp;
+        unawaited(MarketCandleStore.archive(_selectedSymbol, _timeframe,
+            _selectedSymbol.source == TradeSource.ctrader
+                ? widget.controller.accountId : null, unique)
+            .catchError((Object _) {}));
         setState(() {
         _actualBars = [...unique, ..._actualBars];
         _actualCandles = _actualBars.map((bar) => bar.candle).toList(growable: false);
@@ -1877,16 +1918,20 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Widget _buildDrawingRail(double height) => Positioned(
-    left: 0, top: math.min(100.0, height * .16), bottom: 15, width: 46,
+    left: 0, top: math.min(56.0, height * .11), bottom: 12, width: 38,
     child: Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.horizontal(right: Radius.circular(12)),
-        border: Border.all(color: Theme.of(context).dividerColor),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
+        borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
+        border: Border.all(color: const Color(0xFFF0F0F0)),
+        boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 6)],
       ),
       child: SingleChildScrollView(
         child: Column(children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 5),
+            child: Icon(Icons.drag_indicator, size: 18, color: Color(0xFFB8B8B8)),
+          ),
           IconButton(
             key: const Key('drawing-rail-cursor'),
             tooltip: 'تحريك الشارت',
@@ -1901,29 +1946,48 @@ class _ChartScreenState extends State<ChartScreen>
               _secondChannelAnchor = null;
               _rectangleFirstCorner = null;
             }),
-            icon: const Icon(Icons.near_me_outlined, size: 23),
+            icon: const Icon(Icons.vertical_align_center, size: 22),
           ),
-          const Divider(height: 1),
           IconButton(
             tooltip: 'خط اتجاه',
             onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.trendLine),
-            icon: const Icon(Icons.show_chart, size: 23),
+            icon: const Icon(Icons.show_chart, size: 22),
           ),
           IconButton(
             tooltip: 'تصحيح فيبوناتشي',
             onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.fibonacci),
-            icon: const Icon(Icons.tune, size: 23),
+            icon: const Icon(Icons.segment, size: 22),
+          ),
+          IconButton(
+            tooltip: 'خط شعاع',
+            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.ray),
+            icon: const Icon(Icons.radio_button_unchecked, size: 22),
           ),
           IconButton(
             tooltip: 'خط أفقي',
             onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.horizontal),
-            icon: const Icon(Icons.horizontal_rule, size: 23),
+            icon: const Icon(Icons.horizontal_rule, size: 22),
+          ),
+          IconButton(
+            tooltip: 'شعاع أفقي',
+            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.horizontalRay),
+            icon: const Icon(Icons.linear_scale, size: 22),
+          ),
+          IconButton(
+            tooltip: 'خط رأسي',
+            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.verticalLine),
+            icon: const Icon(Icons.vertical_align_center, size: 22),
+          ),
+          IconButton(
+            tooltip: 'قناة متوازية',
+            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.parallelChannel),
+            icon: const Icon(Icons.tune, size: 22),
           ),
           IconButton(
             key: const Key('drawing-rail-short'),
             tooltip: 'أداة مركز بيع',
             onPressed: () => _selectDrawingMode(short: true),
-            icon: Icon(Icons.south_east, size: 23,
+            icon: Icon(Icons.flag_outlined, size: 22,
               color: _placingShort || _selectedShort != null
                   ? TradeColors.shortHandle : null),
           ),
@@ -1931,14 +1995,14 @@ class _ChartScreenState extends State<ChartScreen>
             key: const Key('drawing-rail-rectangle'),
             tooltip: 'مستطيل نطاق سعري',
             onPressed: () => _selectDrawingMode(rectangle: true),
-            icon: Icon(Icons.crop_square_outlined, size: 23,
+            icon: Icon(Icons.crop_square_outlined, size: 22,
               color: _placingRectangle || _selectedRectangle != null
                   ? TradeColors.rectangleHandle : null),
           ),
           IconButton(
             tooltip: 'مغناطيس الأسعار',
             onPressed: _showDrawingTools,
-            icon: const Icon(Icons.tune_outlined, size: 23),
+            icon: const Icon(Icons.text_fields, size: 22),
           ),
         ]),
       ),
@@ -2281,54 +2345,150 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  Widget _referenceChartHeader(List<TradeCandle> candles) {
+    final hasVerifiedPrices = candles.isNotEmpty;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? Colors.white : const Color(0xFF101010);
+    final source = _selectedSymbol.source == TradeSource.ctrader
+        ? 'cTrader' : 'Binance';
+    final quoteCurrency = _selectedSymbol.source == TradeSource.binance
+        ? 'USDT' : 'USD';
+    return Container(
+      key: const Key('chart-reference-header'),
+      height: 82,
+      color: Theme.of(context).colorScheme.surface,
+      child: Stack(children: [
+        Positioned(left: 8, top: 4, child: Row(children: [
+          Container(
+            height: 22, width: 22,
+            decoration: BoxDecoration(
+              color: const Color(0xFFDBF2EE),
+              borderRadius: BorderRadius.circular(12)),
+            alignment: Alignment.center,
+            child: Icon(Icons.circle, size: 10,
+                color: hasVerifiedPrices && !_ctraderTimeCandlesStale
+                    ? const Color(0xFF047660) : Colors.grey),
+          ),
+          Container(
+            height: 22, width: 23,
+            decoration: const BoxDecoration(
+              color: Color(0xFFFCE1ED),
+              borderRadius: BorderRadius.horizontal(right: Radius.circular(13))),
+            alignment: Alignment.center,
+            child: const Icon(Icons.waves,
+                color: Color(0xFFAB2373), size: 19),
+          ),
+        ])),
+        Positioned(right: 5, top: 4, child: OutlinedButton.icon(
+          onPressed: _showSymbolPicker,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: ink,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            minimumSize: const Size(54, 28),
+            side: const BorderSide(color: Color(0xFFE6E6E6)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(5)),
+          ),
+          icon: const Icon(Icons.keyboard_arrow_down, size: 15),
+          label: Text(quoteCurrency, textDirection: TextDirection.ltr,
+              style: const TextStyle(fontSize: 12)),
+        )),
+        Positioned(left: 8, top: 27, right: 66,
+          child: Text(
+            hasVerifiedPrices
+                ? '$source · ${_ctraderTimeCandlesStale ? 'بيانات متأخرة' : 'شموع موثقة'}'
+                : 'لا توجد أسعار موثقة · $source',
+            key: const Key('chart-provenance-header'),
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.left,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12,
+                color: hasVerifiedPrices && !_ctraderTimeCandlesStale
+                    ? const Color(0xFF047660) : TradeColors.negative),
+          )),
+        Positioned(left: 8, top: 49, child: OutlinedButton.icon(
+          // The screenshot does not establish what the button labelled 3
+          // does. Keep it visibly disabled until its meaning is verified.
+          onPressed: null,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(42, 28),
+            padding: const EdgeInsets.symmetric(horizontal: 5),
+            side: const BorderSide(color: Color(0xFFE4E4E4)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(5))),
+          icon: Icon(Icons.keyboard_arrow_down, size: 18, color: ink),
+          label: Text('3', style: TextStyle(fontSize: 14, color: ink)),
+        )),
+      ]),
+    );
+  }
+
+  Widget _referenceChartToolbar(Color surface) => Container(
+    key: const Key('chart-reference-toolbar'),
+    color: surface,
+    height: 54,
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        TextButton(
+          key: const Key('symbol-picker'),
+          onPressed: _showSymbolPicker,
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(_selectedSymbol.kind == InstrumentKind.gold
+                ? 'GOLD' : _symbol,
+                textDirection: TextDirection.ltr,
+                style: const TextStyle(fontSize: 16,
+                    color: Color(0xFF101010), fontWeight: FontWeight.w800)),
+            Text(_symbol, textDirection: TextDirection.ltr,
+                style: const TextStyle(fontSize: 10,
+                    color: Color(0xFF9B9B9B))),
+          ]),
+        ),
+        TextButton(
+          key: const Key('timeframe-picker'),
+          onPressed: _showTimeframePicker,
+          child: Text(_timeframe == '1m' ? '1 دق' : _timeframe,
+            style: const TextStyle(fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF333333))),
+        ),
+        _iconAction(icon: Icons.edit_outlined,
+            label: 'أدوات الرسم', active: _drawing,
+            onPressed: _showDrawingTools),
+        _iconAction(icon: Icons.tune_outlined,
+            label: 'محور التحليل', onPressed: _showAnalysisHub),
+        _iconAction(icon: Icons.more_horiz,
+            label: 'نوع الشموع', onPressed: _showChartTypePicker),
+        _iconAction(icon: Icons.replay_circle_filled_outlined,
+            label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
+            active: _replay, onPressed: _toggleReplay),
+        _iconAction(icon: Icons.functions, label: 'المؤشرات',
+            active: _showIndicators,
+            onPressed: () => setState(() => _showIndicators = !_showIndicators)),
+        _iconAction(icon: Icons.zoom_in_outlined,
+            label: 'تكبير الشارت', onPressed: () => _zoomBy(1.25)),
+        _iconAction(icon: Icons.zoom_out_outlined,
+            label: 'تصغير الشارت', onPressed: () => _zoomBy(.8)),
+        _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
+            onPressed: () {
+              _momentum.stop();
+              setState(() => _viewport = _viewport.jumpToLatest());
+            }),
+        if (_mode == ChartMode.range)
+          TextButton(onPressed: _showRangeSettings,
+              child: Text('مدى $_rangeTicks')),
+      ]),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final candles = _displayCandles;
     final surface = colors.surface;
     return Column(children: [
-      Container(
-        color: surface,
-        padding: const EdgeInsetsDirectional.only(start: 12, end: 4),
-        child: Row(children: [
-          Expanded(
-            child: InkWell(
-              key: const Key('symbol-picker'),
-              borderRadius: BorderRadius.circular(8),
-              onTap: _showSymbolPicker,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                    Flexible(child: Text(_symbol, textDirection: TextDirection.ltr,
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900))),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.keyboard_arrow_down, size: 19),
-                  ]),
-                  Text(_liveRequested
-                      ? 'تحليل السوق · ${_selectedSymbol.source == TradeSource.binance ? 'Binance' : 'cTrader'}'
-                      : 'تحليل السوق · غير متصل',
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
-                ]),
-              ),
-            ),
-          ),
-          Flexible(child: TradeStatusChip(label: _liveRequested
-              ? (_loading ? 'جار التحميل' : _loadError != null
-                  ? 'خطأ في المصدر' : _ctraderTimeCandlesStale
-                  ? 'بيانات متأخرة' : _selectedSymbol.source == TradeSource.ctrader
-                  ? 'شموع cTrader' : 'شموع Binance')
-              : 'غير مرتبط', connected: _liveRequested && !_loading &&
-                  _loadError == null && !_ctraderTimeCandlesStale &&
-                  candles.isNotEmpty)),
-          _iconAction(icon: Icons.fullscreen, label: 'ملء الشاشة', onPressed: _notifyUnconnected),
-          _iconAction(icon: Icons.refresh, label: 'تحديث أسعار السوق',
-            onPressed: _liveRequested ? _loadRealHistory : _notifyUnconnected),
-        ]),
-      ),
-      const Divider(height: 1),
+      _referenceChartHeader(candles),
       if (_mode == ChartMode.range)
         Container(
           width: double.infinity,
@@ -2750,7 +2910,7 @@ class _ChartScreenState extends State<ChartScreen>
                 ]),
               ),
             ))),
-          if (candles.isNotEmpty && _drawing)
+          if (candles.isNotEmpty)
             _buildDrawingRail(constraints.maxHeight),
           if (_drawing && _selectedShort != null &&
               _selectedShort! < _shortPositions.length && candles.isNotEmpty)
@@ -2763,42 +2923,7 @@ class _ChartScreenState extends State<ChartScreen>
       ),
       // The chart stays the dominant surface; its tool strip sits below the
       // time axis, as in the supplied mobile reference.
-      Container(
-        color: surface,
-        height: 50,
-        child: SingleChildScrollView(
-         scrollDirection: Axis.horizontal,
-         child: Row(children: [
-          TextButton.icon(
-            key: const Key('timeframe-picker'),
-            onPressed: _showTimeframePicker,
-            label: Text(_timeframe, textDirection: TextDirection.ltr),
-            icon: const Icon(Icons.keyboard_arrow_down, size: 18),
-          ),
-          _iconAction(icon: Icons.tune_outlined,
-            label: 'محور التحليل', onPressed: _showAnalysisHub),
-          _iconAction(icon: Icons.candlestick_chart, label: 'نوع الشموع', onPressed: _showChartTypePicker),
-          _iconAction(icon: Icons.replay_circle_filled_outlined,
-              label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
-              active: _replay, onPressed: _toggleReplay),
-          _iconAction(icon: Icons.functions, label: 'المؤشرات', active: _showIndicators,
-            onPressed: () => setState(() => _showIndicators = !_showIndicators)),
-          _iconAction(icon: Icons.edit_outlined, label: 'أدوات الرسم', active: _drawing,
-            onPressed: _showDrawingTools),
-          _iconAction(icon: Icons.zoom_in_outlined, label: 'تكبير الشارت',
-            onPressed: () => _zoomBy(1.25)),
-          _iconAction(icon: Icons.zoom_out_outlined, label: 'تصغير الشارت',
-            onPressed: () => _zoomBy(.8)),
-          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
-            onPressed: () {
-              _momentum.stop();
-              setState(() => _viewport = _viewport.jumpToLatest());
-            }),
-          const SizedBox(width: 8),
-          if (_mode == ChartMode.range)
-            TextButton(onPressed: _showRangeSettings, child: Text('مدى $_rangeTicks')),
-         ])),
-      ),
+      _referenceChartToolbar(surface),
       Container(
         padding: const EdgeInsetsDirectional.only(start: 12, end: 8, top: 6, bottom: 6),
         color: surface,
@@ -3026,8 +3151,7 @@ class _CandleChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final background = dark ? const Color(0xFF000D16) : Colors.white;
-    final line = dark ? const Color(0xFF293544) : const Color(0xFFE4EAF1);
-    final text = dark ? const Color(0xFF9598A1) : const Color(0xFF637086);
+    final text = dark ? const Color(0xFFC1C7D0) : const Color(0xFF101010);
     canvas.drawRect(Offset.zero & size, Paint()..color = background);
     final axis = size.width - 61;
     if (axis < 30 || size.height < 60 || candles.isEmpty) return;
@@ -3042,27 +3166,26 @@ class _CandleChartPainter extends CustomPainter {
     final minimum = scale.minimum;
     final span = math.max(.00001, maximum - minimum);
     double y(double price) => scale.y(price);
-    final decimals = span < .05 ? 5 : span < 1 ? 4 : span < 20 ? 2 : 1;
-    final gridPaint = Paint()..color = line..strokeWidth = .8;
-    for (var i = 0; i <= 5; i++) {
-      final lineY = chartHeight * i / 5;
-      canvas.drawLine(Offset(0, lineY), Offset(axis, lineY), gridPaint);
-      _text(canvas, (maximum - span * i / 5).toStringAsFixed(decimals),
-          Offset(axis + 3, lineY - 6), text, 10);
+    // Reference: no visible candle-area grid. Labels derive from the actual
+    // visible price interval, never from screenshot numbers or fake candles.
+    final step = ChartAxisTicks.interval(minimum, maximum);
+    final decimals = ChartAxisTicks.decimals(step);
+    for (final tick in ChartAxisTicks.ticks(minimum, maximum)) {
+      final py = y(tick);
+      final important = (tick / (step * 5) -
+          (tick / (step * 5)).round()).abs() < 0.000001;
+      _text(canvas, _price(tick, decimals),
+          Offset(axis + 6, py - 8), text, 12,
+          bold: important);
     }
-    for (var i = 1; i <= 4; i++) {
-      final x = axis * i / 5;
-      canvas.drawLine(Offset(x, 0), Offset(x, chartHeight), gridPaint);
-    }
-    canvas.drawLine(Offset(axis, 0), Offset(axis, size.height), gridPaint);
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, axis, chartHeight));
     final positiveWick = Paint()
       ..color = TradeColors.positive
-      ..strokeWidth = 1.3;
+      ..strokeWidth = 1.0;
     final negativeWick = Paint()
       ..color = TradeColors.negative
-      ..strokeWidth = 1.3;
+      ..strokeWidth = 1.0;
     final positiveBody = Paint()..color = TradeColors.positive;
     final negativeBody = Paint()..color = TradeColors.negative;
     for (var i = start; i < ending; i++) {
@@ -3075,8 +3198,8 @@ class _CandleChartPainter extends CustomPainter {
       final openY = y(candle.open);
       final closeY = y(candle.close);
       canvas.drawRect(Rect.fromLTRB(
-        centerX - viewport.barWidth * .31, math.min(openY, closeY),
-        centerX + viewport.barWidth * .31, math.max(openY + 1, closeY + 1),
+        centerX - viewport.barWidth * .34, math.min(openY, closeY),
+        centerX + viewport.barWidth * .34, math.max(openY + 1, closeY + 1),
       ), candle.positive ? positiveBody : negativeBody);
     }
     if (indicator) {
@@ -3179,11 +3302,11 @@ class _CandleChartPainter extends CustomPainter {
         canvas.drawLine(Offset(x, lastY),
             Offset(math.min(axis, x + 2.2), lastY), marker);
       }
-      final tagY = (lastY - 10).clamp(0, chartHeight - 20).toDouble();
-      canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 20),
+      final tagY = (lastY - 14).clamp(0, chartHeight - 30).toDouble();
+      canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 30),
           Paint()..color = lastColor);
       _text(canvas, _price(lastClose, decimals),
-          Offset(axis + 2, tagY + 3), Colors.white, 10);
+          Offset(axis + 3, tagY + 7), Colors.white, 12);
     }
     for (var i = 0; i < shortPositions.length; i++) {
       final item = shortPositions[i];
@@ -3202,8 +3325,12 @@ class _CandleChartPainter extends CustomPainter {
             candleCount: candles.length);
         if (index == null) continue;
         final date = DateTime.fromMillisecondsSinceEpoch(timestamps[index], isUtc: true);
-        final label = _formatUtc(date);
-        _text(canvas, label, Offset(x - 26, chartHeight + 4), text, 9);
+        final local = date.toLocal();
+        final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+        final label = '${hour.toString().padLeft(2, '0')}:'
+            '${local.minute.toString().padLeft(2, '0')} '
+            '${local.hour < 12 ? 'AM' : 'PM'}';
+        _text(canvas, label, Offset(x - 26, chartHeight + 4), text, 10);
       }
     }
     if (crosshair != null) {
@@ -3246,10 +3373,12 @@ class _CandleChartPainter extends CustomPainter {
     }
   }
 
-  static void _text(Canvas canvas, String value, Offset offset, Color color, double size) {
+  static void _text(Canvas canvas, String value, Offset offset, Color color,
+      double size, {bool bold = false}) {
     final painter = TextPainter(
       text: TextSpan(text: value,
-          style: TextStyle(fontSize: size, color: color, fontWeight: FontWeight.w500)),
+          style: TextStyle(fontSize: size, color: color,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
       textDirection: TextDirection.ltr,
       maxLines: 1,
     )..layout();

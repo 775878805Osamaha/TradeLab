@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 abstract final class TradeColors {
   static const blue = Color(0xFF2962FF);
   static const blueLight = Color(0xFF5C85FF);
-  static const positive = Color(0xFF26A69A);
-  static const negative = Color(0xFFEF5350);
+  // PROMPT 08: sampled mobile chart candles, not trade execution indicators.
+  static const positive = Color(0xFF089981);
+  static const negative = Color(0xFFF23645);
   // Short-position drawing palette, measured against PROMPT 01 reference.
   // These are presentation colors and never encode an executed trade.
   static const shortStopFill = Color(0xFFF88F96);

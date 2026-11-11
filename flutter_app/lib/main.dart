@@ -163,8 +163,9 @@ class _TradeLabShellState extends State<TradeLabShell> {
         bottom: false,
         child: Column(
           children: [
-            AnimatedBuilder(animation: _market,
-              builder: (context, _) => MarketSourceNotice(controller: _market)),
+            if (_selectedIndex != 1)
+              AnimatedBuilder(animation: _market,
+                builder: (context, _) => MarketSourceNotice(controller: _market)),
             Expanded(
               child: IndexedStack(
                 index: _selectedIndex,
