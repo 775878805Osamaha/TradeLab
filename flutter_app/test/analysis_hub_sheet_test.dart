@@ -74,6 +74,8 @@ void main() {
     expect(templates.center.dx, greaterThan(chartType.center.dx));
     expect(chartType.center.dx, greaterThan(tree.center.dx));
 
+    await tester.ensureVisible(
+      find.byKey(const Key('analysis-action-tradeWithBroker')));
     await tester.tap(find.byKey(const Key('analysis-action-tradeWithBroker')));
     await tester.pump();
     expect(commands, [AnalysisHubAction.tradeWithBroker]);
