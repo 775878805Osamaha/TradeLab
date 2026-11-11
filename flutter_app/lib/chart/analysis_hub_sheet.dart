@@ -155,7 +155,7 @@ class AnalysisHubSheet extends StatelessWidget {
               Padding(padding: EdgeInsets.symmetric(horizontal: side),
                 child: row(const [AnalysisHubAction.symbolInformation,
                   AnalysisHubAction.dataSource], 137)),
-              SizedBox(height: math.max(20, 45 * unit)),
+              SizedBox(height: math.max(20.0, 45 * unit)),
             ]),
           )),
         ]),

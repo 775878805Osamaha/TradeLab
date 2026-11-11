@@ -51,7 +51,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-type-bottom-sheet')), findsOneWidget);
     expect(chart, findsOneWidget);
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(chart, findsOneWidget);
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
@@ -62,12 +62,14 @@ void main() {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('محور التحليل'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const Key('analysis-action-indicators')));
     await tester.tap(find.byKey(const Key('analysis-action-indicators')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('analysis-sma12-toggle')), findsOneWidget);
     await tester.tap(find.byKey(const Key('analysis-sma12-toggle')));
     await tester.pumpAndSettle();
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('محور التحليل'));
     await tester.pumpAndSettle();
