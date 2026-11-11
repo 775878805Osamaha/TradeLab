@@ -109,9 +109,11 @@ void main() {
     await tester.tap(find.byKey(const Key('symbol-wick-toggle')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('symbol-body-bear')));
-    await tester.pump();
+    // Wait for the modal's entrance animation before hitting its palette;
+    // a single pump would leave palette taps below the test viewport.
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('symbol-palette-ff2962ff')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(committed, isNull);
     await tester.tap(find.byKey(const Key('symbol-apply')));
     expect(committed?.wickVisible, isFalse);
