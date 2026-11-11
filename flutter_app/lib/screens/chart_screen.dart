@@ -2394,7 +2394,10 @@ class _ChartScreenState extends State<ChartScreen>
               style: const TextStyle(fontSize: 12)),
         )),
         Positioned(left: 8, top: 27, right: 66,
-          child: Text(
+          child: GestureDetector(
+            onTap: !_liveRequested
+                ? (widget.onOpenAccount ?? _notifyUnconnected) : null,
+            child: Text(
             hasVerifiedPrices
                 ? '$source · ${_ctraderTimeCandlesStale ? 'بيانات متأخرة' : 'شموع موثقة'}'
                 : 'لا توجد أسعار موثقة · $source',
@@ -2406,7 +2409,7 @@ class _ChartScreenState extends State<ChartScreen>
             style: TextStyle(fontSize: 12,
                 color: hasVerifiedPrices && !_ctraderTimeCandlesStale
                     ? const Color(0xFF047660) : TradeColors.negative),
-          )),
+          ))),
         Positioned(left: 8, top: 49, child: OutlinedButton.icon(
           // The screenshot does not establish what the button labelled 3
           // does. Keep it visibly disabled until its meaning is verified.

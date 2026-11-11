@@ -13,10 +13,9 @@ class ChartAxisTicks {
     final magnitude = math.pow(10, (math.log(rough) / math.ln10).floor())
         .toDouble();
     final normalized = rough / magnitude;
-    final base = normalized <= 1 ? 1.0
-        : normalized <= 2 ? 2.0
-        : normalized <= 4 ? 4.0
-        : normalized <= 5 ? 5.0 : 10.0;
+    const steps = [1.0, 2.0, 4.0, 5.0, 10.0];
+    final base = steps.reduce((a, b) =>
+        (a - normalized).abs() <= (b - normalized).abs() ? a : b);
     return base * magnitude;
   }
 
