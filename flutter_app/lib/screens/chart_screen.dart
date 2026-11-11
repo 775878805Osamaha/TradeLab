@@ -11,6 +11,7 @@ import '../chart/chart_line_geometry.dart';
 import '../chart/chart_short_position.dart';
 import '../chart/chart_price_rectangle.dart';
 import '../chart/chart_type_sheet.dart';
+import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/candle_prefix.dart';
@@ -43,9 +44,11 @@ typedef _DrawingSnapshot = (List<double>, List<ChartPattern>,
     List<ChartShortPosition>, List<ChartPriceRectangle>);
 
 class ChartScreen extends StatefulWidget {
-  const ChartScreen({required this.controller, this.journal, super.key});
+  const ChartScreen({required this.controller, this.journal,
+    this.onOpenAccount, super.key});
   final MarketController controller;
   final PaperJournalController? journal;
+  final VoidCallback? onOpenAccount;
 
   @override
   State<ChartScreen> createState() => _ChartScreenState();
@@ -1070,6 +1073,174 @@ class _ChartScreenState extends State<ChartScreen>
             const SizedBox(height: 16),
           ]),
         ),
+      ),
+    );
+  }
+
+  Future<void> _showAnalysisHub() async {
+    _momentum.stop();
+    final action = await showModalBottomSheet<AnalysisHubAction>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.transparent,
+      builder: (sheetContext) => AnalysisHubSheet(
+        onAction: (selection) => Navigator.pop(sheetContext, selection),
+      ),
+    );
+    if (!mounted || action == null) return;
+    await _runAnalysisHubAction(action);
+  }
+
+  Future<void> _runAnalysisHubAction(AnalysisHubAction action) async {
+    switch (action) {
+      case AnalysisHubAction.layoutFormat:
+        await _showChartAppearance();
+      case AnalysisHubAction.drawingSettings:
+        await _showMagnetSettings();
+      case AnalysisHubAction.indicators:
+        await _showIndicatorCatalog();
+      case AnalysisHubAction.replay:
+        // Replay is always owned by this ChartScreen, never a separate page.
+        _toggleReplay();
+      case AnalysisHubAction.chartType:
+        await _showChartTypePicker();
+      case AnalysisHubAction.objectTree:
+        await _showObjectTree();
+      case AnalysisHubAction.symbolInformation:
+      case AnalysisHubAction.dataSource:
+        await _showMarketInformation();
+      case AnalysisHubAction.tradeWithBroker:
+        if (widget.onOpenAccount != null) {
+          widget.onOpenAccount!();
+        } else {
+          await _showUnavailableAnalysisAction(action);
+        }
+      case AnalysisHubAction.saveLayout:
+        // This tile is disabled in the reference and has no callback.
+        break;
+      case AnalysisHubAction.layoutManager:
+      case AnalysisHubAction.newLayout:
+      case AnalysisHubAction.openLayout:
+      case AnalysisHubAction.compare:
+      case AnalysisHubAction.alerts:
+      case AnalysisHubAction.indicatorTemplates:
+        await _showUnavailableAnalysisAction(action);
+    }
+  }
+
+  Future<void> _showUnavailableAnalysisAction(AnalysisHubAction action) async {
+    await showDialog<void>(context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(action.label, textDirection: TextDirection.rtl),
+        content: const Text(
+          'هذه الوظيفة ظاهرة في المرجع، لكن TradeLab لا يملك محركًا '
+          'جاهزًا لتنفيذها حاليًا. لم يتم حفظ مخطط أو إنشاء تنبيه أو '
+          'تغيير بيانات السوق.',
+          textDirection: TextDirection.rtl),
+        actions: [TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('حسنًا'))],
+      ));
+  }
+
+  Future<void> _showIndicatorCatalog() async {
+    await showModalBottomSheet<void>(context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(child: StatefulBuilder(
+        builder: (context, updateSheet) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const TradeSectionTitle('المؤشرات'),
+            SwitchListTile(
+              key: const Key('analysis-sma12-toggle'),
+              title: const Text('المتوسط المتحرك البسيط (12)',
+                textDirection: TextDirection.rtl),
+              subtitle: const Text('مُحتسب من شموع السوق المعروضة فقط',
+                textDirection: TextDirection.rtl),
+              value: _showIndicators,
+              onChanged: (value) {
+                setState(() => _showIndicators = value);
+                updateSheet(() {});
+              },
+            ),
+          ]),
+        ),
+      )),
+    );
+  }
+
+  Future<void> _showChartAppearance() async {
+    await showModalBottomSheet<void>(context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(child: StatefulBuilder(
+        builder: (context, updateSheet) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const TradeSectionTitle('إعداد التنسيق'),
+            SwitchListTile(
+              title: const Text('المتوسط المتحرك (12)',
+                textDirection: TextDirection.rtl),
+              value: _showIndicators,
+              onChanged: (value) {
+                setState(() => _showIndicators = value);
+                updateSheet(() {});
+              },
+            ),
+            SwitchListTile(
+              title: const Text('إظهار تسميات مركز البيع',
+                textDirection: TextDirection.rtl),
+              value: _showShortLabels,
+              onChanged: (value) {
+                setState(() => _showShortLabels = value);
+                updateSheet(() {});
+              },
+            ),
+          ]),
+        ),
+      )),
+    );
+  }
+
+  Future<void> _showObjectTree() async {
+    final objects = <(String, int)>[
+      ('الخطوط الأفقية', _levels.length),
+      ('رسومات الاتجاه وفيبوناتشي', _patterns.length),
+      ('مناطق السعر', _rectangles.length),
+      ('مراكز البيع التجريبية', _shortPositions.length),
+    ];
+    await showModalBottomSheet<void>(context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const TradeSectionTitle('شجرة الكائنات'),
+          for (final object in objects)
+            ListTile(
+              title: Text(object.$1, textDirection: TextDirection.rtl),
+              leading: const Icon(Icons.layers_outlined),
+              trailing: Text('${object.$2}'),
+            ),
+        ]),
+      )),
+    );
+  }
+
+  Future<void> _showMarketInformation() async {
+    final source = _selectedSymbol.source == TradeSource.ctrader
+        ? 'cTrader' : 'Binance';
+    await showDialog<void>(context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('معلومات الشارت',
+          textDirection: TextDirection.rtl),
+        content: Text('الرمز: $_symbol\nالمصدر: $source\n'
+          'الإطار: $_timeframe\nعدد الشموع المحمّلة: ${_displayCandles.length}\n'
+          'Replay: ${_replay ? 'نشط' : 'غير نشط'}',
+          textDirection: TextDirection.rtl),
+        actions: [TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('إغلاق'))],
       ),
     );
   }
@@ -2425,6 +2596,8 @@ class _ChartScreenState extends State<ChartScreen>
             label: Text(_timeframe, textDirection: TextDirection.ltr),
             icon: const Icon(Icons.keyboard_arrow_down, size: 18),
           ),
+          _iconAction(icon: Icons.tune_outlined,
+            label: 'محور التحليل', onPressed: _showAnalysisHub),
           _iconAction(icon: Icons.candlestick_chart, label: 'نوع الشموع', onPressed: _showChartTypePicker),
           _iconAction(icon: Icons.replay_circle_filled_outlined,
               label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',

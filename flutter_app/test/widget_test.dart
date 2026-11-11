@@ -35,6 +35,50 @@ void main() {
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
   });
 
+  testWidgets('analysis hub opens above chart and routes to candle types',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    final chart = find.byKey(const Key('chart-gesture-area'));
+    expect(chart, findsOneWidget);
+    await tester.tap(find.byTooltip('محور التحليل'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('analysis-hub-sheet')), findsOneWidget);
+    expect(find.byKey(const Key('analysis-action-saveLayout')), findsOneWidget);
+    expect(chart, findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const Key('analysis-action-chartType')));
+    await tester.tap(find.byKey(const Key('analysis-action-chartType')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-type-bottom-sheet')), findsOneWidget);
+    expect(chart, findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(chart, findsOneWidget);
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+  });
+
+  testWidgets('analysis hub indicator catalog and Replay stay on chart',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    await tester.tap(find.byTooltip('محور التحليل'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('analysis-action-indicators')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('analysis-sma12-toggle')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('analysis-sma12-toggle')));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('محور التحليل'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('analysis-action-replay')));
+    await tester.tap(find.byKey(const Key('analysis-action-replay')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+  });
+
   testWidgets('Heikin-Ashi and Range never show unlinked synthetic candles',
       (tester) async {
     var requests = 0;

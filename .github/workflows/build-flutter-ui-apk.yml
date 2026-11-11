@@ -64,6 +64,8 @@ jobs:
         run: flutter test --update-goldens test/chart_type_sheet_test.dart
       - name: Verify Gann and trend catalogs, search, favorites, RTL and goldens
         run: flutter test --update-goldens test/drawing_tools_sheet_test.dart
+      - name: Verify PROMPT 06 analysis hub layout, actions and golden
+        run: flutter test --update-goldens test/analysis_hub_sheet_test.dart
       - name: Build optimized Flutter preview APK
         # Flutter's generated Android host signs this preview using its
         # ephemeral debug certificate; this is NOT a Play Store release.
@@ -117,6 +119,7 @@ jobs:
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_chart_type_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_chart_type_sheet.png"
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_drawing_tools_sheet.png"
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_trend_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_trend_drawing_tools_sheet.png"
+            python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_analysis_hub_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_analysis_hub_sheet.png"
       - name: Upload real Android emulator screenshot
         uses: actions/upload-artifact@v4
         with:
@@ -171,6 +174,18 @@ jobs:
         with:
           name: TradeLab-Android-Trend-Drawings
           path: flutter_app/build/tradelab_trend_drawing_tools_sheet.png
+          if-no-files-found: error
+      - name: Upload PROMPT 06 analysis hub golden
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Analysis-Hub-Golden
+          path: flutter_app/test/goldens/analysis_hub_sheet.png
+          if-no-files-found: error
+      - name: Upload real Android analysis hub screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Android-Analysis-Hub
+          path: flutter_app/build/tradelab_analysis_hub_sheet.png
           if-no-files-found: error
       - name: Publish direct APK as GitHub prerelease
         if: github.event_name != 'pull_request'

@@ -170,7 +170,8 @@ class _TradeLabShellState extends State<TradeLabShell> {
                 index: _selectedIndex,
                 children: [
                   MarketsScreen(controller: _market),
-                  ChartScreen(controller: _market, journal: _journal),
+                  ChartScreen(controller: _market, journal: _journal,
+                    onOpenAccount: () => setState(() => _selectedIndex = 3)),
                   ResultsScreen(controller: _market, journal: _journal),
                   AccountScreen(
                     controller: _market,

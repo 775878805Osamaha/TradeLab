@@ -32,6 +32,16 @@ abstract final class TradeColors {
   static const drawingMutedInk = Color(0xFF777777);
   static const drawingHandle = Color(0xFFE3E3E3);
   static const drawingFavorite = Color(0xFFFF9800);
+  // PROMPT 06: independent, white analysis-command sheet over the live chart.
+  static const analysisSheet = Color(0xFFFFFFFF);
+  static const analysisInk = Color(0xFF101010);
+  static const analysisMuted = Color(0xFF777777);
+  static const analysisDisabled = Color(0xFFB0B0B0);
+  static const analysisBorder = Color(0xFFEAEAEA);
+  static const analysisTile = Color(0xFFF2F2F2);
+  static const analysisHandle = Color(0xFFE3E3E3);
+  static const analysisBrokerPink = Color(0xFFEE4F9B);
+  static const analysisBrokerBlue = Color(0xFF4388F0);
   static const gold = Color(0xFFF5A623);
 
   static const lightCanvas = Color(0xFFF4F6FA);
