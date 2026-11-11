@@ -85,6 +85,7 @@ class AnalysisHubSheet extends StatelessWidget {
       textDirection: TextDirection.rtl,
       child: Container(
         key: const Key('analysis-hub-sheet'),
+        width: width,
         height: height,
         decoration: const BoxDecoration(
           color: TradeColors.analysisSheet,
