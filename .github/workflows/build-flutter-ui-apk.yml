@@ -10,6 +10,7 @@ on:
   push:
     branches:
       - feat/tradelab-flutter-ui-20261108
+      - feat/tradelab-analysis-hub-prompt06
     paths:
       - flutter_app/**
       - .github/workflows/build-flutter-ui-apk.yml
