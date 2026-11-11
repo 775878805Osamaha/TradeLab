@@ -130,10 +130,10 @@ void main() {
     await tester.pump();
     expect(tester.widget<GestureDetector>(swatch).onTap, isNotNull);
     await tester.tap(swatch);
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
     expect(find.text('تنسيق الخط واللون'), findsOneWidget);
     await tester.tap(find.text('متقطع'));
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('panel-cancel')));
     expect(canceled, 1);
     expect(applied, isNull);
@@ -148,10 +148,10 @@ void main() {
       onApply: (settings) => applied = settings,
       onCancel: () {});
     await tester.tap(find.byKey(const Key('panel-background-color')));
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
     expect(find.text('اختيار اللون'), findsOneWidget);
     await tester.tap(find.bySemanticsLabel('اختيار اللون fff2f2f2'));
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('panel-grid-horizontal')));
     await tester.pump();
     expect(applied, isNull);
