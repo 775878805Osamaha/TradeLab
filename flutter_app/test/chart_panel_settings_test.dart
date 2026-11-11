@@ -75,6 +75,23 @@ void main() {
     expect(find.byKey(const Key('panel-fixed-footer')), findsOneWidget);
   });
 
+  testWidgets('RTL percentage units are outside their margin inputs',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 872));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await mount(tester, onApply: (_) {}, onCancel: () {});
+    await tester.drag(find.byKey(const Key('panel-settings-scroll')),
+      const Offset(0, -900));
+    await tester.pump();
+    expect(find.text('%'), findsNWidgets(2));
+    expect(find.text('الأعمدة\nالبيانية'), findsOneWidget);
+    final percent = tester.getTopLeft(find.text('%').first);
+    final topField = tester.getTopLeft(
+      find.byKey(const Key('panel-margin-top')));
+    expect(percent.dx, lessThan(topField.dx));
+    expect(find.byKey(const Key('panel-fixed-footer')), findsOneWidget);
+  });
+
   testWidgets('Cancel discards edits, Apply returns typed margins', (tester) async {
     await tester.binding.setSurfaceSize(const Size(393, 872));
     addTearDown(() => tester.binding.setSurfaceSize(null));
