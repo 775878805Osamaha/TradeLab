@@ -3482,12 +3482,13 @@ class _CandleChartPainter extends CustomPainter {
       }
     }
     if (indicator && scaleSettings.indicatorLabels != ChartPriceLabelMode.hidden &&
-        actualPriceCandles.isNotEmpty) {
-      final count = math.min(12, actualPriceCandles.length);
+        candles.isNotEmpty) {
+      // The label must equal the SMA12 actually painted above, including
+      // Heikin Ashi / Range presentations, never an unrelated raw series.
+      final count = math.min(12, candles.length);
       var sum = 0.0;
-      for (var i = actualPriceCandles.length - count;
-          i < actualPriceCandles.length; i++) {
-        sum += actualPriceCandles[i].close;
+      for (var i = candles.length - count; i < candles.length; i++) {
+        sum += candles[i].close;
       }
       annotate(sum / count, TradeColors.blue, scaleSettings.indicatorLabels);
     }

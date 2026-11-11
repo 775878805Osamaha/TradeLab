@@ -247,7 +247,7 @@ class _ChartScaleSettingsPageState extends State<ChartScaleSettingsPage> {
                   builder: (sheetContext) => SafeArea(child: ListTile(
                     title: const Text('المقاييس والخطوط'),
                     subtitle: const Text('إعدادات الملصقات ومحوري السعر والوقت.'),
-                    onTap: () => Navigator.pop(sheetContext)))),
+                    onTap: () => Navigator.pop(sheetContext))))),
               const Spacer(),
               _footer('إلغاء', u: u, width: 94,
                 key: const Key('scale-cancel'),
