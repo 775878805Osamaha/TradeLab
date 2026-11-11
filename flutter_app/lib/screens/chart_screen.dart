@@ -1588,7 +1588,8 @@ class _ChartScreenState extends State<ChartScreen>
     bool active = false,
   }) => IconButton(
         tooltip: label,
-        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 48),
+        padding: EdgeInsets.zero,
         onPressed: onPressed,
         icon: Icon(icon, size: 22,
             color: active ? TradeColors.blue : Theme.of(context).colorScheme.onSurface),
@@ -2438,6 +2439,9 @@ class _ChartScreenState extends State<ChartScreen>
         TextButton(
           key: const Key('symbol-picker'),
           onPressed: _showSymbolPicker,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            minimumSize: const Size(0, 48)),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Text(_selectedSymbol.kind == InstrumentKind.gold
                 ? 'GOLD' : _symbol,
@@ -2452,13 +2456,17 @@ class _ChartScreenState extends State<ChartScreen>
         TextButton(
           key: const Key('timeframe-picker'),
           onPressed: _showTimeframePicker,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            minimumSize: const Size(0, 48)),
           child: Text(_timeframe == '1m' ? '1 دق' : _timeframe,
             style: const TextStyle(fontSize: 17,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF333333))),
         ),
-        // Keep Replay within the initial viewport, even for wide symbol
-        // labels on 320–390dp devices. It never navigates off the chart.
+        // Most used controls remain in the first 390dp; extra tools scroll.
+        _iconAction(icon: Icons.more_horiz,
+            label: 'نوع الشموع', onPressed: _showChartTypePicker),
         _iconAction(icon: Icons.replay_circle_filled_outlined,
             label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
             active: _replay, onPressed: _toggleReplay),
@@ -2467,8 +2475,6 @@ class _ChartScreenState extends State<ChartScreen>
             onPressed: _showDrawingTools),
         _iconAction(icon: Icons.tune_outlined,
             label: 'محور التحليل', onPressed: _showAnalysisHub),
-        _iconAction(icon: Icons.more_horiz,
-            label: 'نوع الشموع', onPressed: _showChartTypePicker),
         _iconAction(icon: Icons.functions, label: 'المؤشرات',
             active: _showIndicators,
             onPressed: () => setState(() => _showIndicators = !_showIndicators)),
