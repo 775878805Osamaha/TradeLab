@@ -41,8 +41,11 @@ enum DrawingCatalogKind {
   schiffPitchfork('شوكة شيف', DrawingCategory.trend),
   modifiedSchiffPitchfork('شوكة شيف المعدلة', DrawingCategory.trend),
   insidePitchfork('شوكة داخلية', DrawingCategory.trend),
-  shortPosition('مركز بيع · الدخول ثم الوقف والهدف', DrawingCategory.tools),
+  shortPosition('مركز بيع على المكشوف', DrawingCategory.tools),
+  longPosition('مركز شراء', DrawingCategory.tools),
+  fixedVolumeProfile('بروفايل الحجم بنطاق ثابت', DrawingCategory.tools),
   priceRectangle('مستطيل نطاق سعري · زاويتان', DrawingCategory.tools),
+  ellipse('دائرة', DrawingCategory.tools),
   magnet('مغناطيس الأسعار', DrawingCategory.tools);
 
   const DrawingCatalogKind(this.label, this.category);
@@ -66,6 +69,89 @@ enum DrawingCategory {
   const DrawingCategory(this.label);
   final String label;
 }
+
+/// Favorite rows are a projection of the saved selection, never an additional
+/// hardcoded selection. Their order follows the reference from right to left.
+enum DrawingFavoriteSection {
+  trend('أدوات الاتجاه'),
+  gann('جان وفيبوناتشي'),
+  forecast('التنبؤ والقياس'),
+  shapes('الأشكال الهندسية'),
+  other('أدوات أخرى');
+
+  const DrawingFavoriteSection(this.label);
+  final String label;
+}
+
+class DrawingFavoriteGroups {
+  const DrawingFavoriteGroups._();
+
+  static const order = <DrawingCatalogKind>[
+    DrawingCatalogKind.verticalLine,
+    DrawingCatalogKind.trendLine,
+    DrawingCatalogKind.horizontalRay,
+    DrawingCatalogKind.horizontal,
+    DrawingCatalogKind.fibonacciRetracement,
+    DrawingCatalogKind.shortPosition,
+    DrawingCatalogKind.longPosition,
+    DrawingCatalogKind.fixedVolumeProfile,
+    DrawingCatalogKind.ellipse,
+    DrawingCatalogKind.priceRectangle,
+  ];
+
+  static DrawingFavoriteSection sectionOf(DrawingCatalogKind tool) =>
+      switch (tool) {
+        DrawingCatalogKind.ellipse || DrawingCatalogKind.priceRectangle =>
+          DrawingFavoriteSection.shapes,
+        DrawingCatalogKind.shortPosition || DrawingCatalogKind.longPosition ||
+        DrawingCatalogKind.fixedVolumeProfile => DrawingFavoriteSection.forecast,
+        _ when tool.category == DrawingCategory.trend =>
+          DrawingFavoriteSection.trend,
+        _ when tool.category == DrawingCategory.gann =>
+          DrawingFavoriteSection.gann,
+        _ => DrawingFavoriteSection.other,
+      };
+
+  static Map<DrawingFavoriteSection, List<DrawingCatalogKind>> fromSelection(
+      Set<DrawingCatalogKind> favorites, {String query = ''}) {
+    final matched = favorites.where((tool) =>
+        tool.label.toLowerCase().contains(query.trim().toLowerCase())).toList();
+    matched.sort((a, b) {
+      final aIndex = order.indexOf(a);
+      final bIndex = order.indexOf(b);
+      if (aIndex >= 0 && bIndex >= 0) return aIndex.compareTo(bIndex);
+      if (aIndex >= 0) return -1;
+      if (bIndex >= 0) return 1;
+      return a.index.compareTo(b.index);
+    });
+    return {
+      for (final section in DrawingFavoriteSection.values)
+        if (matched.any((tool) => sectionOf(tool) == section))
+          section: matched.where((tool) => sectionOf(tool) == section).toList(),
+    };
+  }
+}
+
+/// PROMPT 07: reference order is physical right-to-left, row by row.
+/// These are chart commands, not drawing shapes or synthetic price data.
+enum DrawingGeneralAction {
+  ruler('مقياس', GeneralTileSurface.gray),
+  eraser('ممحاة', GeneralTileSurface.gray),
+  continueDrawing('استمر في الرسم', GeneralTileSurface.outlined),
+  hideDrawings('إخفاء الرسومات', GeneralTileSurface.outlined, hasMore: true),
+  lockDrawings('غلق كل أدوات الرسم', GeneralTileSurface.outlined),
+  magnet('مغناطيس الأسعار', GeneralTileSurface.outlined, hasMore: true),
+  deleteDrawings('حذف الرسومات', GeneralTileSurface.outlined, hasMore: true),
+  zoomIn('تكبير', GeneralTileSurface.outlined),
+  zoomOut('تصغير', GeneralTileSurface.disabled);
+
+  const DrawingGeneralAction(this.label, this.surface, {this.hasMore = false});
+  final String label;
+  final GeneralTileSurface surface;
+  final bool hasMore;
+}
+
+enum GeneralTileSurface { gray, outlined, disabled }
 
 /// Unknown IDs are ignored so stored favorites survive catalog upgrades.
 class DrawingFavoritesCodec {
@@ -91,6 +177,10 @@ class DrawingToolsSheet extends StatefulWidget {
     required this.onFavoritesChanged,
     required this.onSelect,
     required this.onUnavailable,
+    this.onGeneralAction,
+    this.onGeneralMore,
+    this.showFavoriteShortcuts = true,
+    this.onShowFavoriteShortcutsChanged,
     this.initialCategory = DrawingCategory.gann,
     super.key,
   });
@@ -99,6 +189,10 @@ class DrawingToolsSheet extends StatefulWidget {
   final ValueChanged<Set<DrawingCatalogKind>> onFavoritesChanged;
   final ValueChanged<DrawingCatalogKind> onSelect;
   final ValueChanged<DrawingCatalogKind> onUnavailable;
+  final ValueChanged<DrawingGeneralAction>? onGeneralAction;
+  final ValueChanged<DrawingGeneralAction>? onGeneralMore;
+  final bool showFavoriteShortcuts;
+  final ValueChanged<bool>? onShowFavoriteShortcutsChanged;
   final DrawingCategory initialCategory;
 
   @override
@@ -110,12 +204,14 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
   final TextEditingController _search = TextEditingController();
   final ScrollController _categories = ScrollController();
   late DrawingCategory _category;
+  late bool _showFavoriteShortcuts;
 
   @override
   void initState() {
     super.initState();
     _category = widget.initialCategory;
     _favorites = {...widget.favorites};
+    _showFavoriteShortcuts = widget.showFavoriteShortcuts;
   }
 
   @override
@@ -127,15 +223,22 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
 
   List<DrawingCatalogKind> get _visibleTools {
     final query = _search.text.trim().toLowerCase();
+    if (_category == DrawingCategory.favorites) {
+      return DrawingFavoriteGroups.fromSelection(_favorites, query: query)
+          .values.expand((tools) => tools).toList();
+    }
     if (query.isNotEmpty) {
       return DrawingCatalogKind.values.where((t) =>
           t.label.toLowerCase().contains(query)).toList();
     }
-    if (_category == DrawingCategory.favorites) {
-      return DrawingCatalogKind.values.where(_favorites.contains).toList();
-    }
     return DrawingCatalogKind.values.where((t) =>
         t.category == _category).toList();
+  }
+
+  List<DrawingGeneralAction> get _visibleGeneralActions {
+    final query = _search.text.trim().toLowerCase();
+    return DrawingGeneralAction.values.where((action) =>
+        action.label.toLowerCase().contains(query)).toList();
   }
 
   void _toggleFavorite(DrawingCatalogKind tool) {
@@ -143,6 +246,11 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
       if (!_favorites.add(tool)) _favorites.remove(tool);
     });
     widget.onFavoritesChanged({..._favorites});
+  }
+
+  void _toggleFavoriteShortcuts() {
+    setState(() => _showFavoriteShortcuts = !_showFavoriteShortcuts);
+    widget.onShowFavoriteShortcutsChanged?.call(_showFavoriteShortcuts);
   }
 
   @override
@@ -279,10 +387,21 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
             ),
           ),
           SizedBox(height: width * (24 / 691)),
-          Expanded(child: _visibleTools.isEmpty
+          Expanded(child: (_category == DrawingCategory.tools
+                  ? _visibleGeneralActions.isEmpty : _visibleTools.isEmpty)
               ? Center(child: Text('لا توجد أدوات مطابقة',
                   style: TextStyle(color: TradeColors.drawingMutedInk,
                       fontSize: (width * (25 / 691)).clamp(13.0, 18.0))))
+              : _category == DrawingCategory.favorites
+                ? DrawingFavoritesList(
+                    groups: DrawingFavoriteGroups.fromSelection(_favorites,
+                        query: _search.text),
+                    referenceWidth: width,
+                    favorites: _favorites,
+                    onSelect: widget.onSelect,
+                    onUnavailable: widget.onUnavailable,
+                    onToggleFavorite: _toggleFavorite,
+                  )
               : GridView.builder(
                   key: const Key('drawing-tools-grid'),
                   padding: EdgeInsets.fromLTRB(side, 0, side, width * (20 / 691)),
@@ -293,8 +412,18 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
                     mainAxisSpacing: gap,
                     childAspectRatio: 200 / 135,
                   ),
-                  itemCount: _visibleTools.length,
+                  itemCount: _category == DrawingCategory.tools
+                      ? _visibleGeneralActions.length : _visibleTools.length,
                   itemBuilder: (context, i) {
+                    if (_category == DrawingCategory.tools) {
+                      final action = _visibleGeneralActions[i];
+                      return GeneralToolActionTile(
+                        action: action,
+                        onTap: () => widget.onGeneralAction?.call(action),
+                        onMore: action.hasMore
+                            ? () => widget.onGeneralMore?.call(action) : null,
+                      );
+                    }
                     final tool = _visibleTools[i];
                     return DrawingToolTile(
                       tool: tool,
@@ -306,10 +435,352 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
                     );
                   },
                 )),
+          if (_category == DrawingCategory.favorites)
+            DrawingFavoritesBottomBar(
+              referenceWidth: width,
+              enabled: _showFavoriteShortcuts,
+              onChanged: _toggleFavoriteShortcuts,
+            ),
         ]),
       ),
     );
   }
+}
+
+/// A single vertically scrolling list owns every section. In particular, the
+/// last visible cards scroll *beneath* the footer, never beneath app tabs.
+class DrawingFavoritesList extends StatelessWidget {
+  const DrawingFavoritesList({
+    required this.groups, required this.referenceWidth,
+    required this.favorites, required this.onSelect,
+    required this.onUnavailable, required this.onToggleFavorite, super.key,
+  });
+
+  final Map<DrawingFavoriteSection, List<DrawingCatalogKind>> groups;
+  final double referenceWidth;
+  final Set<DrawingCatalogKind> favorites;
+  final ValueChanged<DrawingCatalogKind> onSelect;
+  final ValueChanged<DrawingCatalogKind> onUnavailable;
+  final ValueChanged<DrawingCatalogKind> onToggleFavorite;
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = referenceWidth / 691;
+    final side = 30 * unit;
+    final gap = 15 * unit;
+    return ListView(
+      key: const Key('drawing-favorites-list'),
+      padding: EdgeInsets.only(bottom: 26 * unit),
+      physics: const ClampingScrollPhysics(),
+      children: [
+        for (final entry in groups.entries) ...[
+          Padding(
+            padding: EdgeInsetsDirectional.only(
+              start: side, end: side, top: 9 * unit, bottom: 18 * unit,
+            ),
+            child: SizedBox(
+              height: 37 * unit,
+              child: Align(alignment: Alignment.centerRight, child: Text(
+                entry.key.label,
+                key: Key('drawing-favorite-section-${entry.key.name}'),
+                textDirection: TextDirection.rtl,
+                style: TextStyle(
+                  fontSize: (24 * unit).clamp(12.0, 16.0),
+                  fontWeight: FontWeight.w600,
+                  color: TradeColors.drawingMutedInk,
+                ),
+              )),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: side),
+            child: LayoutBuilder(builder: (context, constraints) {
+              final tileWidth = (constraints.maxWidth - 2 * gap) / 3;
+              final tileHeight = tileWidth * 138 / 199;
+              return Wrap(
+                key: Key('drawing-favorite-grid-${entry.key.name}'),
+                direction: Axis.horizontal,
+                alignment: WrapAlignment.start,
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final tool in entry.value)
+                    SizedBox(width: tileWidth, height: tileHeight,
+                      child: DrawingToolTile(
+                        tool: tool,
+                        isFavorite: favorites.contains(tool),
+                        onToggleFavorite: () => onToggleFavorite(tool),
+                        onTap: () => tool.implemented
+                            ? onSelect(tool) : onUnavailable(tool),
+                      ),
+                    ),
+                ],
+              );
+            }),
+          ),
+          SizedBox(height: 6 * unit),
+        ],
+      ],
+    );
+  }
+}
+
+class DrawingFavoritesBottomBar extends StatelessWidget {
+  const DrawingFavoritesBottomBar({
+    required this.referenceWidth, required this.enabled,
+    required this.onChanged, super.key,
+  });
+
+  final double referenceWidth;
+  final bool enabled;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = referenceWidth / 691;
+    return Container(
+      key: const Key('drawing-favorite-footer'),
+      height: 119 * unit,
+      decoration: const BoxDecoration(
+        color: TradeColors.drawingSheet,
+        border: Border(top: BorderSide(color: Color(0xFFEDEDED), width: .8)),
+      ),
+      child: Row(textDirection: TextDirection.rtl, children: [
+        Padding(
+          padding: EdgeInsetsDirectional.only(start: 31 * unit),
+          child: SizedBox(width: 53 * unit, height: 53 * unit,
+            child: CustomPaint(painter: _FavoriteToolbarIconPainter())),
+        ),
+        SizedBox(width: 31 * unit),
+        Expanded(child: Text(
+          'إظهار المفضلة على الرسم البياني',
+          maxLines: 1,
+          textDirection: TextDirection.rtl,
+          style: TextStyle(
+            fontSize: (29 * unit).clamp(13.0, 19.0),
+            fontWeight: FontWeight.w700,
+            color: TradeColors.drawingInk,
+          ),
+        )),
+        SizedBox(width: 12 * unit),
+        Semantics(
+          button: true, toggled: enabled,
+          label: 'إظهار المفضلة على الرسم البياني',
+          child: GestureDetector(
+            key: const Key('drawing-favorite-visibility-switch'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onChanged,
+            child: Container(
+              width: 91 * unit, height: 48 * unit,
+              margin: EdgeInsetsDirectional.only(end: 30 * unit),
+              decoration: BoxDecoration(
+                color: enabled ? const Color(0xFF101010)
+                    : const Color(0xFFD0D0D0),
+                borderRadius: BorderRadius.circular(30 * unit),
+              ),
+              child: Align(
+                alignment: enabled ? Alignment.centerLeft : Alignment.centerRight,
+                child: Container(
+                  width: 39 * unit, height: 39 * unit,
+                  margin: EdgeInsets.all(4.5 * unit),
+                  decoration: const BoxDecoration(
+                    color: Colors.white, shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _FavoriteToolbarIconPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 52, size.height / 52);
+    final p = Paint()..color = TradeColors.drawingInk..strokeWidth = 2.4
+      ..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawPath(Path()..moveTo(6,33)..lineTo(30,7)..lineTo(40,16)
+      ..lineTo(16,42)..lineTo(7,43)..close(), p);
+    canvas.drawLine(const Offset(24,14), const Offset(33,23), p);
+    final star = Path();
+    for (var i=0; i<10; i++) {
+      final radius = i.isEven ? 13.0 : 5.5;
+      final angle = -math.pi/2 + i*math.pi/5;
+      final point = Offset(34+radius*math.cos(angle),
+          36+radius*math.sin(angle));
+      if (i==0) star.moveTo(point.dx,point.dy);
+      else star.lineTo(point.dx,point.dy);
+    }
+    canvas.drawPath(star..close(), p);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// The three surface states and separate overflow strip are deliberate;
+/// Material buttons would introduce a different radius and ripple layout.
+class GeneralToolActionTile extends StatelessWidget {
+  const GeneralToolActionTile({
+    required this.action, required this.onTap, this.onMore, super.key,
+  });
+
+  final DrawingGeneralAction action;
+  final VoidCallback onTap;
+  final VoidCallback? onMore;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, constraints) {
+    final unit = constraints.maxWidth / 200;
+    final disabled = action.surface == GeneralTileSurface.disabled;
+    final outlined = action.surface != GeneralTileSurface.gray;
+    final ink = disabled ? const Color(0xFFA9A9A9) : TradeColors.drawingInk;
+    return Container(
+      key: Key('drawing-general-${action.name}'),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: outlined ? TradeColors.drawingSheet : TradeColors.drawingTile,
+        border: outlined ? Border.all(color: const Color(0xFFE8E8E8), width: .9) : null,
+        borderRadius: BorderRadius.circular(19 * unit),
+      ),
+      child: Row(textDirection: TextDirection.rtl, children: [
+        Expanded(child: Semantics(
+          button: true, enabled: !disabled, label: action.label,
+          child: GestureDetector(
+            key: Key('drawing-general-action-${action.name}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: disabled ? null : onTap,
+            child: Column(children: [
+              SizedBox(height: 12 * unit),
+              SizedBox(height: 62 * unit, child: Center(child: SizedBox(
+                height: 49 * unit, width: 49 * unit,
+                child: CustomPaint(painter: GeneralToolGlyphPainter(action, ink)),
+              ))),
+              Expanded(child: Center(child: Padding(
+                padding: EdgeInsets.symmetric(horizontal:
+                    (action == DrawingGeneralAction.lockDrawings ? 15 :
+                     action.hasMore ? 9 : 4) * unit),
+                child: Text(action.label,
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: TextStyle(color: ink,
+                      fontSize: (24 * unit).clamp(10.5, 14.0),
+                      fontWeight: FontWeight.w700),
+                ),
+              ))),
+            ]),
+          ),
+        )),
+        if (action.hasMore) Container(
+          width: 61 * unit,
+          decoration: const BoxDecoration(border: Border(
+            right: BorderSide(color: Color(0xFFE8E8E8), width: .9),
+          )),
+          child: Semantics(button: true, label: 'المزيد: ${action.label}',
+            child: GestureDetector(
+              key: Key('drawing-general-more-${action.name}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onMore,
+              child: Center(child: Icon(Icons.more_vert,
+                size: 29 * unit, color: TradeColors.drawingInk)),
+            ),
+          ),
+        ),
+      ]),
+    );
+  });
+}
+
+/// Original thin-line symbols, inspired by geometric functions, not copied
+/// from any third-party icon library or proprietary TradingView asset.
+class GeneralToolGlyphPainter extends CustomPainter {
+  const GeneralToolGlyphPainter(this.action, this.ink);
+  final DrawingGeneralAction action;
+  final Color ink;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 48, size.height / 48);
+    final p = Paint()..color = ink..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    void line(double x, double y, double a, double b) =>
+        canvas.drawLine(Offset(x,y), Offset(a,b), p);
+    void path(List<Offset> points, {bool close = false}) {
+      final shape = Path()..moveTo(points.first.dx, points.first.dy);
+      for (final point in points.skip(1)) { shape.lineTo(point.dx, point.dy); }
+      if (close) shape.close();
+      canvas.drawPath(shape, p);
+    }
+    void box(double x, double y, double w, double h, [double r = 2]) =>
+        canvas.drawRRect(RRect.fromRectAndRadius(
+            Rect.fromLTWH(x,y,w,h),Radius.circular(r)),p);
+    switch (action) {
+      case DrawingGeneralAction.ruler:
+        path(const [Offset(9,34),Offset(33,10),Offset(40,17),
+          Offset(16,41)],close:true);
+        line(18,29,21,32);line(23,24,28,29);
+        line(28,19,31,22);line(33,14,36,17);
+      case DrawingGeneralAction.eraser:
+        path(const [Offset(7,30),Offset(29,8),Offset(42,21),
+          Offset(21,42),Offset(7,42)],close:true);
+        line(19,18,32,31);line(21,42,43,42);
+      case DrawingGeneralAction.continueDrawing:
+        path(const [Offset(6,33),Offset(27,8),Offset(35,15),
+          Offset(14,40),Offset(7,41)],close:true);
+        line(21,14,29,22);
+        box(31,32,12,11,2);canvas.drawArc(
+          const Rect.fromLTWH(34,25,7,14),math.pi,math.pi,false,p);
+      case DrawingGeneralAction.hideDrawings:
+        final eye = Path()..moveTo(5,22)..quadraticBezierTo(24,2,43,22)
+          ..quadraticBezierTo(24,43,5,22);
+        canvas.drawPath(eye,p);canvas.drawCircle(const Offset(24,22),6,p);
+        line(35,35,43,43);
+      case DrawingGeneralAction.lockDrawings:
+        box(12,22,24,21,3);
+        // Reference depicts an open padlock before the lock-all command.
+        line(18,22,18,15);
+        canvas.drawArc(const Rect.fromLTWH(18,7,13,16),
+            math.pi, math.pi * 1.08, false, p);
+        canvas.drawCircle(const Offset(24,31),2,p);
+      case DrawingGeneralAction.magnet:
+        line(10,38,10,20);
+        canvas.drawArc(const Rect.fromLTWH(10,7,28,27),
+            math.pi, math.pi, false, p);
+        line(38,20,38,38);
+        line(18,38,18,20);
+        canvas.drawArc(const Rect.fromLTWH(18,15,12,12),
+            math.pi, math.pi, false, p);
+        line(30,20,30,38);
+        line(10,32,18,32);line(30,32,38,32);
+      case DrawingGeneralAction.deleteDrawings:
+        path(const [Offset(14,14),Offset(16,41),Offset(34,41),Offset(36,14)]);
+        line(12,14,39,14);line(21,9,29,9);line(19,18,19,35);
+        line(28,18,28,35);
+        line(34,39,42,31);line(38,30,43,35);
+      case DrawingGeneralAction.zoomIn:
+        canvas.drawCircle(const Offset(21,21),12,p);
+        line(30,30,41,41);line(15,21,27,21);line(21,15,21,27);
+      case DrawingGeneralAction.zoomOut:
+        canvas.drawCircle(const Offset(21,21),12,p);
+        line(30,30,41,41);line(15,21,27,21);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant GeneralToolGlyphPainter oldDelegate) =>
+      oldDelegate.action != action || oldDelegate.ink != ink;
 }
 
 class DrawingCategoryTab extends StatelessWidget {
@@ -611,12 +1082,37 @@ class DrawingToolGlyphPainter extends CustomPainter {
         poly(const [Offset(8,46),Offset(23,28),Offset(39,46)]);
         dot(8,46,3);dot(23,28,3);dot(39,46,3);
       case DrawingCatalogKind.shortPosition:
-        rectangle(10,9,31,13);rectangle(10,22,31,21);
-        line(7,22,45,22);dot(10,22,3);
+        line(8,15,46,15);line(8,34,46,34);
+        dot(8,15,3);dot(8,34,3);
+        final shortLabel = TextPainter(
+          text: const TextSpan(text: 'S', style: TextStyle(
+            fontSize: 15, fontWeight: FontWeight.w700,
+            color: TradeColors.drawingInk)),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        shortLabel.paint(canvas, const Offset(29,18));
+      case DrawingCatalogKind.longPosition:
+        line(8,15,46,15);line(8,34,46,34);
+        dot(8,15,3);dot(8,34,3);
+        final longLabel = TextPainter(
+          text: const TextSpan(text: 'L', style: TextStyle(
+            fontSize: 15, fontWeight: FontWeight.w700,
+            color: TradeColors.drawingInk)),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        longLabel.paint(canvas, const Offset(29,18));
+      case DrawingCatalogKind.fixedVolumeProfile:
+        line(37,5,37,46);dot(37,5,3);dot(37,46,3);
+        line(6,10,6,42);dot(6,42,3);
+        rectangle(7,12,13,5);rectangle(7,22,22,5);
+        rectangle(7,32,15,5);
       case DrawingCatalogKind.priceRectangle:
         rectangle(7,8,38,34);
         for(final p in const [Offset(7,8),Offset(45,8),Offset(7,42),Offset(45,42)])
           dot(p.dx,p.dy,3);
+      case DrawingCatalogKind.ellipse:
+        canvas.drawOval(const Rect.fromLTWH(8,8,36,36), linePaint);
+        dot(26,26,3);dot(44,26,3);
       case DrawingCatalogKind.magnet:
         poly(const [Offset(8,8),Offset(8,30),Offset(15,40),Offset(36,40),
           Offset(44,30),Offset(44,8),Offset(33,8),Offset(33,27),

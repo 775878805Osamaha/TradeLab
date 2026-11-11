@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 abstract final class TradeColors {
   static const blue = Color(0xFF2962FF);
   static const blueLight = Color(0xFF5C85FF);
-  static const positive = Color(0xFF26A69A);
-  static const negative = Color(0xFFEF5350);
+  // PROMPT 08: sampled mobile chart candles, not trade execution indicators.
+  static const positive = Color(0xFF089981);
+  static const negative = Color(0xFFF23645);
   // Short-position drawing palette, measured against PROMPT 01 reference.
   // These are presentation colors and never encode an executed trade.
   static const shortStopFill = Color(0xFFF88F96);
@@ -32,6 +33,25 @@ abstract final class TradeColors {
   static const drawingMutedInk = Color(0xFF777777);
   static const drawingHandle = Color(0xFFE3E3E3);
   static const drawingFavorite = Color(0xFFFF9800);
+  // PROMPT 06: independent, white analysis-command sheet over the live chart.
+  static const analysisSheet = Color(0xFFFFFFFF);
+  static const analysisInk = Color(0xFF101010);
+  static const analysisMuted = Color(0xFF777777);
+  static const analysisDisabled = Color(0xFFB0B0B0);
+  static const analysisBorder = Color(0xFFEAEAEA);
+  static const analysisTile = Color(0xFFF2F2F2);
+  static const analysisHandle = Color(0xFFE3E3E3);
+  static const analysisBrokerPink = Color(0xFFEE4F9B);
+  static const analysisBrokerBlue = Color(0xFF4388F0);
+  // PROMPT 11: chart-panel settings use the white reference surface rather
+  // than Material 3's tinted form-field treatment.
+  static const panelSurface = Color(0xFFFFFFFF);
+  static const panelInk = Color(0xFF101010);
+  static const panelMuted = Color(0xFF777777);
+  static const panelBorder = Color(0xFFDADADA);
+  static const panelAccept = Color(0xFF222222);
+  static const panelCheckerLight = Color(0xFFF2F2F2);
+  static const panelCheckerDark = Color(0xFFAAAAAF);
   static const gold = Color(0xFFF5A623);
 
   static const lightCanvas = Color(0xFFF4F6FA);
@@ -104,15 +124,15 @@ abstract final class TradeTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
-        height: 72,
-        indicatorColor: TradeColors.blue.withValues(alpha: .10),
+        height: 60,
+        indicatorColor: const Color(0xFF101010),
         labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
           fontSize: 12,
           fontWeight: states.contains(WidgetState.selected)
               ? FontWeight.w700
               : FontWeight.w500,
           color: states.contains(WidgetState.selected)
-              ? TradeColors.blue
+              ? (dark ? Colors.white : const Color(0xFF101010))
               : (dark ? TradeColors.darkSecondary : TradeColors.lightSecondary),
         )),
       ),

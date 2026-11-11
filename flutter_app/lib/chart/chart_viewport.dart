@@ -10,7 +10,8 @@ class ChartPriceScale {
   final double height;
 
   factory ChartPriceScale.visible(List<TradeCandle> candles, ChartViewport viewport,
-      double width, double height) {
+      double width, double height, {
+      int topMarginPercent = 8, int bottomMarginPercent = 8}) {
     if (candles.isEmpty) return ChartPriceScale(0, 1, height);
     final (start, end) = viewport.visibleIndices(
       plotWidth: width, candleCount: candles.length);
@@ -21,8 +22,15 @@ class ChartPriceScale {
       minPrice = math.min(minPrice, candles[i].low);
       maxPrice = math.max(maxPrice, candles[i].high);
     }
-    final padding = math.max((maxPrice - minPrice) * .08, maxPrice.abs() * .00001);
-    return ChartPriceScale(minPrice - padding, maxPrice + padding, height);
+    // Margins are actual price-axis viewport space, not a decorative Padding
+    // around the canvas. All drawing hit-tests use this same scale.
+    final span = math.max(maxPrice - minPrice, maxPrice.abs() * .00001);
+    final visibleFraction = (1 - (topMarginPercent + bottomMarginPercent) / 100)
+        .clamp(.2, 1.0);
+    final fullSpan = span / visibleFraction;
+    return ChartPriceScale(
+      minPrice - fullSpan * bottomMarginPercent / 100,
+      maxPrice + fullSpan * topMarginPercent / 100, height);
   }
 
   double y(double price) => (maximum - price) / (maximum - minimum) * height;
@@ -34,10 +42,17 @@ class ChartPriceScale {
 /// Positive scrolling visits historical bars. Independent of Flutter so its
 /// gesture mathematics can be unit tested.
 class ChartViewport {
-  const ChartViewport({this.barWidth = 10, this.scrollBars = 0});
+  const ChartViewport({this.barWidth = 10, this.scrollBars = 0,
+    this.rightMarginBars = 0});
 
   final double barWidth;
   final double scrollBars;
+  /// Permanent right-hand space, measured in actual candle columns. It does
+  /// not modify source data, replay count or the historical scroll anchor.
+  final double rightMarginBars;
+
+  ChartViewport withRightMarginBars(double bars) => ChartViewport(
+    barWidth: barWidth, scrollBars: scrollBars, rightMarginBars: bars);
 
   static const minBarWidth = 5.0;
   static const maxBarWidth = 30.0;
@@ -46,7 +61,8 @@ class ChartViewport {
     required int index,
     required int candleCount,
     required double plotWidth,
-  }) => plotWidth - (candleCount - scrollBars - index - .5) * barWidth;
+  }) => plotWidth -
+      (candleCount - scrollBars - index - .5 + rightMarginBars) * barWidth;
 
   /// Converts an x-coordinate to the nearest candle index without clamping
   /// future whitespace to the last candle (important for Replay correctness).
@@ -54,11 +70,11 @@ class ChartViewport {
       required int candleCount}) {
     if (candleCount <= 0 || x < 0 || x > plotWidth) return null;
     final index = ((x - plotWidth) / barWidth +
-        candleCount - scrollBars - .5).round();
+        candleCount - scrollBars - .5 + rightMarginBars).round();
     return index < 0 || index >= candleCount ? null : index;
   }
 
-  double get futurePaddingBars => math.max(0.0, -scrollBars);
+  double get futurePaddingBars => rightMarginBars + math.max(0.0, -scrollBars);
 
   double _boundedScroll(double proposed, double plotWidth, int candleCount,
       double newWidth) {
@@ -73,6 +89,7 @@ class ChartViewport {
     required int candleCount,
   }) => ChartViewport(
         barWidth: barWidth,
+        rightMarginBars: rightMarginBars,
         scrollBars: _boundedScroll(
           scrollBars + deltaX / barWidth, plotWidth, candleCount, barWidth),
       );
@@ -92,6 +109,7 @@ class ChartViewport {
         (currentFocalX - initialFocalX) / width;
     return ChartViewport(
       barWidth: width,
+      rightMarginBars: rightMarginBars,
       scrollBars: _boundedScroll(anchoredScroll, plotWidth, candleCount, width),
     );
   }
@@ -117,11 +135,13 @@ class ChartViewport {
         (newCount - oldCount) - (newIndex - oldIndex);
     return ChartViewport(
       barWidth: barWidth,
+      rightMarginBars: rightMarginBars,
       scrollBars: remapped.clamp(0.0, (newCount - 1).toDouble()).toDouble(),
     );
   }
 
-  ChartViewport jumpToLatest() => ChartViewport(barWidth: barWidth);
+  ChartViewport jumpToLatest() => ChartViewport(
+    barWidth: barWidth, rightMarginBars: rightMarginBars);
 
   /// A new broker-closed bar should follow the right edge only when the user
   /// is already at the latest candle. Preserve the visible time anchor both
@@ -131,6 +151,7 @@ class ChartViewport {
     if (appended <= 0 || scrollBars == 0) return this;
     return ChartViewport(
       barWidth: barWidth,
+      rightMarginBars: rightMarginBars,
       scrollBars: scrollBars + appended,
     );
   }
@@ -142,7 +163,7 @@ class ChartViewport {
     required int candleCount,
   }) {
     if (candleCount <= 0) return (0, 0);
-    final edge = candleCount - scrollBars;
+    final edge = candleCount - scrollBars + rightMarginBars;
     final from = (edge - plotWidth / barWidth - 2).floor().clamp(0, candleCount);
     final to = (edge + 2).ceil().clamp(0, candleCount);
     return (from, math.max(from, to));
@@ -150,10 +171,11 @@ class ChartViewport {
 
   @override
   bool operator ==(Object other) => other is ChartViewport &&
-      other.barWidth == barWidth && other.scrollBars == scrollBars;
+      other.barWidth == barWidth && other.scrollBars == scrollBars &&
+      other.rightMarginBars == rightMarginBars;
 
   @override
-  int get hashCode => Object.hash(barWidth, scrollBars);
+  int get hashCode => Object.hash(barWidth, scrollBars, rightMarginBars);
 }
 
 /// Only a deliberate one-finger pan can carry momentum into a chart fling.

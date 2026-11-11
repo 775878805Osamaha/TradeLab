@@ -11,14 +11,19 @@ import '../chart/chart_line_geometry.dart';
 import '../chart/chart_short_position.dart';
 import '../chart/chart_price_rectangle.dart';
 import '../chart/chart_type_sheet.dart';
+import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
+import '../chart/chart_panel_settings.dart';
+import '../chart/chart_panel_settings_page.dart';
+import '../chart/chart_axis_ticks.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_tick_rollforward.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
+import '../data/market_candle_store.dart';
 import '../data/ctrader_candle_stitcher.dart';
 import '../data/market_controller.dart';
 import '../paper/paper_journal_controller.dart';
@@ -43,9 +48,11 @@ typedef _DrawingSnapshot = (List<double>, List<ChartPattern>,
     List<ChartShortPosition>, List<ChartPriceRectangle>);
 
 class ChartScreen extends StatefulWidget {
-  const ChartScreen({required this.controller, this.journal, super.key});
+  const ChartScreen({required this.controller, this.journal,
+    this.onOpenAccount, super.key});
   final MarketController controller;
   final PaperJournalController? journal;
+  final VoidCallback? onOpenAccount;
 
   @override
   State<ChartScreen> createState() => _ChartScreenState();
@@ -80,11 +87,17 @@ class _ChartScreenState extends State<ChartScreen>
   bool _linkedBefore = false;
   String? _accountBefore;
   String _symbol = 'XAUUSD';
-  String _timeframe = '15m';
+  String _timeframe = '1m';
   ChartMode _mode = ChartMode.candles;
   int _rangeTicks = 1000;
   bool _replay = false;
   bool _drawing = false;
+  bool _drawingsVisible = true;
+  bool _drawingsLocked = false;
+  bool _eraserMode = false;
+  bool _rulerMode = false;
+  bool _continueDrawing = true;
+  ChartAnchor? _measureStart;
   ChartDrawingTool _drawingTool = ChartDrawingTool.horizontal;
   // The catalog owns visual selection; chart coordinates and history do not
   // change until the user deliberately chooses an implemented tool.
@@ -94,9 +107,17 @@ class _ChartScreenState extends State<ChartScreen>
     DrawingCatalogKind.horizontal,
     DrawingCatalogKind.horizontalRay,
     DrawingCatalogKind.verticalLine,
+    DrawingCatalogKind.shortPosition,
+    DrawingCatalogKind.longPosition,
+    DrawingCatalogKind.fixedVolumeProfile,
+    DrawingCatalogKind.ellipse,
+    DrawingCatalogKind.priceRectangle,
   };
   static const _drawingFavoritesKey = 'tradelab-drawing-favorites-v1';
+  static const _drawingFavoritesVisibleKey =
+      'tradelab-drawing-favorites-visible-v1';
   final _drawingFavoritesStorage = const FlutterSecureStorage();
+  bool _showFavoriteShortcuts = true;
   bool _placingShort = false;
   bool _placingRectangle = false;
   ChartAnchor? _rectangleFirstCorner;
@@ -117,7 +138,13 @@ class _ChartScreenState extends State<ChartScreen>
   bool _showIndicators = false;
   bool _showShortLabels = true;
   int _visibleThrough = 60;
-  ChartViewport _viewport = const ChartViewport();
+  ChartViewport _viewport = const ChartViewport(
+    barWidth: 5.5, scrollBars: -5, rightMarginBars: 10);
+  ChartPanelSettings _panelSettings = const ChartPanelSettings();
+  bool _panelSettingsOpen = false;
+  bool _panelChartTouched = false;
+  static const _panelSettingsKey = 'tradelab-chart-panel-settings-v1';
+  final _panelSettingsStorage = const FlutterSecureStorage();
   ChartViewport _gestureStart = const ChartViewport();
   late final AnimationController _momentum;
   double _previousMomentumX = 0;
@@ -214,6 +241,7 @@ class _ChartScreenState extends State<ChartScreen>
   void initState() {
     super.initState();
     unawaited(_loadDrawingFavorites());
+    unawaited(_loadPanelSettings());
     _momentum = AnimationController.unbounded(vsync: this)
       ..addListener(_tickMomentum);
     _linkedBefore = widget.controller.ctraderConnected;
@@ -234,11 +262,19 @@ class _ChartScreenState extends State<ChartScreen>
     try {
       final stored = await _drawingFavoritesStorage.read(
           key: _drawingFavoritesKey);
-      if (!mounted || stored == null) return;
-      final favorites = DrawingFavoritesCodec.decode(stored);
-      setState(() => _favoriteDrawingTools
-        ..clear()
-        ..addAll(favorites));
+      final savedVisibility = await _drawingFavoritesStorage.read(
+          key: _drawingFavoritesVisibleKey);
+      if (!mounted) return;
+      setState(() {
+        if (stored != null) {
+          _favoriteDrawingTools
+            ..clear()
+            ..addAll(DrawingFavoritesCodec.decode(stored));
+        }
+        if (savedVisibility != null) {
+          _showFavoriteShortcuts = savedVisibility == 'true';
+        }
+      });
     } catch (_) {
       // Drawing access must remain usable on devices without a secure store.
     }
@@ -254,6 +290,43 @@ class _ChartScreenState extends State<ChartScreen>
       // A storage error must not interrupt chart gestures or drawing selection.
     }
   }
+
+  Future<void> _persistDrawingFavoriteVisibility() async {
+    try {
+      await _drawingFavoritesStorage.write(
+        key: _drawingFavoritesVisibleKey,
+        value: _showFavoriteShortcuts.toString(),
+      );
+    } catch (_) {
+      // The visible state remains effective for the active chart session.
+    }
+  }
+
+  Future<void> _loadPanelSettings() async {
+    try {
+      final saved = await _panelSettingsStorage.read(key: _panelSettingsKey);
+      if (saved == null || !mounted) return;
+      final loaded = ChartPanelSettings.decode(saved);
+      setState(() {
+        _panelSettings = loaded;
+        _viewport = _viewport.withRightMarginBars(loaded.rightMarginBars.toDouble());
+      });
+    } catch (_) {
+      // Keep readable defaults when secure storage is unavailable.
+    }
+  }
+
+  Future<void> _savePanelSettings(ChartPanelSettings settings) async {
+    try {
+      await _panelSettingsStorage.write(
+        key: _panelSettingsKey, value: settings.encode());
+    } catch (_) {
+      // The chart still uses the committed settings for this session.
+    }
+  }
+
+  ChartViewport _freshViewport() => ChartViewport(
+    rightMarginBars: _panelSettings.rightMarginBars.toDouble());
 
   @override
   void didChangeDependencies() {
@@ -354,6 +427,10 @@ class _ChartScreenState extends State<ChartScreen>
     _momentum.stop();
     final revision = ++_loadRevision;
     if (!mounted) return;
+    final sourceSymbol = _selectedSymbol;
+    final sourceTimeframe = _timeframe;
+    final sourceAccount = sourceSymbol.source == TradeSource.ctrader
+        ? widget.controller.accountId : null;
     setState(() {
       _stopPlayback();
       if (_replay) {
@@ -480,16 +557,44 @@ class _ChartScreenState extends State<ChartScreen>
         _rangeBarEndTickIndices = timeline.endTickIndices;
         _rangeBarTimestamps = timeline.endTimestamps;
       } else {
-        final bars = await widget.controller.history(_selectedSymbol, _timeframe);
+        // Render verified, account-scoped history immediately on a return to
+        // this symbol. A recently synchronized cache needs no new OHLC call.
+        List<MarketBar> cached = const [];
+        var fresh = false;
+        try {
+          cached = await MarketCandleStore.read(
+              sourceSymbol, sourceTimeframe, sourceAccount);
+          fresh = cached.isNotEmpty && await MarketCandleStore.isFresh(
+              sourceSymbol, sourceTimeframe, sourceAccount);
+        } catch (_) {
+          // SQLite can be unavailable in some test hosts. The verified source
+          // remains authoritative, never an invented fallback.
+        }
+        if (revision != _loadRevision || !mounted) return;
+        if (cached.isNotEmpty) {
+          setState(() {
+            _actualBars = cached;
+            _actualCandles = cached.map((bar) => bar.candle).toList(growable: false);
+            _actualTimestamps = cached.map((bar) => bar.timestamp).toList(growable: false);
+            _olderCursorMs = cached.first.timestamp;
+          });
+        }
+        if (fresh) return;
+        final bars = await widget.controller.history(sourceSymbol, sourceTimeframe);
         if (revision != _loadRevision || !mounted) return;
         // MarketApi already validated strictly ascending broker timestamps
         // and OHLC. Do not sort or deduplicate again in the UI: doing so
         // would conceal a source/protocol defect behind plausible candles.
-        _actualBars = List<MarketBar>.unmodifiable(bars);
-        _actualCandles = bars.map((bar) => bar.candle).toList(growable: false);
+        final merged = MarketCandleStore.mergeVerified(cached, bars);
+        _actualBars = merged;
+        _actualCandles = merged.map((bar) => bar.candle).toList(growable: false);
         _actualTimestamps =
-            bars.map((bar) => bar.timestamp).toList(growable: false);
-        if (bars.isNotEmpty) _olderCursorMs = bars.first.timestamp;
+            merged.map((bar) => bar.timestamp).toList(growable: false);
+        if (merged.isNotEmpty) _olderCursorMs = merged.first.timestamp;
+        if (bars.isNotEmpty) {
+          unawaited(MarketCandleStore.archive(sourceSymbol, sourceTimeframe,
+              sourceAccount, bars, markFresh: true).catchError((Object _) {}));
+        }
       }
       if (revision == _loadRevision && _totalBars == 0) {
         _loadError = 'لم يُرجع المصدر شموعًا لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
@@ -538,6 +643,9 @@ class _ChartScreenState extends State<ChartScreen>
         // deliberate right-side whitespace; follow new bars at the live edge.
         _viewport = _viewport.afterAppending(appended);
       });
+      unawaited(MarketCandleStore.archive(symbol, timeframe,
+          widget.controller.accountId, recent, markFresh: true)
+          .catchError((Object _) {}));
     } on MarketDataException catch (error) {
       if (mounted && revision == _loadRevision) {
         setState(() => _loadError = error.message);
@@ -807,6 +915,10 @@ class _ChartScreenState extends State<ChartScreen>
         }
       } else {
         _olderCursorMs = unique.first.timestamp;
+        unawaited(MarketCandleStore.archive(_selectedSymbol, _timeframe,
+            _selectedSymbol.source == TradeSource.ctrader
+                ? widget.controller.accountId : null, unique)
+            .catchError((Object _) {}));
         setState(() {
         _actualBars = [...unique, ..._actualBars];
         _actualCandles = _actualBars.map((bar) => bar.candle).toList(growable: false);
@@ -908,7 +1020,7 @@ class _ChartScreenState extends State<ChartScreen>
         }
         _replay = !_replay;
         _visibleThrough = math.max(1, _totalBars ~/ 2);
-        _viewport = const ChartViewport();
+        _viewport = _freshViewport();
         _crosshair = null;
         _selectedLine = null;
         _selectedPattern = null;
@@ -1029,7 +1141,7 @@ class _ChartScreenState extends State<ChartScreen>
                     setState(() {
                       _stopPlayback();
                       _symbol = item.code;
-                      _viewport = const ChartViewport();
+                      _viewport = _freshViewport();
                       _resetDrawingObjects();
                     });
                     Navigator.pop(sheetContext);
@@ -1060,7 +1172,7 @@ class _ChartScreenState extends State<ChartScreen>
                     onSelected: (_) {
                       setState(() {
                         _timeframe = frame;
-                        _viewport = const ChartViewport();
+                        _viewport = _freshViewport();
                         _resetDrawingObjects();
                       });
                       Navigator.pop(sheetContext);
@@ -1070,6 +1182,149 @@ class _ChartScreenState extends State<ChartScreen>
             const SizedBox(height: 16),
           ]),
         ),
+      ),
+    );
+  }
+
+  Future<void> _showAnalysisHub() async {
+    _momentum.stop();
+    final action = await showModalBottomSheet<AnalysisHubAction>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.transparent,
+      builder: (sheetContext) => AnalysisHubSheet(
+        onAction: (selection) => Navigator.pop(sheetContext, selection),
+      ),
+    );
+    if (!mounted || action == null) return;
+    await _runAnalysisHubAction(action);
+  }
+
+  Future<void> _runAnalysisHubAction(AnalysisHubAction action) async {
+    switch (action) {
+      case AnalysisHubAction.layoutFormat:
+        await _showChartAppearance();
+      case AnalysisHubAction.drawingSettings:
+        await _showMagnetSettings();
+      case AnalysisHubAction.indicators:
+        await _showIndicatorCatalog();
+      case AnalysisHubAction.replay:
+        // Replay is always owned by this ChartScreen, never a separate page.
+        _toggleReplay();
+      case AnalysisHubAction.chartType:
+        await _showChartTypePicker();
+      case AnalysisHubAction.objectTree:
+        await _showObjectTree();
+      case AnalysisHubAction.symbolInformation:
+      case AnalysisHubAction.dataSource:
+        await _showMarketInformation();
+      case AnalysisHubAction.tradeWithBroker:
+        if (widget.onOpenAccount != null) {
+          widget.onOpenAccount!();
+        } else {
+          await _showUnavailableAnalysisAction(action);
+        }
+      case AnalysisHubAction.saveLayout:
+        // This tile is disabled in the reference and has no callback.
+        break;
+      case AnalysisHubAction.layoutManager:
+      case AnalysisHubAction.newLayout:
+      case AnalysisHubAction.openLayout:
+      case AnalysisHubAction.compare:
+      case AnalysisHubAction.alerts:
+      case AnalysisHubAction.indicatorTemplates:
+        await _showUnavailableAnalysisAction(action);
+    }
+  }
+
+  Future<void> _showUnavailableAnalysisAction(AnalysisHubAction action) async {
+    await showDialog<void>(context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(action.label, textDirection: TextDirection.rtl),
+        content: const Text(
+          'هذه الوظيفة ظاهرة في المرجع، لكن TradeLab لا يملك محركًا '
+          'جاهزًا لتنفيذها حاليًا. لم يتم حفظ مخطط أو إنشاء تنبيه أو '
+          'تغيير بيانات السوق.',
+          textDirection: TextDirection.rtl),
+        actions: [TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('حسنًا'))],
+      ));
+  }
+
+  Future<void> _showIndicatorCatalog() async {
+    await showModalBottomSheet<void>(context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(child: StatefulBuilder(
+        builder: (context, updateSheet) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const TradeSectionTitle('المؤشرات'),
+            SwitchListTile(
+              key: const Key('analysis-sma12-toggle'),
+              title: const Text('المتوسط المتحرك البسيط (12)',
+                textDirection: TextDirection.rtl),
+              subtitle: const Text('مُحتسب من شموع السوق المعروضة فقط',
+                textDirection: TextDirection.rtl),
+              value: _showIndicators,
+              onChanged: (value) {
+                setState(() => _showIndicators = value);
+                updateSheet(() {});
+              },
+            ),
+          ]),
+        ),
+      )),
+    );
+  }
+
+  Future<void> _showChartAppearance() async {
+    // The reference settings page remains inside the chart tab so the chart,
+    // fetched market history, Replay cursor and parent navigation survive.
+    _momentum.stop();
+    setState(() => _panelSettingsOpen = true);
+  }
+
+  Future<void> _showObjectTree() async {
+    final objects = <(String, int)>[
+      ('الخطوط الأفقية', _levels.length),
+      ('رسومات الاتجاه وفيبوناتشي', _patterns.length),
+      ('مناطق السعر', _rectangles.length),
+      ('مراكز البيع التجريبية', _shortPositions.length),
+    ];
+    await showModalBottomSheet<void>(context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const TradeSectionTitle('شجرة الكائنات'),
+          for (final object in objects)
+            ListTile(
+              title: Text(object.$1, textDirection: TextDirection.rtl),
+              leading: const Icon(Icons.layers_outlined),
+              trailing: Text('${object.$2}'),
+            ),
+        ]),
+      )),
+    );
+  }
+
+  Future<void> _showMarketInformation() async {
+    final source = _selectedSymbol.source == TradeSource.ctrader
+        ? 'cTrader' : 'Binance';
+    await showDialog<void>(context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('معلومات الشارت',
+          textDirection: TextDirection.rtl),
+        content: Text('الرمز: $_symbol\nالمصدر: $source\n'
+          'الإطار: $_timeframe\nعدد الشموع المحمّلة: ${_displayCandles.length}\n'
+          'Replay: ${_replay ? 'نشط' : 'غير نشط'}',
+          textDirection: TextDirection.rtl),
+        actions: [TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('إغلاق'))],
       ),
     );
   }
@@ -1120,7 +1375,7 @@ class _ChartScreenState extends State<ChartScreen>
               if (reload) {
                 // Range has different bar identities; merely opening or
                 // dismissing this sheet never resets zoom, Replay or cache.
-                _viewport = const ChartViewport();
+                _viewport = _freshViewport();
                 _resetDrawingObjects();
               }
             });
@@ -1157,7 +1412,7 @@ class _ChartScreenState extends State<ChartScreen>
                     if (changed) {
                       setState(() {
                         _rangeTicks = size;
-                        _viewport = const ChartViewport();
+                        _viewport = _freshViewport();
                         _resetDrawingObjects();
                       });
                     }
@@ -1207,9 +1462,30 @@ class _ChartScreenState extends State<ChartScreen>
       builder: (sheetContext) => DrawingToolsSheet(
         initialCategory: DrawingCategory.trend,
         favorites: _favoriteDrawingTools,
+        showFavoriteShortcuts: _showFavoriteShortcuts,
+        onShowFavoriteShortcutsChanged: (visible) {
+          if (!mounted) return;
+          setState(() => _showFavoriteShortcuts = visible);
+          unawaited(_persistDrawingFavoriteVisibility());
+        },
         onFavoritesChanged: (favorites) {
-          _favoriteDrawingTools..clear()..addAll(favorites);
+          if (!mounted) return;
+          setState(() => _favoriteDrawingTools..clear()..addAll(favorites));
           unawaited(_persistDrawingFavorites());
+        },
+        onGeneralAction: (action) {
+          Navigator.pop(sheetContext);
+          _runGeneralDrawingAction(action);
+        },
+        onGeneralMore: (action) {
+          Navigator.pop(sheetContext);
+          // Only already-supported configuration flows are exposed. The
+          // reference does not define additional menu items or delete scopes.
+          if (action == DrawingGeneralAction.magnet) {
+            _showMagnetSettings();
+          } else {
+            _runGeneralDrawingAction(action);
+          }
         },
         onUnavailable: (tool) => showDialog<void>(
           context: sheetContext,
@@ -1228,36 +1504,129 @@ class _ChartScreenState extends State<ChartScreen>
         ),
         onSelect: (tool) {
           Navigator.pop(sheetContext);
-          switch (tool) {
-            case DrawingCatalogKind.fibonacciRetracement:
-              _selectDrawingMode(tool: ChartDrawingTool.fibonacci);
-            case DrawingCatalogKind.trendLine:
-              _selectDrawingMode(tool: ChartDrawingTool.trendLine);
-            case DrawingCatalogKind.ray:
-              _selectDrawingMode(tool: ChartDrawingTool.ray);
-            case DrawingCatalogKind.extendedLine:
-              _selectDrawingMode(tool: ChartDrawingTool.extendedLine);
-            case DrawingCatalogKind.horizontal:
-              _selectDrawingMode(tool: ChartDrawingTool.horizontal);
-            case DrawingCatalogKind.horizontalRay:
-              _selectDrawingMode(tool: ChartDrawingTool.horizontalRay);
-            case DrawingCatalogKind.verticalLine:
-              _selectDrawingMode(tool: ChartDrawingTool.verticalLine);
-            case DrawingCatalogKind.parallelChannel:
-              _selectDrawingMode(tool: ChartDrawingTool.parallelChannel);
-            case DrawingCatalogKind.shortPosition:
-              _selectDrawingMode(short: true);
-            case DrawingCatalogKind.priceRectangle:
-              _selectDrawingMode(rectangle: true);
-            case DrawingCatalogKind.magnet:
-              _showMagnetSettings();
-            default:
-              // These entries are guarded by DrawingCatalogKind.implemented.
-              break;
-          }
+          _activateCatalogDrawingTool(tool);
         },
       ),
     );
+  }
+
+  void _activateCatalogDrawingTool(DrawingCatalogKind tool) {
+    switch (tool) {
+      case DrawingCatalogKind.fibonacciRetracement:
+        _selectDrawingMode(tool: ChartDrawingTool.fibonacci);
+      case DrawingCatalogKind.trendLine:
+        _selectDrawingMode(tool: ChartDrawingTool.trendLine);
+      case DrawingCatalogKind.ray:
+        _selectDrawingMode(tool: ChartDrawingTool.ray);
+      case DrawingCatalogKind.extendedLine:
+        _selectDrawingMode(tool: ChartDrawingTool.extendedLine);
+      case DrawingCatalogKind.horizontal:
+        _selectDrawingMode(tool: ChartDrawingTool.horizontal);
+      case DrawingCatalogKind.horizontalRay:
+        _selectDrawingMode(tool: ChartDrawingTool.horizontalRay);
+      case DrawingCatalogKind.verticalLine:
+        _selectDrawingMode(tool: ChartDrawingTool.verticalLine);
+      case DrawingCatalogKind.parallelChannel:
+        _selectDrawingMode(tool: ChartDrawingTool.parallelChannel);
+      case DrawingCatalogKind.shortPosition:
+        _selectDrawingMode(short: true);
+      case DrawingCatalogKind.priceRectangle:
+        _selectDrawingMode(rectangle: true);
+      case DrawingCatalogKind.magnet:
+        _showMagnetSettings();
+      default:
+        // Unsupported reference entries are visible in the catalog only.
+        break;
+    }
+  }
+
+  void _drawingNotice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message, textDirection: TextDirection.rtl),
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
+  int get _drawingObjectCount => _levels.length + _patterns.length +
+      _rectangles.length + _shortPositions.length;
+
+  Future<void> _confirmDeleteDrawings() async {
+    final count = _drawingObjectCount;
+    if (count == 0) {
+      _drawingNotice('لا توجد رسومات لحذفها');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('حذف الرسومات', textDirection: TextDirection.rtl),
+        content: Text('هل تريد حذف $count من الرسومات على هذا الشارت؟ '
+            'يمكن التراجع عن الحذف من أدوات الرسم.',
+            textDirection: TextDirection.rtl),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _saveDrawingUndo();
+      _restoreDrawings((<double>[], <ChartPattern>[],
+          <ChartShortPosition>[], <ChartPriceRectangle>[]));
+    });
+    _drawingNotice('حُذفت الرسومات، ويمكن التراجع');
+  }
+
+  void _runGeneralDrawingAction(DrawingGeneralAction action) {
+    switch (action) {
+      case DrawingGeneralAction.ruler:
+        setState(() {
+          _drawing = true;
+          _eraserMode = false;
+          _rulerMode = true;
+          _measureStart = null;
+          _pendingAnchor = null;
+        });
+        _drawingNotice('المقياس: اختر نقطتين على شموع الشارت');
+      case DrawingGeneralAction.eraser:
+        setState(() {
+          _eraserMode = true;
+          _rulerMode = false;
+          _drawing = true;
+          _measureStart = null;
+          _pendingAnchor = null;
+        });
+        _drawingNotice('الممحاة: المس رسمة لحذفها، ويمكن التراجع');
+      case DrawingGeneralAction.continueDrawing:
+        setState(() => _continueDrawing = !_continueDrawing);
+        _drawingNotice(_continueDrawing
+            ? 'استمر في الرسم: مفعّل' : 'استمر في الرسم: متوقف');
+      case DrawingGeneralAction.hideDrawings:
+        setState(() => _drawingsVisible = !_drawingsVisible);
+        _drawingNotice(_drawingsVisible ? 'الرسومات ظاهرة' : 'الرسومات مخفية');
+      case DrawingGeneralAction.lockDrawings:
+        setState(() {
+          _drawingsLocked = !_drawingsLocked;
+          _eraserMode = false;
+          _rulerMode = false;
+          _measureStart = null;
+        });
+        _drawingNotice(_drawingsLocked
+            ? 'تم قفل أدوات الرسم' : 'تم فتح قفل أدوات الرسم');
+      case DrawingGeneralAction.magnet:
+        _showMagnetSettings();
+      case DrawingGeneralAction.deleteDrawings:
+        unawaited(_confirmDeleteDrawings());
+      case DrawingGeneralAction.zoomIn:
+        _zoomBy(1.25);
+      case DrawingGeneralAction.zoomOut:
+        // The reference explicitly disables this catalog command.
+        break;
+    }
   }
 
   Widget _iconAction({
@@ -1267,7 +1636,8 @@ class _ChartScreenState extends State<ChartScreen>
     bool active = false,
   }) => IconButton(
         tooltip: label,
-        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 48),
+        padding: EdgeInsets.zero,
         onPressed: onPressed,
         icon: Icon(icon, size: 22,
             color: active ? TradeColors.blue : Theme.of(context).colorScheme.onSurface),
@@ -1352,7 +1722,9 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   ChartPriceScale _priceScale(List<TradeCandle> candles, double width, double height) =>
-      ChartPriceScale.visible(candles, _viewport, width, math.max(1, height - 24));
+      ChartPriceScale.visible(candles, _viewport, width, math.max(1, height - 24),
+        topMarginPercent: _panelSettings.topMarginPercent,
+        bottomMarginPercent: _panelSettings.bottomMarginPercent);
 
   int? _hitLine(double y, ChartPriceScale scale) {
     for (var index = _levels.length - 1; index >= 0; index--) {
@@ -1578,6 +1950,9 @@ class _ChartScreenState extends State<ChartScreen>
       bool rectangle = false}) {
     setState(() {
       _drawing = true;
+      _eraserMode = false;
+      _rulerMode = false;
+      _measureStart = null;
       _placingShort = short;
       _placingRectangle = rectangle;
       if (tool != null) _drawingTool = tool;
@@ -1594,65 +1969,52 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Widget _buildDrawingRail(double height) => Positioned(
-    left: 0, top: math.min(100.0, height * .16), bottom: 15, width: 46,
+    left: 0, top: math.min(56.0, height * .11), bottom: 12, width: 38,
     child: Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.horizontal(right: Radius.circular(12)),
-        border: Border.all(color: Theme.of(context).dividerColor),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
+        borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
+        border: Border.all(color: const Color(0xFFF0F0F0)),
+        boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 6)],
       ),
       child: SingleChildScrollView(
         child: Column(children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 5),
+            child: Icon(Icons.drag_indicator, size: 18, color: Color(0xFFB8B8B8)),
+          ),
           IconButton(
             key: const Key('drawing-rail-cursor'),
             tooltip: 'تحريك الشارت',
             onPressed: () => setState(() {
               _drawing = false;
+              _eraserMode = false;
+              _rulerMode = false;
+              _measureStart = null;
               _placingShort = false;
               _placingRectangle = false;
               _pendingAnchor = null;
               _secondChannelAnchor = null;
               _rectangleFirstCorner = null;
             }),
-            icon: const Icon(Icons.near_me_outlined, size: 23),
+            icon: const Icon(Icons.vertical_align_center, size: 22),
           ),
-          const Divider(height: 1),
+          if (_showFavoriteShortcuts)
+            for (final tool in DrawingFavoriteGroups.fromSelection(
+                    _favoriteDrawingTools).values.expand((items) => items))
+              if (tool.implemented)
+                IconButton(
+                  key: Key('drawing-rail-favorite-${tool.name}'),
+                  tooltip: tool.label,
+                  onPressed: () => _activateCatalogDrawingTool(tool),
+                  icon: SizedBox(width: 24, height: 24,
+                    child: CustomPaint(painter: DrawingToolGlyphPainter(tool))),
+                ),
           IconButton(
-            tooltip: 'خط اتجاه',
-            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.trendLine),
-            icon: const Icon(Icons.show_chart, size: 23),
-          ),
-          IconButton(
-            tooltip: 'تصحيح فيبوناتشي',
-            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.fibonacci),
-            icon: const Icon(Icons.tune, size: 23),
-          ),
-          IconButton(
-            tooltip: 'خط أفقي',
-            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.horizontal),
-            icon: const Icon(Icons.horizontal_rule, size: 23),
-          ),
-          IconButton(
-            key: const Key('drawing-rail-short'),
-            tooltip: 'أداة مركز بيع',
-            onPressed: () => _selectDrawingMode(short: true),
-            icon: Icon(Icons.south_east, size: 23,
-              color: _placingShort || _selectedShort != null
-                  ? TradeColors.shortHandle : null),
-          ),
-          IconButton(
-            key: const Key('drawing-rail-rectangle'),
-            tooltip: 'مستطيل نطاق سعري',
-            onPressed: () => _selectDrawingMode(rectangle: true),
-            icon: Icon(Icons.crop_square_outlined, size: 23,
-              color: _placingRectangle || _selectedRectangle != null
-                  ? TradeColors.rectangleHandle : null),
-          ),
-          IconButton(
-            tooltip: 'مغناطيس الأسعار',
+            key: const Key('drawing-rail-open-catalog'),
+            tooltip: 'أدوات الرسم',
             onPressed: _showDrawingTools,
-            icon: const Icon(Icons.tune_outlined, size: 23),
+            icon: const Icon(Icons.edit_outlined, size: 22),
           ),
         ]),
       ),
@@ -1995,54 +2357,186 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  Widget _referenceChartHeader(List<TradeCandle> candles) {
+    final hasVerifiedPrices = candles.isNotEmpty;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? Colors.white : const Color(0xFF101010);
+    final source = _selectedSymbol.source == TradeSource.ctrader
+        ? 'cTrader' : 'Binance';
+    final quoteCurrency = _selectedSymbol.source == TradeSource.binance
+        ? 'USDT' : 'USD';
+    return Container(
+      key: const Key('chart-reference-header'),
+      height: 72,
+      color: Theme.of(context).colorScheme.surface,
+      child: Stack(children: [
+        Positioned(left: 8, top: 4, child: Row(children: [
+          Container(
+            height: 22, width: 22,
+            decoration: BoxDecoration(
+              color: const Color(0xFFDBF2EE),
+              borderRadius: BorderRadius.circular(12)),
+            alignment: Alignment.center,
+            child: Icon(Icons.circle, size: 10,
+                color: hasVerifiedPrices && !_ctraderTimeCandlesStale
+                    ? const Color(0xFF047660) : Colors.grey),
+          ),
+          Container(
+            height: 22, width: 23,
+            decoration: const BoxDecoration(
+              color: Color(0xFFFCE1ED),
+              borderRadius: BorderRadius.horizontal(right: Radius.circular(13))),
+            alignment: Alignment.center,
+            child: const Icon(Icons.waves,
+                color: Color(0xFFAB2373), size: 19),
+          ),
+        ])),
+        Positioned(right: 5, top: 4, child: OutlinedButton.icon(
+          onPressed: _showSymbolPicker,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: ink,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            minimumSize: const Size(54, 28),
+            side: const BorderSide(color: Color(0xFFE6E6E6)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(5)),
+          ),
+          icon: const Icon(Icons.keyboard_arrow_down, size: 15),
+          label: Text(quoteCurrency, textDirection: TextDirection.ltr,
+              style: const TextStyle(fontSize: 12)),
+        )),
+        Positioned(left: 8, top: 27, right: 66,
+          child: GestureDetector(
+            onTap: !_liveRequested
+                ? (widget.onOpenAccount ?? _notifyUnconnected) : null,
+            child: Text(
+            hasVerifiedPrices
+                ? (_ctraderTimeCandlesStale
+                    ? 'شموع $source · بيانات متأخرة' : 'شموع $source')
+                : 'لا توجد أسعار موثقة · $source',
+            key: const Key('chart-provenance-header'),
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.left,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12,
+                color: hasVerifiedPrices && !_ctraderTimeCandlesStale
+                    ? const Color(0xFF047660) : TradeColors.negative),
+          ))),
+        Positioned(left: 8, top: 43, child: OutlinedButton.icon(
+          // The screenshot does not establish what the button labelled 3
+          // does. Keep it visibly disabled until its meaning is verified.
+          onPressed: null,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(42, 28),
+            padding: const EdgeInsets.symmetric(horizontal: 5),
+            side: const BorderSide(color: Color(0xFFE4E4E4)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(5))),
+          icon: Icon(Icons.keyboard_arrow_down, size: 18, color: ink),
+          label: Text('3', style: TextStyle(fontSize: 14, color: ink)),
+        )),
+      ]),
+    );
+  }
+
+  Widget _referenceChartToolbar(Color surface) => Container(
+    key: const Key('chart-reference-toolbar'),
+    color: surface,
+    height: 54,
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        TextButton(
+          key: const Key('symbol-picker'),
+          onPressed: _showSymbolPicker,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            minimumSize: const Size(0, 48)),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(_selectedSymbol.kind == InstrumentKind.gold
+                ? 'GOLD' : _symbol,
+                textDirection: TextDirection.ltr,
+                style: const TextStyle(fontSize: 16,
+                    color: Color(0xFF101010), fontWeight: FontWeight.w800)),
+            Text(_symbol, textDirection: TextDirection.ltr,
+                style: const TextStyle(fontSize: 10,
+                    color: Color(0xFF9B9B9B))),
+          ]),
+        ),
+        TextButton(
+          key: const Key('timeframe-picker'),
+          onPressed: _showTimeframePicker,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            minimumSize: const Size(0, 48)),
+          child: Text(_timeframe == '1m' ? '1 دق' : _timeframe,
+            style: const TextStyle(fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF333333))),
+        ),
+        // Most used controls remain in the first 390dp; extra tools scroll.
+        _iconAction(icon: Icons.more_horiz,
+            label: 'نوع الشموع', onPressed: _showChartTypePicker),
+        _iconAction(icon: Icons.replay_circle_filled_outlined,
+            label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
+            active: _replay, onPressed: _toggleReplay),
+        _iconAction(icon: Icons.edit_outlined,
+            label: 'أدوات الرسم', active: _drawing,
+            onPressed: _showDrawingTools),
+        _iconAction(icon: Icons.tune_outlined,
+            label: 'محور التحليل', onPressed: _showAnalysisHub),
+        _iconAction(icon: Icons.functions, label: 'المؤشرات',
+            active: _showIndicators,
+            onPressed: () => setState(() => _showIndicators = !_showIndicators)),
+        if (_panelSettings.paneButtons == ChartButtonVisibility.always ||
+            (_panelSettings.paneButtons == ChartButtonVisibility.onTap &&
+              _panelChartTouched)) ...[
+          _iconAction(icon: Icons.zoom_in_outlined,
+              label: 'تكبير الشارت', onPressed: () => _zoomBy(1.25)),
+          _iconAction(icon: Icons.zoom_out_outlined,
+              label: 'تصغير الشارت', onPressed: () => _zoomBy(.8)),
+        ],
+        if (_panelSettings.navigationButtons == ChartButtonVisibility.always ||
+            (_panelSettings.navigationButtons == ChartButtonVisibility.onTap &&
+              _panelChartTouched))
+          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
+              onPressed: () {
+                _momentum.stop();
+                setState(() => _viewport = _viewport.jumpToLatest());
+              }),
+        if (widget.journal != null && !_replay)
+          _iconAction(icon: Icons.add_chart, label: 'صفقة تجريبية',
+              onPressed: _openPaperOrder),
+        if (_mode == ChartMode.range)
+          TextButton(onPressed: _showRangeSettings,
+              child: Text('مدى $_rangeTicks')),
+      ]),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
+    if (_panelSettingsOpen) {
+      return ChartPanelSettingsPage(
+        initial: _panelSettings,
+        onCancel: () => setState(() => _panelSettingsOpen = false),
+        onApply: (updated) {
+          setState(() {
+            _panelSettings = updated;
+            _viewport = _viewport.withRightMarginBars(
+              updated.rightMarginBars.toDouble());
+            _panelSettingsOpen = false;
+          });
+          unawaited(_savePanelSettings(updated));
+        },
+      );
+    }
     final colors = Theme.of(context).colorScheme;
     final candles = _displayCandles;
     final surface = colors.surface;
     return Column(children: [
-      Container(
-        color: surface,
-        padding: const EdgeInsetsDirectional.only(start: 12, end: 4),
-        child: Row(children: [
-          Expanded(
-            child: InkWell(
-              key: const Key('symbol-picker'),
-              borderRadius: BorderRadius.circular(8),
-              onTap: _showSymbolPicker,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                    Flexible(child: Text(_symbol, textDirection: TextDirection.ltr,
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900))),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.keyboard_arrow_down, size: 19),
-                  ]),
-                  Text(_liveRequested
-                      ? 'تحليل السوق · ${_selectedSymbol.source == TradeSource.binance ? 'Binance' : 'cTrader'}'
-                      : 'تحليل السوق · غير متصل',
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant)),
-                ]),
-              ),
-            ),
-          ),
-          Flexible(child: TradeStatusChip(label: _liveRequested
-              ? (_loading ? 'جار التحميل' : _loadError != null
-                  ? 'خطأ في المصدر' : _ctraderTimeCandlesStale
-                  ? 'بيانات متأخرة' : _selectedSymbol.source == TradeSource.ctrader
-                  ? 'شموع cTrader' : 'شموع Binance')
-              : 'غير مرتبط', connected: _liveRequested && !_loading &&
-                  _loadError == null && !_ctraderTimeCandlesStale &&
-                  candles.isNotEmpty)),
-          _iconAction(icon: Icons.fullscreen, label: 'ملء الشاشة', onPressed: _notifyUnconnected),
-          _iconAction(icon: Icons.refresh, label: 'تحديث أسعار السوق',
-            onPressed: _liveRequested ? _loadRealHistory : _notifyUnconnected),
-        ]),
-      ),
-      const Divider(height: 1),
+      _referenceChartHeader(candles),
       if (_mode == ChartMode.range)
         Container(
           width: double.infinity,
@@ -2083,6 +2577,7 @@ class _ChartScreenState extends State<ChartScreen>
             behavior: HitTestBehavior.opaque,
             onScaleStart: (details) {
               _momentum.stop(); // A new gesture owns the chart immediately.
+              if (!_panelChartTouched) setState(() => _panelChartTouched = true);
               _gestureHadMultiTouch = details.pointerCount > 1;
               _gestureStart = _viewport;
               _gestureFocalX = details.localFocalPoint.dx;
@@ -2092,7 +2587,8 @@ class _ChartScreenState extends State<ChartScreen>
               _draggingRectangle = false;
               _rectangleDragHandle = null;
               _rectangleAtDragStart = null;
-              if (_drawing && details.pointerCount == 1) {
+              if (_drawing && !_drawingsLocked && _drawingsVisible &&
+                  !_eraserMode && !_rulerMode && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 final rectangleHit = PriceRectangleGeometry.hitTest(
                     details.localFocalPoint, _rectangles, _viewport,
@@ -2233,7 +2729,7 @@ class _ChartScreenState extends State<ChartScreen>
             },
             onDoubleTap: () {
               _momentum.stop();
-              setState(() { _viewport = const ChartViewport(); _crosshair = null; });
+              setState(() { _viewport = _freshViewport(); _crosshair = null; });
             },
             onLongPressStart: (details) {
               _momentum.stop();
@@ -2242,8 +2738,68 @@ class _ChartScreenState extends State<ChartScreen>
             onLongPressMoveUpdate: (details) => setState(() => _crosshair = details.localPosition),
             onLongPressEnd: (_) => setState(() => _crosshair = null),
             onTapUp: (details) {
-              if (!_drawing || details.localPosition.dx > plotWidth) return;
+              if (!_drawing || _drawingsLocked ||
+                  details.localPosition.dx > plotWidth) return;
               final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
+              if (_rulerMode) {
+                final anchor = _anchorAt(details.localPosition,
+                    scale, plotWidth, candles.length);
+                if (anchor == null) return;
+                if (_measureStart == null) {
+                  setState(() => _measureStart = anchor);
+                } else {
+                  final start = _measureStart!;
+                  final distance = anchor.price - start.price;
+                  final percent = start.price == 0 ? 0.0
+                      : distance / start.price * 100;
+                  final bars = (anchor.index - start.index).abs();
+                  setState(() {
+                    _measureStart = null;
+                    if (!_continueDrawing) {
+                      _rulerMode = false;
+                      _drawing = false;
+                    }
+                  });
+                  _drawingNotice('المقياس: ${distance.toStringAsFixed(3)} '
+                      '(${percent.toStringAsFixed(2)}%) · $bars شمعة');
+                }
+                return;
+              }
+              if (_eraserMode) {
+                if (!_drawingsVisible) return;
+                final rectangleHit = PriceRectangleGeometry.hitTest(
+                    details.localPosition, _rectangles, _viewport,
+                    scale, candles.length, plotWidth);
+                final shortHit = _hitShortPosition(details.localPosition,
+                    scale, plotWidth, candles.length);
+                final lineHit = _hitLine(details.localPosition.dy, scale);
+                final patternHit = _hitPattern(details.localPosition,
+                    scale, plotWidth, candles.length);
+                if (rectangleHit == null && shortHit == null &&
+                    lineHit == null && patternHit == null) return;
+                setState(() {
+                  _saveDrawingUndo();
+                  if (rectangleHit != null) {
+                    _rectangles.removeAt(rectangleHit.$1);
+                  } else if (shortHit != null) {
+                    _shortPositions.removeAt(shortHit.$1);
+                  } else if (lineHit != null) {
+                    _levels.removeAt(lineHit);
+                  } else if (patternHit != null) {
+                    _patterns.removeAt(patternHit);
+                  }
+                  _selectedRectangle = null;
+                  _selectedShort = null;
+                  _selectedLine = null;
+                  _selectedPattern = null;
+                  if (!_continueDrawing) {
+                    _eraserMode = false;
+                    _drawing = false;
+                  }
+                });
+                return;
+              }
+              if (!_drawingsVisible) return;
               final hit = _hitLine(details.localPosition.dy, scale);
               setState(() {
                 final rectangleHit = PriceRectangleGeometry.hitTest(
@@ -2331,6 +2887,8 @@ class _ChartScreenState extends State<ChartScreen>
                     _pendingAnchor = null;
                     _secondChannelAnchor = null;
                   }
+                  if (!_continueDrawing && _pendingAnchor == null &&
+                      _secondChannelAnchor == null) _drawing = false;
                   return;
                 }
                 _saveDrawingUndo();
@@ -2341,6 +2899,7 @@ class _ChartScreenState extends State<ChartScreen>
                 _selectedLine = _levels.length - 1;
                 _selectedPattern = null;
                 _selectedShort = null;
+                if (!_continueDrawing) _drawing = false;
               });
             },
             child: RepaintBoundary(
@@ -2353,19 +2912,20 @@ class _ChartScreenState extends State<ChartScreen>
                   dark: Theme.of(context).brightness == Brightness.dark,
                   viewport: _viewport,
                   crosshair: _crosshair,
-                  levels: List<double>.unmodifiable(_levels),
-                  patterns: List<ChartPattern>.unmodifiable(_patterns),
-                  shortPositions: List<ChartShortPosition>.unmodifiable(_shortPositions),
-                  selectedLine: _drawing ? _selectedLine : null,
-                  selectedPattern: _drawing ? _selectedPattern : null,
-                  selectedShort: _drawing ? _selectedShort : null,
+                  levels: _drawingsVisible ? List<double>.unmodifiable(_levels) : const [],
+                  patterns: _drawingsVisible ? List<ChartPattern>.unmodifiable(_patterns) : const [],
+                  shortPositions: _drawingsVisible ? List<ChartShortPosition>.unmodifiable(_shortPositions) : const [],
+                  selectedLine: _drawing && _drawingsVisible ? _selectedLine : null,
+                  selectedPattern: _drawing && _drawingsVisible ? _selectedPattern : null,
+                  selectedShort: _drawing && _drawingsVisible ? _selectedShort : null,
                   showShortLabels: _showShortLabels,
                   indicator: _showIndicators,
+                  panel: _panelSettings,
                 ),
               ),
             ),
           )),
-          if (candles.isNotEmpty && _rectangles.isNotEmpty)
+          if (_drawingsVisible && candles.isNotEmpty && _rectangles.isNotEmpty)
             Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
               child: CustomPaint(
                 painter: ChartPriceRectanglePainter(
@@ -2400,7 +2960,7 @@ class _ChartScreenState extends State<ChartScreen>
                 ]),
               ),
             ))),
-          if (candles.isNotEmpty && _drawing)
+          if (candles.isNotEmpty)
             _buildDrawingRail(constraints.maxHeight),
           if (_drawing && _selectedShort != null &&
               _selectedShort! < _shortPositions.length && candles.isNotEmpty)
@@ -2413,40 +2973,7 @@ class _ChartScreenState extends State<ChartScreen>
       ),
       // The chart stays the dominant surface; its tool strip sits below the
       // time axis, as in the supplied mobile reference.
-      Container(
-        color: surface,
-        height: 50,
-        child: SingleChildScrollView(
-         scrollDirection: Axis.horizontal,
-         child: Row(children: [
-          TextButton.icon(
-            key: const Key('timeframe-picker'),
-            onPressed: _showTimeframePicker,
-            label: Text(_timeframe, textDirection: TextDirection.ltr),
-            icon: const Icon(Icons.keyboard_arrow_down, size: 18),
-          ),
-          _iconAction(icon: Icons.candlestick_chart, label: 'نوع الشموع', onPressed: _showChartTypePicker),
-          _iconAction(icon: Icons.replay_circle_filled_outlined,
-              label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
-              active: _replay, onPressed: _toggleReplay),
-          _iconAction(icon: Icons.functions, label: 'المؤشرات', active: _showIndicators,
-            onPressed: () => setState(() => _showIndicators = !_showIndicators)),
-          _iconAction(icon: Icons.edit_outlined, label: 'أدوات الرسم', active: _drawing,
-            onPressed: _showDrawingTools),
-          _iconAction(icon: Icons.zoom_in_outlined, label: 'تكبير الشارت',
-            onPressed: () => _zoomBy(1.25)),
-          _iconAction(icon: Icons.zoom_out_outlined, label: 'تصغير الشارت',
-            onPressed: () => _zoomBy(.8)),
-          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
-            onPressed: () {
-              _momentum.stop();
-              setState(() => _viewport = _viewport.jumpToLatest());
-            }),
-          const SizedBox(width: 8),
-          if (_mode == ChartMode.range)
-            TextButton(onPressed: _showRangeSettings, child: Text('مدى $_rangeTicks')),
-         ])),
-      ),
+      _referenceChartToolbar(surface),
       Container(
         padding: const EdgeInsetsDirectional.only(start: 12, end: 8, top: 6, bottom: 6),
         color: surface,
@@ -2492,16 +3019,6 @@ class _ChartScreenState extends State<ChartScreen>
               onPressed: _redoDrawing, icon: const Icon(Icons.redo, size: 19)),
         ]),
       ),
-      if (widget.journal != null && !_replay)
-        Align(
-          alignment: AlignmentDirectional.centerEnd,
-          child: TextButton.icon(
-            key: const Key('open-paper-order'),
-            onPressed: _openPaperOrder,
-            icon: const Icon(Icons.add_chart, size: 17),
-            label: const Text('صفقة تجريبية'),
-          ),
-        ),
       if (_pendingAnchor != null && _drawing)
         Container(
           alignment: Alignment.center,
@@ -2655,6 +3172,7 @@ class _CandleChartPainter extends CustomPainter {
     required this.selectedShort,
     required this.showShortLabels,
     required this.indicator,
+    required this.panel,
   });
 
   final List<TradeCandle> candles;
@@ -2670,12 +3188,12 @@ class _CandleChartPainter extends CustomPainter {
   final int? selectedShort;
   final bool showShortLabels;
   final bool indicator;
+  final ChartPanelSettings panel;
 
   @override
   void paint(Canvas canvas, Size size) {
     final background = dark ? const Color(0xFF000D16) : Colors.white;
-    final line = dark ? const Color(0xFF293544) : const Color(0xFFE4EAF1);
-    final text = dark ? const Color(0xFF9598A1) : const Color(0xFF637086);
+    final text = dark ? const Color(0xFFC1C7D0) : const Color(0xFF101010);
     canvas.drawRect(Offset.zero & size, Paint()..color = background);
     final axis = size.width - 61;
     if (axis < 30 || size.height < 60 || candles.isEmpty) return;
@@ -2685,32 +3203,52 @@ class _CandleChartPainter extends CustomPainter {
       candleCount: candles.length,
     );
     if (start >= ending) return;
-    final scale = ChartPriceScale.visible(candles, viewport, axis, chartHeight);
+    final scale = ChartPriceScale.visible(candles, viewport, axis, chartHeight,
+      topMarginPercent: panel.topMarginPercent,
+      bottomMarginPercent: panel.bottomMarginPercent);
     final maximum = scale.maximum;
     final minimum = scale.minimum;
     final span = math.max(.00001, maximum - minimum);
     double y(double price) => scale.y(price);
-    final decimals = span < .05 ? 5 : span < 1 ? 4 : span < 20 ? 2 : 1;
-    final gridPaint = Paint()..color = line..strokeWidth = .8;
-    for (var i = 0; i <= 5; i++) {
-      final lineY = chartHeight * i / 5;
-      canvas.drawLine(Offset(0, lineY), Offset(axis, lineY), gridPaint);
-      _text(canvas, (maximum - span * i / 5).toStringAsFixed(decimals),
-          Offset(axis + 3, lineY - 6), text, 10);
+    // Reference: no visible candle-area grid. Labels derive from the actual
+    // visible price interval, never from screenshot numbers or fake candles.
+    final step = ChartAxisTicks.interval(minimum, maximum);
+    final decimals = ChartAxisTicks.decimals(step);
+    for (final tick in ChartAxisTicks.ticks(minimum, maximum)) {
+      final py = y(tick);
+      final important = (tick / (step * 5) -
+          (tick / (step * 5)).round()).abs() < 0.000001;
+      _text(canvas, _price(tick, decimals),
+          Offset(axis + 6, py - 8), Color(panel.axisTextColor),
+          panel.axisTextSize.toDouble(),
+          bold: important);
+      if (panel.horizontalGridVisible && py >= 0 && py < chartHeight) {
+        canvas.drawLine(Offset(0, py), Offset(axis, py), Paint()
+          ..color = const Color(0xFFEEEEEE)
+          ..strokeWidth = .55);
+      }
     }
-    for (var i = 1; i <= 4; i++) {
-      final x = axis * i / 5;
-      canvas.drawLine(Offset(x, 0), Offset(x, chartHeight), gridPaint);
+    if (panel.verticalGridVisible) {
+      for (var tick = 1; tick < 5; tick++) {
+        final x = axis * tick / 5;
+        canvas.drawLine(Offset(x, 0), Offset(x, chartHeight), Paint()
+          ..color = const Color(0xFFEEEEEE)
+          ..strokeWidth = .55);
+      }
     }
-    canvas.drawLine(Offset(axis, 0), Offset(axis, size.height), gridPaint);
+    if (panel.scaleLineColor != 0x00000000) {
+      canvas.drawLine(Offset(axis, 0), Offset(axis, chartHeight), Paint()
+        ..color = Color(panel.scaleLineColor)
+        ..strokeWidth = .75);
+    }
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, axis, chartHeight));
     final positiveWick = Paint()
       ..color = TradeColors.positive
-      ..strokeWidth = 1.3;
+      ..strokeWidth = 1.0;
     final negativeWick = Paint()
       ..color = TradeColors.negative
-      ..strokeWidth = 1.3;
+      ..strokeWidth = 1.0;
     final positiveBody = Paint()..color = TradeColors.positive;
     final negativeBody = Paint()..color = TradeColors.negative;
     for (var i = start; i < ending; i++) {
@@ -2723,8 +3261,8 @@ class _CandleChartPainter extends CustomPainter {
       final openY = y(candle.open);
       final closeY = y(candle.close);
       canvas.drawRect(Rect.fromLTRB(
-        centerX - viewport.barWidth * .31, math.min(openY, closeY),
-        centerX + viewport.barWidth * .31, math.max(openY + 1, closeY + 1),
+        centerX - viewport.barWidth * .34, math.min(openY, closeY),
+        centerX + viewport.barWidth * .34, math.max(openY + 1, closeY + 1),
       ), candle.positive ? positiveBody : negativeBody);
     }
     if (indicator) {
@@ -2827,11 +3365,12 @@ class _CandleChartPainter extends CustomPainter {
         canvas.drawLine(Offset(x, lastY),
             Offset(math.min(axis, x + 2.2), lastY), marker);
       }
-      final tagY = (lastY - 10).clamp(0, chartHeight - 20).toDouble();
-      canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 20),
+      final tagY = (lastY - 14).clamp(0, chartHeight - 30).toDouble();
+      canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 30),
           Paint()..color = lastColor);
       _text(canvas, _price(lastClose, decimals),
-          Offset(axis + 2, tagY + 3), Colors.white, 10);
+          Offset(axis + 3, tagY + 7), Colors.white,
+          panel.axisTextSize.toDouble());
     }
     for (var i = 0; i < shortPositions.length; i++) {
       final item = shortPositions[i];
@@ -2850,8 +3389,14 @@ class _CandleChartPainter extends CustomPainter {
             candleCount: candles.length);
         if (index == null) continue;
         final date = DateTime.fromMillisecondsSinceEpoch(timestamps[index], isUtc: true);
-        final label = _formatUtc(date);
-        _text(canvas, label, Offset(x - 26, chartHeight + 4), text, 9);
+        final local = date.toLocal();
+        final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+        final label = '${hour.toString().padLeft(2, '0')}:'
+            '${local.minute.toString().padLeft(2, '0')} '
+            '${local.hour < 12 ? 'AM' : 'PM'}';
+      _text(canvas, label, Offset(x - 26, chartHeight + 4),
+          Color(panel.axisTextColor),
+          math.max(9, panel.axisTextSize - 2).toDouble());
       }
     }
     if (crosshair != null) {
@@ -2888,16 +3433,20 @@ class _CandleChartPainter extends CustomPainter {
     // A separate LTR price axis keeps digits and decimal points predictable in RTL.
     if (timestamps.length < candles.length) {
       _text(canvas, 'شموع مدى',
-          Offset(axis / 2 - 18, chartHeight + 3), text, 10);
+          Offset(axis / 2 - 18, chartHeight + 3),
+          Color(panel.axisTextColor),
+          math.max(9, panel.axisTextSize - 2).toDouble());
     } else {
       _text(canvas, 'UTC', Offset(3, chartHeight + 4), text, 9);
     }
   }
 
-  static void _text(Canvas canvas, String value, Offset offset, Color color, double size) {
+  static void _text(Canvas canvas, String value, Offset offset, Color color,
+      double size, {bool bold = false}) {
     final painter = TextPainter(
       text: TextSpan(text: value,
-          style: TextStyle(fontSize: size, color: color, fontWeight: FontWeight.w500)),
+          style: TextStyle(fontSize: size, color: color,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
       textDirection: TextDirection.ltr,
       maxLines: 1,
     )..layout();
@@ -3013,6 +3562,7 @@ class _CandleChartPainter extends CustomPainter {
   bool shouldRepaint(covariant _CandleChartPainter old) =>
       old.candles != candles || old.timestamps != timestamps ||
       old.dark != dark || old.viewport != viewport ||
+      old.panel != panel ||
       old.crosshair != crosshair || old.indicator != indicator ||
       !listEquals(old.levels, levels) ||
       !listEquals(old.patterns, patterns) ||
