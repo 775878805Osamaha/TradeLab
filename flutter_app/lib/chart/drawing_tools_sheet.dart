@@ -393,7 +393,9 @@ class GeneralToolActionTile extends StatelessWidget {
                 child: CustomPaint(painter: GeneralToolGlyphPainter(action, ink)),
               ))),
               Expanded(child: Center(child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4 * unit),
+                padding: EdgeInsets.symmetric(horizontal:
+                    (action == DrawingGeneralAction.lockDrawings ? 15 :
+                     action.hasMore ? 9 : 4) * unit),
                 child: Text(action.label,
                   textDirection: TextDirection.rtl,
                   textAlign: TextAlign.center,
@@ -455,12 +457,10 @@ class GeneralToolGlyphPainter extends CustomPainter {
             Rect.fromLTWH(x,y,w,h),Radius.circular(r)),p);
     switch (action) {
       case DrawingGeneralAction.ruler:
-        path(const [Offset(10,37),Offset(36,11),Offset(43,18),
-          Offset(17,44)],close:true);
-        for (var i=0;i<4;i++) {
-          final start=16.0+i*5.0;
-          line(start,start+13, start+3,start+16);
-        }
+        path(const [Offset(9,34),Offset(33,10),Offset(40,17),
+          Offset(16,41)],close:true);
+        line(18,29,21,32);line(23,24,28,29);
+        line(28,19,31,22);line(33,14,36,17);
       case DrawingGeneralAction.eraser:
         path(const [Offset(7,30),Offset(29,8),Offset(42,21),
           Offset(21,42),Offset(7,42)],close:true);
@@ -477,18 +477,27 @@ class GeneralToolGlyphPainter extends CustomPainter {
         canvas.drawPath(eye,p);canvas.drawCircle(const Offset(24,22),6,p);
         line(35,35,43,43);
       case DrawingGeneralAction.lockDrawings:
-        box(12,22,24,21,3);canvas.drawArc(
-          const Rect.fromLTWH(18,5,13,27),math.pi,math.pi,false,p);
+        box(12,22,24,21,3);
+        // Reference depicts an open padlock before the lock-all command.
+        line(18,22,18,15);
+        canvas.drawArc(const Rect.fromLTWH(18,7,13,16),
+            math.pi, math.pi * 1.08, false, p);
         canvas.drawCircle(const Offset(24,31),2,p);
       case DrawingGeneralAction.magnet:
-        path(const [Offset(9,36),Offset(9,17),Offset(13,9),
-          Offset(18,9),Offset(18,28),Offset(29,28),
-          Offset(29,9),Offset(35,9),Offset(39,17),Offset(39,36)]);
-        line(9,30,18,30);line(29,30,39,30);
+        line(10,38,10,20);
+        canvas.drawArc(const Rect.fromLTWH(10,7,28,27),
+            math.pi, math.pi, false, p);
+        line(38,20,38,38);
+        line(18,38,18,20);
+        canvas.drawArc(const Rect.fromLTWH(18,15,12,12),
+            math.pi, math.pi, false, p);
+        line(30,20,30,38);
+        line(10,32,18,32);line(30,32,38,32);
       case DrawingGeneralAction.deleteDrawings:
         path(const [Offset(14,14),Offset(16,41),Offset(34,41),Offset(36,14)]);
         line(12,14,39,14);line(21,9,29,9);line(19,18,19,35);
         line(28,18,28,35);
+        line(34,39,42,31);line(38,30,43,35);
       case DrawingGeneralAction.zoomIn:
         canvas.drawCircle(const Offset(21,21),12,p);
         line(30,30,41,41);line(15,21,27,21);line(21,15,21,27);
