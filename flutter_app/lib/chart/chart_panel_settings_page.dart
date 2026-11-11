@@ -60,9 +60,10 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, layout) {
     // The reference is 691 physical pixels wide. Scale dimensions in its
     // coordinate space only after using the actual logical viewport width.
-    final unit = MediaQuery.sizeOf(context).width / 691;
+    final unit = layout.maxWidth / 691;
     final textSize = (26 * unit).clamp(14.0, 19.0);
     return PopScope(
       canPop: false,
@@ -229,7 +230,7 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
             padding: EdgeInsets.symmetric(
               horizontal: 38 * unit, vertical: 29 * unit),
             child: Row(children: [
-              _footerButton('•••', unit: unit,
+              _footerButton('•••', unit: unit, referenceWidth: 110,
                 key: const Key('panel-more'),
                 outline: TradeColors.panelBorder,
                 onTap: () => showModalBottomSheet<void>(
@@ -242,17 +243,18 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
                   )),
                 )),
               const Spacer(),
-              _footerButton('إلغاء', unit: unit,
+              _footerButton('إلغاء', unit: unit, referenceWidth: 94,
                 key: const Key('panel-cancel'),
                 outline: TradeColors.panelInk, onTap: widget.onCancel),
               SizedBox(width: 23 * unit),
-              _footerButton('موافق', unit: unit,
+              _footerButton('موافق', unit: unit, referenceWidth: 115,
                 key: const Key('panel-apply'), filled: true, onTap: _apply),
             ]),
           ),
         ]),
       ),
     );
+    });
   }
 
   Widget _sectionTitle(String title, double unit) => Text(title,
@@ -281,7 +283,13 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
         style: TextStyle(fontSize: textSize,
           color: TradeColors.panelInk))),
       SizedBox(width: 12 * unit),
-      control,
+      // A long RTL label and its control must coexist on narrow phones and
+      // large accessibility text scales without horizontal overflow.
+      Flexible(fit: FlexFit.loose, child: FittedBox(
+        alignment: Alignment.centerLeft,
+        fit: BoxFit.scaleDown,
+        child: control,
+      )),
     ]));
 
   Widget _visibilityPicker({required Key key, required double unit,
@@ -372,21 +380,24 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
 
   Widget _footerButton(String label, {required Key key,
     required double unit, required VoidCallback onTap,
+    double referenceWidth = 110,
     Color? outline, bool filled = false}) => Semantics(
       button: true, label: label,
       child: GestureDetector(key: key,
         behavior: HitTestBehavior.opaque, onTap: onTap,
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 23 * unit),
+          width: referenceWidth * unit,
+          padding: EdgeInsets.symmetric(horizontal: 8 * unit),
           height: (64 * unit).clamp(38.0, 48.0),
           decoration: BoxDecoration(
             color: filled ? TradeColors.panelAccept : TradeColors.panelSurface,
             border: Border.all(color: outline ?? TradeColors.panelAccept),
             borderRadius: BorderRadius.circular(13 * unit)),
           alignment: Alignment.center,
-          child: Text(label, style: TextStyle(
-            color: filled ? Colors.white : TradeColors.panelInk,
-            fontSize: (26 * unit).clamp(15.0, 19.0))),
+          child: FittedBox(fit: BoxFit.scaleDown, child:
+            Text(label, style: TextStyle(
+              color: filled ? Colors.white : TradeColors.panelInk,
+              fontSize: (26 * unit).clamp(15.0, 19.0)))),
         )),
     );
 }
