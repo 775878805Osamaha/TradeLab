@@ -54,7 +54,7 @@ jobs:
       - name: Static analysis
         run: flutter analyze --no-fatal-infos
       - name: Interaction tests
-        run: flutter test test/widget_test.dart test/chart_short_position_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/chart_panel_settings_test.dart test/chart_axis_ticks_test.dart test/market_candle_store_test.dart test/chart_annotations_test.dart test/chart_line_geometry_test.dart test/candle_prefix_test.dart test/results_connection_test.dart test/market_api_test.dart test/paper_ledger_test.dart test/paper_journal_controller_test.dart test/paper_trade_service_test.dart
+        run: flutter test test/widget_test.dart test/chart_short_position_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/chart_panel_settings_test.dart test/chart_scale_settings_test.dart test/chart_axis_ticks_test.dart test/market_candle_store_test.dart test/chart_annotations_test.dart test/chart_line_geometry_test.dart test/candle_prefix_test.dart test/results_connection_test.dart test/market_api_test.dart test/paper_ledger_test.dart test/paper_journal_controller_test.dart test/paper_trade_service_test.dart
       - name: Verify native OAuth compatibility
         run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs
       - name: Capture chart design snapshot
@@ -124,7 +124,7 @@ jobs:
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_analysis_hub_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_analysis_hub_sheet.png"
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_general_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_general_drawing_tools_sheet.png"
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_favorite_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_favorite_drawing_tools_sheet.png"
-            python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_panel_settings.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_panel_settings_top.png" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_panel_settings_bottom.png"
+            python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_panel_settings.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_panel_settings_top.png" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_panel_settings_bottom.png" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_scale_settings_bottom.png"
       - name: Upload real Android emulator screenshot
         uses: actions/upload-artifact@v4
         with:
@@ -232,6 +232,13 @@ jobs:
           path: |
             flutter_app/build/tradelab_panel_settings_top.png
             flutter_app/build/tradelab_panel_settings_bottom.png
+          if-no-files-found: warn
+      - name: Upload actual Android PROMPT 13 price-scale screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Android-Price-Scale-Prompt13
+          path: flutter_app/build/tradelab_scale_settings_bottom.png
           if-no-files-found: warn
       - name: Publish direct APK as GitHub prerelease
         if: github.event_name != 'pull_request'

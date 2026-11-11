@@ -12,12 +12,14 @@ class ChartPanelSettingsPage extends StatefulWidget {
     required this.initial,
     required this.onApply,
     required this.onCancel,
+    this.onOpenScales,
     super.key,
   });
 
   final ChartPanelSettings initial;
   final ValueChanged<ChartPanelSettings> onApply;
   final VoidCallback onCancel;
+  final VoidCallback? onOpenScales;
 
   @override
   State<ChartPanelSettingsPage> createState() => _ChartPanelSettingsPageState();
@@ -351,12 +353,25 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
                 outline: TradeColors.panelBorder,
                 onTap: () => showModalBottomSheet<void>(
                   context: context,
-                  builder: (context) => SafeArea(child: ListTile(
-                    title: const Text('إعدادات اللوحة'),
-                    subtitle: const Text('لا توجد إجراءات إضافية محددة.'),
-                    trailing: const Icon(Icons.more_horiz),
-                    onTap: () => Navigator.pop(context),
-                  )),
+                  builder: (sheetContext) => SafeArea(child: Column(
+                    mainAxisSize: MainAxisSize.min, children: [
+                      ListTile(
+                        title: const Text('المقاييس والخطوط',
+                          textDirection: TextDirection.rtl),
+                        trailing: const Icon(Icons.chevron_right),
+                        enabled: widget.onOpenScales != null,
+                        onTap: widget.onOpenScales == null ? null : () {
+                          Navigator.pop(sheetContext);
+                          widget.onOpenScales!();
+                        },
+                      ),
+                      ListTile(
+                        title: const Text('إعدادات اللوحة',
+                          textDirection: TextDirection.rtl),
+                        trailing: const Icon(Icons.more_horiz),
+                        onTap: () => Navigator.pop(sheetContext),
+                      ),
+                    ])),
                 )),
               const Spacer(),
               _footerButton('إلغاء', unit: unit, referenceWidth: 94,

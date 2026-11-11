@@ -16,6 +16,9 @@ import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/chart_panel_settings.dart';
 import '../chart/chart_panel_settings_page.dart';
+import '../chart/chart_scale_settings.dart';
+import '../chart/chart_scale_settings_page.dart';
+import '../chart/chart_axis_source_labels.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_timeline.dart';
@@ -142,8 +145,11 @@ class _ChartScreenState extends State<ChartScreen>
     barWidth: 5.5, scrollBars: -5, rightMarginBars: 10);
   ChartPanelSettings _panelSettings = const ChartPanelSettings();
   bool _panelSettingsOpen = false;
+  bool _scaleSettingsOpen = false;
+  ChartScaleSettings _scaleSettings = const ChartScaleSettings();
   bool _panelChartTouched = false;
   static const _panelSettingsKey = 'tradelab-chart-panel-settings-v1';
+  static const _scaleSettingsKey = 'tradelab-chart-scale-settings-v1';
   final _panelSettingsStorage = const FlutterSecureStorage();
   ChartViewport _gestureStart = const ChartViewport();
   late final AnimationController _momentum;
@@ -242,6 +248,7 @@ class _ChartScreenState extends State<ChartScreen>
     super.initState();
     unawaited(_loadDrawingFavorites());
     unawaited(_loadPanelSettings());
+    unawaited(_loadScaleSettings());
     _momentum = AnimationController.unbounded(vsync: this)
       ..addListener(_tickMomentum);
     _linkedBefore = widget.controller.ctraderConnected;
@@ -322,6 +329,26 @@ class _ChartScreenState extends State<ChartScreen>
         key: _panelSettingsKey, value: settings.encode());
     } catch (_) {
       // The chart still uses the committed settings for this session.
+    }
+  }
+
+  Future<void> _loadScaleSettings() async {
+    try {
+      final stored = await _panelSettingsStorage.read(key: _scaleSettingsKey);
+      if (stored != null && mounted) {
+        setState(() => _scaleSettings = ChartScaleSettings.decode(stored));
+      }
+    } catch (_) {
+      // Invalid/older local preferences must never block a real chart.
+    }
+  }
+
+  Future<void> _saveScaleSettings(ChartScaleSettings settings) async {
+    try {
+      await _panelSettingsStorage.write(
+        key: _scaleSettingsKey, value: settings.encode());
+    } catch (_) {
+      // Keep committed in-memory preferences if the device store is locked.
     }
   }
 
@@ -2517,9 +2544,31 @@ class _ChartScreenState extends State<ChartScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_scaleSettingsOpen) {
+      return ChartScaleSettingsPage(
+        initial: _scaleSettings,
+        onCancel: () => setState(() {
+          _scaleSettingsOpen = false;
+          _panelSettingsOpen = true;
+        }),
+        onApply: (updated) {
+          // Presentation only: keep downloaded OHLC, viewport and Replay.
+          setState(() {
+            _scaleSettings = updated;
+            _scaleSettingsOpen = false;
+            _panelSettingsOpen = false;
+          });
+          unawaited(_saveScaleSettings(updated));
+        },
+      );
+    }
     if (_panelSettingsOpen) {
       return ChartPanelSettingsPage(
         initial: _panelSettings,
+        onOpenScales: () => setState(() {
+          _scaleSettingsOpen = true;
+          _panelSettingsOpen = false;
+        }),
         onCancel: () => setState(() => _panelSettingsOpen = false),
         onApply: (updated) {
           setState(() {
@@ -2921,6 +2970,16 @@ class _ChartScreenState extends State<ChartScreen>
                   showShortLabels: _showShortLabels,
                   indicator: _showIndicators,
                   panel: _panelSettings,
+                  scaleSettings: _scaleSettings,
+                  actualPriceCandles: _mode == ChartMode.range
+                    ? const [] : _replay
+                      ? CandlePrefix(_actualCandles, _visibleThrough)
+                      : _actualCandles,
+                  previousSessionClose: _mode == ChartMode.range
+                    ? null : ChartAxisSourceLabels.previousSessionClose(
+                      _actualBars, candles.length),
+                  sourceQuote: _replay ? null
+                    : widget.controller.recentQuoteFor(_selectedSymbol),
                   replayActive: _replay,
                 ),
               ),
@@ -3174,6 +3233,10 @@ class _CandleChartPainter extends CustomPainter {
     required this.showShortLabels,
     required this.indicator,
     required this.panel,
+    required this.scaleSettings,
+    required this.actualPriceCandles,
+    required this.previousSessionClose,
+    required this.sourceQuote,
     required this.replayActive,
   });
 
@@ -3191,6 +3254,10 @@ class _CandleChartPainter extends CustomPainter {
   final bool showShortLabels;
   final bool indicator;
   final ChartPanelSettings panel;
+  final ChartScaleSettings scaleSettings;
+  final List<TradeCandle> actualPriceCandles;
+  final double? previousSessionClose;
+  final MarketQuote? sourceQuote;
   final bool replayActive;
 
   @override
@@ -3359,18 +3426,41 @@ class _CandleChartPainter extends CustomPainter {
     }
     _paintShortPositions(canvas, scale, axis, candles.length, decimals);
     canvas.restore();
+    // All axis annotations are sourced from broker/market history already in
+    // memory. Toggling settings never requests an additional OHLC candle.
+    final occupiedAxis = <double>[];
+    void annotate(double price, Color color, ChartPriceLabelMode mode) {
+      if (mode == ChartPriceLabelMode.hidden || !price.isFinite) return;
+      final py = y(price);
+      if (py < 4 || py > chartHeight - 18) return;
+      if (scaleSettings.avoidOverlappingLabels &&
+          occupiedAxis.any((other) => (other - py).abs() < 23)) return;
+      occupiedAxis.add(py);
+      if (mode == ChartPriceLabelMode.valueAndLine) {
+        canvas.drawLine(Offset(0, py), Offset(axis, py),
+          Paint()..color = color.withValues(alpha: .75)..strokeWidth = .7);
+      }
+      final top = (py - 11).clamp(0, chartHeight - 22).toDouble();
+      canvas.drawRect(Rect.fromLTWH(axis, top, 61, 22),
+        Paint()..color = color);
+      _text(canvas, _price(price, decimals), Offset(axis + 3, top + 4),
+        Colors.white, math.max(9, panel.axisTextSize - 2).toDouble());
+    }
     // A source-derived last-close marker, not a simulated tick or countdown.
     final lastClose = candles.last.close;
     final lastY = y(lastClose);
-    if (lastY >= 0 && lastY <= chartHeight) {
+    if (scaleSettings.symbolLabel != ChartPriceLabelMode.hidden &&
+        lastY >= 0 && lastY <= chartHeight) {
+      occupiedAxis.add(lastY);
       final lastColor = candles.last.positive
-          ? TradeColors.positive : TradeColors.negative;
-      final marker = Paint()
-        ..color = lastColor
-        ..strokeWidth = .9;
-      for (var x = 0.0; x < axis; x += 6) {
-        canvas.drawLine(Offset(x, lastY),
-            Offset(math.min(axis, x + 2.2), lastY), marker);
+          ? Color(scaleSettings.symbolLabelColor)
+          : Color(scaleSettings.symbolNegativeColor);
+      if (scaleSettings.symbolLabel == ChartPriceLabelMode.valueAndLine) {
+        final marker = Paint()..color = lastColor..strokeWidth = .9;
+        for (var x = 0.0; x < axis; x += 6) {
+          canvas.drawLine(Offset(x, lastY),
+              Offset(math.min(axis, x + 2.2), lastY), marker);
+        }
       }
       final tagY = (lastY - 14).clamp(0, chartHeight - 30).toDouble();
       canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 30),
@@ -3378,6 +3468,37 @@ class _CandleChartPainter extends CustomPainter {
       _text(canvas, _price(lastClose, decimals),
           Offset(axis + 3, tagY + 7), Colors.white,
           panel.axisTextSize.toDouble());
+    }
+    if (previousSessionClose != null) {
+      annotate(previousSessionClose!, Color(scaleSettings.previousCloseColor),
+        scaleSettings.previousClose);
+    }
+    if (scaleSettings.highLow != ChartPriceLabelMode.hidden) {
+      final extremes = ChartAxisSourceLabels.visibleHighLow(
+        actualPriceCandles, start, ending);
+      if (extremes != null) {
+        annotate(extremes.$1, Color(scaleSettings.highColor), scaleSettings.highLow);
+        annotate(extremes.$2, Color(scaleSettings.lowColor), scaleSettings.highLow);
+      }
+    }
+    if (indicator && scaleSettings.indicatorLabels != ChartPriceLabelMode.hidden &&
+        actualPriceCandles.isNotEmpty) {
+      final count = math.min(12, actualPriceCandles.length);
+      var sum = 0.0;
+      for (var i = actualPriceCandles.length - count;
+          i < actualPriceCandles.length; i++) {
+        sum += actualPriceCandles[i].close;
+      }
+      annotate(sum / count, TradeColors.blue, scaleSettings.indicatorLabels);
+    }
+    // Only a fresh verified quote received by an existing market request.
+    // Replay does not display contemporary BID/ASK over historical candles.
+    if (!replayActive && sourceQuote != null &&
+        scaleSettings.bidAsk != ChartPriceLabelMode.hidden) {
+      annotate(sourceQuote!.ask, Color(scaleSettings.askColor),
+        scaleSettings.bidAsk);
+      annotate(sourceQuote!.bid, Color(scaleSettings.bidColor),
+        scaleSettings.bidAsk);
     }
     for (var i = 0; i < shortPositions.length; i++) {
       final item = shortPositions[i];
@@ -3390,6 +3511,7 @@ class _CandleChartPainter extends CustomPainter {
     if (timestamps.length >= candles.length) {
       // Real UTC dates only. Range uses the time of the originating BID
       // tick, NOT a guessed fixed-duration interval per Range bar.
+      DateTime? priorTick;
       for (var tick = 1; tick <= 4; tick++) {
         final x = axis * tick / 5;
         final index = viewport.indexAt(x: x, plotWidth: axis,
@@ -3398,12 +3520,20 @@ class _CandleChartPainter extends CustomPainter {
         final date = DateTime.fromMillisecondsSinceEpoch(timestamps[index], isUtc: true);
         final local = date.toLocal();
         final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
-        final label = '${hour.toString().padLeft(2, '0')}:'
+        final isDayBoundary = priorTick == null ||
+          priorTick.day != local.day || priorTick.month != local.month ||
+          priorTick.year != local.year;
+        priorTick = local;
+        final label = scaleSettings.weekdayOnLabels && isDayBoundary
+          ? ChartScaleSettings.localWeekday(local)
+          : '${hour.toString().padLeft(2, '0')}:'
             '${local.minute.toString().padLeft(2, '0')} '
             '${local.hour < 12 ? 'AM' : 'PM'}';
-      _text(canvas, label, Offset(x - 26, chartHeight + 4),
+      _text(canvas, label, Offset(x - (isDayBoundary &&
+          scaleSettings.weekdayOnLabels ? 20 : 26), chartHeight + 4),
           Color(panel.axisTextColor),
-          math.max(9, panel.axisTextSize - 2).toDouble());
+          math.max(9, panel.axisTextSize - 2).toDouble(),
+          rtl: scaleSettings.weekdayOnLabels && isDayBoundary);
       }
     }
     if (crosshair != null) {
@@ -3448,12 +3578,12 @@ class _CandleChartPainter extends CustomPainter {
   }
 
   static void _text(Canvas canvas, String value, Offset offset, Color color,
-      double size, {bool bold = false}) {
+      double size, {bool bold = false, bool rtl = false}) {
     final painter = TextPainter(
       text: TextSpan(text: value,
           style: TextStyle(fontSize: size, color: color,
               fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
-      textDirection: TextDirection.ltr,
+      textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
       maxLines: 1,
     )..layout();
     painter.paint(canvas, offset);
@@ -3586,6 +3716,10 @@ class _CandleChartPainter extends CustomPainter {
       old.candles != candles || old.timestamps != timestamps ||
       old.dark != dark || old.viewport != viewport ||
       old.panel != panel ||
+      old.scaleSettings != scaleSettings ||
+      old.actualPriceCandles != actualPriceCandles ||
+      old.previousSessionClose != previousSessionClose ||
+      old.sourceQuote != sourceQuote ||
       old.replayActive != replayActive ||
       old.crosshair != crosshair || old.indicator != indicator ||
       !listEquals(old.levels, levels) ||
