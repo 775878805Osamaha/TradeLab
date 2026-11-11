@@ -105,7 +105,7 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
               physics: const ClampingScrollPhysics(),
               child: Padding(
                 padding: EdgeInsetsDirectional.only(
-                  start: 37 * unit, end: 49 * unit),
+                  start: 37 * unit, end: 38 * unit),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                   SizedBox(height: 87 * unit),
@@ -194,23 +194,26 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
                       _draft.copyWith(paneButtons: v)))),
                   SizedBox(height: 64 * unit),
                   _sectionTitle('هوامش', unit),
-                  SizedBox(height: 25 * unit),
-                  _row('الأعلى', unit, textSize, _numberField(
-                    controller: _top, suffix: '%', unit: unit,
+                  SizedBox(height: 4 * unit),
+                  _row('الأعلى', unit, textSize, _marginPercentField(
+                    controller: _top, unit: unit,
                     key: const Key('panel-margin-top'))),
-                  SizedBox(height: 28 * unit),
-                  _row('الأسفل', unit, textSize, _numberField(
-                    controller: _bottom, suffix: '%', unit: unit,
+                  SizedBox(height: 18 * unit),
+                  _row('الأسفل', unit, textSize, _marginPercentField(
+                    controller: _bottom, unit: unit,
                     key: const Key('panel-margin-bottom'))),
-                  SizedBox(height: 28 * unit),
+                  SizedBox(height: 31 * unit),
                   _row('يمين', unit, textSize, Row(mainAxisSize: MainAxisSize.min,
                     children: [
-                    _numberField(controller: _right, suffix: '', unit: unit,
+                    _numberField(controller: _right, unit: unit,
                       key: const Key('panel-margin-right')),
-                    SizedBox(width: 8 * unit),
-                    Text('الأعمدة البيانية', style: TextStyle(
-                      fontSize: (16 * unit).clamp(9.0, 11.0),
-                      color: TradeColors.panelMuted)),
+                    SizedBox(width: 12 * unit),
+                    SizedBox(width: 82 * unit,
+                      child: Text('الأعمدة\nالبيانية',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: (24 * unit).clamp(14.0, 18.0),
+                          color: TradeColors.panelInk))),
                   ])),
                   if (_validationError != null)
                     Padding(padding: const EdgeInsets.only(top: 10),
@@ -228,7 +231,7 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
               border: Border(top: BorderSide(color: TradeColors.panelBorder,
                 width: .5))),
             padding: EdgeInsets.symmetric(
-              horizontal: 38 * unit, vertical: 29 * unit),
+              horizontal: 38 * unit, vertical: 34 * unit),
             child: Row(children: [
               _footerButton('•••', unit: unit, referenceWidth: 110,
                 key: const Key('panel-more'),
@@ -330,8 +333,18 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
       ),
     );
 
+  Widget _marginPercentField({required TextEditingController controller,
+    required double unit, required Key key}) =>
+    Row(mainAxisSize: MainAxisSize.min, children: [
+      _numberField(controller: controller, unit: unit, key: key),
+      SizedBox(width: 17 * unit),
+      Text('%', textDirection: TextDirection.ltr,
+        style: TextStyle(color: TradeColors.panelInk,
+          fontSize: (25 * unit).clamp(14.0, 19.0))),
+    ]);
+
   Widget _numberField({required TextEditingController controller,
-    required String suffix, required double unit, required Key key}) =>
+    required double unit, required Key key}) =>
     SizedBox(width: (190 * unit).clamp(110.0, 150.0),
       height: (63 * unit).clamp(38.0, 49.0),
       child: TextField(
@@ -341,16 +354,14 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
           setState(() => _validationError = null);
         } },
         textDirection: TextDirection.ltr,
-        textAlign: TextAlign.center,
+        textAlign: TextAlign.right,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly,
           LengthLimitingTextInputFormatter(3)],
         style: const TextStyle(color: TradeColors.panelInk, fontSize: 17),
         decoration: InputDecoration(
           filled: true, fillColor: TradeColors.panelSurface,
-          suffixText: suffix.length <= 1 ? suffix : null,
-          suffixStyle: const TextStyle(color: TradeColors.panelMuted),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 5),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(9),
             borderSide: const BorderSide(color: TradeColors.panelBorder)),
           enabledBorder: OutlineInputBorder(
