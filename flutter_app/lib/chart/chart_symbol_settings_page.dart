@@ -320,20 +320,22 @@ class _ChartSymbolSettingsPageState extends State<ChartSymbolSettingsPage> {
           padding: EdgeInsets.symmetric(horizontal: 14 * u),
           child: Row(children: [
             Expanded(child: bidi && value.startsWith('نيويورك (')
-              ? Row(textDirection: TextDirection.ltr,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Flexible(child: Text('نيويورك',
+              ? FittedBox(fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Row(mainAxisSize: MainAxisSize.min,
+                    textDirection: TextDirection.ltr,
+                    children: [
+                    Text('نيويورك',
                       textDirection: TextDirection.rtl,
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: TradeColors.panelInk,
-                        fontSize: (27 * u).clamp(14, 18)))),
+                        fontSize: (27 * u).clamp(14, 18))),
                     SizedBox(width: 5 * u),
                     Text(value.substring(value.indexOf('(')),
                       textDirection: TextDirection.ltr,
                       style: TextStyle(color: TradeColors.panelInk,
                         fontSize: (27 * u).clamp(14, 18))),
-                  ])
+                  ]))
               : Text(value, textAlign: TextAlign.right,
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: TradeColors.panelInk,
