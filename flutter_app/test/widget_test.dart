@@ -205,12 +205,20 @@ void main() {
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);
   });
 
-  testWidgets('sell-position drawing is offered but never seeded on an empty feed',
+  testWidgets('sell-position shortcuts never seed an empty cTrader feed',
       (tester) async {
     await openAtPhoneSize(tester);
-    final option = find.byKey(const Key('drawing-rail-short'));
-    await tester.ensureVisible(option);
-    await tester.tap(option);
+    // Price-specific shortcuts appear only with verified candles, unlike the
+    // reference's nine general commands. They must not create sample prices.
+    expect(find.byKey(const Key('drawing-rail-short')), findsNothing);
+    await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('drawing-category-tools')));
+    await tester.tap(find.byKey(const Key('drawing-category-tools')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('drawing-general-eraser')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-tool-shortPosition')), findsNothing);
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     // With no authorized cTrader candles, the screenshot's sample prices
     // must never appear as an invented position or market feed.
@@ -219,13 +227,18 @@ void main() {
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
   });
 
-  testWidgets('price rectangle is selectable without inventing XAUUSD candles',
+  testWidgets('price rectangle remains unavailable without real XAUUSD candles',
       (tester) async {
     await openAtPhoneSize(tester);
-    final option = find.byKey(const Key('drawing-rail-rectangle'));
-    await tester.ensureVisible(option);
-    await tester.pump();
-    await tester.tap(option);
+    expect(find.byKey(const Key('drawing-rail-rectangle')), findsNothing);
+    await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('drawing-category-tools')));
+    await tester.tap(find.byKey(const Key('drawing-category-tools')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('drawing-general-ruler')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-tool-priceRectangle')), findsNothing);
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     expect(find.byKey(const Key('price-rectangle-placement-hint')), findsNothing);
