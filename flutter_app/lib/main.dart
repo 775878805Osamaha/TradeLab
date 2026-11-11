@@ -104,7 +104,8 @@ class TradeLabShell extends StatefulWidget {
 }
 
 class _TradeLabShellState extends State<TradeLabShell> {
-  // The approved tab order is Market → Chart → Results → Account (RTL).
+  // Preserve the four implemented TradeLab destinations. Do not invent
+  // TradingView community/discovery screens to fill a five-tab reference.
   // Chart opens in ANALYSIS mode, never an implicit Replay session.
   int _selectedIndex = 1;
   late final MarketController _market = widget.controller ?? MarketController();
@@ -137,23 +138,23 @@ class _TradeLabShellState extends State<TradeLabShell> {
   Widget build(BuildContext context) {
     final destinations = const [
       NavigationDestination(
-        icon: Icon(Icons.show_chart_outlined),
-        selectedIcon: Icon(Icons.show_chart),
-        label: 'السوق',
+        icon: Icon(Icons.bookmark_border),
+        selectedIcon: Icon(Icons.bookmark, color: Colors.white),
+        label: 'قائمة المراقبة',
       ),
       NavigationDestination(
-        icon: Icon(Icons.candlestick_chart_outlined),
-        selectedIcon: Icon(Icons.candlestick_chart),
-        label: 'الشارت',
+        icon: Icon(Icons.show_chart_outlined),
+        selectedIcon: Icon(Icons.show_chart, color: Colors.white),
+        label: 'رسوم بيانية',
       ),
       NavigationDestination(
         icon: Icon(Icons.bar_chart_outlined),
-        selectedIcon: Icon(Icons.bar_chart),
+        selectedIcon: Icon(Icons.bar_chart, color: Colors.white),
         label: 'النتائج',
       ),
       NavigationDestination(
         icon: Icon(Icons.account_balance_outlined),
-        selectedIcon: Icon(Icons.account_balance),
+        selectedIcon: Icon(Icons.account_balance, color: Colors.white),
         label: 'الحساب',
       ),
     ];

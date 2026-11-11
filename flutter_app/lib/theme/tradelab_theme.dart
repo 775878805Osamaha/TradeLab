@@ -115,15 +115,15 @@ abstract final class TradeTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
-        height: 72,
-        indicatorColor: TradeColors.blue.withValues(alpha: .10),
+        height: 60,
+        indicatorColor: const Color(0xFF101010),
         labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
           fontSize: 12,
           fontWeight: states.contains(WidgetState.selected)
               ? FontWeight.w700
               : FontWeight.w500,
           color: states.contains(WidgetState.selected)
-              ? TradeColors.blue
+              ? (dark ? Colors.white : const Color(0xFF101010))
               : (dark ? TradeColors.darkSecondary : TradeColors.lightSecondary),
         )),
       ),

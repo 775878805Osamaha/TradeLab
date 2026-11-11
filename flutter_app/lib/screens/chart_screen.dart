@@ -2355,7 +2355,7 @@ class _ChartScreenState extends State<ChartScreen>
         ? 'USDT' : 'USD';
     return Container(
       key: const Key('chart-reference-header'),
-      height: 82,
+      height: 72,
       color: Theme.of(context).colorScheme.surface,
       child: Stack(children: [
         Positioned(left: 8, top: 4, child: Row(children: [
@@ -2399,7 +2399,8 @@ class _ChartScreenState extends State<ChartScreen>
                 ? (widget.onOpenAccount ?? _notifyUnconnected) : null,
             child: Text(
             hasVerifiedPrices
-                ? '$source · ${_ctraderTimeCandlesStale ? 'بيانات متأخرة' : 'شموع موثقة'}'
+                ? (_ctraderTimeCandlesStale
+                    ? 'شموع $source · بيانات متأخرة' : 'شموع $source')
                 : 'لا توجد أسعار موثقة · $source',
             key: const Key('chart-provenance-header'),
             textDirection: TextDirection.rtl,
@@ -2410,7 +2411,7 @@ class _ChartScreenState extends State<ChartScreen>
                 color: hasVerifiedPrices && !_ctraderTimeCandlesStale
                     ? const Color(0xFF047660) : TradeColors.negative),
           ))),
-        Positioned(left: 8, top: 49, child: OutlinedButton.icon(
+        Positioned(left: 8, top: 43, child: OutlinedButton.icon(
           // The screenshot does not establish what the button labelled 3
           // does. Keep it visibly disabled until its meaning is verified.
           onPressed: null,
@@ -2478,6 +2479,9 @@ class _ChartScreenState extends State<ChartScreen>
               _momentum.stop();
               setState(() => _viewport = _viewport.jumpToLatest());
             }),
+        if (widget.journal != null && !_replay)
+          _iconAction(icon: Icons.add_chart, label: 'صفقة تجريبية',
+              onPressed: _openPaperOrder),
         if (_mode == ChartMode.range)
           TextButton(onPressed: _showRangeSettings,
               child: Text('مدى $_rangeTicks')),
@@ -2972,16 +2976,6 @@ class _ChartScreenState extends State<ChartScreen>
               onPressed: _redoDrawing, icon: const Icon(Icons.redo, size: 19)),
         ]),
       ),
-      if (widget.journal != null && !_replay)
-        Align(
-          alignment: AlignmentDirectional.centerEnd,
-          child: TextButton.icon(
-            key: const Key('open-paper-order'),
-            onPressed: _openPaperOrder,
-            icon: const Icon(Icons.add_chart, size: 17),
-            label: const Text('صفقة تجريبية'),
-          ),
-        ),
       if (_pendingAnchor != null && _drawing)
         Container(
           alignment: Alignment.center,
