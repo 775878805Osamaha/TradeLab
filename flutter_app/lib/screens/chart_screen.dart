@@ -2457,6 +2457,11 @@ class _ChartScreenState extends State<ChartScreen>
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF333333))),
         ),
+        // Keep Replay within the initial viewport, even for wide symbol
+        // labels on 320–390dp devices. It never navigates off the chart.
+        _iconAction(icon: Icons.replay_circle_filled_outlined,
+            label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
+            active: _replay, onPressed: _toggleReplay),
         _iconAction(icon: Icons.edit_outlined,
             label: 'أدوات الرسم', active: _drawing,
             onPressed: _showDrawingTools),
@@ -2464,9 +2469,6 @@ class _ChartScreenState extends State<ChartScreen>
             label: 'محور التحليل', onPressed: _showAnalysisHub),
         _iconAction(icon: Icons.more_horiz,
             label: 'نوع الشموع', onPressed: _showChartTypePicker),
-        _iconAction(icon: Icons.replay_circle_filled_outlined,
-            label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
-            active: _replay, onPressed: _toggleReplay),
         _iconAction(icon: Icons.functions, label: 'المؤشرات',
             active: _showIndicators,
             onPressed: () => setState(() => _showIndicators = !_showIndicators)),
