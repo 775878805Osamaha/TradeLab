@@ -35,6 +35,7 @@ enum class BacktestTab {
 data class BacktestUiState(
     val availableStrategies: List<Strategy> = StrategyRegistry.AVAILABLE_STRATEGIES,
     val selectedStrategy: Strategy? = StrategyRegistry.AVAILABLE_STRATEGIES.firstOrNull(),
+    val strategyParameters: Map<String, Any> = selectedStrategy?.defaultParameters ?: emptyMap(),
     val symbol: String = "XAUUSD",
     val timeframe: Timeframe = Timeframe.M15,
     val initialBalance: String = "50.0",
@@ -57,6 +58,8 @@ data class BacktestUiState(
     val pastRuns: List<BacktestRun> = emptyList(),
     val selectedTab: BacktestTab = BacktestTab.CONFIG,
     val displayMode: ResultsDisplayMode = ResultsDisplayMode.VALUE,
+    /** Persisted on screen after the transient snackbar is dismissed. */
+    val failureReason: String? = null,
     val message: String? = null
 )
 
@@ -82,7 +85,8 @@ class BacktestViewModel(
         }
     }
 
-    fun selectStrategy(strategy: Strategy?) = _uiState.update { it.copy(selectedStrategy = strategy) }
+    fun selectStrategy(strategy: Strategy?, parameters: Map<String, Any> = strategy?.defaultParameters ?: emptyMap()) =
+        _uiState.update { it.copy(selectedStrategy = strategy, strategyParameters = parameters.toMap()) }
     fun selectSymbol(symbol: String) = _uiState.update { it.copy(symbol = symbol) }
     fun selectTimeframe(tf: Timeframe) = _uiState.update { it.copy(timeframe = tf) }
 
@@ -125,7 +129,10 @@ class BacktestViewModel(
         val state = _uiState.value
         val strategy = state.selectedStrategy
         if (strategy == null) {
-            _uiState.update { it.copy(message = "يرجى تحديد أو إنشاء استراتيجية لبدء الاختبار") }
+            _uiState.update { it.copy(
+                failureReason = "يرجى تحديد أو إنشاء استراتيجية لبدء الاختبار",
+                message = "يرجى تحديد أو إنشاء استراتيجية لبدء الاختبار"
+            ) }
             return
         }
 
@@ -133,6 +140,7 @@ class BacktestViewModel(
         val config = try {
             BacktestConfig(
                 strategy = strategy,
+                parameters = state.strategyParameters,
                 symbol = state.symbol,
                 timeframe = state.timeframe,
                 initialBalance = parseBacktestNumber("رأس المال", state.initialBalance),
@@ -154,6 +162,7 @@ class BacktestViewModel(
                 it.copy(
                     isRunning = false,
                     currentStage = BacktestProgressStage.FAILED,
+                    failureReason = "إعدادات الاختبار غير صالحة: ${error.message}",
                     message = "إعدادات الاختبار غير صالحة: ${error.message}"
                 )
             }
@@ -166,6 +175,7 @@ class BacktestViewModel(
                 currentStage = BacktestProgressStage.PREPARING_DATA,
                 progressFraction = 0.05f,
                 lastResult = null,
+                failureReason = null,
                 message = "بدء الاختبار التاريخي..."
             )
         }
@@ -222,6 +232,7 @@ class BacktestViewModel(
                         currentStage = BacktestProgressStage.COMPLETED,
                         progressFraction = 1.0f,
                         lastResult = result,
+                        failureReason = null,
                         selectedTab = BacktestTab.RESULTS,
                         message = if (historySaved) {
                             "اكتمل الاختبار التاريخي: ${result.trades.size} صفقة منفذة بنجاح"
@@ -246,6 +257,7 @@ class BacktestViewModel(
                         currentStage = BacktestProgressStage.FAILED,
                         progressFraction = 0f,
                         lastResult = null,
+                        failureReason = "تعذر تحميل بيانات تاريخية موثوقة من المصدر: ${e.message ?: "سبب غير معروف"}",
                         message = "حدث خطأ أثناء الاختبار: ${e.message}"
                     )
                 }
@@ -277,6 +289,7 @@ class BacktestViewModel(
             it.copy(
                 isRunning = false,
                 lastResult = null,
+                failureReason = null,
                 message = null,
                 currentStage = null,
                 progressFraction = 0f,

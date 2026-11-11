@@ -41,6 +41,7 @@ import com.example.feature.settings.SettingsScreen
 import com.example.feature.strategy.StrategyScreen
 import com.example.feature.trade.TradeScreen
 import com.example.feature.trade.TradeViewModel
+import com.example.feature.trade.TradingLabScreen
 import com.example.ui.navigation.Screen
 import com.example.ui.theme.TradeLabTheme
 import com.example.ui.theme.TradingBackground
@@ -120,7 +121,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     var chartImmersive by remember { mutableStateOf(true) }
-                    // Keep the four primary destinations accessible even when the chart
+                    // Keep all five primary destinations accessible even when the chart
                     // uses its edge-to-edge layout. Immersive affects chart chrome,
                     // not the app's primary navigation.
                     val showBottomNav = currentRoute in Screen.bottomNavItems.map { it.route }
@@ -174,9 +175,15 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            // Primary Tab: Trade
+                            // Primary Tab: Laboratory (manual simulator and strategy tests)
                             composable(Screen.Trade.route) {
-                                androidx.compose.runtime.LaunchedEffect(Unit) { openReplayOnChart() }
+                                TradingLabScreen(
+                                    onOpenSimulator = openReplayOnChart,
+                                    onOpenStrategies = { navController.navigate(Screen.Strategies.route) },
+                                    onOpenBacktest = { navController.navigate(Screen.Backtest.route) },
+                                    onOpenDataSettings = { navController.navigate(Screen.Settings.route) },
+                                    sourceStatus = app.cTrader.status.collectAsState().value
+                                )
                             }
 
                             // Primary Tab: Results
@@ -184,7 +191,7 @@ class MainActivity : ComponentActivity() {
                                 ResultsScreen(
                                     viewModel = resultsViewModel,
                                     onNavigateToHistory = { resultsViewModel.setSelectedTab(com.example.feature.results.ResultsTab.JOURNAL) },
-                                    onNavigateToBacktest = openReplayOnChart
+                                    onNavigateToBacktest = { navController.navigate(Screen.Trade.route) }
                                 )
                             }
 
@@ -218,10 +225,10 @@ class MainActivity : ComponentActivity() {
                             // Sub-Screen: Strategies
                             composable(Screen.Strategies.route) {
                                 StrategyScreen(
-                                    onNavigateToBacktest = { strategyId ->
+                                    onNavigateToBacktest = { strategyId, parameters ->
                                         val strat = com.example.core.strategy.StrategyRegistry.getStrategy(strategyId)
                                         if (strat != null) {
-                                            backtestViewModel.selectStrategy(strat)
+                                            backtestViewModel.selectStrategy(strat, parameters)
                                         }
                                         navController.navigate(Screen.Backtest.route)
                                     },

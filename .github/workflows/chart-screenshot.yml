@@ -59,7 +59,7 @@ jobs:
             adb shell cmd overlay enable --user 0 com.android.internal.systemui.navbar.gestural
             # This runner executes script lines in separate shells. Keep each
             # guarded command on one line so screenshot capture still runs.
-            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.ReplayEntryInteractionTest,com.example.ChartAppearanceInteractionTest,com.example.DrawingAnchorInteractionTest --stacktrace || echo "::warning::Instrumentation failed; preserve emulator evidence"
+            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.ReplayEntryInteractionTest,com.example.TradingLabNavigationTest,com.example.ChartAppearanceInteractionTest,com.example.DrawingAnchorInteractionTest --stacktrace || echo "::warning::Instrumentation failed; preserve emulator evidence"
             mkdir -p screenshots
             for capture in appearance-light appearance-dark appearance-light-market appearance-light-results appearance-light-account; do adb pull "/sdcard/Download/$capture.png" "screenshots/$capture.png" || true; done
             adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -152,7 +152,7 @@ jobs:
               if path.name.endswith("150s.png") and teal + red < 40:
                   raise SystemExit("No visible candlestick evidence after 150 seconds")
           PY
-      - name: Verify four Arabic bottom navigation destinations
+      - name: Verify five Arabic bottom navigation destinations
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -165,7 +165,7 @@ jobs:
           for node in root.iter("node"):
               labels.add(node.attrib.get("text", ""))
               labels.add(node.attrib.get("content-desc", ""))
-          expected = {"السوق", "الشارت", "النتائج", "الحساب"}
+          expected = {"السوق", "الشارت", "النتائج", "المختبر", "الحساب"}
           missing = expected - labels
           print("Found navigation labels:", sorted(expected - missing))
           if missing:
