@@ -48,10 +48,11 @@ class AnalysisHubSheet extends StatelessWidget {
         media.size.height - media.padding.top - media.padding.bottom);
     final idealHeight = width * (1310 / 691);
     // Preserve the reference's visible chart strip on taller Android displays.
-    // The screenshot's sheet occupies roughly 84.6% of the display height.
+    // Android's reserved system areas require a slightly taller modal than
+    // the visible 691x1536 screenshot ratio suggests.
     final height = math.min(idealHeight,
       math.min(available - media.viewInsets.bottom,
-        media.size.height * .846));
+        media.size.height * .881));
 
     Widget row(List<AnalysisHubAction> actions, double height) {
       return Row(children: [
@@ -92,9 +93,9 @@ class AnalysisHubSheet extends StatelessWidget {
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(children: [
-          SizedBox(height: 185 * unit,
+          SizedBox(height: 196 * unit,
             child: Stack(children: [
-              Positioned(top: 30 * unit, left: 0, right: 0,
+              Positioned(top: 44 * unit, left: 0, right: 0,
                 child: Center(child: Container(
                   key: const Key('analysis-hub-handle'),
                   width: 60 * unit, height: math.max(3.5, 7 * unit),
@@ -104,7 +105,7 @@ class AnalysisHubSheet extends StatelessWidget {
                   ),
                 )),
               ),
-              Positioned(top: 90 * unit, right: side,
+              Positioned(top: 96 * unit, right: side,
                 child: Text('محور التحليل',
                   key: const Key('analysis-hub-title'),
                   textDirection: TextDirection.rtl,
