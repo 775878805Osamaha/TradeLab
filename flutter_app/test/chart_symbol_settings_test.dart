@@ -74,7 +74,7 @@ void main() {
         child: Scaffold(body: SafeArea(child: Directionality(
           textDirection: TextDirection.rtl,
           child: ChartSymbolSettingsPage(initial: initial,
-            onApply: onApply, onCancel: onCancel))))));
+            onApply: onApply, onCancel: onCancel)))))));
     await tester.pump();
   }
 
