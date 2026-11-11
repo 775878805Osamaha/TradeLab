@@ -40,6 +40,86 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
     super.dispose();
   }
 
+  Future<void> _selectColor(int current, ValueChanged<int> update) async {
+    const choices = <int>[
+      0xFFFFFFFF, 0xFFF2F2F2, 0xFFE0E0E0, 0xFF9E9E9E,
+      0xFF555555, 0xFF000000, 0x00000000,
+    ];
+    final chosen = await showModalBottomSheet<int>(
+      context: context,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('اختيار اللون', style: TextStyle(fontSize: 19)),
+          const SizedBox(height: 24),
+          Wrap(spacing: 14, runSpacing: 14, children: [
+            for (final value in choices)
+              Semantics(button: true, selected: value == current,
+                label: 'اختيار اللون ${value.toRadixString(16)}',
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(sheetContext, value),
+                  child: Container(width: 48, height: 48,
+                    decoration: BoxDecoration(
+                      color: Color(value),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: value == current ? TradeColors.panelInk
+                          : TradeColors.panelBorder,
+                        width: value == current ? 2 : 1)),
+                    child: value == 0x00000000
+                      ? const Icon(Icons.grid_on, color: Colors.grey)
+                      : null)),
+              ),
+          ]),
+          const SizedBox(height: 12),
+        ]),
+      )),
+    );
+    if (mounted && chosen != null) setState(() => update(chosen));
+  }
+
+  Future<void> _editLine({required int color,
+    required ChartGridStroke style, required ValueChanged<int> onColor,
+    required ValueChanged<ChartGridStroke> onStyle}) async {
+    final result = await showModalBottomSheet<Object>(
+      context: context,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('تنسيق الخط واللون', style: TextStyle(fontSize: 19)),
+          const SizedBox(height: 10),
+          for (final stroke in ChartGridStroke.values)
+            ListTile(
+              title: Text(stroke.label),
+              trailing: stroke == style ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(sheetContext, stroke)),
+          const Divider(),
+          Wrap(spacing: 12, runSpacing: 12, children: [
+            for (final value in const <int>[
+                0xFFEEEEEE, 0xFFD4D4D4, 0xFF9E9E9E,
+                0xFF555555, 0xFF000000])
+              GestureDetector(
+                onTap: () => Navigator.pop(sheetContext, value),
+                child: Container(width: 43, height: 43,
+                  decoration: BoxDecoration(color: Color(value),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: value == color ? TradeColors.panelInk
+                        : TradeColors.panelBorder,
+                      width: value == color ? 2 : 1))),
+              ),
+          ]),
+          const SizedBox(height: 14),
+        ]),
+      )),
+    );
+    if (!mounted || result == null) return;
+    setState(() {
+      if (result is ChartGridStroke) onStyle(result);
+      if (result is int) onColor(result);
+    });
+  }
+
   void _apply() {
     FocusScope.of(context).unfocus();
     final top = int.tryParse(_top.text);
@@ -108,9 +188,9 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
                   start: 37 * unit, end: 38 * unit),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                  SizedBox(height: 87 * unit),
+                  SizedBox(height: 67 * unit),
                   _sectionTitle('أنماط الرسم البياني الأساسية', unit),
-                  SizedBox(height: 30 * unit),
+                  SizedBox(height: 25 * unit),
                   _row('الخلفية', unit, textSize, _picker(
                     value: 'ثابت', unit: unit,
                     items: const ['ثابت'],
@@ -120,40 +200,73 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
                   SizedBox(height: 16 * unit),
                   _row('', unit, textSize, _colorWell(
                     key: const Key('panel-background-color'),
-                    color: Colors.white, onTap: null, unit: unit)),
-                  SizedBox(height: 22 * unit),
-                  _row('خطوط الشبكة الرأسية', unit, textSize, Row(
-                    mainAxisSize: MainAxisSize.min, children: [
-                      _colorWell(
-                        key: const Key('panel-vertical-grid-color'),
-                        color: Colors.transparent, onTap: null, unit: unit,
-                        withLine: true),
-                    ]), check: _draft.verticalGridVisible,
+                    color: Color(_draft.backgroundColor),
+                    onTap: () => _selectColor(_draft.backgroundColor,
+                      (value) => _draft = _draft.copyWith(
+                        backgroundColor: value)), unit: unit)),
+                  SizedBox(height: 5 * unit),
+                  _row('خطوط الشبكة الرأسية', unit, textSize, _linePreview(
+                    key: const Key('panel-vertical-grid-color'), unit: unit,
+                    enabled: _draft.verticalGridVisible,
+                    color: Color(_draft.verticalGridColor),
+                    stroke: _draft.verticalGridStroke,
+                    onTap: () => _editLine(
+                      color: _draft.verticalGridColor,
+                      style: _draft.verticalGridStroke,
+                      onColor: (value) => _draft = _draft.copyWith(
+                        verticalGridColor: value),
+                      onStyle: (value) => _draft = _draft.copyWith(
+                        verticalGridStroke: value))),
+                    check: _draft.verticalGridVisible,
                     onCheck: (value) => setState(() => _draft =
                       _draft.copyWith(verticalGridVisible: value))),
                   SizedBox(height: 18 * unit),
-                  _row('خطوط الشبكة الأفقية', unit, textSize, _colorWell(
-                    key: const Key('panel-horizontal-grid-color'),
-                    color: Colors.transparent, onTap: null, unit: unit,
-                    withLine: true),
+                  _row('خطوط الشبكة الأفقية', unit, textSize, _linePreview(
+                    key: const Key('panel-horizontal-grid-color'), unit: unit,
+                    enabled: _draft.horizontalGridVisible,
+                    color: Color(_draft.horizontalGridColor),
+                    stroke: _draft.horizontalGridStroke,
+                    onTap: () => _editLine(
+                      color: _draft.horizontalGridColor,
+                      style: _draft.horizontalGridStroke,
+                      onColor: (value) => _draft = _draft.copyWith(
+                        horizontalGridColor: value),
+                      onStyle: (value) => _draft = _draft.copyWith(
+                        horizontalGridStroke: value))),
                     check: _draft.horizontalGridVisible,
                     onCheck: (value) => setState(() => _draft =
                       _draft.copyWith(horizontalGridVisible: value))),
                   SizedBox(height: 18 * unit),
-                  _row('مؤشر التقاطع', unit, textSize, _colorWell(
-                    key: const Key('panel-crosshair-sample'),
-                    color: TradeColors.panelCheckerDark,
-                    onTap: null, unit: unit, dashed: true)),
+                  _row('مؤشر التقاطع', unit, textSize, _linePreview(
+                    key: const Key('panel-crosshair-sample'), unit: unit,
+                    enabled: true,
+                    color: Color(_draft.crosshairColor),
+                    stroke: _draft.crosshairStroke,
+                    onTap: () => _editLine(
+                      color: _draft.crosshairColor,
+                      style: _draft.crosshairStroke,
+                      onColor: (value) => _draft = _draft.copyWith(
+                        crosshairColor: value),
+                      onStyle: (value) => _draft = _draft.copyWith(
+                        crosshairStroke: value)))),
                   SizedBox(height: 20 * unit),
                   _row('علامة مائية', unit, textSize, _picker(
-                    value: 'وضع إعادة التشغيل', unit: unit,
-                    items: const ['وضع إعادة التشغيل'], onSelect: (_) {},
+                    value: _draft.watermarkMode.label, unit: unit,
+                    items: ChartWatermarkMode.values
+                      .map((value) => value.label).toList(),
+                    onSelect: (label) => setState(() => _draft =
+                      _draft.copyWith(watermarkMode: ChartWatermarkMode.values
+                        .firstWhere((mode) => mode.label == label))),
                     key: const Key('panel-watermark-mode'))),
                   SizedBox(height: 15 * unit),
                   _row('', unit, textSize, _colorWell(
                     key: const Key('panel-watermark-color'),
-                    color: Colors.transparent, onTap: null, unit: unit)),
-                  SizedBox(height: 70 * unit),
+                    color: Color(_draft.watermarkColor),
+                    onTap: _draft.watermarkMode == ChartWatermarkMode.hidden
+                      ? null : () => _selectColor(_draft.watermarkColor,
+                        (value) => _draft = _draft.copyWith(
+                          watermarkColor: value)), unit: unit)),
+                  SizedBox(height: 40 * unit),
                   _sectionTitle('المقاييس', unit),
                   SizedBox(height: 25 * unit),
                   _row('النص', unit, textSize, Row(
@@ -264,6 +377,28 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
     textAlign: TextAlign.right,
     style: TextStyle(color: TradeColors.panelMuted,
       fontSize: (22 * unit).clamp(12.5, 16.0)));
+
+  Widget _linePreview({required Key key, required double unit,
+    required bool enabled, required Color color,
+    required ChartGridStroke stroke, required VoidCallback onTap}) =>
+    Semantics(button: true, enabled: enabled,
+      label: 'تنسيق الخط واللون',
+      child: GestureDetector(
+        key: key, onTap: enabled ? onTap : null,
+        child: Container(
+          width: (144 * unit).clamp(84.0, 120.0),
+          height: (64 * unit).clamp(36.0, 46.0),
+          padding: EdgeInsets.all(6 * unit),
+          decoration: BoxDecoration(
+            color: enabled ? TradeColors.panelSurface
+              : const Color(0xFFF2F2F2),
+            border: Border.all(color: TradeColors.panelBorder),
+            borderRadius: BorderRadius.circular(10 * unit)),
+          child: CustomPaint(painter: _PanelLinePainter(
+            color: color, stroke: stroke, disabled: !enabled)),
+        ),
+      ),
+    );
 
   Widget _row(String label, double unit, double textSize, Widget control, {
     bool? check, ValueChanged<bool>? onCheck,
@@ -449,4 +584,53 @@ class _CheckerPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _CheckerPainter old) =>
     old.color != color || old.dashed != dashed || old.withLine != withLine;
+}
+
+/// Reference swatch: a line sample on the left and a checkerboard/colour
+/// sample on the right. When a grid is off both remain visually disabled.
+class _PanelLinePainter extends CustomPainter {
+  const _PanelLinePainter({required this.color,
+    required this.stroke, required this.disabled});
+
+  final Color color;
+  final ChartGridStroke stroke;
+  final bool disabled;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final square = size.height * .84;
+    final rect = Rect.fromLTWH(size.width - square, (size.height - square) / 2,
+      square, square);
+    canvas.drawRect(rect, Paint()..color = TradeColors.panelCheckerLight);
+    final step = rect.width / 4;
+    for (var row = 0; row < 4; row++) {
+      for (var col = 0; col < 4; col++) {
+        if ((row + col).isEven) {
+          canvas.drawRect(Rect.fromLTWH(rect.left + col * step,
+              rect.top + row * step, step, step),
+            Paint()..color = TradeColors.panelCheckerDark);
+        }
+      }
+    }
+    if (!disabled && color.a > 0) {
+      canvas.drawRect(rect, Paint()..color = color);
+    }
+    final paint = Paint()
+      ..color = disabled ? TradeColors.panelBorder : color
+      ..strokeWidth = 1.2;
+    final left = 8.0;
+    final end = rect.left - 12;
+    final y = size.height / 2;
+    if (stroke == ChartGridStroke.solid) {
+      canvas.drawLine(Offset(left, y), Offset(end, y), paint);
+    } else {
+      for (var x = left; x < end; x += 8) {
+        canvas.drawLine(Offset(x, y), Offset((x + 4).clamp(left, end), y), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PanelLinePainter old) =>
+    old.color != color || old.stroke != stroke || old.disabled != disabled;
 }

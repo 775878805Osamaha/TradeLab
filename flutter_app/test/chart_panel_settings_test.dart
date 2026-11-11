@@ -20,6 +20,29 @@ void main() {
     expect(restored.navigationButtons, ChartButtonVisibility.hidden);
     expect(defaults.axisTextSize, 12);
     expect(defaults.rightMarginBars, 10);
+    expect(defaults.backgroundColor, 0xFFFFFFFF);
+    expect(defaults.verticalGridVisible, isFalse);
+    expect(defaults.horizontalGridVisible, isFalse);
+    expect(defaults.watermarkMode, ChartWatermarkMode.replay);
+    final styles = defaults.copyWith(
+      backgroundColor: 0xFFF2F2F2,
+      verticalGridVisible: true,
+      horizontalGridColor: 0xFF555555,
+      horizontalGridStroke: ChartGridStroke.dashed,
+      crosshairStroke: ChartGridStroke.solid,
+      watermarkMode: ChartWatermarkMode.hidden,
+    );
+    final copied = ChartPanelSettings.decode(styles.encode());
+    expect(copied.backgroundColor, 0xFFF2F2F2);
+    expect(copied.verticalGridVisible, isTrue);
+    expect(copied.horizontalGridColor, 0xFF555555);
+    expect(copied.horizontalGridStroke, ChartGridStroke.dashed);
+    expect(copied.crosshairStroke, ChartGridStroke.solid);
+    expect(copied.watermarkMode, ChartWatermarkMode.hidden);
+    // Previously saved panel preferences remain decodable after this extension.
+    final legacy = ChartPanelSettings.decode('{"axisTextSize":12}');
+    expect(legacy.backgroundColor, 0xFFFFFFFF);
+    expect(legacy.verticalGridVisible, isFalse);
     expect(ChartPanelSettings.marginsValid(51, 30, 10), isFalse);
   });
 
@@ -90,6 +113,51 @@ void main() {
       find.byKey(const Key('panel-margin-top')));
     expect(percent.dx, lessThan(topField.dx));
     expect(find.byKey(const Key('panel-fixed-footer')), findsOneWidget);
+  });
+
+  testWidgets('grid formatting is disabled until checked; cancel is safe',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 872));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    ChartPanelSettings? applied;
+    var canceled = 0;
+    await mount(tester,
+      onApply: (settings) => applied = settings,
+      onCancel: () => canceled++);
+    final swatch = find.byKey(const Key('panel-vertical-grid-color'));
+    expect(tester.widget<GestureDetector>(swatch).onTap, isNull);
+    await tester.tap(find.byKey(const Key('panel-grid-vertical')));
+    await tester.pump();
+    expect(tester.widget<GestureDetector>(swatch).onTap, isNotNull);
+    await tester.tap(swatch);
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('تنسيق الخط واللون'), findsOneWidget);
+    await tester.tap(find.text('متقطع'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.byKey(const Key('panel-cancel')));
+    expect(canceled, 1);
+    expect(applied, isNull);
+  });
+
+  testWidgets('background colour and grid state apply only on confirmation',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 872));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    ChartPanelSettings? applied;
+    await mount(tester,
+      onApply: (settings) => applied = settings,
+      onCancel: () {});
+    await tester.tap(find.byKey(const Key('panel-background-color')));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('اختيار اللون'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('اختيار اللون fff2f2f2'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.byKey(const Key('panel-grid-horizontal')));
+    await tester.pump();
+    expect(applied, isNull);
+    await tester.tap(find.byKey(const Key('panel-apply')));
+    expect(applied?.backgroundColor, 0xFFF2F2F2);
+    expect(applied?.horizontalGridVisible, isTrue);
   });
 
   testWidgets('Cancel discards edits, Apply returns typed margins', (tester) async {
