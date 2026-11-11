@@ -195,7 +195,7 @@ class _ChartSymbolSettingsPageState extends State<ChartSymbolSettingsPage> {
                         (zone) => zone.labelAt(DateTime.now().toUtc())).toList(),
                       onSelected: (value) => setState(() => _draft =
                         _draft.copyWith(timeZone: ChartTimeZone.values.firstWhere(
-                          (zone) => zone.labelAt(DateTime.now().toUtc()) == value)))),
+                          (zone) => zone.labelAt(DateTime.now().toUtc()) == value))),
                       bidi: true), u, labelSize),
                     SizedBox(height: 38 * u),
                   ]),
