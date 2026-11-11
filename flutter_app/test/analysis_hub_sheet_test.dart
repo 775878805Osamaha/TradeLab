@@ -52,7 +52,12 @@ void main() {
     await pumpHub(tester, commands.add);
     final broker = tester.getRect(
       find.byKey(const Key('analysis-action-tradeWithBroker')));
-    expect(broker.width, moreOrLessEquals(390 * 631 / 691, epsilon: 1));
+    final topRight = tester.getRect(
+      find.byKey(const Key('analysis-action-layoutFormat'))).right;
+    final topLeft = tester.getRect(
+      find.byKey(const Key('analysis-action-drawingSettings'))).left;
+    expect(broker.left, moreOrLessEquals(topLeft, epsilon: 1));
+    expect(broker.right, moreOrLessEquals(topRight, epsilon: 1));
     final toolsTitle = tester.getRect(find.text('أدوات'));
     expect(toolsTitle.right, lessThan(390 - 390 * 20 / 691));
     final first = tester.getRect(
