@@ -1,4 +1,4 @@
-"""Capture the real PROMPT 11 panel and PROMPT 13 price-scale settings.
+"""Capture PROMPT 11 panel, PROMPT 13 scales and PROMPT 14 symbol editor.
 
 The prior workflow step leaves favorites open. Navigate using the Android
 accessibility tree; capture both the available upper reference and the lower
@@ -38,8 +38,9 @@ def save(path):
 
 
 def main():
-    if len(sys.argv) not in (3, 4):
-        print('Usage: capture_panel_settings.py <top.png> <bottom.png> [price-scale.png]',
+    if len(sys.argv) not in (3, 4, 5):
+        print('Usage: capture_panel_settings.py <top.png> <bottom.png> '
+              '[price-scale.png] [symbol.png]',
               file=sys.stderr)
         return 2
 
@@ -77,7 +78,7 @@ def main():
         print('Fixed confirmation footer disappeared', file=sys.stderr)
         return 1
     save(sys.argv[2])
-    if len(sys.argv) == 4:
+    if len(sys.argv) >= 4:
         if not tap_label('•••'):
             print('Could not open fixed settings more button', file=sys.stderr)
             return 1
@@ -108,6 +109,23 @@ def main():
             print('Scale page confirmation footer disappeared', file=sys.stderr)
             return 1
         save(sys.argv[3])
+    if len(sys.argv) == 5:
+        adb('shell', 'input', 'keyevent', '4')
+        time.sleep(1.4)
+        if not tap_label('•••'):
+            print('Could not open symbol navigation', file=sys.stderr)
+            return 1
+        if not tap_label('رمز'):
+            print('Could not open symbol editor', file=sys.stderr)
+            return 1
+        root = ui_tree()
+        if not center_of(root, 'تلوين الأعمدة طبقًا للإغلاق السابق'):
+            print('Symbol settings controls not found', file=sys.stderr)
+            return 1
+        if not center_of(root, 'موافق'):
+            print('Symbol editor fixed footer absent', file=sys.stderr)
+            return 1
+        save(sys.argv[4])
     return 0
 
 

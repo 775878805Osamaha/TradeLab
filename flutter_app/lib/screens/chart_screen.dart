@@ -18,6 +18,8 @@ import '../chart/chart_panel_settings.dart';
 import '../chart/chart_panel_settings_page.dart';
 import '../chart/chart_scale_settings.dart';
 import '../chart/chart_scale_settings_page.dart';
+import '../chart/chart_symbol_settings.dart';
+import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/candle_prefix.dart';
@@ -147,9 +149,12 @@ class _ChartScreenState extends State<ChartScreen>
   bool _panelSettingsOpen = false;
   bool _scaleSettingsOpen = false;
   ChartScaleSettings _scaleSettings = const ChartScaleSettings();
+  bool _symbolSettingsOpen = false;
+  ChartSymbolSettings _symbolSettings = const ChartSymbolSettings();
   bool _panelChartTouched = false;
   static const _panelSettingsKey = 'tradelab-chart-panel-settings-v1';
   static const _scaleSettingsKey = 'tradelab-chart-scale-settings-v1';
+  static const _symbolSettingsKey = 'tradelab-chart-symbol-settings-v1';
   final _panelSettingsStorage = const FlutterSecureStorage();
   ChartViewport _gestureStart = const ChartViewport();
   late final AnimationController _momentum;
@@ -249,6 +254,7 @@ class _ChartScreenState extends State<ChartScreen>
     unawaited(_loadDrawingFavorites());
     unawaited(_loadPanelSettings());
     unawaited(_loadScaleSettings());
+    unawaited(_loadSymbolSettings());
     _momentum = AnimationController.unbounded(vsync: this)
       ..addListener(_tickMomentum);
     _linkedBefore = widget.controller.ctraderConnected;
@@ -349,6 +355,26 @@ class _ChartScreenState extends State<ChartScreen>
         key: _scaleSettingsKey, value: settings.encode());
     } catch (_) {
       // Keep committed in-memory preferences if the device store is locked.
+    }
+  }
+
+  Future<void> _loadSymbolSettings() async {
+    try {
+      final stored = await _panelSettingsStorage.read(key: _symbolSettingsKey);
+      if (stored != null && mounted) {
+        setState(() => _symbolSettings = ChartSymbolSettings.decode(stored));
+      }
+    } catch (_) {
+      // Preserve a functioning chart if local device storage is unavailable.
+    }
+  }
+
+  Future<void> _saveSymbolSettings(ChartSymbolSettings settings) async {
+    try {
+      await _panelSettingsStorage.write(
+        key: _symbolSettingsKey, value: settings.encode());
+    } catch (_) {
+      // A committed in-memory setting remains valid for this chart session.
     }
   }
 
@@ -2544,6 +2570,24 @@ class _ChartScreenState extends State<ChartScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_symbolSettingsOpen) {
+      return ChartSymbolSettingsPage(
+        initial: _symbolSettings,
+        onCancel: () => setState(() {
+          _symbolSettingsOpen = false;
+          _panelSettingsOpen = true;
+        }),
+        onApply: (updated) {
+          // Redraw the same cached bars; never issue a data request here.
+          setState(() {
+            _symbolSettings = updated;
+            _symbolSettingsOpen = false;
+            _panelSettingsOpen = false;
+          });
+          unawaited(_saveSymbolSettings(updated));
+        },
+      );
+    }
     if (_scaleSettingsOpen) {
       return ChartScaleSettingsPage(
         initial: _scaleSettings,
@@ -2567,6 +2611,10 @@ class _ChartScreenState extends State<ChartScreen>
         initial: _panelSettings,
         onOpenScales: () => setState(() {
           _scaleSettingsOpen = true;
+          _panelSettingsOpen = false;
+        }),
+        onOpenSymbol: () => setState(() {
+          _symbolSettingsOpen = true;
           _panelSettingsOpen = false;
         }),
         onCancel: () => setState(() => _panelSettingsOpen = false),
@@ -2971,6 +3019,7 @@ class _ChartScreenState extends State<ChartScreen>
                   indicator: _showIndicators,
                   panel: _panelSettings,
                   scaleSettings: _scaleSettings,
+                  symbolSettings: _symbolSettings,
                   actualPriceCandles: _mode == ChartMode.range
                     ? const [] : _replay
                       ? CandlePrefix(_actualCandles, _visibleThrough)
@@ -3234,6 +3283,7 @@ class _CandleChartPainter extends CustomPainter {
     required this.indicator,
     required this.panel,
     required this.scaleSettings,
+    required this.symbolSettings,
     required this.actualPriceCandles,
     required this.previousSessionClose,
     required this.sourceQuote,
@@ -3255,6 +3305,7 @@ class _CandleChartPainter extends CustomPainter {
   final bool indicator;
   final ChartPanelSettings panel;
   final ChartScaleSettings scaleSettings;
+  final ChartSymbolSettings symbolSettings;
   final List<TradeCandle> actualPriceCandles;
   final double? previousSessionClose;
   final MarketQuote? sourceQuote;
@@ -3284,7 +3335,8 @@ class _CandleChartPainter extends CustomPainter {
     // Reference: no visible candle-area grid. Labels derive from the actual
     // visible price interval, never from screenshot numbers or fake candles.
     final step = ChartAxisTicks.interval(minimum, maximum);
-    final decimals = ChartAxisTicks.decimals(step);
+    final decimals = symbolSettings.digitsForTickStep(
+      ChartAxisTicks.decimals(step));
     for (final tick in ChartAxisTicks.ticks(minimum, maximum)) {
       final py = y(tick);
       final important = (tick / (step * 5) -
@@ -3318,26 +3370,44 @@ class _CandleChartPainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, axis, chartHeight));
     final positiveWick = Paint()
-      ..color = TradeColors.positive
+      ..color = Color(symbolSettings.wickBull)
       ..strokeWidth = 1.0;
     final negativeWick = Paint()
-      ..color = TradeColors.negative
+      ..color = Color(symbolSettings.wickBear)
       ..strokeWidth = 1.0;
-    final positiveBody = Paint()..color = TradeColors.positive;
-    final negativeBody = Paint()..color = TradeColors.negative;
+    final positiveBody = Paint()..color = Color(symbolSettings.bodyBull);
+    final negativeBody = Paint()..color = Color(symbolSettings.bodyBear);
+    final positiveBorder = Paint()
+      ..color = Color(symbolSettings.borderBull)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+    final negativeBorder = Paint()
+      ..color = Color(symbolSettings.borderBear)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
     for (var i = start; i < ending; i++) {
       final candle = candles[i];
+      final rising = symbolSettings.colorByPreviousClose && i > 0
+          ? candle.close >= candles[i - 1].close : candle.positive;
       final centerX = viewport.chartX(
         index: i, candleCount: candles.length, plotWidth: axis);
       if (centerX < -viewport.barWidth || centerX > axis + viewport.barWidth) continue;
-      canvas.drawLine(Offset(centerX, y(candle.high)), Offset(centerX, y(candle.low)),
-          candle.positive ? positiveWick : negativeWick);
+      if (symbolSettings.wickVisible) {
+        canvas.drawLine(Offset(centerX, y(candle.high)), Offset(centerX, y(candle.low)),
+          rising ? positiveWick : negativeWick);
+      }
       final openY = y(candle.open);
       final closeY = y(candle.close);
-      canvas.drawRect(Rect.fromLTRB(
+      final bodyRect = Rect.fromLTRB(
         centerX - viewport.barWidth * .34, math.min(openY, closeY),
         centerX + viewport.barWidth * .34, math.max(openY + 1, closeY + 1),
-      ), candle.positive ? positiveBody : negativeBody);
+      );
+      if (symbolSettings.bodyVisible) {
+        canvas.drawRect(bodyRect, rising ? positiveBody : negativeBody);
+      }
+      if (symbolSettings.borderVisible) {
+        canvas.drawRect(bodyRect, rising ? positiveBorder : negativeBorder);
+      }
     }
     if (indicator) {
       final linePath = Path();
@@ -3518,8 +3588,7 @@ class _CandleChartPainter extends CustomPainter {
         final index = viewport.indexAt(x: x, plotWidth: axis,
             candleCount: candles.length);
         if (index == null) continue;
-        final date = DateTime.fromMillisecondsSinceEpoch(timestamps[index], isUtc: true);
-        final local = date.toLocal();
+        final local = symbolSettings.timeZone.displayDate(timestamps[index]);
         final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
         final isDayBoundary = priorTick == null ||
           priorTick.day != local.day || priorTick.month != local.month ||
@@ -3558,7 +3627,7 @@ class _CandleChartPainter extends CustomPainter {
         final index = viewport.indexAt(
             x: location.dx, plotWidth: axis, candleCount: candles.length);
         if (index != null) {
-          final date = DateTime.fromMillisecondsSinceEpoch(timestamps[index], isUtc: true);
+          final date = symbolSettings.timeZone.displayDate(timestamps[index]);
           final startX = (location.dx - 37).clamp(0.0, axis - 75).toDouble();
           canvas.drawRect(Rect.fromLTWH(startX, chartHeight, 75, 20),
               Paint()..color = TradeColors.blue);
@@ -3574,7 +3643,8 @@ class _CandleChartPainter extends CustomPainter {
           Color(panel.axisTextColor),
           math.max(9, panel.axisTextSize - 2).toDouble());
     } else {
-      _text(canvas, 'UTC', Offset(3, chartHeight + 4), text, 9);
+      _text(canvas, symbolSettings.timeZone.labelAt(DateTime.now().toUtc()),
+        Offset(3, chartHeight + 4), text, 9, rtl: true);
     }
   }
 
@@ -3718,6 +3788,7 @@ class _CandleChartPainter extends CustomPainter {
       old.dark != dark || old.viewport != viewport ||
       old.panel != panel ||
       old.scaleSettings != scaleSettings ||
+      old.symbolSettings != symbolSettings ||
       old.actualPriceCandles != actualPriceCandles ||
       old.previousSessionClose != previousSessionClose ||
       old.sourceQuote != sourceQuote ||
