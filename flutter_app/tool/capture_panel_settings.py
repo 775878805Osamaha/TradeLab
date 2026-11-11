@@ -1,4 +1,4 @@
-"""Capture the real PROMPT 11 panel settings page on an Android emulator.
+"""Capture the real PROMPT 11 panel and PROMPT 13 price-scale settings.
 
 The prior workflow step leaves favorites open. Navigate using the Android
 accessibility tree; capture both the available upper reference and the lower
@@ -38,8 +38,8 @@ def save(path):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print('Usage: capture_panel_settings.py <top.png> <bottom.png>',
+    if len(sys.argv) not in (3, 4):
+        print('Usage: capture_panel_settings.py <top.png> <bottom.png> [price-scale.png]',
               file=sys.stderr)
         return 2
 
@@ -77,6 +77,37 @@ def main():
         print('Fixed confirmation footer disappeared', file=sys.stderr)
         return 1
     save(sys.argv[2])
+    if len(sys.argv) == 4:
+        if not tap_label('•••'):
+            print('Could not open fixed settings more button', file=sys.stderr)
+            return 1
+        if not tap_label('المقاييس والخطوط'):
+            print('Could not open price/time scale page', file=sys.stderr)
+            return 1
+        if not center_of(ui_tree(), 'إغلاق اليوم السابق'):
+            # The price-scale page opens at top, matching the reference upper
+            # frame. Scroll the actual form, never reposition screenshot pixels.
+            for _ in range(5):
+                adb('shell', 'input', 'swipe', str(width // 2),
+                    str(max(header_y + 180, footer_y - 120)),
+                    str(width // 2), str(header_y + 85), '400')
+                time.sleep(.6)
+                if center_of(ui_tree(), 'مقياس الوقت'):
+                    break
+        for _ in range(5):
+            if center_of(ui_tree(), 'مقياس الوقت'):
+                break
+            adb('shell', 'input', 'swipe', str(width // 2),
+                str(max(header_y + 180, footer_y - 120)),
+                str(width // 2), str(header_y + 85), '400')
+            time.sleep(.6)
+        else:
+            print('Could not reach the time-scale section', file=sys.stderr)
+            return 1
+        if not center_of(ui_tree(), 'موافق'):
+            print('Scale page confirmation footer disappeared', file=sys.stderr)
+            return 1
+        save(sys.argv[3])
     return 0
 
 
