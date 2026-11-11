@@ -105,9 +105,17 @@ class _ChartScreenState extends State<ChartScreen>
     DrawingCatalogKind.horizontal,
     DrawingCatalogKind.horizontalRay,
     DrawingCatalogKind.verticalLine,
+    DrawingCatalogKind.shortPosition,
+    DrawingCatalogKind.longPosition,
+    DrawingCatalogKind.fixedVolumeProfile,
+    DrawingCatalogKind.ellipse,
+    DrawingCatalogKind.priceRectangle,
   };
   static const _drawingFavoritesKey = 'tradelab-drawing-favorites-v1';
+  static const _drawingFavoritesVisibleKey =
+      'tradelab-drawing-favorites-visible-v1';
   final _drawingFavoritesStorage = const FlutterSecureStorage();
+  bool _showFavoriteShortcuts = true;
   bool _placingShort = false;
   bool _placingRectangle = false;
   ChartAnchor? _rectangleFirstCorner;
@@ -245,11 +253,19 @@ class _ChartScreenState extends State<ChartScreen>
     try {
       final stored = await _drawingFavoritesStorage.read(
           key: _drawingFavoritesKey);
-      if (!mounted || stored == null) return;
-      final favorites = DrawingFavoritesCodec.decode(stored);
-      setState(() => _favoriteDrawingTools
-        ..clear()
-        ..addAll(favorites));
+      final savedVisibility = await _drawingFavoritesStorage.read(
+          key: _drawingFavoritesVisibleKey);
+      if (!mounted) return;
+      setState(() {
+        if (stored != null) {
+          _favoriteDrawingTools
+            ..clear()
+            ..addAll(DrawingFavoritesCodec.decode(stored));
+        }
+        if (savedVisibility != null) {
+          _showFavoriteShortcuts = savedVisibility == 'true';
+        }
+      });
     } catch (_) {
       // Drawing access must remain usable on devices without a secure store.
     }
@@ -263,6 +279,17 @@ class _ChartScreenState extends State<ChartScreen>
       );
     } catch (_) {
       // A storage error must not interrupt chart gestures or drawing selection.
+    }
+  }
+
+  Future<void> _persistDrawingFavoriteVisibility() async {
+    try {
+      await _drawingFavoritesStorage.write(
+        key: _drawingFavoritesVisibleKey,
+        value: _showFavoriteShortcuts.toString(),
+      );
+    } catch (_) {
+      // The visible state remains effective for the active chart session.
     }
   }
 
@@ -1425,8 +1452,15 @@ class _ChartScreenState extends State<ChartScreen>
       builder: (sheetContext) => DrawingToolsSheet(
         initialCategory: DrawingCategory.trend,
         favorites: _favoriteDrawingTools,
+        showFavoriteShortcuts: _showFavoriteShortcuts,
+        onShowFavoriteShortcutsChanged: (visible) {
+          if (!mounted) return;
+          setState(() => _showFavoriteShortcuts = visible);
+          unawaited(_persistDrawingFavoriteVisibility());
+        },
         onFavoritesChanged: (favorites) {
-          _favoriteDrawingTools..clear()..addAll(favorites);
+          if (!mounted) return;
+          setState(() => _favoriteDrawingTools..clear()..addAll(favorites));
           unawaited(_persistDrawingFavorites());
         },
         onGeneralAction: (action) {
@@ -1460,36 +1494,40 @@ class _ChartScreenState extends State<ChartScreen>
         ),
         onSelect: (tool) {
           Navigator.pop(sheetContext);
-          switch (tool) {
-            case DrawingCatalogKind.fibonacciRetracement:
-              _selectDrawingMode(tool: ChartDrawingTool.fibonacci);
-            case DrawingCatalogKind.trendLine:
-              _selectDrawingMode(tool: ChartDrawingTool.trendLine);
-            case DrawingCatalogKind.ray:
-              _selectDrawingMode(tool: ChartDrawingTool.ray);
-            case DrawingCatalogKind.extendedLine:
-              _selectDrawingMode(tool: ChartDrawingTool.extendedLine);
-            case DrawingCatalogKind.horizontal:
-              _selectDrawingMode(tool: ChartDrawingTool.horizontal);
-            case DrawingCatalogKind.horizontalRay:
-              _selectDrawingMode(tool: ChartDrawingTool.horizontalRay);
-            case DrawingCatalogKind.verticalLine:
-              _selectDrawingMode(tool: ChartDrawingTool.verticalLine);
-            case DrawingCatalogKind.parallelChannel:
-              _selectDrawingMode(tool: ChartDrawingTool.parallelChannel);
-            case DrawingCatalogKind.shortPosition:
-              _selectDrawingMode(short: true);
-            case DrawingCatalogKind.priceRectangle:
-              _selectDrawingMode(rectangle: true);
-            case DrawingCatalogKind.magnet:
-              _showMagnetSettings();
-            default:
-              // These entries are guarded by DrawingCatalogKind.implemented.
-              break;
-          }
+          _activateCatalogDrawingTool(tool);
         },
       ),
     );
+  }
+
+  void _activateCatalogDrawingTool(DrawingCatalogKind tool) {
+    switch (tool) {
+      case DrawingCatalogKind.fibonacciRetracement:
+        _selectDrawingMode(tool: ChartDrawingTool.fibonacci);
+      case DrawingCatalogKind.trendLine:
+        _selectDrawingMode(tool: ChartDrawingTool.trendLine);
+      case DrawingCatalogKind.ray:
+        _selectDrawingMode(tool: ChartDrawingTool.ray);
+      case DrawingCatalogKind.extendedLine:
+        _selectDrawingMode(tool: ChartDrawingTool.extendedLine);
+      case DrawingCatalogKind.horizontal:
+        _selectDrawingMode(tool: ChartDrawingTool.horizontal);
+      case DrawingCatalogKind.horizontalRay:
+        _selectDrawingMode(tool: ChartDrawingTool.horizontalRay);
+      case DrawingCatalogKind.verticalLine:
+        _selectDrawingMode(tool: ChartDrawingTool.verticalLine);
+      case DrawingCatalogKind.parallelChannel:
+        _selectDrawingMode(tool: ChartDrawingTool.parallelChannel);
+      case DrawingCatalogKind.shortPosition:
+        _selectDrawingMode(short: true);
+      case DrawingCatalogKind.priceRectangle:
+        _selectDrawingMode(rectangle: true);
+      case DrawingCatalogKind.magnet:
+        _showMagnetSettings();
+      default:
+        // Unsupported reference entries are visible in the catalog only.
+        break;
+    }
   }
 
   void _drawingNotice(String message) {
@@ -1949,61 +1987,22 @@ class _ChartScreenState extends State<ChartScreen>
             }),
             icon: const Icon(Icons.vertical_align_center, size: 22),
           ),
+          if (_showFavoriteShortcuts)
+            for (final tool in DrawingFavoriteGroups.fromSelection(
+                    _favoriteDrawingTools).values.expand((items) => items))
+              if (tool.implemented)
+                IconButton(
+                  key: Key('drawing-rail-favorite-${tool.name}'),
+                  tooltip: tool.label,
+                  onPressed: () => _activateCatalogDrawingTool(tool),
+                  icon: SizedBox(width: 24, height: 24,
+                    child: CustomPaint(painter: DrawingToolGlyphPainter(tool))),
+                ),
           IconButton(
-            tooltip: 'خط اتجاه',
-            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.trendLine),
-            icon: const Icon(Icons.show_chart, size: 22),
-          ),
-          IconButton(
-            tooltip: 'تصحيح فيبوناتشي',
-            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.fibonacci),
-            icon: const Icon(Icons.segment, size: 22),
-          ),
-          IconButton(
-            tooltip: 'خط شعاع',
-            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.ray),
-            icon: const Icon(Icons.radio_button_unchecked, size: 22),
-          ),
-          IconButton(
-            tooltip: 'خط أفقي',
-            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.horizontal),
-            icon: const Icon(Icons.horizontal_rule, size: 22),
-          ),
-          IconButton(
-            tooltip: 'شعاع أفقي',
-            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.horizontalRay),
-            icon: const Icon(Icons.linear_scale, size: 22),
-          ),
-          IconButton(
-            tooltip: 'خط رأسي',
-            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.verticalLine),
-            icon: const Icon(Icons.vertical_align_center, size: 22),
-          ),
-          IconButton(
-            tooltip: 'قناة متوازية',
-            onPressed: () => _selectDrawingMode(tool: ChartDrawingTool.parallelChannel),
-            icon: const Icon(Icons.tune, size: 22),
-          ),
-          IconButton(
-            key: const Key('drawing-rail-short'),
-            tooltip: 'أداة مركز بيع',
-            onPressed: () => _selectDrawingMode(short: true),
-            icon: Icon(Icons.flag_outlined, size: 22,
-              color: _placingShort || _selectedShort != null
-                  ? TradeColors.shortHandle : null),
-          ),
-          IconButton(
-            key: const Key('drawing-rail-rectangle'),
-            tooltip: 'مستطيل نطاق سعري',
-            onPressed: () => _selectDrawingMode(rectangle: true),
-            icon: Icon(Icons.crop_square_outlined, size: 22,
-              color: _placingRectangle || _selectedRectangle != null
-                  ? TradeColors.rectangleHandle : null),
-          ),
-          IconButton(
-            tooltip: 'مغناطيس الأسعار',
+            key: const Key('drawing-rail-open-catalog'),
+            tooltip: 'أدوات الرسم',
             onPressed: _showDrawingTools,
-            icon: const Icon(Icons.text_fields, size: 22),
+            icon: const Icon(Icons.edit_outlined, size: 22),
           ),
         ]),
       ),

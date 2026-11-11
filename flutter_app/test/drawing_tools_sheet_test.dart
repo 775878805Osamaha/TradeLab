@@ -69,6 +69,47 @@ void main() {
     });
   });
 
+  const referenceFavorites = <DrawingCatalogKind>{
+    DrawingCatalogKind.verticalLine,
+    DrawingCatalogKind.trendLine,
+    DrawingCatalogKind.horizontalRay,
+    DrawingCatalogKind.horizontal,
+    DrawingCatalogKind.fibonacciRetracement,
+    DrawingCatalogKind.shortPosition,
+    DrawingCatalogKind.longPosition,
+    DrawingCatalogKind.fixedVolumeProfile,
+    DrawingCatalogKind.ellipse,
+    DrawingCatalogKind.priceRectangle,
+  };
+
+  test('PROMPT 09 favorite grouping follows RTL reference and stored selection', () {
+    final grouped = DrawingFavoriteGroups.fromSelection(referenceFavorites);
+    expect(grouped.keys.toList(), [
+      DrawingFavoriteSection.trend, DrawingFavoriteSection.gann,
+      DrawingFavoriteSection.forecast, DrawingFavoriteSection.shapes,
+    ]);
+    expect(grouped[DrawingFavoriteSection.trend], [
+      DrawingCatalogKind.verticalLine, DrawingCatalogKind.trendLine,
+      DrawingCatalogKind.horizontalRay, DrawingCatalogKind.horizontal,
+    ]);
+    expect(grouped[DrawingFavoriteSection.forecast], [
+      DrawingCatalogKind.shortPosition, DrawingCatalogKind.longPosition,
+      DrawingCatalogKind.fixedVolumeProfile,
+    ]);
+    expect(grouped[DrawingFavoriteSection.shapes], [
+      DrawingCatalogKind.ellipse, DrawingCatalogKind.priceRectangle,
+    ]);
+    final searched = DrawingFavoriteGroups.fromSelection(
+      referenceFavorites, query: 'خط');
+    expect(searched.values.expand((tools) => tools), [
+      DrawingCatalogKind.verticalLine, DrawingCatalogKind.trendLine,
+      DrawingCatalogKind.horizontal,
+    ]);
+    expect(searched.values.expand((tools) => tools),
+        isNot(contains(DrawingCatalogKind.extendedLine)));
+    expect(DrawingFavoriteGroups.fromSelection({}).isEmpty, isTrue);
+  });
+
   Future<void> pumpCatalog(WidgetTester tester, {
     Size size = const Size(345.5, 768),
     DrawingCategory initialCategory = DrawingCategory.gann,
@@ -77,6 +118,9 @@ void main() {
     ValueChanged<Set<DrawingCatalogKind>>? onFavoritesChanged,
     ValueChanged<DrawingGeneralAction>? onGeneralAction,
     ValueChanged<DrawingGeneralAction>? onGeneralMore,
+    Set<DrawingCatalogKind>? favorites,
+    bool showFavoriteShortcuts = true,
+    ValueChanged<bool>? onShowFavoriteShortcutsChanged,
   }) async {
     tester.view.devicePixelRatio = 2;
     tester.view.physicalSize = size * 2;
@@ -92,13 +136,16 @@ void main() {
             backgroundColor: Colors.transparent,
             builder: (_) => DrawingToolsSheet(
               initialCategory: initialCategory,
-              favorites: {
+              favorites: favorites ?? {
                 DrawingCatalogKind.fibonacciRetracement,
                 DrawingCatalogKind.trendLine,
                 DrawingCatalogKind.horizontal,
                 DrawingCatalogKind.horizontalRay,
                 DrawingCatalogKind.verticalLine,
               },
+              showFavoriteShortcuts: showFavoriteShortcuts,
+              onShowFavoriteShortcutsChanged:
+                  onShowFavoriteShortcutsChanged,
               onFavoritesChanged: onFavoritesChanged ?? (_) {},
               onSelect: onSelect ?? (_) {},
               onUnavailable: onUnavailable ?? (_) {},
@@ -254,6 +301,90 @@ void main() {
     await pumpCatalog(tester, initialCategory: DrawingCategory.trend);
     await expectLater(find.byKey(const Key('drawing-tools-bottom-sheet')),
         matchesGoldenFile('goldens/trend_drawing_tools.png'));
+  });
+
+  testWidgets('PROMPT 09 grouped cards, fixed footer and selected favorites tab',
+      (tester) async {
+    await pumpCatalog(tester,
+      initialCategory: DrawingCategory.favorites,
+      favorites: referenceFavorites);
+    expect(find.byKey(const Key('drawing-category-favorites')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-favorite-section-trend')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-favorite-section-gann')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-favorite-section-forecast')), findsOneWidget);
+    final right = tester.getRect(find.byKey(
+        const Key('drawing-tool-verticalLine')));
+    final center = tester.getRect(find.byKey(
+        const Key('drawing-tool-trendLine')));
+    final left = tester.getRect(find.byKey(
+        const Key('drawing-tool-horizontalRay')));
+    expect(right.left, greaterThan(center.right));
+    expect(center.left, greaterThan(left.right));
+    expect(right.top, moreOrLessEquals(left.top, epsilon: .5));
+    final horizontal = tester.getRect(find.byKey(
+        const Key('drawing-tool-horizontal')));
+    expect(horizontal.top, greaterThan(right.bottom));
+    expect(horizontal.left, moreOrLessEquals(right.left, epsilon: .5));
+    final footer = tester.getRect(find.byKey(
+        const Key('drawing-favorite-footer')));
+    await tester.drag(find.byKey(const Key('drawing-favorites-list')),
+        const Offset(0, -400));
+    await tester.pump();
+    expect(tester.getRect(find.byKey(const Key('drawing-favorite-footer'))),
+        footer);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('PROMPT 09 removing favorite immediately removes card',
+      (tester) async {
+    Set<DrawingCatalogKind>? updated;
+    await pumpCatalog(tester, initialCategory: DrawingCategory.favorites,
+      favorites: referenceFavorites, onFavoritesChanged: (value) => updated = value);
+    await tester.tap(find.byKey(
+        const Key('drawing-favorite-horizontalRay')));
+    await tester.pump();
+    expect(updated, isNot(contains(DrawingCatalogKind.horizontalRay)));
+    expect(find.byKey(const Key('drawing-tool-horizontalRay')), findsNothing);
+    expect(find.byKey(const Key('drawing-tool-trendLine')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('PROMPT 09 search only includes actual favorites',
+      (tester) async {
+    await pumpCatalog(tester, initialCategory: DrawingCategory.favorites,
+      favorites: referenceFavorites);
+    await tester.enterText(find.byKey(const Key('drawing-tools-search')),
+        'خط');
+    await tester.pump();
+    expect(find.byKey(const Key('drawing-tool-horizontal')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-tool-extendedLine')), findsNothing);
+    expect(find.byKey(const Key('drawing-tool-horizontalRay')), findsNothing);
+    expect(find.byKey(const Key('drawing-favorite-footer')), findsOneWidget);
+  });
+
+  testWidgets('PROMPT 09 visibility switch persists callback without removing drawings',
+      (tester) async {
+    final changed = <bool>[];
+    await pumpCatalog(tester, initialCategory: DrawingCategory.favorites,
+      favorites: referenceFavorites,
+      onShowFavoriteShortcutsChanged: changed.add);
+    final control = find.byKey(const Key('drawing-favorite-visibility-switch'));
+    expect(control, findsOneWidget);
+    await tester.tap(control);
+    await tester.pump();
+    expect(changed, [false]);
+    expect(find.byKey(const Key('drawing-tool-verticalLine')), findsOneWidget);
+    await tester.tap(control);
+    await tester.pump();
+    expect(changed, [false, true]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('PROMPT 09 reference fixture golden', (tester) async {
+    await pumpCatalog(tester, initialCategory: DrawingCategory.favorites,
+      favorites: referenceFavorites);
+    await expectLater(find.byKey(const Key('drawing-tools-bottom-sheet')),
+        matchesGoldenFile('goldens/favorites_drawing_tools.png'));
   });
 
   test('PROMPT 07 defines exactly nine commands and the expected surfaces', () {

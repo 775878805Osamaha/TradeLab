@@ -62,7 +62,7 @@ jobs:
         run: flutter test --update-goldens test/chart_price_rectangle_test.dart
       - name: Verify 21 chart-kind cards and capture selected-candles sheet
         run: flutter test --update-goldens test/chart_type_sheet_test.dart
-      - name: Verify Gann, trend and general drawing catalogs, actions, RTL and goldens
+      - name: Verify Gann, trend, general and favorite drawing catalogs, RTL and goldens
         run: flutter test --update-goldens test/drawing_tools_sheet_test.dart
       - name: Verify PROMPT 06 analysis hub layout, actions and golden
         run: flutter test --update-goldens test/analysis_hub_sheet_test.dart
@@ -122,6 +122,7 @@ jobs:
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_trend_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_trend_drawing_tools_sheet.png"
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_analysis_hub_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_analysis_hub_sheet.png"
             python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_general_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_general_drawing_tools_sheet.png"
+            python3 "$GITHUB_WORKSPACE/flutter_app/tool/capture_favorite_drawing_tools_sheet.py" "$GITHUB_WORKSPACE/flutter_app/build/tradelab_favorite_drawing_tools_sheet.png"
       - name: Upload real Android emulator screenshot
         uses: actions/upload-artifact@v4
         with:
@@ -207,6 +208,20 @@ jobs:
           name: TradeLab-Android-General-Drawing-Commands
           path: flutter_app/build/tradelab_general_drawing_tools_sheet.png
           if-no-files-found: error
+      - name: Upload PROMPT 09 favorite drawing groups golden
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Favorite-Drawing-Groups-Golden
+          path: flutter_app/test/goldens/favorites_drawing_tools.png
+          if-no-files-found: warn
+      - name: Upload actual Android PROMPT 09 favorites sheet screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Android-Favorite-Drawing-Groups
+          path: flutter_app/build/tradelab_favorite_drawing_tools_sheet.png
+          if-no-files-found: warn
       - name: Publish direct APK as GitHub prerelease
         if: github.event_name != 'pull_request'
         env:
