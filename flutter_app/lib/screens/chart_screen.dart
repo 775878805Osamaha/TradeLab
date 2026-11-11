@@ -2921,6 +2921,7 @@ class _ChartScreenState extends State<ChartScreen>
                   showShortLabels: _showShortLabels,
                   indicator: _showIndicators,
                   panel: _panelSettings,
+                  replayActive: _replay,
                 ),
               ),
             ),
@@ -3173,6 +3174,7 @@ class _CandleChartPainter extends CustomPainter {
     required this.showShortLabels,
     required this.indicator,
     required this.panel,
+    required this.replayActive,
   });
 
   final List<TradeCandle> candles;
@@ -3189,10 +3191,12 @@ class _CandleChartPainter extends CustomPainter {
   final bool showShortLabels;
   final bool indicator;
   final ChartPanelSettings panel;
+  final bool replayActive;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final background = dark ? const Color(0xFF000D16) : Colors.white;
+    final background = dark && panel.backgroundColor == 0xFFFFFFFF
+        ? const Color(0xFF000D16) : Color(panel.backgroundColor);
     final text = dark ? const Color(0xFFC1C7D0) : const Color(0xFF101010);
     canvas.drawRect(Offset.zero & size, Paint()..color = background);
     final axis = size.width - 61;
@@ -3223,18 +3227,21 @@ class _CandleChartPainter extends CustomPainter {
           panel.axisTextSize.toDouble(),
           bold: important);
       if (panel.horizontalGridVisible && py >= 0 && py < chartHeight) {
-        canvas.drawLine(Offset(0, py), Offset(axis, py), Paint()
-          ..color = const Color(0xFFEEEEEE)
-          ..strokeWidth = .55);
+        _configuredLine(canvas, Offset(0, py), Offset(axis, py),
+          Color(panel.horizontalGridColor), panel.horizontalGridStroke, .55);
       }
     }
     if (panel.verticalGridVisible) {
       for (var tick = 1; tick < 5; tick++) {
         final x = axis * tick / 5;
-        canvas.drawLine(Offset(x, 0), Offset(x, chartHeight), Paint()
-          ..color = const Color(0xFFEEEEEE)
-          ..strokeWidth = .55);
+        _configuredLine(canvas, Offset(x, 0), Offset(x, chartHeight),
+          Color(panel.verticalGridColor), panel.verticalGridStroke, .55);
       }
+    }
+    if (replayActive && panel.watermarkMode == ChartWatermarkMode.replay &&
+        Color(panel.watermarkColor).a > 0) {
+      _text(canvas, 'Replay', Offset(axis * .38, chartHeight * .40),
+        Color(panel.watermarkColor), 30, bold: true);
     }
     if (panel.scaleLineColor != 0x00000000) {
       canvas.drawLine(Offset(axis, 0), Offset(axis, chartHeight), Paint()
@@ -3404,13 +3411,12 @@ class _CandleChartPainter extends CustomPainter {
         crosshair!.dx.clamp(0, axis).toDouble(),
         crosshair!.dy.clamp(0, chartHeight).toDouble(),
       );
-      final crossPaint = Paint()
-        ..color = dark ? const Color(0xFF9CA9B9) : const Color(0xFF8692A3)
-        ..strokeWidth = 1;
-      canvas.drawLine(Offset(location.dx, 0),
-          Offset(location.dx, chartHeight), crossPaint);
-      canvas.drawLine(Offset(0, location.dy),
-          Offset(axis, location.dy), crossPaint);
+      _configuredLine(canvas, Offset(location.dx, 0),
+        Offset(location.dx, chartHeight), Color(panel.crosshairColor),
+        panel.crosshairStroke, 1);
+      _configuredLine(canvas, Offset(0, location.dy),
+        Offset(axis, location.dy), Color(panel.crosshairColor),
+        panel.crosshairStroke, 1);
       final crossPrice = maximum - location.dy / chartHeight * span;
       final markerY = (location.dy - 9).clamp(0, chartHeight - 18).toDouble();
       canvas.drawRect(Rect.fromLTWH(axis, markerY, 61, 18),
@@ -3545,6 +3551,23 @@ class _CandleChartPainter extends CustomPainter {
     painter.paint(canvas, Offset(left + 6, top + 4));
   }
 
+  static void _configuredLine(Canvas canvas, Offset from, Offset to,
+    Color color, ChartGridStroke stroke, double width) {
+    final paint = Paint()..color = color..strokeWidth = width;
+    if (stroke == ChartGridStroke.solid) {
+      canvas.drawLine(from, to, paint);
+      return;
+    }
+    final delta = to - from;
+    final distance = delta.distance;
+    if (distance < .01) return;
+    final direction = delta / distance;
+    for (var at = 0.0; at < distance; at += 8) {
+      canvas.drawLine(from + direction * at,
+        from + direction * math.min(at + 4, distance), paint);
+    }
+  }
+
   static String _price(double value, int digits) {
     final parts = value.toStringAsFixed(digits).split('.');
     final integer = parts.first.replaceAllMapped(
@@ -3563,6 +3586,7 @@ class _CandleChartPainter extends CustomPainter {
       old.candles != candles || old.timestamps != timestamps ||
       old.dark != dark || old.viewport != viewport ||
       old.panel != panel ||
+      old.replayActive != replayActive ||
       old.crosshair != crosshair || old.indicator != indicator ||
       !listEquals(old.levels, levels) ||
       !listEquals(old.patterns, patterns) ||
