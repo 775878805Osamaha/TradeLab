@@ -43,6 +43,15 @@ abstract final class TradeColors {
   static const analysisHandle = Color(0xFFE3E3E3);
   static const analysisBrokerPink = Color(0xFFEE4F9B);
   static const analysisBrokerBlue = Color(0xFF4388F0);
+  // PROMPT 11: chart-panel settings use the white reference surface rather
+  // than Material 3's tinted form-field treatment.
+  static const panelSurface = Color(0xFFFFFFFF);
+  static const panelInk = Color(0xFF101010);
+  static const panelMuted = Color(0xFF777777);
+  static const panelBorder = Color(0xFFDADADA);
+  static const panelAccept = Color(0xFF222222);
+  static const panelCheckerLight = Color(0xFFF2F2F2);
+  static const panelCheckerDark = Color(0xFFAAAAAF);
   static const gold = Color(0xFFF5A623);
 
   static const lightCanvas = Color(0xFFF4F6FA);

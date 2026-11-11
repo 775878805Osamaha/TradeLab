@@ -14,6 +14,8 @@ import '../chart/chart_type_sheet.dart';
 import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
+import '../chart/chart_panel_settings.dart';
+import '../chart/chart_panel_settings_page.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_timeline.dart';
@@ -136,7 +138,13 @@ class _ChartScreenState extends State<ChartScreen>
   bool _showIndicators = false;
   bool _showShortLabels = true;
   int _visibleThrough = 60;
-  ChartViewport _viewport = const ChartViewport(barWidth: 5.5, scrollBars: -5);
+  ChartViewport _viewport = const ChartViewport(
+    barWidth: 5.5, scrollBars: -5, rightMarginBars: 10);
+  ChartPanelSettings _panelSettings = const ChartPanelSettings();
+  bool _panelSettingsOpen = false;
+  bool _panelChartTouched = false;
+  static const _panelSettingsKey = 'tradelab-chart-panel-settings-v1';
+  final _panelSettingsStorage = const FlutterSecureStorage();
   ChartViewport _gestureStart = const ChartViewport();
   late final AnimationController _momentum;
   double _previousMomentumX = 0;
@@ -233,6 +241,7 @@ class _ChartScreenState extends State<ChartScreen>
   void initState() {
     super.initState();
     unawaited(_loadDrawingFavorites());
+    unawaited(_loadPanelSettings());
     _momentum = AnimationController.unbounded(vsync: this)
       ..addListener(_tickMomentum);
     _linkedBefore = widget.controller.ctraderConnected;
@@ -292,6 +301,32 @@ class _ChartScreenState extends State<ChartScreen>
       // The visible state remains effective for the active chart session.
     }
   }
+
+  Future<void> _loadPanelSettings() async {
+    try {
+      final saved = await _panelSettingsStorage.read(key: _panelSettingsKey);
+      if (saved == null || !mounted) return;
+      final loaded = ChartPanelSettings.decode(saved);
+      setState(() {
+        _panelSettings = loaded;
+        _viewport = _viewport.withRightMarginBars(loaded.rightMarginBars.toDouble());
+      });
+    } catch (_) {
+      // Keep readable defaults when secure storage is unavailable.
+    }
+  }
+
+  Future<void> _savePanelSettings(ChartPanelSettings settings) async {
+    try {
+      await _panelSettingsStorage.write(
+        key: _panelSettingsKey, value: settings.encode());
+    } catch (_) {
+      // The chart still uses the committed settings for this session.
+    }
+  }
+
+  ChartViewport _freshViewport() => ChartViewport(
+    rightMarginBars: _panelSettings.rightMarginBars.toDouble());
 
   @override
   void didChangeDependencies() {
@@ -985,7 +1020,7 @@ class _ChartScreenState extends State<ChartScreen>
         }
         _replay = !_replay;
         _visibleThrough = math.max(1, _totalBars ~/ 2);
-        _viewport = const ChartViewport();
+        _viewport = _freshViewport();
         _crosshair = null;
         _selectedLine = null;
         _selectedPattern = null;
@@ -1106,7 +1141,7 @@ class _ChartScreenState extends State<ChartScreen>
                     setState(() {
                       _stopPlayback();
                       _symbol = item.code;
-                      _viewport = const ChartViewport();
+                      _viewport = _freshViewport();
                       _resetDrawingObjects();
                     });
                     Navigator.pop(sheetContext);
@@ -1137,7 +1172,7 @@ class _ChartScreenState extends State<ChartScreen>
                     onSelected: (_) {
                       setState(() {
                         _timeframe = frame;
-                        _viewport = const ChartViewport();
+                        _viewport = _freshViewport();
                         _resetDrawingObjects();
                       });
                       Navigator.pop(sheetContext);
@@ -1246,35 +1281,10 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showChartAppearance() async {
-    await showModalBottomSheet<void>(context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(child: StatefulBuilder(
-        builder: (context, updateSheet) => Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const TradeSectionTitle('إعداد التنسيق'),
-            SwitchListTile(
-              title: const Text('المتوسط المتحرك (12)',
-                textDirection: TextDirection.rtl),
-              value: _showIndicators,
-              onChanged: (value) {
-                setState(() => _showIndicators = value);
-                updateSheet(() {});
-              },
-            ),
-            SwitchListTile(
-              title: const Text('إظهار تسميات مركز البيع',
-                textDirection: TextDirection.rtl),
-              value: _showShortLabels,
-              onChanged: (value) {
-                setState(() => _showShortLabels = value);
-                updateSheet(() {});
-              },
-            ),
-          ]),
-        ),
-      )),
-    );
+    // The reference settings page remains inside the chart tab so the chart,
+    // fetched market history, Replay cursor and parent navigation survive.
+    _momentum.stop();
+    setState(() => _panelSettingsOpen = true);
   }
 
   Future<void> _showObjectTree() async {
@@ -1365,7 +1375,7 @@ class _ChartScreenState extends State<ChartScreen>
               if (reload) {
                 // Range has different bar identities; merely opening or
                 // dismissing this sheet never resets zoom, Replay or cache.
-                _viewport = const ChartViewport();
+                _viewport = _freshViewport();
                 _resetDrawingObjects();
               }
             });
@@ -1402,7 +1412,7 @@ class _ChartScreenState extends State<ChartScreen>
                     if (changed) {
                       setState(() {
                         _rangeTicks = size;
-                        _viewport = const ChartViewport();
+                        _viewport = _freshViewport();
                         _resetDrawingObjects();
                       });
                     }
@@ -1712,7 +1722,9 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   ChartPriceScale _priceScale(List<TradeCandle> candles, double width, double height) =>
-      ChartPriceScale.visible(candles, _viewport, width, math.max(1, height - 24));
+      ChartPriceScale.visible(candles, _viewport, width, math.max(1, height - 24),
+        topMarginPercent: _panelSettings.topMarginPercent,
+        bottomMarginPercent: _panelSettings.bottomMarginPercent);
 
   int? _hitLine(double y, ChartPriceScale scale) {
     for (var index = _levels.length - 1; index >= 0; index--) {
@@ -2477,15 +2489,22 @@ class _ChartScreenState extends State<ChartScreen>
         _iconAction(icon: Icons.functions, label: 'المؤشرات',
             active: _showIndicators,
             onPressed: () => setState(() => _showIndicators = !_showIndicators)),
-        _iconAction(icon: Icons.zoom_in_outlined,
-            label: 'تكبير الشارت', onPressed: () => _zoomBy(1.25)),
-        _iconAction(icon: Icons.zoom_out_outlined,
-            label: 'تصغير الشارت', onPressed: () => _zoomBy(.8)),
-        _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
-            onPressed: () {
-              _momentum.stop();
-              setState(() => _viewport = _viewport.jumpToLatest());
-            }),
+        if (_panelSettings.paneButtons == ChartButtonVisibility.always ||
+            (_panelSettings.paneButtons == ChartButtonVisibility.onTap &&
+              _panelChartTouched)) ...[
+          _iconAction(icon: Icons.zoom_in_outlined,
+              label: 'تكبير الشارت', onPressed: () => _zoomBy(1.25)),
+          _iconAction(icon: Icons.zoom_out_outlined,
+              label: 'تصغير الشارت', onPressed: () => _zoomBy(.8)),
+        ],
+        if (_panelSettings.navigationButtons == ChartButtonVisibility.always ||
+            (_panelSettings.navigationButtons == ChartButtonVisibility.onTap &&
+              _panelChartTouched))
+          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
+              onPressed: () {
+                _momentum.stop();
+                setState(() => _viewport = _viewport.jumpToLatest());
+              }),
         if (widget.journal != null && !_replay)
           _iconAction(icon: Icons.add_chart, label: 'صفقة تجريبية',
               onPressed: _openPaperOrder),
@@ -2498,6 +2517,21 @@ class _ChartScreenState extends State<ChartScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_panelSettingsOpen) {
+      return ChartPanelSettingsPage(
+        initial: _panelSettings,
+        onCancel: () => setState(() => _panelSettingsOpen = false),
+        onApply: (updated) {
+          setState(() {
+            _panelSettings = updated;
+            _viewport = _viewport.withRightMarginBars(
+              updated.rightMarginBars.toDouble());
+            _panelSettingsOpen = false;
+          });
+          unawaited(_savePanelSettings(updated));
+        },
+      );
+    }
     final colors = Theme.of(context).colorScheme;
     final candles = _displayCandles;
     final surface = colors.surface;
@@ -2543,6 +2577,7 @@ class _ChartScreenState extends State<ChartScreen>
             behavior: HitTestBehavior.opaque,
             onScaleStart: (details) {
               _momentum.stop(); // A new gesture owns the chart immediately.
+              if (!_panelChartTouched) setState(() => _panelChartTouched = true);
               _gestureHadMultiTouch = details.pointerCount > 1;
               _gestureStart = _viewport;
               _gestureFocalX = details.localFocalPoint.dx;
@@ -2694,7 +2729,7 @@ class _ChartScreenState extends State<ChartScreen>
             },
             onDoubleTap: () {
               _momentum.stop();
-              setState(() { _viewport = const ChartViewport(); _crosshair = null; });
+              setState(() { _viewport = _freshViewport(); _crosshair = null; });
             },
             onLongPressStart: (details) {
               _momentum.stop();
@@ -2885,6 +2920,7 @@ class _ChartScreenState extends State<ChartScreen>
                   selectedShort: _drawing && _drawingsVisible ? _selectedShort : null,
                   showShortLabels: _showShortLabels,
                   indicator: _showIndicators,
+                  panel: _panelSettings,
                 ),
               ),
             ),
@@ -3136,6 +3172,7 @@ class _CandleChartPainter extends CustomPainter {
     required this.selectedShort,
     required this.showShortLabels,
     required this.indicator,
+    required this.panel,
   });
 
   final List<TradeCandle> candles;
@@ -3151,6 +3188,7 @@ class _CandleChartPainter extends CustomPainter {
   final int? selectedShort;
   final bool showShortLabels;
   final bool indicator;
+  final ChartPanelSettings panel;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3165,7 +3203,9 @@ class _CandleChartPainter extends CustomPainter {
       candleCount: candles.length,
     );
     if (start >= ending) return;
-    final scale = ChartPriceScale.visible(candles, viewport, axis, chartHeight);
+    final scale = ChartPriceScale.visible(candles, viewport, axis, chartHeight,
+      topMarginPercent: panel.topMarginPercent,
+      bottomMarginPercent: panel.bottomMarginPercent);
     final maximum = scale.maximum;
     final minimum = scale.minimum;
     final span = math.max(.00001, maximum - minimum);
@@ -3179,8 +3219,27 @@ class _CandleChartPainter extends CustomPainter {
       final important = (tick / (step * 5) -
           (tick / (step * 5)).round()).abs() < 0.000001;
       _text(canvas, _price(tick, decimals),
-          Offset(axis + 6, py - 8), text, 12,
+          Offset(axis + 6, py - 8), Color(panel.axisTextColor),
+          panel.axisTextSize.toDouble(),
           bold: important);
+      if (panel.horizontalGridVisible && py >= 0 && py < chartHeight) {
+        canvas.drawLine(Offset(0, py), Offset(axis, py), Paint()
+          ..color = const Color(0xFFEEEEEE)
+          ..strokeWidth = .55);
+      }
+    }
+    if (panel.verticalGridVisible) {
+      for (var tick = 1; tick < 5; tick++) {
+        final x = axis * tick / 5;
+        canvas.drawLine(Offset(x, 0), Offset(x, chartHeight), Paint()
+          ..color = const Color(0xFFEEEEEE)
+          ..strokeWidth = .55);
+      }
+    }
+    if (panel.scaleLineColor != 0x00000000) {
+      canvas.drawLine(Offset(axis, 0), Offset(axis, chartHeight), Paint()
+        ..color = Color(panel.scaleLineColor)
+        ..strokeWidth = .75);
     }
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, axis, chartHeight));
@@ -3310,7 +3369,8 @@ class _CandleChartPainter extends CustomPainter {
       canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 30),
           Paint()..color = lastColor);
       _text(canvas, _price(lastClose, decimals),
-          Offset(axis + 3, tagY + 7), Colors.white, 12);
+          Offset(axis + 3, tagY + 7), Colors.white,
+          panel.axisTextSize.toDouble());
     }
     for (var i = 0; i < shortPositions.length; i++) {
       final item = shortPositions[i];
@@ -3334,7 +3394,9 @@ class _CandleChartPainter extends CustomPainter {
         final label = '${hour.toString().padLeft(2, '0')}:'
             '${local.minute.toString().padLeft(2, '0')} '
             '${local.hour < 12 ? 'AM' : 'PM'}';
-        _text(canvas, label, Offset(x - 26, chartHeight + 4), text, 10);
+      _text(canvas, label, Offset(x - 26, chartHeight + 4),
+          Color(panel.axisTextColor),
+          math.max(9, panel.axisTextSize - 2).toDouble());
       }
     }
     if (crosshair != null) {
@@ -3371,7 +3433,9 @@ class _CandleChartPainter extends CustomPainter {
     // A separate LTR price axis keeps digits and decimal points predictable in RTL.
     if (timestamps.length < candles.length) {
       _text(canvas, 'شموع مدى',
-          Offset(axis / 2 - 18, chartHeight + 3), text, 10);
+          Offset(axis / 2 - 18, chartHeight + 3),
+          Color(panel.axisTextColor),
+          math.max(9, panel.axisTextSize - 2).toDouble());
     } else {
       _text(canvas, 'UTC', Offset(3, chartHeight + 4), text, 9);
     }
@@ -3498,6 +3562,7 @@ class _CandleChartPainter extends CustomPainter {
   bool shouldRepaint(covariant _CandleChartPainter old) =>
       old.candles != candles || old.timestamps != timestamps ||
       old.dark != dark || old.viewport != viewport ||
+      old.panel != panel ||
       old.crosshair != crosshair || old.indicator != indicator ||
       !listEquals(old.levels, levels) ||
       !listEquals(old.patterns, patterns) ||
