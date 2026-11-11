@@ -13,6 +13,7 @@ class ChartPanelSettingsPage extends StatefulWidget {
     required this.onApply,
     required this.onCancel,
     this.onOpenScales,
+    this.onOpenSymbol,
     super.key,
   });
 
@@ -20,6 +21,7 @@ class ChartPanelSettingsPage extends StatefulWidget {
   final ValueChanged<ChartPanelSettings> onApply;
   final VoidCallback onCancel;
   final VoidCallback? onOpenScales;
+  final VoidCallback? onOpenSymbol;
 
   @override
   State<ChartPanelSettingsPage> createState() => _ChartPanelSettingsPageState();
@@ -363,6 +365,16 @@ class _ChartPanelSettingsPageState extends State<ChartPanelSettingsPage> {
                         onTap: widget.onOpenScales == null ? null : () {
                           Navigator.pop(sheetContext);
                           widget.onOpenScales!();
+                        },
+                      ),
+                      ListTile(
+                        title: const Text('رمز',
+                          textDirection: TextDirection.rtl),
+                        trailing: const Icon(Icons.chevron_right),
+                        enabled: widget.onOpenSymbol != null,
+                        onTap: widget.onOpenSymbol == null ? null : () {
+                          Navigator.pop(sheetContext);
+                          widget.onOpenSymbol!();
                         },
                       ),
                       ListTile(
