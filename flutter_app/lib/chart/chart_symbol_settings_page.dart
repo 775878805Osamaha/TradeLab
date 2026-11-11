@@ -132,13 +132,13 @@ class _ChartSymbolSettingsPageState extends State<ChartSymbolSettingsPage> {
                   children: [
                     SizedBox(height: 80 * u),
                     _section('شموع', u),
-                    SizedBox(height: 48 * u),
+                    SizedBox(height: 40 * u),
                     _checkedRow('تلوين الأعمدة طبقًا للإغلاق السابق',
                       _draft.colorByPreviousClose, u, labelSize,
                       key: const Key('symbol-prev-close-toggle'),
                       onChanged: (v) => setState(() => _draft =
                         _draft.copyWith(colorByPreviousClose: v))),
-                    SizedBox(height: 54 * u),
+                    SizedBox(height: 46 * u),
                     _colorRow('الجزء الرئيسي', _draft.bodyVisible,
                       bear: _draft.bodyBear, bull: _draft.bodyBull,
                       u: u, font: labelSize,
@@ -164,7 +164,7 @@ class _ChartSymbolSettingsPageState extends State<ChartSymbolSettingsPage> {
                         (v) => _draft = _draft.copyWith(borderBear: v)),
                       onBull: () => _chooseColor(_draft.borderBull,
                         (v) => _draft = _draft.copyWith(borderBull: v))),
-                    SizedBox(height: 32 * u),
+                    SizedBox(height: 27 * u),
                     _colorRow('ظل الشمعة', _draft.wickVisible,
                       bear: _draft.wickBear, bull: _draft.wickBull,
                       u: u, font: labelSize,
@@ -177,9 +177,9 @@ class _ChartSymbolSettingsPageState extends State<ChartSymbolSettingsPage> {
                         (v) => _draft = _draft.copyWith(wickBear: v)),
                       onBull: () => _chooseColor(_draft.wickBull,
                         (v) => _draft = _draft.copyWith(wickBull: v))),
-                    SizedBox(height: 65 * u),
+                    SizedBox(height: 54 * u),
                     _section('تعديل البيانات', u),
-                    SizedBox(height: 36 * u),
+                    SizedBox(height: 33 * u),
                     _settingRow('الدقة', _dropdown(u: u,
                       key: const Key('symbol-precision'),
                       value: _draft.precisionDigits?.toString() ?? 'افتراضي',
@@ -319,11 +319,21 @@ class _ChartSymbolSettingsPageState extends State<ChartSymbolSettingsPage> {
             borderRadius: BorderRadius.circular(13 * u)),
           padding: EdgeInsets.symmetric(horizontal: 14 * u),
           child: Row(children: [
-            Expanded(child: bidi
-              ? Text(value, textAlign: TextAlign.right,
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: TradeColors.panelInk,
-                    fontSize: (27 * u).clamp(14, 18)))
+            Expanded(child: bidi && value.startsWith('نيويورك (')
+              ? Row(textDirection: TextDirection.ltr,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Flexible(child: Text('نيويورك',
+                      textDirection: TextDirection.rtl,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: TradeColors.panelInk,
+                        fontSize: (27 * u).clamp(14, 18)))),
+                    SizedBox(width: 5 * u),
+                    Text(value.substring(value.indexOf('(')),
+                      textDirection: TextDirection.ltr,
+                      style: TextStyle(color: TradeColors.panelInk,
+                        fontSize: (27 * u).clamp(14, 18))),
+                  ])
               : Text(value, textAlign: TextAlign.right,
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: TradeColors.panelInk,
