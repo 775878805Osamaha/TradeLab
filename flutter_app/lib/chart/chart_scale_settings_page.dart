@@ -231,7 +231,9 @@ class _ChartScaleSettingsPageState extends State<ChartScaleSettingsPage> {
                       (v) => setState(() => _draft = _draft.copyWith(
                         weekdayOnLabels: v)), u, labelSize,
                       key: const Key('scale-weekday')),
-                    SizedBox(height: 112 * u),
+                    // Keep the last time-axis row close to the fixed footer
+                    // at the scrolled reference position; no dummy row below.
+                    SizedBox(height: 26 * u),
                   ],
                 ),
               ),
@@ -316,8 +318,11 @@ class _ChartScaleSettingsPageState extends State<ChartScaleSettingsPage> {
       ]));
 
   Widget _controlOnly(Widget control, double u) => Row(children: [
-    const Spacer(),
+    // Below-row line/swatch samples share the *right edge* of the 286px
+    // dropdown (reference x≈335), rather than being stuck to the left margin.
+    SizedBox(width: 318 * u),
     control,
+    const Spacer(),
   ]);
 
   Widget _disabledNumber(double u) => Container(
