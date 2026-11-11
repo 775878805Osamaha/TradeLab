@@ -208,16 +208,9 @@ void main() {
   testWidgets('sell-position drawing is offered but never seeded on an empty feed',
       (tester) async {
     await openAtPhoneSize(tester);
-    await tester.tap(find.byTooltip('أدوات الرسم'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('drawing-category-tools')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('drawing-category-tools')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('drawing-tool-shortPosition')), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('drawing-tool-shortPosition')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('drawing-tool-shortPosition')));
+    final option = find.byKey(const Key('drawing-rail-short'));
+    await tester.ensureVisible(option);
+    await tester.tap(option);
     await tester.pumpAndSettle();
     // With no authorized cTrader candles, the screenshot's sample prices
     // must never appear as an invented position or market feed.
@@ -229,14 +222,7 @@ void main() {
   testWidgets('price rectangle is selectable without inventing XAUUSD candles',
       (tester) async {
     await openAtPhoneSize(tester);
-    await tester.tap(find.byTooltip('أدوات الرسم'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('drawing-category-tools')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('drawing-category-tools')));
-    await tester.pumpAndSettle();
-    final option = find.byKey(const Key('drawing-tool-priceRectangle'));
-    expect(option, findsOneWidget);
+    final option = find.byKey(const Key('drawing-rail-rectangle'));
     await tester.ensureVisible(option);
     await tester.pump();
     await tester.tap(option);
@@ -244,6 +230,35 @@ void main() {
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     expect(find.byKey(const Key('price-rectangle-placement-hint')), findsNothing);
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+  });
+
+  testWidgets('PROMPT 07 general zoom preserves empty real-feed state',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('drawing-category-tools')));
+    await tester.tap(find.byKey(const Key('drawing-category-tools')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('drawing-general-zoomIn')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('drawing-general-action-zoomIn')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+  });
+
+  testWidgets('PROMPT 07 deleting no drawings cannot mutate market data',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    await tester.tap(find.byTooltip('أدوات الرسم'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('drawing-category-tools')));
+    await tester.tap(find.byKey(const Key('drawing-category-tools')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('drawing-general-action-deleteDrawings')));
+    await tester.pump();
+    expect(find.text('لا توجد رسومات لحذفها'), findsOneWidget);
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
   });
 
   testWidgets('navigation retains results and account screens', (tester) async {

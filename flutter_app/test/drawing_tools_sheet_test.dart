@@ -75,6 +75,8 @@ void main() {
     ValueChanged<DrawingCatalogKind>? onSelect,
     ValueChanged<DrawingCatalogKind>? onUnavailable,
     ValueChanged<Set<DrawingCatalogKind>>? onFavoritesChanged,
+    ValueChanged<DrawingGeneralAction>? onGeneralAction,
+    ValueChanged<DrawingGeneralAction>? onGeneralMore,
   }) async {
     tester.view.devicePixelRatio = 2;
     tester.view.physicalSize = size * 2;
@@ -100,6 +102,8 @@ void main() {
               onFavoritesChanged: onFavoritesChanged ?? (_) {},
               onSelect: onSelect ?? (_) {},
               onUnavailable: onUnavailable ?? (_) {},
+              onGeneralAction: onGeneralAction,
+              onGeneralMore: onGeneralMore,
             ),
           ),
           child: const Text('Open drawing tools'),
@@ -250,6 +254,74 @@ void main() {
     await pumpCatalog(tester, initialCategory: DrawingCategory.trend);
     await expectLater(find.byKey(const Key('drawing-tools-bottom-sheet')),
         matchesGoldenFile('goldens/trend_drawing_tools.png'));
+  });
+
+  test('PROMPT 07 defines exactly nine commands and the expected surfaces', () {
+    expect(DrawingGeneralAction.values, [
+      DrawingGeneralAction.ruler, DrawingGeneralAction.eraser,
+      DrawingGeneralAction.continueDrawing,
+      DrawingGeneralAction.hideDrawings, DrawingGeneralAction.lockDrawings,
+      DrawingGeneralAction.magnet, DrawingGeneralAction.deleteDrawings,
+      DrawingGeneralAction.zoomIn, DrawingGeneralAction.zoomOut,
+    ]);
+    expect(DrawingGeneralAction.values.where((a) => a.hasMore).toList(), [
+      DrawingGeneralAction.hideDrawings, DrawingGeneralAction.magnet,
+      DrawingGeneralAction.deleteDrawings,
+    ]);
+    expect(DrawingGeneralAction.zoomOut.surface, GeneralTileSurface.disabled);
+    expect(DrawingGeneralAction.ruler.surface, GeneralTileSurface.gray);
+  });
+
+  testWidgets('PROMPT 07 general actions render as 3×3 RTL with overflow strips',
+      (tester) async {
+    final actions = <DrawingGeneralAction>[];
+    final more = <DrawingGeneralAction>[];
+    await pumpCatalog(tester, initialCategory: DrawingCategory.tools,
+      onGeneralAction: actions.add, onGeneralMore: more.add);
+    expect(find.byKey(const Key('drawing-category-tools')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-general-ruler')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-general-zoomOut')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-general-more-hideDrawings')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-general-more-magnet')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-general-more-deleteDrawings')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-general-more-eraser')), findsNothing);
+    final right = tester.getRect(find.byKey(const Key('drawing-general-ruler')));
+    final middle = tester.getRect(find.byKey(const Key('drawing-general-eraser')));
+    final left = tester.getRect(find.byKey(const Key('drawing-general-continueDrawing')));
+    expect(right.left, greaterThan(middle.right));
+    expect(middle.left, greaterThan(left.right));
+    final row2 = tester.getRect(find.byKey(const Key('drawing-general-hideDrawings')));
+    final row3 = tester.getRect(find.byKey(const Key('drawing-general-deleteDrawings')));
+    expect(row2.top, greaterThan(right.bottom));
+    expect(row3.top, greaterThan(row2.bottom));
+    await tester.tap(find.byKey(const Key('drawing-general-action-eraser')));
+    await tester.pump();
+    expect(actions, [DrawingGeneralAction.eraser]);
+    await tester.tap(find.byKey(const Key('drawing-general-more-magnet')));
+    await tester.pump();
+    expect(more, [DrawingGeneralAction.magnet]);
+    await tester.tapAt(tester.getCenter(
+        find.byKey(const Key('drawing-general-action-zoomOut'))));
+    await tester.pump();
+    expect(actions, [DrawingGeneralAction.eraser]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('PROMPT 07 search filters general commands without old drawing shapes',
+      (tester) async {
+    await pumpCatalog(tester, initialCategory: DrawingCategory.tools);
+    await tester.enterText(find.byKey(const Key('drawing-tools-search')), 'مغناطيس');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('drawing-general-magnet')), findsOneWidget);
+    expect(find.byKey(const Key('drawing-general-ruler')), findsNothing);
+    expect(find.byKey(const Key('drawing-tool-shortPosition')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('PROMPT 07 reference size golden', (tester) async {
+    await pumpCatalog(tester, initialCategory: DrawingCategory.tools);
+    await expectLater(find.byKey(const Key('drawing-tools-bottom-sheet')),
+        matchesGoldenFile('goldens/general_drawing_actions.png'));
   });
 
   for (final size in const [Size(320,640), Size(360,800), Size(390,844)]) {

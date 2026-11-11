@@ -67,6 +67,27 @@ enum DrawingCategory {
   final String label;
 }
 
+/// PROMPT 07: reference order is physical right-to-left, row by row.
+/// These are chart commands, not drawing shapes or synthetic price data.
+enum DrawingGeneralAction {
+  ruler('مقياس', GeneralTileSurface.gray),
+  eraser('ممحاة', GeneralTileSurface.gray),
+  continueDrawing('استمر في الرسم', GeneralTileSurface.outlined),
+  hideDrawings('إخفاء الرسومات', GeneralTileSurface.outlined, hasMore: true),
+  lockDrawings('غلق كل أدوات الرسم', GeneralTileSurface.outlined),
+  magnet('مغناطيس الأسعار', GeneralTileSurface.outlined, hasMore: true),
+  deleteDrawings('حذف الرسومات', GeneralTileSurface.outlined, hasMore: true),
+  zoomIn('تكبير', GeneralTileSurface.outlined),
+  zoomOut('تصغير', GeneralTileSurface.disabled);
+
+  const DrawingGeneralAction(this.label, this.surface, {this.hasMore = false});
+  final String label;
+  final GeneralTileSurface surface;
+  final bool hasMore;
+}
+
+enum GeneralTileSurface { gray, outlined, disabled }
+
 /// Unknown IDs are ignored so stored favorites survive catalog upgrades.
 class DrawingFavoritesCodec {
   const DrawingFavoritesCodec._();
@@ -91,6 +112,8 @@ class DrawingToolsSheet extends StatefulWidget {
     required this.onFavoritesChanged,
     required this.onSelect,
     required this.onUnavailable,
+    this.onGeneralAction,
+    this.onGeneralMore,
     this.initialCategory = DrawingCategory.gann,
     super.key,
   });
@@ -99,6 +122,8 @@ class DrawingToolsSheet extends StatefulWidget {
   final ValueChanged<Set<DrawingCatalogKind>> onFavoritesChanged;
   final ValueChanged<DrawingCatalogKind> onSelect;
   final ValueChanged<DrawingCatalogKind> onUnavailable;
+  final ValueChanged<DrawingGeneralAction>? onGeneralAction;
+  final ValueChanged<DrawingGeneralAction>? onGeneralMore;
   final DrawingCategory initialCategory;
 
   @override
@@ -136,6 +161,12 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
     }
     return DrawingCatalogKind.values.where((t) =>
         t.category == _category).toList();
+  }
+
+  List<DrawingGeneralAction> get _visibleGeneralActions {
+    final query = _search.text.trim().toLowerCase();
+    return DrawingGeneralAction.values.where((action) =>
+        action.label.toLowerCase().contains(query)).toList();
   }
 
   void _toggleFavorite(DrawingCatalogKind tool) {
@@ -279,7 +310,8 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
             ),
           ),
           SizedBox(height: width * (24 / 691)),
-          Expanded(child: _visibleTools.isEmpty
+          Expanded(child: (_category == DrawingCategory.tools
+                  ? _visibleGeneralActions.isEmpty : _visibleTools.isEmpty)
               ? Center(child: Text('لا توجد أدوات مطابقة',
                   style: TextStyle(color: TradeColors.drawingMutedInk,
                       fontSize: (width * (25 / 691)).clamp(13.0, 18.0))))
@@ -293,8 +325,18 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
                     mainAxisSpacing: gap,
                     childAspectRatio: 200 / 135,
                   ),
-                  itemCount: _visibleTools.length,
+                  itemCount: _category == DrawingCategory.tools
+                      ? _visibleGeneralActions.length : _visibleTools.length,
                   itemBuilder: (context, i) {
+                    if (_category == DrawingCategory.tools) {
+                      final action = _visibleGeneralActions[i];
+                      return GeneralToolActionTile(
+                        action: action,
+                        onTap: () => widget.onGeneralAction?.call(action),
+                        onMore: action.hasMore
+                            ? () => widget.onGeneralMore?.call(action) : null,
+                      );
+                    }
                     final tool = _visibleTools[i];
                     return DrawingToolTile(
                       tool: tool,
@@ -310,6 +352,156 @@ class _DrawingToolsSheetState extends State<DrawingToolsSheet> {
       ),
     );
   }
+}
+
+/// The three surface states and separate overflow strip are deliberate;
+/// Material buttons would introduce a different radius and ripple layout.
+class GeneralToolActionTile extends StatelessWidget {
+  const GeneralToolActionTile({
+    required this.action, required this.onTap, this.onMore, super.key,
+  });
+
+  final DrawingGeneralAction action;
+  final VoidCallback onTap;
+  final VoidCallback? onMore;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, constraints) {
+    final unit = constraints.maxWidth / 200;
+    final disabled = action.surface == GeneralTileSurface.disabled;
+    final outlined = action.surface != GeneralTileSurface.gray;
+    final ink = disabled ? const Color(0xFFA9A9A9) : TradeColors.drawingInk;
+    return Container(
+      key: Key('drawing-general-${action.name}'),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: outlined ? TradeColors.drawingSheet : TradeColors.drawingTile,
+        border: outlined ? Border.all(color: const Color(0xFFE8E8E8), width: .9) : null,
+        borderRadius: BorderRadius.circular(19 * unit),
+      ),
+      child: Row(textDirection: TextDirection.rtl, children: [
+        Expanded(child: Semantics(
+          button: true, enabled: !disabled, label: action.label,
+          child: GestureDetector(
+            key: Key('drawing-general-action-${action.name}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: disabled ? null : onTap,
+            child: Column(children: [
+              SizedBox(height: 12 * unit),
+              SizedBox(height: 62 * unit, child: Center(child: SizedBox(
+                height: 49 * unit, width: 49 * unit,
+                child: CustomPaint(painter: GeneralToolGlyphPainter(action, ink)),
+              ))),
+              Expanded(child: Center(child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4 * unit),
+                child: Text(action.label,
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: TextStyle(color: ink,
+                      fontSize: (24 * unit).clamp(10.5, 14.0),
+                      fontWeight: FontWeight.w700),
+                ),
+              ))),
+            ]),
+          ),
+        )),
+        if (action.hasMore) Container(
+          width: 61 * unit,
+          decoration: const BoxDecoration(border: Border(
+            right: BorderSide(color: Color(0xFFE8E8E8), width: .9),
+          )),
+          child: Semantics(button: true, label: 'المزيد: ${action.label}',
+            child: GestureDetector(
+              key: Key('drawing-general-more-${action.name}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onMore,
+              child: Center(child: Icon(Icons.more_vert,
+                size: 29 * unit, color: TradeColors.drawingInk)),
+            ),
+          ),
+        ),
+      ]),
+    );
+  });
+}
+
+/// Original thin-line symbols, inspired by geometric functions, not copied
+/// from any third-party icon library or proprietary TradingView asset.
+class GeneralToolGlyphPainter extends CustomPainter {
+  const GeneralToolGlyphPainter(this.action, this.ink);
+  final DrawingGeneralAction action;
+  final Color ink;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 48, size.height / 48);
+    final p = Paint()..color = ink..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    void line(double x, double y, double a, double b) =>
+        canvas.drawLine(Offset(x,y), Offset(a,b), p);
+    void path(List<Offset> points, {bool close = false}) {
+      final shape = Path()..moveTo(points.first.dx, points.first.dy);
+      for (final point in points.skip(1)) { shape.lineTo(point.dx, point.dy); }
+      if (close) shape.close();
+      canvas.drawPath(shape, p);
+    }
+    void box(double x, double y, double w, double h, [double r = 2]) =>
+        canvas.drawRRect(RRect.fromRectAndRadius(
+            Rect.fromLTWH(x,y,w,h),Radius.circular(r)),p);
+    switch (action) {
+      case DrawingGeneralAction.ruler:
+        path(const [Offset(10,37),Offset(36,11),Offset(43,18),
+          Offset(17,44)],close:true);
+        for (var i=0;i<4;i++) {
+          final start=16.0+i*5.0;
+          line(start,start+13, start+3,start+16);
+        }
+      case DrawingGeneralAction.eraser:
+        path(const [Offset(7,30),Offset(29,8),Offset(42,21),
+          Offset(21,42),Offset(7,42)],close:true);
+        line(19,18,32,31);line(21,42,43,42);
+      case DrawingGeneralAction.continueDrawing:
+        path(const [Offset(6,33),Offset(27,8),Offset(35,15),
+          Offset(14,40),Offset(7,41)],close:true);
+        line(21,14,29,22);
+        box(31,32,12,11,2);canvas.drawArc(
+          const Rect.fromLTWH(34,25,7,14),math.pi,math.pi,false,p);
+      case DrawingGeneralAction.hideDrawings:
+        final eye = Path()..moveTo(5,22)..quadraticBezierTo(24,2,43,22)
+          ..quadraticBezierTo(24,43,5,22);
+        canvas.drawPath(eye,p);canvas.drawCircle(const Offset(24,22),6,p);
+        line(35,35,43,43);
+      case DrawingGeneralAction.lockDrawings:
+        box(12,22,24,21,3);canvas.drawArc(
+          const Rect.fromLTWH(18,5,13,27),math.pi,math.pi,false,p);
+        canvas.drawCircle(const Offset(24,31),2,p);
+      case DrawingGeneralAction.magnet:
+        path(const [Offset(9,36),Offset(9,17),Offset(13,9),
+          Offset(18,9),Offset(18,28),Offset(29,28),
+          Offset(29,9),Offset(35,9),Offset(39,17),Offset(39,36)]);
+        line(9,30,18,30);line(29,30,39,30);
+      case DrawingGeneralAction.deleteDrawings:
+        path(const [Offset(14,14),Offset(16,41),Offset(34,41),Offset(36,14)]);
+        line(12,14,39,14);line(21,9,29,9);line(19,18,19,35);
+        line(28,18,28,35);
+      case DrawingGeneralAction.zoomIn:
+        canvas.drawCircle(const Offset(21,21),12,p);
+        line(30,30,41,41);line(15,21,27,21);line(21,15,21,27);
+      case DrawingGeneralAction.zoomOut:
+        canvas.drawCircle(const Offset(21,21),12,p);
+        line(30,30,41,41);line(15,21,27,21);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant GeneralToolGlyphPainter oldDelegate) =>
+      oldDelegate.action != action || oldDelegate.ink != ink;
 }
 
 class DrawingCategoryTab extends StatelessWidget {

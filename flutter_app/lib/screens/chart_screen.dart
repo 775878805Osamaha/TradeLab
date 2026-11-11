@@ -88,6 +88,12 @@ class _ChartScreenState extends State<ChartScreen>
   int _rangeTicks = 1000;
   bool _replay = false;
   bool _drawing = false;
+  bool _drawingsVisible = true;
+  bool _drawingsLocked = false;
+  bool _eraserMode = false;
+  bool _rulerMode = false;
+  bool _continueDrawing = true;
+  ChartAnchor? _measureStart;
   ChartDrawingTool _drawingTool = ChartDrawingTool.horizontal;
   // The catalog owns visual selection; chart coordinates and history do not
   // change until the user deliberately chooses an implemented tool.
@@ -1382,6 +1388,20 @@ class _ChartScreenState extends State<ChartScreen>
           _favoriteDrawingTools..clear()..addAll(favorites);
           unawaited(_persistDrawingFavorites());
         },
+        onGeneralAction: (action) {
+          Navigator.pop(sheetContext);
+          _runGeneralDrawingAction(action);
+        },
+        onGeneralMore: (action) {
+          Navigator.pop(sheetContext);
+          // Only already-supported configuration flows are exposed. The
+          // reference does not define additional menu items or delete scopes.
+          if (action == DrawingGeneralAction.magnet) {
+            _showMagnetSettings();
+          } else {
+            _runGeneralDrawingAction(action);
+          }
+        },
         onUnavailable: (tool) => showDialog<void>(
           context: sheetContext,
           builder: (dialogContext) => AlertDialog(
@@ -1429,6 +1449,95 @@ class _ChartScreenState extends State<ChartScreen>
         },
       ),
     );
+  }
+
+  void _drawingNotice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message, textDirection: TextDirection.rtl),
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
+  int get _drawingObjectCount => _levels.length + _patterns.length +
+      _rectangles.length + _shortPositions.length;
+
+  Future<void> _confirmDeleteDrawings() async {
+    final count = _drawingObjectCount;
+    if (count == 0) {
+      _drawingNotice('لا توجد رسومات لحذفها');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('حذف الرسومات', textDirection: TextDirection.rtl),
+        content: Text('هل تريد حذف $count من الرسومات على هذا الشارت؟ '
+            'يمكن التراجع عن الحذف من أدوات الرسم.',
+            textDirection: TextDirection.rtl),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _saveDrawingUndo();
+      _restoreDrawings((<double>[], <ChartPattern>[],
+          <ChartShortPosition>[], <ChartPriceRectangle>[]));
+    });
+    _drawingNotice('حُذفت الرسومات، ويمكن التراجع');
+  }
+
+  void _runGeneralDrawingAction(DrawingGeneralAction action) {
+    switch (action) {
+      case DrawingGeneralAction.ruler:
+        setState(() {
+          _drawing = true;
+          _eraserMode = false;
+          _rulerMode = true;
+          _measureStart = null;
+          _pendingAnchor = null;
+        });
+        _drawingNotice('المقياس: اختر نقطتين على شموع الشارت');
+      case DrawingGeneralAction.eraser:
+        setState(() {
+          _eraserMode = true;
+          _rulerMode = false;
+          _drawing = true;
+          _measureStart = null;
+          _pendingAnchor = null;
+        });
+        _drawingNotice('الممحاة: المس رسمة لحذفها، ويمكن التراجع');
+      case DrawingGeneralAction.continueDrawing:
+        setState(() => _continueDrawing = !_continueDrawing);
+        _drawingNotice(_continueDrawing
+            ? 'استمر في الرسم: مفعّل' : 'استمر في الرسم: متوقف');
+      case DrawingGeneralAction.hideDrawings:
+        setState(() => _drawingsVisible = !_drawingsVisible);
+        _drawingNotice(_drawingsVisible ? 'الرسومات ظاهرة' : 'الرسومات مخفية');
+      case DrawingGeneralAction.lockDrawings:
+        setState(() {
+          _drawingsLocked = !_drawingsLocked;
+          _eraserMode = false;
+          _rulerMode = false;
+          _measureStart = null;
+        });
+        _drawingNotice(_drawingsLocked
+            ? 'تم قفل أدوات الرسم' : 'تم فتح قفل أدوات الرسم');
+      case DrawingGeneralAction.magnet:
+        _showMagnetSettings();
+      case DrawingGeneralAction.deleteDrawings:
+        unawaited(_confirmDeleteDrawings());
+      case DrawingGeneralAction.zoomIn:
+        _zoomBy(1.25);
+      case DrawingGeneralAction.zoomOut:
+        // The reference explicitly disables this catalog command.
+        break;
+    }
   }
 
   Widget _iconAction({
@@ -1749,6 +1858,9 @@ class _ChartScreenState extends State<ChartScreen>
       bool rectangle = false}) {
     setState(() {
       _drawing = true;
+      _eraserMode = false;
+      _rulerMode = false;
+      _measureStart = null;
       _placingShort = short;
       _placingRectangle = rectangle;
       if (tool != null) _drawingTool = tool;
@@ -1780,6 +1892,9 @@ class _ChartScreenState extends State<ChartScreen>
             tooltip: 'تحريك الشارت',
             onPressed: () => setState(() {
               _drawing = false;
+              _eraserMode = false;
+              _rulerMode = false;
+              _measureStart = null;
               _placingShort = false;
               _placingRectangle = false;
               _pendingAnchor = null;
@@ -2263,7 +2378,8 @@ class _ChartScreenState extends State<ChartScreen>
               _draggingRectangle = false;
               _rectangleDragHandle = null;
               _rectangleAtDragStart = null;
-              if (_drawing && details.pointerCount == 1) {
+              if (_drawing && !_drawingsLocked && _drawingsVisible &&
+                  !_eraserMode && !_rulerMode && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 final rectangleHit = PriceRectangleGeometry.hitTest(
                     details.localFocalPoint, _rectangles, _viewport,
@@ -2413,8 +2529,68 @@ class _ChartScreenState extends State<ChartScreen>
             onLongPressMoveUpdate: (details) => setState(() => _crosshair = details.localPosition),
             onLongPressEnd: (_) => setState(() => _crosshair = null),
             onTapUp: (details) {
-              if (!_drawing || details.localPosition.dx > plotWidth) return;
+              if (!_drawing || _drawingsLocked ||
+                  details.localPosition.dx > plotWidth) return;
               final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
+              if (_rulerMode) {
+                final anchor = _anchorAt(details.localPosition,
+                    scale, plotWidth, candles.length);
+                if (anchor == null) return;
+                if (_measureStart == null) {
+                  setState(() => _measureStart = anchor);
+                } else {
+                  final start = _measureStart!;
+                  final distance = anchor.price - start.price;
+                  final percent = start.price == 0 ? 0.0
+                      : distance / start.price * 100;
+                  final bars = (anchor.index - start.index).abs();
+                  setState(() {
+                    _measureStart = null;
+                    if (!_continueDrawing) {
+                      _rulerMode = false;
+                      _drawing = false;
+                    }
+                  });
+                  _drawingNotice('المقياس: ${distance.toStringAsFixed(3)} '
+                      '(${percent.toStringAsFixed(2)}%) · $bars شمعة');
+                }
+                return;
+              }
+              if (_eraserMode) {
+                if (!_drawingsVisible) return;
+                final rectangleHit = PriceRectangleGeometry.hitTest(
+                    details.localPosition, _rectangles, _viewport,
+                    scale, candles.length, plotWidth);
+                final shortHit = _hitShortPosition(details.localPosition,
+                    scale, plotWidth, candles.length);
+                final lineHit = _hitLine(details.localPosition.dy, scale);
+                final patternHit = _hitPattern(details.localPosition,
+                    scale, plotWidth, candles.length);
+                if (rectangleHit == null && shortHit == null &&
+                    lineHit == null && patternHit == null) return;
+                setState(() {
+                  _saveDrawingUndo();
+                  if (rectangleHit != null) {
+                    _rectangles.removeAt(rectangleHit.$1);
+                  } else if (shortHit != null) {
+                    _shortPositions.removeAt(shortHit.$1);
+                  } else if (lineHit != null) {
+                    _levels.removeAt(lineHit);
+                  } else if (patternHit != null) {
+                    _patterns.removeAt(patternHit);
+                  }
+                  _selectedRectangle = null;
+                  _selectedShort = null;
+                  _selectedLine = null;
+                  _selectedPattern = null;
+                  if (!_continueDrawing) {
+                    _eraserMode = false;
+                    _drawing = false;
+                  }
+                });
+                return;
+              }
+              if (!_drawingsVisible) return;
               final hit = _hitLine(details.localPosition.dy, scale);
               setState(() {
                 final rectangleHit = PriceRectangleGeometry.hitTest(
@@ -2502,6 +2678,8 @@ class _ChartScreenState extends State<ChartScreen>
                     _pendingAnchor = null;
                     _secondChannelAnchor = null;
                   }
+                  if (!_continueDrawing && _pendingAnchor == null &&
+                      _secondChannelAnchor == null) _drawing = false;
                   return;
                 }
                 _saveDrawingUndo();
@@ -2512,6 +2690,7 @@ class _ChartScreenState extends State<ChartScreen>
                 _selectedLine = _levels.length - 1;
                 _selectedPattern = null;
                 _selectedShort = null;
+                if (!_continueDrawing) _drawing = false;
               });
             },
             child: RepaintBoundary(
@@ -2524,19 +2703,19 @@ class _ChartScreenState extends State<ChartScreen>
                   dark: Theme.of(context).brightness == Brightness.dark,
                   viewport: _viewport,
                   crosshair: _crosshair,
-                  levels: List<double>.unmodifiable(_levels),
-                  patterns: List<ChartPattern>.unmodifiable(_patterns),
-                  shortPositions: List<ChartShortPosition>.unmodifiable(_shortPositions),
-                  selectedLine: _drawing ? _selectedLine : null,
-                  selectedPattern: _drawing ? _selectedPattern : null,
-                  selectedShort: _drawing ? _selectedShort : null,
+                  levels: _drawingsVisible ? List<double>.unmodifiable(_levels) : const [],
+                  patterns: _drawingsVisible ? List<ChartPattern>.unmodifiable(_patterns) : const [],
+                  shortPositions: _drawingsVisible ? List<ChartShortPosition>.unmodifiable(_shortPositions) : const [],
+                  selectedLine: _drawing && _drawingsVisible ? _selectedLine : null,
+                  selectedPattern: _drawing && _drawingsVisible ? _selectedPattern : null,
+                  selectedShort: _drawing && _drawingsVisible ? _selectedShort : null,
                   showShortLabels: _showShortLabels,
                   indicator: _showIndicators,
                 ),
               ),
             ),
           )),
-          if (candles.isNotEmpty && _rectangles.isNotEmpty)
+          if (_drawingsVisible && candles.isNotEmpty && _rectangles.isNotEmpty)
             Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
               child: CustomPaint(
                 painter: ChartPriceRectanglePainter(
