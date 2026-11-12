@@ -274,6 +274,34 @@ void main() {
         throwsA(isA<MarketDataException>()));
   });
 
+  test('cTrader tick errors explain broker rejection and failed transport',
+      () async {
+    for (final item in const [
+      ('ctrader_tick_history_unusable', 'غير مكتملة'),
+      ('ctrader_broker_rejected_request', 'رفض وسيط'),
+      ('ctrader_response_timeout', 'مهلة'),
+      ('ctrader_connection_failed', 'اتصال'),
+    ]) {
+      final api = MarketApi(client: MockClient((request) async {
+        if (request.url.path == '/v1/symbols') {
+          return http.Response(jsonEncode({'symbols': [
+            {'symbolName': 'XAUUSD', 'symbolId': 42}
+          ]}), 200);
+        }
+        expect(request.url.path, '/v1/ticks');
+        return http.Response(jsonEncode({'error': item.$1}), 503);
+      }));
+      await expectLater(
+        api.ctraderBidTicksRange(
+          token: 'fake', accountId: '1', symbol: 'XAUUSD',
+          fromMs: 1700000000000, toMs: 1700003600000,
+        ),
+        throwsA(isA<MarketDataException>().having(
+          (error) => error.message, 'message', contains(item.$2))),
+      );
+    }
+  });
+
   test('cTrader fills truncated tick pages by splitting exact milliseconds',
       () async {
     final end = DateTime.utc(2026, 11, 8).millisecondsSinceEpoch;
