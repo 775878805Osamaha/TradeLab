@@ -142,6 +142,11 @@ void main() {
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
     expect(find.textContaining('تيكات تجريبية'), findsNothing);
     expect(find.textContaining('تيكات BID الحقيقية'), findsOneWidget);
+    final rangeStatus = tester.widget<Text>(
+        find.byKey(const Key('range-data-status')));
+    expect(rangeStatus.maxLines, 1,
+        reason: 'BID diagnostics must not steal candle plot height');
+    expect(rangeStatus.overflow, TextOverflow.ellipsis);
     expect(requests, 0);
     expect(tester.takeException(), isNull);
   });
