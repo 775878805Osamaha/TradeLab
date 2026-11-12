@@ -137,10 +137,67 @@ void main() {
         isNull);
   });
 
+  test('second finger rebases pinch after an existing one-finger pan', () {
+    final gesture = ChartTouchGesture();
+    const width = 300.0;
+    const candles = 100;
+    ChartViewport update(ChartViewport viewport,
+        {required int pointers, required double focal,
+        required double scale, required double dx}) =>
+      gesture.update(
+        viewport: viewport, pointerCount: pointers, focalX: focal,
+        scale: scale, deltaX: dx, plotWidth: width, candleCount: candles);
+
+    const original = ChartViewport();
+    final panned = update(original,
+        pointers: 1, focal: 150, scale: 1, dx: 80);
+    expect(panned.scrollBars, 8);
+    const selected = 80;
+    final xBefore = panned.chartX(
+        index: selected, candleCount: candles, plotWidth: width);
+    final secondFinger = update(panned,
+        pointers: 2, focal: xBefore, scale: 1.2, dx: -40);
+    expect(secondFinger, panned,
+        reason: 'touching with a second finger must not jump the chart');
+    expect(gesture.ignoredPointerTransition, isTrue);
+    final zoomed = update(secondFinger,
+        pointers: 2, focal: xBefore + 20, scale: 2.4, dx: 20);
+    expect(zoomed.barWidth, 20);
+    expect(zoomed.chartX(
+        index: selected, candleCount: candles, plotWidth: width),
+        closeTo(xBefore + 20, .000001));
+    expect(gesture.hadMultiTouch, isTrue);
+
+    final lifted = update(zoomed,
+        pointers: 1, focal: 25, scale: 2.4, dx: -180);
+    expect(lifted, zoomed,
+        reason: 'centroid shift on finger lift must not move chart');
+    expect(gesture.ignoredPointerTransition, isTrue);
+    final resumed = update(lifted,
+        pointers: 1, focal: 20, scale: 2.4, dx: -30);
+    expect(resumed.scrollBars, lessThan(lifted.scrollBars));
+  });
+
+  test('tiny one-finger jitter is not a valid inertial chart fling', () {
+    final gesture = ChartTouchGesture();
+    var viewport = const ChartViewport();
+    viewport = gesture.update(
+      viewport: viewport, pointerCount: 1, focalX: 151,
+      scale: 1, deltaX: 1, plotWidth: 300, candleCount: 50);
+    expect(viewport.scrollBars, closeTo(.1, .0001));
+    expect(gesture.horizontalTravel, 1);
+    expect(chartShouldFling(
+      horizontalVelocity: 4000, horizontalTravel: gesture.horizontalTravel,
+      candleCount: 50, multiTouch: gesture.hadMultiTouch,
+      editingDrawing: false, reducedMotion: false), isFalse);
+  });
+
   test('momentum is limited to deliberate one-finger chart pans', () {
     bool eligible(double speed, {int count = 100, bool pinch = false,
-        bool draw = false, bool reduce = false}) => chartShouldFling(
+        bool draw = false, bool reduce = false,
+        double travel = 100}) => chartShouldFling(
           horizontalVelocity: speed,
+          horizontalTravel: travel,
           candleCount: count,
           multiTouch: pinch,
           editingDrawing: draw,
@@ -149,6 +206,9 @@ void main() {
     expect(eligible(1200), isTrue);
     expect(eligible(-1200), isTrue);
     expect(eligible(150), isFalse);
+    expect(eligible(1500, travel: 4), isFalse);
+    expect(eligible(1500, travel: 14), isTrue);
+    expect(eligible(1500, travel: double.nan), isFalse);
     expect(eligible(double.nan), isFalse);
     expect(eligible(double.infinity), isFalse);
     expect(eligible(800, count: 1), isFalse);
