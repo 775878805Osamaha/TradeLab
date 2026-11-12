@@ -4,7 +4,8 @@ import 'package:tradelab_flutter/data/range_startup_loader.dart';
 
 void main() {
   final now = DateTime.utc(2026, 11, 12, 18).millisecondsSinceEpoch;
-  const hour = 60 * 60 * 1000;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
 
   test('returns authentic recent Range bars without a six-day wait', () async {
     final requests = <(int, int)>[];
@@ -21,9 +22,9 @@ void main() {
       },
       onSnapshot: (batch) async => seen.add(batch),
     );
-    expect(requests, [(now - hour, now)]);
+    expect(requests, [(now - 5 * minute, now)]);
     expect(snapshot, isNotNull);
-    expect(snapshot!.fromMs, now - hour);
+    expect(snapshot!.fromMs, now - 5 * minute);
     expect(snapshot.ticks, hasLength(3));
     expect(snapshot.closedBars, greaterThanOrEqualTo(2));
     expect(snapshot.timeline.endTickIndices, isNotEmpty);
@@ -49,17 +50,17 @@ void main() {
       onSnapshot: (batch) async => seen.add(batch),
     );
     expect(requests, [
-      (now - hour, now),
-      (now - 4 * hour, now - hour - 1),
+      (now - 5 * minute, now),
+      (now - 15 * minute, now - 5 * minute - 1),
     ]);
-    expect(snapshot!.fromMs, now - 4 * hour);
+    expect(snapshot!.fromMs, now - 15 * minute);
     expect(snapshot.ticks.map((tick) => tick.bid).toList(),
         [97, 98, 99, 100]);
     expect(seen, hasLength(2));
     expect(seen.last.timeline.bars.length, greaterThan(1));
   });
 
-  test('stops at 24 hours and reports no authentic market ticks', () async {
+  test('stops at six days and reports no authentic market ticks', () async {
     final calls = <(int, int)>[];
     final snapshot = await RangeStartupLoader.load(
       endMs: now, priceDistance: 10.0,
@@ -70,8 +71,33 @@ void main() {
       onSnapshot: (_) async => fail('No broker data must not create candles'),
     );
     expect(snapshot, isNull);
-    expect(calls, hasLength(4));
-    expect(calls.last, (now - 24 * hour, now - 12 * hour - 1));
+    expect(calls, hasLength(8));
+    expect(calls.last, (now - 6 * 24 * hour, now - 3 * 24 * hour - 1));
+  });
+
+  test('recovers Friday BID ticks after a closed weekend without fabrication',
+      () async {
+    var calls = 0;
+    final records = <RangeStartupSnapshot>[];
+    final result = await RangeStartupLoader.load(
+      endMs: now, priceDistance: 1, minimumClosedBars: 2,
+      getTicks: (from, to) async {
+        calls++;
+        if (calls < 8) return const <MarketTick>[];
+        return [
+          MarketTick(from + 1000, 2010),
+          MarketTick(from + 2000, 2011.4),
+          MarketTick(from + 3000, 2012.5),
+        ];
+      },
+      onSnapshot: (page) async => records.add(page),
+    );
+    expect(calls, 8);
+    expect(records, hasLength(1));
+    expect(result!.closedBars, greaterThanOrEqualTo(2));
+    expect(result.fromMs, now - 6 * 24 * hour);
+    expect(result.ticks.every((tick) =>
+        tick.timestamp <= now - 3 * 24 * hour - 1), isTrue);
   });
 
   test('rejects out-of-window and unordered provider ticks', () async {
@@ -116,7 +142,7 @@ void main() {
     for (var i = 1; i < ticks.length; i++) {
       expect(ticks[i].timestamp, greaterThanOrEqualTo(ticks[i - 1].timestamp));
     }
-    expect(ticks.where((x) => x.timestamp == now - hour), hasLength(2));
-    expect(ticks.where((x) => x.timestamp == now - hour - 1), hasLength(2));
+    expect(ticks.where((x) => x.timestamp == now - 5 * minute), hasLength(2));
+    expect(ticks.where((x) => x.timestamp == now - 5 * minute - 1), hasLength(2));
   });
 }
