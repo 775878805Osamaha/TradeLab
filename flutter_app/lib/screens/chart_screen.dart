@@ -2390,6 +2390,8 @@ class _ChartScreenState extends State<ChartScreen>
 
   Widget _referenceChartHeader(List<TradeCandle> candles) {
     final hasVerifiedPrices = candles.isNotEmpty;
+    final fetchingRangeTicks = _mode == ChartMode.range &&
+        _loading && _liveRequested && !hasVerifiedPrices;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final ink = isDark ? Colors.white : const Color(0xFF101010);
     final source = _selectedSymbol.source == TradeSource.ctrader
@@ -2446,15 +2448,19 @@ class _ChartScreenState extends State<ChartScreen>
                 hasVerifiedPrices
                     ? (_ctraderTimeCandlesStale
                         ? 'شموع $source · بيانات متأخرة' : 'شموع $source')
-                    : 'لا توجد أسعار موثقة · $source',
+                    : fetchingRangeTicks
+                        ? 'جارِ التحقق من تيكات BID · cTrader'
+                        : 'لا توجد أسعار موثقة · $source',
                 key: const Key('chart-provenance-header'),
                 textDirection: TextDirection.rtl,
                 textAlign: TextAlign.left,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 12,
-                    color: hasVerifiedPrices && !_ctraderTimeCandlesStale
-                        ? const Color(0xFF047660) : TradeColors.negative),
+                    color: fetchingRangeTicks
+                        ? TradeColors.blue
+                        : hasVerifiedPrices && !_ctraderTimeCandlesStale
+                            ? const Color(0xFF047660) : TradeColors.negative),
               ),
             ),
           )),
