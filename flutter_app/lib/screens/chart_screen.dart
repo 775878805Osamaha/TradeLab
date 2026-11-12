@@ -583,7 +583,7 @@ class _ChartScreenState extends State<ChartScreen>
         if (revision != _loadRevision || !mounted) return;
         if (snapshot == null) {
           throw const MarketDataException(
-              'لم تصل تيكات BID موثقة من cTrader خلال آخر 24 ساعة. '
+              'لم تصل تيكات BID موثقة من cTrader خلال آخر 6 أيام. '
               'تحقق من اتصال الحساب وتوفر تاريخ التيكات لدى الوسيط.');
         }
       } else {
