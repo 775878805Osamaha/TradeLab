@@ -83,6 +83,7 @@ class _ChartScreenState extends State<ChartScreen>
   int? _rangeOlderCursorMs;
   int _loadRevision = 0;
   bool _loading = false;
+  String? _rangeLoadingStage;
   bool _olderLoading = false;
   bool _historyExhausted = false;
   int? _olderCursorMs;
@@ -470,6 +471,7 @@ class _ChartScreenState extends State<ChartScreen>
         _olderLoading = false;
         _olderLoadError = null;
         _loadError = null;
+        _rangeLoadingStage = null;
         _loading = false;
         if (mounted) setState(() {});
       }
@@ -494,6 +496,7 @@ class _ChartScreenState extends State<ChartScreen>
       }
       _replay = false;
       _loading = true;
+      _rangeLoadingStage = null;
       // Invalidate the previous history request's UI state. Its finally block
       // intentionally ignores stale revisions, so reset the spinner here.
       _olderLoading = false;
@@ -530,6 +533,8 @@ class _ChartScreenState extends State<ChartScreen>
         final cacheKey = '$account:${symbol.code}';
         var point = _rangePointCache[cacheKey];
         if (point == null) {
+          setState(() => _rangeLoadingStage =
+              'جار التحقق من دقة تسعير XAUUSD لدى cTrader');
           point = await widget.controller.pointSize(symbol);
           if (revision != _loadRevision || !mounted) return;
           if (!point.isFinite || point <= 0) {
@@ -546,6 +551,14 @@ class _ChartScreenState extends State<ChartScreen>
             if (revision != _loadRevision || !mounted) {
               throw const MarketDataException('تغير الشارت أثناء تحميل تيكات المدى.');
             }
+            final windowMinutes = ((toMs - fromMs) / 60000).round();
+            final windowLabel = windowMinutes < 60
+                ? '$windowMinutes دقيقة'
+                : windowMinutes < 1440
+                    ? '${windowMinutes ~/ 60} ساعة'
+                    : '${windowMinutes ~/ 1440} يوم';
+            setState(() => _rangeLoadingStage =
+                'فحص نافذة تيكات BID: $windowLabel');
             List<MarketTick>? verified;
             try {
               verified = await RangeTickStore.readCoveredInterval(
@@ -554,6 +567,8 @@ class _ChartScreenState extends State<ChartScreen>
               // Missing or damaged archive is not a market data source.
             }
             if (verified != null) return verified;
+            setState(() => _rangeLoadingStage =
+                'طلب تيكات BID الحقيقية من cTrader: $windowLabel');
             final fetched = await widget.controller.rangeTicksBetween(
               symbol, fromMs: fromMs, toMs: toMs);
             if (revision != _loadRevision || !mounted) {
@@ -573,6 +588,8 @@ class _ChartScreenState extends State<ChartScreen>
             // completes. Continue widening history only if too few bars
             // formed to make the chart useful.
             setState(() {
+              _rangeLoadingStage =
+                  'تم التحقق من ${page.ticks.length} تيك BID · استكمال التاريخ';
               _rangeHistoryTicks = page.ticks;
               _rangeOlderCursorMs = page.fromMs - 1;
               _actualRange = page.timeline.bars;
@@ -635,7 +652,12 @@ class _ChartScreenState extends State<ChartScreen>
     } catch (_) {
       if (revision == _loadRevision) _loadError = 'تعذر تحميل بيانات السوق. أعد المحاولة.';
     } finally {
-      if (revision == _loadRevision && mounted) setState(() => _loading = false);
+      if (revision == _loadRevision && mounted) {
+        setState(() {
+          _loading = false;
+          _rangeLoadingStage = null;
+        });
+      }
     }
   }
 
@@ -2710,7 +2732,7 @@ class _ChartScreenState extends State<ChartScreen>
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           color: TradeColors.blue.withValues(alpha: .07),
           child: Text(_liveRequested
-              ? 'مدى $_rangeTicks نقطة · ${!_rangeSourceSupported ? 'غير مدعوم لهذا المصدر' : _loading && _actualRange.isEmpty ? 'تحميل صفحات BID الموثقة' : _actualRange.isEmpty ? 'لا توجد تيكات BID موثقة' : _actualRange.length == 1 ? 'شمعة قيد التكوين من BID؛ جرّب مدى أصغر' : 'شموع محسوبة من تيكات BID لـ cTrader'}'
+              ? 'مدى $_rangeTicks نقطة · ${!_rangeSourceSupported ? 'غير مدعوم لهذا المصدر' : _loading && _actualRange.isEmpty ? (_rangeLoadingStage ?? 'تحميل صفحات BID الموثقة') : _actualRange.isEmpty ? 'لا توجد تيكات BID موثقة' : _actualRange.length == 1 ? 'شمعة قيد التكوين من BID؛ جرّب مدى أصغر' : 'شموع محسوبة من تيكات BID لـ cTrader'}'
               : 'مدى $_rangeTicks · اربط حساب cTrader للحصول على تيكات BID الحقيقية',
               style: const TextStyle(fontSize: 11, color: TradeColors.blue)),
         ),
