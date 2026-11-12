@@ -24,7 +24,7 @@ import '../chart/chart_axis_source_labels.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_timeline.dart';
-import '../data/range_tick_rollforward.dart';
+import '../data/range_startup_loader.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
@@ -520,94 +520,72 @@ class _ChartScreenState extends State<ChartScreen>
         if (!_rangeSourceSupported) {
           throw const MarketDataException('شموع المدى الحقيقية متاحة حاليًا لرموز cTrader فقط؛ لا تتوفر تيكات Binance لهذا الوضع.');
         }
-        final account = widget.controller.accountId!;
+        final account = widget.controller.accountId;
+        if (account == null) {
+          throw const MarketDataException(
+              'لا يوجد حساب cTrader محدد. افتح الحساب وأعد الاتصال.');
+        }
         final symbol = _selectedSymbol;
         final cacheKey = '$account:${symbol.code}';
-        // Reuse only a recent *complete* timestamped provider window. The
-        // v3 price-only snapshot is not sufficient for historical paging.
-        // A verified six-day window may be older than the short quote TTL.
-        // Keep its complete historical coverage; request only uncovered
-        // milliseconds since its end instead of re-fetching all six days.
-        final windowEnd = DateTime.now().toUtc().millisecondsSinceEpoch;
-        final windowStart = windowEnd -
-            RangeTickStore.verifiedWindowDuration.inMilliseconds;
-        VerifiedBidWindow? restored;
-        try {
-          restored = await RangeTickStore.readLatestVerifiedWindowWithCoverage(
-            account, symbol.code, maxAge: const Duration(days: 6));
-        } catch (_) {
-          // A damaged cache never substitutes estimated ticks for cTrader.
-          restored = null;
-        }
-        if (revision != _loadRevision || !mounted) return;
-
-        List<MarketTick>? ticks;
-        int? coveredFromMs;
-        if (restored != null && restored.ticks.isNotEmpty &&
-            restored.toMs >= windowStart) {
-          if (windowEnd - restored.toMs <=
-              const Duration(minutes: 2).inMilliseconds) {
-            // No extra network traffic for the same fresh broker snapshot.
-            ticks = restored.ticks;
-            coveredFromMs = restored.fromMs;
-          } else {
-            // The old and new six-day windows overlap. Fetch precisely the
-            // missing inclusive suffix; this avoids duplicate same-ms ticks.
-            final suffix = await widget.controller.rangeTicksBetween(
-              symbol,
-              fromMs: restored.toMs + 1,
-              toMs: windowEnd,
-            );
-            if (revision != _loadRevision || !mounted) return;
-            ticks = RangeTickRollforward.merge(
-              cached: restored,
-              newTicks: suffix,
-              newFromMs: windowStart,
-              newToMs: windowEnd,
-            );
-            coveredFromMs = windowStart;
-            // Persist the new complete window after the prices are available.
-            unawaited(RangeTickStore.archiveVerifiedWindow(
-              account, symbol.code, ticks,
-              fromMs: windowStart, toMs: windowEnd,
-            ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-          }
-        }
-
-        if (ticks == null || ticks.isEmpty) {
-          // Missing, expired or empty saved coverage: fall back to a full,
-          // verified broker request rather than treating holes as real ticks.
-          ticks = await widget.controller.rangeTicks(symbol,
-              before: DateTime.fromMillisecondsSinceEpoch(
-                  windowEnd, isUtc: true));
-          if (revision != _loadRevision || !mounted) return;
-          if (ticks.isEmpty) {
-            throw const MarketDataException(
-                'لم يُرجع cTrader تيكات ضمن الفترة المطلوبة.');
-          }
-          coveredFromMs = windowStart;
-          unawaited(RangeTickStore.archiveVerifiedWindow(
-            account, symbol.code, ticks,
-            fromMs: windowStart, toMs: windowEnd,
-          ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-        }
-        _rangeHistoryTicks = ticks;
-        _rangeOlderCursorMs = coveredFromMs! - 1;
         var point = _rangePointCache[cacheKey];
         if (point == null) {
-          point = await widget.controller.pointSize(_selectedSymbol);
+          point = await widget.controller.pointSize(symbol);
           if (revision != _loadRevision || !mounted) return;
           if (!point.isFinite || point <= 0) {
-            throw const MarketDataException('دقة تسعير الرمز غير صالحة لإنشاء شموع المدى.');
+            throw const MarketDataException(
+                'دقة تسعير رمز cTrader غير صالحة لإنشاء شموع المدى.');
           }
           _rangePointCache[cacheKey] = point;
         }
+        final windowEnd = DateTime.now().toUtc().millisecondsSinceEpoch;
+        final snapshot = await RangeStartupLoader.load(
+          endMs: windowEnd,
+          priceDistance: _rangeTicks * point,
+          getTicks: (fromMs, toMs) async {
+            if (revision != _loadRevision || !mounted) {
+              throw const MarketDataException('تغير الشارت أثناء تحميل تيكات المدى.');
+            }
+            List<MarketTick>? verified;
+            try {
+              verified = await RangeTickStore.readCoveredInterval(
+                account, symbol.code, fromMs: fromMs, toMs: toMs);
+            } catch (_) {
+              // Missing or damaged archive is not a market data source.
+            }
+            if (verified != null) return verified;
+            final fetched = await widget.controller.rangeTicksBetween(
+              symbol, fromMs: fromMs, toMs: toMs);
+            if (revision != _loadRevision || !mounted) {
+              throw const MarketDataException('تغير الحساب أثناء تحميل المدى.');
+            }
+            // Every page is certified by the broker before recording its
+            // exact time coverage. Short windows must never claim six days.
+            unawaited(RangeTickStore.archiveVerifiedWindow(
+              account, symbol.code, fetched,
+              fromMs: fromMs, toMs: toMs,
+            ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+            return fetched;
+          },
+          onSnapshot: (page) async {
+            if (revision != _loadRevision || !mounted) return;
+            // Display authentic BID Range bars as soon as a short interval
+            // completes. Continue widening history only if too few bars
+            // formed to make the chart useful.
+            setState(() {
+              _rangeHistoryTicks = page.ticks;
+              _rangeOlderCursorMs = page.fromMs - 1;
+              _actualRange = page.timeline.bars;
+              _rangeBarEndTickIndices = page.timeline.endTickIndices;
+              _rangeBarTimestamps = page.timeline.endTimestamps;
+            });
+          },
+        );
         if (revision != _loadRevision || !mounted) return;
-        final timeline = await RangeBarTimeline.buildAsync(ticks, _rangeTicks * point);
-        if (revision != _loadRevision || !mounted) return;
-        _actualRange = timeline.bars;
-        _rangeBarEndTickIndices = timeline.endTickIndices;
-        _rangeBarTimestamps = timeline.endTimestamps;
+        if (snapshot == null) {
+          throw const MarketDataException(
+              'لم تصل تيكات BID موثقة من cTrader خلال آخر 24 ساعة. '
+              'تحقق من اتصال الحساب وتوفر تاريخ التيكات لدى الوسيط.');
+        }
       } else {
         // Render verified, account-scoped history immediately on a return to
         // this symbol. A recently synchronized cache needs no new OHLC call.
@@ -730,8 +708,9 @@ class _ChartScreenState extends State<ChartScreen>
       // verified local windows, even if they were saved with different
       // boundaries on a previous app session. Partial archives are unsafe.
       final endMs = _rangeOlderCursorMs ?? earliest - 1;
-      final fromMs = endMs -
-          RangeTickStore.verifiedWindowDuration.inMilliseconds;
+      // Use bounded 12-hour pages for older history, not a single dense
+      // six-day broker request that can leave the chart unresponsive.
+      final fromMs = endMs - const Duration(hours: 12).inMilliseconds;
       if (fromMs < 0) {
         _historyExhausted = true;
         return;
@@ -2411,6 +2390,8 @@ class _ChartScreenState extends State<ChartScreen>
 
   Widget _referenceChartHeader(List<TradeCandle> candles) {
     final hasVerifiedPrices = candles.isNotEmpty;
+    final fetchingRangeTicks = _mode == ChartMode.range &&
+        _loading && _liveRequested && !hasVerifiedPrices;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final ink = isDark ? Colors.white : const Color(0xFF101010);
     final source = _selectedSymbol.source == TradeSource.ctrader
@@ -2467,15 +2448,19 @@ class _ChartScreenState extends State<ChartScreen>
                 hasVerifiedPrices
                     ? (_ctraderTimeCandlesStale
                         ? 'شموع $source · بيانات متأخرة' : 'شموع $source')
-                    : 'لا توجد أسعار موثقة · $source',
+                    : fetchingRangeTicks
+                        ? 'جارِ التحقق من تيكات BID · cTrader'
+                        : 'لا توجد أسعار موثقة · $source',
                 key: const Key('chart-provenance-header'),
                 textDirection: TextDirection.rtl,
                 textAlign: TextAlign.left,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 12,
-                    color: hasVerifiedPrices && !_ctraderTimeCandlesStale
-                        ? const Color(0xFF047660) : TradeColors.negative),
+                    color: fetchingRangeTicks
+                        ? TradeColors.blue
+                        : hasVerifiedPrices && !_ctraderTimeCandlesStale
+                            ? const Color(0xFF047660) : TradeColors.negative),
               ),
             ),
           )),
@@ -2711,7 +2696,7 @@ class _ChartScreenState extends State<ChartScreen>
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           color: TradeColors.blue.withValues(alpha: .07),
           child: Text(_liveRequested
-              ? 'مدى $_rangeTicks نقطة · ${!_rangeSourceSupported ? 'غير مدعوم لهذا المصدر' : _actualRange.isEmpty ? 'انتظار تيكات cTrader' : 'شموع محسوبة من تيكات BID لـ cTrader'}'
+              ? 'مدى $_rangeTicks نقطة · ${!_rangeSourceSupported ? 'غير مدعوم لهذا المصدر' : _loading && _actualRange.isEmpty ? 'تحميل صفحات BID الموثقة' : _actualRange.isEmpty ? 'لا توجد تيكات BID موثقة' : _actualRange.length == 1 ? 'شمعة قيد التكوين من BID؛ جرّب مدى أصغر' : 'شموع محسوبة من تيكات BID لـ cTrader'}'
               : 'مدى $_rangeTicks · اربط حساب cTrader للحصول على تيكات BID الحقيقية',
               style: const TextStyle(fontSize: 11, color: TradeColors.blue)),
         ),

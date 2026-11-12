@@ -212,6 +212,8 @@ class RangeTickStore {
     ''');
   }
 
+  /// Accept any exact provider interval up to six days, so short startup
+  /// pages can be cached without pretending to cover a longer quiet period.
   /// Only mark a window complete after the provider returned a verified,
   /// ordered, non-truncated response and every tick reached the archive.
   /// If the app closes between the writes, orphan ticks are safe: no
@@ -224,7 +226,7 @@ class RangeTickStore {
     required int toMs,
   }) async {
     if (accountId.isEmpty || symbol.isEmpty || fromMs < 0 || toMs < fromMs ||
-        toMs - fromMs != verifiedWindowDuration.inMilliseconds ||
+        toMs - fromMs > verifiedWindowDuration.inMilliseconds ||
         ticks.any((tick) => tick.timestamp < fromMs || tick.timestamp > toMs)) {
       throw ArgumentError('Invalid verified BID window bounds');
     }
