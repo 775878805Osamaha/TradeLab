@@ -254,6 +254,52 @@ void main() {
     ), isNull);
   });
 
+  test('short verified windows support progressive Range startup safely',
+      () async {
+    final end = DateTime.now().toUtc().millisecondsSinceEpoch - 1000;
+    const hourMs = 3600000;
+    final firstFrom = end - hourMs;
+    final previousFrom = end - 4 * hourMs;
+    await RangeTickStore.archiveVerifiedWindow(
+      'progressive-account', 'XAUUSD', [
+        MarketTick(firstFrom + 1, 2000),
+        MarketTick(end - 100, 2010),
+      ],
+      fromMs: firstFrom, toMs: end,
+    );
+    await RangeTickStore.archiveVerifiedWindow(
+      'progressive-account', 'XAUUSD', [
+        MarketTick(previousFrom + 1, 1990),
+        MarketTick(firstFrom - 1, 1995),
+      ],
+      fromMs: previousFrom, toMs: firstFrom - 1,
+    );
+    final recovered = await RangeTickStore.readCoveredInterval(
+      'progressive-account', 'XAUUSD',
+      fromMs: previousFrom, toMs: end,
+    );
+    expect(recovered!.map((tick) => tick.bid).toList(),
+        [1990, 1995, 2000, 2010]);
+    final latest = await RangeTickStore.readLatestVerifiedWindowWithCoverage(
+      'progressive-account', 'XAUUSD',
+    );
+    expect(latest, isNotNull);
+    expect(latest!.fromMs, firstFrom);
+    expect(latest.ticks.length, 2);
+    expect(await RangeTickStore.readCoveredInterval(
+      'progressive-account', 'XAUUSD',
+      fromMs: previousFrom - 1, toMs: end,
+    ), isNull, reason: 'One missing millisecond is not verified history');
+    await expectLater(
+      RangeTickStore.archiveVerifiedWindow(
+        'progressive-account', 'XAUUSD', const [],
+        fromMs: previousFrom - 7 * 86400000,
+        toMs: previousFrom,
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('latest verified window restores fresh timestamped ticks', () async {
     final end = DateTime.now().toUtc().millisecondsSinceEpoch - 1000;
     final from = end - sixDaysMs;
