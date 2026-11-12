@@ -88,9 +88,18 @@ jobs:
           if len(matches) != 1:
               raise SystemExit('Expected one url_launcher_android Gradle build script')
           target = matches[0]
+          # Disable the single crashing Android Lint task; keep every other
+          # module's release lint and all Flutter tests active.
+          gradle_lines = [
+              '',
+              '// CI preview only: url_launcher_android JavaDoc Lint engine bug.',
+              'tasks.matching { it.name == "lintVitalAnalyzeRelease" }.configureEach {',
+              '    enabled = false',
+              '}',
+              '',
+          ]
           with target.open('a', encoding='utf-8') as out:
-              out.write('\n// CI preview only: upstream Android lint JavaDoc parser failure.\n'
-                        'android { lint { checkReleaseBuilds = false } }\n')
+              out.write(chr(10).join(gradle_lines))
           print(f'Isolated release lint workaround: {target}')
           PY
       - name: Build optimized Flutter preview APK
