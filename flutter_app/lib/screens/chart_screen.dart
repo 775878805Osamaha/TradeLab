@@ -2734,6 +2734,9 @@ class _ChartScreenState extends State<ChartScreen>
           child: Text(_liveRequested
               ? 'مدى $_rangeTicks نقطة · ${!_rangeSourceSupported ? 'غير مدعوم لهذا المصدر' : _loading && _actualRange.isEmpty ? (_rangeLoadingStage ?? 'تحميل صفحات BID الموثقة') : _actualRange.isEmpty ? 'لا توجد تيكات BID موثقة' : _actualRange.length == 1 ? 'شمعة قيد التكوين من BID؛ جرّب مدى أصغر' : 'شموع محسوبة من تيكات BID لـ cTrader'}'
               : 'مدى $_rangeTicks · اربط حساب cTrader للحصول على تيكات BID الحقيقية',
+              textDirection: TextDirection.rtl,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 11, color: TradeColors.blue)),
         ),
       if (_loading) const LinearProgressIndicator(minHeight: 2),
