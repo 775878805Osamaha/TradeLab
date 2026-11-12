@@ -25,6 +25,7 @@ import '../chart/chart_axis_ticks.dart';
 import '../chart/candle_prefix.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_startup_loader.dart';
+import '../data/range_older_page.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
@@ -704,13 +705,15 @@ class _ChartScreenState extends State<ChartScreen>
       _olderLoadError = null;
     });
     try {
-      // Cover the exact six-day interval using one or more independently
-      // verified local windows, even if they were saved with different
-      // boundaries on a previous app session. Partial archives are unsafe.
+      // Reuse independently verified local windows when available.
+      // Older pages must cover exactly twelve hours, including every BID
+      // event at an interval boundary; no inferred continuity is allowed.
       final endMs = _rangeOlderCursorMs ?? earliest - 1;
-      // Use bounded 12-hour pages for older history, not a single dense
-      // six-day broker request that can leave the chart unresponsive.
-      final fromMs = endMs - const Duration(hours: 12).inMilliseconds;
+      if (endMs < RangeOlderPage.lookback.inMilliseconds) {
+        _historyExhausted = true;
+        return;
+      }
+      final fromMs = RangeOlderPage.bounds(endMs).fromMs;
       if (fromMs < 0) {
         _historyExhausted = true;
         return;
@@ -725,16 +728,27 @@ class _ChartScreenState extends State<ChartScreen>
       }
       if (!mounted || revision != _loadRevision) return;
       if (older == null) {
-        older = await widget.controller.rangeTicks(
-          symbol,
-          before: DateTime.fromMillisecondsSinceEpoch(endMs, isUtc: true),
+        // IMPORTANT: rangeTicks() fetches SIX days; its result cannot be
+        // archived as a twelve-hour interval. Request only the exact
+        // uncovered inclusive page through the verified cTrader API.
+        older = await widget.controller.rangeTicksBetween(
+          symbol, fromMs: fromMs, toMs: endMs,
         );
         if (!mounted || revision != _loadRevision) return;
-        // Save exact provider coverage, including verified empty windows,
-        // without blocking chart rendering.
+        RangeOlderPage.verify(
+          page: older, fromMs: fromMs, toMs: endMs,
+          alreadyLoaded: _rangeHistoryTicks.length,
+        );
+        // Persist only this complete, broker-verified interval (even if
+        // quiet); never mark six-day coverage from a shorter response.
         unawaited(RangeTickStore.archiveVerifiedWindow(
           account, symbol.code, older, fromMs: fromMs, toMs: endMs,
         ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+      } else {
+        RangeOlderPage.verify(
+          page: older, fromMs: fromMs, toMs: endMs,
+          alreadyLoaded: _rangeHistoryTicks.length,
+        );
       }
       // The cursor is exclusive, even when several ticks share a ms.
       if (older.any((tick) => tick.timestamp >= earliest)) {
@@ -744,7 +758,7 @@ class _ChartScreenState extends State<ChartScreen>
       if (older.isEmpty) {
         _rangeOlderCursorMs = fromMs - 1;
         _olderLoadError =
-            'لا توجد تيكات في الأيام الستة السابقة. اضغط «أقدم» لمتابعة البحث.';
+            'لا توجد تيكات BID في آخر 12 ساعة من الفترة الأقدم. اضغط «أقدم» لمتابعة البحث.';
         return;
       }
       final prefix = older;

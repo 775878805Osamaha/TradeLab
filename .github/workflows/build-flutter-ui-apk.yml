@@ -55,7 +55,7 @@ jobs:
       - name: Static analysis
         run: flutter analyze --no-fatal-infos
       - name: Interaction tests
-        run: flutter test test/widget_test.dart test/chart_short_position_test.dart test/range_startup_loader_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/chart_panel_settings_test.dart test/chart_scale_settings_test.dart test/chart_symbol_settings_test.dart test/chart_axis_ticks_test.dart test/market_candle_store_test.dart test/chart_annotations_test.dart test/chart_line_geometry_test.dart test/candle_prefix_test.dart test/results_connection_test.dart test/market_api_test.dart test/paper_ledger_test.dart test/paper_journal_controller_test.dart test/paper_trade_service_test.dart
+        run: flutter test test/widget_test.dart test/chart_short_position_test.dart test/range_startup_loader_test.dart test/range_older_page_test.dart test/range_bar_builder_test.dart test/chart_viewport_test.dart test/chart_panel_settings_test.dart test/chart_scale_settings_test.dart test/chart_symbol_settings_test.dart test/chart_axis_ticks_test.dart test/market_candle_store_test.dart test/chart_annotations_test.dart test/chart_line_geometry_test.dart test/candle_prefix_test.dart test/results_connection_test.dart test/market_api_test.dart test/paper_ledger_test.dart test/paper_journal_controller_test.dart test/paper_trade_service_test.dart
       - name: Verify native OAuth compatibility
         run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs
       - name: Capture chart design snapshot

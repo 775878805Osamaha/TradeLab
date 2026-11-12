@@ -47,7 +47,8 @@ jobs:
         run: flutter analyze --no-fatal-infos
       - name: Verify historical tick archive and chart interactions
         run: |
-          flutter test test/range_startup_loader_test.dart \
+          flutter test test/range_older_page_test.dart \
+            test/range_startup_loader_test.dart \
             test/range_tick_store_test.dart \
             test/widget_test.dart \
             test/range_tick_rollforward_test.dart \
