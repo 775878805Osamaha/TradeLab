@@ -67,33 +67,31 @@ jobs:
         run: flutter test --update-goldens test/drawing_tools_sheet_test.dart
       - name: Verify PROMPT 06 analysis hub layout, actions and golden
         run: flutter test --update-goldens test/analysis_hub_sheet_test.dart
-      - name: Work around upstream Android lint JavaDoc parser crash
-        # Only exclude the two crashing CommentDetector checks in the
-        # url_launcher_android dependency; preserve all other lint checks.
+      - name: Isolate upstream url_launcher_android release lint engine crash
+        # Android Lint's JavaDoc parser raises NoSuchMethodError on UrlLauncher.java.
+        # Disable ONLY this external plugin's release-vital lint in preview builds.
+        # Flutter static analysis, widget tests and all other Android lint stay on.
         run: |
           python3 - <<'PY'
           import json
           from pathlib import Path
-          import xml.etree.ElementTree as ET
 
           deps = json.loads(Path('.flutter-plugins-dependencies').read_text())
-          paths = [Path(p['path']) / 'android'
-                   for p in deps['plugins']['android']
-                   if p['name'] == 'url_launcher_android']
-          if len(paths) != 1 or not paths[0].is_dir():
-              raise SystemExit('Could not locate the resolved url_launcher_android plugin')
-          lint_file = paths[0] / 'lint.xml'
-          root = ET.parse(lint_file).getroot() if lint_file.exists() else ET.Element('lint')
-          for check_id in ('EasterEgg', 'StopShip'):
-              node = next((n for n in root.findall('issue')
-                           if n.get('id') == check_id), None)
-              if node is None:
-                  ET.SubElement(root, 'issue', {'id': check_id, 'severity': 'ignore'})
-              else:
-                  node.set('severity', 'ignore')
-          ET.ElementTree(root).write(lint_file, encoding='utf-8',
-                                     xml_declaration=True)
-          print(f'Android lint workaround scoped to {lint_file}')
+          plugin_dirs = [Path(p['path']) / 'android'
+                         for p in deps['plugins']['android']
+                         if p['name'] == 'url_launcher_android']
+          if len(plugin_dirs) != 1 or not plugin_dirs[0].is_dir():
+              raise SystemExit('Could not locate resolved url_launcher_android')
+          scripts = [plugin_dirs[0] / 'build.gradle',
+                     plugin_dirs[0] / 'build.gradle.kts']
+          matches = [p for p in scripts if p.is_file()]
+          if len(matches) != 1:
+              raise SystemExit('Expected one url_launcher_android Gradle build script')
+          target = matches[0]
+          with target.open('a', encoding='utf-8') as out:
+              out.write('\\n// CI preview only: upstream Android lint JavaDoc parser failure.\\n'
+                        'android { lint { checkReleaseBuilds = false } }\\n')
+          print(f'Isolated release lint workaround: {target}')
           PY
       - name: Build optimized Flutter preview APK
         # Flutter's generated Android host signs this preview using its
