@@ -156,11 +156,10 @@ class _ChartScreenState extends State<ChartScreen>
   static const _scaleSettingsKey = 'tradelab-chart-scale-settings-v1';
   static const _symbolSettingsKey = 'tradelab-chart-symbol-settings-v1';
   final _panelSettingsStorage = const FlutterSecureStorage();
-  ChartViewport _gestureStart = const ChartViewport();
+  ChartTouchGesture _touchGesture = ChartTouchGesture();
   late final AnimationController _momentum;
   double _previousMomentumX = 0;
   double _momentumPlotWidth = 1;
-  bool _gestureHadMultiTouch = false;
   double _gestureFocalX = 0;
   Offset? _crosshair;
   Timer? _replayTimer;
@@ -2747,8 +2746,10 @@ class _ChartScreenState extends State<ChartScreen>
             onScaleStart: (details) {
               _momentum.stop(); // A new gesture owns the chart immediately.
               if (!_panelChartTouched) setState(() => _panelChartTouched = true);
-              _gestureHadMultiTouch = details.pointerCount > 1;
-              _gestureStart = _viewport;
+              // Begin a fresh gesture, independent of any earlier fling.
+              // A later second-finger touch rebases the pinch on the viewport
+              // the first finger has already moved to.
+              _touchGesture = ChartTouchGesture();
               _gestureFocalX = details.localFocalPoint.dx;
               _gestureFocalY = details.localFocalPoint.dy;
               _draggingShortHandle = null;
@@ -2809,7 +2810,22 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onScaleUpdate: (details) {
-              if (details.pointerCount > 1) _gestureHadMultiTouch = true;
+              final nextViewport = _touchGesture.update(
+                viewport: _viewport,
+                pointerCount: details.pointerCount,
+                focalX: details.localFocalPoint.dx,
+                scale: details.scale,
+                deltaX: details.focalPointDelta.dx,
+                plotWidth: plotWidth,
+                candleCount: candles.length,
+              );
+              // Adding/removing a finger shifts Flutter's gesture centroid.
+              // Do not reinterpret that shift as a candle pan, zoom or edit.
+              if (_touchGesture.ignoredPointerTransition) return;
+              final movingDrawing = _draggingRectangle ||
+                  _draggingShortHandle != null || _draggingLine ||
+                  _draggingPattern;
+              if (!movingDrawing && nextViewport == _viewport) return;
               setState(() {
               if (_draggingRectangle && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
@@ -2852,20 +2868,10 @@ class _ChartScreenState extends State<ChartScreen>
                       scale.price(_gestureFocalY.clamp(0, scale.height).toDouble());
                   _patterns[_selectedPattern!] = original.moved(barDelta.toInt(), change);
                 }
-              } else if (details.pointerCount > 1) {
-                _viewport = _gestureStart.pinch(
-                  scale: details.scale,
-                  initialFocalX: _gestureFocalX,
-                  currentFocalX: details.localFocalPoint.dx,
-                  plotWidth: plotWidth,
-                  candleCount: candles.length,
-                );
-              } else {
-                _viewport = _viewport.pan(
-                  deltaX: details.focalPointDelta.dx,
-                  plotWidth: plotWidth,
-                  candleCount: candles.length,
-                );
+              } else if (details.pointerCount > 1 || _crosshair == null) {
+                // Rebased, incremental touch transform; chart geometry and
+                // source OHLC remain untouched.
+                _viewport = nextViewport;
               }
               });
               // The same paging threshold also applies during momentum.
@@ -2889,8 +2895,9 @@ class _ChartScreenState extends State<ChartScreen>
               final velocity = details.velocity.pixelsPerSecond.dx;
               if (chartShouldFling(
                   horizontalVelocity: velocity,
+                  horizontalTravel: _touchGesture.horizontalTravel,
                   candleCount: candles.length,
-                  multiTouch: _gestureHadMultiTouch,
+                  multiTouch: _touchGesture.hadMultiTouch,
                   editingDrawing: editing || _crosshair != null,
                   reducedMotion: MediaQuery.disableAnimationsOf(context))) {
                 _startMomentum(velocity, plotWidth);
