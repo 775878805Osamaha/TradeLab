@@ -20,11 +20,16 @@ class RangeStartupLoader {
   // could require thousands of network pages before any candle appeared.
   // This bounded startup makes the first verified tick slice visible early.
   static const horizons = <Duration>[
+    Duration(minutes: 5),
+    Duration(minutes: 15),
     Duration(hours: 1),
     Duration(hours: 4),
     Duration(hours: 12),
     Duration(hours: 24),
+    Duration(days: 3),
+    Duration(days: 6),
   ];
+  static const maxStartupTicks = 1000000;
 
   /// [getTicks] must return an ordered, complete and verified cTrader BID
   /// response for the *inclusive* requested interval. Adjacent windows never
@@ -57,6 +62,11 @@ class RangeStartupLoader {
               'تيكات cTrader لا تتوافق مع النوافذ الزمنية المطلوبة.');
         }
         previous = tick.timestamp;
+      }
+      if (combined.length + page.length > maxStartupTicks) {
+        throw const MarketDataException(
+            'تاريخ cTrader أكبر من الحد الآمن للذاكرة. '
+            'اختر مدى أكبر أو حدّث بيانات الوسيط.');
       }
       combined = <MarketTick>[...page, ...combined];
       priorFrom = fromMs;
