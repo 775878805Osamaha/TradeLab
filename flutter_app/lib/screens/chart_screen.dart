@@ -534,7 +534,7 @@ class _ChartScreenState extends State<ChartScreen>
         var point = _rangePointCache[cacheKey];
         if (point == null) {
           setState(() => _rangeLoadingStage =
-              'جار التحقق من دقة تسعير XAUUSD لدى cTrader');
+              'جار التحقق من دقة تسعير ${symbol.code} لدى cTrader');
           point = await widget.controller.pointSize(symbol);
           if (revision != _loadRevision || !mounted) return;
           if (!point.isFinite || point <= 0) {
