@@ -96,4 +96,32 @@ void main() {
     final limited = MarketCandleStore.mergeVerified(old, recent, maxCount: 2);
     expect(limited.map((bar) => bar.timestamp), [2000, 3000]);
   });
+  test('SQLite archive is idempotent and never overwrites broker OHLC', () async {
+    final account = 'integrity-${DateTime.now().microsecondsSinceEpoch}';
+    const start = 1700000000000;
+    const initial = [
+      MarketBar(start, TradeCandle(10, 12, 9, 11)),
+      MarketBar(start + 180000, TradeCandle(13, 15, 12, 14)),
+    ];
+    await MarketCandleStore.archive(gold, '1m', account, initial);
+    await MarketCandleStore.archive(gold, '1m', account, initial);
+
+    const newAndConflicting = [
+      MarketBar(start + 60000, TradeCandle(11, 13, 10, 12)),
+      MarketBar(start + 180000, TradeCandle(13, 16, 12, 15)),
+    ];
+    await expectLater(
+      MarketCandleStore.archive(gold, '1m', account, newAndConflicting),
+      throwsA(isA<MarketDataException>()),
+    );
+
+    final after = await MarketCandleStore.read(gold, '1m', account);
+    expect(after.length, 2);
+    expect(after.map((bar) => bar.timestamp), [
+      start, start + 180000,
+    ]);
+    expect(after.last.candle.high, 15);
+    expect(after.last.candle.close, 14);
+  });
+
 }
