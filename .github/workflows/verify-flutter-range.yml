@@ -58,6 +58,34 @@ jobs:
             test/ctrader_candle_stitcher_test.dart \
             test/ctrader_account_selection_test.dart \
             test/market_api_test.dart
+      - name: Work around url_launcher_android upstream JavaDoc lint crash
+        # An upstream Android Lint NoSuchMethodError in JavaDocParser aborts
+        # release builds while scanning the third-party url_launcher plugin.
+        # Disable only that plugin's crashing task in this CI preview job.
+        # Keep Flutter analyze/tests and lint for every other Android module.
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          deps = json.loads(Path('.flutter-plugins-dependencies').read_text())
+          plugins = [Path(p['path']) / 'android'
+                     for p in deps['plugins']['android']
+                     if p['name'] == 'url_launcher_android']
+          if len(plugins) != 1 or not plugins[0].is_dir():
+              raise SystemExit('Resolved url_launcher_android missing')
+          files = [p for p in (plugins[0] / 'build.gradle',
+                                plugins[0] / 'build.gradle.kts')
+                   if p.is_file()]
+          if len(files) != 1:
+              raise SystemExit('Expected a single url_launcher_android Gradle script')
+          with files[0].open('a', encoding='utf-8') as out:
+              out.write('\n// CI preview only: upstream JavaDoc lint crash.\n'
+                        'tasks.matching { it.name == "lintVitalAnalyzeRelease" }.configureEach {\n'
+                        '    enabled = false\n'
+                        '}\n')
+          print('Scoped lint workaround:', files[0])
+          PY
       - name: Build Android release preview (no publishing)
         run: flutter build apk --release
       - name: Verify Android APK, signature and ARM64 support
