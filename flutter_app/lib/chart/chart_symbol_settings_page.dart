@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/tradelab_theme.dart';
 import 'chart_symbol_settings.dart';
@@ -93,7 +94,15 @@ class _ChartSymbolSettingsPageState extends State<ChartSymbolSettingsPage> {
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(builder: (context, layout) {
+  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
+    value: const SystemUiOverlayStyle(
+      statusBarColor: Colors.white,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+      systemNavigationBarColor: Colors.white,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+    child: LayoutBuilder(builder: (context, layout) {
     final u = layout.maxWidth / 691;
     final labelSize = (26 * u).clamp(13.5, 19.0);
     return PopScope(canPop: false,
@@ -229,7 +238,7 @@ class _ChartSymbolSettingsPageState extends State<ChartSymbolSettingsPage> {
         ]),
       ),
     );
-  });
+  }));
 
   Widget _section(String label, double u) => Text(label,
     textAlign: TextAlign.right,
