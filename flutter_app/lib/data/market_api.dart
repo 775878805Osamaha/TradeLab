@@ -89,6 +89,29 @@ class MarketApi {
               'يلزم تحديث التطبيق أو إعادة اختيار الإطار.');
         }
       }
+      if (url.path == '/v1/ticks') {
+        if (reason == 'ctrader_tick_history_unusable') {
+          throw const MarketDataException(
+              'أعاد cTrader تيكات BID غير مكتملة أو غير متسقة. '
+              'لم نعرض شموع مدى غير موثوقة؛ أعد المحاولة.');
+        }
+        if (reason == 'ctrader_broker_rejected_request') {
+          throw const MarketDataException(
+              'رفض وسيط cTrader طلب تيكات BID لهذا الرمز أو الحساب. '
+              'تحقق من صلاحية قراءة الأسعار واختيار الحساب.');
+        }
+        if (reason == 'ctrader_response_timeout') {
+          throw const MarketDataException(
+              'انتهت مهلة استجابة cTrader لتيكات BID. '
+              'تحقق من الاتصال واضغط إعادة المحاولة.');
+        }
+        if (reason == 'ctrader_connection_failed' ||
+            reason == 'ctrader_broker_unavailable') {
+          throw const MarketDataException(
+              'تعذر الاتصال بخادم تيكات cTrader. '
+              'تحقق من اتصال الوسيط وأعد المحاولة.');
+        }
+      }
       throw MarketDataException(
           'فشل الاتصال بالمصدر (${response.statusCode}). أعد المحاولة.');
     }
