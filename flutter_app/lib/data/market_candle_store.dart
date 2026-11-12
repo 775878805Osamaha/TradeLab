@@ -21,17 +21,34 @@ class MarketCandleStore {
     return '${symbol.source.name}:${accountId ?? 'public'}:${symbol.code}:$timeframe';
   }
 
-  /// Combine two validated source windows by exact timestamp. Newer fetched
-  /// rows take precedence on overlap; missing timestamps stay missing.
+  /// Merge verified provider windows by timestamp without inventing gaps.
+  /// An already archived *closed* candle must not change silently on refresh:
+  /// conflicting broker OHLC indicates a source revision or corrupt archive.
+  /// Replay must never inherit those revisions as if its past were unchanged.
   static List<MarketBar> mergeVerified(
       List<MarketBar> existing, List<MarketBar> fetched,
       {int maxCount = 100000}) {
+    if (maxCount <= 0) {
+      throw ArgumentError.value(maxCount, 'maxCount', 'Must be positive');
+    }
     validateBars(existing);
     validateBars(fetched);
     final byTime = <int, MarketBar>{
       for (final bar in existing) bar.timestamp: bar,
-      for (final bar in fetched) bar.timestamp: bar,
     };
+    for (final bar in fetched) {
+      final archived = byTime[bar.timestamp];
+      if (archived != null &&
+          (archived.candle.open != bar.candle.open ||
+           archived.candle.high != bar.candle.high ||
+           archived.candle.low != bar.candle.low ||
+           archived.candle.close != bar.candle.close)) {
+        throw const MarketDataException(
+          'تعارض بين الشموع المحفوظة وبيانات المصدر. '
+          'أوقفنا تحديث الشارت لحماية Replay؛ تحقق من مصدر البيانات.');
+      }
+      byTime[bar.timestamp] = bar;
+    }
     final timestamps = byTime.keys.toList()..sort();
     final start = timestamps.length > maxCount ? timestamps.length - maxCount : 0;
     return List<MarketBar>.unmodifiable(
@@ -123,8 +140,32 @@ class MarketCandleStore {
       // Batched writes support long broker history without one transaction per
       // candle and without storing an enormous JSON blob in memory.
       for (var offset = 0; offset < bars.length; offset += 500) {
+        final page = bars.skip(offset).take(500).toList(growable: false);
+        // Query existing rows in one bounded batch (501 bind parameters).
+        // Even an older pagination request must not overwrite broker-closed
+        // history behind Replay's back. SQLite serializes this transaction.
+        final timestamps = page.map((bar) => bar.timestamp).toList(growable: false);
+        final archived = await txn.query('candle_history',
+          columns: ['timestamp_ms', 'open', 'high', 'low', 'close'],
+          where: 'cache_key = ? AND timestamp_ms IN (${List.filled(page.length, '?').join(',')})',
+          whereArgs: [cacheKey, ...timestamps],
+        );
+        final incoming = <int, MarketBar>{
+          for (final bar in page) bar.timestamp: bar,
+        };
+        for (final row in archived) {
+          final candle = incoming[row['timestamp_ms'] as int]!.candle;
+          if ((row['open'] as num).toDouble() != candle.open ||
+              (row['high'] as num).toDouble() != candle.high ||
+              (row['low'] as num).toDouble() != candle.low ||
+              (row['close'] as num).toDouble() != candle.close) {
+            throw const MarketDataException(
+              'تعارض في الشموع التاريخية المؤرشفة. '
+              'لم نستبدل أسعارًا سابقة؛ تحقق من بيانات المصدر.');
+          }
+        }
         final batch = txn.batch();
-        for (final bar in bars.skip(offset).take(500)) {
+        for (final bar in page) {
           batch.insert('candle_history', {
             'cache_key': cacheKey,
             'timestamp_ms': bar.timestamp,
@@ -132,7 +173,7 @@ class MarketCandleStore {
             'high': bar.candle.high,
             'low': bar.candle.low,
             'close': bar.candle.close,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
         }
         await batch.commit(noResult: true);
       }
