@@ -158,6 +158,33 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('chart tolerates a real one-to-two-to-one touch sequence',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    final chart = find.byKey(const Key('chart-gesture-area'));
+    final center = tester.getCenter(chart);
+    final first = await tester.startGesture(center, pointer: 1);
+    await first.moveBy(const Offset(48, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+
+    final second = await tester.startGesture(
+        center + const Offset(35, 0), pointer: 2);
+    await tester.pump(const Duration(milliseconds: 16));
+    await first.moveBy(const Offset(-14, 0));
+    await second.moveBy(const Offset(25, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await second.up();
+    await tester.pump(const Duration(milliseconds: 16));
+    await first.moveBy(const Offset(22, 0));
+    await first.up();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(chart, findsOneWidget);
+    expect(find.byKey(const Key('chart-source-empty')), findsOneWidget);
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
+  });
+
   testWidgets('compact chart remains readable on narrow screens', (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
