@@ -178,15 +178,77 @@ class ChartViewport {
   int get hashCode => Object.hash(barWidth, scrollBars, rightMarginBars);
 }
 
+/// Tracks one continuous touch session independently from the chart's OHLC.
+ /// When a second finger joins after a pan, the pinch is rebased on the
+ /// *current* viewport (not the original touch-down). The first two-finger
+ /// update and the first one-finger update after lifting a finger are ignored:
+ /// both are pointer-centroid changes, not deliberate chart movement.
+class ChartTouchGesture {
+  ChartViewport? _pinchOrigin;
+  double _pinchOriginFocalX = 0;
+  double _pinchOriginScale = 1;
+  bool _pinching = false;
+
+  bool hadMultiTouch = false;
+  bool ignoredPointerTransition = false;
+  double horizontalTravel = 0;
+
+  ChartViewport update({
+    required ChartViewport viewport,
+    required int pointerCount,
+    required double focalX,
+    required double scale,
+    required double deltaX,
+    required double plotWidth,
+    required int candleCount,
+  }) {
+    ignoredPointerTransition = false;
+    if (pointerCount > 1) {
+      hadMultiTouch = true;
+      if (!_pinching) {
+        _pinching = true;
+        _pinchOrigin = viewport;
+        _pinchOriginFocalX = focalX;
+        _pinchOriginScale = scale.isFinite && scale > 0 ? scale : 1;
+        ignoredPointerTransition = true;
+        return viewport;
+      }
+      if (!scale.isFinite || scale <= 0 || !focalX.isFinite) {
+        return viewport;
+      }
+      return _pinchOrigin!.pinch(
+        scale: scale / _pinchOriginScale,
+        initialFocalX: _pinchOriginFocalX,
+        currentFocalX: focalX,
+        plotWidth: plotWidth,
+        candleCount: candleCount,
+      );
+    }
+    if (_pinching) {
+      _pinching = false;
+      _pinchOrigin = null;
+      ignoredPointerTransition = true;
+      return viewport;
+    }
+    if (pointerCount != 1 || !deltaX.isFinite) return viewport;
+    horizontalTravel += deltaX.abs();
+    return viewport.pan(
+      deltaX: deltaX, plotWidth: plotWidth, candleCount: candleCount,
+    );
+  }
+}
+
 /// Only a deliberate one-finger pan can carry momentum into a chart fling.
 /// Editing a drawing, pinching, empty history and reduced-motion settings
 /// must never trigger a new autonomous scroll.
 bool chartShouldFling({
   required double horizontalVelocity,
+  required double horizontalTravel,
   required int candleCount,
   required bool multiTouch,
   required bool editingDrawing,
   required bool reducedMotion,
-}) => horizontalVelocity.isFinite &&
-    horizontalVelocity.abs() >= 180 && candleCount > 1 &&
+}) => horizontalVelocity.isFinite && horizontalTravel.isFinite &&
+    horizontalVelocity.abs() >= 180 && horizontalTravel >= 14 &&
+    candleCount > 1 &&
     !multiTouch && !editingDrawing && !reducedMotion;
