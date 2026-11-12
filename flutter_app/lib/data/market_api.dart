@@ -49,6 +49,29 @@ class MarketApi {
           reason = data['error'] as String;
         }
       } catch (_) {}
+      if (url.path == '/v1/ticks') {
+        if (reason == 'ctrader_tick_history_unusable') {
+          throw const MarketDataException(
+            'أعاد cTrader تيكات BID غير مكتملة أو غير متسقة. '
+            'لم نعرض شموع مدى غير موثقة.');
+        }
+        if (reason == 'ctrader_broker_rejected_request') {
+          throw const MarketDataException(
+            'رفض وسيط cTrader طلب تاريخ تيكات BID. '
+            'تحقق من دعم الوسيط للرمز XAUUSD وتاريخ التيكات.');
+        }
+        if (reason == 'ctrader_response_timeout') {
+          throw const MarketDataException(
+            'انتهت مهلة رد cTrader على طلب تيكات المدى. '
+            'أعد المحاولة أو اختر حجم مدى أصغر.');
+        }
+        if (reason == 'ctrader_connection_failed' ||
+            reason == 'ctrader_broker_unavailable') {
+          throw const MarketDataException(
+            'تعذر اتصال البوابة بخادم cTrader لجلب تيكات المدى. '
+            'تحقق من الاتصال وأعد المحاولة.');
+        }
+      }
       if (url.path == '/v1/candles') {
         if (reason == 'ctrader_candle_history_unusable') {
           throw const MarketDataException(
