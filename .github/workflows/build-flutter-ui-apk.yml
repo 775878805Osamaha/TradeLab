@@ -89,8 +89,8 @@ jobs:
               raise SystemExit('Expected one url_launcher_android Gradle build script')
           target = matches[0]
           with target.open('a', encoding='utf-8') as out:
-              out.write('\\n// CI preview only: upstream Android lint JavaDoc parser failure.\\n'
-                        'android { lint { checkReleaseBuilds = false } }\\n')
+              out.write('\n// CI preview only: upstream Android lint JavaDoc parser failure.\n'
+                        'android { lint { checkReleaseBuilds = false } }\n')
           print(f'Isolated release lint workaround: {target}')
           PY
       - name: Build optimized Flutter preview APK
