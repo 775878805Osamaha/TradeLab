@@ -53,17 +53,47 @@ void main() {
     );
   });
 
-  test('merging a new broker page preserves verified history and gaps', () {
+  test('identical broker overlap preserves verified history and gaps', () {
     const earlier = [
       MarketBar(1000, TradeCandle(10, 12, 9, 11)),
       MarketBar(3000, TradeCandle(11, 13, 10, 12)),
     ];
     const newer = [
-      MarketBar(3000, TradeCandle(12, 14, 11, 13)),
+      MarketBar(3000, TradeCandle(11, 13, 10, 12)),
       MarketBar(4000, TradeCandle(13, 15, 12, 14)),
     ];
     final merged = MarketCandleStore.mergeVerified(earlier, newer);
     expect(merged.map((bar) => bar.timestamp), [1000, 3000, 4000]);
-    expect(merged[1].candle.close, 13);
+    expect(merged[1].candle.close, 12);
+    expect(() => merged.add(newer.last), throwsUnsupportedError);
+  });
+
+  test('reject broker revisions of an archived closed candle', () {
+    const earlier = [
+      MarketBar(1000, TradeCandle(10, 12, 9, 11)),
+      MarketBar(3000, TradeCandle(11, 13, 10, 12)),
+    ];
+    const conflicting = [
+      MarketBar(3000, TradeCandle(12, 14, 11, 13)),
+      MarketBar(4000, TradeCandle(13, 15, 12, 14)),
+    ];
+    expect(
+      () => MarketCandleStore.mergeVerified(earlier, conflicting),
+      throwsA(isA<MarketDataException>()),
+    );
+    // A rejected refresh never mutates the previously authenticated history.
+    expect(earlier.last.candle.close, 12);
+  });
+
+  test('verified merge has a positive cap and retains newest timestamps', () {
+    const old = [MarketBar(1000, TradeCandle(10, 11, 9, 10))];
+    const recent = [
+      MarketBar(2000, TradeCandle(11, 12, 10, 11)),
+      MarketBar(3000, TradeCandle(12, 13, 11, 12)),
+    ];
+    expect(() => MarketCandleStore.mergeVerified(old, recent, maxCount: 0),
+        throwsArgumentError);
+    final limited = MarketCandleStore.mergeVerified(old, recent, maxCount: 2);
+    expect(limited.map((bar) => bar.timestamp), [2000, 3000]);
   });
 }
