@@ -330,7 +330,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Binance chart layout');
     expect(find.text('شموع Binance'), findsOneWidget);
-    expect(find.textContaining('شموع Binance ·'), findsOneWidget);
+    // Source details remain accessible in the chart-header tooltip, rather
+    // than occupying the deleted footer below the drawing toolbar.
+    expect(find.byTooltip('شموع Binance · آخر بيانات مصدر موثق'), findsOneWidget);
+    expect(find.textContaining('شموع Binance ·'), findsNothing);
     expect(find.textContaining('جارِ تحميل شموع'), findsNothing);
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
     expect(find.byKey(const Key('chart-source-empty')), findsNothing);
