@@ -30,6 +30,20 @@ void main() {
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
   });
 
+  testWidgets('chart tools touch the bottom navigation without an info footer',
+      (tester) async {
+    await openAtPhoneSize(tester);
+    final toolbar = find.byKey(const Key('chart-reference-toolbar'));
+    final navigation = find.byType(NavigationBar);
+    expect(toolbar, findsOneWidget);
+    expect(navigation, findsOneWidget);
+    expect(tester.getTopLeft(navigation).dy -
+        tester.getBottomLeft(toolbar).dy, closeTo(0, 1));
+    expect(find.byKey(const Key('chart-interaction-hint-overlay')), findsNothing);
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Replay cannot start without verified broker candles', (tester) async {
     await openAtPhoneSize(tester);
     await tester.tap(find.byTooltip('تشغيل Replay داخل الشارت'));
@@ -316,7 +330,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Binance chart layout');
     expect(find.text('شموع Binance'), findsOneWidget);
-    expect(find.textContaining('شموع Binance ·'), findsOneWidget);
+    // Source details remain accessible in the chart-header tooltip, rather
+    // than occupying the deleted footer below the drawing toolbar.
+    expect(find.byTooltip('شموع Binance · آخر بيانات مصدر موثق'), findsOneWidget);
+    expect(find.textContaining('شموع Binance ·'), findsNothing);
     expect(find.textContaining('جارِ تحميل شموع'), findsNothing);
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
     expect(find.byKey(const Key('chart-source-empty')), findsNothing);

@@ -2462,20 +2462,24 @@ class _ChartScreenState extends State<ChartScreen>
           child: GestureDetector(
             onTap: !_liveRequested
                 ? (widget.onOpenAccount ?? _notifyUnconnected) : null,
-            child: Text(
-            hasVerifiedPrices
-                ? (_ctraderTimeCandlesStale
-                    ? 'شموع $source · بيانات متأخرة' : 'شموع $source')
-                : 'لا توجد أسعار موثقة · $source',
-            key: const Key('chart-provenance-header'),
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.left,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12,
-                color: hasVerifiedPrices && !_ctraderTimeCandlesStale
-                    ? const Color(0xFF047660) : TradeColors.negative),
-          ))),
+            child: Tooltip(
+              message: _marketEvidenceLabel,
+              child: Text(
+                hasVerifiedPrices
+                    ? (_ctraderTimeCandlesStale
+                        ? 'شموع $source · بيانات متأخرة' : 'شموع $source')
+                    : 'لا توجد أسعار موثقة · $source',
+                key: const Key('chart-provenance-header'),
+                textDirection: TextDirection.rtl,
+                textAlign: TextAlign.left,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12,
+                    color: hasVerifiedPrices && !_ctraderTimeCandlesStale
+                        ? const Color(0xFF047660) : TradeColors.negative),
+              ),
+            ),
+          )),
         Positioned(left: 8, top: 43, child: OutlinedButton.icon(
           // The screenshot does not establish what the button labelled 3
           // does. Keep it visibly disabled until its meaning is verified.
@@ -2491,6 +2495,56 @@ class _ChartScreenState extends State<ChartScreen>
         )),
       ]),
     );
+  }
+
+  bool get _hasSelectedDrawing => _drawing &&
+      (_selectedLine != null || _selectedPattern != null ||
+       _selectedShort != null || _selectedRectangle != null);
+
+  void _deleteSelectedChartDrawing() {
+    if (!_hasSelectedDrawing) return;
+    setState(() {
+      _saveDrawingUndo();
+      if (_selectedRectangle != null && _selectedRectangle! < _rectangles.length) {
+        _rectangles.removeAt(_selectedRectangle!);
+      } else if (_selectedShort != null && _selectedShort! < _shortPositions.length) {
+        _shortPositions.removeAt(_selectedShort!);
+      } else if (_selectedLine != null && _selectedLine! < _levels.length) {
+        _levels.removeAt(_selectedLine!);
+      } else if (_selectedPattern != null && _selectedPattern! < _patterns.length) {
+        _patterns.removeAt(_selectedPattern!);
+      }
+      _selectedLine = null;
+      _selectedPattern = null;
+      _selectedShort = null;
+      _selectedRectangle = null;
+    });
+  }
+
+  // Guidance stays over the chart instead of adding a second footer below
+  // the reference toolbar. Its overlay ignores input so chart gestures work.
+  String? get _activeChartHint {
+    if (_placingShort) {
+      return _shortEntryAnchor == null
+          ? 'مركز بيع: المس الشارت لتحديد سعر الدخول'
+          : _shortStopPrice == null
+              ? 'حدد وقف الخسارة فوق سعر الدخول'
+              : 'حدد الهدف أسفل سعر الدخول';
+    }
+    if (_placingRectangle) {
+      return _rectangleFirstCorner == null
+          ? 'المستطيل: اختر الزاوية الأولى على الشارت'
+          : 'المستطيل: اختر الزاوية المقابلة لتحديد السعر والزمن';
+    }
+    if (_pendingAnchor != null && _drawing) {
+      return _secondChannelAnchor != null
+          ? 'القناة المتوازية: حدد النقطة الثالثة لضبط عرض القناة'
+          : 'المس الشارت لتحديد النقطة الثانية للرسم';
+    }
+    if (_drawing && _selectedPattern != null) {
+      return 'اسحب دائرة البداية أو النهاية لتعديل طرف الرسم فقط';
+    }
+    return null;
   }
 
   Widget _referenceChartToolbar(Color surface) => Container(
@@ -2537,6 +2591,23 @@ class _ChartScreenState extends State<ChartScreen>
         _iconAction(icon: Icons.edit_outlined,
             label: 'أدوات الرسم', active: _drawing,
             onPressed: _showDrawingTools),
+        if (_hasSelectedDrawing)
+          _iconAction(icon: Icons.tune,
+              label: 'خصائص الرسم المحدد',
+              onPressed: _selectedRectangle != null ? _rectangleProperties :
+                  _selectedShort != null ? _shortProperties : _editSelectedDrawing),
+        if (_hasSelectedDrawing)
+          _iconAction(icon: Icons.delete_outline,
+              label: 'حذف الرسم المحدد', onPressed: _deleteSelectedChartDrawing),
+        if (_lineUndo.isNotEmpty)
+          _iconAction(icon: Icons.undo, label: 'تراجع',
+              onPressed: _undoDrawing),
+        if (_lineRedo.isNotEmpty)
+          IconButton(
+            key: const Key('drawing-redo'),
+            tooltip: 'إعادة الرسم',
+            onPressed: _redoDrawing,
+            icon: const Icon(Icons.redo, size: 22)),
         _iconAction(icon: Icons.tune_outlined,
             label: 'محور التحليل', onPressed: _showAnalysisHub),
         _iconAction(icon: Icons.functions, label: 'المؤشرات',
@@ -2632,6 +2703,7 @@ class _ChartScreenState extends State<ChartScreen>
     final colors = Theme.of(context).colorScheme;
     final candles = _displayCandles;
     final surface = colors.surface;
+    final chartHint = _activeChartHint;
     return Column(children: [
       _referenceChartHeader(candles),
       if (_mode == ChartMode.range)
@@ -3071,6 +3143,34 @@ class _ChartScreenState extends State<ChartScreen>
             ))),
           if (candles.isNotEmpty)
             _buildDrawingRail(constraints.maxHeight),
+          if (candles.isNotEmpty && chartHint != null)
+            Positioned(
+              top: 8, left: 78, right: 68,
+              child: IgnorePointer(
+                child: Container(
+                  key: const Key('chart-interaction-hint-overlay'),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: surface.withValues(alpha: .94),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: TradeColors.blue.withValues(alpha: .25)),
+                  ),
+                  child: Text(
+                    chartHint,
+                    key: _placingShort
+                        ? const Key('short-position-placement-hint')
+                        : _placingRectangle
+                            ? const Key('price-rectangle-placement-hint')
+                            : null,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: TradeColors.blue),
+                  ),
+                ),
+              ),
+            ),
           if (_drawing && _selectedShort != null &&
               _selectedShort! < _shortPositions.length && candles.isNotEmpty)
             _buildShortFloatingToolbar(constraints.maxWidth),
@@ -3082,93 +3182,9 @@ class _ChartScreenState extends State<ChartScreen>
       ),
       // The chart stays the dominant surface; its tool strip sits below the
       // time axis, as in the supplied mobile reference.
+      // No broker-info or drawing-hint footer: chart tools meet navigation.
+      // Active drawing guidance now overlays the chart without using height.
       _referenceChartToolbar(surface),
-      Container(
-        padding: const EdgeInsetsDirectional.only(start: 12, end: 8, top: 6, bottom: 6),
-        color: surface,
-        child: Row(children: [
-          const Icon(Icons.info_outline, size: 15, color: TradeColors.blue),
-          const SizedBox(width: 6),
-          Expanded(child: Text(_marketEvidenceLabel,
-              maxLines: 2, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11))),
-          if (_drawing && (_selectedLine != null || _selectedPattern != null ||
-              _selectedShort != null || _selectedRectangle != null))
-            IconButton(tooltip: 'خصائص الرسم المحدد',
-              onPressed: _selectedRectangle != null ? _rectangleProperties :
-                  _selectedShort != null ? _shortProperties : _editSelectedDrawing,
-              icon: const Icon(Icons.tune)),
-          if (_drawing && (_selectedLine != null || _selectedPattern != null ||
-              _selectedShort != null || _selectedRectangle != null))
-            IconButton(tooltip: 'حذف الرسم المحدد', onPressed: () => setState(() {
-              _saveDrawingUndo();
-              if (_selectedRectangle != null && _selectedRectangle! < _rectangles.length) {
-                _rectangles.removeAt(_selectedRectangle!);
-              } else if (_selectedShort != null && _selectedShort! < _shortPositions.length) {
-                _shortPositions.removeAt(_selectedShort!);
-              } else if (_selectedLine != null && _selectedLine! < _levels.length) {
-                _levels.removeAt(_selectedLine!);
-              } else if (_selectedPattern != null && _selectedPattern! < _patterns.length) {
-                _patterns.removeAt(_selectedPattern!);
-              }
-              _selectedLine = null;
-              _selectedPattern = null;
-              _selectedShort = null;
-              _selectedRectangle = null;
-            }), icon: const Icon(Icons.delete_outline)),
-          if (_lineUndo.isNotEmpty)
-            TextButton.icon(
-              onPressed: _undoDrawing,
-              icon: const Icon(Icons.undo, size: 18),
-              label: const Text('تراجع'),
-            ),
-          if (_lineRedo.isNotEmpty)
-            IconButton(
-              key: const Key('drawing-redo'), tooltip: 'إعادة الرسم',
-              onPressed: _redoDrawing, icon: const Icon(Icons.redo, size: 19)),
-        ]),
-      ),
-      if (_pendingAnchor != null && _drawing)
-        Container(
-          alignment: Alignment.center,
-          color: TradeColors.blue.withValues(alpha: .06),
-          padding: const EdgeInsets.symmetric(vertical: 5),
-          child: Text(_secondChannelAnchor != null
-                  ? 'القناة المتوازية: حدد النقطة الثالثة لضبط عرض القناة'
-                  : 'المس الشارت لتحديد النقطة الثانية للرسم',
-              style: TextStyle(fontSize: 12, color: TradeColors.blue)),
-        ),
-      if (_drawing && _selectedPattern != null)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 3),
-          child: Text('اسحب دائرة البداية أو النهاية لتعديل طرف الرسم فقط',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: TradeColors.blue)),
-        ),
-      if (_placingShort && candles.isNotEmpty)
-        Container(
-          alignment: Alignment.center,
-          color: TradeColors.shortHandle.withValues(alpha: .06),
-          padding: const EdgeInsets.symmetric(vertical: 5),
-          child: Text(_shortEntryAnchor == null
-              ? 'مركز بيع: المس الشارت لتحديد سعر الدخول'
-              : _shortStopPrice == null
-                  ? 'حدد وقف الخسارة فوق سعر الدخول'
-                  : 'حدد الهدف أسفل سعر الدخول',
-              key: const Key('short-position-placement-hint'),
-              style: const TextStyle(fontSize: 12, color: TradeColors.shortHandle)),
-        ),
-      if (_placingRectangle && candles.isNotEmpty)
-        Container(alignment: Alignment.center,
-          color: TradeColors.rectangleHandle.withValues(alpha: .06),
-          padding: const EdgeInsets.symmetric(vertical: 5),
-          child: Text(_rectangleFirstCorner == null
-            ? 'المستطيل: اختر الزاوية الأولى على الشارت'
-            : 'المستطيل: اختر الزاوية المقابلة لتحديد السعر والزمن',
-            key: const Key('price-rectangle-placement-hint'),
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: TradeColors.rectangleHandle)),
-        ),
       if (_replay) _replayControls(context),
     ]);
   }
