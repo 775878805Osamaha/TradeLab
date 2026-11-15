@@ -936,8 +936,9 @@ class _ChartScreenState extends State<ChartScreen>
         if (_replay && replayCutoffTick != null) {
           _stopPlayback();
           _training.clear(); // Rebuilt Range indices need a fresh cutoff.
+          // A non-null, closed-bar cutoff was already checked above.
           _training.moveTo(timeline.bars, safeReplayBars!);
-          _visibleThrough = safeReplayBars;
+          _visibleThrough = safeReplayBars!;
         }
       });
     } on MarketDataException catch (error) {
