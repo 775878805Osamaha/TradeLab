@@ -26,6 +26,7 @@ import '../chart/chart_axis_ticks.dart';
 import '../chart/candle_prefix.dart';
 import '../replay/replay_playback_speed.dart';
 import '../replay/replay_training_session.dart';
+import '../replay/replay_training_order_dialog.dart';
 import '../replay/replay_training_archive.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_startup_loader.dart';
@@ -1118,112 +1119,44 @@ class _ChartScreenState extends State<ChartScreen>
   Future<void> _openTrainingOrderDialog() async {
     if (!_replay || _visibleThrough < 1 ||
         _visibleThrough > _replayMarketCandles.length) return;
-    final source = _replayMarketCandles;
-    final price = source[_visibleThrough - 1].close;
-    final quantityController = TextEditingController(text: '1');
-    final stopController = TextEditingController();
-    final targetController = TextEditingController();
-    ReplaySide selectedSide = ReplaySide.buy;
-    String? dialogError;
-    double? parsePrice(String value) =>
-        double.tryParse(value.trim().replaceAll(',', '.'));
-    final order = await showDialog<(ReplaySide, double, double?, double?)>(
+
+    // Execute at the known raw candle close, not Heikin-Ashi averages.
+    final price = _replayMarketCandles[_visibleThrough - 1].close;
+    final order = await showDialog<ReplayPracticeOrder>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, updateDialog) => AlertDialog(
-          title: const Text('صفقة تدريب داخل Replay'),
-          content: SingleChildScrollView(child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('تدريب محلي فقط، لا يُرسل أمرًا إلى وسيط أو دفتر التداول.'),
-              Text('سعر آخر شمعة مكشوفة: ${price.toStringAsFixed(5)}'),
-              DropdownButton<ReplaySide>(
-                key: const Key('replay-trade-side'),
-                value: selectedSide,
-                items: const [
-                  DropdownMenuItem(value: ReplaySide.buy, child: Text('شراء')),
-                  DropdownMenuItem(value: ReplaySide.sell, child: Text('بيع')),
-                ],
-                onChanged: (value) {
-                  if (value != null) updateDialog(() => selectedSide = value);
-                },
-              ),
-              TextField(
-                key: const Key('replay-trade-quantity'),
-                controller: quantityController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'الكمية التدريبية'),
-              ),
-              TextField(
-                controller: stopController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'وقف الخسارة (اختياري)'),
-              ),
-              TextField(
-                controller: targetController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'الهدف (اختياري)'),
-              ),
-              if (dialogError != null)
-                Text(dialogError!, style: const TextStyle(color: Colors.red)),
-            ],
-          )),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('إلغاء')),
-            FilledButton(
-              key: const Key('replay-trade-confirm'),
-              onPressed: () {
-                final q = parsePrice(quantityController.text);
-                final stopText = stopController.text.trim();
-                final targetText = targetController.text.trim();
-                final sl = stopText.isEmpty ? null : parsePrice(stopText);
-                final tp = targetText.isEmpty ? null : parsePrice(targetText);
-                if (q == null || !q.isFinite || q <= 0 ||
-                    (stopText.isNotEmpty && sl == null) ||
-                    (targetText.isNotEmpty && tp == null)) {
-                  updateDialog(() => dialogError = 'أدخل كمية وأسعارًا رقمية صحيحة.');
-                  return;
-                }
-                final invalidStop = sl != null && (selectedSide == ReplaySide.buy
-                    ? sl >= price : sl <= price);
-                final invalidTarget = tp != null && (selectedSide == ReplaySide.buy
-                    ? tp <= price : tp >= price);
-                if (invalidStop || invalidTarget) {
-                  updateDialog(() => dialogError =
-                      'يجب أن يكون الوقف في جهة الخسارة والهدف في جهة الربح.');
-                  return;
-                }
-                Navigator.pop(dialogContext, (selectedSide, q, sl, tp));
-              },
-              child: const Text('فتح صفقة تدريب'),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => ReplayTrainingOrderDialog(entryPrice: price),
     );
-    quantityController.dispose();
-    stopController.dispose();
-    targetController.dispose();
     if (!mounted || !_replay || order == null) return;
+
+    // The history may have changed while the modal was open. Never place
+    // an entry at a newly revealed or newly hidden market price.
+    final currentBars = _replayMarketCandles;
+    if (_visibleThrough < 1 ||
+        _visibleThrough > currentBars.length ||
+        currentBars[_visibleThrough - 1].close != price) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('تحركت الشموع أثناء فتح النافذة. أعد إدخال الصفقة.')));
+      return;
+    }
+
     try {
       setState(() {
         _training.enter(
-          side: order.$1,
-          candles: _replayMarketCandles,
-          quantity: order.$2,
-          stopLoss: order.$3,
-          takeProfit: order.$4,
+          side: order.side,
+          candles: currentBars,
+          quantity: order.quantity,
+          stopLoss: order.stopLoss,
+          takeProfit: order.takeProfit,
         );
       });
       _trainingEverTraded = true;
       _recordTraining();
     } on ArgumentError {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('الوقف أو الهدف أو حجم الصفقة غير صالح للتدريب.')));
+        content: Text('الوقف أو الهدف أو حجم الصفقة غير صالح للتدريب.')));
     } on StateError {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('بيانات الشمعة تغيرت. حاول مجددًا.')));
+        content: Text('بيانات الشمعة تغيرت. حاول مجددًا.')));
     }
   }
 
