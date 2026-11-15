@@ -1060,6 +1060,254 @@ class _ChartScreenState extends State<ChartScreen>
     _playing = false;
   }
 
+  /// Execution uses authentic raw OHLC, even when the UI displays
+  /// Heikin-Ashi. Never execute on smoothed, synthetic candle prices.
+  List<TradeCandle> get _replayMarketCandles =>
+      _mode == ChartMode.range ? _actualRange : _actualCandles;
+
+  void _recordTraining() {
+    if (_trainingSessionId.isEmpty || _training.trades.isEmpty) return;
+    final sessionId = _trainingSessionId;
+    final sourceKey = _trainingSourceKey;
+    final count = _training.visibleCount;
+    final trades = _training.trades;
+    // Serialize writes: a slower previous write must never overwrite a newer
+    // replay cutoff, stop fill or manual close in SQLite.
+    _trainingSaveQueue = _trainingSaveQueue.then((_) =>
+        ReplayTrainingArchive.save(
+          sessionId: sessionId,
+          sourceKey: sourceKey,
+          visibleCount: count,
+          trades: trades,
+        )).catchError((Object error) {
+      if (mounted && _replay) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('تعذر حفظ سجل Replay المحلي. تحقق من مساحة التخزين.')));
+      }
+    });
+  }
+
+  void _seekReplay(int requestedCount) {
+    if (!_replay) return;
+    final next = requestedCount.clamp(1, _totalBars).toInt();
+    setState(() {
+      _stopPlayback();
+      _training.moveTo(_replayMarketCandles, next);
+      _visibleThrough = next;
+    });
+    _recordTraining();
+  }
+
+  void _setReplaySpeed(ReplayPlaybackSpeed speed) {
+    final wasPlaying = _playing;
+    _stopPlayback();
+    setState(() => _replaySpeed = speed);
+    if (wasPlaying) _togglePlay();
+  }
+
+  Future<void> _openTrainingOrderDialog() async {
+    if (!_replay || _visibleThrough < 1 ||
+        _visibleThrough > _replayMarketCandles.length) return;
+    final source = _replayMarketCandles;
+    final price = source[_visibleThrough - 1].close;
+    final quantityController = TextEditingController(text: '1');
+    final stopController = TextEditingController();
+    final targetController = TextEditingController();
+    ReplaySide selectedSide = ReplaySide.buy;
+    String? dialogError;
+    double? parsePrice(String value) =>
+        double.tryParse(value.trim().replaceAll(',', '.'));
+    final order = await showDialog<(ReplaySide, double, double?, double?)>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, updateDialog) => AlertDialog(
+          title: const Text('صفقة تدريب داخل Replay'),
+          content: SingleChildScrollView(child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('تدريب محلي فقط، لا يُرسل أمرًا إلى وسيط أو دفتر التداول.'),
+              Text('سعر آخر شمعة مكشوفة: ${price.toStringAsFixed(5)}'),
+              DropdownButton<ReplaySide>(
+                key: const Key('replay-trade-side'),
+                value: selectedSide,
+                items: const [
+                  DropdownMenuItem(value: ReplaySide.buy, child: Text('شراء')),
+                  DropdownMenuItem(value: ReplaySide.sell, child: Text('بيع')),
+                ],
+                onChanged: (value) {
+                  if (value != null) updateDialog(() => selectedSide = value);
+                },
+              ),
+              TextField(
+                key: const Key('replay-trade-quantity'),
+                controller: quantityController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'الكمية التدريبية'),
+              ),
+              TextField(
+                controller: stopController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'وقف الخسارة (اختياري)'),
+              ),
+              TextField(
+                controller: targetController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'الهدف (اختياري)'),
+              ),
+              if (dialogError != null)
+                Text(dialogError!, style: const TextStyle(color: Colors.red)),
+            ],
+          )),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('إلغاء')),
+            FilledButton(
+              key: const Key('replay-trade-confirm'),
+              onPressed: () {
+                final q = parsePrice(quantityController.text);
+                final stopText = stopController.text.trim();
+                final targetText = targetController.text.trim();
+                final sl = stopText.isEmpty ? null : parsePrice(stopText);
+                final tp = targetText.isEmpty ? null : parsePrice(targetText);
+                if (q == null || !q.isFinite || q <= 0 ||
+                    (stopText.isNotEmpty && sl == null) ||
+                    (targetText.isNotEmpty && tp == null)) {
+                  updateDialog(() => dialogError = 'أدخل كمية وأسعارًا رقمية صحيحة.');
+                  return;
+                }
+                final invalidStop = sl != null && (selectedSide == ReplaySide.buy
+                    ? sl >= price : sl <= price);
+                final invalidTarget = tp != null && (selectedSide == ReplaySide.buy
+                    ? tp <= price : tp >= price);
+                if (invalidStop || invalidTarget) {
+                  updateDialog(() => dialogError =
+                      'يجب أن يكون الوقف في جهة الخسارة والهدف في جهة الربح.');
+                  return;
+                }
+                Navigator.pop(dialogContext, (selectedSide, q, sl, tp));
+              },
+              child: const Text('فتح صفقة تدريب'),
+            ),
+          ],
+        ),
+      ),
+    );
+    quantityController.dispose();
+    stopController.dispose();
+    targetController.dispose();
+    if (!mounted || !_replay || order == null) return;
+    try {
+      setState(() => _training.enter(
+        side: order.$1,
+        candles: _replayMarketCandles,
+        quantity: order.$2,
+        stopLoss: order.$3,
+        takeProfit: order.$4,
+      ));
+      _recordTraining();
+    } on ArgumentError {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('الوقف أو الهدف أو حجم الصفقة غير صالح للتدريب.')));
+    } on StateError {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('بيانات الشمعة تغيرت. حاول مجددًا.')));
+    }
+  }
+
+  void _closeTrainingTrade(int tradeId) {
+    if (!_replay) return;
+    try {
+      setState(() => _training.closeAtCurrent(
+          tradeId, _replayMarketCandles));
+      _recordTraining();
+    } on StateError {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('تعذر إغلاق الصفقة: لم يعد السعر المكشوف صالحًا.')));
+    }
+  }
+
+  Future<void> _showTrainingTrades() async {
+    final trades = _training.trades;
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('صفقات التدريب التاريخية',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text('النتيجة = فرق السعر × الكمية؛ ليست أرباحًا بالدولار.'),
+          Text('المحقق: ${_training.realizedPricePnl.toStringAsFixed(4)}',
+              textDirection: TextDirection.ltr),
+          SizedBox(height: math.min(320.0, 64.0 * trades.length + 20.0),
+            child: trades.isEmpty
+                ? const Center(child: Text('لم تفتح أي صفقات تدريب'))
+                : ListView.builder(
+                    itemCount: trades.length,
+                    itemBuilder: (_, index) {
+                      final trade = trades[index];
+                      return ListTile(
+                        title: Text(
+                          '${trade.side == ReplaySide.buy ? 'شراء' : 'بيع'} '
+                          '${trade.entryPrice.toStringAsFixed(5)}'),
+                        subtitle: Text(trade.isOpen ? 'مفتوحة، كمية ${trade.quantity}'
+                            : 'مغلقة، فرق السعر × الكمية: '
+                              '${trade.realizedPricePnl.toStringAsFixed(4)}'),
+                        trailing: trade.isOpen ? TextButton(
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            _closeTrainingTrade(trade.id);
+                          },
+                          child: const Text('إغلاق'),
+                        ) : null,
+                      );
+                    },
+                  ),
+          ),
+        ]),
+      )),
+    );
+  }
+
+  Future<void> _showTrainingArchive() async {
+    try {
+      await _trainingSaveQueue;
+      final history = await ReplayTrainingArchive.recent();
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => SafeArea(child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('أرشيف جلسات Replay المحلية',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('نتائج تدريب منفصلة عن حساب التداول والوسيط.'),
+            SizedBox(height: 320, child: history.isEmpty
+                ? const Center(child: Text('لا توجد جلسات محفوظة'))
+                : ListView.builder(
+                    itemCount: history.length,
+                    itemBuilder: (_, index) {
+                      final record = history[index];
+                      return ListTile(
+                        title: Text('${record['sourceKey']}'),
+                        subtitle: Text('عدد الصفقات: ${record['tradeCount']} · '
+                            'آخر شمعة مكشوفة: ${record['visibleCount']}'),
+                        trailing: Text('${record['realizedPricePnl']}'),
+                      );
+                    },
+                  ),
+            ),
+          ]),
+        )),
+      );
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('لم نتمكن من قراءة أرشيف التدريب المحلي.')));
+    }
+  }
+
   void _toggleReplay() {
     _momentum.stop();
     if (_totalBars < 2) {
