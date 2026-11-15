@@ -45,14 +45,18 @@ void main() {
     session.moveTo(candles, 2);
     session.enter(side: ReplaySide.buy, candles: candles, quantity: 1);
     session.moveTo(candles, 0);
-    session.moveTo(candles, 0);
     await ReplayTrainingArchive.save(
       sessionId: id, sourceKey: source,
       visibleCount: session.visibleCount, trades: session.trades);
     history = await ReplayTrainingArchive.recent();
-    expect(history.first['sessionId'], id);
-    expect(history.first['visibleCount'], 0);
-    expect(history.first['tradeCount'], 0);
-    expect(history.first['realizedPricePnl'], 0);
+    final rewound = history.firstWhere((entry) => entry['sessionId'] == id);
+    expect(rewound['visibleCount'], 0);
+    expect(rewound['tradeCount'], 0);
+    expect(rewound['realizedPricePnl'], 0);
+    // Saving one session's empty rewind must not delete another archived
+    // training session even when both were saved in the same millisecond.
+    final completed = history.firstWhere(
+        (entry) => entry['sessionId'] == endedSessionId);
+    expect(completed['tradeCount'], 1);
   });
 }
