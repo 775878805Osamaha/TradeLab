@@ -36,7 +36,11 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(TradeLabApp(controller: controller));
-    await tester.pumpAndSettle();
+    // The app has an ongoing live-data refresh lifecycle; waiting for every
+    // scheduled frame can hang indefinitely. Let the initial chart build
+    // complete, then assert the specific UI readiness condition instead.
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(find.byKey(const Key('symbol-picker')), findsOneWidget);
     await tester.tap(find.byKey(const Key('symbol-picker')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('BTCUSDT').last);
