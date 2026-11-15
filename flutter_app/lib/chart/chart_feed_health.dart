@@ -49,7 +49,9 @@ abstract final class ChartFeedHealth {
     if (latestClosedOpenMs == null || latestClosedOpenMs <= 0 ||
         frameMinutes == null) return false;
     final reference = freshQuoteTimestampMs ?? nowMs;
-    if (reference <= latestClosedOpenMs) return false;
+    if (reference <= latestClosedOpenMs) {
+      return false;
+    }
     return reference - latestClosedOpenMs >
         math.max(frameMinutes * 3, 10) * Duration.millisecondsPerMinute;
   }
