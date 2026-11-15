@@ -1207,13 +1207,15 @@ class _ChartScreenState extends State<ChartScreen>
     targetController.dispose();
     if (!mounted || !_replay || order == null) return;
     try {
-      setState(() => _training.enter(
-        side: order.$1,
-        candles: _replayMarketCandles,
-        quantity: order.$2,
-        stopLoss: order.$3,
-        takeProfit: order.$4,
-      ));
+      setState(() {
+        _training.enter(
+          side: order.$1,
+          candles: _replayMarketCandles,
+          quantity: order.$2,
+          stopLoss: order.$3,
+          takeProfit: order.$4,
+        );
+      });
       _trainingEverTraded = true;
       _recordTraining();
     } on ArgumentError {
