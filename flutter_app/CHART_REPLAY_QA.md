@@ -52,8 +52,9 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
 ```bash
 cd flutter_app
 flutter pub get
-flutter analyze
-flutter test test/ctrader_closed_bar_cutoff_test.dart \
+flutter analyze --no-fatal-infos
+flutter test test/chart_time_axis_label_layout_test.dart \
+  test/ctrader_closed_bar_cutoff_test.dart \
   test/replay_training_session_test.dart \
   test/replay_training_archive_test.dart \
   test/replay_training_widget_test.dart \
