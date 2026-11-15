@@ -3636,7 +3636,6 @@ class _CandleChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final background = dark && panel.backgroundColor == 0xFFFFFFFF
         ? const Color(0xFF000D16) : Color(panel.backgroundColor);
-    final text = dark ? const Color(0xFFC1C7D0) : const Color(0xFF101010);
     canvas.drawRect(Offset.zero & size, Paint()..color = background);
     final axis = size.width - 61;
     if (axis < 30 || size.height < 60 || candles.isEmpty) return;
