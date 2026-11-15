@@ -36,11 +36,12 @@ delete the native app, its local Room database or its cTrader login credentials.
   theme toggle. Results remain unlinked until Room migration is verified.
 
 **Important:** Until a per-user cTrader OAuth session is successfully authorized,
-the default XAUUSD chart still displays a clearly labeled **synthetic design
-fixture**. Once signed in, a broker error results in an error state, *never*
-synthetic fallback. In disconnected Range preview only, synthetic tick data are
-still used and labeled as preview. Real Range has no OHLC shortcuts. Production
-range-bar semantics must still be compared with a supported broker reference.
+XAUUSD and other cTrader charts show a connection-required state, **not
+synthetic candles**. Connected broker errors show an explicit error rather than
+invented prices. Real Range bars are constructed only from authenticated
+chronological cTrader BID ticks, not OHLC approximations. The Range bar algorithm
+still requires comparison against a verified broker/TradingView reference.
+Replay practice orders are local-only and are never sent to the broker.
 
 The backend's additive `client=flutter` OAuth callback change must be deployed
 to the configured gateway *before* the separate Flutter Android callback can
