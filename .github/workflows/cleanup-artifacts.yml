@@ -1,0 +1,64 @@
+name: Clean old Actions artifacts safely
+
+# No scheduled or push triggers; run manually after examining the preview.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Preview only (recommended first run)'
+        required: true
+        type: boolean
+        default: true
+      minimum_age_days:
+        description: 'Never delete artifacts newer than this many days (minimum 7)'
+        required: true
+        type: number
+        default: 7
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Preserve latest APK artifacts, release-related data and backups
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const dryRun = String(context.payload.inputs?.dry_run ?? 'true') !== 'false';
+            const minimumDays = Number(context.payload.inputs?.minimum_age_days ?? 7);
+            if (!Number.isInteger(minimumDays) || minimumDays < 7) {
+              throw new Error('Minimum age must be at least seven days.');
+            }
+            const artifacts = (await github.paginate(github.rest.actions.listArtifactsForRepo, {
+              owner, repo, per_page: 100,
+            })).filter(a => !a.expired).sort((a, b) =>
+              new Date(b.created_at) - new Date(a.created_at));
+            const keep = new Set(artifacts.slice(0, 2).map(a => a.id));
+            const apkLike = a => /apk|aab|android|flutter|bundle|build/i.test(a.name);
+            for (const a of artifacts.filter(apkLike).slice(0, 2)) keep.add(a.id);
+            const sensitive = /backup|keystore|key-store|signing|secret|database|db-backup|source|release|archive|export/i;
+            const temporary = /apk|aab|android|flutter|bundle|build|coverage|test|result|report|log|screen|capture|debug|preview/i;
+            const oldestAllowed = Date.now() - minimumDays * 86400000;
+            const candidates = artifacts.filter(a =>
+              !keep.has(a.id) && !sensitive.test(a.name) && temporary.test(a.name) &&
+              new Date(a.created_at).getTime() < oldestAllowed);
+            let bytes = 0;
+            let deleted = 0;
+            for (const a of candidates.slice(0, 250)) {
+              console.log(`${dryRun ? 'WOULD_DELETE' : 'DELETE'} ${a.id} ${a.name} ${a.size_in_bytes} bytes`);
+              bytes += a.size_in_bytes || 0;
+              if (!dryRun) {
+                await github.rest.actions.deleteArtifact({owner, repo, artifact_id: a.id});
+                deleted++;
+              }
+            }
+            console.log(JSON.stringify({dryRun, repository: `${owner}/${repo}`,
+              examined: artifacts.length, protected: keep.size,
+              eligible: candidates.length, processed: Math.min(candidates.length, 250),
+              deleted, candidateBytes: bytes}));
+            console.log('Releases and repository source files are never modified.');
