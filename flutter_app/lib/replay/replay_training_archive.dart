@@ -47,7 +47,6 @@ class ReplayTrainingArchive {
     if (sessionId.isEmpty || sourceKey.isEmpty || visibleCount < 0) {
       throw ArgumentError('Replay session identity or cutoff is invalid.');
     }
-    if (trades.isEmpty) return;
     final data = jsonEncode({
       'schema': 1,
       'sourceKey': sourceKey,
