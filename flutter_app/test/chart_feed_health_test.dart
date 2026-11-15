@@ -66,6 +66,25 @@ void main() {
       nowMs: monday, freshQuoteTimestampMs: monday), isFalse);
   });
 
+  test('read-only chart quote polling reuses fresh Markets quotes', () {
+    const now = 2000000;
+    expect(ChartFeedHealth.shouldRequestQuote(
+      nowMs: now, lastAttemptMs: 0, freshQuoteTimestampMs: now - 15000
+    ), isFalse, reason: 'A quote refreshed in Markets should not be fetched twice');
+    expect(ChartFeedHealth.shouldRequestQuote(
+      nowMs: now, lastAttemptMs: now - 30000
+    ), isFalse, reason: 'Throttle quote source requests to one per minute');
+    expect(ChartFeedHealth.shouldRequestQuote(
+      nowMs: now, lastAttemptMs: now - 60000
+    ), isTrue);
+    expect(ChartFeedHealth.shouldRequestQuote(
+      nowMs: now, lastAttemptMs: 0, freshQuoteTimestampMs: now - 61000
+    ), isTrue, reason: 'An old quote is due for a new source check');
+    expect(ChartFeedHealth.shouldRequestQuote(
+      nowMs: now, lastAttemptMs: now + 10000
+    ), isFalse, reason: 'Clock changes must not create request bursts');
+  });
+
   test('no evidence, invalid dates or unknown frames never claim lag', () {
     expect(ChartFeedHealth.closedCandlesLagging(
       latestClosedOpenMs: null, timeframe: '1m', nowMs: 1000), isFalse);
