@@ -1,0 +1,99 @@
+# PREPARED ONLY. Enable SHOREBIRD_AUTO_PATCH after completing docs/SHOREBIRD_OTA_SETUP.md.
+name: Shorebird Android OTA
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Release a signed APK once, or publish a Dart patch for the installed release
+        type: choice
+        required: true
+        options:
+          - release
+          - patch
+        default: patch
+  push:
+    branches: [main]
+    paths:
+      - 'flutter_app/lib/**'
+      - 'flutter_app/pubspec.yaml'
+      - 'flutter_app/pubspec.lock'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shorebird-android-ota
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || vars.SHOREBIRD_AUTO_PATCH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+      SHOREBIRD_ANDROID_KEYSTORE_BASE64: ${{ secrets.SHOREBIRD_ANDROID_KEYSTORE_BASE64 }}
+      SHOREBIRD_ANDROID_STORE_PASSWORD: ${{ secrets.SHOREBIRD_ANDROID_STORE_PASSWORD }}
+      SHOREBIRD_ANDROID_KEY_ALIAS: ${{ secrets.SHOREBIRD_ANDROID_KEY_ALIAS }}
+      SHOREBIRD_ANDROID_KEY_PASSWORD: ${{ secrets.SHOREBIRD_ANDROID_KEY_PASSWORD }}
+      SHOREBIRD_RELEASE_VERSION: ${{ vars.SHOREBIRD_RELEASE_VERSION }}
+          steps:
+      - uses: actions/checkout@v4
+      - name: Confirm Shorebird registration and credentials
+        run: |
+          set -euo pipefail
+          test -s 'flutter_app/shorebird.yaml' || { echo "Run shorebird init and commit shorebird.yaml (and pubspec.yaml) first"; exit 1; }
+          test -n "$SHOREBIRD_TOKEN" || { echo "Missing repository secret SHOREBIRD_TOKEN"; exit 1; }
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.operation }}" = "patch" ]; then
+            test -n "$SHOREBIRD_RELEASE_VERSION" || { echo "Set SHOREBIRD_RELEASE_VERSION to the exact installed baseline release"; exit 1; }
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+      - name: Generate and configure TradeLab Android host
+        working-directory: flutter_app
+        run: |
+          flutter create --platforms android --project-name tradelab_flutter . --no-pub
+          python3 tool/configure_android_host.py
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            rm -f "android/app/src/main/res/mipmap-${density}/ic_launcher.png"
+          done
+          cp -r ../app/src/main/res/mipmap-* android/app/src/main/res/
+          cp ../app/src/main/res/drawable/ic_launcher_*.xml android/app/src/main/res/drawable/
+          sed -i 's/android:label="tradelab_flutter"/android:label="TradeLab Flutter Preview"/' android/app/src/main/AndroidManifest.xml
+      - name: Resolve Flutter dependencies
+        working-directory: flutter_app
+        run: flutter pub get
+      - name: Analyze Flutter code
+        working-directory: flutter_app
+        run: flutter analyze --no-fatal-infos
+      - name: Run Flutter tests
+        working-directory: flutter_app
+        run: flutter test test/widget_test.dart
+      - name: Set up private Android signing
+        working-directory: flutter_app
+        run: python3 tool/configure_shorebird_signing.py
+      - name: Release Shorebird-enabled APK (initial/manual)
+        if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release'
+        working-directory: flutter_app
+        run: shorebird release android --artifact apk
+      - name: Upload base APK for one-time device installation
+        if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shorebird-Android-Base-APK
+          path: flutter_app/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+      - name: Publish OTA Dart patch (registered release only)
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'patch')
+        working-directory: flutter_app
+        run: shorebird patch android --release-version "$SHOREBIRD_RELEASE_VERSION" --track stable
