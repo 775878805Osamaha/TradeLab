@@ -11,6 +11,20 @@ class RangeBarTimeline {
   const RangeBarTimeline._(this.bars, this.endTickIndices, this.endTimestamps);
 
   final List<TradeCandle> bars;
+
+  /// All source ticks form a final, still-open Range bar. This last
+  /// snapshot is useful on the live chart, but MUST NOT be executed as
+  /// a finished candle in Replay.
+  int get closedBarCount => bars.isEmpty ? 0 : bars.length - 1;
+
+  /// A Replay cutoff may correspond to the latest tick of a range snapshot.
+  /// Exclude the last forming bar, even when its endTickIndex is already
+  /// known, so Replay does not treat an incomplete bar as confirmed.
+  int visibleClosedBarsThroughTick(int lastAllowedTickIndex) {
+    final byEvent = visibleBarsThroughTick(lastAllowedTickIndex);
+    return byEvent < closedBarCount ? byEvent : closedBarCount;
+  }
+
   final List<int> endTickIndices;
   /// UTC milliseconds of the real BID tick that completed each Range bar.
   /// Several bars may close on one tick when the price jumps.
