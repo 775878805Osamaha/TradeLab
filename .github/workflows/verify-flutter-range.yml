@@ -130,7 +130,7 @@ jobs:
             set -eu
             # Integration smoke runs on the same Android 13 emulator.
             # These checks require a real device runtime, not a mocked widget host.
-            flutter test integration_test/replay_device_smoke_test.dart -d emulator-5554
+            (cd "$GITHUB_WORKSPACE/flutter_app" && flutter test integration_test/replay_device_smoke_test.dart -d emulator-5554)
             adb install "$GITHUB_WORKSPACE/flutter_app/build/app/outputs/flutter-apk/app-release.apk"
             adb shell monkey -p com.example.tradelab_flutter -c android.intent.category.LAUNCHER 1
             sleep 5
