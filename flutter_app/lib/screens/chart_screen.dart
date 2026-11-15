@@ -655,7 +655,9 @@ class _ChartScreenState extends State<ChartScreen>
         }
       }
       if (revision == _loadRevision && _totalBars == 0) {
-        _loadError = 'لم يُرجع المصدر شموعًا لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
+        _loadError = _mode == ChartMode.range && _actualRange.isNotEmpty
+            ? 'وصلت تيكات BID الحقيقية، لكن شمعة المدى الأخيرة ما زالت قيد التكوّن. اختر مدى أصغر أو حمّل تاريخًا أقدم.'
+            : 'لم يُرجع المصدر شموعًا مكتملة لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
       }
     } on MarketDataException catch (e) {
       if (revision == _loadRevision) _loadError = e.message;
@@ -1346,13 +1348,17 @@ class _ChartScreenState extends State<ChartScreen>
   void _togglePlay() {
     if (_playing) {
       setState(_stopPlayback);
+      _recordTraining(); // Commit the last revealed cursor on manual pause.
       return;
     }
     setState(() => _playing = true);
     _replayTimer = Timer.periodic(_replaySpeed.interval, (timer) {
       if (!mounted || !_replay || _visibleThrough >= _totalBars) {
         timer.cancel();
-        if (mounted) setState(() => _playing = false);
+        if (mounted) {
+          setState(() => _playing = false);
+          _recordTraining(); // Final cursor reached; flush the current session.
+        }
         return;
       }
       final openBefore = _training.openTradeCount;
