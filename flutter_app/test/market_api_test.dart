@@ -91,6 +91,43 @@ void main() {
     expect(seen, hasLength(1));
   });
 
+  test('cTrader never requests still-forming daily, weekly or monthly bars',
+      () async {
+    final now = DateTime.now().toUtc();
+    final cutoffByPeriod = {
+      'D1': DateTime.utc(now.year, now.month, now.day).millisecondsSinceEpoch - 1,
+      'W1': DateTime.utc(now.year, now.month, now.day)
+          .subtract(Duration(days: now.weekday - DateTime.monday))
+          .millisecondsSinceEpoch - 1,
+      'MN1': DateTime.utc(now.year, now.month).millisecondsSinceEpoch - 1,
+    };
+    final requested = <String, int>{};
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      expect(request.url.path, '/v1/candles');
+      final period = request.url.queryParameters['period']!;
+      final to = int.parse(request.url.queryParameters['to']!);
+      expect(to, lessThanOrEqualTo(cutoffByPeriod[period]!));
+      requested[period] = to;
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'period': period, 'symbolId': '42',
+        'accountId': '7', 'hasMore': false, 'candles': [],
+      }), 200);
+    }));
+    for (final timeframe in ['1D', '1W', '1M']) {
+      final bars = await api.ctraderCandles(
+        token: 'test', accountId: '7', symbol: 'XAUUSD',
+        timeframe: timeframe, before: now.add(const Duration(days: 40)),
+      );
+      expect(bars, isEmpty);
+    }
+    expect(requested.keys.toSet(), {'D1', 'W1', 'MN1'});
+  });
+
   test('cTrader reports unusable provider OHLC distinctly from bad requests',
       () async {
     final client = MockClient((request) async {
