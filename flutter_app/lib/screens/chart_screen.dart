@@ -14,6 +14,7 @@ import '../chart/chart_type_sheet.dart';
 import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
+import '../chart/chart_frame_profiler.dart';
 import '../chart/chart_panel_settings.dart';
 import '../chart/chart_panel_settings_page.dart';
 import '../chart/chart_scale_settings.dart';
@@ -23,6 +24,10 @@ import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/candle_prefix.dart';
+import '../replay/replay_playback_speed.dart';
+import '../replay/replay_training_session.dart';
+import '../replay/replay_training_order_dialog.dart';
+import '../replay/replay_training_archive.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_startup_loader.dart';
 import '../data/range_older_page.dart';
@@ -164,6 +169,14 @@ class _ChartScreenState extends State<ChartScreen>
   double _gestureFocalX = 0;
   Offset? _crosshair;
   Timer? _replayTimer;
+  ReplayPlaybackSpeed _replaySpeed = ReplayPlaybackSpeed.normal;
+  final ReplayTrainingSession _training = ReplayTrainingSession();
+  final ChartFrameProfiler _frameProfiler = ChartFrameProfiler();
+  String _trainingSessionId = '';
+  String _trainingSourceKey = '';
+  bool _trainingEverTraded = false;
+  Timer? _trainingSaveDebounce;
+  Future<void> _trainingSaveQueue = Future<void>.value();
   Timer? _closedCandleTimer;
   bool _refreshingClosedCandles = false;
   bool _playing = false;
@@ -245,12 +258,17 @@ class _ChartScreenState extends State<ChartScreen>
   }
   int get _totalBars {
     if (!_liveRequested) return 0;
-    return _mode == ChartMode.range ? _actualRange.length : _actualBars.length;
+    // The last Range bar is still forming; never count it as a Replay
+    // entry/exit candle. The live chart can keep drawing it separately.
+    return _mode == ChartMode.range
+        ? math.max(0, _actualRange.length - 1)
+        : _actualBars.length;
   }
 
   @override
   void initState() {
     super.initState();
+    _frameProfiler.attach();
     unawaited(_loadDrawingFavorites());
     unawaited(_loadPanelSettings());
     unawaited(_loadScaleSettings());
@@ -430,6 +448,9 @@ class _ChartScreenState extends State<ChartScreen>
       return;
     }
     if (_mode == ChartMode.range) {
+      // Rebuilding Range from an earlier BID origin changes all bar indices.
+      // Do not silently relocate a practice entry while a trade is recorded.
+      if (_replay && _training.trades.isNotEmpty) return;
       if (_rangeHistoryTicks.isNotEmpty) {
         unawaited(_loadOlderRangeHistory());
       }
@@ -455,8 +476,11 @@ class _ChartScreenState extends State<ChartScreen>
       }
       if (!linked && _selectedSymbol.source == TradeSource.ctrader) {
         _loadRevision++;
+        _recordTraining();
         _stopPlayback();
         _replay = false;
+        _training.clear();
+        _trainingEverTraded = false;
         _actualBars = [];
         _actualCandles = [];
         _actualTimestamps = [];
@@ -477,6 +501,7 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _loadRealHistory() async {
+    if (_replay) _recordTraining();
     _momentum.stop();
     final revision = ++_loadRevision;
     if (!mounted) return;
@@ -493,6 +518,8 @@ class _ChartScreenState extends State<ChartScreen>
         _rectangles..clear()..addAll(_analysisRectangles);
       }
       _replay = false;
+      _training.clear();
+      _trainingEverTraded = false;
       _loading = true;
       // Invalidate the previous history request's UI state. Its finally block
       // intentionally ignores stale revisions, so reset the spinner here.
@@ -628,7 +655,9 @@ class _ChartScreenState extends State<ChartScreen>
         }
       }
       if (revision == _loadRevision && _totalBars == 0) {
-        _loadError = 'لم يُرجع المصدر شموعًا لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
+        _loadError = _mode == ChartMode.range && _actualRange.isNotEmpty
+            ? 'وصلت تيكات BID الحقيقية، لكن شمعة المدى الأخيرة ما زالت قيد التكوّن. اختر مدى أصغر أو حمّل تاريخًا أقدم.'
+            : 'لم يُرجع المصدر شموعًا مكتملة لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
       }
     } on MarketDataException catch (e) {
       if (revision == _loadRevision) _loadError = e.message;
@@ -692,6 +721,11 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _loadOlderRangeHistory() async {
+    if (_replay && _training.trades.isNotEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('أنهِ أو احفظ جلسة التدريب قبل إعادة بناء تاريخ شموع المدى.')));
+      return;
+    }
     if (_olderLoading || _loading || _historyExhausted ||
         !_liveRequested || _mode != ChartMode.range ||
         _rangeHistoryTicks.isEmpty ||
@@ -849,7 +883,8 @@ class _ChartScreenState extends State<ChartScreen>
       }
       final safeReplayBars = replayCutoffTick == null
           ? null
-          : timeline.visibleBarsThroughTick(prefix.length + replayCutoffTick);
+          : timeline.visibleClosedBarsThroughTick(
+              prefix.length + replayCutoffTick);
       if (_replay && (safeReplayBars == null || safeReplayBars == 0)) {
         _olderLoadError =
             'يغيّر التاريخ الأقدم بداية شموع المدى قبل موضع Replay؛ '
@@ -900,7 +935,10 @@ class _ChartScreenState extends State<ChartScreen>
         _lineRedo.clear();
         if (_replay && replayCutoffTick != null) {
           _stopPlayback();
-          _visibleThrough = safeReplayBars!;
+          _training.clear(); // Rebuilt Range indices need a fresh cutoff.
+          // A non-null, closed-bar cutoff was already checked above.
+          _training.moveTo(timeline.bars, safeReplayBars!);
+          _visibleThrough = safeReplayBars;
         }
       });
     } on MarketDataException catch (error) {
@@ -1007,7 +1045,10 @@ class _ChartScreenState extends State<ChartScreen>
         _lineRedo.clear();
         // The Replay cutoff must stay at the SAME historical candle when
         // older candles are prepended. Never reveal new future candles.
-        if (_replay) _visibleThrough += unique.length;
+        if (_replay) {
+          _training.prepend(unique.length);
+          _visibleThrough += unique.length;
+        }
         });
       }
     } catch (_) {
@@ -1023,6 +1064,8 @@ class _ChartScreenState extends State<ChartScreen>
 
   @override
   void dispose() {
+    _recordTraining();
+    _frameProfiler.detach();
     widget.controller.removeListener(_onMarketUpdate);
     _loadRevision++;
     _replayTimer?.cancel();
@@ -1037,16 +1080,226 @@ class _ChartScreenState extends State<ChartScreen>
     _playing = false;
   }
 
+  /// Execution uses authentic raw OHLC, even when the UI displays
+  /// Heikin-Ashi. Never execute on smoothed, synthetic candle prices.
+  List<TradeCandle> get _replayMarketCandles =>
+      _mode == ChartMode.range ? _actualRange : _actualCandles;
+
+  void _recordTraining() {
+    _trainingSaveDebounce?.cancel();
+    _trainingSaveDebounce = null;
+    if (_trainingSessionId.isEmpty || !_trainingEverTraded) return;
+    final sessionId = _trainingSessionId;
+    final sourceKey = _trainingSourceKey;
+    final count = _training.visibleCount;
+    final trades = _training.trades;
+    // Serialize writes: a slower previous write must never overwrite a newer
+    // replay cutoff, stop fill or manual close in SQLite.
+    _trainingSaveQueue = _trainingSaveQueue.then((_) =>
+        ReplayTrainingArchive.save(
+          sessionId: sessionId,
+          sourceKey: sourceKey,
+          visibleCount: count,
+          trades: trades,
+        )).catchError((Object error) {
+      if (mounted && _replay) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('تعذر حفظ سجل Replay المحلي. تحقق من مساحة التخزين.')));
+      }
+    });
+  }
+
+  /// Avoid one SQLite write for every frame while the user drags the slider.
+  /// Closing Replay and disposing the chart flush the final snapshot.
+  void _scheduleTrainingSave() {
+    if (!_trainingEverTraded) return;
+    _trainingSaveDebounce?.cancel();
+    _trainingSaveDebounce = Timer(
+        const Duration(milliseconds: 300), _recordTraining);
+  }
+
+  void _seekReplay(int requestedCount) {
+    if (!_replay) return;
+    final next = requestedCount.clamp(1, _totalBars).toInt();
+    setState(() {
+      _stopPlayback();
+      _training.moveTo(_replayMarketCandles, next);
+      _visibleThrough = next;
+    });
+    _scheduleTrainingSave();
+  }
+
+  void _setReplaySpeed(ReplayPlaybackSpeed speed) {
+    final wasPlaying = _playing;
+    _stopPlayback();
+    setState(() => _replaySpeed = speed);
+    if (wasPlaying) _togglePlay();
+  }
+
+  Future<void> _openTrainingOrderDialog() async {
+    if (!_replay || _visibleThrough < 1 ||
+        _visibleThrough > _replayMarketCandles.length) return;
+
+    // Freeze the revealed timeline while the ticket is on screen.
+    // Otherwise the playback timer could move the cursor during editing.
+    if (_playing) setState(_stopPlayback);
+    final entryVisibleCount = _visibleThrough;
+    // Execute at the known raw candle close, not Heikin-Ashi averages.
+    final price = _replayMarketCandles[entryVisibleCount - 1].close;
+    final order = await showDialog<ReplayPracticeOrder>(
+      context: context,
+      builder: (_) => ReplayTrainingOrderDialog(entryPrice: price),
+    );
+    if (!mounted || !_replay || order == null) return;
+
+    // The history may have changed while the modal was open. Never place
+    // an entry at a newly revealed or newly hidden market price.
+    final currentBars = _replayMarketCandles;
+    if (_visibleThrough != entryVisibleCount ||
+        _visibleThrough < 1 ||
+        _visibleThrough > currentBars.length ||
+        currentBars[_visibleThrough - 1].close != price) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('تحركت الشموع أثناء فتح النافذة. أعد إدخال الصفقة.')));
+      return;
+    }
+
+    try {
+      setState(() {
+        _training.enter(
+          side: order.side,
+          candles: currentBars,
+          quantity: order.quantity,
+          stopLoss: order.stopLoss,
+          takeProfit: order.takeProfit,
+        );
+      });
+      _trainingEverTraded = true;
+      _recordTraining();
+    } on ArgumentError {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('الوقف أو الهدف أو حجم الصفقة غير صالح للتدريب.')));
+    } on StateError {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('بيانات الشمعة تغيرت. حاول مجددًا.')));
+    }
+  }
+
+  void _closeTrainingTrade(int tradeId) {
+    if (!_replay) return;
+    try {
+      setState(() => _training.closeAtCurrent(
+          tradeId, _replayMarketCandles));
+      _recordTraining();
+    } on StateError {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('تعذر إغلاق الصفقة: لم يعد السعر المكشوف صالحًا.')));
+    }
+  }
+
+  Future<void> _showTrainingTrades() async {
+    final trades = _training.trades;
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('صفقات التدريب التاريخية',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text('النتيجة = فرق السعر × الكمية؛ ليست أرباحًا بالدولار.'),
+          Text('المحقق: ${_training.realizedPricePnl.toStringAsFixed(4)}',
+              textDirection: TextDirection.ltr),
+          SizedBox(height: math.min(320.0, 64.0 * trades.length + 20.0),
+            child: trades.isEmpty
+                ? const Center(child: Text('لم تفتح أي صفقات تدريب'))
+                : ListView.builder(
+                    itemCount: trades.length,
+                    itemBuilder: (_, index) {
+                      final trade = trades[index];
+                      return ListTile(
+                        title: Text(
+                          '${trade.side == ReplaySide.buy ? 'شراء' : 'بيع'} '
+                          '${trade.entryPrice.toStringAsFixed(5)}'),
+                        subtitle: Text(trade.isOpen ? 'مفتوحة، كمية ${trade.quantity}'
+                            : 'مغلقة، فرق السعر × الكمية: '
+                              '${trade.realizedPricePnl.toStringAsFixed(4)}'),
+                        trailing: trade.isOpen ? TextButton(
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            _closeTrainingTrade(trade.id);
+                          },
+                          child: const Text('إغلاق'),
+                        ) : null,
+                      );
+                    },
+                  ),
+          ),
+        ]),
+      )),
+    );
+  }
+
+  Future<void> _showTrainingArchive() async {
+    try {
+      // A slider seek may have a pending debounced snapshot.
+      _recordTraining();
+      await _trainingSaveQueue;
+      final history = await ReplayTrainingArchive.recent();
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => SafeArea(child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('أرشيف جلسات Replay المحلية',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('نتائج تدريب منفصلة عن حساب التداول والوسيط.'),
+            SizedBox(height: 320, child: history.isEmpty
+                ? const Center(child: Text('لا توجد جلسات محفوظة'))
+                : ListView.builder(
+                    itemCount: history.length,
+                    itemBuilder: (_, index) {
+                      final record = history[index];
+                      return ListTile(
+                        title: Text('${record['sourceKey']}'),
+                        subtitle: Text('عدد الصفقات: ${record['tradeCount']} · '
+                            'آخر شمعة مكشوفة: ${record['visibleCount']}'),
+                        trailing: Text('${record['realizedPricePnl']}'),
+                      );
+                    },
+                  ),
+            ),
+          ]),
+        )),
+      );
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('لم نتمكن من قراءة أرشيف التدريب المحلي.')));
+    }
+  }
+
   void _toggleReplay() {
     _momentum.stop();
     if (_totalBars < 2) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('حمّل شموع السوق أولًا لبدء Replay.')));
+        content: Text('حمّل شمعتين مكتملتين على الأقل قبل بدء Replay.')));
       return;
     }
+    if (_replay) _recordTraining();
     setState(() {
         _stopPlayback();
         if (!_replay) {
+          _training.clear();
+          _trainingEverTraded = false;
+          _trainingSessionId =
+              DateTime.now().toUtc().microsecondsSinceEpoch.toString();
+          _trainingSourceKey =
+              '${_selectedSymbol.source.name}:'
+              '${widget.controller.accountId ?? 'public'}:'
+              '$_symbol:$_timeframe:${_mode.name}';
           // Drawings created after the Replay cutoff could expose future
           // information. Keep analysis objects separately until Replay ends.
           _analysisLevels = List<double>.of(_levels);
@@ -1065,6 +1318,16 @@ class _ChartScreenState extends State<ChartScreen>
         }
         _replay = !_replay;
         _visibleThrough = math.max(1, _totalBars ~/ 2);
+        if (_replay) {
+          _training.moveTo(_replayMarketCandles, _visibleThrough);
+        } else {
+          // Snapshot is already queued above. Do not allow dispose() or a
+          // stale timer callback to replace it with an empty in-memory state.
+          _training.clear();
+          _trainingEverTraded = false;
+          _trainingSessionId = '';
+          _trainingSourceKey = '';
+        }
         _viewport = _freshViewport();
         _crosshair = null;
         _selectedLine = null;
@@ -1086,16 +1349,25 @@ class _ChartScreenState extends State<ChartScreen>
   void _togglePlay() {
     if (_playing) {
       setState(_stopPlayback);
+      _recordTraining(); // Commit the last revealed cursor on manual pause.
       return;
     }
     setState(() => _playing = true);
-    _replayTimer = Timer.periodic(const Duration(milliseconds: 650), (timer) {
+    _replayTimer = Timer.periodic(_replaySpeed.interval, (timer) {
       if (!mounted || !_replay || _visibleThrough >= _totalBars) {
         timer.cancel();
-        if (mounted) setState(() => _playing = false);
+        if (mounted) {
+          setState(() => _playing = false);
+          _recordTraining(); // Final cursor reached; flush the current session.
+        }
         return;
       }
-      setState(() => _visibleThrough++);
+      final openBefore = _training.openTradeCount;
+      setState(() {
+        _training.moveTo(_replayMarketCandles, _visibleThrough + 1);
+        _visibleThrough++;
+      });
+      if (openBefore != _training.openTradeCount) _recordTraining();
     });
   }
 
@@ -3205,12 +3477,31 @@ class _ChartScreenState extends State<ChartScreen>
             Text('$_visibleThrough / $_totalBars شمعة',
                 style: Theme.of(context).textTheme.labelSmall),
           ]),
+          Wrap(spacing: 8, runSpacing: 2, children: [
+            OutlinedButton.icon(
+              key: const Key('replay-practice-order'),
+              onPressed: _openTrainingOrderDialog,
+              icon: const Icon(Icons.add_circle_outline, size: 17),
+              label: const Text('صفقة تدريب'),
+            ),
+            TextButton(
+              key: const Key('replay-practice-list'),
+              onPressed: _showTrainingTrades,
+              child: Text('صفقاتي (${_training.trades.length})'),
+            ),
+            TextButton(
+              key: const Key('replay-practice-archive'),
+              onPressed: _showTrainingArchive,
+              child: const Text('الأرشيف'),
+            ),
+          ]),
           if (_liveRequested && (_mode == ChartMode.range
               ? _rangeHistoryTicks.isNotEmpty : _actualBars.isNotEmpty))
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: TextButton.icon(
-                onPressed: _olderLoading || _historyExhausted
+                onPressed: _olderLoading || _historyExhausted ||
+                      (_mode == ChartMode.range && _training.trades.isNotEmpty)
                     ? null : () => _mode == ChartMode.range
                         ? _loadOlderRangeHistory()
                         : _loadOlderHistory(manual: true),
@@ -3225,31 +3516,38 @@ class _ChartScreenState extends State<ChartScreen>
             ),
           Row(children: [
             IconButton(tooltip: 'رجوع شمعة',
-              onPressed: _visibleThrough <= 1 ? null : () => setState(() {
-                _stopPlayback();
-                _visibleThrough--;
-              }),
+              onPressed: _visibleThrough <= 1
+                  ? null : () => _seekReplay(_visibleThrough - 1),
               icon: const Icon(Icons.skip_previous)),
             IconButton(key: const Key('replay-play-pause'),
               tooltip: _playing ? 'إيقاف' : 'تشغيل',
               onPressed: _togglePlay,
               icon: Icon(_playing ? Icons.pause_circle : Icons.play_circle_fill,
                   color: TradeColors.blue)),
+            DropdownButton<ReplayPlaybackSpeed>(
+              key: const Key('replay-speed-picker'),
+              value: _replaySpeed,
+              underline: const SizedBox.shrink(),
+              items: [
+                for (final speed in ReplayPlaybackSpeed.values)
+                  DropdownMenuItem(value: speed,
+                      child: Text(speed.label)),
+              ],
+              onChanged: (speed) {
+                if (speed != null) _setReplaySpeed(speed);
+              },
+            ),
             IconButton(tooltip: 'تقدم شمعة',
-              onPressed: _visibleThrough >= _totalBars ? null : () => setState(() {
-                _stopPlayback();
-                _visibleThrough++;
-              }),
+              onPressed: _visibleThrough >= _totalBars
+                  ? null : () => _seekReplay(_visibleThrough + 1),
               icon: const Icon(Icons.skip_next)),
             Expanded(child: Slider(
               value: _visibleThrough.clamp(1, math.max(2, _totalBars)).toDouble(),
               min: 1, max: math.max(2, _totalBars).toDouble(),
-              divisions: math.max(1, _totalBars - 1),
+              // Continuous thumb + rounded candle indices: do not ask the
+              // Slider to render tens of thousands of discrete tick marks.
               label: '$_visibleThrough',
-              onChanged: (value) => setState(() {
-                _stopPlayback();
-                _visibleThrough = value.round();
-              }),
+              onChanged: (value) => _seekReplay(value.round()),
             )),
           ]),
         ]),

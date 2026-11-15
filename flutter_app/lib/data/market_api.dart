@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'tradelab_data.dart';
+import 'ctrader_closed_bar_cutoff.dart';
 
 /// The only permitted providers: cTrader for forex/gold, Binance for crypto.
 /// No demo, fallback feed, or OHLC-derived ticks are permitted here.
@@ -198,7 +199,6 @@ class MarketApi {
     final id = await symbolId(token: token, accountId: accountId,
         symbol: symbol);
     final requestedEnd = before.toUtc().millisecondsSinceEpoch;
-    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
     final frame = ctraderCandleLookback(timeframe);
     // Intraday time frames have exact minute boundaries. Historical
     // Trendbars may include the active bar; exclude it from backtest/Replay.
@@ -207,9 +207,11 @@ class MarketApi {
       '15m' => 15, '30m' => 30, '1h' => 60,
       '4h' => 240, _ => 0,
     };
-    final closedEnd = frameMinutes == 0
-        ? now
-        : (now ~/ (frameMinutes * 60000)) * (frameMinutes * 60000) - 1;
+    // Broker nominal day/week/month opens can precede UTC boundaries.
+    // Apply a conservative calendar guard before broker paging so Replay
+    // never assumes that midnight UTC proves the most recent bar has closed.
+    final closedEnd = CTraderClosedBarCutoff.conservativeLatestAllowedOpenMs(
+        timeframe, DateTime.now().toUtc());
     final endMs = requestedEnd < closedEnd ? requestedEnd : closedEnd;
     final startMs = fromTimestampMs ??
         endMs - frame.inMilliseconds;

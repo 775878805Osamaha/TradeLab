@@ -17,6 +17,16 @@ void main() {
     expect(MarketCandleStore.key(gold, '1m', 'one'),
         isNot(MarketCandleStore.key(gold, '1m', 'two')));
     expect(MarketCandleStore.key(btc, '1m', null), contains('binance'));
+    // Old calendar records may contain a forming broker-offset bar from
+    // the previous preview. They are never used under closed-bar policy v2.
+    for (final frame in const ['1D', '1W', '1M']) {
+      expect(MarketCandleStore.key(gold, frame, 'one'),
+          endsWith(':broker-closed-v2'));
+    }
+    expect(MarketCandleStore.key(gold, '1m', 'one'),
+        isNot(contains('broker-closed-v2')));
+    expect(MarketCandleStore.key(btc, '1D', null),
+        isNot(contains('broker-closed-v2')));
   });
 
   test('persist 120 verified market candles; no fabricated gaps', () async {

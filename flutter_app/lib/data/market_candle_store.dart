@@ -18,7 +18,16 @@ class MarketCandleStore {
         (accountId == null || accountId.isEmpty)) {
       throw ArgumentError('A cTrader account is required for cached candles');
     }
-    return '${symbol.source.name}:${accountId ?? 'public'}:${symbol.code}:$timeframe';
+    // The legacy preview could archive a D1/W1/MN1 bar before it closed
+    // under a broker-offset session. Keep the old rows on disk, but do not
+    // reuse them as immutable confirmed candles under the stricter policy.
+    // Only calendar-frame cTrader keys change; high-volume intraday caches
+    // retain their existing identities.
+    final closedPolicy = symbol.source == TradeSource.ctrader &&
+        const {'1D', '1W', '1M'}.contains(timeframe)
+        ? ':broker-closed-v2'
+        : '';
+    return '${symbol.source.name}:${accountId ?? 'public'}:${symbol.code}:$timeframe$closedPolicy';
   }
 
   /// Merge verified provider windows by timestamp without inventing gaps.
