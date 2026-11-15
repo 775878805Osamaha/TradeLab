@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/chart_viewport.dart';
 import 'package:tradelab_flutter/replay/replay_trade_overlay.dart';
@@ -125,8 +125,9 @@ void main() {
 
   testWidgets('isolated overlay paints without altering gestures or source',
       (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: Center(child: SizedBox(
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: Center(child: SizedBox(
         width: 320,
         height: 240,
         child: CustomPaint(
@@ -139,7 +140,7 @@ void main() {
             plotWidth: 259,
           ),
         ),
-      ))),
+      )),
     ));
     expect(find.byKey(const Key('practice-overlay-only')), findsOneWidget);
     expect(tester.takeException(), isNull);
