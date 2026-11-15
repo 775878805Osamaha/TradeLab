@@ -23,6 +23,7 @@ import '../chart/chart_symbol_settings.dart';
 import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
 import '../chart/chart_axis_ticks.dart';
+import '../chart/chart_time_axis_label_layout.dart';
 import '../chart/candle_prefix.dart';
 import '../replay/replay_playback_speed.dart';
 import '../replay/replay_training_session.dart';
@@ -3900,30 +3901,66 @@ class _CandleChartPainter extends CustomPainter {
           _price(item.target, decimals), TradeColors.shortLabelBlue);
     }
     if (timestamps.length >= candles.length) {
-      // Real UTC dates only. Range uses the time of the originating BID
-      // tick, NOT a guessed fixed-duration interval per Range bar.
+      // Label widths are measured using the same font/RTL direction as the
+      // painter. Never let overlapping text corrupt the mobile time axis.
+      // This affects presentation only; the underlying UTC times are intact.
+      final timeAxisLayout = ChartTimeAxisLabelLayout(plotWidth: axis);
+      final fontSize = math.max(9, panel.axisTextSize - 2).toDouble();
+      final labelColor = Color(panel.axisTextColor);
+      final zoneLabel = symbolSettings.timeZone.labelAt(DateTime.now().toUtc());
+      final zoneWidth = math.min(120.0, axis * .30);
+      if (zoneWidth > 24) {
+        final zonePainter = TextPainter(
+          text: TextSpan(text: zoneLabel,
+              style: TextStyle(color: labelColor, fontSize: 9,
+                  fontWeight: FontWeight.w500)),
+          textDirection: TextDirection.rtl,
+          maxLines: 1,
+          ellipsis: '…',
+        )..layout(maxWidth: zoneWidth);
+        final zoneLeft = axis - zonePainter.width - 3;
+        // Place timezone at the right of the plot, away from the drawing
+        // rail overlay on the left, then reserve its measured width.
+        if (timeAxisLayout.reserve(
+            left: zoneLeft, right: zoneLeft + zonePainter.width)) {
+          zonePainter.paint(canvas, Offset(zoneLeft, chartHeight + 4));
+        }
+      }
+
+      // Real UTC dates only. Range uses the originating BID tick timestamp,
+      // never a fabricated equal-duration interval.
       DateTime? priorTick;
       for (var tick = 1; tick <= 4; tick++) {
         final x = axis * tick / 5;
-        final index = viewport.indexAt(x: x, plotWidth: axis,
-            candleCount: candles.length);
+        final index = viewport.indexAt(
+            x: x, plotWidth: axis, candleCount: candles.length);
         if (index == null) continue;
         final local = symbolSettings.timeZone.displayDate(timestamps[index]);
         final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
         final isDayBoundary = priorTick == null ||
-          priorTick.day != local.day || priorTick.month != local.month ||
-          priorTick.year != local.year;
+            priorTick.day != local.day || priorTick.month != local.month ||
+            priorTick.year != local.year;
         priorTick = local;
-        final label = scaleSettings.weekdayOnLabels && isDayBoundary
-          ? ChartScaleSettings.localWeekday(local)
-          : '${hour.toString().padLeft(2, '0')}:'
-            '${local.minute.toString().padLeft(2, '0')} '
-            '${local.hour < 12 ? 'AM' : 'PM'}';
-      _text(canvas, label, Offset(x - (isDayBoundary &&
-          scaleSettings.weekdayOnLabels ? 20 : 26), chartHeight + 4),
-          Color(panel.axisTextColor),
-          math.max(9, panel.axisTextSize - 2).toDouble(),
-          rtl: scaleSettings.weekdayOnLabels && isDayBoundary);
+        final isWeekdayLabel =
+            scaleSettings.weekdayOnLabels && isDayBoundary;
+        final label = isWeekdayLabel
+            ? ChartScaleSettings.localWeekday(local)
+            : '${hour.toString().padLeft(2, '0')}:'
+              '${local.minute.toString().padLeft(2, '0')} '
+              '${local.hour < 12 ? 'AM' : 'PM'}';
+        final labelPainter = TextPainter(
+          text: TextSpan(text: label,
+              style: TextStyle(color: labelColor, fontSize: fontSize,
+                  fontWeight: FontWeight.w500)),
+          textDirection: isWeekdayLabel
+              ? TextDirection.rtl : TextDirection.ltr,
+          maxLines: 1,
+        )..layout();
+        if (timeAxisLayout.reserveCentered(
+            centerX: x, width: labelPainter.width)) {
+          labelPainter.paint(
+              canvas, Offset(x - labelPainter.width / 2, chartHeight + 4));
+        }
       }
     }
     if (crosshair != null) {
@@ -3962,9 +3999,6 @@ class _CandleChartPainter extends CustomPainter {
           Offset(axis / 2 - 18, chartHeight + 3),
           Color(panel.axisTextColor),
           math.max(9, panel.axisTextSize - 2).toDouble());
-    } else {
-      _text(canvas, symbolSettings.timeZone.labelAt(DateTime.now().toUtc()),
-        Offset(3, chartHeight + 4), text, 9, rtl: true);
     }
   }
 
