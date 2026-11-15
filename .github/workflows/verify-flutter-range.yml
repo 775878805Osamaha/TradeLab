@@ -63,6 +63,7 @@ jobs:
             test/market_api_test.dart \
             test/ctrader_closed_bar_cutoff_test.dart \
             test/replay_training_session_test.dart \
+            test/replay_training_archive_test.dart \
             test/replay_training_widget_test.dart \
             test/chart_frame_profiler_test.dart
       - name: Work around url_launcher_android upstream JavaDoc lint crash
