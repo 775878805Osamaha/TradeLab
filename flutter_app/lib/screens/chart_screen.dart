@@ -171,6 +171,7 @@ class _ChartScreenState extends State<ChartScreen>
   final ReplayTrainingSession _training = ReplayTrainingSession();
   String _trainingSessionId = '';
   String _trainingSourceKey = '';
+  bool _trainingEverTraded = false;
   Future<void> _trainingSaveQueue = Future<void>.value();
   Timer? _closedCandleTimer;
   bool _refreshingClosedCandles = false;
@@ -470,6 +471,7 @@ class _ChartScreenState extends State<ChartScreen>
         _stopPlayback();
         _replay = false;
         _training.clear();
+        _trainingEverTraded = false;
         _actualBars = [];
         _actualCandles = [];
         _actualTimestamps = [];
@@ -508,6 +510,7 @@ class _ChartScreenState extends State<ChartScreen>
       }
       _replay = false;
       _training.clear();
+      _trainingEverTraded = false;
       _loading = true;
       // Invalidate the previous history request's UI state. Its finally block
       // intentionally ignores stale revisions, so reset the spinner here.
@@ -920,7 +923,9 @@ class _ChartScreenState extends State<ChartScreen>
         _lineRedo.clear();
         if (_replay && replayCutoffTick != null) {
           _stopPlayback();
-          _visibleThrough = safeReplayBars!;
+          _training.clear(); // Rebuilt Range indices need a fresh cutoff.
+          _training.moveTo(timeline.bars, safeReplayBars!);
+          _visibleThrough = safeReplayBars;
         }
       });
     } on MarketDataException catch (error) {
@@ -1066,7 +1071,7 @@ class _ChartScreenState extends State<ChartScreen>
       _mode == ChartMode.range ? _actualRange : _actualCandles;
 
   void _recordTraining() {
-    if (_trainingSessionId.isEmpty || _training.trades.isEmpty) return;
+    if (_trainingSessionId.isEmpty || !_trainingEverTraded) return;
     final sessionId = _trainingSessionId;
     final sourceKey = _trainingSourceKey;
     final count = _training.visibleCount;
@@ -1204,6 +1209,7 @@ class _ChartScreenState extends State<ChartScreen>
         stopLoss: order.$3,
         takeProfit: order.$4,
       ));
+      _trainingEverTraded = true;
       _recordTraining();
     } on ArgumentError {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -1320,6 +1326,7 @@ class _ChartScreenState extends State<ChartScreen>
         _stopPlayback();
         if (!_replay) {
           _training.clear();
+          _trainingEverTraded = false;
           _trainingSessionId =
               DateTime.now().toUtc().microsecondsSinceEpoch.toString();
           _trainingSourceKey =
@@ -1379,11 +1386,12 @@ class _ChartScreenState extends State<ChartScreen>
         if (mounted) setState(() => _playing = false);
         return;
       }
+      final openBefore = _training.openTradeCount;
       setState(() {
         _training.moveTo(_replayMarketCandles, _visibleThrough + 1);
         _visibleThrough++;
       });
-      _recordTraining();
+      if (openBefore != _training.openTradeCount) _recordTraining();
     });
   }
 
@@ -3493,12 +3501,31 @@ class _ChartScreenState extends State<ChartScreen>
             Text('$_visibleThrough / $_totalBars شمعة',
                 style: Theme.of(context).textTheme.labelSmall),
           ]),
+          Wrap(spacing: 8, runSpacing: 2, children: [
+            OutlinedButton.icon(
+              key: const Key('replay-practice-order'),
+              onPressed: _openTrainingOrderDialog,
+              icon: const Icon(Icons.add_circle_outline, size: 17),
+              label: const Text('صفقة تدريب'),
+            ),
+            TextButton(
+              key: const Key('replay-practice-list'),
+              onPressed: _showTrainingTrades,
+              child: Text('صفقاتي (${_training.trades.length})'),
+            ),
+            TextButton(
+              key: const Key('replay-practice-archive'),
+              onPressed: _showTrainingArchive,
+              child: const Text('الأرشيف'),
+            ),
+          ]),
           if (_liveRequested && (_mode == ChartMode.range
               ? _rangeHistoryTicks.isNotEmpty : _actualBars.isNotEmpty))
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: TextButton.icon(
-                onPressed: _olderLoading || _historyExhausted
+                onPressed: _olderLoading || _historyExhausted ||
+                      (_mode == ChartMode.range && _training.trades.isNotEmpty)
                     ? null : () => _mode == ChartMode.range
                         ? _loadOlderRangeHistory()
                         : _loadOlderHistory(manual: true),
