@@ -1,10 +1,8 @@
 name: Capture TradeLab Chart Screenshot
 
+# Economic mode: explicit manual CI only.
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
-
 jobs:
   screenshot:
     runs-on: ubuntu-22.04
