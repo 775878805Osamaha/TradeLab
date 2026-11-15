@@ -28,7 +28,23 @@ void main() {
     expect(history.first['tradeCount'], 1);
     expect(history.first['realizedPricePnl'], 5);
 
+    // An ended Replay session clears its in-memory model. The persisted
+    // archive must remain unchanged when the screen/controller is disposed.
+    final endedSessionId = 'ended-${DateTime.now().microsecondsSinceEpoch}';
+    await ReplayTrainingArchive.save(
+      sessionId: endedSessionId, sourceKey: source,
+      visibleCount: session.visibleCount, trades: session.trades);
+    session.clear();
+    history = await ReplayTrainingArchive.recent();
+    final ended = history.firstWhere(
+        (entry) => entry['sessionId'] == endedSessionId);
+    expect(ended['tradeCount'], 1);
+    expect(ended['realizedPricePnl'], 5);
+
     // A seek to before the entry must not leave a future trade in SQLite.
+    session.moveTo(candles, 2);
+    session.enter(side: ReplaySide.buy, candles: candles, quantity: 1);
+    session.moveTo(candles, 0);
     session.moveTo(candles, 0);
     await ReplayTrainingArchive.save(
       sessionId: id, sourceKey: source,
