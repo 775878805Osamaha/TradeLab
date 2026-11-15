@@ -1120,8 +1120,12 @@ class _ChartScreenState extends State<ChartScreen>
     if (!_replay || _visibleThrough < 1 ||
         _visibleThrough > _replayMarketCandles.length) return;
 
+    // Freeze the revealed timeline while the ticket is on screen.
+    // Otherwise the playback timer could move the cursor during editing.
+    if (_playing) setState(_stopPlayback);
+    final entryVisibleCount = _visibleThrough;
     // Execute at the known raw candle close, not Heikin-Ashi averages.
-    final price = _replayMarketCandles[_visibleThrough - 1].close;
+    final price = _replayMarketCandles[entryVisibleCount - 1].close;
     final order = await showDialog<ReplayPracticeOrder>(
       context: context,
       builder: (_) => ReplayTrainingOrderDialog(entryPrice: price),
@@ -1131,7 +1135,8 @@ class _ChartScreenState extends State<ChartScreen>
     // The history may have changed while the modal was open. Never place
     // an entry at a newly revealed or newly hidden market price.
     final currentBars = _replayMarketCandles;
-    if (_visibleThrough < 1 ||
+    if (_visibleThrough != entryVisibleCount ||
+        _visibleThrough < 1 ||
         _visibleThrough > currentBars.length ||
         currentBars[_visibleThrough - 1].close != price) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
