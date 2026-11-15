@@ -28,6 +28,7 @@ import '../replay/replay_playback_speed.dart';
 import '../replay/replay_training_session.dart';
 import '../replay/replay_training_order_dialog.dart';
 import '../replay/replay_training_archive.dart';
+import '../replay/replay_trade_overlay.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_startup_loader.dart';
 import '../data/range_older_page.dart';
@@ -3399,6 +3400,24 @@ class _ChartScreenState extends State<ChartScreen>
                       ? _rangeBarTimestamps : _actualTimestamps,
                 ),
                 size: Size.infinite,
+              ),
+            ))),
+          // Practice orders belong to the current Replay prefix only.
+          // A separate, non-interactive painter keeps drawing tools and
+          // gesture handling untouched. Each order owns distinct SL/TP
+          // segments, rather than connecting unrelated trade levels.
+          if (_replay && candles.isNotEmpty && _training.trades.isNotEmpty)
+            Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
+              child: CustomPaint(
+                key: const Key('replay-practice-levels-overlay'),
+                size: Size.infinite,
+                painter: ReplayTradeOverlayPainter(
+                  trades: _training.trades,
+                  viewport: _viewport,
+                  scale: _priceScale(candles, plotWidth, constraints.maxHeight),
+                  candleCount: candles.length,
+                  plotWidth: plotWidth,
+                ),
               ),
             ))),
           if (candles.isEmpty)
