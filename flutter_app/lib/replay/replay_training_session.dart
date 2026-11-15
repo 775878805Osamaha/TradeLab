@@ -136,6 +136,11 @@ class ReplayTrainingSession {
       _visibleCount = newVisibleCount;
       return;
     }
+    // Normal chart seeking must stay O(1) while no practice trades exist.
+    if (_trades.isEmpty) {
+      _visibleCount = newVisibleCount;
+      return;
+    }
     for (var bar = _visibleCount; bar < newVisibleCount; bar++) {
       final candle = candles[bar];
       for (var i = 0; i < _trades.length; i++) {
@@ -152,8 +157,12 @@ class ReplayTrainingSession {
                 ? candle.high >= trade.takeProfit!
                 : candle.low <= trade.takeProfit!);
         if (stopped) {
+          // A gap past the stop is filled at the more adverse opening price.
+          final fill = trade.side == ReplaySide.buy
+              ? (candle.open < trade.stopLoss! ? candle.open : trade.stopLoss!)
+              : (candle.open > trade.stopLoss! ? candle.open : trade.stopLoss!);
           _trades[i] = trade.close(
-              bar, trade.stopLoss!, ReplayExitReason.stopLoss);
+              bar, fill, ReplayExitReason.stopLoss);
         } else if (targeted) {
           _trades[i] = trade.close(
               bar, trade.takeProfit!, ReplayExitReason.takeProfit);
