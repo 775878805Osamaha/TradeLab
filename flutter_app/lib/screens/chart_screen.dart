@@ -23,6 +23,9 @@ import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/candle_prefix.dart';
+import '../replay/replay_playback_speed.dart';
+import '../replay/replay_training_session.dart';
+import '../replay/replay_training_archive.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_startup_loader.dart';
 import '../data/range_older_page.dart';
@@ -164,6 +167,11 @@ class _ChartScreenState extends State<ChartScreen>
   double _gestureFocalX = 0;
   Offset? _crosshair;
   Timer? _replayTimer;
+  ReplayPlaybackSpeed _replaySpeed = ReplayPlaybackSpeed.normal;
+  final ReplayTrainingSession _training = ReplayTrainingSession();
+  String _trainingSessionId = '';
+  String _trainingSourceKey = '';
+  Future<void> _trainingSaveQueue = Future<void>.value();
   Timer? _closedCandleTimer;
   bool _refreshingClosedCandles = false;
   bool _playing = false;
@@ -430,6 +438,9 @@ class _ChartScreenState extends State<ChartScreen>
       return;
     }
     if (_mode == ChartMode.range) {
+      // Rebuilding Range from an earlier BID origin changes all bar indices.
+      // Do not silently relocate a practice entry while a trade is recorded.
+      if (_replay && _training.trades.isNotEmpty) return;
       if (_rangeHistoryTicks.isNotEmpty) {
         unawaited(_loadOlderRangeHistory());
       }
@@ -455,8 +466,10 @@ class _ChartScreenState extends State<ChartScreen>
       }
       if (!linked && _selectedSymbol.source == TradeSource.ctrader) {
         _loadRevision++;
+        _recordTraining();
         _stopPlayback();
         _replay = false;
+        _training.clear();
         _actualBars = [];
         _actualCandles = [];
         _actualTimestamps = [];
@@ -477,6 +490,7 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _loadRealHistory() async {
+    if (_replay) _recordTraining();
     _momentum.stop();
     final revision = ++_loadRevision;
     if (!mounted) return;
@@ -493,6 +507,7 @@ class _ChartScreenState extends State<ChartScreen>
         _rectangles..clear()..addAll(_analysisRectangles);
       }
       _replay = false;
+      _training.clear();
       _loading = true;
       // Invalidate the previous history request's UI state. Its finally block
       // intentionally ignores stale revisions, so reset the spinner here.
@@ -692,6 +707,11 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _loadOlderRangeHistory() async {
+    if (_replay && _training.trades.isNotEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('أنهِ أو احفظ جلسة التدريب قبل إعادة بناء تاريخ شموع المدى.')));
+      return;
+    }
     if (_olderLoading || _loading || _historyExhausted ||
         !_liveRequested || _mode != ChartMode.range ||
         _rangeHistoryTicks.isEmpty ||
@@ -1007,7 +1027,10 @@ class _ChartScreenState extends State<ChartScreen>
         _lineRedo.clear();
         // The Replay cutoff must stay at the SAME historical candle when
         // older candles are prepended. Never reveal new future candles.
-        if (_replay) _visibleThrough += unique.length;
+        if (_replay) {
+          _training.prepend(unique.length);
+          _visibleThrough += unique.length;
+        }
         });
       }
     } catch (_) {
@@ -1089,13 +1112,17 @@ class _ChartScreenState extends State<ChartScreen>
       return;
     }
     setState(() => _playing = true);
-    _replayTimer = Timer.periodic(const Duration(milliseconds: 650), (timer) {
+    _replayTimer = Timer.periodic(_replaySpeed.interval, (timer) {
       if (!mounted || !_replay || _visibleThrough >= _totalBars) {
         timer.cancel();
         if (mounted) setState(() => _playing = false);
         return;
       }
-      setState(() => _visibleThrough++);
+      setState(() {
+        _training.moveTo(_replayMarketCandles, _visibleThrough + 1);
+        _visibleThrough++;
+      });
+      _recordTraining();
     });
   }
 
