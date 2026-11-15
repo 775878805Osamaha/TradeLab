@@ -207,9 +207,10 @@ class MarketApi {
       '15m' => 15, '30m' => 30, '1h' => 60,
       '4h' => 240, _ => 0,
     };
-    // Including calendar bars: never expose an active D1/W1/MN1 candle
-    // to Replay even if the broker returns its changing OHLC.
-    final closedEnd = CTraderClosedBarCutoff.latestAllowedOpenMs(
+    // Broker nominal day/week/month opens can precede UTC boundaries.
+    // Apply a conservative calendar guard before broker paging so Replay
+    // never assumes that midnight UTC proves the most recent bar has closed.
+    final closedEnd = CTraderClosedBarCutoff.conservativeLatestAllowedOpenMs(
         timeframe, DateTime.now().toUtc());
     final endMs = requestedEnd < closedEnd ? requestedEnd : closedEnd;
     final startMs = fromTimestampMs ??
