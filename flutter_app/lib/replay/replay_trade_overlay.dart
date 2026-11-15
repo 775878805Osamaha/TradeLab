@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../chart/chart_viewport.dart';
 import 'replay_training_session.dart';
@@ -48,7 +48,9 @@ class ReplayTradeOverlayLayout {
     final marks = <ReplayTradeOverlayMark>[];
     for (final trade in trades) {
       if (trade.entryIndex < 0 || trade.entryIndex >= candleCount ||
-          !trade.entryPrice.isFinite) continue;
+          !trade.entryPrice.isFinite) {
+        continue;
+      }
 
       // A closed trade can end on an earlier candle; an open trade stops at
       // the LAST REVEALED candle. Invalid future exit data is not drawn.
@@ -67,7 +69,9 @@ class ReplayTradeOverlayLayout {
           plotWidth: plotWidth);
       // Skip off-screen trades rather than paying the cost to paint them.
       if (math.max(entryX, endX) < -8 ||
-          math.min(entryX, endX) > plotWidth + 8) continue;
+          math.min(entryX, endX) > plotWidth + 8) {
+        continue;
+      }
 
       marks.add(ReplayTradeOverlayMark(
         trade: trade,
@@ -161,12 +165,12 @@ class ReplayTradeOverlayPainter extends CustomPainter {
           Paint()..color = color);
       canvas.drawCircle(
           Offset(mark.entryX, mark.entryY), 4,
-          Paint()..color = Colors.white..style = PaintingStyle.stroke
+          Paint()..color = const Color(0xFFFFFFFF)..style = PaintingStyle.stroke
             ..strokeWidth = 1);
       if (mark.exitY != null) {
         canvas.drawCircle(
           Offset(mark.endX, mark.exitY!), 4,
-          Paint()..color = Colors.white,
+          Paint()..color = const Color(0xFFFFFFFF),
         );
         canvas.drawCircle(
           Offset(mark.endX, mark.exitY!), 4,
