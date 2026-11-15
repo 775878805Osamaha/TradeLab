@@ -175,6 +175,7 @@ class _ChartScreenState extends State<ChartScreen>
   String _trainingSessionId = '';
   String _trainingSourceKey = '';
   bool _trainingEverTraded = false;
+  Timer? _trainingSaveDebounce;
   Future<void> _trainingSaveQueue = Future<void>.value();
   Timer? _closedCandleTimer;
   bool _refreshingClosedCandles = false;
@@ -1077,6 +1078,8 @@ class _ChartScreenState extends State<ChartScreen>
       _mode == ChartMode.range ? _actualRange : _actualCandles;
 
   void _recordTraining() {
+    _trainingSaveDebounce?.cancel();
+    _trainingSaveDebounce = null;
     if (_trainingSessionId.isEmpty || !_trainingEverTraded) return;
     final sessionId = _trainingSessionId;
     final sourceKey = _trainingSourceKey;
@@ -1098,6 +1101,15 @@ class _ChartScreenState extends State<ChartScreen>
     });
   }
 
+  /// Avoid one SQLite write for every frame while the user drags the slider.
+  /// Closing Replay and disposing the chart flush the final snapshot.
+  void _scheduleTrainingSave() {
+    if (!_trainingEverTraded) return;
+    _trainingSaveDebounce?.cancel();
+    _trainingSaveDebounce = Timer(
+        const Duration(milliseconds: 300), _recordTraining);
+  }
+
   void _seekReplay(int requestedCount) {
     if (!_replay) return;
     final next = requestedCount.clamp(1, _totalBars).toInt();
@@ -1106,7 +1118,7 @@ class _ChartScreenState extends State<ChartScreen>
       _training.moveTo(_replayMarketCandles, next);
       _visibleThrough = next;
     });
-    _recordTraining();
+    _scheduleTrainingSave();
   }
 
   void _setReplaySpeed(ReplayPlaybackSpeed speed) {
