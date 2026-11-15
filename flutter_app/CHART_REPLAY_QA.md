@@ -6,8 +6,11 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
 
 - cTrader/forex and gold: only broker-authenticated OHLC and BID tick data.
 - Binance/crypto: only the supported public crypto instruments.
-- Daily, weekly, monthly and intraday cTrader candles are hidden until the UTC
-  open of the **next** period. This is enforced before the chart and Replay.
+- Intraday cTrader bars are bounded by the current UTC period opening.
+- For daily, weekly and monthly broker bars, use conservative request cutoffs
+  that account for nominal bar openings shortly before UTC day/week/month
+  boundaries (e.g. forex sessions aligned to 17:00 New York). This may withhold
+  just-closed bars briefly; exact broker closure still needs live verification.
 - Never populate chart gaps with synthetic price history.
 - Do not compare Range bar shapes with a screenshot alone. Its broker BID tick
   sequence, price distance, decimal precision, session start and timezone must
