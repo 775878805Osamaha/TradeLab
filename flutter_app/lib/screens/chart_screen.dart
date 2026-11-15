@@ -14,6 +14,7 @@ import '../chart/chart_type_sheet.dart';
 import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
+import '../chart/chart_frame_profiler.dart';
 import '../chart/chart_panel_settings.dart';
 import '../chart/chart_panel_settings_page.dart';
 import '../chart/chart_scale_settings.dart';
@@ -169,6 +170,7 @@ class _ChartScreenState extends State<ChartScreen>
   Timer? _replayTimer;
   ReplayPlaybackSpeed _replaySpeed = ReplayPlaybackSpeed.normal;
   final ReplayTrainingSession _training = ReplayTrainingSession();
+  final ChartFrameProfiler _frameProfiler = ChartFrameProfiler();
   String _trainingSessionId = '';
   String _trainingSourceKey = '';
   bool _trainingEverTraded = false;
@@ -260,6 +262,7 @@ class _ChartScreenState extends State<ChartScreen>
   @override
   void initState() {
     super.initState();
+    _frameProfiler.attach();
     unawaited(_loadDrawingFavorites());
     unawaited(_loadPanelSettings());
     unawaited(_loadScaleSettings());
@@ -1051,6 +1054,8 @@ class _ChartScreenState extends State<ChartScreen>
 
   @override
   void dispose() {
+    _recordTraining();
+    _frameProfiler.detach();
     widget.controller.removeListener(_onMarketUpdate);
     _loadRevision++;
     _replayTimer?.cancel();
