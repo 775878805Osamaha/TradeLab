@@ -1,11 +1,8 @@
 name: Verify real gold historical candles
 
+# Economic mode: manual validation only.
 on:
-  push:
-    branches:
-      - feature/verify-gold-history-endpoint
   workflow_dispatch:
-
 jobs:
   gold-ohlc-smoke:
     runs-on: ubuntu-latest
