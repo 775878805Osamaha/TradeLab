@@ -40,4 +40,33 @@ class CTraderClosedBarCutoff {
     // interval starts excludes that bar regardless of provider pagination.
     return activeOpenMs - 1;
   }
+
+  /// Conservative request cutoff for calendar bars.
+  ///
+  /// cTrader's trendbar timestamps denote the NOMINAL open, which may differ
+  /// from a UTC calendar boundary (forex D1 may start at 17:00 New York).
+  /// Exclude the current period even when its nominal open belongs to the
+  /// preceding UTC day/week/month. The guard may withhold a just-closed
+  /// bar briefly; this is preferable to exposing a forming candle in Replay.
+  ///
+  /// The maximum offset depends on broker/symbol conventions: a fully
+  /// authoritative solution would use source-provided closed-bar metadata.
+  static int conservativeLatestAllowedOpenMs(
+      String timeframe, DateTime now) {
+    final utc = now.toUtc();
+    final midnight = DateTime.utc(utc.year, utc.month, utc.day);
+    final calendarStart = switch (timeframe) {
+      '1D' => midnight.subtract(const Duration(days: 1)),
+      '1W' => midnight
+          .subtract(Duration(days: utc.weekday - DateTime.monday))
+          .subtract(const Duration(days: 2)),
+      '1M' => DateTime.utc(utc.year, utc.month)
+          .subtract(const Duration(days: 3)),
+      _ => null,
+    };
+    if (calendarStart == null) {
+      return latestAllowedOpenMs(timeframe, utc);
+    }
+    return calendarStart.millisecondsSinceEpoch - 1;
+  }
 }
