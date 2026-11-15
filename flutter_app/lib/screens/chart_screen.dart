@@ -15,6 +15,7 @@ import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/chart_frame_profiler.dart';
+import '../chart/chart_feed_health.dart';
 import '../chart/chart_panel_settings.dart';
 import '../chart/chart_panel_settings_page.dart';
 import '../chart/chart_scale_settings.dart';
@@ -179,6 +180,7 @@ class _ChartScreenState extends State<ChartScreen>
   Future<void> _trainingSaveQueue = Future<void>.value();
   Timer? _closedCandleTimer;
   bool _refreshingClosedCandles = false;
+  MarketQuote? _lastObservedQuote;
   bool _playing = false;
   final List<double> _levels = [];
   final List<ChartPattern> _patterns = [];
@@ -223,15 +225,13 @@ class _ChartScreenState extends State<ChartScreen>
   bool get _ctraderTimeCandlesStale {
     if (_selectedSymbol.source != TradeSource.ctrader ||
         _mode == ChartMode.range || _actualTimestamps.isEmpty) return false;
-    final last = _actualTimestamps.last;
-    final interval = switch (_timeframe) {
-      '1m' => 1, '2m' => 2, '3m' => 3, '5m' => 5,
-      '15m' => 15, '30m' => 30, '1h' => 60,
-      '4h' => 240, '1D' => 1440, '1W' => 10080,
-      '1M' => 43200, _ => 1,
-    };
-    final lag = DateTime.now().toUtc().millisecondsSinceEpoch - last;
-    return lag > math.max(interval * 3, 10) * 60000;
+    final quote = widget.controller.recentQuoteFor(_selectedSymbol);
+    return ChartFeedHealth.closedCandlesLagging(
+      latestClosedOpenMs: _actualTimestamps.last,
+      timeframe: _timeframe,
+      nowMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      freshQuoteTimestampMs: quote?.timestampMs,
+    );
   }
 
   String get _marketEvidenceLabel {
@@ -248,9 +248,11 @@ class _ChartScreenState extends State<ChartScreen>
             '${_utcMinuteLabel(_rangeHistoryTicks.last.timestamp)}';
       }
       if (_actualTimestamps.isNotEmpty) {
-        return 'شموع cTrader · $broker ($mode) · آخر شمعة '
+        final quote = widget.controller.recentQuoteFor(_selectedSymbol);
+        return 'شموع cTrader · $broker ($mode) · آخر شمعة مغلقة '
             '${_utcMinuteLabel(_actualTimestamps.last)}'
-            '${_ctraderTimeCandlesStale ? ' · بيانات متأخرة' : ''}';
+            '${quote == null ? '' : ' · سعر BID/ASK عند ${_utcMinuteLabel(quote.timestampMs)}'}'
+            '${_ctraderTimeCandlesStale ? ' · الشموع متأخرة' : ''}';
       }
       return 'لم تصل شموع موثقة من cTrader لهذا الرمز';
     }
@@ -278,11 +280,17 @@ class _ChartScreenState extends State<ChartScreen>
     _linkedBefore = widget.controller.ctraderConnected;
     _accountBefore = widget.controller.accountId;
     widget.controller.addListener(_onMarketUpdate);
+    _lastObservedQuote = widget.controller.recentQuoteFor(_selectedSymbol);
     // Poll only broker-closed candles. Never update Replay or request
     // synthetic OHLC from non-cTrader sources.
     _closedCandleTimer = Timer.periodic(
       const Duration(seconds: 30),
-      (_) => unawaited(_refreshClosedCTraderCandles()),
+      (_) {
+        unawaited(_refreshClosedCTraderCandles());
+        // Quote labels must also disappear after their 90-second validity
+        // expires, including when the chart is in Range mode.
+        _refreshDisplayedQuote();
+      },
     );
     // Binance does not require a cTrader session. Load its chart immediately
     // when selected, even on a device that has never linked a broker.
@@ -459,6 +467,15 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  void _refreshDisplayedQuote() {
+    final latest = widget.controller.recentQuoteFor(_selectedSymbol);
+    if (!ChartFeedHealth.quoteChanged(_lastObservedQuote, latest)) return;
+    _lastObservedQuote = latest;
+    // A quote update changes only its label. No chart history, viewport,
+    // gesture state, Replay cursor or drawing object is modified.
+    if (mounted) setState(() {});
+  }
+
   void _onMarketUpdate() {
     final linked = widget.controller.ctraderConnected;
     final changedAccount = _accountBefore != widget.controller.accountId;
@@ -498,6 +515,9 @@ class _ChartScreenState extends State<ChartScreen>
         if (mounted) setState(() {});
       }
     }
+    // MarketController can publish a new BID/ASK while the broker link and
+    // selected account stay unchanged. Redraw verified price labels then.
+    _refreshDisplayedQuote();
   }
 
   Future<void> _loadRealHistory() async {
@@ -671,7 +691,7 @@ class _ChartScreenState extends State<ChartScreen>
   Future<void> _refreshClosedCTraderCandles() async {
     if (!mounted || _refreshingClosedCandles || _loading || _olderLoading ||
         _replay || _draggingLine || _draggingPattern ||
-        !_liveRequested || _loadError != null ||
+        !_liveRequested ||
         _selectedSymbol.source != TradeSource.ctrader ||
         _mode == ChartMode.range || _actualBars.isEmpty) return;
     final revision = _loadRevision;
@@ -689,11 +709,13 @@ class _ChartScreenState extends State<ChartScreen>
       final combined = CTraderCandleStitcher.append(_actualBars, recent);
       final appended = combined.length - _actualBars.length;
       if (appended == 0) {
-        // Update the freshness label even when the broker has no new candle.
-        setState(() {});
+        // A broker response with no new CLOSED bar still proves the request
+        // recovered. Never leave a transient network error latched forever.
+        setState(() => _loadError = null);
         return;
       }
       setState(() {
+        _loadError = null;
         _actualBars = combined;
         _actualCandles =
             combined.map((bar) => bar.candle).toList(growable: false);
@@ -2733,7 +2755,8 @@ class _ChartScreenState extends State<ChartScreen>
               child: Text(
                 hasVerifiedPrices
                     ? (_ctraderTimeCandlesStale
-                        ? 'شموع $source · بيانات متأخرة' : 'شموع $source')
+                        ? 'شموع $source · ${widget.controller.recentQuoteFor(_selectedSymbol) != null ? 'الشموع أقدم من السعر' : 'بيانات متأخرة'}'
+                        : 'شموع $source')
                     : fetchingRangeTicks
                         ? 'جارِ التحقق من تيكات BID · cTrader'
                         : 'لا توجد أسعار موثقة · $source',
