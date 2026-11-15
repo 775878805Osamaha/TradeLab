@@ -18,6 +18,10 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
 - cTrader quote notifications repaint only read-only BID/ASK labels; they do not
   change OHLC, chart pan/zoom, Replay or drawing data. Price source timestamps
   remain separate from the most recent *closed* candle timestamp.
+- The visible chart polls only its selected cTrader quote (read-only) at most
+  once a minute, and reuses an existing fresh quote from Markets. Hidden
+  IndexedStack chart tabs make no scheduled market requests; returning to the
+  tab resumes loading without fabricating missing history.
 - Transient failures while polling closed cTrader OHLC can be retried on the
   existing 30-second cadence; a valid no-new-bar response clears a prior
   transient error without injecting a candle. A broker quote can be current
