@@ -1,10 +1,8 @@
 name: Capture TradeLab Chart Screenshot
 
+# Cost-control: manually dispatch builds and tests only when requested.
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
-
 jobs:
   screenshot:
     runs-on: ubuntu-22.04
