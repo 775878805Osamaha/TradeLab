@@ -11,6 +11,9 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
   that account for nominal bar openings shortly before UTC day/week/month
   boundaries (e.g. forex sessions aligned to 17:00 New York). This may withhold
   just-closed bars briefly; exact broker closure still needs live verification.
+- Calendar-frame cTrader cache keys have a separate `broker-closed-v2` namespace.
+  Previous potentially unclosed D1/W1/MN1 records remain on disk but are not
+  trusted for Replay; intraday cached candles are unaffected.
 - Never populate chart gaps with synthetic price history.
 - Do not compare Range bar shapes with a screenshot alone. Its broker BID tick
   sequence, price distance, decimal precision, session start and timezone must
