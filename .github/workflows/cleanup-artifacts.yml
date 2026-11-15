@@ -39,13 +39,14 @@ jobs:
             })).filter(a => !a.expired).sort((a, b) =>
               new Date(b.created_at) - new Date(a.created_at));
             const keep = new Set(artifacts.slice(0, 2).map(a => a.id));
-            const apkLike = a => /apk|aab|android|flutter|bundle|build|debug|signed|installable/i.test(a.name);
+            const apkLike = a => /(^|[-_. ])(apk|aab)(?=$|[-_. ])|(^|[-_. ])(manager|worker)[-_. ]sync(?=$|[-_. ])/i.test(a.name);
             for (const a of artifacts.filter(apkLike).slice(0, 2)) keep.add(a.id);
             const sensitive = /backup|keystore|key-store|signing|secret|database|db-backup|source|release|archive|export/i;
-            const temporary = /apk|aab|android|flutter|bundle|build|coverage|test|result|report|log|screen|capture|debug|preview/i;
+            // Skip ambiguous names. A screenshot called 'Android' is not an APK.
+            const temporary = a => apkLike(a) || /coverage|test|result|report|log|screen|capture|golden|preview/i.test(a.name);
             const oldestAllowed = Date.now() - minimumDays * 86400000;
             const candidates = artifacts.filter(a =>
-              !keep.has(a.id) && !sensitive.test(a.name) && temporary.test(a.name) &&
+              !keep.has(a.id) && !sensitive.test(a.name) && temporary(a) &&
               new Date(a.created_at).getTime() < oldestAllowed);
             let bytes = 0;
             let deleted = 0;
