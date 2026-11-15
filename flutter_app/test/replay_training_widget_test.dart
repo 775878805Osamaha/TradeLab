@@ -4,11 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/market_controller.dart';
 import 'package:tradelab_flutter/main.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+
   testWidgets('verified Binance candles enable Replay training in same chart',
       (tester) async {
     final baseMs = DateTime.utc(2026, 11, 1).millisecondsSinceEpoch;
