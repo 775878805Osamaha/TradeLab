@@ -68,7 +68,9 @@ abstract final class ChartFeedHealth {
   }) {
     final frameMinutes = intervalMinutes(timeframe);
     if (latestClosedOpenMs == null || latestClosedOpenMs <= 0 ||
-        frameMinutes == null) return false;
+        frameMinutes == null) {
+      return false;
+    }
     final reference = freshQuoteTimestampMs ?? nowMs;
     if (reference <= latestClosedOpenMs) {
       return false;
