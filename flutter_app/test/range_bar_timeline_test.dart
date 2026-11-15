@@ -21,6 +21,18 @@ void main() {
     expect(timeline.visibleBarsThroughTick(1), 2);
     expect(timeline.visibleBarsThroughTick(2), 2);
     expect(timeline.visibleBarsThroughTick(3), 3);
+    // The trailing bar is the still-forming Range snapshot, not executable.
+    expect(timeline.closedBarCount, 2);
+    expect(timeline.visibleClosedBarsThroughTick(3), 2);
+    expect(timeline.visibleClosedBarsThroughTick(1), 2);
+  });
+
+  test('one authentic tick produces a forming bar but zero Replay bars', () {
+    final timeline = RangeBarTimeline.build([MarketTick(100, 102)], 1);
+    expect(timeline.bars, hasLength(1));
+    expect(timeline.closedBarCount, 0);
+    expect(timeline.visibleBarsThroughTick(0), 1);
+    expect(timeline.visibleClosedBarsThroughTick(0), 0);
   });
 
   test('Replay cutoff remains at same source event when ticks prepend', () {
@@ -99,6 +111,8 @@ void main() {
     expect(timeline.endTickIndices, isEmpty);
     expect(timeline.endTimestamps, isEmpty);
     expect(timeline.visibleBarsThroughTick(100), 0);
+    expect(timeline.closedBarCount, 0);
+    expect(timeline.visibleClosedBarsThroughTick(100), 0);
   });
 
   test('Range drawings rebase using BID event rather than candle shift', () {
