@@ -123,6 +123,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: TradeLab-Range-Android13-Screenshot
+          retention-days: 7
           path: flutter_app/build/tradelab_range_emulator.png
           if-no-files-found: error
       - name: Upload verified installable APK and checksum
