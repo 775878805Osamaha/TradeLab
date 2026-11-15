@@ -61,10 +61,12 @@ typedef _DrawingSnapshot = (List<double>, List<ChartPattern>,
 
 class ChartScreen extends StatefulWidget {
   const ChartScreen({required this.controller, this.journal,
-    this.onOpenAccount, super.key});
+    this.onOpenAccount, this.active = true, super.key});
   final MarketController controller;
   final PaperJournalController? journal;
   final VoidCallback? onOpenAccount;
+  /// False while kept alive but hidden inside the bottom-tab IndexedStack.
+  final bool active;
 
   @override
   State<ChartScreen> createState() => _ChartScreenState();
@@ -181,6 +183,8 @@ class _ChartScreenState extends State<ChartScreen>
   Timer? _closedCandleTimer;
   bool _refreshingClosedCandles = false;
   MarketQuote? _lastObservedQuote;
+  bool _pollingSelectedQuote = false;
+  int _lastQuoteRequestAtMs = 0;
   bool _playing = false;
   final List<double> _levels = [];
   final List<ChartPattern> _patterns = [];
@@ -286,8 +290,10 @@ class _ChartScreenState extends State<ChartScreen>
     _closedCandleTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) {
+        if (!widget.active) return;
         unawaited(_refreshClosedCTraderCandles());
-        // Quote labels must also disappear after their 90-second validity
+        unawaited(_refreshSelectedCTraderQuote());
+        // Quote labels must disappear after their 90-second validity
         // expires, including when the chart is in Range mode.
         _refreshDisplayedQuote();
       },
@@ -295,6 +301,20 @@ class _ChartScreenState extends State<ChartScreen>
     // Binance does not require a cTrader session. Load its chart immediately
     // when selected, even on a device that has never linked a broker.
     if (_liveRequested) Future.microtask(_loadRealHistory);
+    if (widget.active && _selectedSymbol.source == TradeSource.ctrader) {
+      Future.microtask(_refreshSelectedCTraderQuote);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ChartScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.active && widget.active) {
+      // The chart was hidden behind another tab. Refresh only the selected
+      // verified symbol, never fetch quote data while offscreen.
+      _refreshDisplayedQuote();
+      unawaited(_refreshSelectedCTraderQuote());
+    }
   }
 
   Future<void> _loadDrawingFavorites() async {
@@ -467,6 +487,35 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  /// cTrader price refresh is read-only. No broker trades, artificial bars
+  /// or price interpolation are created. Inactive tabs issue no requests.
+  Future<void> _refreshSelectedCTraderQuote() async {
+    if (!mounted || !widget.active || _pollingSelectedQuote || _replay ||
+        _selectedSymbol.source != TradeSource.ctrader ||
+        !widget.controller.ctraderConnected) return;
+    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final cached = widget.controller.recentQuoteFor(_selectedSymbol);
+    if (!ChartFeedHealth.shouldRequestQuote(
+      nowMs: nowMs,
+      lastAttemptMs: _lastQuoteRequestAtMs,
+      freshQuoteTimestampMs: cached?.timestampMs,
+    )) return;
+    _pollingSelectedQuote = true;
+    _lastQuoteRequestAtMs = nowMs;
+    final symbol = _selectedSymbol;
+    try {
+      // paperQuote is a source-only BID/ASK GET; it neither places orders
+      // nor writes to the local trading journal.
+      await widget.controller.paperQuote(symbol);
+    } on MarketDataException {
+      // Keep the previous evidence/error state; never fabricate a price.
+    } catch (_) {
+      // Recheck on the next throttled interval after a transient failure.
+    } finally {
+      _pollingSelectedQuote = false;
+    }
+  }
+
   void _refreshDisplayedQuote() {
     final latest = widget.controller.recentQuoteFor(_selectedSymbol);
     if (!ChartFeedHealth.quoteChanged(_lastObservedQuote, latest)) return;
@@ -486,10 +535,12 @@ class _ChartScreenState extends State<ChartScreen>
       _rangePointCache.clear();
       _linkedBefore = linked;
       _accountBefore = widget.controller.accountId;
+      _lastQuoteRequestAtMs = 0;
       // Never carry another broker account's drawings into this account.
       _resetDrawingObjects();
       if (linked && _selectedSymbol.source == TradeSource.ctrader) {
         _loadRealHistory();
+        unawaited(_refreshSelectedCTraderQuote());
       }
       if (!linked && _selectedSymbol.source == TradeSource.ctrader) {
         _loadRevision++;
@@ -689,7 +740,8 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _refreshClosedCTraderCandles() async {
-    if (!mounted || _refreshingClosedCandles || _loading || _olderLoading ||
+    if (!mounted || !widget.active || _refreshingClosedCandles ||
+        _loading || _olderLoading ||
         _replay || _draggingLine || _draggingPattern ||
         !_liveRequested ||
         _selectedSymbol.source != TradeSource.ctrader ||
