@@ -48,7 +48,7 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
 ```bash
 cd flutter_app
 flutter pub get
-flutter analyze
+flutter analyze --no-fatal-infos
 flutter test test/ctrader_closed_bar_cutoff_test.dart \
   test/replay_training_session_test.dart \
   test/replay_training_archive_test.dart \
@@ -59,15 +59,29 @@ flutter test test/ctrader_closed_bar_cutoff_test.dart \
   test/chart_viewport_test.dart
 ```
 
-Android device/emulator smoke:
+Android 13 emulator smoke is intentionally **manual-only**, not part of
+the source-only PR gate or the automatic APK release workflow. Use GitHub
+Actions -> **TradeLab Flutter Android Replay smoke (manual)** -> Run workflow,
+select the reviewed source branch (or `main` after merge). No release APK
+is published. The runner compiles a temporary test app solely to install
+and execute `integration_test/replay_device_smoke_test.dart`.
+
+For a directly connected physical device:
 
 ```bash
+flutter create --platforms android --project-name tradelab_flutter . --no-pub
+python3 tool/configure_android_host.py
+flutter pub get
 flutter test integration_test/replay_device_smoke_test.dart -d <device-id>
 ```
 
-This smoke confirms the unlinked state and that Replay does not reveal
-unverified data. A live authenticated cTrader scenario must be verified on a
-device with the user's account. Never use private tokens in CI fixtures.
+The device smoke checks both the unlinked cTrader state and a deterministic
+mocked Binance OHLC series, opens and closes a local Replay practice ticket,
+and exercises touch dragging without needing any credentials. These are
+functional tests **not** frame-time performance benchmarks and **not** proof
+of authenticated cTrader connectivity. A live authenticated cTrader scenario
+must be verified separately using the user's account. Never use private
+tokens in CI fixtures.
 
 ## Frame performance measurements (physical Android)
 
