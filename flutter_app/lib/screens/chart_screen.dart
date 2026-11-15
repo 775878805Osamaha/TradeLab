@@ -258,7 +258,11 @@ class _ChartScreenState extends State<ChartScreen>
   }
   int get _totalBars {
     if (!_liveRequested) return 0;
-    return _mode == ChartMode.range ? _actualRange.length : _actualBars.length;
+    // The last Range bar is still forming; never count it as a Replay
+    // entry/exit candle. The live chart can keep drawing it separately.
+    return _mode == ChartMode.range
+        ? math.max(0, _actualRange.length - 1)
+        : _actualBars.length;
   }
 
   @override
@@ -877,7 +881,8 @@ class _ChartScreenState extends State<ChartScreen>
       }
       final safeReplayBars = replayCutoffTick == null
           ? null
-          : timeline.visibleBarsThroughTick(prefix.length + replayCutoffTick);
+          : timeline.visibleClosedBarsThroughTick(
+              prefix.length + replayCutoffTick);
       if (_replay && (safeReplayBars == null || safeReplayBars == 0)) {
         _olderLoadError =
             'يغيّر التاريخ الأقدم بداية شموع المدى قبل موضع Replay؛ '
@@ -1235,6 +1240,8 @@ class _ChartScreenState extends State<ChartScreen>
 
   Future<void> _showTrainingArchive() async {
     try {
+      // A slider seek may have a pending debounced snapshot.
+      _recordTraining();
       await _trainingSaveQueue;
       final history = await ReplayTrainingArchive.recent();
       if (!mounted) return;
@@ -1275,7 +1282,7 @@ class _ChartScreenState extends State<ChartScreen>
     _momentum.stop();
     if (_totalBars < 2) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('حمّل شموع السوق أولًا لبدء Replay.')));
+        content: Text('حمّل شمعتين مكتملتين على الأقل قبل بدء Replay.')));
       return;
     }
     if (_replay) _recordTraining();
@@ -1311,7 +1318,12 @@ class _ChartScreenState extends State<ChartScreen>
         if (_replay) {
           _training.moveTo(_replayMarketCandles, _visibleThrough);
         } else {
+          // Snapshot is already queued above. Do not allow dispose() or a
+          // stale timer callback to replace it with an empty in-memory state.
           _training.clear();
+          _trainingEverTraded = false;
+          _trainingSessionId = '';
+          _trainingSourceKey = '';
         }
         _viewport = _freshViewport();
         _crosshair = null;
