@@ -57,6 +57,7 @@ cd flutter_app
 flutter pub get
 flutter analyze
 flutter test test/ctrader_closed_bar_cutoff_test.dart \
+  test/chart_feed_health_test.dart \
   test/replay_training_session_test.dart \
   test/replay_training_archive_test.dart \
   test/replay_training_widget_test.dart \
