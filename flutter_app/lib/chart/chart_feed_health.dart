@@ -32,6 +32,27 @@ abstract final class ChartFeedHealth {
       previous?.bid != next?.bid ||
       previous?.ask != next?.ask;
 
+  /// Throttle read-only quote checks to at most once per minute. A fresh
+  /// quote already obtained by the Markets screen satisfies the chart, so
+  /// the same source is not fetched a second time needlessly.
+  static bool shouldRequestQuote({
+    required int nowMs,
+    required int lastAttemptMs,
+    int? freshQuoteTimestampMs,
+    int minimumIntervalMs = 60000,
+  }) {
+    if (nowMs <= 0 || minimumIntervalMs <= 0 ||
+        lastAttemptMs > nowMs ||
+        nowMs - lastAttemptMs < minimumIntervalMs) {
+      return false;
+    }
+    if (freshQuoteTimestampMs != null &&
+        nowMs - freshQuoteTimestampMs < minimumIntervalMs) {
+      return false;
+    }
+    return true;
+  }
+
   /// A closed-bar open can be older than the current BID without being wrong:
   /// the newest forming bar has deliberately NOT been appended. Only flag
   /// a lag beyond three frame intervals (minimum ten minutes).
