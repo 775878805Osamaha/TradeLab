@@ -15,6 +15,13 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
   Previous potentially unclosed D1/W1/MN1 records remain on disk but are not
   trusted for Replay; intraday cached candles are unaffected.
 - Never populate chart gaps with synthetic price history.
+- cTrader quote notifications repaint only read-only BID/ASK labels; they do not
+  change OHLC, chart pan/zoom, Replay or drawing data. Price source timestamps
+  remain separate from the most recent *closed* candle timestamp.
+- Transient failures while polling closed cTrader OHLC can be retried on the
+  existing 30-second cadence; a valid no-new-bar response clears a prior
+  transient error without injecting a candle. A broker quote can be current
+  while the last closed candle is delayed, and the header must say so.
 - Do not compare Range bar shapes with a screenshot alone. Its broker BID tick
   sequence, price distance, decimal precision, session start and timezone must
   match the reference. The current `RangeBarBuilder` is a reference
