@@ -57,4 +57,5 @@ jobs:
             test/replay_training_archive_test.dart \
             test/replay_training_widget_test.dart \
             test/replay_training_order_dialog_test.dart \
+            test/replay_trade_overlay_test.dart \
             test/chart_frame_profiler_test.dart
