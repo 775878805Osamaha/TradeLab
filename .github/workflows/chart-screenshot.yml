@@ -1,10 +1,8 @@
 name: Capture TradeLab Chart Screenshot
 
+# Cost control: run explicitly by workflow_dispatch only.
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
-
 jobs:
   screenshot:
     runs-on: ubuntu-22.04
