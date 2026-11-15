@@ -1,12 +1,18 @@
 name: Verify TradeLab Flutter Range History
 
-# Economic mode: manual validation only.
+# Lightweight quality gate: no Gradle release build, emulator or APK.
+# Runs only for Flutter changes in PRs, and on explicit manual dispatch.
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'flutter_app/**'
+      - '.github/workflows/verify-flutter-range.yml'
 permissions:
   contents: read
 
-# A new main-branch commit supersedes the prior verification run.
+# A new PR commit supersedes previous quick-test attempts.
 concurrency:
   group: tradelab-range-${{ github.ref }}
   cancel-in-progress: true
@@ -14,7 +20,7 @@ concurrency:
 jobs:
   verify-flutter-range:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: flutter_app
@@ -57,88 +63,3 @@ jobs:
             test/replay_training_archive_test.dart \
             test/replay_training_widget_test.dart \
             test/chart_frame_profiler_test.dart
-      - name: Work around url_launcher_android upstream JavaDoc lint crash
-        # An upstream Android Lint NoSuchMethodError in JavaDocParser aborts
-        # release builds while scanning the third-party url_launcher plugin.
-        # Disable only that plugin's crashing task in this CI preview job.
-        # Keep Flutter analyze/tests and lint for every other Android module.
-        run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          deps = json.loads(Path('.flutter-plugins-dependencies').read_text())
-          plugins = [Path(p['path']) / 'android'
-                     for p in deps['plugins']['android']
-                     if p['name'] == 'url_launcher_android']
-          if len(plugins) != 1 or not plugins[0].is_dir():
-              raise SystemExit('Resolved url_launcher_android missing')
-          files = [p for p in (plugins[0] / 'build.gradle',
-                                plugins[0] / 'build.gradle.kts')
-                   if p.is_file()]
-          if len(files) != 1:
-              raise SystemExit('Expected a single url_launcher_android Gradle script')
-          with files[0].open('a', encoding='utf-8') as out:
-              out.write('\n// CI preview only: upstream JavaDoc lint crash.\n'
-                        'tasks.matching { it.name == "lintVitalAnalyzeRelease" }.configureEach {\n'
-                        '    enabled = false\n'
-                        '}\n')
-          print('Scoped lint workaround:', files[0])
-          PY
-      - name: Build Android release preview (no publishing)
-        run: flutter build apk --release
-      - name: Verify Android APK, signature and ARM64 support
-        run: |
-          set -euo pipefail
-          apk="build/app/outputs/flutter-apk/app-release.apk"
-          test -s "$apk"
-          # A truncated or wrong-file download must not pass as an APK.
-          test "$(stat -c%s "$apk")" -gt 25000000
-          unzip -t "$apk" >/dev/null
-          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
-          test -x "$build_tools/apksigner"
-          "$build_tools/apksigner" verify --verbose "$apk"
-          "$build_tools/aapt" dump badging "$apk" | tee build/apk-package-details.txt
-          "$build_tools/aapt" dump badging "$apk" | grep -F "package: name='com.example.tradelab_flutter'"
-          unzip -Z1 "$apk" | grep -Fx 'lib/arm64-v8a/libflutter.so'
-          unzip -Z1 "$apk" | grep -Fx 'lib/arm64-v8a/libapp.so'
-          cp "$apk" build/TradeLab-Flutter-Verified.apk
-          (cd build && sha256sum TradeLab-Flutter-Verified.apk > TradeLab-Flutter-Verified.apk.sha256)
-      - name: Enable KVM for Android emulator
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Install and launch on Android 13 emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 33
-          target: google_apis
-          arch: x86_64
-          profile: pixel_5
-          disable-animations: true
-          script: |
-            set -eu
-            # Integration smoke runs on the same Android 13 emulator.
-            # These checks require a real device runtime, not a mocked widget host.
-            (cd "$GITHUB_WORKSPACE/flutter_app" && flutter test integration_test/replay_device_smoke_test.dart -d emulator-5554)
-            adb install "$GITHUB_WORKSPACE/flutter_app/build/app/outputs/flutter-apk/app-release.apk"
-            adb shell monkey -p com.example.tradelab_flutter -c android.intent.category.LAUNCHER 1
-            sleep 5
-            adb shell pidof -s com.example.tradelab_flutter
-            adb exec-out screencap -p > "$GITHUB_WORKSPACE/flutter_app/build/tradelab_range_emulator.png"
-      - name: Upload Android emulator evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: TradeLab-Range-Android13-Screenshot
-          path: flutter_app/build/tradelab_range_emulator.png
-          if-no-files-found: error
-      - name: Upload verified installable APK and checksum
-        uses: actions/upload-artifact@v4
-        with:
-          name: TradeLab-Flutter-Verified-Installable-APK
-          path: |
-            flutter_app/build/TradeLab-Flutter-Verified.apk
-            flutter_app/build/TradeLab-Flutter-Verified.apk.sha256
-            flutter_app/build/apk-package-details.txt
-          if-no-files-found: error
