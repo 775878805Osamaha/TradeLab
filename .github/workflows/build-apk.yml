@@ -1,16 +1,8 @@
 name: Build TradeLab Debug APK
 
+# Cost-control: manually dispatch builds and tests only when requested.
 on:
-  push:
-    branches:
-      - main
-      - 'feat/ctrader-range-*'
-      - 'fix/ctrader-range-*'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
-
 jobs:
   build:
     name: Build & Test Android Debug APK
