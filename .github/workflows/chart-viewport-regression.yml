@@ -1,15 +1,8 @@
 name: Android Chart Viewport Regression
 
+# Economic mode: explicit manual CI only.
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/workflows/chart-viewport-regression.yml'
-      - 'app/src/main/java/com/example/ui/components/**'
-      - 'app/src/main/java/com/example/feature/chart/**'
-      - 'app/src/androidTest/java/com/example/LargeChartInteractionTest.kt'
   workflow_dispatch:
-
 jobs:
   viewport:
     runs-on: ubuntu-22.04
