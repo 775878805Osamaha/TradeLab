@@ -1,21 +1,8 @@
 name: TradeLab Flutter UI Preview APK
 
+# Economical CI: run only by manual dispatch when requested.
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - flutter_app/**
-      - .github/workflows/build-flutter-ui-apk.yml
-  push:
-    branches:
-      - main
-      - feat/tradelab-flutter-ui-20261108
-      - feat/tradelab-analysis-hub-prompt06
-    paths:
-      - flutter_app/**
-      - .github/workflows/build-flutter-ui-apk.yml
-
 permissions:
   # A prerelease exposes the APK itself rather than forcing Android users to
   # extract the ZIP wrapper used for GitHub Actions artifacts.
