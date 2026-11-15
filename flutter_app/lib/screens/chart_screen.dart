@@ -496,14 +496,18 @@ class _ChartScreenState extends State<ChartScreen>
   Future<void> _refreshSelectedCTraderQuote() async {
     if (!mounted || !widget.active || _pollingSelectedQuote || _replay ||
         _selectedSymbol.source != TradeSource.ctrader ||
-        !widget.controller.ctraderConnected) return;
+        !widget.controller.ctraderConnected) {
+      return;
+    }
     final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
     final cached = widget.controller.recentQuoteFor(_selectedSymbol);
     if (!ChartFeedHealth.shouldRequestQuote(
       nowMs: nowMs,
       lastAttemptMs: _lastQuoteRequestAtMs,
       freshQuoteTimestampMs: cached?.timestampMs,
-    )) return;
+    )) {
+      return;
+    }
     _pollingSelectedQuote = true;
     _lastQuoteRequestAtMs = nowMs;
     final symbol = _selectedSymbol;
