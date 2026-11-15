@@ -197,6 +197,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tradelab-chart-emulator-screenshot
+          retention-days: 7
           path: |
             screenshots/
             app/build/reports/androidTests/
