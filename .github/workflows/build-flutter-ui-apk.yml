@@ -1,6 +1,6 @@
 name: TradeLab Flutter UI Preview APK
 
-# Economical CI: run only by manual dispatch when requested.
+# Cost-control: manually dispatch builds and tests only when requested.
 on:
   workflow_dispatch:
 permissions:

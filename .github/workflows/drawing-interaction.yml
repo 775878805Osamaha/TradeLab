@@ -1,6 +1,6 @@
 name: Android Drawing Interaction QA
 
-# Economic mode: manual validation only.
+# Economic mode: manual runs only; no push or PR execution.
 on:
   workflow_dispatch:
 jobs:

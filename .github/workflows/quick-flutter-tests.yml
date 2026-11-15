@@ -1,0 +1,29 @@
+name: Quick TradeLab Flutter tests (no APK)
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Branch to test (no APK will be created)'
+        required: true
+        type: string
+        default: main
+permissions:
+  contents: read
+jobs:
+  quick-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test

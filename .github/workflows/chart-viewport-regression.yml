@@ -1,6 +1,6 @@
 name: Android Chart Viewport Regression
 
-# Economical CI: run only by manual dispatch when requested.
+# Cost-control: manually dispatch builds and tests only when requested.
 on:
   workflow_dispatch:
 jobs:
