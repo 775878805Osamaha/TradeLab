@@ -1,19 +1,8 @@
 name: Verify cTrader gateway for Flutter
 
+# Cost control: run explicitly by workflow_dispatch only.
 on:
-  push:
-    branches:
-      - main
-      - feat/tradelab-flutter-ui-20261108
-    paths:
-      - vercel-gateway/**
-      - .github/workflows/verify-flutter-ctrader-gateway.yml
-  pull_request:
-    paths:
-      - vercel-gateway/**
-      - .github/workflows/verify-flutter-ctrader-gateway.yml
   workflow_dispatch:
-
 permissions:
   contents: read
 
