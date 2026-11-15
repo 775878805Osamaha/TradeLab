@@ -1315,9 +1315,17 @@ class _ChartScreenState extends State<ChartScreen>
         content: Text('حمّل شموع السوق أولًا لبدء Replay.')));
       return;
     }
+    if (_replay) _recordTraining();
     setState(() {
         _stopPlayback();
         if (!_replay) {
+          _training.clear();
+          _trainingSessionId =
+              DateTime.now().toUtc().microsecondsSinceEpoch.toString();
+          _trainingSourceKey =
+              '${_selectedSymbol.source.name}:'
+              '${widget.controller.accountId ?? 'public'}:'
+              '$_symbol:$_timeframe:${_mode.name}';
           // Drawings created after the Replay cutoff could expose future
           // information. Keep analysis objects separately until Replay ends.
           _analysisLevels = List<double>.of(_levels);
@@ -1336,6 +1344,11 @@ class _ChartScreenState extends State<ChartScreen>
         }
         _replay = !_replay;
         _visibleThrough = math.max(1, _totalBars ~/ 2);
+        if (_replay) {
+          _training.moveTo(_replayMarketCandles, _visibleThrough);
+        } else {
+          _training.clear();
+        }
         _viewport = _freshViewport();
         _crosshair = null;
         _selectedLine = null;
@@ -3500,31 +3513,37 @@ class _ChartScreenState extends State<ChartScreen>
             ),
           Row(children: [
             IconButton(tooltip: 'رجوع شمعة',
-              onPressed: _visibleThrough <= 1 ? null : () => setState(() {
-                _stopPlayback();
-                _visibleThrough--;
-              }),
+              onPressed: _visibleThrough <= 1
+                  ? null : () => _seekReplay(_visibleThrough - 1),
               icon: const Icon(Icons.skip_previous)),
             IconButton(key: const Key('replay-play-pause'),
               tooltip: _playing ? 'إيقاف' : 'تشغيل',
               onPressed: _togglePlay,
               icon: Icon(_playing ? Icons.pause_circle : Icons.play_circle_fill,
                   color: TradeColors.blue)),
+            DropdownButton<ReplayPlaybackSpeed>(
+              key: const Key('replay-speed-picker'),
+              value: _replaySpeed,
+              underline: const SizedBox.shrink(),
+              items: [
+                for (final speed in ReplayPlaybackSpeed.values)
+                  DropdownMenuItem(value: speed,
+                      child: Text(speed.label)),
+              ],
+              onChanged: (speed) {
+                if (speed != null) _setReplaySpeed(speed);
+              },
+            ),
             IconButton(tooltip: 'تقدم شمعة',
-              onPressed: _visibleThrough >= _totalBars ? null : () => setState(() {
-                _stopPlayback();
-                _visibleThrough++;
-              }),
+              onPressed: _visibleThrough >= _totalBars
+                  ? null : () => _seekReplay(_visibleThrough + 1),
               icon: const Icon(Icons.skip_next)),
             Expanded(child: Slider(
               value: _visibleThrough.clamp(1, math.max(2, _totalBars)).toDouble(),
               min: 1, max: math.max(2, _totalBars).toDouble(),
               divisions: math.max(1, _totalBars - 1),
               label: '$_visibleThrough',
-              onChanged: (value) => setState(() {
-                _stopPlayback();
-                _visibleThrough = value.round();
-              }),
+              onChanged: (value) => _seekReplay(value.round()),
             )),
           ]),
         ]),
