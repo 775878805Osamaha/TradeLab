@@ -3525,7 +3525,8 @@ class _ChartScreenState extends State<ChartScreen>
             Expanded(child: Slider(
               value: _visibleThrough.clamp(1, math.max(2, _totalBars)).toDouble(),
               min: 1, max: math.max(2, _totalBars).toDouble(),
-              divisions: math.max(1, _totalBars - 1),
+              // Continuous thumb + rounded candle indices: do not ask the
+              // Slider to render tens of thousands of discrete tick marks.
               label: '$_visibleThrough',
               onChanged: (value) => _seekReplay(value.round()),
             )),
