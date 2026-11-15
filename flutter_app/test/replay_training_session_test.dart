@@ -87,6 +87,28 @@ void main() {
     expect(() => session.closeAtCurrent(trade.id, bars), throwsStateError);
   });
 
+  test('stop orders use adverse open when the next bar gaps past stop', () {
+    const gap = [
+      TradeCandle(100, 101, 99, 100),
+      TradeCandle(95, 100, 94, 98),
+    ];
+    final session = ReplayTrainingSession()..moveTo(gap, 1);
+    session.enter(side: ReplaySide.buy, candles: gap,
+        quantity: 1, stopLoss: 99);
+    session.moveTo(gap, 2);
+    expect(session.trades.single.exitReason, ReplayExitReason.stopLoss);
+    expect(session.trades.single.exitPrice, 95);
+    expect(session.realizedPricePnl, -5);
+  });
+
+  test('large seek with no practice trades has no side effects', () {
+    final candles = List<TradeCandle>.filled(
+        100000, const TradeCandle(100, 101, 99, 100));
+    final session = ReplayTrainingSession()..moveTo(candles, 80000);
+    expect(session.visibleCount, 80000);
+    expect(session.trades, isEmpty);
+  });
+
   test('cannot move beyond the available history', () {
     final session = ReplayTrainingSession();
     expect(() => session.moveTo(bars, bars.length + 1), throwsRangeError);
