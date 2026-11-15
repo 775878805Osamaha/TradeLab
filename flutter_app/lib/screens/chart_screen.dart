@@ -300,7 +300,7 @@ class _ChartScreenState extends State<ChartScreen>
     );
     // Binance does not require a cTrader session. Load its chart immediately
     // when selected, even on a device that has never linked a broker.
-    if (_liveRequested) Future.microtask(_loadRealHistory);
+    if (widget.active && _liveRequested) Future.microtask(_loadRealHistory);
     if (widget.active && _selectedSymbol.source == TradeSource.ctrader) {
       Future.microtask(_refreshSelectedCTraderQuote);
     }
@@ -312,8 +312,12 @@ class _ChartScreenState extends State<ChartScreen>
     if (!oldWidget.active && widget.active) {
       // The chart was hidden behind another tab. Refresh only the selected
       // verified symbol, never fetch quote data while offscreen.
-      _refreshDisplayedQuote();
-      unawaited(_refreshSelectedCTraderQuote());
+      _lastObservedQuote = widget.controller.recentQuoteFor(_selectedSymbol);
+      if (_liveRequested && !_loading &&
+          _actualBars.isEmpty && _actualRange.isEmpty) {
+        Future.microtask(_loadRealHistory);
+      }
+      Future.microtask(_refreshSelectedCTraderQuote);
     }
   }
 
@@ -538,7 +542,8 @@ class _ChartScreenState extends State<ChartScreen>
       _lastQuoteRequestAtMs = 0;
       // Never carry another broker account's drawings into this account.
       _resetDrawingObjects();
-      if (linked && _selectedSymbol.source == TradeSource.ctrader) {
+      if (linked && widget.active &&
+          _selectedSymbol.source == TradeSource.ctrader) {
         _loadRealHistory();
         unawaited(_refreshSelectedCTraderQuote());
       }
