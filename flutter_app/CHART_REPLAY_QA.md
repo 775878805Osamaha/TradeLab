@@ -30,13 +30,18 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
 - If SL and TP both lie inside one bar, SL wins (conservative ambiguity).
 - Seeking backward removes any practice trade that was entered later and
   reopens trades that exited later. Archives are updated accordingly.
+- For Range, the latest, still-forming BID bar stays visible on the live
+  chart but is excluded from Replay's executable bar count, including after
+  loading older ticks. A single verified tick is not a completed Range bar.
 - For Range, seeking back through already loaded history is supported; while a
   practice session has trade records, loading an older BID origin is disabled
   to avoid silently reassigning a trade to different recomputed Range bars.
 - Practice P&L is **price difference times quantity**, not dollars or a broker
   contract-size estimate. It is not live account equity.
 - Archive is stored in a separate `tradelab_replay_training.db`. No broker
-  access token is saved there.
+  access token is saved there. Exiting Replay preserves the queued final
+  snapshot; closing the screen later does not replace it with an empty session.
+  Pause and end-of-playback also flush the current cursor.
 
 ## Automated tests
 
@@ -48,6 +53,7 @@ flutter test test/ctrader_closed_bar_cutoff_test.dart \
   test/replay_training_session_test.dart \
   test/replay_training_archive_test.dart \
   test/replay_training_widget_test.dart \
+  test/replay_training_order_dialog_test.dart \
   test/chart_frame_profiler_test.dart \
   test/range_bar_timeline_test.dart \
   test/chart_viewport_test.dart
