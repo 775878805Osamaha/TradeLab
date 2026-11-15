@@ -102,8 +102,8 @@ class ReplayTrainingSession {
   List<ReplayTrainingTrade> get trades =>
       List<ReplayTrainingTrade>.unmodifiable(_trades);
   int get openTradeCount => _trades.where((trade) => trade.isOpen).length;
-  double get realizedPricePnl => _trades.fold(0,
-      (double result, trade) => result + trade.realizedPricePnl);
+  double get realizedPricePnl => _trades.fold<double>(0.0,
+      (result, trade) => result + trade.realizedPricePnl);
 
   void clear() {
     _trades.clear();
