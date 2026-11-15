@@ -111,8 +111,13 @@ void main() {
     expect(ReplayTradeOverlayLayout.visible(
       trades: [openBuy], viewport: viewport, scale: scale,
       candleCount: 0, plotWidth: 300), isEmpty);
+    const ancientClosed = ReplayTrainingTrade(
+      id: 9, side: ReplaySide.buy, entryIndex: 2, entryPrice: 103,
+      quantity: 1, exitIndex: 3, exitPrice: 105,
+      exitReason: ReplayExitReason.manual,
+    );
     expect(ReplayTradeOverlayLayout.visible(
-      trades: [openBuy],
+      trades: [ancientClosed],
       viewport: const ChartViewport(barWidth: 10, scrollBars: 500),
       scale: scale,
       candleCount: 1000, plotWidth: 300), isEmpty);
