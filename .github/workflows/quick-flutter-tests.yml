@@ -25,5 +25,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter analyze
+      # Match the verified PR gate: informational Flutter deprecations are
+      # reported, but do not fail analysis. Errors and warnings still fail.
+      - run: flutter analyze --no-fatal-infos
       - run: flutter test
