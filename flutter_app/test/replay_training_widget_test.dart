@@ -25,19 +25,16 @@ void main() {
 
   testWidgets('verified Binance candles enable Replay training in same chart',
       (tester) async {
-    final baseMs = DateTime.utc(2026, 11, 1).millisecondsSinceEpoch;
+    // Reuse the fixed, known-good Binance fixture from widget_test.dart,
+    // which already proves the real chart and Replay entry point work.
     final client = MockClient((request) async {
       expect(request.url.host, 'api.binance.com');
       expect(request.url.path, '/api/v3/klines');
-      final rows = List.generate(60, (i) {
-        final time = baseMs + i * 60000;
-        final price = 35000 + i.toDouble();
-        return [
-          time, '$price', '${price + 2}', '${price - 2}',
-          '${price + 1}', '1', time + 59999
-        ];
-      });
-      return http.Response(jsonEncode(rows), 200);
+      expect(request.url.queryParameters['symbol'], 'BTCUSDT');
+      return http.Response(jsonEncode([
+        [1700000000000, '35000', '35200', '34700', '35100', '1', 1700000899999],
+        [1700000900000, '35100', '35300', '35000', '35250', '1', 1700001799999],
+      ]), 200);
     });
     final controller = MarketController(api: MarketApi(client: client));
     addTearDown(controller.dispose);
@@ -54,7 +51,18 @@ void main() {
     await pumpUiFrames(tester);
     await tester.tap(find.text('BTCUSDT').last);
     await pumpUiFrames(tester);
-
+    // Stop waiting once verified broker bars have actually been rendered.
+    // A bounded readiness check produces a specific failure instead of
+    // ever waiting for unrelated refresh animations to settle.
+    for (var attempt = 0;
+        attempt < 40 &&
+            find.byKey(const Key('chart-source-empty')).evaluate().isNotEmpty;
+        attempt++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(find.text('شموع Binance'), findsOneWidget);
+    expect(find.byKey(const Key('chart-source-empty')), findsNothing,
+        reason: 'Expected verified Binance candles before entering Replay');
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
     await tester.tap(find.byTooltip('تشغيل Replay داخل الشارت'));
     await pumpUiFrames(tester);
