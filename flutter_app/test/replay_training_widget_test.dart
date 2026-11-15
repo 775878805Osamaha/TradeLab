@@ -69,6 +69,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('صفقاتي (1)'), findsOneWidget);
+    expect(find.byKey(const Key('replay-practice-levels-overlay')),
+        findsOneWidget,
+        reason: 'An entered practice trade should have chart markers');
     await tester.tap(find.byKey(const Key('replay-practice-list')));
     await tester.pumpAndSettle();
     expect(find.text('صفقات التدريب التاريخية'), findsOneWidget);
