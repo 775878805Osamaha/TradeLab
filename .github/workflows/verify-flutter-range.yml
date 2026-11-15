@@ -60,7 +60,11 @@ jobs:
             test/ctrader_candle_stitcher_test.dart \
             test/ctrader_account_selection_test.dart \
             test/market_candle_store_test.dart \
-            test/market_api_test.dart
+            test/market_api_test.dart \
+            test/ctrader_closed_bar_cutoff_test.dart \
+            test/replay_training_session_test.dart \
+            test/replay_training_widget_test.dart \
+            test/chart_frame_profiler_test.dart
       - name: Work around url_launcher_android upstream JavaDoc lint crash
         # An upstream Android Lint NoSuchMethodError in JavaDocParser aborts
         # release builds while scanning the third-party url_launcher plugin.
@@ -123,6 +127,9 @@ jobs:
           disable-animations: true
           script: |
             set -eu
+            # Integration smoke runs on the same Android 13 emulator.
+            # These checks require a real device runtime, not a mocked widget host.
+            flutter test integration_test/replay_device_smoke_test.dart -d emulator-5554
             adb install "$GITHUB_WORKSPACE/flutter_app/build/app/outputs/flutter-apk/app-release.apk"
             adb shell monkey -p com.example.tradelab_flutter -c android.intent.category.LAUNCHER 1
             sleep 5
