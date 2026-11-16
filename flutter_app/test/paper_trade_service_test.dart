@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
@@ -11,6 +13,13 @@ class _QuoteProvider implements PaperQuoteProvider {
   MarketQuote quote;
   @override
   Future<MarketQuote> fetch(TradeSymbol symbol) async => quote;
+}
+
+class _DelayedQuoteProvider implements PaperQuoteProvider {
+  final response = Completer<MarketQuote>();
+
+  @override
+  Future<MarketQuote> fetch(TradeSymbol symbol) => response.future;
 }
 
 class _Store implements PaperJournalStore {
@@ -160,4 +169,72 @@ void main() {
       throwsStateError);
     expect(journal.entries.single.kind, LedgerKind.closedTrade);
   });
+
+  test('A to B to A account switch invalidates a still-fresh order quote',
+      () async {
+    final journal = PaperJournalController(store: _Store());
+    addTearDown(journal.dispose);
+    await journal.useAccount('11');
+    final feed = _QuoteProvider(quote(2000, 2000.4));
+    final service = PaperTradeService(
+        quotes: feed, journal: journal, nowMs: () => time);
+    final prepared = await service.prepare(symbol);
+
+    await journal.useAccount('12');
+    await journal.useAccount('11');
+    expect(prepared.accountKey, journal.accountKey,
+        reason: 'The literal account key has returned to its old value');
+    expect(prepared.accountSessionRevision,
+        isNot(journal.accountSessionRevision));
+    await expectLater(
+      service.open(symbol: symbol, side: PaperSide.buy,
+        units: 1, prepared: prepared),
+      throwsStateError,
+    );
+    expect(journal.entries, isEmpty,
+        reason: 'An earlier broker session cannot create a new paper trade');
+    final latest = await service.prepare(symbol);
+    await service.open(symbol: symbol, side: PaperSide.buy,
+      units: 1, prepared: latest);
+    expect(journal.entries, hasLength(1));
+  });
+
+  test('A to B to A switch invalidates a pending close confirmation',
+      () async {
+    final journal = PaperJournalController(store: _Store());
+    addTearDown(journal.dispose);
+    await journal.useAccount('11');
+    final service = PaperTradeService(
+        quotes: _QuoteProvider(quote(2000, 2000.3)),
+        journal: journal, nowMs: () => time);
+    await service.open(symbol: symbol, side: PaperSide.buy,
+        units: 1, prepared: await service.prepare(symbol));
+    final open = journal.entries.single;
+    final pendingExit = await service.prepare(symbol);
+    await journal.useAccount('12');
+    await journal.useAccount('11');
+    await expectLater(service.close(position: open,
+      prepared: pendingExit), throwsStateError);
+    expect(journal.entries.single.kind, LedgerKind.openTrade,
+        reason: 'An obsolete account session must not close a position');
+  });
+
+  test('account switch during quote fetch rejects even if user returns to A',
+      () async {
+    final journal = PaperJournalController(store: _Store());
+    addTearDown(journal.dispose);
+    await journal.useAccount('11');
+    final feed = _DelayedQuoteProvider();
+    final service = PaperTradeService(
+        quotes: feed, journal: journal, nowMs: () => time);
+    final inFlight = service.prepare(symbol);
+    final expectRejected =
+        expectLater(inFlight, throwsA(isA<MarketDataException>()));
+    await journal.useAccount('12');
+    await journal.useAccount('11');
+    feed.response.complete(quote(2000, 2000.3));
+    await expectRejected;
+    expect(journal.entries, isEmpty);
+  });
+
 }

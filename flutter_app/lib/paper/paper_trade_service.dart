@@ -17,10 +17,12 @@ class LivePaperQuoteProvider implements PaperQuoteProvider {
 }
 
 class PreparedPaperQuote {
-  const PreparedPaperQuote(this.quote, this.accountKey, this.receivedAtMs);
+  const PreparedPaperQuote(this.quote, this.accountKey, this.receivedAtMs,
+      this.accountSessionRevision);
   final MarketQuote quote;
   final String accountKey;
   final int receivedAtMs;
+  final int accountSessionRevision;
 }
 
 /// Executes locally only, at verified current bid/ask (not a broker fill).
@@ -40,19 +42,22 @@ class PaperTradeService {
       throw const FormatException('التداول التجريبي الحالي يدعم الرموز المسعّرة بالدولار فقط.');
     }
     final scope = journal.accountKey;
+    final accountRevision = journal.accountSessionRevision;
     final quote = await quotes.fetch(symbol);
     final now = _nowMs();
-    if (scope != journal.accountKey || quote.symbol != symbol.code ||
-        quote.source != symbol.source) {
+    if (scope != journal.accountKey ||
+        accountRevision != journal.accountSessionRevision ||
+        quote.symbol != symbol.code || quote.source != symbol.source) {
       throw const MarketDataException('تغيّر الحساب أو اختلف مصدر السعر أثناء الطلب.');
     }
     quote.assertFresh(nowMs: now);
-    return PreparedPaperQuote(quote, scope, now);
+    return PreparedPaperQuote(quote, scope, now, accountRevision);
   }
 
   void _verify(PreparedPaperQuote prepared, TradeSymbol symbol) {
     final now = _nowMs();
     if (prepared.accountKey != journal.accountKey ||
+        prepared.accountSessionRevision != journal.accountSessionRevision ||
         prepared.quote.symbol != symbol.code ||
         prepared.quote.source != symbol.source ||
         now < prepared.receivedAtMs ||
