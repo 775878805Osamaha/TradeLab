@@ -44,7 +44,7 @@ class ChartQuickActions extends StatelessWidget {
   final VoidCallback onMove;
   final VoidCallback onLatest;
   final VoidCallback onRange;
-  final VoidCallback onFocusMode;
+  final VoidCallback? onFocusMode;
   final bool rangeMode;
   final bool focusMode;
 
@@ -81,7 +81,7 @@ class ChartQuickActions extends StatelessWidget {
         if (rangeMode) onRange();
         break;
       case ChartQuickAction.focusMode:
-        onFocusMode();
+        onFocusMode?.call();
         break;
     }
   }
@@ -96,10 +96,13 @@ class ChartQuickActions extends StatelessWidget {
       child: const Icon(Icons.more_horiz, size: 21),
       onSelected: _select,
       itemBuilder: (_) => [
-        PopupMenuItem(
-          key: const Key('chart-quick-focus'),
-          value: ChartQuickAction.focusMode,
-          child: Text(focusMode ? 'الخروج من وضع الشارت الموسع' : 'توسيع الشارت ملء مساحة التطبيق')),
+        if (onFocusMode != null)
+          PopupMenuItem(
+            key: const Key('chart-quick-focus'),
+            value: ChartQuickAction.focusMode,
+            child: Text(focusMode
+                ? 'الخروج من وضع الشارت الموسع'
+                : 'توسيع الشارت ملء مساحة التطبيق')),
         const PopupMenuItem(
           key: Key('chart-quick-candles'),
           value: ChartQuickAction.candles,
