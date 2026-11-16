@@ -26,6 +26,12 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
   existing 30-second cadence; a valid no-new-bar response clears a prior
   transient error without injecting a candle. A broker quote can be current
   while the last closed candle is delayed, and the header must say so.
+- If the very first cTrader OHLC request fails and there are **zero** cached
+  candles, the regular closed-bar append path cannot recover. A separate,
+  throttled 120-second retry now requests only provider-verified closed
+  candles while the chart tab is visible and Replay is off. It keeps current
+  drawing and viewport state, rejects responses from switched accounts or
+  symbols, and never reconstructs a candle from a live BID/ASK quote.
 - Do not compare Range bar shapes with a screenshot alone. Its broker BID tick
   sequence, price distance, decimal precision, session start and timezone must
   match the reference. The current `RangeBarBuilder` is a reference
