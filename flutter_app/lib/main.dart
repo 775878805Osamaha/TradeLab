@@ -108,6 +108,7 @@ class _TradeLabShellState extends State<TradeLabShell> {
   // TradingView community/discovery screens to fill a five-tab reference.
   // Chart opens in ANALYSIS mode, never an implicit Replay session.
   int _selectedIndex = 1;
+  bool _chartFocusMode = false;
   String _requestedChartSymbol = 'XAUUSD';
   late final MarketController _market = widget.controller ?? MarketController();
   late final PaperJournalController _journal = widget.journal ??
@@ -160,7 +161,14 @@ class _TradeLabShellState extends State<TradeLabShell> {
       ),
     ];
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_chartFocusMode,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _chartFocusMode) {
+          setState(() => _chartFocusMode = false);
+        }
+      },
+      child: Scaffold(
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -175,12 +183,19 @@ class _TradeLabShellState extends State<TradeLabShell> {
                   MarketsScreen(controller: _market,
                     onSymbolSelected: (symbol) => setState(() {
                       _requestedChartSymbol = symbol.code;
+                      _chartFocusMode = false;
                       _selectedIndex = 1;
                     })),
                   ChartScreen(controller: _market, journal: _journal,
                     requestedSymbolCode: _requestedChartSymbol,
                     active: _selectedIndex == 1,
-                    onOpenAccount: () => setState(() => _selectedIndex = 3)),
+                    focusMode: _chartFocusMode,
+                    onToggleFocusMode: () => setState(
+                      () => _chartFocusMode = !_chartFocusMode),
+                    onOpenAccount: () => setState(() {
+                      _chartFocusMode = false;
+                      _selectedIndex = 3;
+                    })),
                   ResultsScreen(controller: _market, journal: _journal),
                   AccountScreen(
                     controller: _market,
@@ -193,7 +208,8 @@ class _TradeLabShellState extends State<TradeLabShell> {
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: _chartFocusMode && _selectedIndex == 1
+        ? null : NavigationBar(
         selectedIndex: _selectedIndex,
         destinations: destinations,
         onDestinationSelected: (index) {
@@ -201,7 +217,7 @@ class _TradeLabShellState extends State<TradeLabShell> {
           if (index == 0) _market.refreshQuotes();
         },
       ),
-    );
+    ));
   }
 }
 
