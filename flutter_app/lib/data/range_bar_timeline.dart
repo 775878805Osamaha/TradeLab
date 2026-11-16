@@ -73,6 +73,30 @@ class RangeBarTimeline {
     return RangeBarTimeline._(bars, endTickIndices, endTimestamps);
   }
 
+  /// Rebase a still-selecting Replay start after a verified older BID page
+  /// changes the Range origin and all subsequent bar indices.
+  ///
+  /// The old selected bar's source BID tick is the authority; a new bar can
+  /// be selected only if it was fully closed by that SAME event or earlier.
+  /// Null means no confirmed reconstructed bar existed yet. Never silently
+  /// borrow a bar that required a future BID tick.
+  int? rebaseReplayStart({
+    required List<int> oldEndTickIndices,
+    required int oldSelectedIndex,
+    required int prependedTicks,
+  }) {
+    if (oldSelectedIndex < 0 ||
+        oldSelectedIndex >= oldEndTickIndices.length ||
+        prependedTicks < 0) {
+      return null;
+    }
+    final originalTick = oldEndTickIndices[oldSelectedIndex];
+    final allowedTick = originalTick + prependedTicks;
+    final closed = visibleClosedBarsThroughTick(allowedTick);
+    if (closed < 1) return null;
+    return closed - 1;
+  }
+
   /// Remap an old drawing anchor by the *source BID tick* rather than by
   /// subtracting bar counts. Prepending ticks can change every Range close.
   /// Returns null when no bar existed yet at that market event, avoiding a
