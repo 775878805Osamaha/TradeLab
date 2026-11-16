@@ -185,6 +185,8 @@ class _ChartScreenState extends State<ChartScreen>
   MarketQuote? _lastObservedQuote;
   bool _pollingSelectedQuote = false;
   int _lastQuoteRequestAtMs = 0;
+  bool _retryingEmptyHistory = false;
+  int _lastEmptyHistoryAttemptMs = 0;
   bool _playing = false;
   final List<double> _levels = [];
   final List<ChartPattern> _patterns = [];
@@ -292,6 +294,7 @@ class _ChartScreenState extends State<ChartScreen>
       (_) {
         if (!widget.active) return;
         unawaited(_refreshClosedCTraderCandles());
+        unawaited(_retryEmptyCTraderHistory());
         unawaited(_refreshSelectedCTraderQuote());
         // Quote labels must disappear after their 90-second validity
         // expires, including when the chart is in Range mode.
@@ -589,6 +592,13 @@ class _ChartScreenState extends State<ChartScreen>
     final sourceTimeframe = _timeframe;
     final sourceAccount = sourceSymbol.source == TradeSource.ctrader
         ? widget.controller.accountId : null;
+    if (sourceSymbol.source == TradeSource.ctrader &&
+        _mode != ChartMode.range) {
+      // A failed *initial* fetch will be retried after two minutes, not on
+      // every 30-second timer or every chart rebuild.
+      _lastEmptyHistoryAttemptMs =
+          DateTime.now().toUtc().millisecondsSinceEpoch;
+    }
     setState(() {
       _stopPlayback();
       if (_replay) {
@@ -745,6 +755,67 @@ class _ChartScreenState extends State<ChartScreen>
       if (revision == _loadRevision) _loadError = 'تعذر تحميل بيانات السوق. أعد المحاولة.';
     } finally {
       if (revision == _loadRevision && mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Recover a first-load cTrader OHLC failure WITHOUT clearing drawings,
+  /// Replay history, user panning/zoom, or replacing bars with fabricated
+  /// prices. Successful results are the same source-validated MarketBars used
+  /// by the original history request. Range BID ticks use a separate path.
+  Future<void> _retryEmptyCTraderHistory() async {
+    if (!mounted || !widget.active || !_liveRequested ||
+        _selectedSymbol.source != TradeSource.ctrader ||
+        _mode == ChartMode.range || _replay || _loading ||
+        _olderLoading || _refreshingClosedCandles ||
+        _retryingEmptyHistory || _actualBars.isNotEmpty ||
+        widget.controller.accountId == null) {
+      return;
+    }
+    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    if (!ChartFeedHealth.shouldRetryEmptyHistory(
+      nowMs: nowMs, lastAttemptMs: _lastEmptyHistoryAttemptMs,
+    )) {
+      return;
+    }
+
+    final revision = _loadRevision;
+    final symbol = _selectedSymbol;
+    final frame = _timeframe;
+    final account = widget.controller.accountId;
+    _retryingEmptyHistory = true;
+    _lastEmptyHistoryAttemptMs = nowMs;
+    try {
+      final bars = await widget.controller.history(symbol, frame);
+      if (!mounted || !widget.active || revision != _loadRevision ||
+          _replay || _mode == ChartMode.range ||
+          _selectedSymbol.code != symbol.code ||
+          _timeframe != frame ||
+          widget.controller.accountId != account ||
+          _actualBars.isNotEmpty) {
+        return;
+      }
+      if (bars.isEmpty) {
+        // A valid empty broker response does not justify a fabricated bar.
+        return;
+      }
+      // The provider already validated order, OHLC and closed-bar boundaries.
+      // Never sort or reconstruct the original broker data on this path.
+      setState(() {
+        _actualBars = bars;
+        _actualCandles = bars.map((bar) => bar.candle).toList(growable: false);
+        _actualTimestamps =
+            bars.map((bar) => bar.timestamp).toList(growable: false);
+        _olderCursorMs = bars.first.timestamp;
+        _loadError = null;
+      });
+      unawaited(MarketCandleStore.archive(symbol, frame, account, bars,
+          markFresh: true).catchError((Object _) {}));
+    } on MarketDataException {
+      // Retain the current error display. The next attempt is throttled.
+    } catch (_) {
+      // A transient provider/storage failure is not market evidence.
+    } finally {
+      _retryingEmptyHistory = false;
     }
   }
 
