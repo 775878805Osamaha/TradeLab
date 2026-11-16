@@ -14,6 +14,7 @@ import '../chart/chart_type_sheet.dart';
 import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
+import '../chart/chart_quick_actions.dart';
 import '../chart/chart_frame_profiler.dart';
 import '../chart/chart_feed_health.dart';
 import '../chart/chart_panel_settings.dart';
@@ -2947,9 +2948,11 @@ class _ChartScreenState extends State<ChartScreen>
         ? 'cTrader' : 'Binance';
     final quoteCurrency = _selectedSymbol.source == TradeSource.binance
         ? 'USDT' : 'USD';
-    return Container(
+    return LayoutBuilder(builder: (context, constraints) {
+      final compactWidth = constraints.maxWidth < 360;
+      return Container(
       key: const Key('chart-reference-header'),
-      height: 84,
+      height: compactWidth ? 104 : 84,
       color: Theme.of(context).colorScheme.surface,
       child: Stack(children: [
         Positioned(left: 8, top: 4, child: Row(children: [
@@ -2973,6 +2976,8 @@ class _ChartScreenState extends State<ChartScreen>
                 color: Color(0xFFAB2373), size: 19),
           ),
         ])),
+        if (compactWidth)
+          Positioned(left: 65, top: 2, child: _buildChartQuickActions()),
         Positioned(right: 5, top: 4, child: OutlinedButton.icon(
           onPressed: _showSymbolPicker,
           style: OutlinedButton.styleFrom(
@@ -2987,7 +2992,7 @@ class _ChartScreenState extends State<ChartScreen>
           label: Text(quoteCurrency, textDirection: TextDirection.ltr,
               style: const TextStyle(fontSize: 12)),
         )),
-        Positioned(left: 8, top: 27, right: 66,
+        Positioned(left: 8, top: compactWidth ? 47 : 27, right: 66,
           child: GestureDetector(
             onTap: !_liveRequested
                 ? (widget.onOpenAccount ?? _notifyUnconnected) : null,
@@ -3016,7 +3021,7 @@ class _ChartScreenState extends State<ChartScreen>
           )),
         // The previous '3' button was an inert mock control. All actions in
         // this compact row are functional and stay visible on small phones.
-        Positioned(left: 8, top: 43, right: 6,
+        Positioned(left: 8, top: compactWidth ? 65 : 43, right: 6,
           child: Row(children: [
             OutlinedButton.icon(
               key: const Key('chart-candle-settings-action'),
@@ -3073,10 +3078,12 @@ class _ChartScreenState extends State<ChartScreen>
                 minWidth: 34, minHeight: 36),
               padding: EdgeInsets.zero,
             ),
+            if (!compactWidth) _buildChartQuickActions(),
           ]),
         ),
       ]),
-    );
+      );
+    });
   }
 
   bool get _hasSelectedDrawing => _drawing &&
@@ -3128,6 +3135,26 @@ class _ChartScreenState extends State<ChartScreen>
     }
     return null;
   }
+
+  Widget _buildChartQuickActions() => ChartQuickActions(
+    onCandles: _showCandleSettings,
+    onChartType: _showChartTypePicker,
+    onReplay: _toggleReplay,
+    onDrawingTools: _showDrawingTools,
+    onAnalysis: _showAnalysisHub,
+    onAppearance: _showChartAppearance,
+    onIndicators: _showIndicatorCatalog,
+    onMove: _enableMoveChart,
+    onLatest: () {
+      _momentum.stop();
+      setState(() {
+        _viewport = _viewport.jumpToLatest();
+        _crosshair = null;
+      });
+    },
+    onRange: _showRangeSettings,
+    rangeMode: _mode == ChartMode.range,
+  );
 
   Widget _referenceChartToolbar(Color surface) => Container(
     key: const Key('chart-reference-toolbar'),
