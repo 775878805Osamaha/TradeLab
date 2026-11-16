@@ -3475,9 +3475,10 @@ class _ChartScreenState extends State<ChartScreen>
         // Most used controls remain in the first 390dp; extra tools scroll.
         _iconAction(icon: Icons.bar_chart_outlined,
             label: 'نوع الشموع', onPressed: _showChartTypePicker),
-        _iconAction(icon: Icons.replay_circle_filled_outlined,
-            label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
-            active: _replay, onPressed: _toggleReplay),
+        if (!_replay && !_replaySelectingStart)
+          _iconAction(icon: Icons.replay_circle_filled_outlined,
+              label: 'تشغيل Replay داخل الشارت',
+              onPressed: _toggleReplay),
         _iconAction(icon: Icons.edit_outlined,
             label: 'أدوات الرسم', active: _drawing,
             onPressed: _showDrawingTools),
@@ -4238,7 +4239,9 @@ class _ChartScreenState extends State<ChartScreen>
         SizedBox(
           key: const Key('replay-trading-buttons'),
           height: 45,
-          child: Row(children: [
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
             const SizedBox(width: 6),
             TextButton.icon(
               key: const Key('replay-practice-order'),
@@ -4256,7 +4259,8 @@ class _ChartScreenState extends State<ChartScreen>
               onPressed: _showTrainingArchive,
               child: const Text('الأرشيف'),
             ),
-          ]),
+            ]),
+          ),
         ),
       if (_replay && _liveRequested &&
           (_mode == ChartMode.range
