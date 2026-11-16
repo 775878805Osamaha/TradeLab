@@ -114,6 +114,7 @@ class _MarketsScreenState extends State<MarketsScreen> {
                 description: 'غيّر كلمات البحث أو نوع السوق.',
               )
             : ListView.separated(
+                key: const Key('markets-symbol-list'),
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 itemCount: _visible.length + 1,
                 separatorBuilder: (context, index) => const SizedBox(height: 8),

@@ -8,6 +8,17 @@ import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/market_controller.dart';
 import 'package:tradelab_flutter/main.dart';
 
+Future<void> scrollMarketTo(WidgetTester tester, String code,
+    {double delta = 180}) async {
+  final target = find.byKey(Key('market-open-chart-$code'));
+  final viewport = find.descendant(
+    of: find.byKey(const Key('markets-symbol-list')),
+    matching: find.byType(Scrollable),
+  );
+  await tester.scrollUntilVisible(target, delta, scrollable: viewport);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('tapping a Markets row opens the selected cTrader chart',
       (tester) async {
@@ -22,6 +33,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('قائمة المراقبة').last);
     await tester.pumpAndSettle();
+    await scrollMarketTo(tester, 'EURUSD');
     await tester.tap(find.byKey(const Key('market-open-chart-EURUSD')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
@@ -31,6 +43,7 @@ void main() {
 
     await tester.tap(find.text('قائمة المراقبة').last);
     await tester.pumpAndSettle();
+    await scrollMarketTo(tester, 'XAUUSD', delta: -180);
     await tester.tap(find.byKey(const Key('market-open-chart-XAUUSD')));
     await tester.pumpAndSettle();
     expect(find.text('XAUUSD'), findsWidgets);
@@ -60,9 +73,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('قائمة المراقبة').last);
     await tester.pumpAndSettle();
-    final btc = find.byKey(const Key('market-open-chart-BTCUSDT'));
-    await tester.ensureVisible(btc);
-    await tester.tap(btc);
+    await scrollMarketTo(tester, 'BTCUSDT');
+    await tester.tap(find.byKey(const Key('market-open-chart-BTCUSDT')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-source-empty')), findsNothing,
         reason: 'The mocked Binance history exists in this isolated test');
@@ -70,6 +82,7 @@ void main() {
 
     await tester.tap(find.text('قائمة المراقبة').last);
     await tester.pumpAndSettle();
+    await scrollMarketTo(tester, 'XAUUSD', delta: -180);
     await tester.tap(find.byKey(const Key('market-open-chart-XAUUSD')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chart-source-empty')), findsOneWidget,
