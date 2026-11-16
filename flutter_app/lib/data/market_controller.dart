@@ -41,6 +41,19 @@ class MarketController extends ChangeNotifier {
     _recentQuotes.removeWhere((_, quote) => quote.source == TradeSource.ctrader);
   }
 
+  /// Markets and the chart can request the same source price concurrently.
+  /// Keep the broker's newest timestamp instead of allowing a late response
+  /// from an older request to roll the displayed BID/ASK backwards.
+  MarketQuote _rememberNewestQuote(MarketQuote incoming) {
+    final previous = _recentQuotes[incoming.symbol];
+    if (previous != null && previous.source == incoming.source &&
+        previous.timestampMs >= incoming.timestampMs) {
+      return previous;
+    }
+    _recentQuotes[incoming.symbol] = incoming;
+    return incoming;
+  }
+
   MarketQuote? recentQuoteFor(TradeSymbol symbol) {
     final quote = _recentQuotes[symbol.code];
     if (quote == null || quote.source != symbol.source ||
@@ -310,9 +323,9 @@ class MarketController extends ChangeNotifier {
         quoteEpoch != _quoteAccountEpoch) {
       throw const MarketDataException('تغير حساب cTrader أثناء طلب السعر. أعد المحاولة.');
     }
-    _recentQuotes[symbol.code] = quote;
+    final newest = _rememberNewestQuote(quote);
     notifyListeners();
-    return quote;
+    return newest;
   }
 
   Future<void> refreshQuotes() async {
@@ -330,8 +343,9 @@ class MarketController extends ChangeNotifier {
               token: _token!, accountId: requestedAccount, symbol: symbol.code);
           if (ctraderConnected && accountId == requestedAccount &&
               requestedQuoteEpoch == _quoteAccountEpoch) {
-            forexPrices[symbol.code] = quote.bid;
-            _recentQuotes[symbol.code] = quote;
+            // A concurrent chart quote may have completed more recently.
+            final newest = _rememberNewestQuote(quote);
+            forexPrices[symbol.code] = newest.bid;
           }
         }
       } catch (_) {
@@ -339,8 +353,15 @@ class MarketController extends ChangeNotifier {
           cryptoPrices.remove(symbol.code);
         } else if (accountId == requestedAccount &&
             requestedQuoteEpoch == _quoteAccountEpoch) {
-          forexPrices.remove(symbol.code);
-          _recentQuotes.remove(symbol.code);
+          // A failed batch request must not erase a newer valid quote
+          // returned by the chart while the batch was in flight.
+          final stillFresh = recentQuoteFor(symbol);
+          if (stillFresh != null) {
+            forexPrices[symbol.code] = stillFresh.bid;
+          } else {
+            forexPrices.remove(symbol.code);
+            _recentQuotes.remove(symbol.code);
+          }
         }
       }
     }));
