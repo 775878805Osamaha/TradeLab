@@ -15,6 +15,27 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
   Previous potentially unclosed D1/W1/MN1 records remain on disk but are not
   trusted for Replay; intraday cached candles are unaffected.
 - Never populate chart gaps with synthetic price history.
+- cTrader quote notifications repaint only read-only BID/ASK labels; they do not
+  change OHLC, chart pan/zoom, Replay or drawing data. Price source timestamps
+  remain separate from the most recent *closed* candle timestamp.
+- Concurrent chart and Markets requests keep the most recent verified
+  source-timestamped BID/ASK even when an older network response finishes last.
+  A failed batch refresh cannot erase a newer chart quote from the same account;
+  invalid/expired prices still disappear under the existing freshness policy.
+- The visible chart polls only its selected cTrader quote (read-only) at most
+  once a minute, and reuses an existing fresh quote from Markets. Hidden
+  IndexedStack chart tabs make no scheduled market requests; returning to the
+  tab resumes loading without fabricating missing history.
+- Transient failures while polling closed cTrader OHLC can be retried on the
+  existing 30-second cadence; a valid no-new-bar response clears a prior
+  transient error without injecting a candle. A broker quote can be current
+  while the last closed candle is delayed, and the header must say so.
+- If the very first cTrader OHLC request fails and there are **zero** cached
+  candles, the regular closed-bar append path cannot recover. A separate,
+  throttled 120-second retry now requests only provider-verified closed
+  candles while the chart tab is visible and Replay is off. It keeps current
+  drawing and viewport state, rejects responses from switched accounts or
+  symbols, and never reconstructs a candle from a live BID/ASK quote.
 - Do not compare Range bar shapes with a screenshot alone. Its broker BID tick
   sequence, price distance, decimal precision, session start and timezone must
   match the reference. The current `RangeBarBuilder` is a reference
@@ -50,6 +71,7 @@ cd flutter_app
 flutter pub get
 flutter analyze
 flutter test test/ctrader_closed_bar_cutoff_test.dart \
+  test/chart_feed_health_test.dart \
   test/replay_training_session_test.dart \
   test/replay_training_archive_test.dart \
   test/replay_training_widget_test.dart \

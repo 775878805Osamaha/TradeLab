@@ -15,6 +15,7 @@ import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/chart_frame_profiler.dart';
+import '../chart/chart_feed_health.dart';
 import '../chart/chart_panel_settings.dart';
 import '../chart/chart_panel_settings_page.dart';
 import '../chart/chart_scale_settings.dart';
@@ -60,10 +61,12 @@ typedef _DrawingSnapshot = (List<double>, List<ChartPattern>,
 
 class ChartScreen extends StatefulWidget {
   const ChartScreen({required this.controller, this.journal,
-    this.onOpenAccount, super.key});
+    this.onOpenAccount, this.active = true, super.key});
   final MarketController controller;
   final PaperJournalController? journal;
   final VoidCallback? onOpenAccount;
+  /// False while kept alive but hidden inside the bottom-tab IndexedStack.
+  final bool active;
 
   @override
   State<ChartScreen> createState() => _ChartScreenState();
@@ -179,6 +182,11 @@ class _ChartScreenState extends State<ChartScreen>
   Future<void> _trainingSaveQueue = Future<void>.value();
   Timer? _closedCandleTimer;
   bool _refreshingClosedCandles = false;
+  MarketQuote? _lastObservedQuote;
+  bool _pollingSelectedQuote = false;
+  int _lastQuoteRequestAtMs = 0;
+  bool _retryingEmptyHistory = false;
+  int _lastEmptyHistoryAttemptMs = 0;
   bool _playing = false;
   final List<double> _levels = [];
   final List<ChartPattern> _patterns = [];
@@ -223,15 +231,13 @@ class _ChartScreenState extends State<ChartScreen>
   bool get _ctraderTimeCandlesStale {
     if (_selectedSymbol.source != TradeSource.ctrader ||
         _mode == ChartMode.range || _actualTimestamps.isEmpty) return false;
-    final last = _actualTimestamps.last;
-    final interval = switch (_timeframe) {
-      '1m' => 1, '2m' => 2, '3m' => 3, '5m' => 5,
-      '15m' => 15, '30m' => 30, '1h' => 60,
-      '4h' => 240, '1D' => 1440, '1W' => 10080,
-      '1M' => 43200, _ => 1,
-    };
-    final lag = DateTime.now().toUtc().millisecondsSinceEpoch - last;
-    return lag > math.max(interval * 3, 10) * 60000;
+    final quote = widget.controller.recentQuoteFor(_selectedSymbol);
+    return ChartFeedHealth.closedCandlesLagging(
+      latestClosedOpenMs: _actualTimestamps.last,
+      timeframe: _timeframe,
+      nowMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      freshQuoteTimestampMs: quote?.timestampMs,
+    );
   }
 
   String get _marketEvidenceLabel {
@@ -248,9 +254,11 @@ class _ChartScreenState extends State<ChartScreen>
             '${_utcMinuteLabel(_rangeHistoryTicks.last.timestamp)}';
       }
       if (_actualTimestamps.isNotEmpty) {
-        return 'شموع cTrader · $broker ($mode) · آخر شمعة '
+        final quote = widget.controller.recentQuoteFor(_selectedSymbol);
+        return 'شموع cTrader · $broker ($mode) · آخر شمعة مغلقة '
             '${_utcMinuteLabel(_actualTimestamps.last)}'
-            '${_ctraderTimeCandlesStale ? ' · بيانات متأخرة' : ''}';
+            '${quote == null ? '' : ' · سعر BID/ASK عند ${_utcMinuteLabel(quote.timestampMs)}'}'
+            '${_ctraderTimeCandlesStale ? ' · الشموع متأخرة' : ''}';
       }
       return 'لم تصل شموع موثقة من cTrader لهذا الرمز';
     }
@@ -278,15 +286,42 @@ class _ChartScreenState extends State<ChartScreen>
     _linkedBefore = widget.controller.ctraderConnected;
     _accountBefore = widget.controller.accountId;
     widget.controller.addListener(_onMarketUpdate);
+    _lastObservedQuote = widget.controller.recentQuoteFor(_selectedSymbol);
     // Poll only broker-closed candles. Never update Replay or request
     // synthetic OHLC from non-cTrader sources.
     _closedCandleTimer = Timer.periodic(
       const Duration(seconds: 30),
-      (_) => unawaited(_refreshClosedCTraderCandles()),
+      (_) {
+        if (!widget.active) return;
+        unawaited(_refreshClosedCTraderCandles());
+        unawaited(_retryEmptyCTraderHistory());
+        unawaited(_refreshSelectedCTraderQuote());
+        // Quote labels must disappear after their 90-second validity
+        // expires, including when the chart is in Range mode.
+        _refreshDisplayedQuote();
+      },
     );
     // Binance does not require a cTrader session. Load its chart immediately
     // when selected, even on a device that has never linked a broker.
-    if (_liveRequested) Future.microtask(_loadRealHistory);
+    if (widget.active && _liveRequested) Future.microtask(_loadRealHistory);
+    if (widget.active && _selectedSymbol.source == TradeSource.ctrader) {
+      Future.microtask(_refreshSelectedCTraderQuote);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ChartScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.active && widget.active) {
+      // The chart was hidden behind another tab. Refresh only the selected
+      // verified symbol, never fetch quote data while offscreen.
+      _lastObservedQuote = widget.controller.recentQuoteFor(_selectedSymbol);
+      if (_liveRequested && !_loading &&
+          _actualBars.isEmpty && _actualRange.isEmpty) {
+        Future.microtask(_loadRealHistory);
+      }
+      Future.microtask(_refreshSelectedCTraderQuote);
+    }
   }
 
   Future<void> _loadDrawingFavorites() async {
@@ -459,6 +494,48 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  /// cTrader price refresh is read-only. No broker trades, artificial bars
+  /// or price interpolation are created. Inactive tabs issue no requests.
+  Future<void> _refreshSelectedCTraderQuote() async {
+    if (!mounted || !widget.active || _pollingSelectedQuote || _replay ||
+        _selectedSymbol.source != TradeSource.ctrader ||
+        !widget.controller.ctraderConnected) {
+      return;
+    }
+    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final cached = widget.controller.recentQuoteFor(_selectedSymbol);
+    if (!ChartFeedHealth.shouldRequestQuote(
+      nowMs: nowMs,
+      lastAttemptMs: _lastQuoteRequestAtMs,
+      freshQuoteTimestampMs: cached?.timestampMs,
+    )) {
+      return;
+    }
+    _pollingSelectedQuote = true;
+    _lastQuoteRequestAtMs = nowMs;
+    final symbol = _selectedSymbol;
+    try {
+      // paperQuote is a source-only BID/ASK GET; it neither places orders
+      // nor writes to the local trading journal.
+      await widget.controller.paperQuote(symbol);
+    } on MarketDataException {
+      // Keep the previous evidence/error state; never fabricate a price.
+    } catch (_) {
+      // Recheck on the next throttled interval after a transient failure.
+    } finally {
+      _pollingSelectedQuote = false;
+    }
+  }
+
+  void _refreshDisplayedQuote() {
+    final latest = widget.controller.recentQuoteFor(_selectedSymbol);
+    if (!ChartFeedHealth.quoteChanged(_lastObservedQuote, latest)) return;
+    _lastObservedQuote = latest;
+    // A quote update changes only its label. No chart history, viewport,
+    // gesture state, Replay cursor or drawing object is modified.
+    if (mounted) setState(() {});
+  }
+
   void _onMarketUpdate() {
     final linked = widget.controller.ctraderConnected;
     final changedAccount = _accountBefore != widget.controller.accountId;
@@ -469,12 +546,20 @@ class _ChartScreenState extends State<ChartScreen>
       _rangePointCache.clear();
       _linkedBefore = linked;
       _accountBefore = widget.controller.accountId;
+      _lastQuoteRequestAtMs = 0;
       // Never carry another broker account's drawings into this account.
       _resetDrawingObjects();
-      if (linked && _selectedSymbol.source == TradeSource.ctrader) {
+      if (linked && widget.active &&
+          _selectedSymbol.source == TradeSource.ctrader) {
         _loadRealHistory();
+        unawaited(_refreshSelectedCTraderQuote());
       }
-      if (!linked && _selectedSymbol.source == TradeSource.ctrader) {
+      if ((!linked || !widget.active) &&
+          _selectedSymbol.source == TradeSource.ctrader) {
+        // The chart is retained in IndexedStack while hidden. An account
+        // change must invalidate old account candles and pending futures even
+        // if the new account remains connected. When the tab is reopened,
+        // didUpdateWidget() will fetch the new account's verified history.
         _loadRevision++;
         _recordTraining();
         _stopPlayback();
@@ -498,6 +583,9 @@ class _ChartScreenState extends State<ChartScreen>
         if (mounted) setState(() {});
       }
     }
+    // MarketController can publish a new BID/ASK while the broker link and
+    // selected account stay unchanged. Redraw verified price labels then.
+    _refreshDisplayedQuote();
   }
 
   Future<void> _loadRealHistory() async {
@@ -509,6 +597,13 @@ class _ChartScreenState extends State<ChartScreen>
     final sourceTimeframe = _timeframe;
     final sourceAccount = sourceSymbol.source == TradeSource.ctrader
         ? widget.controller.accountId : null;
+    if (sourceSymbol.source == TradeSource.ctrader &&
+        _mode != ChartMode.range) {
+      // A failed *initial* fetch will be retried after two minutes, not on
+      // every 30-second timer or every chart rebuild.
+      _lastEmptyHistoryAttemptMs =
+          DateTime.now().toUtc().millisecondsSinceEpoch;
+    }
     setState(() {
       _stopPlayback();
       if (_replay) {
@@ -668,10 +763,72 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  /// Recover a first-load cTrader OHLC failure WITHOUT clearing drawings,
+  /// Replay history, user panning/zoom, or replacing bars with fabricated
+  /// prices. Successful results are the same source-validated MarketBars used
+  /// by the original history request. Range BID ticks use a separate path.
+  Future<void> _retryEmptyCTraderHistory() async {
+    if (!mounted || !widget.active || !_liveRequested ||
+        _selectedSymbol.source != TradeSource.ctrader ||
+        _mode == ChartMode.range || _replay || _loading ||
+        _olderLoading || _refreshingClosedCandles ||
+        _retryingEmptyHistory || _actualBars.isNotEmpty ||
+        widget.controller.accountId == null) {
+      return;
+    }
+    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    if (!ChartFeedHealth.shouldRetryEmptyHistory(
+      nowMs: nowMs, lastAttemptMs: _lastEmptyHistoryAttemptMs,
+    )) {
+      return;
+    }
+
+    final revision = _loadRevision;
+    final symbol = _selectedSymbol;
+    final frame = _timeframe;
+    final account = widget.controller.accountId;
+    _retryingEmptyHistory = true;
+    _lastEmptyHistoryAttemptMs = nowMs;
+    try {
+      final bars = await widget.controller.history(symbol, frame);
+      if (!mounted || !widget.active || revision != _loadRevision ||
+          _replay || _mode == ChartMode.range ||
+          _selectedSymbol.code != symbol.code ||
+          _timeframe != frame ||
+          widget.controller.accountId != account ||
+          _actualBars.isNotEmpty) {
+        return;
+      }
+      if (bars.isEmpty) {
+        // A valid empty broker response does not justify a fabricated bar.
+        return;
+      }
+      // The provider already validated order, OHLC and closed-bar boundaries.
+      // Never sort or reconstruct the original broker data on this path.
+      setState(() {
+        _actualBars = bars;
+        _actualCandles = bars.map((bar) => bar.candle).toList(growable: false);
+        _actualTimestamps =
+            bars.map((bar) => bar.timestamp).toList(growable: false);
+        _olderCursorMs = bars.first.timestamp;
+        _loadError = null;
+      });
+      unawaited(MarketCandleStore.archive(symbol, frame, account, bars,
+          markFresh: true).catchError((Object _) {}));
+    } on MarketDataException {
+      // Retain the current error display. The next attempt is throttled.
+    } catch (_) {
+      // A transient provider/storage failure is not market evidence.
+    } finally {
+      _retryingEmptyHistory = false;
+    }
+  }
+
   Future<void> _refreshClosedCTraderCandles() async {
-    if (!mounted || _refreshingClosedCandles || _loading || _olderLoading ||
+    if (!mounted || !widget.active || _refreshingClosedCandles ||
+        _loading || _olderLoading ||
         _replay || _draggingLine || _draggingPattern ||
-        !_liveRequested || _loadError != null ||
+        !_liveRequested ||
         _selectedSymbol.source != TradeSource.ctrader ||
         _mode == ChartMode.range || _actualBars.isEmpty) return;
     final revision = _loadRevision;
@@ -689,11 +846,13 @@ class _ChartScreenState extends State<ChartScreen>
       final combined = CTraderCandleStitcher.append(_actualBars, recent);
       final appended = combined.length - _actualBars.length;
       if (appended == 0) {
-        // Update the freshness label even when the broker has no new candle.
-        setState(() {});
+        // A broker response with no new CLOSED bar still proves the request
+        // recovered. Never leave a transient network error latched forever.
+        setState(() => _loadError = null);
         return;
       }
       setState(() {
+        _loadError = null;
         _actualBars = combined;
         _actualCandles =
             combined.map((bar) => bar.candle).toList(growable: false);
@@ -2733,7 +2892,8 @@ class _ChartScreenState extends State<ChartScreen>
               child: Text(
                 hasVerifiedPrices
                     ? (_ctraderTimeCandlesStale
-                        ? 'شموع $source · بيانات متأخرة' : 'شموع $source')
+                        ? 'شموع $source · ${widget.controller.recentQuoteFor(_selectedSymbol) != null ? 'الشموع أقدم من السعر' : 'بيانات متأخرة'}'
+                        : 'شموع $source')
                     : fetchingRangeTicks
                         ? 'جارِ التحقق من تيكات BID · cTrader'
                         : 'لا توجد أسعار موثقة · $source',
