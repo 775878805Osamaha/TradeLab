@@ -602,6 +602,8 @@ class _ChartScreenState extends State<ChartScreen>
         _recordTraining();
         _stopPlayback();
         _replay = false;
+        _replaySelectingStart = false;
+        _replayDraggingStart = false;
         _training.clear();
         _trainingEverTraded = false;
         _actualBars = [];
@@ -651,6 +653,8 @@ class _ChartScreenState extends State<ChartScreen>
         _rectangles..clear()..addAll(_analysisRectangles);
       }
       _replay = false;
+      _replaySelectingStart = false;
+      _replayDraggingStart = false;
       _training.clear();
       _trainingEverTraded = false;
       _loading = true;
@@ -1245,6 +1249,11 @@ class _ChartScreenState extends State<ChartScreen>
         if (_replay) {
           _training.prepend(unique.length);
           _visibleThrough += unique.length;
+          _replayInitialCount += unique.length;
+        }
+        if (_replaySelectingStart) {
+          // Prepending older OHLC must keep the cursor on the same UTC bar.
+          _replayCandidateIndex += unique.length;
         }
         });
       }
@@ -1835,6 +1844,8 @@ class _ChartScreenState extends State<ChartScreen>
     setState(() {
       _stopPlayback();
       _replay = false;
+      _replaySelectingStart = false;
+      _replayDraggingStart = false;
       _training.clear();
       _trainingEverTraded = false;
       _symbol = item.code;
@@ -1902,6 +1913,12 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showTimeframePicker() async {
+    if (_replay || _replaySelectingStart) {
+      _replayMessage('تغيير فاصل الشارت أثناء Replay يتطلب إعادة بناء '
+          'السلسلة الزمنية بأمان. أغلق المحاكاة أولًا، ولن تُكشف '
+          'الشموع المستقبلية تلقائيًا.');
+      return;
+    }
     _momentum.stop();
     const frames = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1D', '1W', '1M'];
     await showModalBottomSheet<void>(
