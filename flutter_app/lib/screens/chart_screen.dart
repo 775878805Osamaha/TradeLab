@@ -2939,7 +2939,6 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Widget _referenceChartHeader(List<TradeCandle> candles) {
-    final compactWidth = MediaQuery.sizeOf(context).width < 360;
     final hasVerifiedPrices = candles.isNotEmpty;
     final fetchingRangeTicks = _mode == ChartMode.range &&
         _loading && _liveRequested && !hasVerifiedPrices;
@@ -2949,7 +2948,9 @@ class _ChartScreenState extends State<ChartScreen>
         ? 'cTrader' : 'Binance';
     final quoteCurrency = _selectedSymbol.source == TradeSource.binance
         ? 'USDT' : 'USD';
-    return Container(
+    return LayoutBuilder(builder: (context, constraints) {
+      final compactWidth = constraints.maxWidth < 360;
+      return Container(
       key: const Key('chart-reference-header'),
       height: compactWidth ? 104 : 84,
       color: Theme.of(context).colorScheme.surface,
@@ -3081,7 +3082,8 @@ class _ChartScreenState extends State<ChartScreen>
           ]),
         ),
       ]),
-    );
+      );
+    });
   }
 
   bool get _hasSelectedDrawing => _drawing &&
