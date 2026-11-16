@@ -4089,25 +4089,45 @@ class _ChartScreenState extends State<ChartScreen>
       // No broker-info or drawing-hint footer: chart tools meet navigation.
       // Active drawing guidance now overlays the chart without using height.
       if (!widget.focusMode) _referenceChartToolbar(surface),
-      if (_replay) _replayControls(context),
+      if (_replay || _replaySelectingStart) _replayControls(context),
     ]);
   }
 
-  Widget _replayControls(BuildContext context) => Container(
-        color: Theme.of(context).colorScheme.surface,
-        padding: const EdgeInsets.fromLTRB(12, 2, 12, 10),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Row(children: [
-            const Text('Replay', style: TextStyle(fontWeight: FontWeight.w800)),
-            const Spacer(),
-            Text('$_visibleThrough / $_totalBars شمعة',
-                style: Theme.of(context).textTheme.labelSmall),
-          ]),
-          Wrap(spacing: 8, runSpacing: 2, children: [
-            OutlinedButton.icon(
+  Widget _replayControls(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      ReplayMobileControls(
+        selecting: _replaySelectingStart,
+        playing: _playing,
+        visibleCount: _visibleThrough,
+        totalBars: _totalBars,
+        chartFrame: _timeframe,
+        speed: _replaySpeed,
+        showTrading: _replayShowTradingButtons,
+        autoStep: _replayAutoStep,
+        onClose: _exitReplay,
+        onConfirm: _confirmReplayStart,
+        onStartMenu: _handleReplayStartMenu,
+        onStepMenu: _handleReplayIntervalMenu,
+        onReset: _resetReplayToStart,
+        onStepBack: () => _seekReplay(_visibleThrough - 1),
+        onStepForward: () => _seekReplay(_visibleThrough + 1),
+        onPlayPause: _togglePlay,
+        onSpeed: _setReplaySpeed,
+        onChooseAgain: () => unawaited(_chooseReplayStartAgain()),
+      ),
+      // Trading controls only belong to an active historical simulation.
+      // They never touch any live cTrader/Binance order gateway.
+      if (_replay && _replayShowTradingButtons)
+        SizedBox(
+          key: const Key('replay-trading-buttons'),
+          height: 45,
+          child: Row(children: [
+            const SizedBox(width: 6),
+            TextButton.icon(
               key: const Key('replay-practice-order'),
               onPressed: _openTrainingOrderDialog,
-              icon: const Icon(Icons.add_circle_outline, size: 17),
+              icon: const Icon(Icons.add_circle_outline, size: 16),
               label: const Text('صفقة تدريب'),
             ),
             TextButton(
@@ -4121,63 +4141,28 @@ class _ChartScreenState extends State<ChartScreen>
               child: const Text('الأرشيف'),
             ),
           ]),
-          if (_liveRequested && (_mode == ChartMode.range
-              ? _rangeHistoryTicks.isNotEmpty : _actualBars.isNotEmpty))
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton.icon(
-                onPressed: _olderLoading || _historyExhausted ||
-                      (_mode == ChartMode.range && _training.trades.isNotEmpty)
-                    ? null : () => _mode == ChartMode.range
-                        ? _loadOlderRangeHistory()
-                        : _loadOlderHistory(manual: true),
-                icon: _olderLoading
-                    ? const SizedBox(width: 15, height: 15,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.history, size: 18),
-                label: Text(_historyExhausted ? 'لا تتوفر شموع أقدم'
-                    : _mode == ChartMode.range
-                        ? 'تحميل تيكات مدى أقدم' : 'تحميل شموع أقدم'),
-              ),
-            ),
-          Row(children: [
-            IconButton(tooltip: 'رجوع شمعة',
-              onPressed: _visibleThrough <= 1
-                  ? null : () => _seekReplay(_visibleThrough - 1),
-              icon: const Icon(Icons.skip_previous)),
-            IconButton(key: const Key('replay-play-pause'),
-              tooltip: _playing ? 'إيقاف' : 'تشغيل',
-              onPressed: _togglePlay,
-              icon: Icon(_playing ? Icons.pause_circle : Icons.play_circle_fill,
-                  color: TradeColors.blue)),
-            DropdownButton<ReplayPlaybackSpeed>(
-              key: const Key('replay-speed-picker'),
-              value: _replaySpeed,
-              underline: const SizedBox.shrink(),
-              items: [
-                for (final speed in ReplayPlaybackSpeed.values)
-                  DropdownMenuItem(value: speed,
-                      child: Text(speed.label)),
-              ],
-              onChanged: (speed) {
-                if (speed != null) _setReplaySpeed(speed);
-              },
-            ),
-            IconButton(tooltip: 'تقدم شمعة',
-              onPressed: _visibleThrough >= _totalBars
-                  ? null : () => _seekReplay(_visibleThrough + 1),
-              icon: const Icon(Icons.skip_next)),
-            Expanded(child: Slider(
-              value: _visibleThrough.clamp(1, math.max(2, _totalBars)).toDouble(),
-              min: 1, max: math.max(2, _totalBars).toDouble(),
-              // Continuous thumb + rounded candle indices: do not ask the
-              // Slider to render tens of thousands of discrete tick marks.
-              label: '$_visibleThrough',
-              onChanged: (value) => _seekReplay(value.round()),
-            )),
-          ]),
-        ]),
-      );
+        ),
+      if (_replay && _liveRequested &&
+          (_mode == ChartMode.range
+            ? _rangeHistoryTicks.isNotEmpty : _actualBars.isNotEmpty))
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton.icon(
+            key: const Key('replay-load-older'),
+            onPressed: _olderLoading || _historyExhausted ||
+                  (_mode == ChartMode.range && _training.trades.isNotEmpty)
+              ? null : () => _mode == ChartMode.range
+                ? _loadOlderRangeHistory()
+                : _loadOlderHistory(manual: true),
+            icon: const Icon(Icons.history, size: 16),
+            label: Text(_historyExhausted ? 'لا توجد شموع أقدم'
+                : _mode == ChartMode.range
+                  ? 'تحميل تيكات أقدم' : 'تحميل شموع أقدم'),
+          ),
+        ),
+    ],
+  );
+
 }
 
 /// Line-only angle glyph; keeps the reference toolbar's outlined style.
