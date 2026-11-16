@@ -89,11 +89,17 @@ class AccountScreen extends StatelessWidget {
       if (controller.ctraderConnected) ...[
         DropdownButtonFormField<String>(
           key: const Key('ctrader-account-selector'),
+          isExpanded: true,
           initialValue: controller.accountId,
           decoration: const InputDecoration(labelText: 'حساب وسيط cTrader'),
           items: controller.accounts.map((account) => DropdownMenuItem(
             value: account.id,
-            child: Text('${account.broker} · ${account.id} ${account.isLive ? '(Live)' : '(Demo)'}'),
+            child: Text(
+              '${account.broker} · ${account.id} ${account.isLive ? '(Live)' : '(Demo)'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textDirection: TextDirection.ltr,
+            ),
           )).toList(),
           onChanged: (value) {if (value != null) controller.chooseAccount(value);},
         ),

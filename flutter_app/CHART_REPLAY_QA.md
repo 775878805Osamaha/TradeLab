@@ -129,3 +129,7 @@ faster without before/after measurements.
 - authenticated cTrader OAuth and runtime market feed on a real device;
 - workload-specific performance budgets and device frame-timing results;
 - full migrated Kotlin trading ledger parity and production-ready APK.
+
+## 2026-11-16 side-by-side integration test build
+
+This unmerged test candidate combines PR #445 (Replay trade level overlay), #446 (measured axis labels), #447 (cTrader quote/closed-candle recovery and account isolation), #448 (SQLite practice journal safety). The CI APK uses a separate Android application ID `com.example.tradelab_flutter.test` so the prior TradeLab install is not replaced and its private SQLite records stay untouched. New variant stores its own separate practice data and does not import old records. Both variants can register `tradelabflutter://oauth/ctrader`; if Android prompts for an OAuth callback handler, choose TradeLab Test for testing. Only code and APK packaging are verified by CI; authenticated broker data and physical phone interactions require user testing.
