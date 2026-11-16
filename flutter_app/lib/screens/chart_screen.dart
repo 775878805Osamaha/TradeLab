@@ -63,10 +63,14 @@ typedef _DrawingSnapshot = (List<double>, List<ChartPattern>,
 
 class ChartScreen extends StatefulWidget {
   const ChartScreen({required this.controller, this.journal,
-    this.onOpenAccount, this.active = true, super.key});
+    this.onOpenAccount, this.requestedSymbolCode = 'XAUUSD',
+    this.active = true, super.key});
   final MarketController controller;
   final PaperJournalController? journal;
   final VoidCallback? onOpenAccount;
+  /// Navigation from Markets requests this verified symbol; chart stays
+  /// mounted in IndexedStack and must invalidate the prior symbol's history.
+  final String requestedSymbolCode;
   /// False while kept alive but hidden inside the bottom-tab IndexedStack.
   final bool active;
 
@@ -281,6 +285,9 @@ class _ChartScreenState extends State<ChartScreen>
   @override
   void initState() {
     super.initState();
+    if (tradeSymbols.any((item) => item.code == widget.requestedSymbolCode)) {
+      _symbol = widget.requestedSymbolCode;
+    }
     _frameProfiler.attach();
     unawaited(_loadDrawingFavorites());
     unawaited(_loadPanelSettings());
@@ -317,6 +324,15 @@ class _ChartScreenState extends State<ChartScreen>
   @override
   void didUpdateWidget(covariant ChartScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.requestedSymbolCode != widget.requestedSymbolCode &&
+        widget.requestedSymbolCode != _symbol) {
+      final targets = tradeSymbols.where(
+          (item) => item.code == widget.requestedSymbolCode);
+      if (targets.isNotEmpty) {
+        _changeSymbol(targets.first);
+        return;
+      }
+    }
     if (!oldWidget.active && widget.active) {
       // The chart was hidden behind another tab. Refresh only the selected
       // verified symbol, never fetch quote data while offscreen.
@@ -1598,6 +1614,50 @@ class _ChartScreenState extends State<ChartScreen>
     return result;
   }
 
+  void _changeSymbol(TradeSymbol item) {
+    if (item.code == _symbol) return;
+    _momentum.stop();
+    // Any in-flight response from the previous symbol is invalid from now on.
+    _loadRevision++;
+    if (_replay) _recordTraining();
+    setState(() {
+      _stopPlayback();
+      _replay = false;
+      _training.clear();
+      _trainingEverTraded = false;
+      _symbol = item.code;
+      // Binance does not provide cTrader BID tick Range bars.
+      if (_mode == ChartMode.range &&
+          item.source != TradeSource.ctrader) {
+        _mode = ChartMode.candles;
+      }
+      _viewport = _freshViewport();
+      _resetDrawingObjects();
+      _lastObservedQuote = widget.controller.recentQuoteFor(item);
+      _lastQuoteRequestAtMs = 0;
+      _actualBars = [];
+      _actualCandles = [];
+      _actualTimestamps = [];
+      _actualRange = [];
+      _rangeHistoryTicks = [];
+      _rangeBarEndTickIndices = [];
+      _rangeBarTimestamps = [];
+      _rangeOlderCursorMs = null;
+      _olderCursorMs = null;
+      _olderLoading = false;
+      _historyExhausted = false;
+      _olderLoadError = null;
+      _loadError = null;
+      _loading = false;
+    });
+    if (widget.active && _liveRequested) {
+      unawaited(_loadRealHistory());
+    }
+    if (widget.active && item.source == TradeSource.ctrader) {
+      unawaited(_refreshSelectedCTraderQuote());
+    }
+  }
+
   Future<void> _showSymbolPicker() async {
     _momentum.stop();
     await showModalBottomSheet<void>(
@@ -1619,14 +1679,8 @@ class _ChartScreenState extends State<ChartScreen>
                       ? const Icon(Icons.check_circle, color: TradeColors.blue)
                       : const Icon(Icons.chevron_left),
                   onTap: () {
-                    setState(() {
-                      _stopPlayback();
-                      _symbol = item.code;
-                      _viewport = _freshViewport();
-                      _resetDrawingObjects();
-                    });
                     Navigator.pop(sheetContext);
-                    if (_liveRequested) _loadRealHistory();
+                    _changeSymbol(item);
                   },
                 )),
           ]),
