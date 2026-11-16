@@ -132,3 +132,4 @@ class ChartQuickActions extends StatelessWidget {
       ],
     ),
   );
+}
