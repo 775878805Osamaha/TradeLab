@@ -61,9 +61,12 @@ class ReplayMobileControls extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Directionality(
         textDirection: TextDirection.ltr,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
+        // Play/Confirm and pick-new-start are pinned on the phone. Only the
+        // secondary controls may scroll horizontally on 320dp screens.
+        child: Row(children: [
+          Expanded(child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
             IconButton(
               key: const Key('replay-close'),
               tooltip: 'إغلاق Replay',
@@ -214,6 +217,8 @@ class ReplayMobileControls extends StatelessWidget {
               icon: const Icon(Icons.skip_next_outlined),
               constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
               padding: EdgeInsets.zero),
+            ]),
+          )),
             if (selecting)
               TextButton.icon(
                 key: const Key('replay-confirm-start'),
@@ -236,8 +241,7 @@ class ReplayMobileControls extends StatelessWidget {
               icon: const Icon(Icons.first_page, color: ink),
               constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
               padding: EdgeInsets.zero),
-          ]),
-        ),
+        ]),
       ),
     );
   }
