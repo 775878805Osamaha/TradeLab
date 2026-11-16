@@ -11,6 +11,9 @@ class PaperJournalController extends ChangeNotifier {
   final PaperJournalStore _store;
   String _accountKey = 'local:guest';
   String get accountKey => _accountKey;
+  int _accountSessionRevision = 0;
+  /// Changes on every account switch, including A → B → A.
+  int get accountSessionRevision => _accountSessionRevision;
   List<LedgerEntry> entries = const [];
   bool _loading = false;
   bool _writing = false;
@@ -35,6 +38,7 @@ class PaperJournalController extends ChangeNotifier {
     if (_disposed) return;
     final key = accountId == null ? 'local:guest' : 'ctrader:$accountId';
     if (key == _accountKey && _revision > 0) return;
+    if (key != _accountKey) _accountSessionRevision++;
     _accountKey = key;
     await refresh();
   }
