@@ -154,8 +154,10 @@ class _ChartScreenState extends State<ChartScreen>
   bool _showIndicators = false;
   bool _showShortLabels = true;
   int _visibleThrough = 60;
+  // Keep the newest verified bar close to the price scale on mobile.
+  // Default zoom is legible; pinch and pan remain fully user-controlled.
   ChartViewport _viewport = const ChartViewport(
-    barWidth: 5.5, scrollBars: -5, rightMarginBars: 10);
+    barWidth: 10, scrollBars: 0, rightMarginBars: 4);
   ChartPanelSettings _panelSettings = const ChartPanelSettings();
   bool _panelSettingsOpen = false;
   bool _scaleSettingsOpen = false;
