@@ -31,6 +31,15 @@ class MarketController extends ChangeNotifier {
   // Read-only, short-lived source quotes for optional bid/ask scale labels.
   // Changing a chart setting must never trigger a quote/network request.
   final Map<String, MarketQuote> _recentQuotes = {};
+  // A broker may switch A -> B -> A while the first request is still in
+  // flight. Matching account IDs alone cannot validate that old response.
+  int _quoteAccountEpoch = 0;
+
+  void _invalidateCTraderQuoteSession() {
+    _quoteAccountEpoch++;
+    forexPrices.clear();
+    _recentQuotes.removeWhere((_, quote) => quote.source == TradeSource.ctrader);
+  }
 
   MarketQuote? recentQuoteFor(TradeSymbol symbol) {
     final quote = _recentQuotes[symbol.code];
@@ -122,6 +131,9 @@ class MarketController extends ChangeNotifier {
       final authorized = await _api.accounts(issued);
       if (authorized.isEmpty) throw const MarketDataException('لا توجد حسابات cTrader مصرح بها.');
       _api.forgetCTraderSymbols();
+      // A newly authorized session must never inherit BID/ASK from the old
+      // token, including when the selected account number is unchanged.
+      _invalidateCTraderQuoteSession();
       await _storage.write(key: _tokenKey, value: issued);
       _token = issued;
       accounts = authorized;
@@ -154,7 +166,9 @@ class MarketController extends ChangeNotifier {
           ? current
           : accounts.any((a) => a.id == preferred)
               ? preferred : null;
-      accountId = accounts.isEmpty ? null : selected ?? accounts.first.id;
+      final nextAccount = accounts.isEmpty ? null : selected ?? accounts.first.id;
+      if (nextAccount != accountId) _invalidateCTraderQuoteSession();
+      accountId = nextAccount;
       _api.forgetCTraderSymbols();
       if (accounts.isEmpty) {
         error = 'لا توجد حسابات cTrader متاحة لهذا التفويض.';
@@ -173,8 +187,7 @@ class MarketController extends ChangeNotifier {
         key: _selectedAccountKey, value: id,
       ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       _api.forgetCTraderSymbols();
-      forexPrices.clear();
-      _recentQuotes.clear();
+      _invalidateCTraderQuoteSession();
       notifyListeners();
     }
   }
@@ -183,8 +196,7 @@ class MarketController extends ChangeNotifier {
     _token = null;
     accountId = null;
     accounts = const [];
-    forexPrices.clear();
-    _recentQuotes.clear();
+    _invalidateCTraderQuoteSession();
     _api.forgetCTraderSymbols();
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _pendingKey);
@@ -288,12 +300,14 @@ class MarketController extends ChangeNotifier {
     }
     final account = accountId;
     final token = _token;
+    final quoteEpoch = _quoteAccountEpoch;
     if (!ctraderConnected || token == null || account == null) {
       throw const MarketDataException('اربط حساب cTrader للحصول على سعر فعلي للصفقة التجريبية.');
     }
     final quote = await _api.ctraderQuote(token: token,
       accountId: account, symbol: symbol.code);
-    if (accountId != account || _token == null) {
+    if (accountId != account || _token == null ||
+        quoteEpoch != _quoteAccountEpoch) {
       throw const MarketDataException('تغير حساب cTrader أثناء طلب السعر. أعد المحاولة.');
     }
     _recentQuotes[symbol.code] = quote;
@@ -306,6 +320,7 @@ class MarketController extends ChangeNotifier {
     loadingQuotes = true;
     notifyListeners();
     final requestedAccount = accountId;
+    final requestedQuoteEpoch = _quoteAccountEpoch;
     await Future.wait(tradeSymbols.map((symbol) async {
       try {
         if (symbol.source == TradeSource.binance) {
@@ -313,7 +328,8 @@ class MarketController extends ChangeNotifier {
         } else if (ctraderConnected && requestedAccount != null) {
           final quote = await _api.ctraderQuote(
               token: _token!, accountId: requestedAccount, symbol: symbol.code);
-          if (ctraderConnected && accountId == requestedAccount) {
+          if (ctraderConnected && accountId == requestedAccount &&
+              requestedQuoteEpoch == _quoteAccountEpoch) {
             forexPrices[symbol.code] = quote.bid;
             _recentQuotes[symbol.code] = quote;
           }
@@ -321,8 +337,11 @@ class MarketController extends ChangeNotifier {
       } catch (_) {
         if (symbol.source == TradeSource.binance) {
           cryptoPrices.remove(symbol.code);
-        } else {forexPrices.remove(symbol.code);}
-        _recentQuotes.remove(symbol.code);
+        } else if (accountId == requestedAccount &&
+            requestedQuoteEpoch == _quoteAccountEpoch) {
+          forexPrices.remove(symbol.code);
+          _recentQuotes.remove(symbol.code);
+        }
       }
     }));
     loadingQuotes = false;
