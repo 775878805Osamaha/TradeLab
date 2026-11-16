@@ -80,12 +80,12 @@ class ChartQuickActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 46,
-    height: 48,
+    width: 38,
+    height: 36,
     child: PopupMenuButton<ChartQuickAction>(
       key: const Key('chart-quick-actions'),
       tooltip: 'المزيد من أدوات الشارت',
-      icon: const Icon(Icons.more_horiz, size: 23),
+      child: const Icon(Icons.more_horiz, size: 21),
       onSelected: _select,
       itemBuilder: (_) => [
         const PopupMenuItem(
