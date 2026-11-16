@@ -19,7 +19,7 @@ void main() {
     expect(restored.rightMarginBars, 20);
     expect(restored.navigationButtons, ChartButtonVisibility.hidden);
     expect(defaults.axisTextSize, 12);
-    expect(defaults.rightMarginBars, 10);
+    expect(defaults.rightMarginBars, 4);
     expect(defaults.backgroundColor, 0xFFFFFFFF);
     expect(defaults.verticalGridVisible, isFalse);
     expect(defaults.horizontalGridVisible, isFalse);
@@ -185,6 +185,6 @@ void main() {
     await tester.tap(find.byKey(const Key('panel-apply')));
     expect(saved?.topMarginPercent, 18);
     expect(saved?.bottomMarginPercent, 8);
-    expect(saved?.rightMarginBars, 10);
+    expect(saved?.rightMarginBars, 4);
   });
 }

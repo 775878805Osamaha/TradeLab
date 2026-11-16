@@ -1,0 +1,148 @@
+name: TradeLab combined test APK (install beside old)
+on:
+  push:
+    branches:
+      - test/flutter-all-fixes-20261116
+permissions:
+  contents: write
+jobs:
+  build-test-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate isolated Android Flutter host
+        run: flutter create --platforms android --project-name tradelab_flutter . --no-pub
+      - name: Configure OAuth and existing launcher assets
+        run: |
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            rm -f "android/app/src/main/res/mipmap-${density}/ic_launcher.png"
+          done
+          cp -r ../app/src/main/res/mipmap-* android/app/src/main/res/
+          cp ../app/src/main/res/drawable/ic_launcher_*.xml android/app/src/main/res/drawable/
+          python3 tool/configure_android_host.py
+      - name: Isolate the test package so old local trades are protected
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          scripts = [p for p in [Path('android/app/build.gradle.kts'), Path('android/app/build.gradle')] if p.exists()]
+          if len(scripts) != 1: raise SystemExit('Android application build script missing or ambiguous')
+          script = scripts[0]
+          source = script.read_text()
+          old = ('applicationId = "com.example.tradelab_flutter"' if script.suffix == '.kts'
+                 else 'applicationId "com.example.tradelab_flutter"')
+          if source.count(old) != 1: raise SystemExit('Unexpected applicationId, cannot safely isolate test APK')
+          script.write_text(source.replace(old, old.replace('com.example.tradelab_flutter', 'com.example.tradelab_flutter.test')))
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+          tree = ET.parse(manifest)
+          app = tree.getroot().find('application')
+          if app is None: raise SystemExit('Android manifest application element missing')
+          app.set('{http://schemas.android.com/apk/res/android}label', 'TradeLab Test')
+          tree.write(manifest, encoding='utf-8', xml_declaration=True)
+          PY
+      - name: Fetch dependencies
+        run: flutter pub get
+      - name: Analyze combined Flutter/Dart source
+        run: flutter analyze --no-fatal-infos
+      - name: Execute combined Flutter regression suite
+        run: |
+          flutter test \
+            test/chart_mobile_controls_test.dart \
+            test/markets_chart_navigation_test.dart \
+            test/chart_panel_settings_test.dart \
+            test/chart_symbol_settings_test.dart \
+            test/chart_annotations_test.dart \
+            test/chart_feed_health_test.dart \
+            test/chart_frame_profiler_test.dart \
+            test/chart_mode_transition_test.dart \
+            test/chart_time_axis_label_layout_test.dart \
+            test/chart_viewport_test.dart \
+            test/ctrader_account_selection_test.dart \
+            test/ctrader_candle_stitcher_test.dart \
+            test/ctrader_closed_bar_cutoff_test.dart \
+            test/ctrader_quote_ordering_test.dart \
+            test/market_api_test.dart \
+            test/market_candle_store_test.dart \
+            test/paper_journal_controller_test.dart \
+            test/paper_journal_sqlite_test.dart \
+            test/paper_ledger_test.dart \
+            test/paper_results_flow_test.dart \
+            test/paper_trade_service_test.dart \
+            test/range_bar_builder_test.dart \
+            test/range_bar_timeline_test.dart \
+            test/range_older_page_test.dart \
+            test/range_startup_loader_test.dart \
+            test/range_tick_rollforward_test.dart \
+            test/range_tick_store_test.dart \
+            test/replay_trade_overlay_test.dart \
+            test/replay_training_archive_test.dart \
+            test/replay_training_order_dialog_test.dart \
+            test/replay_training_session_test.dart \
+            test/replay_training_widget_test.dart \
+            test/results_connection_test.dart \
+            test/widget_test.dart 
+      - name: Verify OAuth gateway handoff contract
+        run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs
+      - name: Work around external plugin Android Lint crash only
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          info = json.loads(Path('.flutter-plugins-dependencies').read_text())
+          plugin = [Path(p['path'])/'android' for p in info['plugins']['android']
+                    if p['name'] == 'url_launcher_android']
+          if len(plugin) != 1 or not plugin[0].is_dir():
+              raise SystemExit('url_launcher_android resolution changed')
+          gradle = [p for p in [plugin[0]/'build.gradle', plugin[0]/'build.gradle.kts'] if p.is_file()]
+          if len(gradle) != 1: raise SystemExit('Unexpected plugin build scripts')
+          with gradle[0].open('a') as out:
+              out.write(chr(10) + 'tasks.matching { it.name == "lintVitalAnalyzeRelease" }.configureEach { enabled = false }' + chr(10))
+          PY
+      - name: Build Android test APK
+        run: flutter build apk --release
+      - name: Verify independent signed APK
+        run: |
+          set -euo pipefail
+          apk=build/app/outputs/flutter-apk/app-release.apk
+          test -s "$apk"
+          unzip -t "$apk" >/dev/null
+          tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$tools_dir/apksigner" verify --verbose "$apk"
+          "$tools_dir/aapt" dump badging "$apk" | grep -F "package: name='com.example.tradelab_flutter.test'"
+          cp "$apk" build/app/outputs/flutter-apk/TradeLab-Android-Test.apk
+          sha256sum build/app/outputs/flutter-apk/TradeLab-Android-Test.apk > build/app/outputs/flutter-apk/TradeLab-Android-Test.apk.sha256
+      - name: Upload APK and SHA256 to Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Android-Test-APK
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Android-Test.apk
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Android-Test.apk.sha256
+      - name: Publish test APK as a GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="tradelab-android-test-${GITHUB_SHA:0:12}"
+          gh release create "$tag" \
+            "build/app/outputs/flutter-apk/TradeLab-Android-Test.apk#TradeLab-Android-Test.apk" \
+            "build/app/outputs/flutter-apk/TradeLab-Android-Test.apk.sha256#TradeLab-Android-Test.apk.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "TradeLab Android Test ${GITHUB_SHA:0:12}" \
+            --notes "Unmerged integration candidate of PRs 445-448. Install side by side; separate package com.example.tradelab_flutter.test. Locally signed CI test APK. CI validates source and APK integrity but does not prove cTrader OAuth, Range parity or physical Android performance."
