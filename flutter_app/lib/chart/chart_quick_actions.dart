@@ -13,6 +13,7 @@ enum ChartQuickAction {
   move,
   latest,
   range,
+  focusMode,
 }
 
 class ChartQuickActions extends StatelessWidget {
@@ -27,7 +28,9 @@ class ChartQuickActions extends StatelessWidget {
     required this.onMove,
     required this.onLatest,
     required this.onRange,
+    required this.onFocusMode,
     required this.rangeMode,
+    required this.focusMode,
     super.key,
   });
 
@@ -41,7 +44,9 @@ class ChartQuickActions extends StatelessWidget {
   final VoidCallback onMove;
   final VoidCallback onLatest;
   final VoidCallback onRange;
+  final VoidCallback onFocusMode;
   final bool rangeMode;
+  final bool focusMode;
 
   void _select(ChartQuickAction action) {
     switch (action) {
@@ -75,6 +80,9 @@ class ChartQuickActions extends StatelessWidget {
       case ChartQuickAction.range:
         if (rangeMode) onRange();
         break;
+      case ChartQuickAction.focusMode:
+        onFocusMode();
+        break;
     }
   }
 
@@ -88,6 +96,10 @@ class ChartQuickActions extends StatelessWidget {
       child: const Icon(Icons.more_horiz, size: 21),
       onSelected: _select,
       itemBuilder: (_) => [
+        PopupMenuItem(
+          key: const Key('chart-quick-focus'),
+          value: ChartQuickAction.focusMode,
+          child: Text(focusMode ? 'الخروج من وضع الشارت الموسع' : 'توسيع الشارت ملء مساحة التطبيق')),
         const PopupMenuItem(
           key: Key('chart-quick-candles'),
           value: ChartQuickAction.candles,
