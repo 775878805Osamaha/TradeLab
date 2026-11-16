@@ -108,6 +108,7 @@ class _TradeLabShellState extends State<TradeLabShell> {
   // TradingView community/discovery screens to fill a five-tab reference.
   // Chart opens in ANALYSIS mode, never an implicit Replay session.
   int _selectedIndex = 1;
+  String _requestedChartSymbol = 'XAUUSD';
   late final MarketController _market = widget.controller ?? MarketController();
   late final PaperJournalController _journal = widget.journal ??
       PaperJournalController(store: SqlitePaperJournalStore());
@@ -171,8 +172,13 @@ class _TradeLabShellState extends State<TradeLabShell> {
               child: IndexedStack(
                 index: _selectedIndex,
                 children: [
-                  MarketsScreen(controller: _market),
+                  MarketsScreen(controller: _market,
+                    onSymbolSelected: (symbol) => setState(() {
+                      _requestedChartSymbol = symbol.code;
+                      _selectedIndex = 1;
+                    })),
                   ChartScreen(controller: _market, journal: _journal,
+                    requestedSymbolCode: _requestedChartSymbol,
                     active: _selectedIndex == 1,
                     onOpenAccount: () => setState(() => _selectedIndex = 3)),
                   ResultsScreen(controller: _market, journal: _journal),

@@ -44,13 +44,13 @@ jobs:
           old = ('applicationId = "com.example.tradelab_flutter"' if script.suffix == '.kts'
                  else 'applicationId "com.example.tradelab_flutter"')
           if source.count(old) != 1: raise SystemExit('Unexpected applicationId, cannot safely isolate test APK')
-          script.write_text(source.replace(old, old.replace('com.example.tradelab_flutter', 'com.example.tradelab_flutter.test')))
+          script.write_text(source.replace(old, old.replace('com.example.tradelab_flutter', 'com.example.tradelab_flutter.test2')))
           manifest = Path('android/app/src/main/AndroidManifest.xml')
           ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
           tree = ET.parse(manifest)
           app = tree.getroot().find('application')
           if app is None: raise SystemExit('Android manifest application element missing')
-          app.set('{http://schemas.android.com/apk/res/android}label', 'TradeLab Test')
+          app.set('{http://schemas.android.com/apk/res/android}label', 'TradeLab Test 2')
           tree.write(manifest, encoding='utf-8', xml_declaration=True)
           PY
       - name: Fetch dependencies
@@ -60,6 +60,10 @@ jobs:
       - name: Execute combined Flutter regression suite
         run: |
           flutter test \
+            test/chart_mobile_controls_test.dart \
+            test/markets_chart_navigation_test.dart \
+            test/chart_panel_settings_test.dart \
+            test/chart_symbol_settings_test.dart \
             test/chart_annotations_test.dart \
             test/chart_feed_health_test.dart \
             test/chart_frame_profiler_test.dart \
@@ -117,7 +121,7 @@ jobs:
           unzip -t "$apk" >/dev/null
           tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           "$tools_dir/apksigner" verify --verbose "$apk"
-          "$tools_dir/aapt" dump badging "$apk" | grep -F "package: name='com.example.tradelab_flutter.test'"
+          "$tools_dir/aapt" dump badging "$apk" | grep -F "package: name='com.example.tradelab_flutter.test2'"
           cp "$apk" build/app/outputs/flutter-apk/TradeLab-Android-Test.apk
           sha256sum build/app/outputs/flutter-apk/TradeLab-Android-Test.apk > build/app/outputs/flutter-apk/TradeLab-Android-Test.apk.sha256
       - name: Upload APK and SHA256 to Actions
@@ -141,4 +145,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --prerelease \
             --title "TradeLab Android Test ${GITHUB_SHA:0:12}" \
-            --notes "Unmerged integration candidate of PRs 445-448. Install side by side; separate package com.example.tradelab_flutter.test. Locally signed CI test APK. CI validates source and APK integrity but does not prove cTrader OAuth, Range parity or physical Android performance."
+            --notes "Unmerged integration candidate of PRs 445-448. Install side by side; separate package com.example.tradelab_flutter.test2. Locally signed CI test APK. CI validates source and APK integrity but does not prove cTrader OAuth, Range parity or physical Android performance."

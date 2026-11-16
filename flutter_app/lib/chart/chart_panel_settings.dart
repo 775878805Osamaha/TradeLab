@@ -36,7 +36,7 @@ class ChartPanelSettings {
     this.paneButtons = ChartButtonVisibility.onTap,
     this.topMarginPercent = 10,
     this.bottomMarginPercent = 8,
-    this.rightMarginBars = 10,
+    this.rightMarginBars = 4,
     this.verticalGridVisible = false,
     this.horizontalGridVisible = false,
     this.backgroundColor = 0xFFFFFFFF,
