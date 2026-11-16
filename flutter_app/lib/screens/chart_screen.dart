@@ -3618,6 +3618,18 @@ class _ChartScreenState extends State<ChartScreen>
         child: LayoutBuilder(builder: (context, constraints) {
           final plotWidth = math.max(1.0, constraints.maxWidth - 61);
           _momentumPlotWidth = plotWidth;
+          final selecting = _replaySelectingStart && candles.isNotEmpty &&
+              _replayCandidateIndex < candles.length &&
+              _replayCandidateIndex < _replaySourceTimestamps.length;
+          final replayLineX = selecting
+              ? _viewport.chartX(index: _replayCandidateIndex,
+                  candleCount: candles.length, plotWidth: plotWidth)
+              : 0.0;
+          final replayLineY = selecting
+              ? _priceScale(candles, plotWidth,
+                  math.max(1.0, constraints.maxHeight - 24))
+                  .y(candles[_replayCandidateIndex].close)
+              : 0.0;
           return Stack(children: [
           Positioned.fill(child: GestureDetector(
             key: const Key('chart-gesture-area'),
@@ -4033,6 +4045,52 @@ class _ChartScreenState extends State<ChartScreen>
               ),
             ),
           )),
+          // Blue Replay cursor is a visual overlay over verified history;
+          // it cannot modify prices or reveal future bars after confirmation.
+          if (selecting)
+            Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
+              child: CustomPaint(
+                key: const Key('replay-start-overlay'),
+                size: Size.infinite,
+                painter: ReplayStartOverlayPainter(
+                  cursorX: replayLineX,
+                  plotWidth: plotWidth,
+                  dark: Theme.of(context).brightness == Brightness.dark),
+              ),
+            ))),
+          if (selecting && replayLineX >= 0 && replayLineX <= plotWidth)
+            Positioned(
+              left: (replayLineX - 15)
+                  .clamp(0.0, math.max(0.0, plotWidth - 30)).toDouble(),
+              top: (replayLineY - 15).clamp(35.0,
+                  math.max(35.0, constraints.maxHeight - 48)).toDouble(),
+              child: const IgnorePointer(child: Icon(
+                Icons.content_cut, key: Key('replay-start-scissors'),
+                color: Color(0xFF171717), size: 28)),
+            ),
+          if (selecting)
+            Positioned(
+              left: 6, top: 7,
+              child: IgnorePointer(child: Container(
+                key: const Key('replay-start-time'),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface
+                    .withValues(alpha: .92),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 5),
+                child: Text(
+                  'UTC ${DateTime.fromMillisecondsSinceEpoch(
+                    _replaySourceTimestamps[_replayCandidateIndex],
+                    isUtc: true).toIso8601String().substring(0, 16)
+                      .replaceFirst('T', ' ')}',
+                  textDirection: TextDirection.ltr,
+                  style: const TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.w600),
+                ),
+              )),
+            ),
           if (_drawingsVisible && candles.isNotEmpty && _rectangles.isNotEmpty)
             Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
               child: CustomPaint(
