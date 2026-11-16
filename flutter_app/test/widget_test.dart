@@ -366,6 +366,14 @@ void main() {
     expect(find.byKey(const Key('chart-source-empty')), findsNothing);
     await tester.tap(find.byTooltip('تشغيل Replay داخل الشارت'));
     await tester.pumpAndSettle();
+    // Replay first lets the user choose a verified source candle: no
+    // historical future data is hidden or training session opened until OK.
+    expect(find.byKey(const Key('replay-start-overlay')), findsOneWidget);
+    expect(find.byKey(const Key('replay-start-scissors')), findsOneWidget);
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
+    await tester.tap(find.byKey(const Key('replay-confirm-start')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-start-overlay')), findsNothing);
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
     await tester.tap(find.byTooltip('إغلاق Replay'));
     await tester.pumpAndSettle();
@@ -417,6 +425,14 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('analysis-action-replay')));
     await tester.tap(find.byKey(const Key('analysis-action-replay')));
     await tester.pumpAndSettle();
+    // Replay first lets the user choose a verified source candle: no
+    // historical future data is hidden or training session opened until OK.
+    expect(find.byKey(const Key('replay-start-overlay')), findsOneWidget);
+    expect(find.byKey(const Key('replay-start-scissors')), findsOneWidget);
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
+    await tester.tap(find.byKey(const Key('replay-confirm-start')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-start-overlay')), findsNothing);
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
     expect(chart, findsOneWidget);
     expect(historyRequests, 1);
