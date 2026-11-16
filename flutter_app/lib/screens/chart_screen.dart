@@ -26,6 +26,7 @@ import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/chart_time_axis_label_layout.dart';
+import '../chart/chart_historical_time_zone.dart';
 import '../chart/candle_prefix.dart';
 import '../replay/replay_playback_speed.dart';
 import '../replay/replay_mobile_controls.dart';
@@ -4755,7 +4756,10 @@ class _CandleChartPainter extends CustomPainter {
       final timeAxisLayout = ChartTimeAxisLabelLayout(plotWidth: axis);
       final fontSize = math.max(9, panel.axisTextSize - 2).toDouble();
       final labelColor = Color(panel.axisTextColor);
-      final zoneLabel = symbolSettings.timeZone.labelAt(DateTime.now().toUtc());
+      final zoneLabel = ChartHistoricalTimeZone.labelAtVisibleBar(
+          zone: symbolSettings.timeZone,
+          timestampsUtcMs: timestamps,
+          lastVisibleIndex: ending - 1);
       final zoneWidth = math.min(120.0, axis * .30);
       if (zoneWidth > 24) {
         final zonePainter = TextPainter(
