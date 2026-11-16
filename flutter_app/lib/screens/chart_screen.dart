@@ -114,7 +114,10 @@ class _ChartScreenState extends State<ChartScreen>
   String _symbol = 'XAUUSD';
   String _timeframe = '1m';
   ChartMode _mode = ChartMode.candles;
-  int _rangeTicks = 1000;
+  // A 1000-point default often leaves only a single verified BID Range bar
+  // in the available tick window. Start at a visible, selectable 25 points;
+  // every larger/smaller cTrader preset remains available to the user.
+  int _rangeTicks = 25;
   bool _replay = false;
   bool _drawing = false;
   bool _drawingsVisible = true;
@@ -1972,6 +1975,8 @@ class _ChartScreenState extends State<ChartScreen>
           padding: const EdgeInsets.all(16),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const TradeSectionTitle('إعدادات شموع المدى'),
+            const Text('البدء المقترح: 25 نقطة. تتفاوت كثافة الشموع حسب الرمز والوسيط.',
+              textDirection: TextDirection.rtl),
             const Text(
               'المقاس الأكبر قد ينتج شموعًا أقل. اختر مدى أصغر لعرض حركة '
               'أكثر تفصيلًا من تيكات BID الموثقة؛ لا تُنشأ بيانات افتراضية.',
