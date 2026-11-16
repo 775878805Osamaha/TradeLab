@@ -85,6 +85,42 @@ void main() {
     ), isFalse, reason: 'Clock changes must not create request bursts');
   });
 
+  test('empty initial OHLC history retries after two minutes, not each poll',
+      () {
+    const initialAttempt = 1000000;
+    for (final seconds in [0, 30, 60, 90, 119]) {
+      expect(ChartFeedHealth.shouldRetryEmptyHistory(
+        nowMs: initialAttempt + seconds * 1000,
+        lastAttemptMs: initialAttempt,
+      ), isFalse, reason: 'No extra network call after $seconds seconds');
+    }
+    expect(ChartFeedHealth.shouldRetryEmptyHistory(
+      nowMs: initialAttempt + 120000,
+      lastAttemptMs: initialAttempt,
+    ), isTrue);
+    // A failed retry updates the attempt timestamp, resetting the throttle.
+    expect(ChartFeedHealth.shouldRetryEmptyHistory(
+      nowMs: initialAttempt + 150000,
+      lastAttemptMs: initialAttempt + 120000,
+    ), isFalse);
+    expect(ChartFeedHealth.shouldRetryEmptyHistory(
+      nowMs: initialAttempt + 240000,
+      lastAttemptMs: initialAttempt + 120000,
+    ), isTrue);
+  });
+
+  test('empty-history recovery rejects invalid or reversed device clock', () {
+    expect(ChartFeedHealth.shouldRetryEmptyHistory(
+      nowMs: 0, lastAttemptMs: 0), isFalse);
+    expect(ChartFeedHealth.shouldRetryEmptyHistory(
+      nowMs: 100000, lastAttemptMs: -1), isFalse);
+    expect(ChartFeedHealth.shouldRetryEmptyHistory(
+      nowMs: 100000, lastAttemptMs: 110000), isFalse);
+    expect(ChartFeedHealth.shouldRetryEmptyHistory(
+      nowMs: 500000, lastAttemptMs: 100000,
+      minimumIntervalMs: 0), isFalse);
+  });
+
   test('no evidence, invalid dates or unknown frames never claim lag', () {
     expect(ChartFeedHealth.closedCandlesLagging(
       latestClosedOpenMs: null, timeframe: '1m', nowMs: 1000), isFalse);
