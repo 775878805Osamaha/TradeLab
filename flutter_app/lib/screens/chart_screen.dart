@@ -554,7 +554,12 @@ class _ChartScreenState extends State<ChartScreen>
         _loadRealHistory();
         unawaited(_refreshSelectedCTraderQuote());
       }
-      if (!linked && _selectedSymbol.source == TradeSource.ctrader) {
+      if ((!linked || !widget.active) &&
+          _selectedSymbol.source == TradeSource.ctrader) {
+        // The chart is retained in IndexedStack while hidden. An account
+        // change must invalidate old account candles and pending futures even
+        // if the new account remains connected. When the tab is reopened,
+        // didUpdateWidget() will fetch the new account's verified history.
         _loadRevision++;
         _recordTraining();
         _stopPlayback();
