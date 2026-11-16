@@ -3074,6 +3074,26 @@ class _ChartScreenState extends State<ChartScreen>
                 minWidth: 34, minHeight: 36),
               padding: EdgeInsets.zero,
             ),
+              // Discoverable without moving the historical horizontal toolbar.
+          ChartQuickActions(
+            onCandles: _showCandleSettings,
+            onChartType: _showChartTypePicker,
+            onReplay: _toggleReplay,
+            onDrawingTools: _showDrawingTools,
+            onAnalysis: _showAnalysisHub,
+            onAppearance: _showChartAppearance,
+            onIndicators: _showIndicatorCatalog,
+            onMove: _enableMoveChart,
+            onLatest: () {
+              _momentum.stop();
+              setState(() {
+                _viewport = _viewport.jumpToLatest();
+                _crosshair = null;
+              });
+            },
+            onRange: _showRangeSettings,
+            rangeMode: _mode == ChartMode.range,
+          ),
           ]),
         ),
       ]),
@@ -3164,27 +3184,6 @@ class _ChartScreenState extends State<ChartScreen>
             style: const TextStyle(fontSize: 17,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF333333))),
-        ),
-        // Horizontal tools are still available, but phone users no longer
-        // need to discover a hidden sideways scroll to reach essential actions.
-        ChartQuickActions(
-          onCandles: _showCandleSettings,
-          onChartType: _showChartTypePicker,
-          onReplay: _toggleReplay,
-          onDrawingTools: _showDrawingTools,
-          onAnalysis: _showAnalysisHub,
-          onAppearance: _showChartAppearance,
-          onIndicators: _showIndicatorCatalog,
-          onMove: _enableMoveChart,
-          onLatest: () {
-            _momentum.stop();
-            setState(() {
-              _viewport = _viewport.jumpToLatest();
-              _crosshair = null;
-            });
-          },
-          onRange: _showRangeSettings,
-          rangeMode: _mode == ChartMode.range,
         ),
         // Most used controls remain in the first 390dp; extra tools scroll.
         _iconAction(icon: Icons.bar_chart_outlined,
