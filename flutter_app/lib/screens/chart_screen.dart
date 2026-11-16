@@ -1478,69 +1478,264 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
-  void _toggleReplay() {
-    _momentum.stop();
-    if (_totalBars < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('حمّل شمعتين مكتملتين على الأقل قبل بدء Replay.')));
+  List<int> get _replaySourceTimestamps =>
+      _mode == ChartMode.range ? _rangeBarTimestamps : _actualTimestamps;
+
+  void _replayMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message, textDirection: TextDirection.rtl)));
+  }
+
+  /// Replay is staged: show full verified historical candles with a draggable
+  /// timestamped start cursor. No future candle is hidden until confirmation.
+  void _enterReplayStartSelection() {
+    final times = _replaySourceTimestamps;
+    if (_totalBars < 2 ||
+        !ReplayStartResolver.hasVerifiedTimes(times, _totalBars)) {
+      _replayMessage('يتطلب تحديد بداية Replay شمعتين مغلقتين '
+          'بتوقيت موثق من مصدر السوق. حمّل بيانات الرمز أولًا.');
       return;
     }
-    if (_replay) _recordTraining();
+    _momentum.stop();
+    final plotWidth = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
+    final index = ReplayStartResolver.atX(
+      viewport: _viewport,
+      x: plotWidth * .5,
+      plotWidth: plotWidth,
+      candleCount: _replayMarketCandles.length,
+      completedCount: _totalBars,
+      fallbackIndex: math.max(0, _totalBars - 2));
     setState(() {
-        _stopPlayback();
-        if (!_replay) {
-          _training.clear();
-          _trainingEverTraded = false;
-          _trainingSessionId =
-              DateTime.now().toUtc().microsecondsSinceEpoch.toString();
-          _trainingSourceKey =
-              '${_selectedSymbol.source.name}:'
-              '${widget.controller.accountId ?? 'public'}:'
-              '$_symbol:$_timeframe:${_mode.name}';
-          // Drawings created after the Replay cutoff could expose future
-          // information. Keep analysis objects separately until Replay ends.
-          _analysisLevels = List<double>.of(_levels);
-          _analysisPatterns = List<ChartPattern>.of(_patterns);
-          _analysisShortPositions = List<ChartShortPosition>.of(_shortPositions);
-          _analysisRectangles = List<ChartPriceRectangle>.of(_rectangles);
-          _levels.clear();
-          _patterns.clear();
-          _shortPositions.clear();
-          _rectangles.clear();
-        } else {
-          _levels..clear()..addAll(_analysisLevels);
-          _patterns..clear()..addAll(_analysisPatterns);
-          _shortPositions..clear()..addAll(_analysisShortPositions);
-          _rectangles..clear()..addAll(_analysisRectangles);
-        }
-        _replay = !_replay;
-        _visibleThrough = math.max(1, _totalBars ~/ 2);
-        if (_replay) {
-          _training.moveTo(_replayMarketCandles, _visibleThrough);
-        } else {
-          // Snapshot is already queued above. Do not allow dispose() or a
-          // stale timer callback to replace it with an empty in-memory state.
-          _training.clear();
-          _trainingEverTraded = false;
-          _trainingSessionId = '';
-          _trainingSourceKey = '';
-        }
-        _viewport = _freshViewport();
-        _crosshair = null;
-        _selectedLine = null;
-        _selectedPattern = null;
-        _selectedShort = null;
-        _selectedRectangle = null;
-        _placingShort = false;
-        _placingRectangle = false;
-        _rectangleFirstCorner = null;
-        _shortEntryAnchor = null;
-        _shortStopPrice = null;
-        _pendingAnchor = null;
-        _secondChannelAnchor = null;
-        _lineUndo.clear();
-        _lineRedo.clear();
-      });
+      _stopPlayback();
+      _replaySelectingStart = true;
+      _replayDraggingStart = false;
+      _replayCandidateIndex = index;
+      _crosshair = null;
+      // While selecting, the complete market history remains visible (muted
+      // to the right of the cursor). Avoid confusing drawing edit gestures.
+      _drawing = false;
+    });
+  }
+
+  void _confirmReplayStart() {
+    if (!_replaySelectingStart || _replay) return;
+    if (!ReplayStartResolver.hasVerifiedTimes(
+        _replaySourceTimestamps, _totalBars)) {
+      _replayMessage('تعذر التحقق من توقيت العمود التاريخي المحدد.');
+      return;
+    }
+    final oldCount = _replayMarketCandles.length;
+    final selected = _replayCandidateIndex.clamp(
+        0, ReplayStartResolver.maxStart(_totalBars)).toInt();
+    // Assert the selected bar belongs to actual broker/source timestamps.
+    ReplayStartResolver.timestampAt(
+        _replaySourceTimestamps, selected, _totalBars);
+    _momentum.stop();
+    setState(() {
+      _stopPlayback();
+      _training.clear();
+      _trainingEverTraded = false;
+      _trainingSessionId =
+          DateTime.now().toUtc().microsecondsSinceEpoch.toString();
+      _trainingSourceKey =
+          '${_selectedSymbol.source.name}:'
+          '${widget.controller.accountId ?? 'public'}:'
+          '$_symbol:$_timeframe:${_mode.name}';
+      // Analysis objects can refer to the future. Keep them separately and
+      // show only fresh drawings placed inside the actual Replay timeline.
+      _analysisLevels = List<double>.of(_levels);
+      _analysisPatterns = List<ChartPattern>.of(_patterns);
+      _analysisShortPositions = List<ChartShortPosition>.of(_shortPositions);
+      _analysisRectangles = List<ChartPriceRectangle>.of(_rectangles);
+      _levels.clear();
+      _patterns.clear();
+      _shortPositions.clear();
+      _rectangles.clear();
+      _replaySelectingStart = false;
+      _replayDraggingStart = false;
+      _replay = true;
+      _replayInitialCount = selected + 1;
+      _visibleThrough = _replayInitialCount;
+      _training.moveTo(_replayMarketCandles, _visibleThrough);
+      // Preserve the selected candle's visual x after switching the painter
+      // from full history to the strict (future-free) CandlePrefix.
+      final plotWidth = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
+      final minScroll = -plotWidth / _viewport.barWidth * .68;
+      final scroll = (_viewport.scrollBars + _visibleThrough - oldCount)
+          .clamp(minScroll, (_visibleThrough - 1).toDouble()).toDouble();
+      _viewport = ChartViewport(
+        barWidth: _viewport.barWidth,
+        scrollBars: scroll,
+        rightMarginBars: _viewport.rightMarginBars);
+      _crosshair = null;
+      _selectedLine = null;
+      _selectedPattern = null;
+      _selectedShort = null;
+      _selectedRectangle = null;
+      _lineUndo.clear();
+      _lineRedo.clear();
+    });
+  }
+
+  void _exitReplay() {
+    if (!_replay && !_replaySelectingStart) return;
+    if (_replay) _recordTraining();
+    _momentum.stop();
+    setState(() {
+      _stopPlayback();
+      if (_replay) {
+        _levels..clear()..addAll(_analysisLevels);
+        _patterns..clear()..addAll(_analysisPatterns);
+        _shortPositions..clear()..addAll(_analysisShortPositions);
+        _rectangles..clear()..addAll(_analysisRectangles);
+      }
+      _replay = false;
+      _replaySelectingStart = false;
+      _replayDraggingStart = false;
+      _training.clear();
+      _trainingEverTraded = false;
+      _trainingSessionId = '';
+      _trainingSourceKey = '';
+      _viewport = _viewport.jumpToLatest();
+      _crosshair = null;
+      _selectedLine = null;
+      _selectedPattern = null;
+      _selectedShort = null;
+      _selectedRectangle = null;
+      _placingShort = false;
+      _placingRectangle = false;
+      _rectangleFirstCorner = null;
+      _shortEntryAnchor = null;
+      _shortStopPrice = null;
+      _pendingAnchor = null;
+      _secondChannelAnchor = null;
+      _lineUndo.clear();
+      _lineRedo.clear();
+    });
+  }
+
+  void _toggleReplay() {
+    if (_replay || _replaySelectingStart) {
+      _exitReplay();
+    } else {
+      _enterReplayStartSelection();
+    }
+  }
+
+  Future<void> _chooseReplayStartAgain() async {
+    if (_replay && _training.trades.isNotEmpty) {
+      _stopPlayback();
+      final approve = await showDialog<bool>(context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('اختيار بداية جديدة'),
+          content: const Text('لديك صفقات تدريب في هذه الجلسة. '
+              'اختيار بداية جديدة سيبدأ جلسة مستقلة؛ '
+              'ستُحفظ الجلسة السابقة في الأرشيف المحلي.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('حفظ وبدء جلسة جديدة')),
+          ]));
+      if (approve != true || !mounted) return;
+    }
+    _exitReplay();
+    if (mounted) _enterReplayStartSelection();
+  }
+
+  Future<void> _chooseReplayStartDate() async {
+    if (!_replaySelectingStart) {
+      await _chooseReplayStartAgain();
+    }
+    if (!mounted || !_replaySelectingStart) return;
+    final timestamps = _replaySourceTimestamps;
+    if (!ReplayStartResolver.hasVerifiedTimes(timestamps, _totalBars)) return;
+    final first = DateTime.fromMillisecondsSinceEpoch(timestamps.first);
+    final last = DateTime.fromMillisecondsSinceEpoch(
+        timestamps[ReplayStartResolver.maxStart(_totalBars)]);
+    final date = await showDatePicker(
+      context: context,
+      firstDate: DateTime(first.year, first.month, first.day),
+      lastDate: DateTime(last.year, last.month, last.day),
+      initialDate: DateTime.fromMillisecondsSinceEpoch(
+        timestamps[_replayCandidateIndex]),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+        DateTime.fromMillisecondsSinceEpoch(
+            timestamps[_replayCandidateIndex])),
+    );
+    if (time == null || !mounted) return;
+    final candidate = DateTime(date.year, date.month, date.day,
+        time.hour, time.minute).toUtc().millisecondsSinceEpoch;
+    final index = ReplayStartResolver.atOrBefore(
+        timestamps, _totalBars, candidate);
+    if (index < 0) {
+      _replayMessage('لا توجد شمعة موثقة قبل هذا التاريخ ضمن البيانات المحمّلة.');
+      return;
+    }
+    setState(() => _replayCandidateIndex = index);
+  }
+
+  void _handleReplayStartMenu(ReplayStartMenuAction action) {
+    if (action == ReplayStartMenuAction.toggleTrading) {
+      setState(() => _replayShowTradingButtons = !_replayShowTradingButtons);
+      return;
+    }
+    if (action == ReplayStartMenuAction.date) {
+      unawaited(_chooseReplayStartDate());
+      return;
+    }
+    if (_replay) {
+      unawaited(_chooseReplayStartAgain());
+      return;
+    }
+    if (!_replaySelectingStart) return;
+    switch (action) {
+      case ReplayStartMenuAction.column:
+        break; // Return to dragging the already timestamp-anchored cursor.
+      case ReplayStartMenuAction.earliest:
+        setState(() => _replayCandidateIndex = 0);
+        _replayMessage('تم اختيار أقدم شمعة موثقة محمّلة. '
+            'يمكن تحميل تاريخ أقدم إن أتاحه مصدر السوق.');
+        break;
+      case ReplayStartMenuAction.random:
+        final max = ReplayStartResolver.maxStart(_totalBars);
+        setState(() => _replayCandidateIndex = math.Random().nextInt(max + 1));
+        break;
+      case ReplayStartMenuAction.date:
+      case ReplayStartMenuAction.toggleTrading:
+        break;
+    }
+  }
+
+  void _handleReplayIntervalMenu(ReplayStepMenuAction action) {
+    switch (action) {
+      case ReplayStepMenuAction.currentBar:
+        _replayMessage('التقدم يتم بشمعة مصدر واحدة مكتملة. '
+            'لا يتم اختراع تيكات أو حركة داخلية.');
+        break;
+      case ReplayStepMenuAction.auto:
+        setState(() => _replayAutoStep = !_replayAutoStep);
+        break;
+      case ReplayStepMenuAction.information:
+        _replayMessage('تقدم Replay الحالي يعتمد الشموع التاريخية المغلقة فقط. '
+            'تقدم التيك أو الثانية يحتاج إلى بيانات تاريخية أدق من المصدر.');
+        break;
+    }
+  }
+
+  void _resetReplayToStart() {
+    if (!_replay) return;
+    if (_training.trades.isNotEmpty) {
+      _replayMessage('يوجد سجل صفقات؛ الرجوع سيُزيل الصفقات المستقبلية '
+          'من الجلسة الحالية. استخدم بدء جلسة جديدة أو تابع بأمان.');
+      return;
+    }
+    _seekReplay(_replayInitialCount);
   }
 
   void _togglePlay() {
