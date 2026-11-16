@@ -2970,7 +2970,7 @@ class _ChartScreenState extends State<ChartScreen>
               style: OutlinedButton.styleFrom(
                 foregroundColor: ink,
                 minimumSize: const Size(0, 37),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 side: BorderSide(color: Theme.of(context).dividerColor),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8))),
@@ -2986,7 +2986,7 @@ class _ChartScreenState extends State<ChartScreen>
               icon: Icon(Icons.pan_tool_alt_outlined,
                 size: 21, color: !_drawing ? TradeColors.blue : ink),
               constraints: const BoxConstraints(
-                minWidth: 36, minHeight: 36),
+                minWidth: 34, minHeight: 36),
               padding: EdgeInsets.zero,
             ),
             IconButton(
@@ -2995,7 +2995,7 @@ class _ChartScreenState extends State<ChartScreen>
               onPressed: () => _zoomBy(1.25),
               icon: Icon(Icons.add_circle_outline, color: ink, size: 21),
               constraints: const BoxConstraints(
-                minWidth: 36, minHeight: 36),
+                minWidth: 34, minHeight: 36),
               padding: EdgeInsets.zero,
             ),
             IconButton(
@@ -3004,7 +3004,7 @@ class _ChartScreenState extends State<ChartScreen>
               onPressed: () => _zoomBy(.8),
               icon: Icon(Icons.remove_circle_outline, color: ink, size: 21),
               constraints: const BoxConstraints(
-                minWidth: 36, minHeight: 36),
+                minWidth: 34, minHeight: 36),
               padding: EdgeInsets.zero,
             ),
             IconButton(
@@ -3016,7 +3016,7 @@ class _ChartScreenState extends State<ChartScreen>
               },
               icon: Icon(Icons.last_page_outlined, color: ink, size: 21),
               constraints: const BoxConstraints(
-                minWidth: 36, minHeight: 36),
+                minWidth: 34, minHeight: 36),
               padding: EdgeInsets.zero,
             ),
           ]),
@@ -3145,14 +3145,14 @@ class _ChartScreenState extends State<ChartScreen>
             (_panelSettings.paneButtons == ChartButtonVisibility.onTap &&
               _panelChartTouched)) ...[
           _iconAction(icon: Icons.zoom_in_outlined,
-              label: 'تكبير الشارت', onPressed: () => _zoomBy(1.25)),
+              label: 'تكبير الشارت من الشريط', onPressed: () => _zoomBy(1.25)),
           _iconAction(icon: Icons.zoom_out_outlined,
-              label: 'تصغير الشارت', onPressed: () => _zoomBy(.8)),
+              label: 'تصغير الشارت من الشريط', onPressed: () => _zoomBy(.8)),
         ],
         if (_panelSettings.navigationButtons == ChartButtonVisibility.always ||
             (_panelSettings.navigationButtons == ChartButtonVisibility.onTap &&
               _panelChartTouched))
-          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
+          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة من الشريط',
               onPressed: () {
                 _momentum.stop();
                 setState(() => _viewport = _viewport.jumpToLatest());
