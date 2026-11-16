@@ -12,9 +12,14 @@ typedef ReplayPracticeOrder = ({
 });
 
 class ReplayTrainingOrderDialog extends StatefulWidget {
-  const ReplayTrainingOrderDialog({required this.entryPrice, super.key});
+  const ReplayTrainingOrderDialog({
+    required this.entryPrice,
+    this.initialSide = ReplaySide.buy,
+    super.key,
+  });
 
   final double entryPrice;
+  final ReplaySide initialSide;
 
   @override
   State<ReplayTrainingOrderDialog> createState() =>
@@ -25,7 +30,7 @@ class _ReplayTrainingOrderDialogState extends State<ReplayTrainingOrderDialog> {
   final _quantity = TextEditingController(text: '1');
   final _stop = TextEditingController();
   final _target = TextEditingController();
-  ReplaySide _side = ReplaySide.buy;
+  late ReplaySide _side = widget.initialSide;
   String? _error;
 
   static double? _parsePrice(String raw) =>

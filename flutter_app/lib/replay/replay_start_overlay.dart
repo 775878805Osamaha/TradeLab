@@ -16,8 +16,10 @@ class ReplayStartOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final width = plotWidth.clamp(0.0, size.width).toDouble();
+    if (!cursorX.isFinite || width < 1) return;
+    // Offscreen historical selection must NOT appear falsely pinned to an
+    // edge while the user pans/zooms to a different point in the timeline.
     final x = cursorX.clamp(0.0, width).toDouble();
-    if (width < 1) return;
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, width, size.height));
     // Future remains visible ONLY during the choosing stage and is clearly
@@ -27,11 +29,13 @@ class ReplayStartOverlayPainter extends CustomPainter {
       Paint()..color = (dark ? Colors.black : Colors.white)
           .withValues(alpha: .70),
     );
-    canvas.drawLine(Offset(x, 0), Offset(x, size.height),
-      Paint()
-        ..color = const Color(0xFF2962FF)
-        ..strokeWidth = 2.7
-        ..isAntiAlias = true);
+    if (cursorX >= 0 && cursorX <= width) {
+      canvas.drawLine(Offset(cursorX, 0), Offset(cursorX, size.height),
+        Paint()
+          ..color = const Color(0xFF2962FF)
+          ..strokeWidth = 2.7
+          ..isAntiAlias = true);
+    }
     canvas.restore();
   }
 
