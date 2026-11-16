@@ -18,6 +18,10 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
 - cTrader quote notifications repaint only read-only BID/ASK labels; they do not
   change OHLC, chart pan/zoom, Replay or drawing data. Price source timestamps
   remain separate from the most recent *closed* candle timestamp.
+- Concurrent chart and Markets requests keep the most recent verified
+  source-timestamped BID/ASK even when an older network response finishes last.
+  A failed batch refresh cannot erase a newer chart quote from the same account;
+  invalid/expired prices still disappear under the existing freshness policy.
 - The visible chart polls only its selected cTrader quote (read-only) at most
   once a minute, and reuses an existing fresh quote from Markets. Hidden
   IndexedStack chart tabs make no scheduled market requests; returning to the
