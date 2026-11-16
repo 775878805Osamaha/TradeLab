@@ -24,6 +24,7 @@ void main() {
       expect(find.byKey(const Key('chart-zoom-in')), findsOneWidget);
       expect(find.byKey(const Key('chart-zoom-out')), findsOneWidget);
       expect(find.byKey(const Key('chart-back-to-live')), findsOneWidget);
+      expect(find.byKey(const Key('chart-quick-actions')), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('chart-candle-settings-action')));
       await tester.pumpAndSettle();
@@ -50,6 +51,18 @@ void main() {
       await tester.tap(find.byKey(const Key('chart-zoom-out')));
       await tester.tap(find.byKey(const Key('chart-back-to-live')));
       await tester.pumpAndSettle();
+      // The overflow menu exposes real actions without horizontal scrolling.
+      await tester.tap(find.byKey(const Key('chart-quick-actions')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('chart-quick-candles')), findsOneWidget);
+      expect(find.byKey(const Key('chart-quick-appearance')), findsOneWidget);
+      expect(find.byKey(const Key('chart-quick-drawing-tools')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('chart-quick-candles')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('chart-symbol-settings-page')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('symbol-cancel')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
