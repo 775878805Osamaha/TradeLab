@@ -59,6 +59,7 @@ jobs:
             test/replay_training_order_dialog_test.dart \
             test/paper_ledger_test.dart \
             test/paper_journal_controller_test.dart \
+            test/paper_journal_sqlite_test.dart \
             test/paper_trade_service_test.dart \
             test/results_connection_test.dart \
             test/paper_results_flow_test.dart \
