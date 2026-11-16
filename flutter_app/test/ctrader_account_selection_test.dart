@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -75,7 +75,7 @@ void main() {
       if (path == '/v1/accounts') {
         return http.Response(jsonEncode({'accounts': [
           {'accountId': '101', 'broker': 'Broker A', 'isLive': false},
-          {'accountId': '202', 'broker': 'Broker B', 'isLive': false},
+          {'accountId': '202', 'broker': 'Broker B International Brokerage Services and Trade', 'isLive': false},
         ]}), 200);
       }
       if (path == '/v1/symbols') {
@@ -113,6 +113,12 @@ void main() {
     expect(newQuote.bid, 3882);
     expect(controller.recentQuoteFor(gold)!.bid, 3882);
 
+    // Return to the ORIGINAL account before the old request completes.
+    // Account IDs and tokens now match the old call, so only the session
+    // epoch can prevent its stale quote from being accepted.
+    controller.chooseAccount('101');
+    expect(controller.recentQuoteFor(gold), isNull);
+
     // Register the error expectation before releasing the deferred response:
     // no unhandled asynchronous broker failures are allowed in the test.
     final oldQuoteRejected = expectLater(oldPriceRequest,
@@ -123,9 +129,9 @@ void main() {
       'timestamp': DateTime.now().toUtc().millisecondsSinceEpoch,
     }), 200));
     await oldQuoteRejected;
-    expect(controller.accountId, '202');
-    expect(controller.recentQuoteFor(gold)!.bid, 3882,
-        reason: 'An old account cannot overwrite a freshly verified quote');
+    expect(controller.accountId, '101');
+    expect(controller.recentQuoteFor(gold), isNull,
+        reason: 'The old A request must be rejected after A → B → A');
   });
 
   testWidgets('hidden cTrader chart refetches the chosen account on return',
@@ -142,7 +148,7 @@ void main() {
       if (path == '/v1/accounts') {
         return http.Response(jsonEncode({'accounts': [
           {'accountId': '101', 'broker': 'Broker A', 'isLive': false},
-          {'accountId': '202', 'broker': 'Broker B', 'isLive': false},
+          {'accountId': '202', 'broker': 'Broker B International Brokerage Services and Trade', 'isLive': false},
         ]}), 200);
       }
       if (path == '/v1/symbols') {
