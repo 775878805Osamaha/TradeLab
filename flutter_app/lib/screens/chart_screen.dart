@@ -32,6 +32,7 @@ import '../replay/replay_playback_speed.dart';
 import '../replay/replay_mobile_controls.dart';
 import '../replay/replay_start_overlay.dart';
 import '../replay/replay_start_resolver.dart';
+import '../replay/replay_date_time_resolver.dart';
 import '../replay/replay_training_session.dart';
 import '../replay/replay_training_order_dialog.dart';
 import '../replay/replay_training_archive.dart';
@@ -1705,26 +1706,70 @@ class _ChartScreenState extends State<ChartScreen>
     if (!mounted || !_replaySelectingStart) return;
     final timestamps = _replaySourceTimestamps;
     if (!ReplayStartResolver.hasVerifiedTimes(timestamps, _totalBars)) return;
-    final first = DateTime.fromMillisecondsSinceEpoch(timestamps.first);
-    final last = DateTime.fromMillisecondsSinceEpoch(
-        timestamps[ReplayStartResolver.maxStart(_totalBars)]);
+    final zone = _symbolSettings.timeZone;
+    final first = ReplayDateTimeResolver.displayWallTime(
+        zone, timestamps.first);
+    final last = ReplayDateTimeResolver.displayWallTime(
+        zone, timestamps[ReplayStartResolver.maxStart(_totalBars)]);
+    final initial = ReplayDateTimeResolver.displayWallTime(
+        zone, timestamps[_replayCandidateIndex]);
+    // Date and time on the picker MUST use the chart's configured zone.
+    // The previous implementation used the device timezone even when chart
+    // axis was configured for New York (wrong at historical DST boundaries).
     final date = await showDatePicker(
       context: context,
+      helpText: 'اختر التاريخ بتوقيت ${zone.nameArabic}',
       firstDate: DateTime(first.year, first.month, first.day),
       lastDate: DateTime(last.year, last.month, last.day),
-      initialDate: DateTime.fromMillisecondsSinceEpoch(
-        timestamps[_replayCandidateIndex]),
+      initialDate: DateTime(initial.year, initial.month, initial.day),
     );
-    if (date == null || !mounted) return;
+    if (date == null || !mounted || !_replaySelectingStart) return;
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(
-        DateTime.fromMillisecondsSinceEpoch(
-            timestamps[_replayCandidateIndex])),
+      helpText: 'الساعة والدقيقة بتوقيت ${zone.nameArabic}',
+      initialTime: TimeOfDay.fromDateTime(initial),
     );
-    if (time == null || !mounted) return;
-    final candidate = DateTime(date.year, date.month, date.day,
-        time.hour, time.minute).toUtc().millisecondsSinceEpoch;
+    if (time == null || !mounted || !_replaySelectingStart) return;
+    final candidates = ReplayDateTimeResolver.utcCandidates(
+      zone: zone, year: date.year, month: date.month, day: date.day,
+      hour: time.hour, minute: time.minute);
+    if (candidates.isEmpty) {
+      _replayMessage('هذا الوقت غير موجود في توقيت ${zone.nameArabic} '
+          'بسبب انتقال الساعة أو تاريخ غير صالح. اختر وقتًا آخر.');
+      return;
+    }
+    int? candidate;
+    if (candidates.length == 1) {
+      candidate = candidates.single;
+    } else {
+      // November DST fall-back repeats the same 01:xx clock time twice.
+      // A historical trade decision must not silently pick one of them.
+      candidate = await showDialog<int>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('وقت تاريخي مكرر'),
+          content: const Text('يحدث هذا الوقت مرتين عند تغيير '
+              'التوقيت الصيفي. اختر وقت السوق المقصود:'),
+          actions: [
+            for (final instant in candidates)
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, instant),
+                child: Text(
+                  '${zone.labelAt(DateTime.fromMillisecondsSinceEpoch(
+                      instant, isUtc: true))} · '
+                  '${DateTime.fromMillisecondsSinceEpoch(
+                      instant, isUtc: true).toIso8601String()
+                      .substring(0, 16)} UTC',
+                  textDirection: TextDirection.ltr),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء')),
+          ],
+        ),
+      );
+    }
+    if (candidate == null || !mounted || !_replaySelectingStart) return;
     final index = ReplayStartResolver.atOrBefore(
         timestamps, _totalBars, candidate);
     if (index < 0) {

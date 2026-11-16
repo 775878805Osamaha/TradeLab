@@ -63,6 +63,7 @@ jobs:
             test/replay_mobile_controls_test.dart \
             test/replay_playback_speed_test.dart \
             test/chart_historical_time_zone_test.dart \
+            test/replay_date_time_resolver_test.dart \
             test/replay_training_session_test.dart \
             test/replay_training_archive_test.dart \
             test/replay_training_widget_test.dart \
