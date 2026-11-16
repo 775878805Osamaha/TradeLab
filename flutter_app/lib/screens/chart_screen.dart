@@ -1012,6 +1012,23 @@ class _ChartScreenState extends State<ChartScreen>
           : null;
       final timeline = await RangeBarTimeline.buildAsync(combined, _rangeTicks * point);
       if (!mounted || revision != _loadRevision) return;
+      // The start selection is not yet a playback cutoff, but it still owns
+      // one VERIFIED BID event. Prepending older ticks may shift every Range
+      // bar; never leave the cursor attached to a stale bar index.
+      final remappedStart = _replaySelectingStart
+          ? timeline.rebaseReplayStart(
+              oldEndTickIndices: _rangeBarEndTickIndices,
+              oldSelectedIndex: _replayCandidateIndex,
+              prependedTicks: prefix.length,
+            )
+          : null;
+      if (_replaySelectingStart && remappedStart == null) {
+        _olderLoadError =
+            'أحدث التاريخ الأقدم بداية جديدة لشموع المدى، ولا توجد '
+            'شمعة مغلقة عند تيك البداية المختار. أعد تحديد العمود '
+            'قبل متابعة Replay، ولم نعرض بيانات مستقبلية.';
+        return; // Retain the original source and original cursor.
+      }
       // Range bars are not time candles: after prepending BID events, a bar's
       // index can move non-uniformly. Rebase each drawing endpoint to its
       // original market event while keeping its real price unchanged.
@@ -1110,6 +1127,9 @@ class _ChartScreenState extends State<ChartScreen>
         _actualRange = timeline.bars;
         _rangeBarEndTickIndices = timeline.endTickIndices;
         _rangeBarTimestamps = timeline.endTimestamps;
+        if (_replaySelectingStart && remappedStart != null) {
+          _replayCandidateIndex = remappedStart;
+        }
         _patterns..clear()..addAll(rebasedPatterns);
         _analysisPatterns = rebasedAnalysis;
         _shortPositions..clear()..addAll(rebasedShorts);
