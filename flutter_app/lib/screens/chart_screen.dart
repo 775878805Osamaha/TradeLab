@@ -1723,13 +1723,23 @@ class _ChartScreenState extends State<ChartScreen>
       return;
     }
     if (_replay) {
-      unawaited(_chooseReplayStartAgain());
+      // Choosing "random" or "earliest" during active Replay must REALLY
+      // apply that choice after the user approves replacing the session.
+      unawaited(_chooseReplayStartAgain().then((_) {
+        if (mounted && _replaySelectingStart) {
+          _applyReplayStartMenuChoice(action);
+        }
+      }));
       return;
     }
+    _applyReplayStartMenuChoice(action);
+  }
+
+  void _applyReplayStartMenuChoice(ReplayStartMenuAction action) {
     if (!_replaySelectingStart) return;
     switch (action) {
       case ReplayStartMenuAction.column:
-        break; // Return to dragging the already timestamp-anchored cursor.
+        break; // The cursor can already be dragged or moved by tapping.
       case ReplayStartMenuAction.earliest:
         setState(() => _replayCandidateIndex = 0);
         _replayMessage('تم اختيار أقدم شمعة موثقة محمّلة. '
