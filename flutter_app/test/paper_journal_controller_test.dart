@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/paper/paper_journal_controller.dart';
 import 'package:tradelab_flutter/paper/paper_journal_store.dart';
@@ -39,6 +41,32 @@ class _FakeStore implements PaperJournalStore {
       List.of(entries[accountKey] ?? []);
 }
 
+/// Delays only the first write, allowing deterministic button double-tap
+/// and broker-account-switch races without any local SQLite fixture.
+class _DelayedStore extends _FakeStore {
+  final saveGate = Completer<void>();
+  int started = 0;
+  @override
+  Future<void> add(LedgerEntry entry) async {
+    started++;
+    if (started == 1) await saveGate.future;
+    await super.add(entry);
+  }
+}
+
+class _DelayedCloseStore extends _FakeStore {
+  final closeGate = Completer<void>();
+  int closeStarted = 0;
+  @override
+  Future<void> closeTrade(String accountKey, int id,
+      {required double exitPrice, required int timestampMs}) async {
+    closeStarted++;
+    await closeGate.future;
+    await super.closeTrade(accountKey, id,
+      exitPrice: exitPrice, timestampMs: timestampMs);
+  }
+}
+
 void main() {
   test('switching cTrader accounts isolates local paper journal entries', () async {
     final journal = PaperJournalController(store: _FakeStore());
@@ -53,4 +81,87 @@ void main() {
     await journal.useAccount('123');
     expect(journal.entries.single.amount, 1000);
   });
+
+  test('double-tapping save never inserts a duplicate local paper entry',
+      () async {
+    final store = _DelayedStore();
+    final journal = PaperJournalController(store: store);
+    addTearDown(journal.dispose);
+    await journal.useAccount('101');
+    final entry = LedgerEntry(id: 0, accountKey: journal.accountKey,
+      kind: LedgerKind.deposit, timestampMs: 1700000000000, amount: 1000);
+
+    final first = journal.add(entry);
+    expect(journal.busy, isTrue,
+      reason: 'The write lock must engage synchronously before the first await');
+    await expectLater(journal.add(entry), throwsStateError);
+    expect(store.started, 1);
+    expect(journal.entries, isEmpty);
+
+    store.saveGate.complete();
+    await first;
+    expect(journal.busy, isFalse);
+    expect(journal.entries, hasLength(1));
+    expect(store.entries['ctrader:101'], hasLength(1));
+  });
+
+  test('account switching during a save never publishes the old journal',
+      () async {
+    final store = _DelayedStore();
+    final journal = PaperJournalController(store: store);
+    addTearDown(journal.dispose);
+    await journal.useAccount('101');
+    final entry = LedgerEntry(id: 0, accountKey: journal.accountKey,
+      kind: LedgerKind.deposit, timestampMs: 1700000000000, amount: 250);
+    final first = journal.add(entry);
+
+    await journal.useAccount('202');
+    expect(journal.accountKey, 'ctrader:202');
+    expect(journal.entries, isEmpty);
+    expect(journal.busy, isTrue,
+        reason: 'An in-flight write remains locked even after new-account read');
+    await expectLater(journal.add(LedgerEntry(
+      id: 0, accountKey: journal.accountKey, kind: LedgerKind.deposit,
+      timestampMs: 1700000000000, amount: 500)), throwsStateError);
+
+    store.saveGate.complete();
+    await first;
+    expect(journal.busy, isFalse);
+    expect(journal.entries, isEmpty,
+      reason: 'The completed write belongs to the old broker scope');
+    await journal.useAccount('101');
+    expect(journal.entries.single.amount, 250);
+    await journal.useAccount('202');
+    expect(journal.entries, isEmpty);
+  });
+
+  test('duplicate close and delete cannot race a pending position close',
+      () async {
+    final store = _DelayedCloseStore();
+    final journal = PaperJournalController(store: store);
+    addTearDown(journal.dispose);
+    await journal.useAccount('101');
+    const position = LedgerEntry(
+      id: 1, accountKey: 'ctrader:101', kind: LedgerKind.openTrade,
+      timestampMs: 1700000000000, openedAtMs: 1700000000000,
+      symbol: 'XAUUSD', side: PaperSide.buy, quantity: 1,
+      entryPrice: 2000);
+    await journal.add(position);
+
+    final first = journal.closeTrade(position,
+      exitPrice: 2020, timestampMs: 1700000005000);
+    expect(journal.busy, isTrue);
+    await expectLater(journal.closeTrade(position,
+      exitPrice: 2020, timestampMs: 1700000005000), throwsStateError);
+    await expectLater(journal.delete(position.id), throwsStateError);
+    expect(store.closeStarted, 1);
+    store.closeGate.complete();
+    await first;
+
+    expect(journal.busy, isFalse);
+    expect(journal.entries, hasLength(1));
+    expect(journal.entries.single.kind, LedgerKind.closedTrade);
+    expect(journal.entries.single.realizedPnl, 20);
+  });
+
 }
