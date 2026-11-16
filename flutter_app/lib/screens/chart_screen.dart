@@ -65,7 +65,8 @@ typedef _DrawingSnapshot = (List<double>, List<ChartPattern>,
 class ChartScreen extends StatefulWidget {
   const ChartScreen({required this.controller, this.journal,
     this.onOpenAccount, this.requestedSymbolCode = 'XAUUSD',
-    this.active = true, super.key});
+    this.active = true, this.focusMode = false,
+    this.onToggleFocusMode, super.key});
   final MarketController controller;
   final PaperJournalController? journal;
   final VoidCallback? onOpenAccount;
@@ -74,6 +75,9 @@ class ChartScreen extends StatefulWidget {
   final String requestedSymbolCode;
   /// False while kept alive but hidden inside the bottom-tab IndexedStack.
   final bool active;
+  /// Expand the same chart viewport, never remount or reload source history.
+  final bool focusMode;
+  final VoidCallback? onToggleFocusMode;
 
   @override
   State<ChartScreen> createState() => _ChartScreenState();
@@ -3154,7 +3158,53 @@ class _ChartScreenState extends State<ChartScreen>
     },
     onRange: _showRangeSettings,
     rangeMode: _mode == ChartMode.range,
+    onFocusMode: widget.onToggleFocusMode,
+    focusMode: widget.focusMode,
   );
+
+  /// The chart keeps its controller, drawings, broker history and Replay
+  /// cursor when the shell hides navigation; only presentation changes.
+  Widget _focusedChartHeader(List<TradeCandle> candles) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      key: const Key('chart-focus-header'),
+      height: 48,
+      color: colors.surface,
+      child: Row(children: [
+        IconButton(
+          key: const Key('chart-focus-exit'),
+          tooltip: 'الخروج من وضع الشارت الموسع',
+          onPressed: widget.onToggleFocusMode,
+          icon: const Icon(Icons.fullscreen_exit, size: 24),
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          padding: EdgeInsets.zero,
+        ),
+        Expanded(
+          child: Text(_symbol, textDirection: TextDirection.ltr,
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontWeight: FontWeight.w800,
+              fontSize: 16, color: colors.onSurface)),
+        ),
+        if (candles.isNotEmpty)
+          Icon(Icons.verified_outlined, size: 17,
+            color: colors.primary),
+        TextButton(
+          key: const Key('chart-focus-timeframe'),
+          onPressed: _showTimeframePicker,
+          child: Text(_timeframe == '1m' ? '1 دق' : _timeframe),
+        ),
+        IconButton(
+          key: const Key('symbol-picker'),
+          tooltip: 'اختيار رمز الشارت',
+          onPressed: _showSymbolPicker,
+          icon: const Icon(Icons.search, size: 22),
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          padding: EdgeInsets.zero,
+        ),
+        _buildChartQuickActions(),
+      ]),
+    );
+  }
 
   Widget _referenceChartToolbar(Color surface) => Container(
     key: const Key('chart-reference-toolbar'),
@@ -3317,7 +3367,9 @@ class _ChartScreenState extends State<ChartScreen>
     final surface = colors.surface;
     final chartHint = _activeChartHint;
     return Column(children: [
-      _referenceChartHeader(candles),
+      widget.focusMode
+        ? _focusedChartHeader(candles)
+        : _referenceChartHeader(candles),
       if (_mode == ChartMode.range)
         Container(
           width: double.infinity,
@@ -3822,7 +3874,7 @@ class _ChartScreenState extends State<ChartScreen>
       // time axis, as in the supplied mobile reference.
       // No broker-info or drawing-hint footer: chart tools meet navigation.
       // Active drawing guidance now overlays the chart without using height.
-      _referenceChartToolbar(surface),
+      if (!widget.focusMode) _referenceChartToolbar(surface),
       if (_replay) _replayControls(context),
     ]);
   }
