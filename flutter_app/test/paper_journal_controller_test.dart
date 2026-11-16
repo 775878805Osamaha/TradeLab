@@ -67,6 +67,58 @@ class _DelayedCloseStore extends _FakeStore {
   }
 }
 
+/// A write that reaches durable storage but loses its acknowledgement.
+/// The controller must re-read the record before surfacing the error.
+class _CommitThenFailStore extends _FakeStore {
+  @override
+  Future<void> add(LedgerEntry entry) async {
+    await super.add(entry);
+    throw StateError('network-style acknowledgement lost after local commit');
+  }
+}
+
+/// Mimics an interrupted view lifecycle while the store is writing.
+class _DisposeDuringWriteStore extends _FakeStore {
+  final gate = Completer<void>();
+  final closed = Completer<void>();
+  bool committed = false;
+  bool closedBeforeCommit = false;
+
+  @override
+  Future<void> add(LedgerEntry entry) async {
+    await gate.future;
+    await super.add(entry);
+    committed = true;
+  }
+
+  @override
+  Future<void> close() async {
+    closedBeforeCommit = !committed;
+    closed.complete();
+  }
+}
+
+class _DisposeDuringReadStore extends _FakeStore {
+  final readGate = Completer<void>();
+  final closed = Completer<void>();
+  bool readCompleted = false;
+  bool closedBeforeRead = false;
+
+  @override
+  Future<List<LedgerEntry>> list(String accountKey) async {
+    await readGate.future;
+    final result = await super.list(accountKey);
+    readCompleted = true;
+    return result;
+  }
+
+  @override
+  Future<void> close() async {
+    closedBeforeRead = !readCompleted;
+    closed.complete();
+  }
+}
+
 void main() {
   test('switching cTrader accounts isolates local paper journal entries', () async {
     final journal = PaperJournalController(store: _FakeStore());
@@ -162,6 +214,59 @@ void main() {
     expect(journal.entries, hasLength(1));
     expect(journal.entries.single.kind, LedgerKind.closedTrade);
     expect(journal.entries.single.realizedPnl, 20);
+  });
+
+
+  test('a committed row remains visible when its write acknowledgement fails',
+      () async {
+    final store = _CommitThenFailStore();
+    final journal = PaperJournalController(store: store);
+    addTearDown(journal.dispose);
+    await journal.useAccount('101');
+    final entry = LedgerEntry(
+      id: 0, accountKey: journal.accountKey,
+      kind: LedgerKind.deposit, timestampMs: 1700000000000, amount: 125);
+    await expectLater(journal.add(entry), throwsStateError);
+    expect(journal.busy, isFalse);
+    expect(journal.entries, hasLength(1),
+        reason: 'After an uncertain write, read actual SQLite state');
+    expect(journal.entries.single.amount, 125);
+    expect(store.entries['ctrader:101'], hasLength(1));
+  });
+
+  test('dispose waits for a pending write before closing the database',
+      () async {
+    final store = _DisposeDuringWriteStore();
+    final journal = PaperJournalController(store: store);
+    await journal.useAccount('101');
+    final saving = journal.add(LedgerEntry(
+      id: 0, accountKey: journal.accountKey,
+      kind: LedgerKind.deposit, timestampMs: 1700000000000, amount: 42));
+    expect(journal.busy, isTrue);
+
+    journal.dispose();
+    expect(store.closed.isCompleted, isFalse,
+        reason: 'Never close SQLite while its commit is pending');
+    store.gate.complete();
+    await saving;
+    await store.closed.future.timeout(const Duration(seconds: 2));
+    expect(store.committed, isTrue);
+    expect(store.closedBeforeCommit, isFalse);
+    expect(store.entries['ctrader:101'], hasLength(1));
+  });
+
+  test('dispose waits for a pending journal read before closing the database',
+      () async {
+    final store = _DisposeDuringReadStore();
+    final journal = PaperJournalController(store: store);
+    final loading = journal.useAccount('101');
+    expect(journal.busy, isTrue);
+    journal.dispose();
+    expect(store.closed.isCompleted, isFalse);
+    store.readGate.complete();
+    await loading;
+    await store.closed.future.timeout(const Duration(seconds: 2));
+    expect(store.closedBeforeRead, isFalse);
   });
 
 }
