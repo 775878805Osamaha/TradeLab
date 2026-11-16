@@ -17,6 +17,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+      expect(
+        tester.getSize(find.byKey(const Key('chart-reference-header'))).height,
+        width < 360 ? 104 : 84,
+        reason: 'Header adapts to the constrained phone viewport',
+      );
       expect(find.byKey(const Key('chart-candle-settings-action')),
           findsOneWidget,
           reason: 'The prior inert numeric button has been replaced');
