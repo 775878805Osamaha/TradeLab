@@ -61,6 +61,7 @@ jobs:
         run: |
           flutter test \
             test/chart_mobile_controls_test.dart \
+            test/chart_range_initial_preset_test.dart \
             test/chart_focus_mode_test.dart \
             test/markets_chart_navigation_test.dart \
             test/chart_panel_settings_test.dart \
