@@ -53,6 +53,21 @@ abstract final class ChartFeedHealth {
     return true;
   }
 
+  /// A missing initial OHLC history can recover automatically, but a broker
+  /// outage must never cause a request every frame/30-second poll. The first
+  /// attempted reload is delayed until the configured interval has elapsed.
+  static bool shouldRetryEmptyHistory({
+    required int nowMs,
+    required int lastAttemptMs,
+    int minimumIntervalMs = 120000,
+  }) {
+    if (nowMs <= 0 || lastAttemptMs < 0 || minimumIntervalMs <= 0 ||
+        nowMs < lastAttemptMs) {
+      return false;
+    }
+    return nowMs - lastAttemptMs >= minimumIntervalMs;
+  }
+
   /// A closed-bar open can be older than the current BID without being wrong:
   /// the newest forming bar has deliberately NOT been appended. Only flag
   /// a lag beyond three frame intervals (minimum ten minutes).
