@@ -60,6 +60,9 @@ jobs:
       - name: Execute combined Flutter regression suite
         run: |
           flutter test \
+            test/chart_mobile_controls_test.dart \
+            test/chart_panel_settings_test.dart \
+            test/chart_symbol_settings_test.dart \
             test/chart_annotations_test.dart \
             test/chart_feed_health_test.dart \
             test/chart_frame_profiler_test.dart \
