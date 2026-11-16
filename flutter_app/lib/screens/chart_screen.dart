@@ -1970,10 +1970,14 @@ class _ChartScreenState extends State<ChartScreen>
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      // The default 9/16-height modal clipped the wrapped 9-size Range picker
+      // on phones, causing a real 35px RenderFlex overflow at 390dp.
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
             const TradeSectionTitle('إعدادات شموع المدى'),
             const Text('البدء المقترح: 25 نقطة. تتفاوت كثافة الشموع حسب الرمز والوسيط.',
               textDirection: TextDirection.rtl),
@@ -2014,7 +2018,8 @@ class _ChartScreenState extends State<ChartScreen>
                 ),
             ]),
             const SizedBox(height: 16),
-          ]),
+            ]),
+          ),
         ),
       ),
     );
