@@ -8,6 +8,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/market_controller.dart';
 import 'package:tradelab_flutter/main.dart';
+import 'package:tradelab_flutter/replay/replay_training_session.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -69,6 +70,23 @@ void main() {
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
     expect(find.byKey(const Key('replay-speed-picker')), findsOneWidget);
     expect(find.byKey(const Key('replay-practice-order')), findsOneWidget);
+
+    expect(find.byKey(const Key('replay-inline-trading')), findsOneWidget);
+    expect(find.byKey(const Key('replay-inline-buy')), findsOneWidget);
+    expect(find.byKey(const Key('replay-inline-sell')), findsOneWidget);
+    final flatten = tester.widget<OutlinedButton>(
+        find.byKey(const Key('replay-flatten-trades')));
+    expect(flatten.onPressed, isNull,
+        reason: 'No open practice position may be flattened');
+
+    await tester.tap(find.byKey(const Key('replay-inline-sell')));
+    await tester.pumpAndSettle();
+    expect(find.text('صفقة تدريب داخل Replay'), findsOneWidget);
+    expect(tester.widget<DropdownButton<ReplaySide>>(
+        find.byKey(const Key('replay-trade-side'))).value, ReplaySide.sell,
+        reason: 'Sell ticket preselects SELL, never silently opens BUY');
+    await tester.tap(find.text('إلغاء').last);
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('replay-practice-order')));
     await tester.pumpAndSettle();
