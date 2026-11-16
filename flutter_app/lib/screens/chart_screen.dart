@@ -3631,6 +3631,15 @@ class _ChartScreenState extends State<ChartScreen>
               _touchGesture = ChartTouchGesture();
               _gestureFocalX = details.localFocalPoint.dx;
               _gestureFocalY = details.localFocalPoint.dy;
+              // A touch on the blue Replay line edits the candidate. Touches
+              // elsewhere still pan the chart; a second finger still pinches.
+              final lineX = _viewport.chartX(
+                index: _replayCandidateIndex,
+                candleCount: candles.length,
+                plotWidth: plotWidth);
+              _replayDraggingStart = _replaySelectingStart &&
+                  details.pointerCount == 1 &&
+                  (details.localFocalPoint.dx - lineX).abs() <= 28;
               _draggingShortHandle = null;
               _shortAtDragStart = null;
               _draggingRectangle = false;
@@ -3689,6 +3698,24 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onScaleUpdate: (details) {
+              if (_replaySelectingStart && _replayDraggingStart) {
+                if (details.pointerCount == 1) {
+                  final candidate = ReplayStartResolver.atX(
+                    viewport: _viewport,
+                    x: details.localFocalPoint.dx,
+                    plotWidth: plotWidth,
+                    candleCount: candles.length,
+                    completedCount: _totalBars,
+                    fallbackIndex: _replayCandidateIndex,
+                  );
+                  if (candidate != _replayCandidateIndex) {
+                    setState(() => _replayCandidateIndex = candidate);
+                  }
+                  return;
+                }
+                // Let two-finger pinch take over, with the touch rebased.
+                _replayDraggingStart = false;
+              }
               final nextViewport = _touchGesture.update(
                 viewport: _viewport,
                 pointerCount: details.pointerCount,
@@ -3760,8 +3787,10 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onScaleEnd: (details) {
-              final editing = _draggingLine || _draggingPattern ||
+              final editing = _replayDraggingStart || _draggingLine ||
+                  _draggingPattern ||
                   _draggingShortHandle != null || _draggingRectangle;
+              _replayDraggingStart = false;
               _draggingLine = false;
               _draggingPattern = false;
               _patternAtDragStart = null;
@@ -3793,6 +3822,18 @@ class _ChartScreenState extends State<ChartScreen>
             onLongPressMoveUpdate: (details) => setState(() => _crosshair = details.localPosition),
             onLongPressEnd: (_) => setState(() => _crosshair = null),
             onTapUp: (details) {
+              if (_replaySelectingStart &&
+                  details.localPosition.dx <= plotWidth) {
+                final candidate = ReplayStartResolver.atX(
+                  viewport: _viewport,
+                  x: details.localPosition.dx,
+                  plotWidth: plotWidth,
+                  candleCount: candles.length,
+                  completedCount: _totalBars,
+                  fallbackIndex: _replayCandidateIndex);
+                setState(() => _replayCandidateIndex = candidate);
+                return;
+              }
               if (!_drawing || _drawingsLocked ||
                   details.localPosition.dx > plotWidth) return;
               final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
