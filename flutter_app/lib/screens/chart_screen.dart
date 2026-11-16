@@ -1964,6 +1964,17 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showRangeSettings({bool reloadOnChange = true}) async {
+    // Broker-verified BID events, not a guess from the chart appearance.
+    final bidTickCount = _rangeHistoryTicks.length;
+    final rangeBarCount = _actualRange.length;
+    final latestTick = bidTickCount == 0
+        ? 'غير متاح'
+        : _utcMinuteLabel(_rangeHistoryTicks.last.timestamp);
+    final canLoadOlder = _mode == ChartMode.range &&
+        _liveRequested && _rangeSourceSupported &&
+        widget.controller.accountId != null &&
+        bidTickCount > 0 && !_loading && !_olderLoading &&
+        !_historyExhausted && !_replay;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -1972,6 +1983,48 @@ class _ChartScreenState extends State<ChartScreen>
           padding: const EdgeInsets.all(16),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const TradeSectionTitle('إعدادات شموع المدى'),
+            Container(
+              key: const Key('range-bid-source-status'),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: TradeColors.blue.withValues(alpha: .06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: TradeColors.blue.withValues(alpha: .17))),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('مصدر بيانات المدى: cTrader BID',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 5),
+                  Text('تيكات BID الموثقة: $bidTickCount'),
+                  Text('شموع المدى المستخرجة: $rangeBarCount'),
+                  Text('آخر تيك موثق: $latestTick'),
+                  if (bidTickCount == 0)
+                    Text(_liveRequested
+                        ? 'لم تصل تيكات BID موثقة. تحقّق من اتصال الوسيط '
+                          'أو أعد التحميل؛ لن يتم إنشاء شموع من بيانات غير موجودة.'
+                        : 'اربط حساب cTrader أولًا لتحميل تيكات BID الحقيقية.',
+                      style: const TextStyle(fontSize: 12)),
+                  if (canLoadOlder)
+                    TextButton.icon(
+                      key: const Key('range-load-older-action'),
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        unawaited(_loadOlderRangeHistory());
+                      },
+                      icon: const Icon(Icons.history),
+                      label: const Text('تحميل تاريخ BID أقدم موثّق'),
+                    ),
+                  if (_historyExhausted && bidTickCount > 0)
+                    const Text('وصل تحميل الصفحات إلى الحد المتاح. '
+                      'لا يمكن اختلاق تاريخ إضافي.',
+                      style: TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 9),
             const Text(
               'المقاس الأكبر قد ينتج شموعًا أقل. اختر مدى أصغر لعرض حركة '
               'أكثر تفصيلًا من تيكات BID الموثقة؛ لا تُنشأ بيانات افتراضية.',
