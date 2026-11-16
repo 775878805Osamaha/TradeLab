@@ -10,7 +10,10 @@ class PaperJournalController extends ChangeNotifier {
   String _accountKey = 'local:guest';
   String get accountKey => _accountKey;
   List<LedgerEntry> entries = const [];
-  bool busy = false;
+  bool _loading = false;
+  bool _writing = false;
+  /// True for a pending SQLite read OR write, including a post-write refresh.
+  bool get busy => _loading || _writing;
   String? error;
   int _revision = 0;
 
@@ -24,7 +27,7 @@ class PaperJournalController extends ChangeNotifier {
   Future<void> refresh() async {
     final revision = ++_revision;
     final key = _accountKey;
-    busy = true;
+    _loading = true;
     error = null;
     entries = const [];
     notifyListeners();
@@ -35,30 +38,51 @@ class PaperJournalController extends ChangeNotifier {
       if (revision == _revision) error = 'تعذر فتح دفتر التداول المحلي. لم تُنشأ بيانات وهمية.';
     } finally {
       if (revision == _revision) {
-        busy = false;
+        _loading = false;
         notifyListeners();
       }
     }
   }
 
-  Future<void> add(LedgerEntry entry) async {
-    if (busy || entry.accountKey != _accountKey) {
+  /// Locks journal writes from their first synchronous step through the
+  /// committed local readback. A second tap cannot insert two identical
+  /// practice positions or race a close/delete against the first write.
+  ///
+  /// An account switch is allowed while SQLite finishes its already-started
+  /// operation. The operation remains scoped to the ORIGINAL account, and
+  /// must not refresh an unrelated account after the write completes.
+  Future<void> _writeForAccount(
+      String scope, Future<void> Function() action) async {
+    if (busy || scope != _accountKey) {
       throw StateError('الدفتر غير جاهز أو تغيّر الحساب.');
     }
+    _writing = true;
+    notifyListeners();
+    try {
+      await action();
+      if (_accountKey == scope) {
+        await refresh();
+      }
+    } finally {
+      _writing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> add(LedgerEntry entry) async {
     entry.validate();
-    await _store.add(entry);
-    await refresh();
+    await _writeForAccount(entry.accountKey, () => _store.add(entry));
   }
 
   Future<void> delete(int id) async {
-    if (busy) throw StateError('انتظر حتى يكتمل تحميل الدفتر.');
-    await _store.delete(_accountKey, id);
-    await refresh();
+    if (id <= 0) throw const FormatException('معرّف القيد غير صالح.');
+    final scope = _accountKey;
+    await _writeForAccount(scope, () => _store.delete(scope, id));
   }
 
   Future<void> closeTrade(LedgerEntry position,
       {required double exitPrice, required int timestampMs}) async {
-    if (busy || position.accountKey != _accountKey ||
+    if (position.accountKey != _accountKey ||
         position.kind != LedgerKind.openTrade) {
       throw StateError('المركز ليس مفتوحًا في الدفتر الحالي.');
     }
@@ -66,9 +90,9 @@ class PaperJournalController extends ChangeNotifier {
         !exitPrice.isFinite) {
       throw const FormatException('سعر الخروج أو تاريخه غير صالح.');
     }
-    await _store.closeTrade(_accountKey, position.id,
-      exitPrice: exitPrice, timestampMs: timestampMs);
-    await refresh();
+    final scope = position.accountKey;
+    await _writeForAccount(scope, () => _store.closeTrade(scope, position.id,
+        exitPrice: exitPrice, timestampMs: timestampMs));
   }
 
   @override
