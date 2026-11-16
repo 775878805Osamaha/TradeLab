@@ -163,4 +163,59 @@ void main() {
       anchorPrice: 101,
     ), isNull);
   });
+
+  test('Range Replay start stays tied to historical BID event after prepend', () {
+    final oldTicks = [
+      MarketTick(100, 100),
+      MarketTick(101, 102.4),
+      MarketTick(102, 102.8),
+      MarketTick(103, 102),
+      MarketTick(104, 120),
+    ];
+    final oldTimeline = RangeBarTimeline.build(oldTicks, 1);
+    expect(oldTimeline.closedBarCount, greaterThanOrEqualTo(2));
+    const selectedIndex = 1;
+    final oldEvent = oldTimeline.endTickIndices[selectedIndex];
+    final prefix = [
+      MarketTick(90, 98),
+      MarketTick(91, 99),
+      MarketTick(92, 100),
+    ];
+    final newTimeline =
+        RangeBarTimeline.build([...prefix, ...oldTicks], 1);
+    final remapped = newTimeline.rebaseReplayStart(
+      oldEndTickIndices: oldTimeline.endTickIndices,
+      oldSelectedIndex: selectedIndex,
+      prependedTicks: prefix.length,
+    );
+    expect(remapped, isNotNull);
+    expect(remapped, lessThan(newTimeline.closedBarCount));
+    expect(newTimeline.endTickIndices[remapped!],
+        lessThanOrEqualTo(oldEvent + prefix.length),
+        reason: 'Candidate must not require a BID event after old start');
+  });
+
+  test('Range Replay start fails closed when rebuilt bar needs future BID', () {
+    final old = RangeBarTimeline.build([
+      MarketTick(100, 100),
+      MarketTick(101, 101),
+      MarketTick(102, 102),
+    ], 1);
+    final rebuilt = RangeBarTimeline.build([
+      MarketTick(90, 100.5),
+      MarketTick(100, 100),
+      MarketTick(101, 101),
+      MarketTick(102, 102),
+    ], 1);
+    expect(rebuilt.rebaseReplayStart(
+      oldEndTickIndices: old.endTickIndices,
+      oldSelectedIndex: 0,
+      prependedTicks: 1,
+    ), isNull);
+    expect(rebuilt.rebaseReplayStart(
+      oldEndTickIndices: old.endTickIndices,
+      oldSelectedIndex: -1,
+      prependedTicks: 1,
+    ), isNull);
+  });
 }

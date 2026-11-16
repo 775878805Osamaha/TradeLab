@@ -26,6 +26,7 @@ import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/chart_time_axis_label_layout.dart';
+import '../chart/chart_historical_time_zone.dart';
 import '../chart/candle_prefix.dart';
 import '../replay/replay_playback_speed.dart';
 import '../replay/replay_mobile_controls.dart';
@@ -1012,6 +1013,23 @@ class _ChartScreenState extends State<ChartScreen>
           : null;
       final timeline = await RangeBarTimeline.buildAsync(combined, _rangeTicks * point);
       if (!mounted || revision != _loadRevision) return;
+      // The start selection is not yet a playback cutoff, but it still owns
+      // one VERIFIED BID event. Prepending older ticks may shift every Range
+      // bar; never leave the cursor attached to a stale bar index.
+      final remappedStart = _replaySelectingStart
+          ? timeline.rebaseReplayStart(
+              oldEndTickIndices: _rangeBarEndTickIndices,
+              oldSelectedIndex: _replayCandidateIndex,
+              prependedTicks: prefix.length,
+            )
+          : null;
+      if (_replaySelectingStart && remappedStart == null) {
+        _olderLoadError =
+            'أحدث التاريخ الأقدم بداية جديدة لشموع المدى، ولا توجد '
+            'شمعة مغلقة عند تيك البداية المختار. أعد تحديد العمود '
+            'قبل متابعة Replay، ولم نعرض بيانات مستقبلية.';
+        return; // Retain the original source and original cursor.
+      }
       // Range bars are not time candles: after prepending BID events, a bar's
       // index can move non-uniformly. Rebase each drawing endpoint to its
       // original market event while keeping its real price unchanged.
@@ -1110,6 +1128,9 @@ class _ChartScreenState extends State<ChartScreen>
         _actualRange = timeline.bars;
         _rangeBarEndTickIndices = timeline.endTickIndices;
         _rangeBarTimestamps = timeline.endTimestamps;
+        if (_replaySelectingStart && remappedStart != null) {
+          _replayCandidateIndex = remappedStart;
+        }
         _patterns..clear()..addAll(rebasedPatterns);
         _analysisPatterns = rebasedAnalysis;
         _shortPositions..clear()..addAll(rebasedShorts);
@@ -4735,7 +4756,10 @@ class _CandleChartPainter extends CustomPainter {
       final timeAxisLayout = ChartTimeAxisLabelLayout(plotWidth: axis);
       final fontSize = math.max(9, panel.axisTextSize - 2).toDouble();
       final labelColor = Color(panel.axisTextColor);
-      final zoneLabel = symbolSettings.timeZone.labelAt(DateTime.now().toUtc());
+      final zoneLabel = ChartHistoricalTimeZone.labelAtVisibleBar(
+          zone: symbolSettings.timeZone,
+          timestampsUtcMs: timestamps,
+          lastVisibleIndex: ending - 1);
       final zoneWidth = math.min(120.0, axis * .30);
       if (zoneWidth > 24) {
         final zonePainter = TextPainter(
