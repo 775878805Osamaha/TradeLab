@@ -20,15 +20,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('chart-type-bottom-sheet')), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('chart-kind-range')),
-      200,
-      scrollable: find.descendant(
-        of: find.byKey(const Key('chart-type-grid')),
-        matching: find.byType(Scrollable),
-      ),
-    );
-    await tester.tap(find.byKey(const Key('chart-kind-range')));
+    // The last grid row is initially clipped by the physical phone height.
+    // Scroll the grid far enough to make the CENTER hit-testable, not merely
+    // built by the lazy GridView.
+    await tester.drag(find.byKey(const Key('chart-type-grid')),
+        const Offset(0, -280));
+    await tester.pumpAndSettle();
+    final rangeCard = find.byKey(const Key('chart-kind-range'));
+    expect(rangeCard, findsOneWidget);
+    expect(tester.getCenter(rangeCard).dy, lessThan(760));
+    await tester.tap(rangeCard);
     await tester.pumpAndSettle();
 
     expect(find.text('إعدادات شموع المدى'), findsOneWidget);
