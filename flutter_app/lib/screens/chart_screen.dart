@@ -2939,6 +2939,7 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Widget _referenceChartHeader(List<TradeCandle> candles) {
+    final compactWidth = MediaQuery.sizeOf(context).width < 360;
     final hasVerifiedPrices = candles.isNotEmpty;
     final fetchingRangeTicks = _mode == ChartMode.range &&
         _loading && _liveRequested && !hasVerifiedPrices;
@@ -2950,7 +2951,7 @@ class _ChartScreenState extends State<ChartScreen>
         ? 'USDT' : 'USD';
     return Container(
       key: const Key('chart-reference-header'),
-      height: 84,
+      height: compactWidth ? 104 : 84,
       color: Theme.of(context).colorScheme.surface,
       child: Stack(children: [
         Positioned(left: 8, top: 4, child: Row(children: [
@@ -2974,6 +2975,8 @@ class _ChartScreenState extends State<ChartScreen>
                 color: Color(0xFFAB2373), size: 19),
           ),
         ])),
+        if (compactWidth)
+          Positioned(left: 65, top: 2, child: _buildChartQuickActions()),
         Positioned(right: 5, top: 4, child: OutlinedButton.icon(
           onPressed: _showSymbolPicker,
           style: OutlinedButton.styleFrom(
@@ -2988,7 +2991,7 @@ class _ChartScreenState extends State<ChartScreen>
           label: Text(quoteCurrency, textDirection: TextDirection.ltr,
               style: const TextStyle(fontSize: 12)),
         )),
-        Positioned(left: 8, top: 27, right: 66,
+        Positioned(left: 8, top: compactWidth ? 47 : 27, right: 66,
           child: GestureDetector(
             onTap: !_liveRequested
                 ? (widget.onOpenAccount ?? _notifyUnconnected) : null,
@@ -3017,7 +3020,7 @@ class _ChartScreenState extends State<ChartScreen>
           )),
         // The previous '3' button was an inert mock control. All actions in
         // this compact row are functional and stay visible on small phones.
-        Positioned(left: 8, top: 43, right: 6,
+        Positioned(left: 8, top: compactWidth ? 65 : 43, right: 6,
           child: Row(children: [
             OutlinedButton.icon(
               key: const Key('chart-candle-settings-action'),
@@ -3074,6 +3077,7 @@ class _ChartScreenState extends State<ChartScreen>
                 minWidth: 34, minHeight: 36),
               padding: EdgeInsets.zero,
             ),
+            if (!compactWidth) _buildChartQuickActions(),
           ]),
         ),
       ]),
@@ -3154,9 +3158,8 @@ class _ChartScreenState extends State<ChartScreen>
     key: const Key('chart-reference-toolbar'),
     color: surface,
     height: 54,
-    child: Stack(children: [
-      Positioned.fill(child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: Row(children: [
         TextButton(
           key: const Key('symbol-picker'),
@@ -3239,19 +3242,8 @@ class _ChartScreenState extends State<ChartScreen>
         if (_mode == ChartMode.range)
           TextButton(onPressed: _showRangeSettings,
               child: Text('مدى $_rangeTicks')),
-        // The last tool must be scrollable clear of the fixed overflow button.
-        const SizedBox(width: 52),
       ]),
-    )),
-      Positioned(
-        top: 5,
-        right: 5,
-        child: ColoredBox(
-          color: surface,
-          child: _buildChartQuickActions(),
-        ),
-      ),
-    ]),
+    ),
   );
 
   @override
