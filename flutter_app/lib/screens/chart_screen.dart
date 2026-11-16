@@ -3074,26 +3074,6 @@ class _ChartScreenState extends State<ChartScreen>
                 minWidth: 34, minHeight: 36),
               padding: EdgeInsets.zero,
             ),
-              // Discoverable without moving the historical horizontal toolbar.
-          ChartQuickActions(
-            onCandles: _showCandleSettings,
-            onChartType: _showChartTypePicker,
-            onReplay: _toggleReplay,
-            onDrawingTools: _showDrawingTools,
-            onAnalysis: _showAnalysisHub,
-            onAppearance: _showChartAppearance,
-            onIndicators: _showIndicatorCatalog,
-            onMove: _enableMoveChart,
-            onLatest: () {
-              _momentum.stop();
-              setState(() {
-                _viewport = _viewport.jumpToLatest();
-                _crosshair = null;
-              });
-            },
-            onRange: _showRangeSettings,
-            rangeMode: _mode == ChartMode.range,
-          ),
           ]),
         ),
       ]),
@@ -3150,12 +3130,33 @@ class _ChartScreenState extends State<ChartScreen>
     return null;
   }
 
+  Widget _buildChartQuickActions() => ChartQuickActions(
+    onCandles: _showCandleSettings,
+    onChartType: _showChartTypePicker,
+    onReplay: _toggleReplay,
+    onDrawingTools: _showDrawingTools,
+    onAnalysis: _showAnalysisHub,
+    onAppearance: _showChartAppearance,
+    onIndicators: _showIndicatorCatalog,
+    onMove: _enableMoveChart,
+    onLatest: () {
+      _momentum.stop();
+      setState(() {
+        _viewport = _viewport.jumpToLatest();
+        _crosshair = null;
+      });
+    },
+    onRange: _showRangeSettings,
+    rangeMode: _mode == ChartMode.range,
+  );
+
   Widget _referenceChartToolbar(Color surface) => Container(
     key: const Key('chart-reference-toolbar'),
     color: surface,
     height: 54,
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    child: Stack(children: [
+      Positioned.fill(child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
       child: Row(children: [
         TextButton(
           key: const Key('symbol-picker'),
@@ -3238,8 +3239,19 @@ class _ChartScreenState extends State<ChartScreen>
         if (_mode == ChartMode.range)
           TextButton(onPressed: _showRangeSettings,
               child: Text('مدى $_rangeTicks')),
+        // The last tool must be scrollable clear of the fixed overflow button.
+        const SizedBox(width: 52),
       ]),
-    ),
+    )),
+      Positioned(
+        top: 5,
+        right: 5,
+        child: ColoredBox(
+          color: surface,
+          child: _buildChartQuickActions(),
+        ),
+      ),
+    ]),
   );
 
   @override
