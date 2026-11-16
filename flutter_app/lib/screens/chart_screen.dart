@@ -1699,6 +1699,26 @@ class _ChartScreenState extends State<ChartScreen>
     if (mounted) _enterReplayStartSelection();
   }
 
+  /// Date / oldest / random actions must reveal their real candle in the
+  /// chart. Merely changing the selected timestamp leaves the blue line
+  /// offscreen when jumping to distant historical sessions.
+  void _revealReplayCandidate(int index) {
+    if (!_replaySelectingStart || index < 0 ||
+        index > ReplayStartResolver.maxStart(_totalBars)) return;
+    _momentum.stop();
+    final width = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
+    final viewport = _viewport.revealHistoricalBar(
+      index: index,
+      candleCount: _replayMarketCandles.length,
+      plotWidth: width,
+    );
+    setState(() {
+      _replayCandidateIndex = index;
+      _viewport = viewport;
+      _crosshair = null;
+    });
+  }
+
   Future<void> _chooseReplayStartDate() async {
     if (!_replaySelectingStart) {
       await _chooseReplayStartAgain();
@@ -1776,7 +1796,7 @@ class _ChartScreenState extends State<ChartScreen>
       _replayMessage('لا توجد شمعة موثقة قبل هذا التاريخ ضمن البيانات المحمّلة.');
       return;
     }
-    setState(() => _replayCandidateIndex = index);
+    _revealReplayCandidate(index);
   }
 
   void _handleReplayStartMenu(ReplayStartMenuAction action) {
@@ -1807,13 +1827,13 @@ class _ChartScreenState extends State<ChartScreen>
       case ReplayStartMenuAction.column:
         break; // The cursor can already be dragged or moved by tapping.
       case ReplayStartMenuAction.earliest:
-        setState(() => _replayCandidateIndex = 0);
+        _revealReplayCandidate(0);
         _replayMessage('تم اختيار أقدم شمعة موثقة محمّلة. '
             'يمكن تحميل تاريخ أقدم إن أتاحه مصدر السوق.');
         break;
       case ReplayStartMenuAction.random:
         final max = ReplayStartResolver.maxStart(_totalBars);
-        setState(() => _replayCandidateIndex = math.Random().nextInt(max + 1));
+        _revealReplayCandidate(math.Random().nextInt(max + 1));
         break;
       case ReplayStartMenuAction.date:
       case ReplayStartMenuAction.toggleTrading:
