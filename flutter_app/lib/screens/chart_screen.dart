@@ -161,6 +161,7 @@ class _ChartScreenState extends State<ChartScreen>
   bool _scaleSettingsOpen = false;
   ChartScaleSettings _scaleSettings = const ChartScaleSettings();
   bool _symbolSettingsOpen = false;
+  bool _symbolSettingsReturnToPanel = false;
   ChartSymbolSettings _symbolSettings = const ChartSymbolSettings();
   bool _panelChartTouched = false;
   static const _panelSettingsKey = 'tradelab-chart-panel-settings-v1';
@@ -1759,10 +1760,42 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showChartAppearance() async {
-    // The reference settings page remains inside the chart tab so the chart,
-    // fetched market history, Replay cursor and parent navigation survive.
+    // Chart display settings must not reset the candle cache or Replay cursor.
     _momentum.stop();
     setState(() => _panelSettingsOpen = true);
+  }
+
+  void _showCandleSettings() {
+    _momentum.stop();
+    setState(() {
+      _symbolSettingsReturnToPanel = false;
+      _panelSettingsOpen = false;
+      _scaleSettingsOpen = false;
+      _symbolSettingsOpen = true;
+    });
+  }
+
+  /// A predictable one-tap exit from drawing/selection modes. Drawing objects
+  /// and their undo history remain untouched; finger drags return to pan.
+  void _enableMoveChart() {
+    _momentum.stop();
+    setState(() {
+      _drawing = false;
+      _eraserMode = false;
+      _rulerMode = false;
+      _placingShort = false;
+      _placingRectangle = false;
+      _pendingAnchor = null;
+      _secondChannelAnchor = null;
+      _rectangleFirstCorner = null;
+      _shortEntryAnchor = null;
+      _shortStopPrice = null;
+      _selectedLine = null;
+      _selectedPattern = null;
+      _selectedShort = null;
+      _selectedRectangle = null;
+      _crosshair = null;
+    });
   }
 
   Future<void> _showObjectTree() async {
@@ -1878,10 +1911,23 @@ class _ChartScreenState extends State<ChartScreen>
           padding: const EdgeInsets.all(16),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const TradeSectionTitle('إعدادات شموع المدى'),
-            const Text('حجم المدى بالنقاط حسب دقة تسعير الرمز. الحساب الحقيقي يستخدم تيكات BID من cTrader فقط.'),
+            const Text(
+              'المقاس الأكبر قد ينتج شموعًا أقل. اختر مدى أصغر لعرض حركة '
+              'أكثر تفصيلًا من تيكات BID الموثقة؛ لا تُنشأ بيانات افتراضية.',
+              textDirection: TextDirection.rtl),
+            if (_rangePointCache[
+                '${widget.controller.accountId}:${_selectedSymbol.code}'] case final point?)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'المسافة السعرية الحالية: '
+                  '${(_rangeTicks * point).toStringAsFixed(5)} '
+                  '${_selectedSymbol.source == TradeSource.ctrader ? 'حسب سعر الوسيط' : ''}',
+                  textDirection: TextDirection.rtl),
+              ),
             const SizedBox(height: 16),
             Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final size in const [100, 250, 500, 1000, 2000, 5000])
+              for (final size in const [10, 25, 50, 100, 250, 500, 1000, 2000, 5000])
                 ChoiceChip(
                   label: Text('$size'),
                   selected: _rangeTicks == size,
@@ -2847,7 +2893,7 @@ class _ChartScreenState extends State<ChartScreen>
         ? 'USDT' : 'USD';
     return Container(
       key: const Key('chart-reference-header'),
-      height: 72,
+      height: 84,
       color: Theme.of(context).colorScheme.surface,
       child: Stack(children: [
         Positioned(left: 8, top: 4, child: Row(children: [
@@ -2912,19 +2958,67 @@ class _ChartScreenState extends State<ChartScreen>
               ),
             ),
           )),
-        Positioned(left: 8, top: 43, child: OutlinedButton.icon(
-          // The screenshot does not establish what the button labelled 3
-          // does. Keep it visibly disabled until its meaning is verified.
-          onPressed: null,
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(42, 28),
-            padding: const EdgeInsets.symmetric(horizontal: 5),
-            side: const BorderSide(color: Color(0xFFE4E4E4)),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(5))),
-          icon: Icon(Icons.keyboard_arrow_down, size: 18, color: ink),
-          label: Text('3', style: TextStyle(fontSize: 14, color: ink)),
-        )),
+        // The previous '3' button was an inert mock control. All actions in
+        // this compact row are functional and stay visible on small phones.
+        Positioned(left: 8, top: 43, right: 6,
+          child: Row(children: [
+            OutlinedButton.icon(
+              key: const Key('chart-candle-settings-action'),
+              onPressed: _showCandleSettings,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: ink,
+                minimumSize: const Size(0, 37),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                side: BorderSide(color: Theme.of(context).dividerColor),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8))),
+              icon: const Icon(Icons.tune, size: 17),
+              label: const Text('الشموع',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(width: 3),
+            IconButton(
+              key: const Key('chart-move-mode'),
+              tooltip: 'تحريك الشارت',
+              onPressed: _enableMoveChart,
+              icon: Icon(Icons.pan_tool_alt_outlined,
+                size: 21, color: !_drawing ? TradeColors.blue : ink),
+              constraints: const BoxConstraints(
+                minWidth: 36, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
+            IconButton(
+              key: const Key('chart-zoom-in'),
+              tooltip: 'تكبير الشارت',
+              onPressed: () => _zoomBy(1.25),
+              icon: Icon(Icons.add_circle_outline, color: ink, size: 21),
+              constraints: const BoxConstraints(
+                minWidth: 36, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
+            IconButton(
+              key: const Key('chart-zoom-out'),
+              tooltip: 'تصغير الشارت',
+              onPressed: () => _zoomBy(.8),
+              icon: Icon(Icons.remove_circle_outline, color: ink, size: 21),
+              constraints: const BoxConstraints(
+                minWidth: 36, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
+            IconButton(
+              key: const Key('chart-back-to-live'),
+              tooltip: 'العودة إلى أحدث شمعة',
+              onPressed: () {
+                _momentum.stop();
+                setState(() => _viewport = _viewport.jumpToLatest());
+              },
+              icon: Icon(Icons.last_page_outlined, color: ink, size: 21),
+              constraints: const BoxConstraints(
+                minWidth: 36, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
+          ]),
+        ),
       ]),
     );
   }
@@ -3015,7 +3109,7 @@ class _ChartScreenState extends State<ChartScreen>
                 color: Color(0xFF333333))),
         ),
         // Most used controls remain in the first 390dp; extra tools scroll.
-        _iconAction(icon: Icons.more_horiz,
+        _iconAction(icon: Icons.bar_chart_outlined,
             label: 'نوع الشموع', onPressed: _showChartTypePicker),
         _iconAction(icon: Icons.replay_circle_filled_outlined,
             label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
@@ -3078,13 +3172,15 @@ class _ChartScreenState extends State<ChartScreen>
         initial: _symbolSettings,
         onCancel: () => setState(() {
           _symbolSettingsOpen = false;
-          _panelSettingsOpen = true;
+          _panelSettingsOpen = _symbolSettingsReturnToPanel;
+          _symbolSettingsReturnToPanel = false;
         }),
         onApply: (updated) {
           // Redraw the same cached bars; never issue a data request here.
           setState(() {
             _symbolSettings = updated;
             _symbolSettingsOpen = false;
+            _symbolSettingsReturnToPanel = false;
             _panelSettingsOpen = false;
           });
           unawaited(_saveSymbolSettings(updated));
@@ -3117,6 +3213,7 @@ class _ChartScreenState extends State<ChartScreen>
           _panelSettingsOpen = false;
         }),
         onOpenSymbol: () => setState(() {
+          _symbolSettingsReturnToPanel = true;
           _symbolSettingsOpen = true;
           _panelSettingsOpen = false;
         }),
