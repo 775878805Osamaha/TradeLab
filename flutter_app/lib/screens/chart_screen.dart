@@ -1342,7 +1342,9 @@ class _ChartScreenState extends State<ChartScreen>
     if (wasPlaying) _togglePlay();
   }
 
-  Future<void> _openTrainingOrderDialog() async {
+  Future<void> _openTrainingOrderDialog({
+    ReplaySide initialSide = ReplaySide.buy,
+  }) async {
     if (!_replay || _visibleThrough < 1 ||
         _visibleThrough > _replayMarketCandles.length) return;
 
@@ -1354,7 +1356,8 @@ class _ChartScreenState extends State<ChartScreen>
     final price = _replayMarketCandles[entryVisibleCount - 1].close;
     final order = await showDialog<ReplayPracticeOrder>(
       context: context,
-      builder: (_) => ReplayTrainingOrderDialog(entryPrice: price),
+      builder: (_) => ReplayTrainingOrderDialog(
+        entryPrice: price, initialSide: initialSide),
     );
     if (!mounted || !_replay || order == null) return;
 
@@ -1400,6 +1403,27 @@ class _ChartScreenState extends State<ChartScreen>
     } on StateError {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('تعذر إغلاق الصفقة: لم يعد السعر المكشوف صالحًا.')));
+    }
+  }
+
+  /// Flatten only local replay practice entries at the currently revealed
+  /// raw OHLC close; never contact a live broker, and never use future prices.
+  void _flattenReplayTrainingTrades() {
+    if (!_replay || _training.openTradeCount == 0) return;
+    final openIds = _training.trades.where((t) => t.isOpen)
+        .map((t) => t.id).toList(growable: false);
+    try {
+      setState(() {
+        _stopPlayback();
+        for (final id in openIds) {
+          _training.closeAtCurrent(id, _replayMarketCandles);
+        }
+      });
+      _recordTraining();
+      _replayMessage('تم تسطيح ${openIds.length} صفقة تدريب عند '
+          'آخر سعر تاريخي مكشوف. لم تُرسل أوامر حقيقية.');
+    } on StateError {
+      _replayMessage('تعذر إغلاق التدريب: السعر التاريخي غير صالح.');
     }
   }
 
@@ -4144,6 +4168,68 @@ class _ChartScreenState extends State<ChartScreen>
                 ),
               ),
             ))),
+          // Quick replay trading follows the reference's floating
+          // buy/sell/flatten strip without squeezing the chart or time axis.
+          // Entries open the existing historical-only practice ticket.
+          if (_replay && _replayShowTradingButtons && candles.isNotEmpty)
+            Positioned(
+              left: 8, right: 65, bottom: 28,
+              child: Container(
+                key: const Key('replay-inline-trading'),
+                height: 46,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface
+                      .withValues(alpha: .94),
+                  borderRadius: BorderRadius.circular(11),
+                  boxShadow: [BoxShadow(
+                    color: Colors.black.withValues(alpha: .10),
+                    blurRadius: 7,
+                    offset: const Offset(0, 2),
+                  )],
+                ),
+                child: Row(children: [
+                  Expanded(child: OutlinedButton(
+                    key: const Key('replay-flatten-trades'),
+                    onPressed: _training.openTradeCount == 0
+                        ? null : _flattenReplayTrainingTrades,
+                    style: OutlinedButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 36),
+                    ),
+                    child: const Text('تسطيح',
+                      textDirection: TextDirection.rtl,
+                      style: TextStyle(fontSize: 12)),
+                  )),
+                  const SizedBox(width: 4),
+                  Expanded(child: FilledButton(
+                    key: const Key('replay-inline-buy'),
+                    onPressed: () => _openTrainingOrderDialog(
+                        initialSide: ReplaySide.buy),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF009778),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 36),
+                    ),
+                    child: const Text('شراء',
+                      style: TextStyle(fontSize: 13)),
+                  )),
+                  const SizedBox(width: 4),
+                  Expanded(child: FilledButton(
+                    key: const Key('replay-inline-sell'),
+                    onPressed: () => _openTrainingOrderDialog(
+                        initialSide: ReplaySide.sell),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFD94959),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 36),
+                    ),
+                    child: const Text('بيع',
+                      style: TextStyle(fontSize: 13)),
+                  )),
+                ]),
+              ),
+            ),
           if (candles.isEmpty)
             Positioned.fill(child: IgnorePointer(child: Center(
               child: Padding(
@@ -4245,7 +4331,7 @@ class _ChartScreenState extends State<ChartScreen>
             const SizedBox(width: 6),
             TextButton.icon(
               key: const Key('replay-practice-order'),
-              onPressed: _openTrainingOrderDialog,
+              onPressed: () => _openTrainingOrderDialog(),
               icon: const Icon(Icons.add_circle_outline, size: 16),
               label: const Text('صفقة تدريب'),
             ),
