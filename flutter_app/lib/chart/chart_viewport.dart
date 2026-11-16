@@ -140,6 +140,31 @@ class ChartViewport {
     );
   }
 
+  /// Brings the REAL selected Replay candle into the plot without altering
+  /// its source index, UTC timestamp, zoom or right-margin preference.
+  ///
+  /// Very early candles cannot be centered without blank history to the
+  /// left, so use the bounded scroll limit to keep them visible at the edge.
+  ChartViewport revealHistoricalBar({
+    required int index,
+    required int candleCount,
+    required double plotWidth,
+  }) {
+    if (index < 0 || index >= candleCount ||
+        !plotWidth.isFinite || plotWidth <= 0) {
+      return this;
+    }
+    final wantedX = plotWidth / 2;
+    final proposed = candleCount - index - .5 + rightMarginBars -
+        (plotWidth - wantedX) / barWidth;
+    return ChartViewport(
+      barWidth: barWidth,
+      rightMarginBars: rightMarginBars,
+      scrollBars: _boundedScroll(
+        proposed, plotWidth, candleCount, barWidth),
+    );
+  }
+
   ChartViewport jumpToLatest() => ChartViewport(
     barWidth: barWidth, rightMarginBars: rightMarginBars);
 
