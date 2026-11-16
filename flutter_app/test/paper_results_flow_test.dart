@@ -89,8 +89,9 @@ void main() {
     expect(find.byKey(const Key('add-ledger-entry')), findsOneWidget);
     expect(find.text('المراكز التجريبية المفتوحة'), findsOneWidget);
     expect(find.text('إغلاق تجريبي'), findsOneWidget);
-    expect(find.text('لا توجد صفقات'), findsWidgets);
-    expect(find.text('20.00 USD'), findsNothing,
+    expect(calculateLedgerReport(journal.entries).tradeCount, 0,
+        reason: 'An open position is not a realized closed trade');
+    expect(find.text('+20.00 USD'), findsNothing,
         reason: 'An open trade has no verified realized P&L');
 
     final open = journal.entries.firstWhere(
