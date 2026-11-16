@@ -28,6 +28,9 @@ import '../chart/chart_axis_ticks.dart';
 import '../chart/chart_time_axis_label_layout.dart';
 import '../chart/candle_prefix.dart';
 import '../replay/replay_playback_speed.dart';
+import '../replay/replay_mobile_controls.dart';
+import '../replay/replay_start_overlay.dart';
+import '../replay/replay_start_resolver.dart';
 import '../replay/replay_training_session.dart';
 import '../replay/replay_training_order_dialog.dart';
 import '../replay/replay_training_archive.dart';
@@ -119,6 +122,12 @@ class _ChartScreenState extends State<ChartScreen>
   // every larger/smaller cTrader preset remains available to the user.
   int _rangeTicks = 25;
   bool _replay = false;
+  bool _replaySelectingStart = false;
+  bool _replayDraggingStart = false;
+  int _replayCandidateIndex = 0;
+  int _replayInitialCount = 1;
+  bool _replayShowTradingButtons = true;
+  bool _replayAutoStep = true;
   bool _drawing = false;
   bool _drawingsVisible = true;
   bool _drawingsLocked = false;
