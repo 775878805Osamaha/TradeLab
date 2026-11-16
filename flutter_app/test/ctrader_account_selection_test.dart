@@ -113,14 +113,16 @@ void main() {
     expect(newQuote.bid, 3882);
     expect(controller.recentQuoteFor(gold)!.bid, 3882);
 
+    // Register the error expectation before releasing the deferred response:
+    // no unhandled asynchronous broker failures are allowed in the test.
+    final oldQuoteRejected = expectLater(oldPriceRequest,
+        throwsA(isA<MarketDataException>()));
     releaseOldSpot.complete(http.Response(jsonEncode({
       'source': 'ctrader', 'accountId': '101', 'symbolId': '42',
       'bid': 3701, 'ask': 3701.2,
       'timestamp': DateTime.now().toUtc().millisecondsSinceEpoch,
     }), 200));
-
-    await expectLater(oldPriceRequest,
-        throwsA(isA<MarketDataException>()));
+    await oldQuoteRejected;
     expect(controller.accountId, '202');
     expect(controller.recentQuoteFor(gold)!.bid, 3882,
         reason: 'An old account cannot overwrite a freshly verified quote');
