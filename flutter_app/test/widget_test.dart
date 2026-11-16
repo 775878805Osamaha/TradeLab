@@ -375,6 +375,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('replay-start-overlay')), findsNothing);
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+    // Replay controls must stack ABOVE the permanent drawing toolbar, with
+    // the drawing band still touching navigation (no artificial footer).
+    final replayBand = find.byKey(const Key('replay-controls'));
+    final drawingBand = find.byKey(const Key('chart-reference-toolbar'));
+    expect(tester.getTopLeft(replayBand).dy,
+        lessThan(tester.getTopLeft(drawingBand).dy));
+    expect(tester.getBottomLeft(drawingBand).dy,
+        closeTo(tester.getTopLeft(find.byType(NavigationBar)).dy, 1));
     await tester.tap(find.byTooltip('إغلاق Replay'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);
@@ -434,6 +442,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('replay-start-overlay')), findsNothing);
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+    // Replay controls must stack ABOVE the permanent drawing toolbar, with
+    // the drawing band still touching navigation (no artificial footer).
+    final replayBand = find.byKey(const Key('replay-controls'));
+    final drawingBand = find.byKey(const Key('chart-reference-toolbar'));
+    expect(tester.getTopLeft(replayBand).dy,
+        lessThan(tester.getTopLeft(drawingBand).dy));
+    expect(tester.getBottomLeft(drawingBand).dy,
+        closeTo(tester.getTopLeft(find.byType(NavigationBar)).dy, 1));
     expect(chart, findsOneWidget);
     expect(historyRequests, 1);
     await tester.tap(find.byTooltip('إغلاق Replay'));

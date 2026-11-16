@@ -4301,8 +4301,11 @@ class _ChartScreenState extends State<ChartScreen>
       // time axis, as in the supplied mobile reference.
       // No broker-info or drawing-hint footer: chart tools meet navigation.
       // Active drawing guidance now overlays the chart without using height.
-      if (!widget.focusMode) _referenceChartToolbar(surface),
+      // TradingView reference: Replay sits directly below the plot; drawing
+      // toolbar remains below Replay, adjacent to bottom navigation.
+      // Retain both bands so Replay never steals the existing drawing actions.
       if (_replay || _replaySelectingStart) _replayControls(context),
+      if (!widget.focusMode) _referenceChartToolbar(surface),
     ]);
   }
 
