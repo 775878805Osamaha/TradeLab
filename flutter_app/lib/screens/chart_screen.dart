@@ -1031,6 +1031,20 @@ class _ChartScreenState extends State<ChartScreen>
             'قبل متابعة Replay، ولم نعرض بيانات مستقبلية.';
         return; // Retain the original source and original cursor.
       }
+      // In an ACTIVE Range Replay, the saved initial candle and the current
+      // cutoff must both rebase by their original BID events. Rebasing only
+      // the current cutoff made Reset jump to an unrelated historical bar.
+      final remappedInitial = _replay
+          ? timeline.rebaseReplayStart(
+              oldEndTickIndices: _rangeBarEndTickIndices,
+              oldSelectedIndex: _replayInitialCount - 1,
+              prependedTicks: prefix.length)
+          : null;
+      if (_replay && remappedInitial == null) {
+        _olderLoadError = 'تعذر تثبيت شمعة بداية Replay الأصلية بعد '
+            'إعادة بناء شموع Range؛ لن نغيّر موضع التدريب.';
+        return;
+      }
       // Range bars are not time candles: after prepending BID events, a bar's
       // index can move non-uniformly. Rebase each drawing endpoint to its
       // original market event while keeping its real price unchanged.
@@ -1105,7 +1119,8 @@ class _ChartScreenState extends State<ChartScreen>
           ? null
           : timeline.visibleClosedBarsThroughTick(
               prefix.length + replayCutoffTick);
-      if (_replay && (safeReplayBars == null || safeReplayBars == 0)) {
+      if (_replay && (safeReplayBars == null || safeReplayBars == 0 ||
+          remappedInitial == null || remappedInitial + 1 > safeReplayBars)) {
         _olderLoadError =
             'يغيّر التاريخ الأقدم بداية شموع المدى قبل موضع Replay؛ '
             'لن نعرض شمعة تحتاج تيكات مستقبلية. أوقف Replay لتحميلها.';
@@ -1162,6 +1177,8 @@ class _ChartScreenState extends State<ChartScreen>
           // A non-null, closed-bar cutoff was already checked above.
           _training.moveTo(timeline.bars, safeReplayBars!);
           _visibleThrough = safeReplayBars;
+          // Rewind continues to target the same verified BID event.
+          _replayInitialCount = remappedInitial! + 1;
         }
       });
     } on MarketDataException catch (error) {
@@ -1857,14 +1874,115 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
-  void _resetReplayToStart() {
+  Future<void> _resetReplayToStart() async {
     if (!_replay) return;
-    if (_training.trades.isNotEmpty) {
-      _replayMessage('يوجد سجل صفقات؛ الرجوع سيُزيل الصفقات المستقبلية '
-          'من الجلسة الحالية. استخدم بدء جلسة جديدة أو تابع بأمان.');
+    // Freeze playback BEFORE asking permission. Otherwise the market cutoff
+    // could advance under the user's confirmation dialog.
+    if (_playing) setState(_stopPlayback);
+    final sourceKey = _trainingSourceKey;
+    final sessionId = _trainingSessionId;
+    final hasTrades = _training.trades.isNotEmpty;
+    final hasDrawings = _levels.isNotEmpty || _patterns.isNotEmpty ||
+        _shortPositions.isNotEmpty || _rectangles.isNotEmpty;
+    final hasPracticeHistory = _trainingEverTraded || hasTrades;
+    if (hasPracticeHistory || hasDrawings) {
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('العودة إلى بداية Replay'),
+          content: Text(
+            hasPracticeHistory
+              ? 'سيُحفظ سجل الصفقات في الأرشيف المحلي أولًا، '
+                'ثم تبدأ جلسة تدريب جديدة من شمعة البداية نفسها. '
+                'ستُمسح رسومات Replay الحالية، ولن تُرسل أي أوامر للوسيط.'
+              : 'سيتم مسح الرسومات التي أُنشئت خلال Replay '
+                'والرجوع إلى شمعة البداية. الرسومات الأصلية خارج '
+                'المحاكاة ستبقى محفوظة.',
+            textDirection: TextDirection.rtl,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              key: const Key('replay-confirm-reset'),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('حفظ والعودة للبداية'),
+            ),
+          ],
+        ),
+      );
+      if (approved != true || !mounted || !_replay ||
+          sessionId != _trainingSessionId ||
+          sourceKey != _trainingSourceKey) return;
+    }
+
+    // A pending historical page might have changed the valid source.
+    // Never seek to an incomplete, invalid or future market candle.
+    if (_replayInitialCount < 1 || _replayInitialCount > _totalBars) {
+      _replayMessage('تعذرت العودة: نقطة البداية لم تعد ضمن '
+          'الشموع التاريخية المكتملة المتاحة.');
       return;
     }
-    _seekReplay(_replayInitialCount);
+    if (hasPracticeHistory) {
+      // A previously queued write can fail without throwing (the regular
+      // background saver intentionally catches SQLite errors). A reset must
+      // independently confirm DURABLE storage before clearing live trades.
+      _trainingSaveDebounce?.cancel();
+      _trainingSaveDebounce = null;
+      try {
+        await _trainingSaveQueue;
+        if (!mounted || !_replay || sessionId != _trainingSessionId ||
+            sourceKey != _trainingSourceKey) return;
+        await ReplayTrainingArchive.save(
+          sessionId: sessionId,
+          sourceKey: sourceKey,
+          visibleCount: _training.visibleCount,
+          trades: _training.trades,
+        );
+      } catch (_) {
+        _replayMessage('فشل حفظ صفقات Replay في الأرشيف. '
+            'تم الإبقاء على الجلسة والصفقات دون إعادة تعيين.');
+        return;
+      }
+      if (!mounted || !_replay || sessionId != _trainingSessionId ||
+          sourceKey != _trainingSourceKey) return;
+    }
+    _momentum.stop();
+    setState(() {
+      _stopPlayback();
+      _training.clear();
+      _training.moveTo(_replayMarketCandles, _replayInitialCount);
+      _visibleThrough = _replayInitialCount;
+      _trainingEverTraded = false;
+      // Fresh archive identity: a later save cannot overwrite the prior run.
+      _trainingSessionId =
+          DateTime.now().toUtc().microsecondsSinceEpoch.toString();
+      // Replay-added drawings may refer to candles no longer revealed.
+      // Original drawings are still held in _analysis* for normal mode.
+      _levels.clear();
+      _patterns.clear();
+      _shortPositions.clear();
+      _rectangles.clear();
+      _crosshair = null;
+      _selectedLine = null;
+      _selectedPattern = null;
+      _selectedShort = null;
+      _selectedRectangle = null;
+      _pendingAnchor = null;
+      _secondChannelAnchor = null;
+      _rectangleFirstCorner = null;
+      _shortEntryAnchor = null;
+      _shortStopPrice = null;
+      _placingShort = false;
+      _placingRectangle = false;
+      _lineUndo.clear();
+      _lineRedo.clear();
+      // The market now displays the short, strictly revealed source prefix.
+      // Place its last candle near the right edge, not in blank future space.
+      _viewport = _viewport.jumpToLatest();
+    });
   }
 
   void _togglePlay() {
@@ -4411,7 +4529,7 @@ class _ChartScreenState extends State<ChartScreen>
         onConfirm: _confirmReplayStart,
         onStartMenu: _handleReplayStartMenu,
         onStepMenu: _handleReplayIntervalMenu,
-        onReset: _resetReplayToStart,
+        onReset: () => unawaited(_resetReplayToStart()),
         onStepBack: () => _seekReplay(_visibleThrough - 1),
         onStepForward: () => _seekReplay(_visibleThrough + 1),
         onPlayPause: _togglePlay,
