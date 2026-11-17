@@ -34,6 +34,31 @@ void main() {
     expect(bars.single.candle.close, 101);
   });
 
+  test('Binance native 2h uses verified klines and excludes unclosed bar',
+      () async {
+    const end = 15000000;
+    final api = MarketApi(client: MockClient((request) async {
+      expect(request.url.host, 'api.binance.com');
+      expect(request.url.path, '/api/v3/klines');
+      expect(request.url.queryParameters['symbol'], 'BTCUSDT');
+      expect(request.url.queryParameters['interval'], '2h');
+      expect(request.url.queryParameters['endTime'], '${end - 1}');
+      return http.Response(jsonEncode([
+        [0, '100', '104', '98', '102', '7', 7199999],
+        [7200000, '102', '107', '101', '105', '5', 14399999],
+        [14400000, '105', '108', '103', '107', '2', 21599999],
+      ]), 200);
+    }));
+    final bars = await api.binanceCandles(
+      symbol: 'BTCUSDT', timeframe: '2h',
+      before: DateTime.fromMillisecondsSinceEpoch(end, isUtc: true),
+    );
+    expect(bars, hasLength(2));
+    expect(bars.first.timestamp, 0);
+    expect(bars.last.timestamp, 7200000);
+    expect(bars.last.candle.close, 105);
+  });
+
   test('forbids unapproved Binance symbols', () async {
     final api = MarketApi(client: MockClient((_) async => http.Response('[]', 200)));
     expect(() => api.binanceCandles(symbol: 'XAUUSD', timeframe: '15m'),
