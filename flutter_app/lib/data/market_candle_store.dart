@@ -42,26 +42,46 @@ class MarketCandleStore {
     }
     validateBars(existing);
     validateBars(fetched);
-    final byTime = <int, MarketBar>{
-      for (final bar in existing) bar.timestamp: bar,
-    };
-    for (final bar in fetched) {
-      final archived = byTime[bar.timestamp];
-      if (archived != null &&
-          (archived.candle.open != bar.candle.open ||
-           archived.candle.high != bar.candle.high ||
-           archived.candle.low != bar.candle.low ||
-           archived.candle.close != bar.candle.close)) {
-        throw const MarketDataException(
-          'تعارض بين الشموع المحفوظة وبيانات المصدر. '
-          'أوقفنا تحديث الشارت لحماية Replay؛ تحقق من مصدر البيانات.');
+    // validateBars guarantees both inputs are strictly timestamp-ascending.
+    // The previous Map + key sort performed O(N log N) work on every refresh.
+    // A two-pointer stable merge is O(existing + fetched), using no inferred
+    // candles and no extra broker queries. Check conflicting historical
+    // overlaps even when a maxCount limit later clips the older prefix.
+    final merged = <MarketBar>[];
+    var archiveIndex = 0;
+    var incomingIndex = 0;
+    while (archiveIndex < existing.length && incomingIndex < fetched.length) {
+      final archived = existing[archiveIndex];
+      final incoming = fetched[incomingIndex];
+      if (archived.timestamp < incoming.timestamp) {
+        merged.add(archived);
+        archiveIndex++;
+      } else if (incoming.timestamp < archived.timestamp) {
+        merged.add(incoming);
+        incomingIndex++;
+      } else {
+        if (archived.candle.open != incoming.candle.open ||
+            archived.candle.high != incoming.candle.high ||
+            archived.candle.low != incoming.candle.low ||
+            archived.candle.close != incoming.candle.close) {
+          throw const MarketDataException(
+            'تعارض بين الشموع المحفوظة وبيانات المصدر. '
+            'أوقفنا تحديث الشارت لحماية Replay؛ تحقق من مصدر البيانات.');
+        }
+        // Equal timestamps have identical validated OHLC. Retain one bar.
+        merged.add(incoming);
+        archiveIndex++;
+        incomingIndex++;
       }
-      byTime[bar.timestamp] = bar;
     }
-    final timestamps = byTime.keys.toList()..sort();
-    final start = timestamps.length > maxCount ? timestamps.length - maxCount : 0;
-    return List<MarketBar>.unmodifiable(
-        timestamps.skip(start).map((ts) => byTime[ts]!));
+    while (archiveIndex < existing.length) {
+      merged.add(existing[archiveIndex++]);
+    }
+    while (incomingIndex < fetched.length) {
+      merged.add(fetched[incomingIndex++]);
+    }
+    final start = merged.length > maxCount ? merged.length - maxCount : 0;
+    return List<MarketBar>.unmodifiable(merged.getRange(start, merged.length));
   }
 
   static Future<Database> _open() async {
