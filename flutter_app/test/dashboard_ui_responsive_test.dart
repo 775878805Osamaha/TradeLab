@@ -57,7 +57,14 @@ void main() {
       expect(find.byKey(const Key('account-connection-hero')), findsOneWidget);
       expect(find.byKey(const Key('ctrader-connect')), findsOneWidget);
       expect(find.text('cTrader'), findsWidgets);
-      await tester.ensureVisible(find.byKey(const Key('dark-mode-switch')));
+      // Account settings are below the fold on compact phones. Unlike
+      // ensureVisible, scrollUntilVisible can materialize a lazy ListView row.
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('dark-mode-switch')), 180,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('account-dashboard-list')),
+          matching: find.byType(Scrollable)),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('dark-mode-switch')));
       await tester.pump();
