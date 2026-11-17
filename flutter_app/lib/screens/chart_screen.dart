@@ -128,7 +128,9 @@ class _ChartScreenState extends State<ChartScreen>
   bool _replayDraggingStart = false;
   int _replayCandidateIndex = 0;
   int _replayInitialCount = 1;
-  bool _replayShowTradingButtons = true;
+  // Keep the candle area clear until the user explicitly requests tools.
+  bool _replayShowTradingButtons = false;
+  bool _replayShowDrawingTools = false;
   bool _replayAutoStep = true;
   bool _drawing = false;
   bool _drawingsVisible = true;
@@ -1595,6 +1597,8 @@ class _ChartScreenState extends State<ChartScreen>
       _stopPlayback();
       _replaySelectingStart = true;
       _replayDraggingStart = false;
+      _replayShowTradingButtons = false;
+      _replayShowDrawingTools = false;
       _replayCandidateIndex = index;
       _crosshair = null;
       // While selecting, the complete market history remains visible (muted
@@ -1834,6 +1838,10 @@ class _ChartScreenState extends State<ChartScreen>
       setState(() => _replayShowTradingButtons = !_replayShowTradingButtons);
       return;
     }
+    if (action == ReplayStartMenuAction.toggleDrawingTools) {
+      setState(() => _replayShowDrawingTools = !_replayShowDrawingTools);
+      return;
+    }
     if (action == ReplayStartMenuAction.date) {
       unawaited(_chooseReplayStartDate());
       return;
@@ -1867,7 +1875,33 @@ class _ChartScreenState extends State<ChartScreen>
         break;
       case ReplayStartMenuAction.date:
       case ReplayStartMenuAction.toggleTrading:
+      case ReplayStartMenuAction.toggleDrawingTools:
         break;
+    }
+  }
+
+  void _handleReplayExtras(ReplayExtrasAction action) {
+    switch (action) {
+      case ReplayExtrasAction.practiceOrder:
+        if (_replay) unawaited(_openTrainingOrderDialog());
+      case ReplayExtrasAction.practiceTrades:
+        if (_replay) unawaited(_showTrainingTrades());
+      case ReplayExtrasAction.practiceArchive:
+        unawaited(_showTrainingArchive());
+      case ReplayExtrasAction.loadOlder:
+        if (!_olderLoading && !_historyExhausted) {
+          setState(() => _olderLoadError = null);
+          unawaited(_mode == ChartMode.range
+              ? _loadOlderRangeHistory()
+              : _loadOlderHistory(manual: true));
+        }
+      case ReplayExtrasAction.candleSettings:
+        _showCandleSettings();
+      case ReplayExtrasAction.drawingTools:
+        setState(() => _replayShowDrawingTools = true);
+        unawaited(_showDrawingTools());
+      case ReplayExtrasAction.chartType:
+        unawaited(_showChartTypePicker());
     }
   }
 
