@@ -49,6 +49,7 @@ jobs:
             test/chart_viewport_test.dart \
             test/chart_paint_only_pan_test.dart \
             test/chart_text_layout_cache_test.dart \
+            test/chart_timeframe_catalog_test.dart \
             test/chart_panel_settings_test.dart \
             test/chart_symbol_settings_test.dart \
             test/chart_mobile_controls_test.dart \
