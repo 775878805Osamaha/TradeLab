@@ -1909,8 +1909,26 @@ class _ChartScreenState extends State<ChartScreen>
       return;
     }
     if (hasPracticeHistory) {
-      _recordTraining();
-      await _trainingSaveQueue;
+      // A previously queued write can fail without throwing (the regular
+      // background saver intentionally catches SQLite errors). A reset must
+      // independently confirm DURABLE storage before clearing live trades.
+      _trainingSaveDebounce?.cancel();
+      _trainingSaveDebounce = null;
+      try {
+        await _trainingSaveQueue;
+        if (!mounted || !_replay || sessionId != _trainingSessionId ||
+            sourceKey != _trainingSourceKey) return;
+        await ReplayTrainingArchive.save(
+          sessionId: sessionId,
+          sourceKey: sourceKey,
+          visibleCount: _training.visibleCount,
+          trades: _training.trades,
+        );
+      } catch (_) {
+        _replayMessage('فشل حفظ صفقات Replay في الأرشيف. '
+            'تم الإبقاء على الجلسة والصفقات دون إعادة تعيين.');
+        return;
+      }
       if (!mounted || !_replay || sessionId != _trainingSessionId ||
           sourceKey != _trainingSourceKey) return;
     }
