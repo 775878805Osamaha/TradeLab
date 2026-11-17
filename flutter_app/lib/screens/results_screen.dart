@@ -383,52 +383,81 @@ class _ResultsScreenState extends State<ResultsScreen> {
         ],
       );
 
-  Widget _metric(String title, IconData icon, Color color, String? value) => TradeSurface(
+  Widget _metric(String title, IconData icon, Color color, String? value) =>
+      TradeDashboardPanel(
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Expanded(child: Text(title, maxLines: 1,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
-            Icon(icon, color: color, size: 19),
+            TradeDashboardIcon(icon, color: color, size: 32),
+            const SizedBox(width: 7),
+            Expanded(child: Text(title,
+              maxLines: 2, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11,
+                height: 1.25, fontWeight: FontWeight.w700))),
           ]),
           const Spacer(),
-          FittedBox(fit: BoxFit.scaleDown,
-            child: Text(value ?? '—', textDirection: TextDirection.ltr,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
-          Text(value == null ? 'لا توجد بيانات' : 'سجل محلي محقق',
-              style: TextStyle(fontSize: 11,
+          Align(alignment: AlignmentDirectional.centerStart,
+            child: FittedBox(fit: BoxFit.scaleDown,
+              child: Text(value ?? '—',
+                textDirection: TextDirection.ltr,
+                style: const TextStyle(fontSize: 19,
+                  fontWeight: FontWeight.w900)))),
+          const SizedBox(height: 4),
+          Text(value == null ? 'لا توجد بيانات' : 'من السجل المحلي',
+            style: TextStyle(fontSize: 10,
               color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ]),
       );
 
-  Widget _curve(LedgerReport report) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const TradeSectionTitle('منحنى الرصيد المحقق (دون صفقات مفتوحة)'),
-        TradeSurface(child: SizedBox(
-          height: 240,
-          child: report.balanceSeries.isEmpty ? const TradeEmptyState(
-            icon: Icons.show_chart,
-            title: 'في انتظار سجل التداول',
-            description: 'لا يتم رسم أرباح افتراضية مكان بياناتك الحقيقية.',
-          ) : LayoutBuilder(builder: (context, constraints) {
-            final points = report.balanceSeries;
-            final chosen = _selectedCurvePoint?.clamp(0, points.length - 1).toInt();
-            void choose(double x) => setState(() => _selectedCurvePoint =
-                ((x / math.max(1, constraints.maxWidth)) * (points.length - 1))
-                    .round().clamp(0, points.length - 1).toInt());
-            return GestureDetector(
-              onTapDown: (details) => choose(details.localPosition.dx),
-              onHorizontalDragUpdate: (details) => choose(details.localPosition.dx),
-              child: Stack(children: [
-                Positioned.fill(child: CustomPaint(
-                  painter: _BalanceCurvePainter(points, chosen))),
-                if (chosen != null) Positioned(top: 2, left: 4,
-                  child: Text('${_day(points[chosen].$1)} · ${_money(points[chosen].$2)}',
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700))),
-              ]),
-            );
-          }),
-        )),
-      ]);
+  Widget _curve(LedgerReport report) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const TradeDashboardSection('منحنى الرصيد المحقق',
+        caption: 'تغير الرصيد من القيود والصفقات المغلقة فقط'),
+      const SizedBox(height: 10),
+      TradeDashboardPanel(child: SizedBox(
+        height: 236,
+        child: report.balanceSeries.isEmpty
+            ? const TradeEmptyState(
+                icon: Icons.show_chart_rounded,
+                title: 'لا توجد بيانات رسم بعد',
+                description: 'يبدأ المنحنى عند حفظ نتائج فعلية في الدفتر.')
+            : LayoutBuilder(builder: (context, constraints) {
+                final points = report.balanceSeries;
+                final chosen = _selectedCurvePoint
+                    ?.clamp(0, points.length - 1).toInt();
+                void choose(double x) => setState(
+                    () => _selectedCurvePoint =
+                    ((x / math.max(1, constraints.maxWidth)) *
+                        (points.length - 1)).round()
+                        .clamp(0, points.length - 1).toInt());
+                return Semantics(
+                  label: 'منحنى الرصيد المحقق · ${points.length} نقطة',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapDown: (details) => choose(details.localPosition.dx),
+                    onHorizontalDragUpdate: (details) =>
+                        choose(details.localPosition.dx),
+                    child: Stack(children: [
+                      Positioned.fill(child: CustomPaint(
+                        painter: _BalanceCurvePainter(points, chosen))),
+                      if (chosen != null)
+                        Positioned(top: 3, left: 5, right: 5,
+                          child: Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: Text(
+                              '${_day(points[chosen].$1)} · ${_money(points[chosen].$2)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textDirection: TextDirection.ltr,
+                              style: const TextStyle(fontSize: 11,
+                                fontWeight: FontWeight.w800)),
+                          )),
+                    ]),
+                  ),
+                );
+              }),
+      )),
+    ]);
 
   Widget _statistics(LedgerReport report) {
     final duration = report.averageTradeMinutes;
@@ -446,29 +475,43 @@ class _ResultsScreenState extends State<ResultsScreen> {
       '—',
     ];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const TradeSectionTitle('إحصائيات الصفقات'),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _stats.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3, mainAxisSpacing: 8, crossAxisSpacing: 8,
-            childAspectRatio: .97,
-          ),
-          itemBuilder: (context, index) => TradeSurface(
-            padding: const EdgeInsets.all(8),
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(_stats[index].$2, size: 19, color: TradeColors.blue),
-              const SizedBox(height: 7),
-              FittedBox(fit: BoxFit.scaleDown,
-                child: Text(values[index], textDirection: TextDirection.ltr,
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-              const SizedBox(height: 3),
-              Text(_stats[index].$1, maxLines: 2, textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 10, height: 1.2)),
-            ]),
-          ),
-        ),
+        const TradeDashboardSection('إحصائيات الصفقات',
+          caption: 'مقاييس من الصفقات المغلقة الموثقة'),
+        LayoutBuilder(builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 620 ? 3 : 2;
+          return GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _stats.length,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              mainAxisSpacing: 10, crossAxisSpacing: 10,
+              mainAxisExtent: 108,
+            ),
+            itemBuilder: (context, index) => TradeDashboardPanel(
+              padding: const EdgeInsets.all(11),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    TradeDashboardIcon(_stats[index].$2,
+                      color: TradeColors.blue, size: 30),
+                    const SizedBox(width: 7),
+                    Expanded(child: Text(_stats[index].$1,
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11,
+                        height: 1.2, fontWeight: FontWeight.w700))),
+                  ]),
+                  const Spacer(),
+                  Text(values[index],
+                    textDirection: TextDirection.ltr,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 18,
+                      fontWeight: FontWeight.w900)),
+                ],
+              ),
+            ),
+          );
+        }),
       ]);
   }
 
