@@ -549,6 +549,40 @@ void main() {
     expect(parsed.last.bid, closeTo(2000.0 + 5999 * 0.0001, 1e-9));
   });
 
+  test('dense BID worker rejects corrupted source price without partial bars',
+      () async {
+    const start = 1700000000000;
+    final rows = List<Map<String, Object>>.generate(6000, (index) =>
+        {'timestamp': start + index, 'price': 2100.0 + index / 10000});
+    for (final corruption in <Object>[-1.0, 'not-a-bid-price']) {
+      rows[5700]['price'] = corruption;
+      final body = jsonEncode({
+        'source': 'ctrader',
+        'quoteType': 'bid', 'symbolId': '42', 'hasMore': false,
+        'ticks': rows,
+      });
+      expect(MarketJsonDecodePolicy.shouldOffload(
+          path: '/v1/ticks', chars: body.length), isTrue);
+      final api = MarketApi(client: MockClient((request) async {
+        if (request.url.path == '/v1/symbols') {
+          return http.Response(jsonEncode({'symbols': [
+            {'symbolName': 'XAUUSD', 'symbolId': 42},
+          ]}), 200);
+        }
+        expect(request.url.path, '/v1/ticks');
+        return http.Response(body, 200);
+      }));
+      await expectLater(
+        api.ctraderBidTicksRange(
+          token: 'test', accountId: '1', symbol: 'XAUUSD',
+          fromMs: start, toMs: start + 7000,
+        ),
+        throwsA(isA<MarketDataException>()),
+      );
+      api.close();
+    }
+  });
+
   test('incremental BID requests reject invalid or oversized windows', () async {
     final api = MarketApi(client: MockClient((_) async =>
         fail('Invalid BID window should never reach a provider')));
