@@ -1,9 +1,27 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 
 import 'tradelab_data.dart';
 import 'ctrader_closed_bar_cutoff.dart';
+
+/// Selective off-main-isolate decoding of dense broker tick payloads.
+/// Small messages avoid isolate overhead; only verified cTrader BID pages
+/// can be large enough to interrupt gesture and frame scheduling.
+class MarketJsonDecodePolicy {
+  const MarketJsonDecodePolicy._();
+  static const minOffloadChars = 128 * 1024;
+
+  static bool shouldOffload({required String path, required int chars}) =>
+      path == '/v1/ticks' && chars >= minOffloadChars;
+}
+
+Map<String, dynamic> _decodeBrokerObject(String payload) {
+  final decoded = jsonDecode(payload);
+  if (decoded is! Map<String, dynamic>) throw const FormatException();
+  return decoded;
+}
 
 /// The only permitted providers: cTrader for forex/gold, Binance for crypto.
 /// No demo, fallback feed, or OHLC-derived ticks are permitted here.
@@ -94,9 +112,17 @@ class MarketApi {
           'فشل الاتصال بالمصدر (${response.statusCode}). أعد المحاولة.');
     }
     try {
-      final data = jsonDecode(response.body);
-      if (data is! Map<String, dynamic>) throw const FormatException();
-      return data;
+      // Large BID history responses used to decode synchronously on the UI
+      // isolate, stalling chart gestures when the broker delivered a page.
+      // Decode only dense responses in a worker; source verification,
+      // chronological checks and strict page completeness remain below.
+      if (MarketJsonDecodePolicy.shouldOffload(
+          path: url.path, chars: response.body.length)) {
+        return await compute<String, Map<String, dynamic>>(
+          _decodeBrokerObject, response.body,
+          debugLabel: 'tradelab-ctrader-bid-json');
+      }
+      return _decodeBrokerObject(response.body);
     } catch (_) {
       throw const MarketDataException('أعاد مصدر السوق استجابة غير صالحة.');
     }
