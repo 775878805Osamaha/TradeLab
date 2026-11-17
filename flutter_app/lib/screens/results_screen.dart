@@ -145,6 +145,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     }
     return Column(children: [
       Container(
+        key: const Key('results-compact-header'),
         color: colors.surface,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
