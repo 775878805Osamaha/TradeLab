@@ -429,7 +429,22 @@ class _ResultsScreenState extends State<ResultsScreen> {
         ]),
       );
 
-  Widget _curve(LedgerReport report) => Column(
+  Widget _curve(LedgerReport report) => report.trades.isEmpty
+      ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const TradeDashboardSection('منحنى التداول'),
+          const SizedBox(height: 9),
+          const TradeDashboardPanel(child: Row(children: [
+            TradeDashboardIcon(Icons.show_chart_rounded,
+              color: TradeColors.blue, size: 40),
+            SizedBox(width: 12),
+            Expanded(child: Text(
+              'لا يوجد منحنى أداء بعد؛ الإيداعات وحدها '
+              'لا تُعدّ أرباح تداول. سيظهر المنحنى بعد أول صفقة مغلقة.',
+              style: TextStyle(fontSize: 13, height: 1.5),
+            )),
+          ])),
+        ])
+      : Column(
     crossAxisAlignment: CrossAxisAlignment.start, children: [
       const TradeDashboardSection('منحنى الرصيد المحقق',
         caption: 'تغير الرصيد من القيود والصفقات المغلقة فقط'),
@@ -559,10 +574,16 @@ class _ResultsScreenState extends State<ResultsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start, children: [
         const TradeSectionTitle('آخر الصفقات المغلقة'),
         if (report.trades.isEmpty)
-          const TradeSurface(child: SizedBox(height: 190,
-            child: TradeEmptyState(icon: Icons.receipt_long_outlined,
-              title: 'لا توجد صفقات',
-              description: 'سجّل صفقة مغلقة محليًا لتظهر هنا.')))
+          const TradeDashboardPanel(child: Row(children: [
+            TradeDashboardIcon(Icons.receipt_long_outlined,
+              color: TradeColors.blue, size: 40),
+            SizedBox(width: 12),
+            Expanded(child: Text(
+              'لا توجد صفقات مغلقة. افتح صفقة تدريب من الشارت '
+              'وسجّل إغلاقها لعرض النتائج.',
+              style: TextStyle(fontSize: 13, height: 1.5),
+            )),
+          ]))
         else for (final entry in report.trades.reversed
             .take(all ? report.trades.length : 5))
           Padding(padding: const EdgeInsets.only(bottom: 8),
