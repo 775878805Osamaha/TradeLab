@@ -109,7 +109,10 @@ class _ChartScreenState extends State<ChartScreen>
   int _loadRevision = 0;
   bool _loading = false;
   bool _olderLoading = false;
-  bool _rangeAutoFilling = false;
+  final RangeAutoFillRevisionGate _rangeAutoFillRevisionGate =
+      RangeAutoFillRevisionGate();
+  bool get _rangeAutoFilling =>
+      _rangeAutoFillRevisionGate.isActiveFor(_loadRevision);
   bool _historyExhausted = false;
   int? _olderCursorMs;
   String? _olderLoadError;
@@ -955,9 +958,8 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _autoFillRangeHistory(int revision) async {
-    if (_rangeAutoFilling || !mounted ||
-        revision != _loadRevision) return;
-    _rangeAutoFilling = true;
+    if (!mounted || revision != _loadRevision ||
+        !_rangeAutoFillRevisionGate.start(revision)) return;
     try {
       final chartWidth = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
       final target = RangeHistoryFillPolicy.targetClosedBars(
@@ -983,7 +985,9 @@ class _ChartScreenState extends State<ChartScreen>
             cursorBefore == _rangeOlderCursorMs) break;
       }
     } finally {
-      _rangeAutoFilling = false;
+      // Never clear the newer chart's active load after a stale request
+      // from a prior symbol finishes.
+      _rangeAutoFillRevisionGate.finish(revision);
     }
   }
 
