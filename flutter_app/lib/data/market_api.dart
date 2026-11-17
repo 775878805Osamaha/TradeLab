@@ -451,8 +451,10 @@ class MarketApi {
           time = entry.timestamp;
           price = entry.bid;
         } else if (entry is Map) {
-          time = (entry['timestamp'] as num?)?.toInt();
-          price = (entry['price'] as num?)?.toDouble();
+          final rawTime = entry['timestamp'];
+          final rawPrice = entry['price'];
+          time = rawTime is num ? rawTime.toInt() : null;
+          price = rawPrice is num ? rawPrice.toDouble() : null;
         } else {
           throw const MarketDataException('تيكات cTrader غير صالحة.');
         }
