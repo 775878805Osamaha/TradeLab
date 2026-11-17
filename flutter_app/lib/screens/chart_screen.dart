@@ -39,6 +39,7 @@ import '../replay/replay_training_archive.dart';
 import '../replay/replay_trade_overlay.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_startup_loader.dart';
+import '../data/ctrader_older_candle_pager.dart';
 import '../data/range_history_fill_policy.dart';
 import '../data/range_older_page.dart';
 import '../data/range_tick_store.dart';
@@ -1288,11 +1289,35 @@ class _ChartScreenState extends State<ChartScreen>
         if (mounted) setState(() => _historyExhausted = true);
         return;
       }
-      // The cursor is exclusive; never re-request the same broker minute.
-      final before = DateTime.fromMillisecondsSinceEpoch(
-          cursor - 1, isUtc: true);
-      final older = await widget.controller.history(
-          _selectedSymbol, _timeframe, before: before);
+      // Preserve the exclusive cursor on every broker request. A closed
+      // session can span multiple empty windows, especially M1 weekends.
+      // Search a bounded number of real cTrader windows automatically,
+      // without synthesizing or repeating any source candle.
+      final symbol = _selectedSymbol;
+      final timeframe = _timeframe;
+      final sourceAccount = widget.controller.accountId;
+      final List<MarketBar> older;
+      var quietCursor = cursor;
+      if (symbol.source == TradeSource.ctrader) {
+        final page = await CTraderOlderCandlePager.load(
+          cursorMs: cursor,
+          lookback: MarketApi.ctraderCandleLookback(timeframe),
+          fetch: (before) => widget.controller.history(
+              symbol, timeframe, before: before),
+          isCurrent: () => mounted && revision == _loadRevision &&
+              widget.controller.accountId == sourceAccount &&
+              _selectedSymbol.code == symbol.code &&
+              _timeframe == timeframe,
+        );
+        if (page == null) return;
+        older = page.bars;
+        quietCursor = page.nextCursorMs;
+      } else {
+        final before = DateTime.fromMillisecondsSinceEpoch(
+            cursor - 1, isUtc: true);
+        older = await widget.controller.history(
+            symbol, timeframe, before: before);
+      }
       if (revision != _loadRevision || !mounted) return;
       final earliest = _actualBars.first.timestamp;
       // Providers can return pages out of order or with duplicate timestamps.
@@ -1307,13 +1332,17 @@ class _ChartScreenState extends State<ChartScreen>
         if (_selectedSymbol.source == TradeSource.binance) {
           _historyExhausted = true;
         } else {
-          // A quiet short-window M1 response is not the end of history.
-          // Continue immediately before the exact window queried, not
-          // 89 days earlier (which would silently skip archived candles).
-          _olderCursorMs = cursor -
-              MarketApi.ctraderCandleLookback(_timeframe).inMilliseconds;
-          _olderLoadError =
-              'لا توجد شموع في الفترة السابقة. اضغط «أقدم» للبحث قبلها.';
+          // The pager has already checked up to five disjoint, genuinely
+          // empty windows. Keep its exclusive cursor for the next request;
+          // stop this pass rather than looping indefinitely on holidays.
+          _olderCursorMs = quietCursor;
+          if (quietCursor < 1) {
+            _historyExhausted = true;
+          } else {
+            _olderLoadError =
+                'لم يجد cTrader شموعًا في الفترات السابقة التي فحصناها. '
+                'اضغط «أقدم» للبحث قبلها.';
+          }
         }
       } else {
         _olderCursorMs = unique.first.timestamp;
