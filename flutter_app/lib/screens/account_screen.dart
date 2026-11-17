@@ -31,14 +31,19 @@ class AccountScreen extends StatelessWidget {
       key: const Key('account-dashboard-list'),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
       children: [
-        const TradeDashboardTitle(
-          title: 'الحساب',
-          subtitle: 'مصادر السوق، الحسابات المصرّح بها، وتفضيلات التطبيق',
-        ),
-        const SizedBox(height: 18),
+        Row(children: [
+          Expanded(child: Text('الحساب',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w900))),
+          TradeDashboardPill(
+            label: linked ? 'متصل' : 'غير متصل',
+            icon: linked ? Icons.check_circle_outline : Icons.link_off,
+            active: linked),
+        ]),
+        const SizedBox(height: 10),
         Container(
           key: const Key('account-connection-hero'),
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             gradient: const LinearGradient(
@@ -50,7 +55,7 @@ class AccountScreen extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Container(
-                width: 48, height: 48, alignment: Alignment.center,
+                width: 42, height: 42, alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: .12),
                   borderRadius: BorderRadius.circular(14)),
@@ -71,7 +76,7 @@ class AccountScreen extends StatelessWidget {
                 ],
               )),
             ]),
-            const SizedBox(height: 17),
+            const SizedBox(height: 10),
             Wrap(spacing: 8, runSpacing: 8, children: [
               TradeDashboardPill(
                 label: linked ? 'cTrader متصل' : 'cTrader غير متصل',
@@ -88,10 +93,10 @@ class AccountScreen extends StatelessWidget {
             ]),
           ]),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 16),
         const TradeDashboardSection('اتصال مصادر الأسعار',
           caption: 'الفوركس والذهب من cTrader · الكريبتو من Binance'),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         _sourceCard(context,
           title: 'cTrader',
           description: linked
@@ -100,7 +105,7 @@ class AccountScreen extends StatelessWidget {
           icon: Icons.show_chart_rounded,
           connected: linked,
           color: TradeColors.blue),
-        const SizedBox(height: 10),
+        const SizedBox(height: 7),
         _sourceCard(context,
           title: 'Binance',
           description: controller.binanceConnected
@@ -215,8 +220,10 @@ class AccountScreen extends StatelessWidget {
     required Color color,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    return TradeDashboardPanel(child: Row(children: [
-      TradeDashboardIcon(icon, color: color, size: 46),
+    return TradeDashboardPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(children: [
+      TradeDashboardIcon(icon, color: color, size: 38),
       const SizedBox(width: 12),
       Expanded(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
