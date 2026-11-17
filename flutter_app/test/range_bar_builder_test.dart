@@ -44,4 +44,35 @@ void main() {
     expect(small.closed.length, greaterThan(large.closed.length));
     expect(small.closed.first.close, 100.5);
   });
+  test('sub-ULP Range distance cannot lock the BID candle builder', () {
+    final bars = RangeBarBuilder(1e-16);
+    bars.appendBidTick(100.0);
+    expect(() => bars.appendBidTick(100.00000000000001),
+        throwsStateError);
+    expect(bars.closed, isEmpty);
+    expect(bars.forming!.close, 100);
+  });
+
+  test('extreme single tick expansion fails before changing confirmed bars', () {
+    final bars = RangeBarBuilder(1);
+    bars.appendBidTick(100);
+    bars.appendBidTick(102);
+    expect(bars.closed.length, 2);
+    expect(() => bars.appendBidTick(
+        102.0 + RangeBarBuilder.maxBarsPerSingleTick + 10),
+        throwsStateError);
+    expect(bars.closed.length, 2);
+    expect(bars.closed.last.close, 102);
+    expect(bars.forming!.close, 102);
+  });
+
+  test('normal multi-candle broker gaps stay deterministic', () {
+    final bars = RangeBarBuilder(.5);
+    bars.appendBidTick(100);
+    bars.appendBidTick(102);
+    expect(bars.closed.map((bar) => bar.close), [100.5, 101, 101.5, 102]);
+    expect(bars.forming!.open, 102);
+    expect(bars.forming!.close, 102);
+  });
+
 }
