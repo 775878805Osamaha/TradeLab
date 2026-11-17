@@ -3471,20 +3471,24 @@ class _ChartScreenState extends State<ChartScreen>
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Row(children: [
-        Tooltip(
-          message: _replay ? _marketEvidenceLabel :
-              'اختر شمعة البداية من التاريخ المتاح',
-          child: Text(
-            _replay ? 'Replay تاريخي · $source' : 'حدد بداية Replay',
-            key: const Key('chart-provenance-header'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-              color: scheme.primary),
+        Flexible(
+          flex: 3,
+          child: Tooltip(
+            message: _replay ? _marketEvidenceLabel :
+                'اختر شمعة البداية من التاريخ المتاح',
+            child: Text(
+              _replay ? 'Replay تاريخي · $source' : 'حدد بداية Replay',
+              key: const Key('chart-provenance-header'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                color: scheme.primary),
+            ),
           ),
         ),
         const SizedBox(width: 6),
-        Expanded(child: Text(_symbol,
+        Expanded(flex: 2, child: Text(_symbol,
           textDirection: TextDirection.ltr, textAlign: TextAlign.end,
           maxLines: 1, overflow: TextOverflow.ellipsis,
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800,
