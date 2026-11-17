@@ -29,6 +29,40 @@ void main() {
         isNot(contains('broker-closed-v2')));
   });
 
+  test('off-isolate SQLite decode restores 5201 genuine OHLC without gaps',
+      () async {
+    final account = 'large-cache-${DateTime.now().microsecondsSinceEpoch}';
+    const start = 1701000000000;
+    final bars = List<MarketBar>.generate(5201, (i) {
+      // Keep a genuine empty one-minute interval between bars 100 and 101.
+      final timestamp = start + (i + (i > 100 ? 1 : 0)) * 60000;
+      final open = 1900.0 + i * .01;
+      return MarketBar(timestamp,
+          TradeCandle(open, open + .5, open - .4, open + .2));
+    });
+    expect(MarketCandleDecodePolicy.shouldOffload(4999), isFalse);
+    // The large result must be parsed and verified outside the UI isolate.
+    expect(MarketCandleDecodePolicy.shouldOffload(bars.length), isTrue);
+    await MarketCandleStore.archive(gold, '1m', account, bars);
+    final restored = await MarketCandleStore.read(gold, '1m', account);
+    expect(restored.length, bars.length);
+    expect(restored[101].timestamp - restored[100].timestamp, 120000);
+    for (final index in [0, 100, 101, 499, 500, 4999, 5000, 5200]) {
+      expect(restored[index].timestamp, bars[index].timestamp);
+      expect(restored[index].candle.open, bars[index].candle.open);
+      expect(restored[index].candle.high, bars[index].candle.high);
+      expect(restored[index].candle.low, bars[index].candle.low);
+      expect(restored[index].candle.close, bars[index].candle.close);
+    }
+    final mostRecent = await MarketCandleStore.read(
+        gold, '1m', account, limit: 100);
+    expect(mostRecent, hasLength(100));
+    expect(mostRecent.first.timestamp, bars[5101].timestamp);
+    expect(mostRecent.last.timestamp, bars.last.timestamp);
+    expect(await MarketCandleStore.read(gold, '1m', '$account-other'),
+        isEmpty);
+  });
+
   test('persist 120 verified market candles; no fabricated gaps', () async {
     final account = 'cache-test-${DateTime.now().microsecondsSinceEpoch}';
     final bars = List<MarketBar>.generate(120, (i) {
