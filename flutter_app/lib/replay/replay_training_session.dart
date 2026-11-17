@@ -136,18 +136,29 @@ class ReplayTrainingSession {
       _visibleCount = newVisibleCount;
       return;
     }
-    // Normal chart seeking must stay O(1) while no practice trades exist.
-    if (_trades.isEmpty) {
+    // Seeking 100k historical bars must not revisit already closed trades,
+    // or open practice trades with no automatic stop/target. Those cannot
+    // change until the user explicitly closes them at a revealed candle.
+    final watchedTrades = <int>[];
+    for (var i = 0; i < _trades.length; i++) {
+      final trade = _trades[i];
+      if (trade.isOpen &&
+          (trade.stopLoss != null || trade.takeProfit != null)) {
+        watchedTrades.add(i);
+      }
+    }
+    if (watchedTrades.isEmpty) {
       _visibleCount = newVisibleCount;
       return;
     }
     for (var bar = _visibleCount; bar < newVisibleCount; bar++) {
       final candle = candles[bar];
-      for (var i = 0; i < _trades.length; i++) {
-        final trade = _trades[i];
+      for (var slot = watchedTrades.length - 1; slot >= 0; slot--) {
+        final index = watchedTrades[slot];
+        final trade = _trades[index];
         // A trade entered at a candle's close is NOT exposed to its
         // earlier high/low: only subsequent revealed candles can fill exits.
-        if (!trade.isOpen || trade.entryIndex >= bar) continue;
+        if (trade.entryIndex >= bar) continue;
         final stopped = trade.stopLoss != null &&
             (trade.side == ReplaySide.buy
                 ? candle.low <= trade.stopLoss!
@@ -161,13 +172,21 @@ class ReplayTrainingSession {
           final fill = trade.side == ReplaySide.buy
               ? (candle.open < trade.stopLoss! ? candle.open : trade.stopLoss!)
               : (candle.open > trade.stopLoss! ? candle.open : trade.stopLoss!);
-          _trades[i] = trade.close(
+          _trades[index] = trade.close(
               bar, fill, ReplayExitReason.stopLoss);
         } else if (targeted) {
-          _trades[i] = trade.close(
+          _trades[index] = trade.close(
               bar, trade.takeProfit!, ReplayExitReason.takeProfit);
+        } else {
+          continue;
         }
+        // Trades are independent. Swap-removing a finished trade avoids
+        // rechecking it on all later bars without shifting the trade list
+        // or changing any stable order IDs or journal records.
+        watchedTrades[slot] = watchedTrades.last;
+        watchedTrades.removeLast();
       }
+      if (watchedTrades.isEmpty) break;
     }
     _visibleCount = newVisibleCount;
   }
