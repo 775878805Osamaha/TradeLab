@@ -25,6 +25,7 @@ class ReplayMobileControls extends StatelessWidget {
     required this.showDrawingTools,
     required this.canLoadOlder,
     required this.olderLoading,
+    required this.tradeCount,
     required this.autoStep,
     required this.onClose,
     required this.onConfirm,
@@ -50,6 +51,7 @@ class ReplayMobileControls extends StatelessWidget {
   final bool showDrawingTools;
   final bool canLoadOlder;
   final bool olderLoading;
+  final int tradeCount;
   final bool autoStep;
   final VoidCallback onClose;
   final VoidCallback onConfirm;
@@ -248,14 +250,17 @@ class ReplayMobileControls extends StatelessWidget {
               onSelected: onExtras,
               icon: const Icon(Icons.more_horiz, color: ink, size: 24),
               itemBuilder: (_) => [
-                const PopupMenuItem(
-                  key: Key('replay-practice-order'),
+                PopupMenuItem(
+                  key: const Key('replay-practice-order'),
+                  enabled: !selecting,
                   value: ReplayExtrasAction.practiceOrder,
                   child: Text('صفقة تدريب', textDirection: TextDirection.rtl)),
-                const PopupMenuItem(
-                  key: Key('replay-practice-list'),
+                PopupMenuItem(
+                  key: const Key('replay-practice-list'),
+                  enabled: !selecting,
                   value: ReplayExtrasAction.practiceTrades,
-                  child: Text('صفقاتي', textDirection: TextDirection.rtl)),
+                  child: Text('صفقاتي ($tradeCount)',
+                    textDirection: TextDirection.rtl)),
                 const PopupMenuItem(
                   key: Key('replay-practice-archive'),
                   value: ReplayExtrasAction.practiceArchive,
