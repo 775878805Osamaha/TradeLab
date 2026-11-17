@@ -480,6 +480,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
         LayoutBuilder(builder: (context, constraints) {
           final columns = constraints.maxWidth >= 620 ? 3 : 2;
           return GridView.builder(
+            key: const Key('results-statistics-grid'),
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _stats.length,
