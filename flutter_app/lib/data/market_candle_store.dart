@@ -149,7 +149,11 @@ class MarketCandleStore {
       // Batched writes support long broker history without one transaction per
       // candle and without storing an enormous JSON blob in memory.
       for (var offset = 0; offset < bars.length; offset += 500) {
-        final page = bars.skip(offset).take(500).toList(growable: false);
+        // List.skip(offset) walks the prefix again on every page, creating
+        // quadratic traversal work when archiving tens of thousands of real
+        // broker bars. Index-based slices read each incoming candle once.
+        final end = offset + 500 < bars.length ? offset + 500 : bars.length;
+        final page = bars.getRange(offset, end).toList(growable: false);
         // Query existing rows in one bounded batch (501 bind parameters).
         // Even an older pagination request must not overwrite broker-closed
         // history behind Replay's back. SQLite serializes this transaction.
