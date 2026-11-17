@@ -105,6 +105,37 @@ void main() {
     await tester.tap(find.text('إغلاق').last);
     await tester.pumpAndSettle();
 
+    // Reset may not destroy the settled trade without an explicit decision.
+    final reset = find.byKey(const Key('replay-reset-start'));
+    expect(reset, findsOneWidget);
+    await tester.ensureVisible(reset);
+    await tester.pumpAndSettle();
+    await tester.tap(reset);
+    await tester.pumpAndSettle();
+    expect(find.text('العودة إلى بداية Replay'), findsOneWidget);
+    expect(find.text('حفظ والعودة للبداية'), findsOneWidget);
+    await tester.tap(find.text('إلغاء').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('صفقاتي (1)'), findsOneWidget,
+        reason: 'Cancelling reset must keep the existing practice trade');
+
+    await tester.ensureVisible(reset);
+    await tester.tap(reset);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('replay-confirm-reset')));
+    for (var attempt = 0;
+        attempt < 25 &&
+            find.textContaining('صفقاتي (0)').evaluate().isEmpty;
+        attempt++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.textContaining('صفقاتي (0)'), findsOneWidget,
+        reason: 'Approved reset creates a new empty Replay practice session');
+    expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+    expect(find.byKey(const Key('replay-practice-levels-overlay')),
+        findsNothing,
+        reason: 'A prior trade must not remain visible in the rewound chart');
+
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
