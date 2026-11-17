@@ -1,8 +1,36 @@
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
 import 'market_api.dart';
 import 'tradelab_data.dart';
+
+/// Parse a dense SQLite result and validate all stored OHLC in a worker.
+/// Database I/O happens before this function; no SQLite handles are sent
+/// between isolates. Keep identical strict source-integrity checks for both
+/// small and large cached histories.
+List<MarketBar> _decodeArchivedCandleRows(List<Map<String, Object?>> rows) {
+  final bars = rows.reversed.map((row) => MarketBar(
+    (row['timestamp_ms'] as num).toInt(),
+    TradeCandle(
+      (row['open'] as num).toDouble(),
+      (row['high'] as num).toDouble(),
+      (row['low'] as num).toDouble(),
+      (row['close'] as num).toDouble(),
+    ),
+  )).toList(growable: false);
+  validateBars(bars);
+  return bars;
+}
+
+/// Controls when the parse/validation cost warrants a worker isolate.
+class MarketCandleDecodePolicy {
+  const MarketCandleDecodePolicy._();
+  static const minOffloadBars = 5000;
+
+  static bool shouldOffload(int count) =>
+      !kIsWeb && count >= minOffloadBars;
+}
 
 /// Locally archived, source-validated time candles. A broker account is part
 /// of the identity: history from one account is never shown as another's.
@@ -130,17 +158,14 @@ class MarketCandleStore {
     final rows = await db.query('candle_history',
         where: 'cache_key = ?', whereArgs: [key(symbol, timeframe, accountId)],
         orderBy: 'timestamp_ms DESC', limit: limit);
-    final bars = rows.reversed.map((row) => MarketBar(
-      row['timestamp_ms'] as int,
-      TradeCandle(
-        (row['open'] as num).toDouble(),
-        (row['high'] as num).toDouble(),
-        (row['low'] as num).toDouble(),
-        (row['close'] as num).toDouble(),
-      ),
-    )).toList(growable: false);
-    validateBars(bars);
-    return bars;
+    if (MarketCandleDecodePolicy.shouldOffload(rows.length)) {
+      // Large broker history can require thousands of OHLC allocations and
+      // integrity checks. Keep this CPU work off the chart's gesture isolate.
+      return compute<List<Map<String, Object?>>, List<MarketBar>>(
+        _decodeArchivedCandleRows, rows,
+        debugLabel: 'tradelab-verified-candle-sqlite-decode');
+    }
+    return _decodeArchivedCandleRows(rows);
   }
 
   static Future<bool> isFresh(
