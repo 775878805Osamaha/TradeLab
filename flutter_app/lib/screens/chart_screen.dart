@@ -3458,6 +3458,70 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  /// Clean Replay layout: a single 48dp source row replaces the live
+  /// two-row trading header; the actual plot remains the main surface.
+  Widget _compactReplayHeader(List<TradeCandle> candles) {
+    final scheme = Theme.of(context).colorScheme;
+    final source = _selectedSymbol.source == TradeSource.ctrader
+        ? 'cTrader' : 'Binance';
+    final warning = _olderLoadError ?? _loadError;
+    return Container(
+      key: Key(widget.focusMode ? 'chart-focus-header' : 'chart-reference-header'),
+      color: scheme.surface,
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Row(children: [
+        Tooltip(
+          message: _replay ? _marketEvidenceLabel :
+              'اختر شمعة البداية من التاريخ المتاح',
+          child: Text(
+            _replay ? 'Replay تاريخي · $source' : 'حدد بداية Replay',
+            key: const Key('chart-provenance-header'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+              color: scheme.primary),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(child: Text(_symbol,
+          textDirection: TextDirection.ltr, textAlign: TextAlign.end,
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800,
+            color: scheme.onSurface))),
+        const SizedBox(width: 6),
+        Text(_mode == ChartMode.range ? 'R$_rangeTicks' :
+          (_timeframe == '1m' ? '1 دق' : _timeframe),
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+        if (warning != null)
+          IconButton(
+            key: const Key('replay-history-warning'),
+            tooltip: warning,
+            onPressed: () => _replayMessage(warning),
+            icon: const Icon(Icons.info_outline, size: 20),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 44),
+            padding: EdgeInsets.zero,
+          ),
+        IconButton(
+          key: const Key('chart-candle-settings-action'),
+          tooltip: 'إعدادات الشموع',
+          onPressed: _showCandleSettings,
+          icon: const Icon(Icons.tune, size: 21),
+          constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
+          padding: EdgeInsets.zero,
+        ),
+        IconButton(
+          key: const Key('symbol-picker'),
+          tooltip: 'اختيار رمز الشارت',
+          onPressed: _showSymbolPicker,
+          icon: const Icon(Icons.search, size: 21),
+          constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
+          padding: EdgeInsets.zero,
+        ),
+      ]),
+    );
+  }
+
   Widget _referenceChartHeader(List<TradeCandle> candles) {
     final hasVerifiedPrices = candles.isNotEmpty;
     final fetchingRangeTicks = _mode == ChartMode.range &&
@@ -3883,11 +3947,12 @@ class _ChartScreenState extends State<ChartScreen>
     final candles = _displayCandles;
     final surface = colors.surface;
     final chartHint = _activeChartHint;
+    final replayUi = _replay || _replaySelectingStart;
     return Column(children: [
-      widget.focusMode
-        ? _focusedChartHeader(candles)
+      replayUi ? _compactReplayHeader(candles)
+        : widget.focusMode ? _focusedChartHeader(candles)
         : _referenceChartHeader(candles),
-      if (_mode == ChartMode.range)
+      if (_mode == ChartMode.range && !replayUi)
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -3898,12 +3963,12 @@ class _ChartScreenState extends State<ChartScreen>
               style: const TextStyle(fontSize: 11, color: TradeColors.blue)),
         ),
       if (_loading) const LinearProgressIndicator(minHeight: 2),
-      if (_loadError != null && _liveRequested)
+      if (_loadError != null && _liveRequested && !replayUi)
         MaterialBanner(content: Text(_loadError!), actions: [
           TextButton(onPressed: _loadRealHistory, child: const Text('إعادة المحاولة')),
         ]),
       if (_olderLoading) const LinearProgressIndicator(minHeight: 2),
-      if (_olderLoadError != null)
+      if (_olderLoadError != null && !replayUi)
         Container(
           color: TradeColors.blue.withValues(alpha: .06),
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -4509,7 +4574,8 @@ class _ChartScreenState extends State<ChartScreen>
                 ]),
               ),
             ))),
-          if (candles.isNotEmpty)
+          if (candles.isNotEmpty &&
+              (!replayUi || _replayShowDrawingTools))
             _buildDrawingRail(constraints.maxHeight),
           if (candles.isNotEmpty && chartHint != null)
             Positioned(
@@ -4556,7 +4622,8 @@ class _ChartScreenState extends State<ChartScreen>
       // toolbar remains below Replay, adjacent to bottom navigation.
       // Retain both bands so Replay never steals the existing drawing actions.
       if (_replay || _replaySelectingStart) _replayControls(context),
-      if (!widget.focusMode) _referenceChartToolbar(surface),
+      if (!widget.focusMode && !replayUi)
+        _referenceChartToolbar(surface),
     ]);
   }
 
