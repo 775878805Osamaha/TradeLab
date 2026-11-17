@@ -1295,6 +1295,7 @@ class _ChartScreenState extends State<ChartScreen>
       // without synthesizing or repeating any source candle.
       final symbol = _selectedSymbol;
       final timeframe = _timeframe;
+      final sourceAccount = widget.controller.accountId;
       final List<MarketBar> older;
       var quietCursor = cursor;
       if (symbol.source == TradeSource.ctrader) {
@@ -1304,7 +1305,7 @@ class _ChartScreenState extends State<ChartScreen>
           fetch: (before) => widget.controller.history(
               symbol, timeframe, before: before),
           isCurrent: () => mounted && revision == _loadRevision &&
-              widget.controller.accountId != null &&
+              widget.controller.accountId == sourceAccount &&
               _selectedSymbol.code == symbol.code &&
               _timeframe == timeframe,
         );
