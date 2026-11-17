@@ -161,4 +161,69 @@ void main() {
     expect(await MarketCandleStore.isFresh(gold, '1m', account), isTrue);
   });
 
+  test('linear merge keeps 12000 authenticated bars ordered without gap filling',
+      () {
+    const start = 1700000000000;
+    const minute = 60000;
+    final existing = List<MarketBar>.generate(8000, (index) {
+      final timestamp = start + (index + (index >= 2000 ? 1 : 0)) * minute;
+      final price = 2000.0 + index * .01;
+      return MarketBar(timestamp,
+          TradeCandle(price, price + 1, price - 1, price + .5));
+    });
+    final incoming = List<MarketBar>.generate(4000, (index) {
+      final timestamp = start + (8001 + index) * minute;
+      final price = 3000.0 + index * .01;
+      return MarketBar(timestamp,
+          TradeCandle(price, price + 1, price - 1, price + .5));
+    });
+    final merged = MarketCandleStore.mergeVerified(existing, incoming);
+    expect(merged, hasLength(12000));
+    expect(merged.first.timestamp, existing.first.timestamp);
+    expect(merged[1999].timestamp + 2 * minute, merged[2000].timestamp);
+    expect(merged[8000].timestamp, incoming.first.timestamp);
+    expect(merged.last.timestamp, incoming.last.timestamp);
+    expect(() => merged.clear(), throwsUnsupportedError);
+    final clipped = MarketCandleStore.mergeVerified(
+        existing, incoming, maxCount: 10000);
+    expect(clipped, hasLength(10000));
+    expect(clipped.first.timestamp, merged[2000].timestamp);
+    expect(clipped.last.timestamp, merged.last.timestamp);
+  });
+
+  test('linear merge keeps only one candle at a genuine overlapping boundary',
+      () {
+    const earlier = [
+      MarketBar(1000, TradeCandle(10, 12, 9, 11)),
+      MarketBar(3000, TradeCandle(11, 13, 10, 12)),
+      MarketBar(5000, TradeCandle(12, 14, 11, 13)),
+    ];
+    const next = [
+      MarketBar(3000, TradeCandle(11, 13, 10, 12)),
+      MarketBar(4000, TradeCandle(12, 14, 11, 13)),
+      MarketBar(5000, TradeCandle(12, 14, 11, 13)),
+      MarketBar(7000, TradeCandle(13, 15, 12, 14)),
+    ];
+    final merged = MarketCandleStore.mergeVerified(earlier, next);
+    expect(merged.map((bar) => bar.timestamp).toList(),
+        [1000, 3000, 4000, 5000, 7000]);
+  });
+
+  test('clipped older overlap still rejects changed confirmed OHLC', () {
+    const existing = [
+      MarketBar(1000, TradeCandle(10, 12, 9, 11)),
+      MarketBar(2000, TradeCandle(11, 13, 10, 12)),
+      MarketBar(3000, TradeCandle(12, 14, 11, 13)),
+    ];
+    const incoming = [
+      MarketBar(1000, TradeCandle(10, 13, 9, 12)),
+      MarketBar(4000, TradeCandle(13, 15, 12, 14)),
+    ];
+    // A maxCount of one must not conceal a corrupt historical overlap.
+    expect(() => MarketCandleStore.mergeVerified(
+        existing, incoming, maxCount: 1),
+        throwsA(isA<MarketDataException>()));
+    expect(existing.first.candle.high, 12);
+  });
+
 }
