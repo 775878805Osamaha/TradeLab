@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
 
 import 'package:path/path.dart' as path;
 
@@ -62,6 +63,16 @@ class RangeTickStore {
     final digest = collector.digest;
     if (digest == null) throw StateError('Unable to hash BID window');
     return digest.toString();
+  }
+
+  /// SHA-256 verification is CPU-bound. A large authenticated BID window can
+  /// contain hundreds of thousands of ticks; keep hashing off the UI isolate
+  /// so panning and pinching do not stall during archive writes or cache reads.
+  /// The exact digest format remains identical for older cache manifests.
+  static Future<String> _windowDigestAsync(List<MarketTick> ticks) async {
+    if (kIsWeb || ticks.length < 5000) return _windowDigest(ticks);
+    return compute<List<MarketTick>, String>(
+      _windowDigest, ticks, debugLabel: 'tradelab-range-bid-cache-sha256');
   }
 
   static Future<Database> _open() async {
@@ -233,6 +244,9 @@ class RangeTickStore {
     // appendHistorical checks chronological ordering, exact overlap values
     // and same-millisecond multiplicities, inside its own transaction.
     await appendHistorical(accountId, symbol, ticks);
+    // Hash before entering the SQLite transaction. Never hold a database
+    // write lock while waiting on a large CPU-bound checksum.
+    final tickDigest = await _windowDigestAsync(ticks);
     final db = await _open();
     await db.transaction((txn) async {
       final counts = await txn.rawQuery('''
@@ -249,7 +263,7 @@ class RangeTickStore {
         'from_ms': fromMs,
         'to_ms': toMs,
         'tick_count': ticks.length,
-        'tick_digest': _windowDigest(ticks),
+        'tick_digest': tickDigest,
         'saved_at_ms': DateTime.now().toUtc().millisecondsSinceEpoch,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
@@ -291,7 +305,7 @@ class RangeTickStore {
       (row['timestamp_ms'] as num).toInt(),
       (row['bid'] as num).toDouble(),
     )).toList(growable: false);
-    return _windowDigest(ticks) == expectedDigest ? ticks : null;
+    return await _windowDigestAsync(ticks) == expectedDigest ? ticks : null;
   }
 
   /// Reads a requested historical interval from one or more individually

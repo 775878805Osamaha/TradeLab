@@ -114,6 +114,30 @@ void main() {
     ), isNull);
   });
 
+  test('large SHA-verified BID window retains every distinct broker event',
+      () async {
+    final start = DateTime.utc(2025, 2, 15).millisecondsSinceEpoch;
+    // Exceeds the isolate threshold; identical timestamps are genuine
+    // distinct broker events and must keep their original order.
+    final ticks = List<MarketTick>.generate(5200, (i) =>
+      MarketTick(start + i ~/ 2, 2000.0 + i / 1000000));
+    await RangeTickStore.archiveVerifiedWindow(
+      'large-digest-account', 'XAUUSD', ticks,
+      fromMs: start, toMs: start + sixDaysMs,
+    );
+    final restored = await RangeTickStore.readVerifiedWindow(
+      'large-digest-account', 'XAUUSD',
+      fromMs: start, toMs: start + sixDaysMs,
+    );
+    expect(restored, isNotNull);
+    expect(restored, hasLength(ticks.length));
+    expect(restored![0].timestamp, restored[1].timestamp);
+    expect(restored[0].bid, ticks.first.bid);
+    expect(restored[1].bid, ticks[1].bid);
+    expect(restored.last.timestamp, ticks.last.timestamp);
+    expect(restored.last.bid, ticks.last.bid);
+  });
+
   test('complete empty market window is cached without synthetic ticks',
       () async {
     final start = DateTime.utc(2025, 3, 1).millisecondsSinceEpoch;
