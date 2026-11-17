@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'replay_playback_speed.dart';
 
 enum ReplayStartMenuAction {
-  column, date, earliest, random, toggleTrading,
+  column, date, earliest, random, toggleTrading, toggleDrawingTools,
+}
+
+enum ReplayExtrasAction {
+  practiceOrder, practiceTrades, practiceArchive, loadOlder,
+  candleSettings, drawingTools, chartType,
 }
 enum ReplayStepMenuAction { currentBar, auto, information }
 
@@ -17,10 +22,14 @@ class ReplayMobileControls extends StatelessWidget {
     required this.chartFrame,
     required this.speed,
     required this.showTrading,
+    required this.showDrawingTools,
+    required this.canLoadOlder,
+    required this.olderLoading,
     required this.autoStep,
     required this.onClose,
     required this.onConfirm,
     required this.onStartMenu,
+    required this.onExtras,
     required this.onStepMenu,
     required this.onReset,
     required this.onStepBack,
@@ -38,10 +47,14 @@ class ReplayMobileControls extends StatelessWidget {
   final String chartFrame;
   final ReplayPlaybackSpeed speed;
   final bool showTrading;
+  final bool showDrawingTools;
+  final bool canLoadOlder;
+  final bool olderLoading;
   final bool autoStep;
   final VoidCallback onClose;
   final VoidCallback onConfirm;
   final ValueChanged<ReplayStartMenuAction> onStartMenu;
+  final ValueChanged<ReplayExtrasAction> onExtras;
   final ValueChanged<ReplayStepMenuAction> onStepMenu;
   final VoidCallback onReset;
   final VoidCallback onStepBack;
@@ -56,7 +69,7 @@ class ReplayMobileControls extends StatelessWidget {
     final surface = Theme.of(context).colorScheme.surface;
     return Container(
       key: const Key('replay-controls'),
-      height: 58,
+      height: 54,
       color: surface,
       padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Directionality(
@@ -126,6 +139,12 @@ class ReplayMobileControls extends StatelessWidget {
                   value: ReplayStartMenuAction.toggleTrading,
                   checked: showTrading,
                   child: const Text('إظهار أزرار التداول',
+                    textDirection: TextDirection.rtl)),
+                CheckedPopupMenuItem(
+                  key: const Key('replay-show-drawing-rail'),
+                  value: ReplayStartMenuAction.toggleDrawingTools,
+                  checked: showDrawingTools,
+                  child: const Text('إظهار أدوات الرسم الجانبية',
                     textDirection: TextDirection.rtl)),
               ],
             ),
@@ -219,6 +238,52 @@ class ReplayMobileControls extends StatelessWidget {
               padding: EdgeInsets.zero),
             ]),
           )),
+            PopupMenuButton<ReplayExtrasAction>(
+              key: const Key('replay-more-actions'),
+              tooltip: 'المزيد من أدوات Replay',
+              position: PopupMenuPosition.over,
+              constraints: const BoxConstraints(minWidth: 230, maxWidth: 315),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+              onSelected: onExtras,
+              icon: const Icon(Icons.more_horiz, color: ink, size: 24),
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  key: Key('replay-practice-order'),
+                  value: ReplayExtrasAction.practiceOrder,
+                  child: Text('صفقة تدريب', textDirection: TextDirection.rtl)),
+                const PopupMenuItem(
+                  key: Key('replay-practice-list'),
+                  value: ReplayExtrasAction.practiceTrades,
+                  child: Text('صفقاتي', textDirection: TextDirection.rtl)),
+                const PopupMenuItem(
+                  key: Key('replay-practice-archive'),
+                  value: ReplayExtrasAction.practiceArchive,
+                  child: Text('الأرشيف', textDirection: TextDirection.rtl)),
+                PopupMenuItem(
+                  key: const Key('replay-load-older'),
+                  value: ReplayExtrasAction.loadOlder,
+                  enabled: canLoadOlder && !olderLoading,
+                  child: const Text('تحميل بيانات أقدم',
+                    textDirection: TextDirection.rtl)),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  key: Key('replay-more-candles'),
+                  value: ReplayExtrasAction.candleSettings,
+                  child: Text('إعدادات الشموع',
+                    textDirection: TextDirection.rtl)),
+                const PopupMenuItem(
+                  key: Key('replay-more-drawings'),
+                  value: ReplayExtrasAction.drawingTools,
+                  child: Text('أدوات الرسم',
+                    textDirection: TextDirection.rtl)),
+                const PopupMenuItem(
+                  key: Key('replay-more-chart-type'),
+                  value: ReplayExtrasAction.chartType,
+                  child: Text('نوع الرسم البياني',
+                    textDirection: TextDirection.rtl)),
+              ],
+            ),
             if (selecting)
               TextButton.icon(
                 key: const Key('replay-confirm-start'),
