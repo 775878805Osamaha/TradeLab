@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show compute;
@@ -15,6 +17,37 @@ class MarketJsonDecodePolicy {
 
   static bool shouldOffload({required String path, required int chars}) =>
       path == '/v1/ticks' && chars >= minOffloadChars;
+}
+
+/// Keep simultaneous cTrader history requests bounded. One truncated
+/// interval can spawn many child intervals; this gate limits only in-flight
+/// HTTP requests, while independent results retain their chronological
+/// interval positions and are validated before joining the chart.
+class _BidRequestGate {
+  _BidRequestGate(this.limit);
+  final int limit;
+  int _active = 0;
+  final Queue<Completer<void>> _queued = Queue<Completer<void>>();
+
+  Future<T> run<T>(Future<T> Function() fetch) async {
+    if (_active >= limit) {
+      final ready = Completer<void>();
+      _queued.addLast(ready);
+      await ready.future;
+    } else {
+      _active++;
+    }
+    try {
+      return await fetch();
+    } finally {
+      if (_queued.isEmpty) {
+        _active--;
+      } else {
+        // Hand over the existing slot without exceeding the concurrency cap.
+        _queued.removeFirst().complete();
+      }
+    }
+  }
 }
 
 Map<String, dynamic> _decodeBrokerObject(String payload) {
@@ -333,8 +366,12 @@ class MarketApi {
     const maxTicks = 1000000;
     const maxRequests = 4096;
     const maxPageTicks = 100000;
+    // Two concurrent verified cTrader pages reduce serial wait when the
+    // broker truncates history without overwhelming the provider.
+    final gate = _BidRequestGate(2);
     var requests = 0;
-    final results = <MarketTick>[];
+    var loadedTicks = 0;
+    final pages = <int, List<MarketTick>>{};
 
     Future<void> loadInterval(int fromMs, int toMs) async {
       requests++;
@@ -342,10 +379,10 @@ class MarketApi {
         throw const MarketDataException(
             'تجاوز تاريخ cTrader عدد الطلبات الآمن؛ جرّب فترة أقصر.');
       }
-      final data = await _json(_gateway('/v1/ticks', {
+      final data = await gate.run(() => _json(_gateway('/v1/ticks', {
         'accountId': accountId, 'symbolId': '$id',
         'from': '$fromMs', 'to': '$toMs',
-      }), token: token);
+      }), token: token));
       if (data['source'] != 'ctrader' ||
           data['quoteType'] != 'bid' ||
           '${data['symbolId']}' != '$id' ||
@@ -362,17 +399,22 @@ class MarketApi {
               'cTrader أعاد تيكات غير مكتملة داخل مللي ثانية واحدة.');
         }
         final middle = fromMs + (toMs - fromMs) ~/ 2;
-        await loadInterval(fromMs, middle);
-        await loadInterval(middle + 1, toMs);
+        // Completion order may differ from time order: each leaf is stored
+        // by its disjoint starting millisecond, and reassembled afterward.
+        await Future.wait<void>([
+          loadInterval(fromMs, middle),
+          loadInterval(middle + 1, toMs),
+        ]);
         return;
       }
 
       final rows = data['ticks'];
       if (rows is! List || rows.length > maxPageTicks ||
-          results.length + rows.length > maxTicks) {
+          loadedTicks + rows.length > maxTicks) {
         throw const MarketDataException(
             'تجاوزت تيكات cTrader الحد الآمن للذاكرة أو حجم الصفحة.');
       }
+      final page = <MarketTick>[];
       var previous = fromMs;
       for (final entry in rows) {
         if (entry is! Map) {
@@ -386,15 +428,22 @@ class MarketApi {
           throw const MarketDataException(
               'ترتيب تيكات cTrader أو أسعارها غير صالح.');
         }
-        results.add(MarketTick(time, price));
+        page.add(MarketTick(time, price));
         previous = time;
       }
+      loadedTicks += page.length;
+      pages[fromMs] = page;
     }
 
-    // Left-to-right recursive loading preserves event order and all
-    // same-millisecond ticks; never deduplicate genuine broker events.
+    // Reassemble only after every disjoint broker interval is verified.
+    // Never sort individual ticks or collapse same-millisecond BID events.
     await loadInterval(fromMs, toMs);
-    return results;
+    final starts = pages.keys.toList()..sort();
+    final result = <MarketTick>[];
+    for (final start in starts) {
+      result.addAll(pages[start]!);
+    }
+    return result;
   }
 
   Future<double> ctraderPointSize({required String token, required String accountId,
