@@ -101,6 +101,7 @@ jobs:
             test/replay_training_session_test.dart \
             test/replay_training_widget_test.dart \
             test/results_connection_test.dart \
+            test/dashboard_ui_responsive_test.dart \
             test/widget_test.dart 
       - name: Verify OAuth gateway handoff contract
         run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs
