@@ -46,6 +46,7 @@ import '../data/range_older_page.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
+import '../data/chart_timeframe_catalog.dart';
 import '../data/market_candle_store.dart';
 import '../data/ctrader_candle_stitcher.dart';
 import '../data/market_controller.dart';
@@ -2231,6 +2232,10 @@ class _ChartScreenState extends State<ChartScreen>
       _training.clear();
       _trainingEverTraded = false;
       _symbol = item.code;
+      // Never reuse an unsupported native provider interval when switching
+      // from cTrader to Binance or vice versa. No derived candles.
+      _timeframe = ChartTimeframeCatalog.compatibleOnSwitch(
+          item.source, _timeframe);
       // Binance does not provide cTrader BID tick Range bars.
       if (_mode == ChartMode.range &&
           item.source != TradeSource.ctrader) {
@@ -2302,7 +2307,7 @@ class _ChartScreenState extends State<ChartScreen>
       return;
     }
     _momentum.stop();
-    const frames = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1D', '1W', '1M'];
+    final frames = ChartTimeframeCatalog.forSource(_selectedSymbol.source);
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
