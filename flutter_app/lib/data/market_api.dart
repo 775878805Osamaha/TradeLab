@@ -373,7 +373,8 @@ class MarketApi {
     var loadedTicks = 0;
     final pages = <int, List<MarketTick>>{};
 
-    Future<void> loadInterval(int fromMs, int toMs) async {
+    Future<void> loadInterval(int fromMs, int toMs,
+        {bool allowParallel = true}) async {
       requests++;
       if (requests > maxRequests) {
         throw const MarketDataException(
@@ -399,12 +400,18 @@ class MarketApi {
               'cTrader أعاد تيكات غير مكتملة داخل مللي ثانية واحدة.');
         }
         final middle = fromMs + (toMs - fromMs) ~/ 2;
-        // Completion order may differ from time order: each leaf is stored
-        // by its disjoint starting millisecond, and reassembled afterward.
-        await Future.wait<void>([
-          loadInterval(fromMs, middle),
-          loadInterval(middle + 1, toMs),
-        ]);
+        // Parallelize only this first split. Each child continues
+        // depth-first to a definitive broker page, preventing thousands of
+        // speculative requests if a provider always returns hasMore=true.
+        if (allowParallel) {
+          await Future.wait<void>([
+            loadInterval(fromMs, middle, allowParallel: false),
+            loadInterval(middle + 1, toMs, allowParallel: false),
+          ]);
+        } else {
+          await loadInterval(fromMs, middle, allowParallel: false);
+          await loadInterval(middle + 1, toMs, allowParallel: false);
+        }
         return;
       }
 
