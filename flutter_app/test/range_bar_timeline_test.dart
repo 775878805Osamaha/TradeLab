@@ -218,4 +218,61 @@ void main() {
       prependedTicks: 1,
     ), isNull);
   });
+
+  test('Range Replay reset start follows its original BID event after older page',
+      () {
+    final original = RangeBarTimeline.build([
+      MarketTick(100, 100),
+      MarketTick(101, 102.4),
+      MarketTick(102, 102.8),
+      MarketTick(103, 102),
+      MarketTick(104, 120),
+    ], 1);
+    const initialIndex = 0;
+    final currentIndex = original.closedBarCount - 1;
+    expect(currentIndex, greaterThan(initialIndex));
+    final prepended = [
+      MarketTick(90, 98), MarketTick(91, 99), MarketTick(92, 100),
+    ];
+    final rebuilt = RangeBarTimeline.build([
+      ...prepended,
+      MarketTick(100, 100),
+      MarketTick(101, 102.4),
+      MarketTick(102, 102.8),
+      MarketTick(103, 102),
+      MarketTick(104, 120),
+    ], 1);
+    final originalStartEvent = original.endTickIndices[initialIndex];
+    final originalCurrentEvent = original.endTickIndices[currentIndex];
+    final newStartIndex = rebuilt.rebaseReplayStart(
+      oldEndTickIndices: original.endTickIndices,
+      oldSelectedIndex: initialIndex,
+      prependedTicks: prepended.length,
+    );
+    final newVisibleCount = rebuilt.visibleClosedBarsThroughTick(
+        prepended.length + originalCurrentEvent);
+    expect(newStartIndex, isNotNull);
+    expect(newStartIndex! + 1, lessThanOrEqualTo(newVisibleCount),
+        reason: 'Reset must never jump after current verified Replay cutoff');
+    expect(rebuilt.endTickIndices[newStartIndex],
+        lessThanOrEqualTo(prepended.length + originalStartEvent),
+        reason: 'Rebased reset cannot depend on a future BID event');
+  });
+
+  test('Range Replay rejects rebuild when its start would need future BID',
+      () {
+    final original = RangeBarTimeline.build([
+      MarketTick(100, 100), MarketTick(101, 101), MarketTick(102, 102),
+    ], 1);
+    final rebuilt = RangeBarTimeline.build([
+      MarketTick(90, 100.5),
+      MarketTick(100, 100), MarketTick(101, 101), MarketTick(102, 102),
+    ], 1);
+    expect(rebuilt.rebaseReplayStart(
+      oldEndTickIndices: original.endTickIndices,
+      oldSelectedIndex: 0,
+      prependedTicks: 1,
+    ), isNull,
+      reason: 'Cannot reset to a candle that only closes after the old start');
+  });
 }
