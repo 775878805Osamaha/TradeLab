@@ -134,4 +134,31 @@ void main() {
     expect(after.last.candle.close, 14);
   });
 
+  test('archive 1602 broker candles across indexed page boundaries without filling gaps',
+      () async {
+    final account = 'long-history-${DateTime.now().microsecondsSinceEpoch}';
+    const firstMs = 1700000000000;
+    final bars = List<MarketBar>.generate(1602, (i) {
+      // One genuine missing minute survives import and an identical replay.
+      final time = firstMs + (i + (i >= 701 ? 1 : 0)) * 60000;
+      final price = 4000.0 + i * 0.01;
+      return MarketBar(time,
+          TradeCandle(price, price + .5, price - .5, price + .1));
+    });
+    await MarketCandleStore.archive(gold, '1m', account, bars,
+        markFresh: true);
+    await MarketCandleStore.archive(gold, '1m', account, bars);
+    final restored = await MarketCandleStore.read(gold, '1m', account);
+    expect(restored, hasLength(1602));
+    expect(restored.first.timestamp, bars.first.timestamp);
+    expect(restored.last.timestamp, bars.last.timestamp);
+    expect(restored[701].timestamp - restored[700].timestamp, 120000);
+    for (final i in [0, 499, 500, 999, 1000, 1499, 1500, 1601]) {
+      expect(restored[i].timestamp, bars[i].timestamp);
+      expect(restored[i].candle.open, bars[i].candle.open);
+      expect(restored[i].candle.close, bars[i].candle.close);
+    }
+    expect(await MarketCandleStore.isFresh(gold, '1m', account), isTrue);
+  });
+
 }
