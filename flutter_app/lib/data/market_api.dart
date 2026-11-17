@@ -56,6 +56,28 @@ Map<String, dynamic> _decodeBrokerObject(String payload) {
   return decoded;
 }
 
+/// Dense broker BID history is decoded AND converted to MarketTick on the
+/// worker isolate. The source/quote/account identity, order and exact range
+/// are still validated by the requesting page before a single tick is used.
+/// Preserve malformed records for the existing validation to reject; never
+/// silently omit a broker event or fabricate a replacement.
+Map<String, dynamic> _decodeDenseBrokerBidTicks(String payload) {
+  final decoded = _decodeBrokerObject(payload);
+  final rows = decoded['ticks'];
+  if (rows is List && rows.length <= 100000) {
+    decoded['ticks'] = <dynamic>[
+      for (final entry in rows)
+        if (entry is Map &&
+            entry['timestamp'] is num && entry['price'] is num)
+          MarketTick((entry['timestamp'] as num).toInt(),
+              (entry['price'] as num).toDouble())
+        else
+          entry,
+    ];
+  }
+  return decoded;
+}
+
 /// The only permitted providers: cTrader for forex/gold, Binance for crypto.
 /// No demo, fallback feed, or OHLC-derived ticks are permitted here.
 class MarketApi {
@@ -145,15 +167,14 @@ class MarketApi {
           'فشل الاتصال بالمصدر (${response.statusCode}). أعد المحاولة.');
     }
     try {
-      // Large BID history responses used to decode synchronously on the UI
-      // isolate, stalling chart gestures when the broker delivered a page.
-      // Decode only dense responses in a worker; source verification,
-      // chronological checks and strict page completeness remain below.
+      // Both JSON decoding and MarketTick allocations of dense BID pages
+      // happen in the worker isolate; frame scheduling on the chart UI
+      // only needs the lightweight final chronology/price verification.
       if (MarketJsonDecodePolicy.shouldOffload(
           path: url.path, chars: response.body.length)) {
         return await compute<String, Map<String, dynamic>>(
-          _decodeBrokerObject, response.body,
-          debugLabel: 'tradelab-ctrader-bid-json');
+          _decodeDenseBrokerBidTicks, response.body,
+          debugLabel: 'tradelab-ctrader-bid-json-and-ticks');
       }
       return _decodeBrokerObject(response.body);
     } catch (_) {
@@ -424,18 +445,24 @@ class MarketApi {
       final page = <MarketTick>[];
       var previous = fromMs;
       for (final entry in rows) {
-        if (entry is! Map) {
+        final int? time;
+        final double? price;
+        if (entry is MarketTick) {
+          time = entry.timestamp;
+          price = entry.bid;
+        } else if (entry is Map) {
+          time = (entry['timestamp'] as num?)?.toInt();
+          price = (entry['price'] as num?)?.toDouble();
+        } else {
           throw const MarketDataException('تيكات cTrader غير صالحة.');
         }
-        final time = (entry['timestamp'] as num?)?.toInt();
-        final price = (entry['price'] as num?)?.toDouble();
         if (time == null || time < fromMs || time > toMs ||
             time < previous || price == null ||
             !price.isFinite || price <= 0) {
           throw const MarketDataException(
               'ترتيب تيكات cTrader أو أسعارها غير صالح.');
         }
-        page.add(MarketTick(time, price));
+        page.add(entry is MarketTick ? entry : MarketTick(time, price));
         previous = time;
       }
       loadedTicks += page.length;
