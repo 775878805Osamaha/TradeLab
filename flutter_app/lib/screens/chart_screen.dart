@@ -1031,6 +1031,20 @@ class _ChartScreenState extends State<ChartScreen>
             'قبل متابعة Replay، ولم نعرض بيانات مستقبلية.';
         return; // Retain the original source and original cursor.
       }
+      // In an ACTIVE Range Replay, the saved initial candle and the current
+      // cutoff must both rebase by their original BID events. Rebasing only
+      // the current cutoff made Reset jump to an unrelated historical bar.
+      final remappedInitial = _replay
+          ? timeline.rebaseReplayStart(
+              oldEndTickIndices: _rangeBarEndTickIndices,
+              oldSelectedIndex: _replayInitialCount - 1,
+              prependedTicks: prefix.length)
+          : null;
+      if (_replay && remappedInitial == null) {
+        _olderLoadError = 'تعذر تثبيت شمعة بداية Replay الأصلية بعد '
+            'إعادة بناء شموع Range؛ لن نغيّر موضع التدريب.';
+        return;
+      }
       // Range bars are not time candles: after prepending BID events, a bar's
       // index can move non-uniformly. Rebase each drawing endpoint to its
       // original market event while keeping its real price unchanged.
@@ -1105,7 +1119,8 @@ class _ChartScreenState extends State<ChartScreen>
           ? null
           : timeline.visibleClosedBarsThroughTick(
               prefix.length + replayCutoffTick);
-      if (_replay && (safeReplayBars == null || safeReplayBars == 0)) {
+      if (_replay && (safeReplayBars == null || safeReplayBars == 0 ||
+          remappedInitial == null || remappedInitial + 1 > safeReplayBars)) {
         _olderLoadError =
             'يغيّر التاريخ الأقدم بداية شموع المدى قبل موضع Replay؛ '
             'لن نعرض شمعة تحتاج تيكات مستقبلية. أوقف Replay لتحميلها.';
@@ -1162,6 +1177,8 @@ class _ChartScreenState extends State<ChartScreen>
           // A non-null, closed-bar cutoff was already checked above.
           _training.moveTo(timeline.bars, safeReplayBars!);
           _visibleThrough = safeReplayBars;
+          // Rewind continues to target the same verified BID event.
+          _replayInitialCount = remappedInitial! + 1;
         }
       });
     } on MarketDataException catch (error) {
