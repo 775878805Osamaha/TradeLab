@@ -123,7 +123,28 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('results-net-profit-hero')), findsOneWidget);
       expect(find.text('صافي الربح المحقق'), findsOneWidget);
-      expect(tester.takeException(), isNull);
+      final renderError = tester.takeException();
+      if (renderError != null) {
+        final captured = <String>[];
+        final oldPrinter = debugPrint;
+        debugPrint = (String? message, {int? wrapWidth}) {
+          if (message != null) captured.add(message);
+        };
+        try {
+          debugDumpRenderTree();
+        } finally {
+          debugPrint = oldPrinter;
+        }
+        final lines = captured.join('\n').split('\n');
+        for (var i = 0; i < lines.length; i++) {
+          if (lines[i].contains('OVERFLOWING')) {
+            // Temporary diagnosis, remove after locating the exact culprit.
+            // ignore: avoid_print
+            print('RESULTS_320_OVERFLOW: ${lines.skip(i > 12 ? i - 12 : 0).take(38).join('\\n')}');
+          }
+        }
+      }
+      expect(renderError, isNull);
     });
 
     testWidgets('Dark Account supports enlarged Arabic and usable settings '
