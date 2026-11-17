@@ -61,41 +61,14 @@ class _MarketsScreenState extends State<MarketsScreen> {
     return Column(children: [
       Container(
         color: scheme.surface,
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TradeDashboardTitle(
-              title: 'قائمة المراقبة',
-              subtitle: 'متابعة الرموز الحقيقية والانتقال مباشرة إلى الشارت',
-              action: IconButton.filledTonal(
-                key: const Key('watchlist-refresh'),
-                tooltip: 'تحديث أسعار Binance',
-                onPressed: widget.controller.loadingQuotes
-                    ? null : widget.controller.refreshQuotes,
-                icon: widget.controller.loadingQuotes
-                    ? const SizedBox(width: 18, height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh_rounded),
-              ),
-            ),
-            const SizedBox(height: 14),
             Row(children: [
-              TradeDashboardPill(
-                label: '${_favorites.length} مفضلة',
-                icon: Icons.star_rounded,
-                color: TradeColors.gold,
-              ),
-              const SizedBox(width: 8),
-              Expanded(child: Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: TradeDashboardPill(
-                  label: widget.controller.binanceConnected
-                      ? 'Binance متصل' : 'بانتظار أسعار Binance',
-                  active: widget.controller.binanceConnected,
-                  icon: widget.controller.binanceConnected
-                      ? Icons.check_circle_outline : Icons.info_outline,
-                ),
-              )),
+              Expanded(child: Text('قائمة المراقبة',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900))),
               IconButton(
                 key: const Key('watchlist-favorites-toggle'),
                 tooltip: 'عرض المفضلة فقط',
@@ -105,12 +78,19 @@ class _MarketsScreenState extends State<MarketsScreen> {
                     ? Icons.star_rounded : Icons.star_outline_rounded,
                     color: _favoritesOnly ? TradeColors.gold :
                         scheme.onSurfaceVariant),
-                style: IconButton.styleFrom(
-                  backgroundColor: _favoritesOnly
-                      ? TradeColors.gold.withValues(alpha: .1) : null),
+              ),
+              IconButton.filledTonal(
+                key: const Key('watchlist-refresh'),
+                tooltip: 'تحديث أسعار Binance',
+                onPressed: widget.controller.loadingQuotes
+                    ? null : widget.controller.refreshQuotes,
+                icon: widget.controller.loadingQuotes
+                    ? const SizedBox(width: 18, height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh_rounded),
               ),
             ]),
-            const SizedBox(height: 13),
+            const SizedBox(height: 10),
             TextField(
               key: const Key('watchlist-search'),
               controller: _search,
@@ -166,10 +146,10 @@ class _MarketsScreenState extends State<MarketsScreen> {
               )
             : ListView.separated(
                 key: const Key('markets-symbol-list'),
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                padding: const EdgeInsets.fromLTRB(16, 9, 16, 22),
                 itemCount: symbols.length + 1,
                 separatorBuilder: (context, index) =>
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 7),
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return Row(children: [
@@ -220,13 +200,13 @@ class _MarketsScreenState extends State<MarketsScreen> {
         onTap: widget.onSymbolSelected == null
             ? null : () => widget.onSymbolSelected!(symbol),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           child: Row(children: [
             TradeDashboardIcon(
               isGold ? Icons.auto_awesome_rounded :
                   isCrypto ? Icons.currency_bitcoin_rounded :
                     Icons.show_chart_rounded,
-              color: accent, size: 44),
+              color: accent, size: 38),
             const SizedBox(width: 10),
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
