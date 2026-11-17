@@ -27,7 +27,6 @@ class AccountScreen extends StatelessWidget {
   Widget _content(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final linked = controller.ctraderConnected;
-    final accent = linked ? TradeColors.positive : TradeColors.gold;
     return ListView(
       key: const Key('account-dashboard-list'),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
