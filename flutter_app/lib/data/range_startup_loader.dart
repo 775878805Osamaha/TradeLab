@@ -50,6 +50,7 @@ class RangeStartupLoader {
     var priorFrom = endMs + 1;
     var combined = <MarketTick>[];
     RangeStartupSnapshot? latest;
+    int? lastNotifiedFromMs;
     for (final horizon in horizons) {
       final fromMs = endMs - horizon.inMilliseconds;
       final toMs = priorFrom - 1;
@@ -68,16 +69,30 @@ class RangeStartupLoader {
             'تاريخ cTrader أكبر من الحد الآمن للذاكرة. '
             'اختر مدى أكبر أو حدّث بيانات الوسيط.');
       }
-      combined = <MarketTick>[...page, ...combined];
       priorFrom = fromMs;
-      if (combined.isEmpty) continue;
-
+      if (page.isEmpty) {
+        // This is a broker-verified quiet interval, not a missing interval.
+        // Extend the known coverage cursor without copying all cached BID
+        // events or recomputing exactly the same Range timeline.
+        if (latest != null) {
+          latest = RangeStartupSnapshot(
+              fromMs, endMs, latest.ticks, latest.timeline);
+        }
+        continue;
+      }
+      combined = <MarketTick>[...page, ...combined];
       final timeline = await RangeBarTimeline.buildAsync(
           combined, priceDistance);
       latest = RangeStartupSnapshot(
           fromMs, endMs, List<MarketTick>.unmodifiable(combined), timeline);
       await onSnapshot(latest);
+      lastNotifiedFromMs = fromMs;
       if (latest.closedBars >= minimumClosedBars) break;
+    }
+    // Commit final verified coverage even if the last older windows were
+    // quiet. Older paging must not request already-verified closed periods.
+    if (latest != null && latest.fromMs != lastNotifiedFromMs) {
+      await onSnapshot(latest);
     }
     return latest;
   }
