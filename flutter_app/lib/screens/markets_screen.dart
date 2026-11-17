@@ -4,10 +4,12 @@ import '../data/tradelab_data.dart';
 import '../data/market_controller.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
+import '../widgets/tradelab_dashboard_widgets.dart';
 
 class MarketsScreen extends StatefulWidget {
   const MarketsScreen({required this.controller, this.onSymbolSelected,
     super.key});
+
   final MarketController controller;
   final ValueChanged<TradeSymbol>? onSymbolSelected;
 
@@ -27,7 +29,7 @@ class _MarketsScreenState extends State<MarketsScreen> {
     widget.controller.addListener(_rebuild);
   }
 
-  void _rebuild() {if (mounted) setState(() {});}
+  void _rebuild() { if (mounted) setState(() {}); }
 
   @override
   void dispose() {
@@ -36,177 +38,250 @@ class _MarketsScreenState extends State<MarketsScreen> {
     super.dispose();
   }
 
-  List<TradeSymbol> get _visible => tradeSymbols.where((symbol) {
-        final category = switch (_filter) {
-          'الذهب' => symbol.kind == InstrumentKind.gold,
-          'فوركس' => symbol.kind == InstrumentKind.forex,
-          'كريبتو' => symbol.kind == InstrumentKind.crypto,
-          _ => true,
-        };
-        final query = _search.text.trim().toLowerCase();
-        return category &&
-            (!_favoritesOnly || _favorites.contains(symbol.code)) &&
-            (symbol.code.toLowerCase().contains(query) ||
-                symbol.title.toLowerCase().contains(query));
-      }).toList(growable: false);
+  List<TradeSymbol> get _visible {
+    final query = _search.text.trim().toLowerCase();
+    return tradeSymbols.where((symbol) {
+      final matchesKind = switch (_filter) {
+        'الذهب' => symbol.kind == InstrumentKind.gold,
+        'فوركس' => symbol.kind == InstrumentKind.forex,
+        'كريبتو' => symbol.kind == InstrumentKind.crypto,
+        _ => true,
+      };
+      return matchesKind &&
+          (!_favoritesOnly || _favorites.contains(symbol.code)) &&
+          (symbol.code.toLowerCase().contains(query) ||
+              symbol.title.toLowerCase().contains(query));
+    }).toList(growable: false);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final scheme = Theme.of(context).colorScheme;
+    final symbols = _visible;
     return Column(children: [
       Container(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
-        color: colors.surface,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: Text('الأسواق',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800))),
-            TradeStatusChip(label: widget.controller.binanceConnected
-                ? 'Binance متصل' : 'بانتظار الأسعار',
-                connected: widget.controller.binanceConnected),
-            IconButton(
-              tooltip: 'تحديث أسعار Binance',
-              onPressed: widget.controller.loadingQuotes ? null : widget.controller.refreshQuotes,
-              icon: widget.controller.loadingQuotes
-                  ? const SizedBox(width: 18,height: 18,child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.refresh),
+        color: scheme.surface,
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TradeDashboardTitle(
+              title: 'قائمة المراقبة',
+              subtitle: 'متابعة الرموز الحقيقية والانتقال مباشرة إلى الشارت',
+              action: IconButton.filledTonal(
+                key: const Key('watchlist-refresh'),
+                tooltip: 'تحديث أسعار Binance',
+                onPressed: widget.controller.loadingQuotes
+                    ? null : widget.controller.refreshQuotes,
+                icon: widget.controller.loadingQuotes
+                    ? const SizedBox(width: 18, height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh_rounded),
+              ),
             ),
-            IconButton(
-              tooltip: 'عرض المفضلة فقط',
-              icon: Icon(_favoritesOnly ? Icons.star : Icons.star_border,
-                  color: _favoritesOnly ? TradeColors.gold : colors.onSurface),
-              onPressed: () => setState(() => _favoritesOnly = !_favoritesOnly),
+            const SizedBox(height: 14),
+            Row(children: [
+              TradeDashboardPill(
+                label: '${_favorites.length} مفضلة',
+                icon: Icons.star_rounded,
+                color: TradeColors.gold,
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TradeDashboardPill(
+                  label: widget.controller.binanceConnected
+                      ? 'Binance متصل' : 'بانتظار أسعار Binance',
+                  active: widget.controller.binanceConnected,
+                  icon: widget.controller.binanceConnected
+                      ? Icons.check_circle_outline : Icons.info_outline,
+                ),
+              )),
+              IconButton(
+                key: const Key('watchlist-favorites-toggle'),
+                tooltip: 'عرض المفضلة فقط',
+                onPressed: () => setState(
+                    () => _favoritesOnly = !_favoritesOnly),
+                icon: Icon(_favoritesOnly
+                    ? Icons.star_rounded : Icons.star_outline_rounded,
+                    color: _favoritesOnly ? TradeColors.gold :
+                        scheme.onSurfaceVariant),
+                style: IconButton.styleFrom(
+                  backgroundColor: _favoritesOnly
+                      ? TradeColors.gold.withValues(alpha: .1) : null),
+              ),
+            ]),
+            const SizedBox(height: 13),
+            TextField(
+              key: const Key('watchlist-search'),
+              controller: _search,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'ابحث عن رمز أو سوق...',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _search.text.isNotEmpty
+                    ? IconButton(
+                        tooltip: 'مسح البحث',
+                        onPressed: () => setState(() => _search.clear()),
+                        icon: const Icon(Icons.close_rounded, size: 20))
+                    : null,
+                filled: true,
+                fillColor: scheme.surfaceContainerLow,
+                contentPadding: const EdgeInsets.symmetric(vertical: 11,
+                  horizontal: 12),
+                border: OutlineInputBorder(
+                  borderSide: BorderSide.none,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                for (final filter in const ['الكل', 'الذهب', 'فوركس', 'كريبتو'])
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 7),
+                    child: ChoiceChip(
+                      key: Key('watchlist-filter-$filter'),
+                      label: Text(filter),
+                      selected: _filter == filter,
+                      showCheckmark: false,
+                      onSelected: (_) => setState(() => _filter = filter),
+                    ),
+                  ),
+              ]),
             ),
           ]),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _search,
-            onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              hintText: 'ابحث عن الذهب، العملات أو الكريبتو',
-              prefixIcon: Icon(Icons.search),
-            ),
-          ),
-          const SizedBox(height: 14),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(children: [
-              for (final filter in const ['الكل', 'الذهب', 'فوركس', 'كريبتو'])
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(end: 8),
-                  child: ChoiceChip(
-                    label: Text(filter),
-                    selected: _filter == filter,
-                    onSelected: (_) => setState(() => _filter = filter),
-                  ),
-                ),
-            ]),
-          ),
-        ]),
       ),
       const Divider(height: 1),
       Expanded(
-        child: _visible.isEmpty
-            ? const TradeEmptyState(
-                icon: Icons.search_off,
+        child: symbols.isEmpty
+            ? TradeEmptyState(
+                icon: _favoritesOnly ? Icons.star_border_rounded
+                    : Icons.search_off_rounded,
                 title: 'لا توجد رموز مطابقة',
-                description: 'غيّر كلمات البحث أو نوع السوق.',
+                description: _favoritesOnly
+                    ? 'أضف رموزًا إلى المفضلة أو أوقف التصفية.'
+                    : 'جرّب تغيير البحث أو اختيار نوع سوق آخر.',
               )
             : ListView.separated(
                 key: const Key('markets-symbol-list'),
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                itemCount: _visible.length + 1,
-                separatorBuilder: (context, index) => const SizedBox(height: 8),
+                itemCount: symbols.length + 1,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   if (index == 0) {
-                    return const Padding(
-                      padding: EdgeInsets.only(bottom: 6),
-                      child: Text('الذهب والفوركس: cTrader · الكريبتو: Binance',
-                          style: TextStyle(fontSize: 12)),
-                    );
-                  }
-                  final symbol = _visible[index - 1];
-                  return TradeSurface(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    child: InkWell(
-                      key: Key('market-open-chart-${symbol.code}'),
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: widget.onSymbolSelected == null
-                          ? null : () => widget.onSymbolSelected!(symbol),
-                      child: Row(children: [
-                      Container(
-                        width: 42,
-                        height: 42,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: (symbol.kind == InstrumentKind.gold
-                                  ? TradeColors.gold
-                                  : TradeColors.blue)
-                              .withValues(alpha: .1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          symbol.kind == InstrumentKind.gold
-                              ? Icons.currency_exchange
-                              : symbol.kind == InstrumentKind.crypto
-                                  ? Icons.currency_bitcoin
-                                  : Icons.show_chart,
-                          color: symbol.kind == InstrumentKind.gold
-                              ? TradeColors.gold
-                              : TradeColors.blue,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(symbol.code, textDirection: TextDirection.ltr,
-                              style: const TextStyle(fontSize: 15,
-                                  fontWeight: FontWeight.w800)),
-                          Text(symbol.title,
-                              style: TextStyle(color: colors.onSurfaceVariant,
-                                  fontSize: 12)),
-                        ],
+                    return Row(children: [
+                      Expanded(child: Text(
+                        _favoritesOnly ? 'الرموز المفضلة' : 'جميع الرموز',
+                        style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w800),
                       )),
-                      Column(crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                        Text((symbol.source == TradeSource.ctrader
-                            ? widget.controller.forexPrices[symbol.code]
-                            : widget.controller.cryptoPrices[symbol.code]) == null
-                            ? '—' : (symbol.source == TradeSource.ctrader
-                            ? widget.controller.forexPrices[symbol.code]!
-                            : widget.controller.cryptoPrices[symbol.code]!).toStringAsFixed(
-                                symbol.code == 'USDJPY' ? 3 : symbol.kind == InstrumentKind.forex ? 5 : 2),
-                            textDirection: TextDirection.ltr,
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                        Text(symbol.source == TradeSource.ctrader
-                            ? widget.controller.forexPrices.containsKey(symbol.code)
-                              ? 'cTrader · سعر BID فعلي'
-                              : widget.controller.ctraderConnected ? 'cTrader · اضغط تحديث' : 'cTrader · يتطلب الربط'
-                            : widget.controller.cryptoPrices.containsKey(symbol.code)
-                                ? 'Binance · سعر فعلي' : 'Binance · اضغط تحديث',
-                            style: TextStyle(fontSize: 10,
-                                color: colors.onSurfaceVariant)),
-                      ]),
-                      IconButton(
-                        tooltip: _favorites.contains(symbol.code)
-                            ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
-                        icon: Icon(_favorites.contains(symbol.code)
-                            ? Icons.star : Icons.star_border,
-                            color: _favorites.contains(symbol.code)
-                                ? TradeColors.gold : colors.onSurfaceVariant),
-                        onPressed: () => setState(() {
-                          if (!_favorites.add(symbol.code)) {
-                            _favorites.remove(symbol.code);
-                          }
-                        }),
-                      ),
-                    ])),
-                  );
+                      Text('${symbols.length} رمز',
+                        style: TextStyle(fontSize: 12,
+                          color: scheme.onSurfaceVariant)),
+                    ]);
+                  }
+                  return _symbolCard(context, symbols[index - 1]);
                 },
               ),
       ),
     ]);
+  }
+
+  Widget _symbolCard(BuildContext context, TradeSymbol symbol) {
+    final scheme = Theme.of(context).colorScheme;
+    final isFavorite = _favorites.contains(symbol.code);
+    final isGold = symbol.kind == InstrumentKind.gold;
+    final isCrypto = symbol.kind == InstrumentKind.crypto;
+    final accent = isGold ? TradeColors.gold :
+        isCrypto ? const Color(0xFF8B68D6) : TradeColors.blue;
+    final price = symbol.source == TradeSource.ctrader
+        ? widget.controller.forexPrices[symbol.code]
+        : widget.controller.cryptoPrices[symbol.code];
+    final decimals = symbol.code == 'USDJPY' ? 3 :
+        symbol.kind == InstrumentKind.forex ? 5 : 2;
+    final hasPrice = price != null && price.isFinite;
+    final source = symbol.source == TradeSource.ctrader
+        ? 'cTrader' : 'Binance';
+    final status = hasPrice
+        ? symbol.source == TradeSource.ctrader
+            ? 'سعر BID من cTrader' : 'سعر من Binance'
+        : symbol.source == TradeSource.ctrader &&
+                !widget.controller.ctraderConnected
+            ? 'يتطلب ربط cTrader' : 'لا يتوفر سعر مؤكد';
+
+    return TradeDashboardPanel(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        key: Key('market-open-chart-${symbol.code}'),
+        borderRadius: BorderRadius.circular(18),
+        onTap: widget.onSymbolSelected == null
+            ? null : () => widget.onSymbolSelected!(symbol),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+          child: Row(children: [
+            TradeDashboardIcon(
+              isGold ? Icons.auto_awesome_rounded :
+                  isCrypto ? Icons.currency_bitcoin_rounded :
+                    Icons.show_chart_rounded,
+              color: accent, size: 44),
+            const SizedBox(width: 10),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(symbol.code, textDirection: TextDirection.ltr,
+                  textAlign: TextAlign.right, maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 16,
+                    fontWeight: FontWeight.w900)),
+                const SizedBox(height: 3),
+                Text(symbol.title,
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11,
+                    color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 5),
+                Text(source, textDirection: TextDirection.ltr,
+                  style: TextStyle(fontSize: 10,
+                    fontWeight: FontWeight.w700, color: accent)),
+              ],
+            )),
+            const SizedBox(width: 8),
+            Flexible(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(hasPrice ? price.toStringAsFixed(decimals) : '—',
+                  maxLines: 1, softWrap: false,
+                  textDirection: TextDirection.ltr,
+                  style: const TextStyle(fontSize: 15,
+                    fontWeight: FontWeight.w900)),
+                const SizedBox(height: 6),
+                Text(status, maxLines: 2,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(fontSize: 10, height: 1.35,
+                    color: hasPrice ? TradeColors.positive :
+                        scheme.onSurfaceVariant)),
+              ],
+            )),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
+              onPressed: () => setState(() {
+                if (!_favorites.add(symbol.code)) {
+                  _favorites.remove(symbol.code);
+                }
+              }),
+              icon: Icon(isFavorite
+                  ? Icons.star_rounded : Icons.star_border_rounded,
+                  color: isFavorite ? TradeColors.gold :
+                      scheme.onSurfaceVariant, size: 24),
+              constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+              padding: EdgeInsets.zero,
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 }
