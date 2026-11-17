@@ -33,7 +33,7 @@ void main() {
           reason: 'Results tabs must not push the analysis off the screen');
       final body = find.byKey(const Key('results-dashboard-list'));
       await tester.scrollUntilVisible(
-        find.text('إحصائيات الصفقات'), 220,
+        find.textContaining('تظهر الإحصائيات بعد'), 220,
         scrollable: find.descendant(
           of: body, matching: find.byType(Scrollable)).first);
       await tester.pumpAndSettle();
