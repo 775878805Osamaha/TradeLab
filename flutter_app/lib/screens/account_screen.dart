@@ -73,14 +73,13 @@ class AccountScreen extends StatelessWidget {
               )),
             ]),
             const SizedBox(height: 17),
-            Row(children: [
+            Wrap(spacing: 8, runSpacing: 8, children: [
               TradeDashboardPill(
                 label: linked ? 'cTrader متصل' : 'cTrader غير متصل',
                 icon: linked ? Icons.check_circle_outline : Icons.link_off,
                 active: linked, color: linked ? TradeColors.positive :
                     const Color(0xFFFFCA72),
               ),
-              const SizedBox(width: 8),
               TradeDashboardPill(
                 label: controller.binanceConnected
                     ? 'Binance نشط' : 'Binance غير محدّث',
