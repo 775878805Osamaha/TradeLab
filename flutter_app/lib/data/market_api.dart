@@ -519,7 +519,7 @@ class MarketApi {
     }
     final interval = switch (timeframe) {
       '1m' => '1m', '3m' => '3m', '5m' => '5m', '15m' => '15m',
-      '30m' => '30m', '1h' => '1h', '4h' => '4h', '1D' => '1d',
+      '30m' => '30m', '1h' => '1h', '2h' => '2h', '4h' => '4h', '1D' => '1d',
       '1W' => '1w', '1M' => '1M', _ => throw const MarketDataException('إطار زمني غير مدعوم'),
     };
     final uri = Uri.https('api.binance.com', '/api/v3/klines', {
