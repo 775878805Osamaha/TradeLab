@@ -424,6 +424,47 @@ void main() {
         [2000.0, 2000.1, 2000.2]);
   });
 
+  test('dense cTrader BID JSON is decoded off the UI isolate in original order',
+      () async {
+    const fromMs = 1700000000000;
+    final ticks = List<Map<String, Object>>.generate(6000, (index) => {
+      // Multiple authentic events in a millisecond must not be coalesced.
+      'timestamp': fromMs + index ~/ 2,
+      'price': 2000.0 + index * 0.0001,
+    });
+    final body = jsonEncode({
+      'source': 'ctrader',
+      'quoteType': 'bid',
+      'symbolId': '42',
+      'hasMore': false,
+      'ticks': ticks,
+    });
+    expect(MarketJsonDecodePolicy.shouldOffload(
+        path: '/v1/ticks', chars: body.length), isTrue);
+    expect(MarketJsonDecodePolicy.shouldOffload(
+        path: '/v1/candles', chars: body.length), isFalse);
+    expect(MarketJsonDecodePolicy.shouldOffload(
+        path: '/v1/ticks', chars: 100), isFalse);
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      expect(request.url.path, '/v1/ticks');
+      return http.Response(body, 200);
+    }));
+    final parsed = await api.ctraderBidTicksRange(
+      token: 'fake', accountId: '1', symbol: 'XAUUSD',
+      fromMs: fromMs, toMs: fromMs + 6000,
+    );
+    expect(parsed, hasLength(ticks.length));
+    expect(parsed.first.timestamp, fromMs);
+    expect(parsed[1].timestamp, fromMs);
+    expect(parsed.last.timestamp, fromMs + 2999);
+    expect(parsed.last.bid, closeTo(2000.0 + 5999 * 0.0001, 1e-9));
+  });
+
   test('incremental BID requests reject invalid or oversized windows', () async {
     final api = MarketApi(client: MockClient((_) async =>
         fail('Invalid BID window should never reach a provider')));
