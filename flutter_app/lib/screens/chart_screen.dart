@@ -92,7 +92,7 @@ class ChartScreen extends StatefulWidget {
 class _ChartScreenState extends State<ChartScreen>
     with SingleTickerProviderStateMixin {
   // Normal pan/fling and crosshair frames invalidate only the candle canvas.
-  final ChangeNotifier _chartRepaint = ChangeNotifier();
+  final ValueNotifier<int> _chartRepaint = ValueNotifier<int>(0);
 
   // Session-only BID tick cache: switching Range size rebuilds locally.
   // Scoped by account and symbol; not a substitute for persistent history.
@@ -530,7 +530,7 @@ class _ChartScreenState extends State<ChartScreen>
       setState(() => _viewport = next);
     } else {
       _viewport = next;
-      _chartRepaint.notifyListeners();
+      _chartRepaint.value++;
     }
     _prefetchOlderAtEdge(_momentumPlotWidth, count);
   }
@@ -4186,7 +4186,7 @@ class _ChartScreenState extends State<ChartScreen>
               if (!movingDrawing && _crosshair == null &&
                   !_replay && !_replaySelectingStart) {
                 _viewport = nextViewport;
-                _chartRepaint.notifyListeners();
+                _chartRepaint.value++;
                 _prefetchOlderAtEdge(plotWidth, candles.length);
                 return;
               }
@@ -4279,7 +4279,7 @@ class _ChartScreenState extends State<ChartScreen>
             },
             onLongPressMoveUpdate: (details) {
               _crosshair = details.localPosition;
-              _chartRepaint.notifyListeners();
+              _chartRepaint.value++;
             },
             onLongPressEnd: (_) => setState(() => _crosshair = null),
             onTapUp: (details) {
