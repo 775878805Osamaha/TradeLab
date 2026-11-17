@@ -391,6 +391,65 @@ void main() {
         [1900.1, 1900.2, 1900.3, 1900.4]);
   });
 
+  test('bounded concurrent BID splits preserve same-ms events and time order',
+      () async {
+    const start = 1700000000000;
+    const end = start + 7;
+    var active = 0;
+    var maximumActive = 0;
+    var requestCount = 0;
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      expect(request.url.path, '/v1/ticks');
+      requestCount++;
+      active++;
+      if (active > maximumActive) maximumActive = active;
+      final from = int.parse(request.url.queryParameters['from']!);
+      final to = int.parse(request.url.queryParameters['to']!);
+      try {
+        // Older and newer halves complete in deliberately different orders.
+        await Future<void>.delayed(
+            Duration(milliseconds: from == start ? 15 : 2));
+        if (to - from > 1) {
+          return http.Response(jsonEncode({
+            'source': 'ctrader', 'quoteType': 'bid',
+            'symbolId': '42', 'hasMore': true, 'ticks': [],
+          }), 200);
+        }
+        final price = 1900.0 + (to - start);
+        return http.Response(jsonEncode({
+          'source': 'ctrader', 'quoteType': 'bid',
+          'symbolId': '42', 'hasMore': false,
+          'ticks': [
+            {'timestamp': to, 'price': price},
+            {'timestamp': to, 'price': price + 0.1},
+          ],
+        }), 200);
+      } finally {
+        active--;
+      }
+    }));
+    final ticks = await api.ctraderBidTicksRange(
+      token: 'fake', accountId: '1', symbol: 'XAUUSD',
+      fromMs: start, toMs: end,
+    );
+    expect(requestCount, 7);
+    expect(maximumActive, 2,
+        reason: 'Only two cTrader pages may be in flight');
+    expect(ticks.map((tick) => tick.timestamp), [
+      start + 1, start + 1, start + 3, start + 3,
+      start + 5, start + 5, start + 7, start + 7,
+    ]);
+    expect(ticks.map((tick) => tick.bid), [
+      1901.0, 1901.1, 1903.0, 1903.1,
+      1905.0, 1905.1, 1907.0, 1907.1,
+    ]);
+  });
+
   test('incremental BID refresh requests exactly the missing milliseconds',
       () async {
     final toMs = DateTime.utc(2026, 11, 8).millisecondsSinceEpoch;
