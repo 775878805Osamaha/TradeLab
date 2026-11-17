@@ -123,12 +123,21 @@ void main() {
     await tester.tap(reset);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('replay-confirm-reset')));
+    await tester.pumpAndSettle();
+    // The confirmed reset deliberately awaits a REAL durable FFI SQLite
+    // write. FakeAsync pump(duration) advances widget time but not native
+    // database I/O; yield to the real event loop as Flutter recommends.
     for (var attempt = 0;
         attempt < 25 &&
             find.textContaining('صفقاتي (0)').evaluate().isEmpty;
         attempt++) {
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+      await tester.pumpAndSettle();
     }
+    expect(find.text('العودة إلى بداية Replay'), findsNothing,
+        reason: 'The approved reset dialog should have closed');
     expect(find.textContaining('صفقاتي (0)'), findsOneWidget,
         reason: 'Approved reset creates a new empty Replay practice session');
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
