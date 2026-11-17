@@ -145,4 +145,29 @@ void main() {
     expect(ticks.where((x) => x.timestamp == now - 5 * minute), hasLength(2));
     expect(ticks.where((x) => x.timestamp == now - 5 * minute - 1), hasLength(2));
   });
+  test('verified quiet history keeps coverage without rebuilding BID bars',
+      () async {
+    var calls = 0;
+    final observed = <RangeStartupSnapshot>[];
+    final latest = await RangeStartupLoader.load(
+      endMs: now, priceDistance: 50, minimumClosedBars: 100,
+      getTicks: (from, to) async {
+        calls++;
+        return calls == 1 ? [MarketTick(to - 1, 100)] : const <MarketTick>[];
+      },
+      onSnapshot: (batch) async => observed.add(batch),
+    );
+    expect(calls, 8);
+    expect(latest, isNotNull);
+    expect(latest!.fromMs, now - 6 * 24 * hour);
+    expect(latest.ticks, hasLength(1));
+    expect(latest.timeline.bars, hasLength(1));
+    expect(observed, hasLength(2),
+        reason: 'First authentic tick and final verified coverage only');
+    expect(identical(observed.first.timeline, observed.last.timeline), isTrue,
+        reason: 'Empty historical intervals cannot change the Range bars');
+    expect(identical(observed.first.ticks, observed.last.ticks), isTrue,
+        reason: 'Keep the same verified event list when no older BID arrived');
+  });
+
 }
