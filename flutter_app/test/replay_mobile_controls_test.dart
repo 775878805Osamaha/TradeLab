@@ -19,10 +19,13 @@ void main() {
             visibleCount: 1, totalBars: 100,
             chartFrame: '3m',
             speed: ReplayPlaybackSpeed.normal,
-            showTrading: true, autoStep: true,
+            showTrading: false, showDrawingTools: false,
+            canLoadOlder: true, olderLoading: false, tradeCount: 0,
+            autoStep: true,
             onClose: () {},
             onConfirm: () => confirmations++,
             onStartMenu: (action) => chosen = action,
+            onExtras: (_) {},
             onStepMenu: (_) {},
             onReset: () {},
             onStepBack: () {},
@@ -48,6 +51,12 @@ void main() {
       await tester.tap(find.byKey(const Key('replay-pick-random')));
       await tester.pumpAndSettle();
       expect(chosen, ReplayStartMenuAction.random);
+      await tester.tap(find.byKey(const Key('replay-more-actions')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('replay-practice-order')), findsOneWidget);
+      expect(tester.widget<PopupMenuItem<ReplayExtrasAction>>(
+        find.byKey(const Key('replay-practice-order'))).enabled, isFalse,
+        reason: 'Cannot open training until the start candle is confirmed');
       expect(tester.takeException(), isNull);
     });
 
@@ -64,10 +73,13 @@ void main() {
             visibleCount: 15, totalBars: 100,
             chartFrame: '3m',
             speed: ReplayPlaybackSpeed.normal,
-            showTrading: true, autoStep: true,
+            showTrading: false, showDrawingTools: false,
+            canLoadOlder: true, olderLoading: false, tradeCount: 0,
+            autoStep: true,
             onClose: () {},
             onConfirm: () {},
             onStartMenu: (_) {},
+            onExtras: (_) {},
             onStepMenu: (_) {},
             onReset: () {},
             onStepBack: () {},
