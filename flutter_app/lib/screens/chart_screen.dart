@@ -4627,77 +4627,34 @@ class _ChartScreenState extends State<ChartScreen>
     ]);
   }
 
-  Widget _replayControls(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      ReplayMobileControls(
-        selecting: _replaySelectingStart,
-        playing: _playing,
-        visibleCount: _visibleThrough,
-        totalBars: _totalBars,
-        chartFrame: _timeframe,
-        speed: _replaySpeed,
-        showTrading: _replayShowTradingButtons,
-        autoStep: _replayAutoStep,
-        onClose: _exitReplay,
-        onConfirm: _confirmReplayStart,
-        onStartMenu: _handleReplayStartMenu,
-        onStepMenu: _handleReplayIntervalMenu,
-        onReset: () => unawaited(_resetReplayToStart()),
-        onStepBack: () => _seekReplay(_visibleThrough - 1),
-        onStepForward: () => _seekReplay(_visibleThrough + 1),
-        onPlayPause: _togglePlay,
-        onSpeed: _setReplaySpeed,
-        onChooseAgain: () => unawaited(_chooseReplayStartAgain()),
-      ),
-      // Trading controls only belong to an active historical simulation.
-      // They never touch any live cTrader/Binance order gateway.
-      if (_replay && _replayShowTradingButtons)
-        SizedBox(
-          key: const Key('replay-trading-buttons'),
-          height: 45,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const SizedBox(width: 6),
-            TextButton.icon(
-              key: const Key('replay-practice-order'),
-              onPressed: () => _openTrainingOrderDialog(),
-              icon: const Icon(Icons.add_circle_outline, size: 16),
-              label: const Text('صفقة تدريب'),
-            ),
-            TextButton(
-              key: const Key('replay-practice-list'),
-              onPressed: _showTrainingTrades,
-              child: Text('صفقاتي (${_training.trades.length})'),
-            ),
-            TextButton(
-              key: const Key('replay-practice-archive'),
-              onPressed: _showTrainingArchive,
-              child: const Text('الأرشيف'),
-            ),
-            ]),
-          ),
-        ),
-      if (_replay && _liveRequested &&
-          (_mode == ChartMode.range
-            ? _rangeHistoryTicks.isNotEmpty : _actualBars.isNotEmpty))
-        Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: TextButton.icon(
-            key: const Key('replay-load-older'),
-            onPressed: _olderLoading || _historyExhausted ||
-                  (_mode == ChartMode.range && _training.trades.isNotEmpty)
-              ? null : () => _mode == ChartMode.range
-                ? _loadOlderRangeHistory()
-                : _loadOlderHistory(manual: true),
-            icon: const Icon(Icons.history, size: 16),
-            label: Text(_historyExhausted ? 'لا توجد شموع أقدم'
-                : _mode == ChartMode.range
-                  ? 'تحميل تيكات أقدم' : 'تحميل شموع أقدم'),
-          ),
-        ),
-    ],
+  Widget _replayControls(BuildContext context) => ReplayMobileControls(
+    selecting: _replaySelectingStart,
+    playing: _playing,
+    visibleCount: _visibleThrough,
+    totalBars: _totalBars,
+    chartFrame: _timeframe,
+    speed: _replaySpeed,
+    showTrading: _replayShowTradingButtons,
+    showDrawingTools: _replayShowDrawingTools,
+    canLoadOlder: _liveRequested &&
+        (_mode == ChartMode.range
+            ? _rangeHistoryTicks.isNotEmpty : _actualBars.isNotEmpty) &&
+        !_historyExhausted &&
+        !(_mode == ChartMode.range && _training.trades.isNotEmpty),
+    olderLoading: _olderLoading,
+    tradeCount: _training.trades.length,
+    autoStep: _replayAutoStep,
+    onClose: _exitReplay,
+    onConfirm: _confirmReplayStart,
+    onStartMenu: _handleReplayStartMenu,
+    onExtras: _handleReplayExtras,
+    onStepMenu: _handleReplayIntervalMenu,
+    onReset: () => unawaited(_resetReplayToStart()),
+    onStepBack: () => _seekReplay(_visibleThrough - 1),
+    onStepForward: () => _seekReplay(_visibleThrough + 1),
+    onPlayPause: _togglePlay,
+    onSpeed: _setReplaySpeed,
+    onChooseAgain: () => unawaited(_chooseReplayStartAgain()),
   );
 
 }
@@ -4824,11 +4781,8 @@ class _CandleChartPainter extends CustomPainter {
           Color(panel.verticalGridColor), panel.verticalGridStroke, .55);
       }
     }
-    if (replayActive && panel.watermarkMode == ChartWatermarkMode.replay &&
-        Color(panel.watermarkColor).a > 0) {
-      _text(canvas, 'Replay', Offset(axis * .38, chartHeight * .40),
-        Color(panel.watermarkColor), 30, bold: true);
-    }
+    // Replay is already identified in the compact header. A large centered
+    // watermark obscures real candles and does not aid playback.
     if (panel.scaleLineColor != 0x00000000) {
       canvas.drawLine(Offset(axis, 0), Offset(axis, chartHeight), Paint()
         ..color = Color(panel.scaleLineColor)
