@@ -68,6 +68,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('replay-start-overlay')), findsNothing);
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+    // A historical Replay header must never reveal contemporary BID/ASK,
+    // current feed status, or the later of these two verified source bars.
+    final evidence = find.byKey(const Key('chart-provenance-header'));
+    expect(tester.widget<Text>(evidence).data, 'Replay تاريخي · Binance');
+    final tooltipFinder = find.ancestor(
+      of: evidence, matching: find.byType(Tooltip));
+    expect(tooltipFinder, findsOneWidget);
+    final message = tester.widget<Tooltip>(tooltipFinder).message!;
+    expect(message, contains('BTCUSDT'));
+    expect(message, contains('آخر شمعة مكشوفة'));
+    expect(message, isNot(contains('BID/ASK')));
+    expect(message, isNot(contains('آخر شمعة مغلقة')));
+    final firstBar = DateTime.fromMillisecondsSinceEpoch(
+        1700000000000, isUtc: true);
+    final firstTime = '${firstBar.hour.toString().padLeft(2, '0')}:'
+        '${firstBar.minute.toString().padLeft(2, '0')} UTC';
+    expect(message, contains(firstTime));
     expect(find.byKey(const Key('replay-speed-picker')), findsOneWidget);
     expect(find.byKey(const Key('replay-practice-order')), findsOneWidget);
 
