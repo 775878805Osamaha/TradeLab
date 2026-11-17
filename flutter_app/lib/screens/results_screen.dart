@@ -146,19 +146,23 @@ class _ResultsScreenState extends State<ResultsScreen> {
     return Column(children: [
       Container(
         color: colors.surface,
-        padding: const EdgeInsets.fromLTRB(16, 15, 16, 12),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TradeDashboardTitle(
-            title: 'النتائج',
-            subtitle: 'أداء التداول التجريبي والدفتر المحلي الموثق',
-            action: TradeDashboardPill(
-              label: widget.controller.ctraderConnected
-                  ? 'cTrader متصل' : 'بيانات محلية',
-              icon: Icons.verified_outlined,
-              active: widget.controller.ctraderConnected,
+          Row(children: [
+            Expanded(child: Text('النتائج',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900))),
+            Tooltip(
+              message: 'النتائج من التداول التجريبي والدفتر المحلي فقط، '
+                  'ولا تشمل الصفقات الحقيقية لدى الوسيط.',
+              child: TradeDashboardPill(
+                label: widget.controller.ctraderConnected
+                    ? 'cTrader متصل' : 'بيانات محلية',
+                icon: Icons.verified_outlined,
+                active: widget.controller.ctraderConnected),
             ),
-          ),
-          const SizedBox(height: 14),
+          ]),
+          const SizedBox(height: 6),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(children: [
@@ -255,12 +259,24 @@ class _ResultsScreenState extends State<ResultsScreen> {
                     label: const Text('قيد جديد'),
                   ),
               ]),
-              const SizedBox(height: 9),
-              Text(journal == null
-                ? 'حساب cTrader متصل لقراءة أسعار السوق. نتائج التداول التجريبي تحتاج إلى نقل سجل Room من تطبيق Android القديم أو تسجيل الصفقات في قاعدة Flutter مستقلة. لن نعرض أرصدة أو أرباحًا مفترضة.'
-                : 'هذه النتائج من سجلات الهاتف فقط، منفصلة عن Room وcTrader؛ لا تشمل أي صفقات غير مسجلة، ولا تُنفّذ أوامر لدى الوسيط.',
-                style: TextStyle(fontSize: 11, height: 1.5,
-                  color: colors.onSurfaceVariant)),
+              const SizedBox(height: 7),
+              Row(children: [
+                Expanded(child: Text(
+                  'النتائج من الدفتر المحلي فقط · دون أوامر حقيقية',
+                  maxLines: 2,
+                  style: TextStyle(fontSize: 12, height: 1.35,
+                    color: colors.onSurfaceVariant),
+                )),
+                Tooltip(
+                  message: journal == null
+                    ? 'لم تُنقل نتائج Room من التطبيق القديم إلى Flutter. '
+                        'لا تُعرض أرباح أو أرصدة افتراضية.'
+                    : 'سجل الهاتف منفصل عن cTrader وRoom، ولا يشمل '
+                        'الصفقات غير المسجلة أو غير المغلقة.',
+                  child: Icon(Icons.info_outline_rounded, size: 19,
+                    color: colors.onSurfaceVariant),
+                ),
+              ]),
               if (journal?.busy == true) const LinearProgressIndicator(),
               if (journal?.error != null)
                 Text(journal!.error!, style: TextStyle(color: colors.error)),
@@ -477,6 +493,25 @@ class _ResultsScreenState extends State<ResultsScreen> {
           ? '${(duration / 60).toStringAsFixed(1)} س' : '${duration.toStringAsFixed(0)} د',
       '—',
     ];
+    if (report.trades.isEmpty) {
+      // Show one honest empty state instead of nine oversized dash cards.
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const TradeDashboardSection('إحصائيات الصفقات'),
+        const SizedBox(height: 10),
+        const TradeDashboardPanel(
+          child: Row(children: [
+            TradeDashboardIcon(Icons.analytics_outlined,
+              color: TradeColors.blue, size: 40),
+            SizedBox(width: 12),
+            Expanded(child: Text(
+              'تظهر الإحصائيات بعد إغلاق أول صفقة تدريب '
+              'وتسجيلها في الدفتر المحلي.',
+              style: TextStyle(fontSize: 13, height: 1.5),
+            )),
+          ]),
+        ),
+      ]);
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const TradeDashboardSection('إحصائيات الصفقات',
           caption: 'مقاييس من الصفقات المغلقة الموثقة'),
