@@ -812,9 +812,13 @@ class _ChartScreenState extends State<ChartScreen>
         }
       }
       if (revision == _loadRevision && _totalBars == 0) {
-        _loadError = _mode == ChartMode.range && _actualRange.isNotEmpty
-            ? 'وصلت تيكات BID الحقيقية، لكن شمعة المدى الأخيرة ما زالت قيد التكوّن. اختر مدى أصغر أو حمّل تاريخًا أقدم.'
-            : 'لم يُرجع المصدر شموعًا مكتملة لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
+        // A forming Range bar with genuine BID ticks is not a terminal
+        // failure: older real ticks may close additional bars. Let the
+        // bounded background backfill search verified earlier intervals.
+        if (_mode != ChartMode.range || _rangeHistoryTicks.isEmpty) {
+          _loadError =
+              'لم يُرجع المصدر شموعًا مكتملة لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
+        }
       }
     } on MarketDataException catch (e) {
       if (revision == _loadRevision) _loadError = e.message;
