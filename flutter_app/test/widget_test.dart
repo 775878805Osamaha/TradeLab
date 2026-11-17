@@ -375,13 +375,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('replay-start-overlay')), findsNothing);
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
-    // Replay controls must stack ABOVE the permanent drawing toolbar, with
-    // the drawing band still touching navigation (no artificial footer).
+    // Clean Replay: only its compact 54dp control band occupies the bottom.
+    // No duplicated drawing toolbar, fixed drawing rail, or practice footer.
     final replayBand = find.byKey(const Key('replay-controls'));
-    final drawingBand = find.byKey(const Key('chart-reference-toolbar'));
-    expect(tester.getTopLeft(replayBand).dy,
-        lessThan(tester.getTopLeft(drawingBand).dy));
-    expect(tester.getBottomLeft(drawingBand).dy,
+    expect(replayBand, findsOneWidget);
+    expect(find.byKey(const Key('chart-reference-toolbar')), findsNothing);
+    expect(find.byKey(const Key('drawing-rail-cursor')), findsNothing);
+    expect(find.byKey(const Key('replay-trading-buttons')), findsNothing);
+    expect(find.byKey(const Key('replay-inline-trading')), findsNothing);
+    expect(find.byKey(const Key('replay-more-actions')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('chart-reference-header'))).height,
+        48);
+    expect(tester.getBottomLeft(replayBand).dy,
         closeTo(tester.getTopLeft(find.byType(NavigationBar)).dy, 1));
     await tester.tap(find.byTooltip('إغلاق Replay'));
     await tester.pumpAndSettle();
@@ -442,13 +447,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('replay-start-overlay')), findsNothing);
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
-    // Replay controls must stack ABOVE the permanent drawing toolbar, with
-    // the drawing band still touching navigation (no artificial footer).
+    // Clean Replay: only its compact 54dp control band occupies the bottom.
+    // No duplicated drawing toolbar, fixed drawing rail, or practice footer.
     final replayBand = find.byKey(const Key('replay-controls'));
-    final drawingBand = find.byKey(const Key('chart-reference-toolbar'));
-    expect(tester.getTopLeft(replayBand).dy,
-        lessThan(tester.getTopLeft(drawingBand).dy));
-    expect(tester.getBottomLeft(drawingBand).dy,
+    expect(replayBand, findsOneWidget);
+    expect(find.byKey(const Key('chart-reference-toolbar')), findsNothing);
+    expect(find.byKey(const Key('drawing-rail-cursor')), findsNothing);
+    expect(find.byKey(const Key('replay-trading-buttons')), findsNothing);
+    expect(find.byKey(const Key('replay-inline-trading')), findsNothing);
+    expect(find.byKey(const Key('replay-more-actions')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('chart-reference-header'))).height,
+        48);
+    expect(tester.getBottomLeft(replayBand).dy,
         closeTo(tester.getTopLeft(find.byType(NavigationBar)).dy, 1));
     expect(chart, findsOneWidget);
     expect(historyRequests, 1);

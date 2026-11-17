@@ -128,7 +128,9 @@ class _ChartScreenState extends State<ChartScreen>
   bool _replayDraggingStart = false;
   int _replayCandidateIndex = 0;
   int _replayInitialCount = 1;
-  bool _replayShowTradingButtons = true;
+  // Keep the candle area clear until the user explicitly requests tools.
+  bool _replayShowTradingButtons = false;
+  bool _replayShowDrawingTools = false;
   bool _replayAutoStep = true;
   bool _drawing = false;
   bool _drawingsVisible = true;
@@ -1595,6 +1597,8 @@ class _ChartScreenState extends State<ChartScreen>
       _stopPlayback();
       _replaySelectingStart = true;
       _replayDraggingStart = false;
+      _replayShowTradingButtons = false;
+      _replayShowDrawingTools = false;
       _replayCandidateIndex = index;
       _crosshair = null;
       // While selecting, the complete market history remains visible (muted
@@ -1834,6 +1838,10 @@ class _ChartScreenState extends State<ChartScreen>
       setState(() => _replayShowTradingButtons = !_replayShowTradingButtons);
       return;
     }
+    if (action == ReplayStartMenuAction.toggleDrawingTools) {
+      setState(() => _replayShowDrawingTools = !_replayShowDrawingTools);
+      return;
+    }
     if (action == ReplayStartMenuAction.date) {
       unawaited(_chooseReplayStartDate());
       return;
@@ -1867,7 +1875,33 @@ class _ChartScreenState extends State<ChartScreen>
         break;
       case ReplayStartMenuAction.date:
       case ReplayStartMenuAction.toggleTrading:
+      case ReplayStartMenuAction.toggleDrawingTools:
         break;
+    }
+  }
+
+  void _handleReplayExtras(ReplayExtrasAction action) {
+    switch (action) {
+      case ReplayExtrasAction.practiceOrder:
+        if (_replay) unawaited(_openTrainingOrderDialog());
+      case ReplayExtrasAction.practiceTrades:
+        if (_replay) unawaited(_showTrainingTrades());
+      case ReplayExtrasAction.practiceArchive:
+        unawaited(_showTrainingArchive());
+      case ReplayExtrasAction.loadOlder:
+        if (!_olderLoading && !_historyExhausted) {
+          setState(() => _olderLoadError = null);
+          unawaited(_mode == ChartMode.range
+              ? _loadOlderRangeHistory()
+              : _loadOlderHistory(manual: true));
+        }
+      case ReplayExtrasAction.candleSettings:
+        _showCandleSettings();
+      case ReplayExtrasAction.drawingTools:
+        setState(() => _replayShowDrawingTools = true);
+        unawaited(_showDrawingTools());
+      case ReplayExtrasAction.chartType:
+        unawaited(_showChartTypePicker());
     }
   }
 
@@ -3424,6 +3458,74 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  /// Clean Replay layout: a single 48dp source row replaces the live
+  /// two-row trading header; the actual plot remains the main surface.
+  Widget _compactReplayHeader(List<TradeCandle> candles) {
+    final scheme = Theme.of(context).colorScheme;
+    final source = _selectedSymbol.source == TradeSource.ctrader
+        ? 'cTrader' : 'Binance';
+    final warning = _olderLoadError ?? _loadError;
+    return Container(
+      key: Key(widget.focusMode ? 'chart-focus-header' : 'chart-reference-header'),
+      color: scheme.surface,
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Row(children: [
+        Flexible(
+          flex: 3,
+          child: Tooltip(
+            message: _replay ? _marketEvidenceLabel :
+                'اختر شمعة البداية من التاريخ المتاح',
+            child: Text(
+              _replay ? 'Replay تاريخي · $source' : 'حدد بداية Replay',
+              key: const Key('chart-provenance-header'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                color: scheme.primary),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(flex: 2, child: Text(_symbol,
+          textDirection: TextDirection.ltr, textAlign: TextAlign.end,
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800,
+            color: scheme.onSurface))),
+        const SizedBox(width: 6),
+        Text(_mode == ChartMode.range ? 'R$_rangeTicks' :
+          (_timeframe == '1m' ? '1 دق' : _timeframe),
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+        if (warning != null)
+          IconButton(
+            key: const Key('replay-history-warning'),
+            tooltip: warning,
+            onPressed: () => _replayMessage(warning),
+            icon: const Icon(Icons.info_outline, size: 20),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 44),
+            padding: EdgeInsets.zero,
+          ),
+        IconButton(
+          key: const Key('chart-candle-settings-action'),
+          tooltip: 'إعدادات الشموع',
+          onPressed: _showCandleSettings,
+          icon: const Icon(Icons.tune, size: 21),
+          constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
+          padding: EdgeInsets.zero,
+        ),
+        IconButton(
+          key: const Key('symbol-picker'),
+          tooltip: 'اختيار رمز الشارت',
+          onPressed: _showSymbolPicker,
+          icon: const Icon(Icons.search, size: 21),
+          constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
+          padding: EdgeInsets.zero,
+        ),
+      ]),
+    );
+  }
+
   Widget _referenceChartHeader(List<TradeCandle> candles) {
     final hasVerifiedPrices = candles.isNotEmpty;
     final fetchingRangeTicks = _mode == ChartMode.range &&
@@ -3849,11 +3951,12 @@ class _ChartScreenState extends State<ChartScreen>
     final candles = _displayCandles;
     final surface = colors.surface;
     final chartHint = _activeChartHint;
+    final replayUi = _replay || _replaySelectingStart;
     return Column(children: [
-      widget.focusMode
-        ? _focusedChartHeader(candles)
+      replayUi ? _compactReplayHeader(candles)
+        : widget.focusMode ? _focusedChartHeader(candles)
         : _referenceChartHeader(candles),
-      if (_mode == ChartMode.range)
+      if (_mode == ChartMode.range && !replayUi)
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -3864,12 +3967,12 @@ class _ChartScreenState extends State<ChartScreen>
               style: const TextStyle(fontSize: 11, color: TradeColors.blue)),
         ),
       if (_loading) const LinearProgressIndicator(minHeight: 2),
-      if (_loadError != null && _liveRequested)
+      if (_loadError != null && _liveRequested && !replayUi)
         MaterialBanner(content: Text(_loadError!), actions: [
           TextButton(onPressed: _loadRealHistory, child: const Text('إعادة المحاولة')),
         ]),
       if (_olderLoading) const LinearProgressIndicator(minHeight: 2),
-      if (_olderLoadError != null)
+      if (_olderLoadError != null && !replayUi)
         Container(
           color: TradeColors.blue.withValues(alpha: .06),
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -4475,7 +4578,8 @@ class _ChartScreenState extends State<ChartScreen>
                 ]),
               ),
             ))),
-          if (candles.isNotEmpty)
+          if (candles.isNotEmpty &&
+              (!replayUi || _replayShowDrawingTools))
             _buildDrawingRail(constraints.maxHeight),
           if (candles.isNotEmpty && chartHint != null)
             Positioned(
@@ -4522,81 +4626,39 @@ class _ChartScreenState extends State<ChartScreen>
       // toolbar remains below Replay, adjacent to bottom navigation.
       // Retain both bands so Replay never steals the existing drawing actions.
       if (_replay || _replaySelectingStart) _replayControls(context),
-      if (!widget.focusMode) _referenceChartToolbar(surface),
+      if (!widget.focusMode && !replayUi)
+        _referenceChartToolbar(surface),
     ]);
   }
 
-  Widget _replayControls(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      ReplayMobileControls(
-        selecting: _replaySelectingStart,
-        playing: _playing,
-        visibleCount: _visibleThrough,
-        totalBars: _totalBars,
-        chartFrame: _timeframe,
-        speed: _replaySpeed,
-        showTrading: _replayShowTradingButtons,
-        autoStep: _replayAutoStep,
-        onClose: _exitReplay,
-        onConfirm: _confirmReplayStart,
-        onStartMenu: _handleReplayStartMenu,
-        onStepMenu: _handleReplayIntervalMenu,
-        onReset: () => unawaited(_resetReplayToStart()),
-        onStepBack: () => _seekReplay(_visibleThrough - 1),
-        onStepForward: () => _seekReplay(_visibleThrough + 1),
-        onPlayPause: _togglePlay,
-        onSpeed: _setReplaySpeed,
-        onChooseAgain: () => unawaited(_chooseReplayStartAgain()),
-      ),
-      // Trading controls only belong to an active historical simulation.
-      // They never touch any live cTrader/Binance order gateway.
-      if (_replay && _replayShowTradingButtons)
-        SizedBox(
-          key: const Key('replay-trading-buttons'),
-          height: 45,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const SizedBox(width: 6),
-            TextButton.icon(
-              key: const Key('replay-practice-order'),
-              onPressed: () => _openTrainingOrderDialog(),
-              icon: const Icon(Icons.add_circle_outline, size: 16),
-              label: const Text('صفقة تدريب'),
-            ),
-            TextButton(
-              key: const Key('replay-practice-list'),
-              onPressed: _showTrainingTrades,
-              child: Text('صفقاتي (${_training.trades.length})'),
-            ),
-            TextButton(
-              key: const Key('replay-practice-archive'),
-              onPressed: _showTrainingArchive,
-              child: const Text('الأرشيف'),
-            ),
-            ]),
-          ),
-        ),
-      if (_replay && _liveRequested &&
-          (_mode == ChartMode.range
-            ? _rangeHistoryTicks.isNotEmpty : _actualBars.isNotEmpty))
-        Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: TextButton.icon(
-            key: const Key('replay-load-older'),
-            onPressed: _olderLoading || _historyExhausted ||
-                  (_mode == ChartMode.range && _training.trades.isNotEmpty)
-              ? null : () => _mode == ChartMode.range
-                ? _loadOlderRangeHistory()
-                : _loadOlderHistory(manual: true),
-            icon: const Icon(Icons.history, size: 16),
-            label: Text(_historyExhausted ? 'لا توجد شموع أقدم'
-                : _mode == ChartMode.range
-                  ? 'تحميل تيكات أقدم' : 'تحميل شموع أقدم'),
-          ),
-        ),
-    ],
+  Widget _replayControls(BuildContext context) => ReplayMobileControls(
+    selecting: _replaySelectingStart,
+    playing: _playing,
+    visibleCount: _visibleThrough,
+    totalBars: _totalBars,
+    chartFrame: _timeframe,
+    speed: _replaySpeed,
+    showTrading: _replayShowTradingButtons,
+    showDrawingTools: _replayShowDrawingTools,
+    canLoadOlder: _liveRequested &&
+        (_mode == ChartMode.range
+            ? _rangeHistoryTicks.isNotEmpty : _actualBars.isNotEmpty) &&
+        !_historyExhausted &&
+        !(_mode == ChartMode.range && _training.trades.isNotEmpty),
+    olderLoading: _olderLoading,
+    tradeCount: _training.trades.length,
+    autoStep: _replayAutoStep,
+    onClose: _exitReplay,
+    onConfirm: _confirmReplayStart,
+    onStartMenu: _handleReplayStartMenu,
+    onExtras: _handleReplayExtras,
+    onStepMenu: _handleReplayIntervalMenu,
+    onReset: () => unawaited(_resetReplayToStart()),
+    onStepBack: () => _seekReplay(_visibleThrough - 1),
+    onStepForward: () => _seekReplay(_visibleThrough + 1),
+    onPlayPause: _togglePlay,
+    onSpeed: _setReplaySpeed,
+    onChooseAgain: () => unawaited(_chooseReplayStartAgain()),
   );
 
 }
@@ -4723,11 +4785,8 @@ class _CandleChartPainter extends CustomPainter {
           Color(panel.verticalGridColor), panel.verticalGridStroke, .55);
       }
     }
-    if (replayActive && panel.watermarkMode == ChartWatermarkMode.replay &&
-        Color(panel.watermarkColor).a > 0) {
-      _text(canvas, 'Replay', Offset(axis * .38, chartHeight * .40),
-        Color(panel.watermarkColor), 30, bold: true);
-    }
+    // Replay is already identified in the compact header. A large centered
+    // watermark obscures real candles and does not aid playback.
     if (panel.scaleLineColor != 0x00000000) {
       canvas.drawLine(Offset(axis, 0), Offset(axis, chartHeight), Paint()
         ..color = Color(panel.scaleLineColor)
