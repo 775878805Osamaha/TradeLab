@@ -70,6 +70,7 @@ jobs:
             test/replay_date_time_resolver_test.dart \
             test/replay_viewport_focus_test.dart \
             test/replay_training_session_test.dart \
+            test/replay_sparse_seek_test.dart \
             test/replay_training_archive_test.dart \
             test/replay_training_widget_test.dart \
             test/replay_training_order_dialog_test.dart \
