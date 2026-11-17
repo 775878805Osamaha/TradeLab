@@ -21,16 +21,17 @@ class TradeDashboardPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: background ?? scheme.surface,
+    // The nearest Material must paint ListTile/SwitchListTile inks and
+    // taps. A decorated Container above the nearest Material hides them.
+    return Material(
+      color: background ?? scheme.surface,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: borderColor ?? scheme.outline.withValues(alpha: .16),
-        ),
+        side: BorderSide(
+          color: borderColor ?? scheme.outline.withValues(alpha: .16)),
       ),
-      padding: padding,
-      child: child,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(padding: padding, child: child),
     );
   }
 }
@@ -129,9 +130,10 @@ class TradeDashboardPill extends StatelessWidget {
           Icon(icon, color: accent, size: 14),
           const SizedBox(width: 5),
         ],
-        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+        Flexible(child: Text(label, maxLines: 1,
+          overflow: TextOverflow.ellipsis, softWrap: false,
           style: TextStyle(color: accent, fontSize: 11,
-            fontWeight: FontWeight.w700)),
+            fontWeight: FontWeight.w700))),
       ]),
     );
   }
