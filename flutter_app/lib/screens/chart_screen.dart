@@ -4467,6 +4467,8 @@ class _ChartScreenState extends State<ChartScreen>
                   timestamps: _mode == ChartMode.range
                       ? _rangeBarTimestamps : _actualTimestamps,
                   dark: Theme.of(context).brightness == Brightness.dark,
+                  viewportSnapshot: _viewport,
+                  crosshairSnapshot: _crosshair,
                   viewportProvider: () => _viewport,
                   crosshairProvider: () => _crosshair,
                   repaint: _chartRepaint,
@@ -4778,6 +4780,8 @@ class _CandleChartPainter extends CustomPainter {
     required this.candles,
     required this.timestamps,
     required this.dark,
+    required this.viewportSnapshot,
+    required this.crosshairSnapshot,
     required ChartViewport Function() viewportProvider,
     required Offset? Function() crosshairProvider,
     required Listenable repaint,
@@ -4803,6 +4807,10 @@ class _CandleChartPainter extends CustomPainter {
   final List<TradeCandle> candles;
   final List<int> timestamps;
   final bool dark;
+  // Stable build-time values are for shouldRepaint comparisons. The getters
+  // below follow motion between widget builds via the repaint notifier.
+  final ChartViewport viewportSnapshot;
+  final Offset? crosshairSnapshot;
   final ChartViewport Function() _viewportProvider;
   final Offset? Function() _crosshairProvider;
   ChartViewport get viewport => _viewportProvider();
@@ -5329,7 +5337,7 @@ class _CandleChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _CandleChartPainter old) =>
       old.candles != candles || old.timestamps != timestamps ||
-      old.dark != dark || old.viewport != viewport ||
+      old.dark != dark || old.viewportSnapshot != viewportSnapshot ||
       old.panel != panel ||
       old.scaleSettings != scaleSettings ||
       old.symbolSettings != symbolSettings ||
@@ -5337,7 +5345,7 @@ class _CandleChartPainter extends CustomPainter {
       old.previousSessionClose != previousSessionClose ||
       old.sourceQuote != sourceQuote ||
       old.replayActive != replayActive ||
-      old.crosshair != crosshair || old.indicator != indicator ||
+      old.crosshairSnapshot != crosshairSnapshot || old.indicator != indicator ||
       !listEquals(old.levels, levels) ||
       !listEquals(old.patterns, patterns) ||
       !listEquals(old.shortPositions, shortPositions) ||
