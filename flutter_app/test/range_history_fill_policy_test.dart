@@ -1,0 +1,66 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:tradelab_flutter/data/range_history_fill_policy.dart';
+
+void main() {
+  test('1000-point Range requests enough genuine bars to fill Android viewport', () {
+    for (final width in <double>[260, 320, 390, 600]) {
+      final target = RangeHistoryFillPolicy.targetClosedBars(
+          plotWidth: width, candleWidth: 12);
+      expect(target, greaterThanOrEqualTo(48));
+      expect(target, greaterThanOrEqualTo((width / 12).ceil()));
+      expect(target, lessThanOrEqualTo(128));
+    }
+  });
+
+  test('autofill skips verified empty windows rather than mistaking them for failure', () {
+    for (var page = 0; page < 4; page++) {
+      expect(RangeHistoryFillPolicy.shouldContinue(
+        completedPages: page,
+        closedBars: 12, targetBars: 60, loadedTicks: 1000,
+        authenticatedSource: true, chartActive: true,
+        historicalReplay: false, loading: false,
+        historyExhausted: false, sourceError: false), isTrue);
+    }
+    expect(RangeHistoryFillPolicy.shouldContinue(
+      completedPages: 24,
+      closedBars: 12, targetBars: 60, loadedTicks: 1000,
+      authenticatedSource: true, chartActive: true,
+      historicalReplay: false, loading: false,
+      historyExhausted: false, sourceError: false), isFalse);
+  });
+
+  test('never searches beyond strict memory, broker or Replay safety bounds', () {
+    final cases = [
+      (100, true, true, false, false, false, false),
+      (1, false, true, false, false, false, false),
+      (1, true, false, false, false, false, false),
+      (1, true, true, true, false, false, false),
+      (1, true, true, false, true, false, false),
+      (1, true, true, false, false, true, false),
+      (1, true, true, false, false, false, true),
+    ];
+    for (final testCase in cases) {
+      expect(RangeHistoryFillPolicy.shouldContinue(
+        completedPages: 0, closedBars: testCase.$1,
+        targetBars: 48, loadedTicks: 100,
+        authenticatedSource: testCase.$2,
+        chartActive: testCase.$3,
+        historicalReplay: testCase.$4,
+        loading: testCase.$5,
+        historyExhausted: testCase.$6,
+        sourceError: testCase.$7), isFalse);
+    }
+    expect(RangeHistoryFillPolicy.shouldContinue(
+      completedPages: 0, closedBars: 0, targetBars: 48,
+      loadedTicks: 1000000, authenticatedSource: true,
+      chartActive: true, historicalReplay: false,
+      loading: false, historyExhausted: false, sourceError: false), isFalse);
+  });
+
+  test('invalid viewport metrics fail safe without faking additional candles', () {
+    expect(RangeHistoryFillPolicy.targetClosedBars(
+      plotWidth: double.nan, candleWidth: 0), 48);
+    expect(RangeHistoryFillPolicy.targetClosedBars(
+      plotWidth: 1e7, candleWidth: 1), 128);
+  });
+}

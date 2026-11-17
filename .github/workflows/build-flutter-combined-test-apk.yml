@@ -87,6 +87,7 @@ jobs:
             test/range_bar_timeline_test.dart \
             test/range_older_page_test.dart \
             test/range_startup_loader_test.dart \
+            test/range_history_fill_policy_test.dart \
             test/range_tick_rollforward_test.dart \
             test/range_tick_store_test.dart \
             test/replay_trade_overlay_test.dart \
@@ -102,6 +103,7 @@ jobs:
             test/replay_training_widget_test.dart \
             test/results_connection_test.dart \
             test/dashboard_ui_responsive_test.dart \
+            test/dashboard_compact_ui_test.dart \
             test/widget_test.dart 
       - name: Verify OAuth gateway handoff contract
         run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs

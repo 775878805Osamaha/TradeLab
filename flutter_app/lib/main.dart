@@ -173,9 +173,8 @@ class _TradeLabShellState extends State<TradeLabShell> {
         bottom: false,
         child: Column(
           children: [
-            if (_selectedIndex != 1)
-              AnimatedBuilder(animation: _market,
-                builder: (context, _) => MarketSourceNotice(controller: _market)),
+            // Each redesigned dashboard owns its verified source indicator.
+            // The duplicated global blue ribbon hid useful chart/list space.
             Expanded(
               child: IndexedStack(
                 index: _selectedIndex,
@@ -210,6 +209,7 @@ class _TradeLabShellState extends State<TradeLabShell> {
       ),
       bottomNavigationBar: _chartFocusMode && _selectedIndex == 1
         ? null : NavigationBar(
+        height: 70,
         selectedIndex: _selectedIndex,
         destinations: destinations,
         onDestinationSelected: (index) {

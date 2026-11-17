@@ -145,20 +145,25 @@ class _ResultsScreenState extends State<ResultsScreen> {
     }
     return Column(children: [
       Container(
+        key: const Key('results-compact-header'),
         color: colors.surface,
-        padding: const EdgeInsets.fromLTRB(16, 15, 16, 12),
+        padding: const EdgeInsets.fromLTRB(16, 5, 16, 5),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TradeDashboardTitle(
-            title: 'النتائج',
-            subtitle: 'أداء التداول التجريبي والدفتر المحلي الموثق',
-            action: TradeDashboardPill(
-              label: widget.controller.ctraderConnected
-                  ? 'cTrader متصل' : 'بيانات محلية',
-              icon: Icons.verified_outlined,
-              active: widget.controller.ctraderConnected,
+          Row(children: [
+            Expanded(child: Text('النتائج',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900))),
+            Tooltip(
+              message: 'النتائج من التداول التجريبي والدفتر المحلي فقط، '
+                  'ولا تشمل الصفقات الحقيقية لدى الوسيط.',
+              child: TradeDashboardPill(
+                label: widget.controller.ctraderConnected
+                    ? 'cTrader متصل' : 'بيانات محلية',
+                icon: Icons.verified_outlined,
+                active: widget.controller.ctraderConnected),
             ),
-          ),
-          const SizedBox(height: 14),
+          ]),
+          const SizedBox(height: 6),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(children: [
@@ -167,6 +172,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   padding: const EdgeInsetsDirectional.only(end: 7),
                   child: ChoiceChip(
                     key: Key('results-tab-$i'),
+                    visualDensity: VisualDensity.compact,
                     label: Text(_pages[i]),
                     selected: _page == i,
                     showCheckmark: false,
@@ -255,12 +261,24 @@ class _ResultsScreenState extends State<ResultsScreen> {
                     label: const Text('قيد جديد'),
                   ),
               ]),
-              const SizedBox(height: 9),
-              Text(journal == null
-                ? 'حساب cTrader متصل لقراءة أسعار السوق. نتائج التداول التجريبي تحتاج إلى نقل سجل Room من تطبيق Android القديم أو تسجيل الصفقات في قاعدة Flutter مستقلة. لن نعرض أرصدة أو أرباحًا مفترضة.'
-                : 'هذه النتائج من سجلات الهاتف فقط، منفصلة عن Room وcTrader؛ لا تشمل أي صفقات غير مسجلة، ولا تُنفّذ أوامر لدى الوسيط.',
-                style: TextStyle(fontSize: 11, height: 1.5,
-                  color: colors.onSurfaceVariant)),
+              const SizedBox(height: 7),
+              Row(children: [
+                Expanded(child: Text(
+                  'النتائج محلية فقط؛ لن نعرض أرصدة أو أرباحًا مفترضة.',
+                  maxLines: 2,
+                  style: TextStyle(fontSize: 12, height: 1.35,
+                    color: colors.onSurfaceVariant),
+                )),
+                Tooltip(
+                  message: journal == null
+                    ? 'لم تُنقل نتائج Room من التطبيق القديم إلى Flutter. '
+                        'لا تُعرض أرباح أو أرصدة افتراضية.'
+                    : 'سجل الهاتف منفصل عن cTrader وRoom، ولا يشمل '
+                        'الصفقات غير المسجلة أو غير المغلقة.',
+                  child: Icon(Icons.info_outline_rounded, size: 19,
+                    color: colors.onSurfaceVariant),
+                ),
+              ]),
               if (journal?.busy == true) const LinearProgressIndicator(),
               if (journal?.error != null)
                 Text(journal!.error!, style: TextStyle(color: colors.error)),
@@ -373,7 +391,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
         crossAxisCount: 2,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: 1.35,
+        childAspectRatio: 1.1,
         children: [
           _metric('صافي الربح', Icons.trending_up, TradeColors.positive,
             report.trades.isEmpty ? null : _money(report.netProfit, signed: true)),
@@ -412,7 +430,22 @@ class _ResultsScreenState extends State<ResultsScreen> {
         ]),
       );
 
-  Widget _curve(LedgerReport report) => Column(
+  Widget _curve(LedgerReport report) => report.trades.isEmpty
+      ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const TradeDashboardSection('منحنى التداول'),
+          const SizedBox(height: 9),
+          const TradeDashboardPanel(child: Row(children: [
+            TradeDashboardIcon(Icons.show_chart_rounded,
+              color: TradeColors.blue, size: 40),
+            SizedBox(width: 12),
+            Expanded(child: Text(
+              'لا يوجد منحنى أداء بعد؛ الإيداعات وحدها '
+              'لا تُعدّ أرباح تداول. سيظهر المنحنى بعد أول صفقة مغلقة.',
+              style: TextStyle(fontSize: 13, height: 1.5),
+            )),
+          ])),
+        ])
+      : Column(
     crossAxisAlignment: CrossAxisAlignment.start, children: [
       const TradeDashboardSection('منحنى الرصيد المحقق',
         caption: 'تغير الرصيد من القيود والصفقات المغلقة فقط'),
@@ -477,6 +510,25 @@ class _ResultsScreenState extends State<ResultsScreen> {
           ? '${(duration / 60).toStringAsFixed(1)} س' : '${duration.toStringAsFixed(0)} د',
       '—',
     ];
+    if (report.trades.isEmpty) {
+      // Show one honest empty state instead of nine oversized dash cards.
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const TradeDashboardSection('إحصائيات الصفقات'),
+        const SizedBox(height: 10),
+        const TradeDashboardPanel(
+          child: Row(children: [
+            TradeDashboardIcon(Icons.analytics_outlined,
+              color: TradeColors.blue, size: 40),
+            SizedBox(width: 12),
+            Expanded(child: Text(
+              'تظهر الإحصائيات بعد إغلاق أول صفقة تدريب '
+              'وتسجيلها في الدفتر المحلي.',
+              style: TextStyle(fontSize: 13, height: 1.5),
+            )),
+          ]),
+        ),
+      ]);
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const TradeDashboardSection('إحصائيات الصفقات',
           caption: 'مقاييس من الصفقات المغلقة الموثقة'),
@@ -523,10 +575,16 @@ class _ResultsScreenState extends State<ResultsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start, children: [
         const TradeSectionTitle('آخر الصفقات المغلقة'),
         if (report.trades.isEmpty)
-          const TradeSurface(child: SizedBox(height: 190,
-            child: TradeEmptyState(icon: Icons.receipt_long_outlined,
-              title: 'لا توجد صفقات',
-              description: 'سجّل صفقة مغلقة محليًا لتظهر هنا.')))
+          const TradeDashboardPanel(child: Row(children: [
+            TradeDashboardIcon(Icons.receipt_long_outlined,
+              color: TradeColors.blue, size: 40),
+            SizedBox(width: 12),
+            Expanded(child: Text(
+              'لا توجد صفقات مغلقة. افتح صفقة تدريب من الشارت '
+              'وسجّل إغلاقها لعرض النتائج.',
+              style: TextStyle(fontSize: 13, height: 1.5),
+            )),
+          ]))
         else for (final entry in report.trades.reversed
             .take(all ? report.trades.length : 5))
           Padding(padding: const EdgeInsets.only(bottom: 8),
