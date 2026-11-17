@@ -47,6 +47,7 @@ jobs:
             test/range_bar_timeline_test.dart \
             test/range_bar_builder_test.dart \
             test/chart_viewport_test.dart \
+            test/chart_paint_only_pan_test.dart \
             test/chart_panel_settings_test.dart \
             test/chart_symbol_settings_test.dart \
             test/chart_mobile_controls_test.dart \
