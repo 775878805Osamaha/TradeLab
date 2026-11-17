@@ -269,6 +269,19 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   String get _marketEvidenceLabel {
+    if (_replay) {
+      // This status must describe the last REVEALED source candle, not a
+      // contemporary live quote or an unrevealed future market timestamp.
+      final times = _replaySourceTimestamps;
+      if (_visibleThrough < 1 || _visibleThrough > times.length) {
+        return 'Replay تاريخي · لم تتوفر شمعة مكشوفة موثقة';
+      }
+      final source = _selectedSymbol.source == TradeSource.ctrader
+          ? 'cTrader' : 'Binance';
+      return 'Replay تاريخي · $source · $_symbol · آخر شمعة مكشوفة '
+          '${_utcMinuteLabel(times[_visibleThrough - 1])} · '
+          'أسعار السوق المباشر مخفية';
+    }
     if (!_liveRequested) return 'اربط حساب cTrader لعرض شموع الذهب والفوركس الحقيقية';
     if (_loading) return 'جار تحميل الأسعار من المصدر';
     if (_loadError != null) return 'تعذر التحقق من مصدر الأسعار';
@@ -3436,7 +3449,7 @@ class _ChartScreenState extends State<ChartScreen>
               borderRadius: BorderRadius.circular(12)),
             alignment: Alignment.center,
             child: Icon(Icons.circle, size: 10,
-                color: hasVerifiedPrices && !_ctraderTimeCandlesStale
+                color: hasVerifiedPrices && (_replay || !_ctraderTimeCandlesStale)
                     ? const Color(0xFF047660) : Colors.grey),
           ),
           Container(
@@ -3473,7 +3486,7 @@ class _ChartScreenState extends State<ChartScreen>
               message: _marketEvidenceLabel,
               child: Text(
                 hasVerifiedPrices
-                    ? (_ctraderTimeCandlesStale
+                    ? (_replay ? 'Replay تاريخي · $source' : _ctraderTimeCandlesStale
                         ? 'شموع $source · ${widget.controller.recentQuoteFor(_selectedSymbol) != null ? 'الشموع أقدم من السعر' : 'بيانات متأخرة'}'
                         : 'شموع $source')
                     : fetchingRangeTicks
@@ -3487,7 +3500,7 @@ class _ChartScreenState extends State<ChartScreen>
                 style: TextStyle(fontSize: 12,
                     color: fetchingRangeTicks
                         ? TradeColors.blue
-                        : hasVerifiedPrices && !_ctraderTimeCandlesStale
+                        : hasVerifiedPrices && (_replay || !_ctraderTimeCandlesStale)
                             ? const Color(0xFF047660) : TradeColors.negative),
               ),
             ),
