@@ -46,3 +46,25 @@ class RangeHistoryFillPolicy {
       authenticatedSource && chartActive &&
       !historicalReplay && !loading && !historyExhausted && !sourceError;
 }
+
+/// Prevents an older, still-pending broker request from blocking the
+/// current symbol/account's Range backfill or clearing the NEW run's flag.
+///
+/// ChartScreen increments its load revision whenever the symbol, account,
+/// timeframe or Range mode is replaced. It owns the cancellation decision;
+/// this tiny gate only makes the in-flight status generation-aware.
+class RangeAutoFillRevisionGate {
+  int? _revision;
+
+  bool isActiveFor(int revision) => _revision == revision;
+
+  bool start(int revision) {
+    if (revision < 0 || _revision == revision) return false;
+    _revision = revision;
+    return true;
+  }
+
+  void finish(int revision) {
+    if (_revision == revision) _revision = null;
+  }
+}
