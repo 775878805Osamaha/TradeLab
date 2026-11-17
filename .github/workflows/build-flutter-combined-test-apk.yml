@@ -1,12 +1,14 @@
 name: TradeLab combined test APK (install beside old)
+# Building APKs is intentionally disabled until TradeLab feature completion
+# and the user's explicit approval. Keep Flutter tests active separately.
 on:
-  push:
-    branches:
-      - test/flutter-all-fixes-20261116
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
   build-test-apk:
+    # Hard stop: manual dispatch also cannot build an APK before approval.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     defaults:
