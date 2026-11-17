@@ -18,6 +18,11 @@ class RangeBarBuilder {
   }
 
   final double priceDistance;
+
+  // One broker tick may legitimately cross several Range prices. A single
+  // malformed distance or extreme price jump must not create an unbounded
+  // number of candles on the chart/UI isolate.
+  static const maxBarsPerSingleTick = 100000;
   final List<TradeCandle> _closed = [];
   double? _open;
   double? _high;
@@ -42,10 +47,26 @@ class RangeBarBuilder {
       return;
     }
 
+    final distanceToPrice = (price - _open!).abs();
+    final crossing = distanceToPrice / priceDistance;
+    if (!crossing.isFinite || crossing > maxBarsPerSingleTick) {
+      // Reject this one tick before mutating the existing confirmed bars.
+      // Do not emit a truncated history that Replay might treat as complete.
+      throw StateError('Range BID gap would create too many bars from one tick');
+    }
+    if (distanceToPrice >= priceDistance) {
+      final firstStep = _open! + (price > _open! ? priceDistance : -priceDistance);
+      if (firstStep == _open! || !firstStep.isFinite) {
+        throw StateError('Range distance is below the price precision');
+      }
+    }
     _lastPrice = price;
     while ((price - _open!).abs() >= priceDistance) {
       final direction = price > _open! ? 1.0 : -1.0;
       final close = _open! + direction * priceDistance;
+      if (!close.isFinite || close == _open!) {
+        throw StateError('Range price step cannot advance at this precision');
+      }
       _high = math.max(_high!, close);
       _low = math.min(_low!, close);
       _closed.add(TradeCandle(_open!, _high!, _low!, close));
