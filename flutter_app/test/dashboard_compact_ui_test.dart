@@ -34,7 +34,8 @@ void main() {
       final body = find.byKey(const Key('results-dashboard-list'));
       await tester.scrollUntilVisible(
         find.text('إحصائيات الصفقات'), 220,
-        scrollable: find.descendant(of: body, matching: find.byType(Scrollable)));
+        scrollable: find.descendant(
+          of: body, matching: find.byType(Scrollable)).first);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('results-statistics-grid')), findsNothing,
           reason: 'Do not display nine blank metrics with no closed trades');
