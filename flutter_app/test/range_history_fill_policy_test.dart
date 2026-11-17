@@ -63,4 +63,34 @@ void main() {
     expect(RangeHistoryFillPolicy.targetClosedBars(
       plotWidth: 1e7, candleWidth: 1), 128);
   });
+  test('stale broker response cannot block newly chosen Range symbol', () {
+    final gate = RangeAutoFillRevisionGate();
+    expect(gate.start(7), isTrue);
+    expect(gate.start(7), isFalse,
+        reason: 'Duplicate backfills for one symbol must never overlap');
+    expect(gate.isActiveFor(7), isTrue);
+    // User selected another cTrader symbol while revision 7 still awaits
+    // network ticks. Revision 8 is now allowed to start immediately.
+    expect(gate.start(8), isTrue);
+    expect(gate.isActiveFor(7), isFalse);
+    expect(gate.isActiveFor(8), isTrue);
+    gate.finish(7);
+    expect(gate.isActiveFor(8), isTrue,
+        reason: 'Old network completion must not clear new download state');
+    expect(gate.start(8), isFalse);
+    gate.finish(8);
+    expect(gate.isActiveFor(8), isFalse);
+    expect(gate.start(9), isTrue);
+  });
+
+  test('unknown revisions never steal live Range load', () {
+    final gate = RangeAutoFillRevisionGate();
+    expect(gate.start(-1), isFalse);
+    expect(gate.start(12), isTrue);
+    gate.finish(13);
+    expect(gate.isActiveFor(12), isTrue);
+    gate.finish(12);
+    expect(gate.isActiveFor(12), isFalse);
+  });
+
 }
