@@ -320,9 +320,12 @@ class _ResultsScreenState extends State<ResultsScreen> {
         const Row(children: [
           Icon(Icons.insights_rounded, color: Color(0xFFA7C6FF), size: 19),
           SizedBox(width: 8),
-          Text('صافي الربح المحقق',
+          // The Arabic title can wrap naturally at 1.3x system text scale.
+          // A non-flex Row child overflowed 62dp on 320dp Android screens.
+          Expanded(child: Text('صافي الربح المحقق',
+            softWrap: true,
             style: TextStyle(fontSize: 13,
-              fontWeight: FontWeight.w700, color: Colors.white)),
+              fontWeight: FontWeight.w700, color: Colors.white))),
         ]),
         const SizedBox(height: 9),
         Text(value, textDirection: TextDirection.ltr,

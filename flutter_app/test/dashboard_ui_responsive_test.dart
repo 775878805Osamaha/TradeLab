@@ -7,10 +7,15 @@ import 'package:tradelab_flutter/screens/markets_screen.dart';
 import 'package:tradelab_flutter/screens/results_screen.dart';
 import 'package:tradelab_flutter/theme/tradelab_theme.dart';
 
-Widget _app(Widget child, {bool dark = false}) => MaterialApp(
+Widget _app(Widget child, {bool dark = false, double textScale = 1}) => MaterialApp(
   theme: TradeTheme.light(),
   darkTheme: TradeTheme.dark(),
   themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+  builder: (context, child) => MediaQuery(
+    data: MediaQuery.of(context).copyWith(
+      textScaler: TextScaler.linear(textScale)),
+    child: child!,
+  ),
   home: Directionality(
     textDirection: TextDirection.rtl,
     child: Scaffold(body: child),
@@ -104,4 +109,52 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+  // A clear, usable Arabic UI must survive the phone's text-size setting and
+  // both color themes. These tests render the real screens, not mock cards.
+  for (final width in <double>[320, 390]) {
+    testWidgets('Dark Results supports enlarged Arabic without layout errors '
+        'at ${width}dp', (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final market = MarketController();
+      addTearDown(market.dispose);
+      await tester.pumpWidget(_app(
+        ResultsScreen(controller: market), dark: true, textScale: 1.3));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('results-net-profit-hero')), findsOneWidget);
+      expect(find.text('صافي الربح المحقق'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Dark Account supports enlarged Arabic and usable settings '
+        'at ${width}dp', (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final market = MarketController();
+      addTearDown(market.dispose);
+      await tester.pumpWidget(_app(AccountScreen(
+        controller: market, darkMode: true, onDarkModeChanged: (_) {}),
+        dark: true, textScale: 1.3));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('account-connection-hero')), findsOneWidget);
+      expect(find.byKey(const Key('ctrader-connect')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Dark Watchlist supports enlarged Arabic and source status '
+        'at ${width}dp', (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final market = MarketController();
+      addTearDown(market.dispose);
+      await tester.pumpWidget(_app(
+        MarketsScreen(controller: market), dark: true, textScale: 1.3));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('watchlist-search')), findsOneWidget);
+      expect(find.byKey(const Key('market-open-chart-XAUUSD')), findsOneWidget);
+      expect(find.textContaining('يتطلب ربط cTrader'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
 }
