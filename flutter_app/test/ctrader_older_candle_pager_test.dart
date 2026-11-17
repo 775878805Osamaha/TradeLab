@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/ctrader_older_candle_pager.dart';
+import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 void main() {
