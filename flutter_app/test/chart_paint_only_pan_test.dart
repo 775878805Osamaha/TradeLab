@@ -27,7 +27,9 @@ void main() {
     await tester.pumpAndSettle();
     final previousHeaderWidget = tester.widget(header);
     await tester.drag(chart, const Offset(-80, 0));
-    await tester.pump();
+    // Drain GestureDetector's pending double-tap recognizer timeout before
+    // the test binding checks for leaked timers after widget disposal.
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(identical(previousHeaderWidget, tester.widget(header)), isTrue,
         reason: 'Gesture samples should repaint candles, not rebuild controls');
