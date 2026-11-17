@@ -147,7 +147,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
       Container(
         key: const Key('results-compact-header'),
         color: colors.surface,
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        padding: const EdgeInsets.fromLTRB(16, 5, 16, 5),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(child: Text('النتائج',
@@ -172,6 +172,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   padding: const EdgeInsetsDirectional.only(end: 7),
                   child: ChoiceChip(
                     key: Key('results-tab-$i'),
+                    visualDensity: VisualDensity.compact,
                     label: Text(_pages[i]),
                     selected: _page == i,
                     showCheckmark: false,
@@ -263,7 +264,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
               const SizedBox(height: 7),
               Row(children: [
                 Expanded(child: Text(
-                  'النتائج من الدفتر المحلي فقط · دون أوامر حقيقية',
+                  'النتائج محلية فقط؛ لن نعرض أرصدة أو أرباحًا مفترضة.',
                   maxLines: 2,
                   style: TextStyle(fontSize: 12, height: 1.35,
                     color: colors.onSurfaceVariant),
@@ -390,7 +391,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
         crossAxisCount: 2,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: 1.35,
+        childAspectRatio: 1.1,
         children: [
           _metric('صافي الربح', Icons.trending_up, TradeColors.positive,
             report.trades.isEmpty ? null : _money(report.netProfit, signed: true)),
