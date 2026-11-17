@@ -9,6 +9,7 @@ import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/market_controller.dart';
 import 'package:tradelab_flutter/main.dart';
 import 'package:tradelab_flutter/replay/replay_training_session.dart';
+import 'package:tradelab_flutter/replay/replay_mobile_controls.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -86,8 +87,18 @@ void main() {
         '${firstBar.minute.toString().padLeft(2, '0')} UTC';
     expect(message, contains(firstTime));
     expect(find.byKey(const Key('replay-speed-picker')), findsOneWidget);
-    expect(find.byKey(const Key('replay-practice-order')), findsOneWidget);
-
+    // The user complained that toolbars and a giant trading strip obscure
+    // the candles. They are HIDDEN until deliberately opened from settings.
+    expect(find.byKey(const Key('chart-reference-toolbar')), findsNothing);
+    expect(find.byKey(const Key('drawing-rail-cursor')), findsNothing);
+    expect(find.byKey(const Key('replay-trading-buttons')), findsNothing);
+    expect(find.byKey(const Key('replay-inline-trading')), findsNothing);
+    expect(tester.getSize(find.byKey(const Key('chart-reference-header'))).height,
+        48);
+    await tester.tap(find.byKey(const Key('replay-start-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('replay-show-trading-menu')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('replay-inline-trading')), findsOneWidget);
     expect(find.byKey(const Key('replay-inline-buy')), findsOneWidget);
     expect(find.byKey(const Key('replay-inline-sell')), findsOneWidget);
@@ -95,7 +106,6 @@ void main() {
         find.byKey(const Key('replay-flatten-trades')));
     expect(flatten.onPressed, isNull,
         reason: 'No open practice position may be flattened');
-
     await tester.tap(find.byKey(const Key('replay-inline-sell')));
     await tester.pumpAndSettle();
     expect(find.text('صفقة تدريب داخل Replay'), findsOneWidget);
@@ -105,16 +115,29 @@ void main() {
     await tester.tap(find.text('إلغاء').last);
     await tester.pumpAndSettle();
 
+    // Hide again, proving trading tools do not occupy chart space by default.
+    await tester.tap(find.byKey(const Key('replay-start-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('replay-show-trading-menu')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-inline-trading')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('replay-more-actions')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('replay-practice-order')));
     await tester.pumpAndSettle();
     expect(find.text('صفقة تدريب داخل Replay'), findsOneWidget);
     await tester.tap(find.byKey(const Key('replay-trade-confirm')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('صفقاتي (1)'), findsOneWidget);
+    expect(tester.widget<ReplayMobileControls>(
+        find.byType(ReplayMobileControls)).tradeCount, 1);
     expect(find.byKey(const Key('replay-practice-levels-overlay')),
         findsOneWidget,
         reason: 'An entered practice trade should have chart markers');
+    await tester.tap(find.byKey(const Key('replay-more-actions')));
+    await tester.pumpAndSettle();
+    expect(find.text('صفقاتي (1)'), findsOneWidget);
     await tester.tap(find.byKey(const Key('replay-practice-list')));
     await tester.pumpAndSettle();
     expect(find.text('صفقات التدريب التاريخية'), findsOneWidget);
@@ -133,7 +156,8 @@ void main() {
     expect(find.text('حفظ والعودة للبداية'), findsOneWidget);
     await tester.tap(find.text('إلغاء').last);
     await tester.pumpAndSettle();
-    expect(find.textContaining('صفقاتي (1)'), findsOneWidget,
+    expect(tester.widget<ReplayMobileControls>(
+        find.byType(ReplayMobileControls)).tradeCount, 1,
         reason: 'Cancelling reset must keep the existing practice trade');
 
     await tester.ensureVisible(reset);
@@ -146,7 +170,8 @@ void main() {
     // database I/O; yield to the real event loop as Flutter recommends.
     for (var attempt = 0;
         attempt < 25 &&
-            find.textContaining('صفقاتي (0)').evaluate().isEmpty;
+            tester.widget<ReplayMobileControls>(
+                find.byType(ReplayMobileControls)).tradeCount != 0;
         attempt++) {
       await tester.runAsync(() async {
         await Future<void>.delayed(const Duration(milliseconds: 80));
@@ -155,7 +180,8 @@ void main() {
     }
     expect(find.text('العودة إلى بداية Replay'), findsNothing,
         reason: 'The approved reset dialog should have closed');
-    expect(find.textContaining('صفقاتي (0)'), findsOneWidget,
+    expect(tester.widget<ReplayMobileControls>(
+        find.byType(ReplayMobileControls)).tradeCount, 0,
         reason: 'Approved reset creates a new empty Replay practice session');
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
     expect(find.byKey(const Key('replay-practice-levels-overlay')),
