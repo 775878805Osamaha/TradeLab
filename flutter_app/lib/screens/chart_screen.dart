@@ -91,6 +91,9 @@ class ChartScreen extends StatefulWidget {
 
 class _ChartScreenState extends State<ChartScreen>
     with SingleTickerProviderStateMixin {
+  // Normal pan/fling and crosshair frames invalidate only the candle canvas.
+  final ValueNotifier<int> _chartRepaint = ValueNotifier<int>(0);
+
   // Session-only BID tick cache: switching Range size rebuilds locally.
   // Scoped by account and symbol; not a substitute for persistent history.
   final _rangeBidCache = <String, List<double>>{};
@@ -522,7 +525,13 @@ class _ChartScreenState extends State<ChartScreen>
       _momentum.stop();
       return;
     }
-    setState(() => _viewport = next);
+    if (_replay || _replaySelectingStart) {
+      // Replay has viewport-positioned widgets outside the candle canvas.
+      setState(() => _viewport = next);
+    } else {
+      _viewport = next;
+      _chartRepaint.value++;
+    }
     _prefetchOlderAtEdge(_momentumPlotWidth, count);
   }
 
@@ -1386,6 +1395,7 @@ class _ChartScreenState extends State<ChartScreen>
     _replayTimer?.cancel();
     _closedCandleTimer?.cancel();
     _momentum.dispose();
+    _chartRepaint.dispose();
     super.dispose();
   }
 
@@ -4171,6 +4181,15 @@ class _ChartScreenState extends State<ChartScreen>
                   _draggingShortHandle != null || _draggingLine ||
                   _draggingPattern;
               if (!movingDrawing && nextViewport == _viewport) return;
+              // Regular one/two finger gestures only change candle geometry.
+              // Keep the header and expensive control tree out of each frame.
+              if (!movingDrawing && _crosshair == null &&
+                  !_replay && !_replaySelectingStart) {
+                _viewport = nextViewport;
+                _chartRepaint.value++;
+                _prefetchOlderAtEdge(plotWidth, candles.length);
+                return;
+              }
               setState(() {
               if (_draggingRectangle && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
@@ -4258,7 +4277,10 @@ class _ChartScreenState extends State<ChartScreen>
               _momentum.stop();
               setState(() => _crosshair = details.localPosition);
             },
-            onLongPressMoveUpdate: (details) => setState(() => _crosshair = details.localPosition),
+            onLongPressMoveUpdate: (details) {
+              _crosshair = details.localPosition;
+              _chartRepaint.value++;
+            },
             onLongPressEnd: (_) => setState(() => _crosshair = null),
             onTapUp: (details) {
               if (_replaySelectingStart &&
@@ -4445,8 +4467,11 @@ class _ChartScreenState extends State<ChartScreen>
                   timestamps: _mode == ChartMode.range
                       ? _rangeBarTimestamps : _actualTimestamps,
                   dark: Theme.of(context).brightness == Brightness.dark,
-                  viewport: _viewport,
-                  crosshair: _crosshair,
+                  viewportSnapshot: _viewport,
+                  crosshairSnapshot: _crosshair,
+                  viewportProvider: () => _viewport,
+                  crosshairProvider: () => _crosshair,
+                  repaint: _chartRepaint,
                   levels: _drawingsVisible ? List<double>.unmodifiable(_levels) : const [],
                   patterns: _drawingsVisible ? List<ChartPattern>.unmodifiable(_patterns) : const [],
                   shortPositions: _drawingsVisible ? List<ChartShortPosition>.unmodifiable(_shortPositions) : const [],
@@ -4755,8 +4780,11 @@ class _CandleChartPainter extends CustomPainter {
     required this.candles,
     required this.timestamps,
     required this.dark,
-    required this.viewport,
-    required this.crosshair,
+    required this.viewportSnapshot,
+    required this.crosshairSnapshot,
+    required ChartViewport Function() viewportProvider,
+    required Offset? Function() crosshairProvider,
+    required Listenable repaint,
     required this.levels,
     required this.patterns,
     required this.shortPositions,
@@ -4772,13 +4800,21 @@ class _CandleChartPainter extends CustomPainter {
     required this.previousSessionClose,
     required this.sourceQuote,
     required this.replayActive,
-  });
+  }) : _viewportProvider = viewportProvider,
+       _crosshairProvider = crosshairProvider,
+       super(repaint: repaint);
 
   final List<TradeCandle> candles;
   final List<int> timestamps;
   final bool dark;
-  final ChartViewport viewport;
-  final Offset? crosshair;
+  // Stable build-time values are for shouldRepaint comparisons. The getters
+  // below follow motion between widget builds via the repaint notifier.
+  final ChartViewport viewportSnapshot;
+  final Offset? crosshairSnapshot;
+  final ChartViewport Function() _viewportProvider;
+  final Offset? Function() _crosshairProvider;
+  ChartViewport get viewport => _viewportProvider();
+  Offset? get crosshair => _crosshairProvider();
   final List<double> levels;
   final List<ChartPattern> patterns;
   final List<ChartShortPosition> shortPositions;
@@ -5301,7 +5337,7 @@ class _CandleChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _CandleChartPainter old) =>
       old.candles != candles || old.timestamps != timestamps ||
-      old.dark != dark || old.viewport != viewport ||
+      old.dark != dark || old.viewportSnapshot != viewportSnapshot ||
       old.panel != panel ||
       old.scaleSettings != scaleSettings ||
       old.symbolSettings != symbolSettings ||
@@ -5309,7 +5345,7 @@ class _CandleChartPainter extends CustomPainter {
       old.previousSessionClose != previousSessionClose ||
       old.sourceQuote != sourceQuote ||
       old.replayActive != replayActive ||
-      old.crosshair != crosshair || old.indicator != indicator ||
+      old.crosshairSnapshot != crosshairSnapshot || old.indicator != indicator ||
       !listEquals(old.levels, levels) ||
       !listEquals(old.patterns, patterns) ||
       !listEquals(old.shortPositions, shortPositions) ||
