@@ -16,6 +16,7 @@ import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/chart_quick_actions.dart';
 import '../chart/chart_frame_profiler.dart';
+import '../chart/chart_text_layout_cache.dart';
 import '../chart/chart_feed_health.dart';
 import '../chart/chart_panel_settings.dart';
 import '../chart/chart_panel_settings_page.dart';
@@ -94,6 +95,7 @@ class _ChartScreenState extends State<ChartScreen>
     with SingleTickerProviderStateMixin {
   // Normal pan/fling and crosshair frames invalidate only the candle canvas.
   final ValueNotifier<int> _chartRepaint = ValueNotifier<int>(0);
+  final ChartTextLayoutCache _chartTextCache = ChartTextLayoutCache();
 
   // Session-only BID tick cache: switching Range size rebuilds locally.
   // Scoped by account and symbol; not a substitute for persistent history.
@@ -1425,6 +1427,7 @@ class _ChartScreenState extends State<ChartScreen>
     _closedCandleTimer?.cancel();
     _momentum.dispose();
     _chartRepaint.dispose();
+    _chartTextCache.clear();
     super.dispose();
   }
 
@@ -4501,6 +4504,7 @@ class _ChartScreenState extends State<ChartScreen>
                   viewportProvider: () => _viewport,
                   crosshairProvider: () => _crosshair,
                   repaint: _chartRepaint,
+                  textCache: _chartTextCache,
                   levels: _drawingsVisible ? List<double>.unmodifiable(_levels) : const [],
                   patterns: _drawingsVisible ? List<ChartPattern>.unmodifiable(_patterns) : const [],
                   shortPositions: _drawingsVisible ? List<ChartShortPosition>.unmodifiable(_shortPositions) : const [],
@@ -4814,6 +4818,7 @@ class _CandleChartPainter extends CustomPainter {
     required ChartViewport Function() viewportProvider,
     required Offset? Function() crosshairProvider,
     required Listenable repaint,
+    required this.textCache,
     required this.levels,
     required this.patterns,
     required this.shortPositions,
@@ -4835,6 +4840,7 @@ class _CandleChartPainter extends CustomPainter {
 
   final List<TradeCandle> candles;
   final List<int> timestamps;
+  final ChartTextLayoutCache textCache;
   final bool dark;
   // Stable build-time values are for shouldRepaint comparisons. The getters
   // below follow motion between widget builds via the repaint notifier.
@@ -5229,16 +5235,10 @@ class _CandleChartPainter extends CustomPainter {
     }
   }
 
-  static void _text(Canvas canvas, String value, Offset offset, Color color,
+  void _text(Canvas canvas, String value, Offset offset, Color color,
       double size, {bool bold = false, bool rtl = false}) {
-    final painter = TextPainter(
-      text: TextSpan(text: value,
-          style: TextStyle(fontSize: size, color: color,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
-      textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
-      maxLines: 1,
-    )..layout();
-    painter.paint(canvas, offset);
+    textCache.paint(
+      canvas, value, offset, color, size, bold: bold, rtl: rtl);
   }
 
   void _paintShortPositions(Canvas canvas, ChartPriceScale scale,
@@ -5305,7 +5305,7 @@ class _CandleChartPainter extends CustomPainter {
     }
   }
 
-  static void _shortAxisTag(Canvas canvas, double axis, double height,
+  void _shortAxisTag(Canvas canvas, double axis, double height,
       double y, String value, Color color) {
     if (y < 0 || y > height) return;
     final top = (y - 9).clamp(0, height - 18).toDouble();
