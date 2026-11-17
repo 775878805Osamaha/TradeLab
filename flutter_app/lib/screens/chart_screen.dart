@@ -39,6 +39,7 @@ import '../replay/replay_training_archive.dart';
 import '../replay/replay_trade_overlay.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_startup_loader.dart';
+import '../data/range_history_fill_policy.dart';
 import '../data/range_older_page.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
@@ -108,6 +109,7 @@ class _ChartScreenState extends State<ChartScreen>
   int _loadRevision = 0;
   bool _loading = false;
   bool _olderLoading = false;
+  bool _rangeAutoFilling = false;
   bool _historyExhausted = false;
   int? _olderCursorMs;
   String? _olderLoadError;
@@ -532,7 +534,8 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   void _prefetchOlderAtEdge(double plotWidth, int count) {
-    if (!_liveRequested || _loading || _olderLoading || _historyExhausted ||
+    if (!_liveRequested || _loading || _olderLoading ||
+        _rangeAutoFilling || _historyExhausted ||
         _olderLoadError != null || count <= 0 ||
         _viewport.scrollBars <= count - plotWidth / _viewport.barWidth - 25) {
       return;
@@ -818,7 +821,16 @@ class _ChartScreenState extends State<ChartScreen>
     } catch (_) {
       if (revision == _loadRevision) _loadError = 'تعذر تحميل بيانات السوق. أعد المحاولة.';
     } finally {
-      if (revision == _loadRevision && mounted) setState(() => _loading = false);
+      if (revision == _loadRevision && mounted) {
+        setState(() => _loading = false);
+        // First authentic ticks appear without waiting for deep history.
+        // Then fill the screen progressively instead of freezing after 12
+        // closed Range bars. This never changes prices or tick timestamps.
+        if (_mode == ChartMode.range && _rangeHistoryTicks.isNotEmpty &&
+            widget.active && !_replay && !_replaySelectingStart) {
+          unawaited(_autoFillRangeHistory(revision));
+        }
+      }
     }
   }
 
@@ -938,6 +950,39 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  Future<void> _autoFillRangeHistory(int revision) async {
+    if (_rangeAutoFilling || !mounted ||
+        revision != _loadRevision) return;
+    _rangeAutoFilling = true;
+    try {
+      final chartWidth = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
+      final target = RangeHistoryFillPolicy.targetClosedBars(
+        plotWidth: chartWidth,
+        candleWidth: _viewport.barWidth,
+      );
+      for (var page = 0;
+          RangeHistoryFillPolicy.shouldContinue(
+            completedPages: page,
+            closedBars: math.max(0, _actualRange.length - 1),
+            targetBars: target,
+            loadedTicks: _rangeHistoryTicks.length,
+            authenticatedSource: _rangeSourceSupported && _liveRequested,
+            chartActive: mounted && widget.active && revision == _loadRevision,
+            historicalReplay: _replay || _replaySelectingStart,
+            loading: _olderLoading || _loading,
+            historyExhausted: _historyExhausted,
+            sourceError: _olderLoadError != null || _loadError != null,
+          ); page++) {
+        final cursorBefore = _rangeOlderCursorMs;
+        await _loadOlderRangeHistory();
+        if (!mounted || revision != _loadRevision ||
+            cursorBefore == _rangeOlderCursorMs) break;
+      }
+    } finally {
+      _rangeAutoFilling = false;
+    }
+  }
+
   Future<void> _loadOlderRangeHistory() async {
     if (_replay && _training.trades.isNotEmpty) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -1008,9 +1053,11 @@ class _ChartScreenState extends State<ChartScreen>
           'تيكات الصفحة الأقدم تتداخل مع حد الشارت؛ تم إيقاف الدمج.');
       }
       if (older.isEmpty) {
+        // No BID events during this VERIFIED interval is a normal market
+        // condition (weekends, holidays). The coverage cursor still advances
+        // to the previous interval; no fake Range bar or failure banner.
+        // Automatic fill and edge paging can immediately continue backwards.
         _rangeOlderCursorMs = fromMs - 1;
-        _olderLoadError =
-            'لا توجد تيكات BID في آخر 12 ساعة من الفترة الأقدم. اضغط «أقدم» لمتابعة البحث.';
         return;
       }
       final prefix = older;
