@@ -10,6 +10,9 @@ permissions:
 
 jobs:
   flutter-ui:
+    # Disabled at the owner's request until every TradeLab feature is complete.
+    # Unlock only after the owner explicitly approves APK generation.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
