@@ -60,6 +60,7 @@ class _MarketsScreenState extends State<MarketsScreen> {
     final symbols = _visible;
     return Column(children: [
       Container(
+        key: const Key('watchlist-compact-header'),
         color: scheme.surface,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start,
