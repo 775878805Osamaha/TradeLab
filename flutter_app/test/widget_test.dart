@@ -322,11 +322,11 @@ void main() {
     await openAtPhoneSize(tester);
     await tester.tap(find.text('النتائج').last);
     await tester.pumpAndSettle();
-    expect(find.text('النتائج والتحليلات'), findsOneWidget);
-    expect(find.text('صافي الربح'), findsOneWidget);
+    expect(find.byKey(const Key('results-net-profit-hero')), findsOneWidget);
+    expect(find.text('صافي الربح المحقق'), findsOneWidget);
     await tester.tap(find.text('الحساب').last);
     await tester.pumpAndSettle();
-    expect(find.text('الحساب والإعدادات'), findsOneWidget);
+    expect(find.byKey(const Key('account-connection-hero')), findsOneWidget);
     await tester.scrollUntilVisible(find.byKey(const Key('dark-mode-switch')),
         180, scrollable: find.byType(Scrollable).last);
     await tester.pumpAndSettle();
