@@ -43,6 +43,7 @@ import '../data/range_startup_loader.dart';
 import '../data/ctrader_older_candle_pager.dart';
 import '../data/range_history_fill_policy.dart';
 import '../data/range_older_page.dart';
+import '../data/range_older_page_scanner.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
@@ -1023,62 +1024,65 @@ class _ChartScreenState extends State<ChartScreen>
       _olderLoadError = null;
     });
     try {
-      // Reuse independently verified local windows when available.
-      // Older pages must cover exactly twelve hours, including every BID
-      // event at an interval boundary; no inferred continuity is allowed.
-      final endMs = _rangeOlderCursorMs ?? earliest - 1;
-      if (endMs < RangeOlderPage.lookback.inMilliseconds) {
-        _historyExhausted = true;
-        return;
-      }
-      final fromMs = RangeOlderPage.bounds(endMs).fromMs;
-      if (fromMs < 0) {
-        _historyExhausted = true;
-        return;
-      }
-      List<MarketTick>? older;
-      try {
-        older = await RangeTickStore.readCoveredInterval(
-          account, symbol.code, fromMs: fromMs, toMs: endMs);
-      } catch (_) {
-        // A damaged local cache can be recovered from cTrader.
-        older = null;
-      }
-      if (!mounted || revision != _loadRevision) return;
-      if (older == null) {
-        // IMPORTANT: rangeTicks() fetches SIX days; its result cannot be
-        // archived as a twelve-hour interval. Request only the exact
-        // uncovered inclusive page through the verified cTrader API.
-        older = await widget.controller.rangeTicksBetween(
-          symbol, fromMs: fromMs, toMs: endMs,
-        );
-        if (!mounted || revision != _loadRevision) return;
-        RangeOlderPage.verify(
-          page: older, fromMs: fromMs, toMs: endMs,
-          alreadyLoaded: _rangeHistoryTicks.length,
-        );
-        // Persist only this complete, broker-verified interval (even if
-        // quiet); never mark six-day coverage from a shorter response.
-        unawaited(RangeTickStore.archiveVerifiedWindow(
-          account, symbol.code, older, fromMs: fromMs, toMs: endMs,
-        ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-      } else {
-        RangeOlderPage.verify(
-          page: older, fromMs: fromMs, toMs: endMs,
-          alreadyLoaded: _rangeHistoryTicks.length,
-        );
-      }
-      // The cursor is exclusive, even when several ticks share a ms.
+      // Edge/manual browsing searches up to six successive authenticated
+      // twelve-hour BID windows when the market was closed. Automatic
+      // background fill still checks one per attempt to honor its 24-page
+      // network-work budget. Neither path synthesizes a candle.
+      final cursorMs = _rangeOlderCursorMs ?? earliest - 1;
+      final previouslyLoaded = _rangeHistoryTicks.length;
+      bool isCurrent() => mounted && revision == _loadRevision &&
+          widget.controller.accountId == account &&
+          _selectedSymbol.code == symbol.code &&
+          _mode == ChartMode.range;
+      final scanned = await RangeOlderPageScanner.scan(
+        cursorMs: cursorMs,
+        alreadyLoaded: previouslyLoaded,
+        maxPages: _rangeAutoFilling
+            ? 1 : RangeOlderPageScanner.maxQuietWindowsPerAttempt,
+        isCurrent: isCurrent,
+        fetchVerified: (fromMs, toMs) async {
+          List<MarketTick>? cached;
+          try {
+            cached = await RangeTickStore.readCoveredInterval(
+              account, symbol.code, fromMs: fromMs, toMs: toMs,
+            );
+          } catch (_) {
+            // A damaged cache is not evidence of broker coverage.
+            cached = null;
+          }
+          if (!isCurrent()) return const <MarketTick>[];
+          if (cached != null) return cached;
+          // rangeTicks() fetches six days and cannot prove this short
+          // interval. Request only the exact missing inclusive BID page.
+          final verified = await widget.controller.rangeTicksBetween(
+            symbol, fromMs: fromMs, toMs: toMs,
+          );
+          if (!isCurrent()) return const <MarketTick>[];
+          RangeOlderPage.verify(
+            page: verified, fromMs: fromMs, toMs: toMs,
+            alreadyLoaded: previouslyLoaded,
+          );
+          // Persist only a complete cTrader page, including quiet sessions.
+          unawaited(RangeTickStore.archiveVerifiedWindow(
+            account, symbol.code, verified, fromMs: fromMs, toMs: toMs,
+          ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+          return verified;
+        },
+      );
+      if (scanned == null || !isCurrent()) return;
+      final older = scanned.ticks;
+      // The cursor is exclusive, even when multiple BID events share a ms.
       if (older.any((tick) => tick.timestamp >= earliest)) {
         throw const MarketDataException(
           'تيكات الصفحة الأقدم تتداخل مع حد الشارت؛ تم إيقاف الدمج.');
       }
       if (older.isEmpty) {
-        // No BID events during this VERIFIED interval is a normal market
-        // condition (weekends, holidays). The coverage cursor still advances
-        // to the previous interval; no fake Range bar or failure banner.
-        // Automatic fill and edge paging can immediately continue backwards.
-        _rangeOlderCursorMs = fromMs - 1;
+        // Every skipped window was provider-verified empty. Preserve its
+        // exact cursor so the next request never overlaps or skips time.
+        _rangeOlderCursorMs = scanned.nextCursorMs;
+        if (scanned.nextCursorMs < RangeOlderPage.lookback.inMilliseconds) {
+          _historyExhausted = true;
+        }
         return;
       }
       final prefix = older;
@@ -1223,7 +1227,7 @@ class _ChartScreenState extends State<ChartScreen>
           );
         }
         _rangeHistoryTicks = combined;
-        _rangeOlderCursorMs = fromMs - 1;
+        _rangeOlderCursorMs = scanned.nextCursorMs;
         _actualRange = timeline.bars;
         _rangeBarEndTickIndices = timeline.endTickIndices;
         _rangeBarTimestamps = timeline.endTimestamps;
