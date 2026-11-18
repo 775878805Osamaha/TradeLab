@@ -77,21 +77,30 @@ class ReplayMobileControls extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Directionality(
         textDirection: TextDirection.ltr,
-        // Play/Confirm and pick-new-start are pinned on the phone. Only the
-        // secondary controls may scroll horizontally on 320dp screens.
+        // Close, step-back/play/step-forward and confirm stay visible.
+        // Start selection, reset, interval and speed are secondary options.
         child: Row(children: [
+          // Primary transport/exit controls are never hidden behind a
+          // horizontal scroll on narrow phones. Only settings scroll.
+          IconButton(
+            key: const Key('replay-close'),
+            tooltip: 'إغلاق Replay',
+            onPressed: onClose,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
+            icon: const Icon(Icons.close, size: 25, color: ink),
+          ),
           Expanded(child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-            IconButton(
-              key: const Key('replay-close'),
-              tooltip: 'إغلاق Replay',
-              onPressed: onClose,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
-              icon: const Icon(Icons.close, size: 25, color: ink),
-            ),
-            PopupMenuButton<ReplayStartMenuAction>(
+            if (!selecting)
+              IconButton(
+                key: const Key('replay-choose-new-start'),
+                tooltip: 'اختيار شمعة بداية جديدة',
+                onPressed: onChooseAgain,
+                icon: const Icon(Icons.first_page, color: ink),
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
+                padding: EdgeInsets.zero),            PopupMenuButton<ReplayStartMenuAction>(
               key: const Key('replay-start-menu'),
               tooltip: 'اختيار نقطة بداية Replay',
               position: PopupMenuPosition.over,
@@ -224,23 +233,40 @@ class ReplayMobileControls extends StatelessWidget {
                 if (option != null) onSpeed(option);
               },
             ),
-            IconButton(
-              key: const Key('replay-step-back'),
-              tooltip: 'العودة شمعة واحدة',
-              onPressed: selecting || visibleCount <= 1 ? null : onStepBack,
-              icon: const Icon(Icons.skip_previous_outlined),
-              constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
-              padding: EdgeInsets.zero),
-            IconButton(
-              key: const Key('replay-step-forward'),
-              tooltip: 'التقدم شمعة واحدة',
-              onPressed: selecting || visibleCount >= totalBars
-                  ? null : onStepForward,
-              icon: const Icon(Icons.skip_next_outlined),
-              constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
-              padding: EdgeInsets.zero),
             ]),
           )),
+            if (!selecting)
+              IconButton(
+                key: const Key('replay-step-back'),
+                tooltip: 'العودة شمعة واحدة',
+                onPressed: selecting || visibleCount <= 1 ? null : onStepBack,
+                icon: const Icon(Icons.skip_previous_outlined),
+                constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
+                padding: EdgeInsets.zero),
+            if (selecting)
+              TextButton.icon(
+                key: const Key('replay-confirm-start'),
+                onPressed: onConfirm,
+                icon: const Icon(Icons.check_circle, color: Color(0xFF2962FF)),
+                label: const Text('بدء', textDirection: TextDirection.rtl))
+            else
+              IconButton(
+                key: const Key('replay-play-pause'),
+                tooltip: playing ? 'إيقاف Replay' : 'تشغيل Replay',
+                onPressed: onPlayPause,
+                icon: Icon(playing ? Icons.pause : Icons.play_arrow,
+                    color: ink, size: 30),
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
+                padding: EdgeInsets.zero),
+            if (!selecting)
+              IconButton(
+                key: const Key('replay-step-forward'),
+                tooltip: 'التقدم شمعة واحدة',
+                onPressed: selecting || visibleCount >= totalBars
+                    ? null : onStepForward,
+                icon: const Icon(Icons.skip_next_outlined),
+                constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
+                padding: EdgeInsets.zero),
             PopupMenuButton<ReplayExtrasAction>(
               key: const Key('replay-more-actions'),
               tooltip: 'المزيد من أدوات Replay',
@@ -290,28 +316,7 @@ class ReplayMobileControls extends StatelessWidget {
                     textDirection: TextDirection.rtl)),
               ],
             ),
-            if (selecting)
-              TextButton.icon(
-                key: const Key('replay-confirm-start'),
-                onPressed: onConfirm,
-                icon: const Icon(Icons.check_circle, color: Color(0xFF2962FF)),
-                label: const Text('بدء', textDirection: TextDirection.rtl))
-            else
-              IconButton(
-                key: const Key('replay-play-pause'),
-                tooltip: playing ? 'إيقاف Replay' : 'تشغيل Replay',
-                onPressed: onPlayPause,
-                icon: Icon(playing ? Icons.pause : Icons.play_arrow,
-                    color: ink, size: 30),
-                constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
-                padding: EdgeInsets.zero),
-            IconButton(
-              key: const Key('replay-choose-new-start'),
-              tooltip: 'اختيار شمعة بداية جديدة',
-              onPressed: onChooseAgain,
-              icon: const Icon(Icons.first_page, color: ink),
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
-              padding: EdgeInsets.zero),
+
         ]),
       ),
     );
