@@ -4,7 +4,7 @@ import 'package:tradelab_flutter/data/range_older_page.dart';
 import 'package:tradelab_flutter/data/range_older_page_scanner.dart';
 
 void main() {
-  const step = Duration(hours: 12).inMilliseconds;
+  const step = 12 * 60 * 60 * 1000;
   final last = DateTime.utc(2026, 11, 17).millisecondsSinceEpoch;
 
   test('one gesture crosses quiet cTrader weekend into genuine BID events',
