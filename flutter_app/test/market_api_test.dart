@@ -583,6 +583,85 @@ void main() {
     }
   });
 
+  test('verified cTrader OHLC rejects fractional broker milliseconds', () {
+    const start = 1700000000000;
+    for (final badTime in <Object>[start + .5, '1700000000000']) {
+      expect(
+        () => parseVerifiedBars([
+          {'timestamp': badTime, 'open': 1900.0, 'high': 1901.0,
+            'low': 1899.0, 'close': 1900.5},
+        ], sourceType: TradeSource.ctrader,
+          minTime: start - 1000, maxTime: start + 1000),
+        throwsA(isA<MarketDataException>()),
+      );
+    }
+    final valid = parseVerifiedBars([
+      {'timestamp': 1700000000000.0, 'open': 1900.0, 'high': 1901.0,
+       'low': 1899.0, 'close': 1900.5},
+    ], sourceType: TradeSource.ctrader,
+      minTime: start - 1000, maxTime: start + 1000);
+    expect(valid.single.timestamp, start,
+        reason: 'Only exactly whole milliseconds may be accepted');
+  });
+
+  test('small BID page rejects fractional milliseconds rather than truncating',
+      () async {
+    const start = 1700000000000;
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      expect(request.url.path, '/v1/ticks');
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'quoteType': 'bid', 'symbolId': '42',
+        'hasMore': false, 'ticks': [
+          {'timestamp': start + .75, 'price': 2000.25},
+        ],
+      }), 200);
+    }));
+    await expectLater(
+      api.ctraderBidTicksRange(
+          token: 'test', accountId: '1', symbol: 'XAUUSD',
+          fromMs: start, toMs: start + 1000),
+      throwsA(isA<MarketDataException>()),
+    );
+    api.close();
+  });
+
+  test('dense BID worker rejects fractional timestamps without changing order',
+      () async {
+    const start = 1700000000000;
+    final entries = List<Map<String, Object>>.generate(6000, (index) => {
+      'timestamp': start + index,
+      'price': 2100.0 + index / 100000,
+    });
+    entries[5700]['timestamp'] = start + 5700.5;
+    final body = jsonEncode({
+      'source': 'ctrader', 'quoteType': 'bid', 'symbolId': '42',
+      'hasMore': false, 'ticks': entries,
+    });
+    expect(MarketJsonDecodePolicy.shouldOffload(
+        path: '/v1/ticks', chars: body.length), isTrue);
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      expect(request.url.path, '/v1/ticks');
+      return http.Response(body, 200);
+    }));
+    await expectLater(
+      api.ctraderBidTicksRange(
+          token: 'test', accountId: '1', symbol: 'XAUUSD',
+          fromMs: start, toMs: start + 7000),
+      throwsA(isA<MarketDataException>()),
+    );
+    api.close();
+  });
+
   test('incremental BID requests reject invalid or oversized windows', () async {
     final api = MarketApi(client: MockClient((_) async =>
         fail('Invalid BID window should never reach a provider')));
