@@ -68,7 +68,7 @@ class ReplayMobileControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const ink = Color(0xFF181818);
+    final ink = Theme.of(context).colorScheme.onSurface;
     final surface = Theme.of(context).colorScheme.surface;
     return Container(
       key: const Key('replay-controls'),
@@ -88,7 +88,7 @@ class ReplayMobileControls extends StatelessWidget {
             onPressed: onClose,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
-            icon: const Icon(Icons.close, size: 25, color: ink),
+            icon: Icon(Icons.close, size: 25, color: ink),
           ),
           Expanded(child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -98,7 +98,7 @@ class ReplayMobileControls extends StatelessWidget {
                 key: const Key('replay-choose-new-start'),
                 tooltip: 'اختيار شمعة بداية جديدة',
                 onPressed: onChooseAgain,
-                icon: const Icon(Icons.first_page, color: ink),
+                icon: Icon(Icons.first_page, color: ink),
                 constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
                 padding: EdgeInsets.zero),
             PopupMenuButton<ReplayStartMenuAction>(
@@ -109,10 +109,10 @@ class ReplayMobileControls extends StatelessWidget {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
               onSelected: onStartMenu,
-              icon: const Icon(Icons.settings_outlined, color: ink),
+              icon: Icon(Icons.settings_outlined, color: ink),
               itemBuilder: (_) => [
-                const PopupMenuItem(
-                  key: Key('replay-pick-column'),
+                PopupMenuItem(
+                  key: const Key('replay-pick-column'),
                   value: ReplayStartMenuAction.column,
                   child: Row(children: [
                     Icon(Icons.first_page, color: ink),
@@ -120,8 +120,8 @@ class ReplayMobileControls extends StatelessWidget {
                     Expanded(child: Text('حدد العمود',
                       textDirection: TextDirection.rtl)),
                   ])),
-                const PopupMenuItem(
-                  key: Key('replay-pick-date'),
+                PopupMenuItem(
+                  key: const Key('replay-pick-date'),
                   value: ReplayStartMenuAction.date,
                   child: Row(children: [
                     Icon(Icons.event, color: ink),
@@ -129,8 +129,8 @@ class ReplayMobileControls extends StatelessWidget {
                     Expanded(child: Text('حدد تاريخًا...',
                       textDirection: TextDirection.rtl)),
                   ])),
-                const PopupMenuItem(
-                  key: Key('replay-pick-earliest'),
+                PopupMenuItem(
+                  key: const Key('replay-pick-earliest'),
                   value: ReplayStartMenuAction.earliest,
                   child: Row(children: [
                     Icon(Icons.flag_outlined, color: ink),
@@ -138,8 +138,8 @@ class ReplayMobileControls extends StatelessWidget {
                     Expanded(child: Text('حدد أول تاريخ متاح',
                       textDirection: TextDirection.rtl)),
                   ])),
-                const PopupMenuItem(
-                  key: Key('replay-pick-random'),
+                PopupMenuItem(
+                  key: const Key('replay-pick-random'),
                   value: ReplayStartMenuAction.random,
                   child: Row(children: [
                     Icon(Icons.casino_outlined, color: ink),
@@ -167,7 +167,7 @@ class ReplayMobileControls extends StatelessWidget {
               onPressed: selecting ? null : onReset,
               constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
               padding: EdgeInsets.zero,
-              icon: const Icon(Icons.first_page_outlined, color: ink),
+              icon: Icon(Icons.first_page_outlined, color: ink),
             ),
             PopupMenuButton<ReplayStepMenuAction>(
               key: const Key('replay-interval-picker'),
@@ -181,7 +181,7 @@ class ReplayMobileControls extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 10),
                 child: Text(ChartTimeframeCatalog.displayLabel(chartFrame),
                   textDirection: TextDirection.rtl,
-                  style: const TextStyle(fontSize: 16,
+                  style: TextStyle(fontSize: 16,
                       color: ink, fontWeight: FontWeight.w700)),
               ),
               itemBuilder: (_) => [
@@ -223,7 +223,7 @@ class ReplayMobileControls extends StatelessWidget {
               value: speed,
               underline: const SizedBox.shrink(),
               icon: const SizedBox.shrink(),
-              style: const TextStyle(fontWeight: FontWeight.w700,
+              style: TextStyle(fontWeight: FontWeight.w700,
                   fontSize: 17, color: ink),
               items: [
                 for (final option in ReplayPlaybackSpeed.values)
@@ -276,7 +276,7 @@ class ReplayMobileControls extends StatelessWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10)),
               onSelected: onExtras,
-              icon: const Icon(Icons.more_horiz, color: ink, size: 24),
+              icon: Icon(Icons.more_horiz, color: ink, size: 24),
               itemBuilder: (_) => [
                 PopupMenuItem(
                   key: const Key('replay-practice-order'),

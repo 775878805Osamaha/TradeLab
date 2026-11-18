@@ -236,4 +236,54 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  for (final dark in <bool>[false, true]) {
+    testWidgets('Replay controls honor ${dark ? 'dark' : 'light'} theme contrast',
+        (tester) async {
+      final theme = dark ? ThemeData.dark() : ThemeData.light();
+      final foreground = theme.colorScheme.onSurface;
+      await tester.binding.setSurfaceSize(const Size(390, 780));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(MaterialApp(
+        theme: theme,
+        home: Scaffold(body: Column(children: [
+          const Spacer(),
+          ReplayMobileControls(
+            selecting: false, playing: false,
+            visibleCount: 15, totalBars: 100,
+            chartFrame: '2h',
+            speed: ReplayPlaybackSpeed.normal,
+            showTrading: false, showDrawingTools: false,
+            canLoadOlder: true, olderLoading: false, tradeCount: 0,
+            autoStep: true,
+            onClose: () {}, onConfirm: () {},
+            onStartMenu: (_) {}, onExtras: (_) {},
+            onStepMenu: (_) {}, onReset: () {},
+            onStepBack: () {}, onStepForward: () {},
+            onPlayPause: () {}, onSpeed: (_) {}, onChooseAgain: () {},
+          ),
+        ])),
+      ));
+      final close = tester.widget<IconButton>(
+          find.byKey(const Key('replay-close')));
+      final playback = tester.widget<IconButton>(
+          find.byKey(const Key('replay-play-pause')));
+      final more = tester.widget<PopupMenuButton<ReplayExtrasAction>>(
+          find.byKey(const Key('replay-more-actions')));
+      final start = tester.widget<PopupMenuButton<ReplayStartMenuAction>>(
+          find.byKey(const Key('replay-start-menu')));
+      final speed = tester.widget<DropdownButton<ReplayPlaybackSpeed>>(
+          find.byKey(const Key('replay-speed-picker')));
+      final interval = tester.widget<PopupMenuButton<ReplayStepMenuAction>>(
+          find.byKey(const Key('replay-interval-picker')));
+      final label = (interval.child! as Padding).child! as Text;
+      expect((close.icon as Icon).color, foreground);
+      expect((playback.icon as Icon).color, foreground);
+      expect((more.icon! as Icon).color, foreground);
+      expect((start.icon! as Icon).color, foreground);
+      expect(label.style!.color, foreground);
+      expect(speed.style!.color, foreground);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }
