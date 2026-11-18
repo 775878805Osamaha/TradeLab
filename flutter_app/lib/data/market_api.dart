@@ -525,7 +525,7 @@ class MarketApi {
     }), token: token);
     final bid = (data['bid'] as num?)?.toDouble();
     final ask = (data['ask'] as num?)?.toDouble();
-    final timestamp = (data['timestamp'] as num?)?.toInt();
+    final timestamp = _exactBrokerMillisecond(data['timestamp']);
     if (data['source'] != 'ctrader' || '${data['symbolId']}' != '$id' ||
         timestamp == null || timestamp <= 0 || bid == null || ask == null ||
         !bid.isFinite || !ask.isFinite || bid <= 0 || ask < bid) {
@@ -582,8 +582,13 @@ class MarketApi {
       final end = (before ?? DateTime.now().toUtc()).millisecondsSinceEpoch;
       final bars = rows.map((row) {
         if (row is! List || row.length < 7) throw const FormatException();
-        final ts = (row[0] as num).toInt();
-        final closeAt = (row[6] as num).toInt();
+        final ts = _exactBrokerMillisecond(row[0]);
+        final closeAt = _exactBrokerMillisecond(row[6]);
+        // Malformed times cannot silently move a Binance candle across
+        // Replay's cutoff, or turn an open candle into a completed one.
+        if (ts == null || closeAt == null || closeAt <= ts) {
+          throw const FormatException('Invalid Binance kline timestamps');
+        }
         // Exclude the current, unclosed candle to keep Replay look-ahead-free.
         if (closeAt >= end) return null;
         return MarketBar(ts, TradeCandle(double.parse('${row[1]}'), double.parse('${row[2]}'),
