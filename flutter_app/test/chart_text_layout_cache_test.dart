@@ -55,4 +55,60 @@ void main() {
   test('invalid cache capacity fails without allocating a layout', () {
     expect(() => ChartTextLayoutCache(capacity: 0), throwsArgumentError);
   });
+
+  test('selected short-position pills reuse identical RTL measured layouts',
+      () {
+    final cache = ChartTextLayoutCache();
+    addTearDown(cache.clear);
+    const caption = 'الهدف: 3,987.50 (1.500%)';
+    final one = cache.layoutPill(caption, maxWidth: 240);
+    final repeated = cache.layoutPill(caption, maxWidth: 240);
+    expect(identical(one, repeated), isTrue);
+    expect(cache.pillLength, 1);
+    expect(one.width, greaterThan(0));
+    expect(one.textDirection, TextDirection.rtl);
+    expect(one.textAlign, TextAlign.center);
+    expect(one.maxLines, 1);
+    final style = (one.text! as TextSpan).style!;
+    expect(style.fontSize, 11);
+    expect(style.color, Colors.white);
+    expect(style.height, 1.18);
+  });
+
+  test('resizing chart and changing line count never reuse stale pill geometry',
+      () {
+    final cache = ChartTextLayoutCache();
+    addTearDown(cache.clear);
+    const text = 'العائد المحتمل 50 نسبة العائد/المخاطرة 2.0';
+    final original = cache.layoutPill(text, maxWidth: 240);
+    final narrower = cache.layoutPill(text, maxWidth: 100);
+    final twoLines = cache.layoutPill(text, maxWidth: 100, twoLines: true);
+    final different = cache.layoutPill('الإيقاف 99', maxWidth: 240);
+    expect(cache.pillLength, 4);
+    expect(identical(original, narrower), isFalse);
+    expect(identical(narrower, twoLines), isFalse);
+    expect(identical(original, different), isFalse);
+    expect(twoLines.maxLines, 2);
+  });
+
+  test('bounded pill LRU evicts old paragraphs and clears all resources',
+      () {
+    final cache = ChartTextLayoutCache(capacity: 2, pillCapacity: 2);
+    final price = cache.layout('3987', Colors.black, 12);
+    final stop = cache.layoutPill('إيقاف', maxWidth: 150);
+    final target = cache.layoutPill('هدف', maxWidth: 150);
+    expect(identical(cache.layoutPill('إيقاف', maxWidth: 150), stop), isTrue);
+    cache.layoutPill('عائد', maxWidth: 150);
+    expect(cache.pillLength, 2);
+    expect(target.debugDisposed, isTrue);
+    expect(stop.debugDisposed, isFalse);
+    expect(price.debugDisposed, isFalse);
+    cache.clear();
+    expect(cache.length, 0);
+    expect(cache.pillLength, 0);
+    expect(stop.debugDisposed, isTrue);
+    expect(price.debugDisposed, isTrue);
+    expect(() => cache.layoutPill('X', maxWidth: 0), throwsArgumentError);
+    expect(() => ChartTextLayoutCache(pillCapacity: 0), throwsArgumentError);
+  });
 }

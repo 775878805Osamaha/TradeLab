@@ -5322,15 +5322,13 @@ class _CandleChartPainter extends CustomPainter {
     _text(canvas, value, Offset(axis + 2, top + 2), Colors.white, 10);
   }
 
-  static void _shortPill(Canvas canvas, String value, Offset location,
+  void _shortPill(Canvas canvas, String value, Offset location,
       Color fill, double axis, double chartHeight, {bool twoLines = false}) {
-    final span = TextSpan(text: value, style: const TextStyle(
-      fontSize: 11, color: Colors.white, height: 1.18));
-    final painter = TextPainter(
-      text: span, textDirection: TextDirection.rtl,
-      textAlign: TextAlign.center,
-      maxLines: twoLines ? 2 : 1,
-    )..layout(maxWidth: math.max(40, axis - 16));
+    // These three selected-trade labels used to construct fresh paragraphs
+    // on every pinch, pan and animated repaint. Reuse their exact measured
+    // RTL layout via the chart-owned, capacity-bounded text cache.
+    final painter = textCache.layoutPill(value,
+        maxWidth: math.max(40, axis - 16), twoLines: twoLines);
     final rectWidth = painter.width + 12;
     final left = (location.dx - rectWidth + 10)
         .clamp(3.0, math.max(3.0, axis - rectWidth - 3)).toDouble();
