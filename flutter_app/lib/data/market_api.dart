@@ -50,6 +50,29 @@ class _BidRequestGate {
   }
 }
 
+/// Accept broker milliseconds only when the source number is exact.
+/// Truncating 1700000000000.75 via toInt() would silently move an authentic
+/// BID event or candle open into a different millisecond, corrupting Replay.
+int? _exactBrokerMillisecond(Object? source) {
+  if (source is! num || !source.isFinite || source < 0 ||
+      source > 8640000000000000 || source % 1 != 0) {
+    return null;
+  }
+  return source.toInt();
+}
+
+dynamic _convertDenseBidRow(dynamic entry) {
+  if (entry is Map) {
+    final time = _exactBrokerMillisecond(entry['timestamp']);
+    final value = entry['price'];
+    if (time != null && value is num) {
+      return MarketTick(time, value.toDouble());
+    }
+  }
+  // Retain malformed records for the caller's strict validation to reject.
+  return entry;
+}
+
 Map<String, dynamic> _decodeBrokerObject(String payload) {
   final decoded = jsonDecode(payload);
   if (decoded is! Map<String, dynamic>) throw const FormatException();
@@ -66,13 +89,7 @@ Map<String, dynamic> _decodeDenseBrokerBidTicks(String payload) {
   final rows = decoded['ticks'];
   if (rows is List && rows.length <= 100000) {
     decoded['ticks'] = <dynamic>[
-      for (final entry in rows)
-        if (entry is Map &&
-            entry['timestamp'] is num && entry['price'] is num)
-          MarketTick((entry['timestamp'] as num).toInt(),
-              (entry['price'] as num).toDouble())
-        else
-          entry,
+      for (final entry in rows) _convertDenseBidRow(entry),
     ];
   }
   return decoded;
@@ -453,7 +470,7 @@ class MarketApi {
         } else if (entry is Map) {
           final rawTime = entry['timestamp'];
           final rawPrice = entry['price'];
-          time = rawTime is num ? rawTime.toInt() : null;
+          time = _exactBrokerMillisecond(rawTime);
           price = rawPrice is num ? rawPrice.toDouble() : null;
         } else {
           throw const MarketDataException('تيكات cTrader غير صالحة.');
@@ -647,7 +664,7 @@ List<MarketBar> parseVerifiedBars(dynamic source, {required TradeSource sourceTy
   if (source is! List) throw const MarketDataException('الشموع المستلمة غير صالحة.');
   final bars = source.map((item) {
     if (item is! Map) throw const MarketDataException('الشموع المستلمة غير صالحة.');
-    final ts = (item['timestamp'] as num?)?.toInt();
+    final ts = _exactBrokerMillisecond(item['timestamp']);
     final o = (item['open'] as num?)?.toDouble();
     final h = (item['high'] as num?)?.toDouble();
     final l = (item['low'] as num?)?.toDouble();
