@@ -14,14 +14,21 @@ class CTraderCandleStitcher {
     if (existing.isEmpty) return List<MarketBar>.unmodifiable(recent);
     if (recent.isEmpty) return existing;
 
-    final known = <int, MarketBar>{
-      for (final bar in existing) bar.timestamp: bar,
-    };
-    final next = <MarketBar>[...existing];
+    // Both verified inputs are timestamp-ascending. A streaming cursor
+    // finds every overlapping closed bar in O(existing + recent) time
+    // without building a 100k/200k-entry timestamp -> bar hash map on
+    // each broker refresh. Validate ALL overlaps before copying the archive.
+    final appended = <MarketBar>[];
     final latest = existing.last.timestamp;
+    var archiveIndex = 0;
     for (final bar in recent) {
-      final prior = known[bar.timestamp];
-      if (prior != null) {
+      while (archiveIndex < existing.length &&
+          existing[archiveIndex].timestamp < bar.timestamp) {
+        archiveIndex++;
+      }
+      if (archiveIndex < existing.length &&
+          existing[archiveIndex].timestamp == bar.timestamp) {
+        final prior = existing[archiveIndex];
         if (prior.candle.open != bar.candle.open ||
             prior.candle.high != bar.candle.high ||
             prior.candle.low != bar.candle.low ||
@@ -31,7 +38,7 @@ class CTraderCandleStitcher {
               'أوقفنا التحديث حتى يُراجع المصدر.');
         }
       } else if (bar.timestamp > latest) {
-        next.add(bar);
+        appended.add(bar);
       } else {
         // The broker returned an old candle missing from the previously
         // displayed history. Do not silently insert bars into Replay indices.
@@ -39,10 +46,10 @@ class CTraderCandleStitcher {
             'تاريخ cTrader غير متصل؛ ظهرت شموع قديمة لم تُحمّل سابقًا.');
       }
     }
-    if (next.length > 200000) {
+    if (existing.length + appended.length > 200000) {
       throw const MarketDataException(
           'تجاوز التاريخ المحمّل حد الذاكرة. أعد فتح الشارت.');
     }
-    return List<MarketBar>.unmodifiable(next);
+    return List<MarketBar>.unmodifiable([...existing, ...appended]);
   }
 }
