@@ -20,6 +20,25 @@ class ChartTimeframeCatalog {
   static List<String> forSource(TradeSource source) =>
       source == TradeSource.ctrader ? ctrader : binance;
 
+  /// Arabic UI label for a native market-provider interval. The machine
+  /// timeframe remains unchanged for authenticated broker requests/Replay.
+  /// Use a single mapping in both the chart and Replay toolbar.
+  static String displayLabel(String timeframe) => switch (timeframe) {
+    '1m' => '1 دق',
+    '2m' => '2 دق',
+    '3m' => '3 دق',
+    '5m' => '5 دق',
+    '15m' => '15 دق',
+    '30m' => '30 دق',
+    '1h' => '1 ساعة',
+    '2h' => 'ساعتان',
+    '4h' => '4 ساعات',
+    '1D' => 'يومي',
+    '1W' => 'أسبوعي',
+    '1M' => 'شهري',
+    _ => timeframe,
+  };
+
   static bool isSupported(TradeSource source, String timeframe) =>
       forSource(source).contains(timeframe);
 
