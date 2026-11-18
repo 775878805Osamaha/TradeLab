@@ -50,6 +50,13 @@ class CTraderCandleStitcher {
       throw const MarketDataException(
           'تجاوز التاريخ المحمّل حد الذاكرة. أعد فتح الشارت.');
     }
+    if (appended.isEmpty) {
+      // All returned provider bars matched verified CLOSED history. Preserve
+      // the existing list identity: a poll with zero new closes must not
+      // copy 100k+ candles into a fresh unmodifiable list.
+      // Every overlap, gap and history limit has already been verified above.
+      return existing;
+    }
     return List<MarketBar>.unmodifiable([...existing, ...appended]);
   }
 }
