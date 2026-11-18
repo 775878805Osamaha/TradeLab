@@ -4589,6 +4589,7 @@ class _ChartScreenState extends State<ChartScreen>
             Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
               child: CustomPaint(
                 painter: ChartPriceRectanglePainter(
+                  textCache: _chartTextCache,
                   drawings: List<ChartPriceRectangle>.unmodifiable(_rectangles),
                   selectedIndex: _drawing ? _selectedRectangle : null,
                   viewport: _viewport,

@@ -111,4 +111,22 @@ void main() {
     expect(() => cache.layoutPill('X', maxWidth: 0), throwsArgumentError);
     expect(() => ChartTextLayoutCache(pillCapacity: 0), throwsArgumentError);
   });
+
+  test('rectangle time text keeps normal weight separate from chart price',
+      () {
+    final cache = ChartTextLayoutCache();
+    addTearDown(cache.clear);
+    final normal = cache.layout('14/11 22:25 UTC', Colors.white, 11.5,
+        fontWeight: FontWeight.normal);
+    final same = cache.layout('14/11 22:25 UTC', Colors.white, 11.5,
+        fontWeight: FontWeight.normal);
+    final medium = cache.layout('14/11 22:25 UTC', Colors.white, 11.5);
+    expect(identical(normal, same), isTrue);
+    expect(identical(normal, medium), isFalse);
+    expect(cache.length, 2);
+    expect((normal.text! as TextSpan).style!.fontWeight, FontWeight.normal);
+    expect((medium.text! as TextSpan).style!.fontWeight, FontWeight.w500);
+    expect(normal.textDirection, TextDirection.ltr);
+    expect(normal.maxLines, 1);
+  });
 }

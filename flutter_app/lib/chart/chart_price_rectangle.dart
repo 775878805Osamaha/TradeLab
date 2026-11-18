@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'chart_viewport.dart';
+import 'chart_text_layout_cache.dart';
 import '../theme/tradelab_theme.dart';
 
 /// A price/time annotation, not an order or a synthetic market range.
@@ -132,7 +133,7 @@ class ChartPriceRectanglePainter extends CustomPainter {
   ChartPriceRectanglePainter({required this.drawings,
     required this.selectedIndex, required this.viewport, required this.scale,
     required this.candleCount, required this.plotWidth, required this.dark,
-    this.timestamps = const []});
+    this.timestamps = const [], this.textCache});
 
   final List<ChartPriceRectangle> drawings;
   final int? selectedIndex;
@@ -142,6 +143,9 @@ class ChartPriceRectanglePainter extends CustomPainter {
   final double plotWidth;
   final bool dark;
   final List<int> timestamps;
+  // ChartScreen owns the measured text cache across gesture repaints.
+  // Standalone renderers without a cache still dispose their paragraphs.
+  final ChartTextLayoutCache? textCache;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -202,9 +206,12 @@ class ChartPriceRectanglePainter extends CustomPainter {
         '${time.month.toString().padLeft(2, '0')} '
         '${time.hour.toString().padLeft(2, '0')}:'
         '${time.minute.toString().padLeft(2, '0')} UTC';
-    final painter = TextPainter(text: TextSpan(text: label,
-        style: const TextStyle(color: Colors.white, fontSize: 11.5)),
-        maxLines: 1, textDirection: TextDirection.ltr)..layout();
+    // Match the original normal-weight, LTR 11.5px time tag exactly.
+    final painter = textCache?.layout(
+          label, Colors.white, 11.5, fontWeight: FontWeight.normal) ??
+        (TextPainter(text: TextSpan(text: label,
+            style: const TextStyle(color: Colors.white, fontSize: 11.5)),
+            maxLines: 1, textDirection: TextDirection.ltr)..layout());
     final left = (atX - painter.width / 2 - 8).clamp(0.0,
         math.max(0.0, plotWidth - painter.width - 16)).toDouble();
     canvas.drawRRect(RRect.fromRectAndRadius(
@@ -212,6 +219,7 @@ class ChartPriceRectanglePainter extends CustomPainter {
           painter.width + 16, math.min(21.0, size.height - scale.height)),
       const Radius.circular(2)), Paint()..color = TradeColors.rectangleAxisTag);
     painter.paint(canvas, Offset(left + 8, scale.height + 3));
+    if (textCache == null) painter.dispose();
   }
 
   void _priceTag(Canvas canvas, double value, double y, Size size) {
@@ -225,11 +233,15 @@ class ChartPriceRectanglePainter extends CustomPainter {
     canvas.drawRect(Rect.fromLTWH(plotWidth, top,
         math.max(0.0, size.width - plotWidth), height),
       Paint()..color = TradeColors.rectangleAxisTag);
-    final painter = TextPainter(text: TextSpan(text: label,
-      style: const TextStyle(fontSize: 10.5, color: Colors.white,
-        fontWeight: FontWeight.w500)),
-      textDirection: TextDirection.ltr, maxLines: 1)..layout();
+    // Label and font identity are unchanged; avoid relayout on every
+    // pinch/pan frame while the selected rectangle remains in view.
+    final painter = textCache?.layout(label, Colors.white, 10.5) ??
+        (TextPainter(text: TextSpan(text: label,
+          style: const TextStyle(fontSize: 10.5, color: Colors.white,
+            fontWeight: FontWeight.w500)),
+          textDirection: TextDirection.ltr, maxLines: 1)..layout());
     painter.paint(canvas, Offset(plotWidth + 3, top + 2));
+    if (textCache == null) painter.dispose();
   }
 
   static String _price(double number, int decimals) {
