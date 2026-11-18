@@ -100,7 +100,8 @@ class ReplayMobileControls extends StatelessWidget {
                 onPressed: onChooseAgain,
                 icon: const Icon(Icons.first_page, color: ink),
                 constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
-                padding: EdgeInsets.zero),            PopupMenuButton<ReplayStartMenuAction>(
+                padding: EdgeInsets.zero),
+            PopupMenuButton<ReplayStartMenuAction>(
               key: const Key('replay-start-menu'),
               tooltip: 'اختيار نقطة بداية Replay',
               position: PopupMenuPosition.over,
