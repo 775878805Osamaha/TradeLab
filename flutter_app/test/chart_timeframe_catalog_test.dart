@@ -41,4 +41,31 @@ void main() {
           TradeSource.binance, value), isTrue);
     }
   });
+  test('all native timeframes have consistent Arabic chart/Replay labels', () {
+    final frames = {
+      ...ChartTimeframeCatalog.ctrader,
+      ...ChartTimeframeCatalog.binance,
+    };
+    for (final timeframe in frames) {
+      final localized = ChartTimeframeCatalog.displayLabel(timeframe);
+      expect(localized, isNot(timeframe));
+      expect(localized, isNotEmpty);
+    }
+    expect(ChartTimeframeCatalog.displayLabel('2m'), '2 دق');
+    expect(ChartTimeframeCatalog.displayLabel('2h'), 'ساعتان');
+    expect(ChartTimeframeCatalog.displayLabel('1W'), 'أسبوعي');
+  });
+
+  test('Arabic display labels never replace broker-native interval codes', () {
+    for (final timeframe in ChartTimeframeCatalog.ctrader) {
+      expect(ChartTimeframeCatalog.compatibleOnSwitch(
+          TradeSource.ctrader, timeframe), timeframe);
+    }
+    for (final timeframe in ChartTimeframeCatalog.binance) {
+      expect(ChartTimeframeCatalog.compatibleOnSwitch(
+          TradeSource.binance, timeframe), timeframe);
+    }
+    expect(ChartTimeframeCatalog.displayLabel('not-an-interval'),
+        'not-an-interval');
+  });
 }

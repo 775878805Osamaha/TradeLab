@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'replay_playback_speed.dart';
+import '../data/chart_timeframe_catalog.dart';
 
 enum ReplayStartMenuAction {
   column, date, earliest, random, toggleTrading, toggleDrawingTools,
@@ -168,7 +169,7 @@ class ReplayMobileControls extends StatelessWidget {
               onSelected: onStepMenu,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 10),
-                child: Text(_frameLabel(chartFrame),
+                child: Text(ChartTimeframeCatalog.displayLabel(chartFrame),
                   textDirection: TextDirection.rtl,
                   style: const TextStyle(fontSize: 16,
                       color: ink, fontWeight: FontWeight.w700)),
@@ -191,7 +192,7 @@ class ReplayMobileControls extends StatelessWidget {
                   key: const Key('replay-current-interval'),
                   value: ReplayStepMenuAction.currentBar,
                   checked: true,
-                  child: Text('شمعة كاملة · ${_frameLabel(chartFrame)}',
+                  child: Text('شمعة كاملة · ${ChartTimeframeCatalog.displayLabel(chartFrame)}',
                     textDirection: TextDirection.rtl)),
                 CheckedPopupMenuItem(
                   key: const Key('replay-auto-interval'),
@@ -316,14 +317,4 @@ class ReplayMobileControls extends StatelessWidget {
     );
   }
 
-  static String _frameLabel(String frame) => switch (frame) {
-    '1m' => '1 دق',
-    '3m' => '3 دق',
-    '5m' => '5 دق',
-    '15m' => '15 دق',
-    '30m' => '30 دق',
-    '1h' => '1 ساعة',
-    '4h' => '4 ساعات',
-    _ => frame,
-  };
 }

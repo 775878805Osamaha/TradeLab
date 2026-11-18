@@ -3601,7 +3601,7 @@ class _ChartScreenState extends State<ChartScreen>
             color: scheme.onSurface))),
         const SizedBox(width: 6),
         Text(_mode == ChartMode.range ? 'R$_rangeTicks' :
-          (_timeframe == '1m' ? '1 دق' : _timeframe),
+          (ChartTimeframeCatalog.displayLabel(_timeframe)),
           style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
         if (warning != null)
           IconButton(
@@ -3881,7 +3881,7 @@ class _ChartScreenState extends State<ChartScreen>
         TextButton(
           key: const Key('chart-focus-timeframe'),
           onPressed: _showTimeframePicker,
-          child: Text(_timeframe == '1m' ? '1 دق' : _timeframe),
+          child: Text(ChartTimeframeCatalog.displayLabel(_timeframe)),
         ),
         IconButton(
           key: const Key('symbol-picker'),
@@ -3926,7 +3926,7 @@ class _ChartScreenState extends State<ChartScreen>
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             minimumSize: const Size(0, 48)),
-          child: Text(_timeframe == '1m' ? '1 دق' : _timeframe,
+          child: Text(ChartTimeframeCatalog.displayLabel(_timeframe),
             style: const TextStyle(fontSize: 17,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF333333))),

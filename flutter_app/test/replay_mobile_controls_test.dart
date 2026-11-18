@@ -102,4 +102,30 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+  testWidgets('Replay displays native 2m and 2h intervals in Arabic',
+      (tester) async {
+    Widget controls(String frame) => MaterialApp(home: Scaffold(
+      body: Column(children: [
+        const Spacer(),
+        ReplayMobileControls(
+          selecting: false, playing: false,
+          visibleCount: 3, totalBars: 100,
+          chartFrame: frame,
+          speed: ReplayPlaybackSpeed.normal,
+          showTrading: false, showDrawingTools: false,
+          canLoadOlder: false, olderLoading: false, tradeCount: 0,
+          autoStep: true,
+          onClose: () {}, onConfirm: () {}, onStartMenu: (_) {},
+          onExtras: (_) {}, onStepMenu: (_) {}, onReset: () {},
+          onStepBack: () {}, onStepForward: () {}, onPlayPause: () {},
+          onSpeed: (_) {}, onChooseAgain: () {},
+        ),
+      ]),
+    ));
+    await tester.pumpWidget(controls('2m'));
+    expect(find.text('2 دق'), findsOneWidget);
+    await tester.pumpWidget(controls('2h'));
+    expect(find.text('ساعتان'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
