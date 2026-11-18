@@ -10,18 +10,28 @@ import 'package:flutter/material.dart';
 /// a theme or axis-settings change cannot reuse a mismatched paragraph.
 /// This is an LRU with a strict bound, never an unbounded per-price cache.
 class ChartTextLayoutCache {
-  ChartTextLayoutCache({this.capacity = 128}) {
+  ChartTextLayoutCache({this.capacity = 128, this.pillCapacity = 32}) {
     if (capacity < 1) {
       throw ArgumentError.value(capacity, 'capacity', 'Must be positive');
+    }
+    if (pillCapacity < 1) {
+      throw ArgumentError.value(pillCapacity, 'pillCapacity', 'Must be positive');
     }
   }
 
   final int capacity;
+  /// Selected short-position labels have multiline/width-dependent layout.
+  /// Keep their cache separate from price ticks so a large number of changing
+  /// axis values cannot evict a stationary stop/target label every frame.
+  final int pillCapacity;
 
   final LinkedHashMap<(String, Color, double, bool, bool), TextPainter>
       _painters = LinkedHashMap();
+  final LinkedHashMap<(String, double, bool), TextPainter> _pills =
+      LinkedHashMap();
 
   int get length => _painters.length;
+  int get pillLength => _pills.length;
 
   TextPainter layout(String value, Color color, double size, {
     bool bold = false,
@@ -59,10 +69,47 @@ class ChartTextLayoutCache {
     layout(value, color, size, bold: bold, rtl: rtl).paint(canvas, offset);
   }
 
+  /// Reuse exactly measured RTL short-position stop/target/reward labels.
+  /// Key includes the plot width and line limit, because resizing/rotating
+  /// the phone can change the label wrap and rectangle geometry.
+  ///
+  /// Formatting matches the original pill painter (centered white 11px
+  /// text, height 1.18, one or two lines); only repeated layout is skipped.
+  TextPainter layoutPill(String value, {
+    required double maxWidth,
+    bool twoLines = false,
+  }) {
+    if (!maxWidth.isFinite || maxWidth <= 0) {
+      throw ArgumentError.value(maxWidth, 'maxWidth', 'Must be positive and finite');
+    }
+    final key = (value, maxWidth, twoLines);
+    final reused = _pills.remove(key);
+    if (reused != null) {
+      _pills[key] = reused;
+      return reused;
+    }
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: const TextStyle(
+        fontSize: 11, color: Colors.white, height: 1.18)),
+      textDirection: TextDirection.rtl,
+      textAlign: TextAlign.center,
+      maxLines: twoLines ? 2 : 1,
+    )..layout(maxWidth: maxWidth);
+    if (_pills.length == pillCapacity) {
+      _pills.remove(_pills.keys.first)?.dispose();
+    }
+    _pills[key] = painter;
+    return painter;
+  }
+
   void clear() {
     for (final painter in _painters.values) {
       painter.dispose();
     }
     _painters.clear();
+    for (final painter in _pills.values) {
+      painter.dispose();
+    }
+    _pills.clear();
   }
 }
