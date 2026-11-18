@@ -59,6 +59,70 @@ void main() {
     expect(bars.last.candle.close, 105);
   });
 
+  test('Binance candles reject fractional open or close timestamps', () async {
+    for (final window in <(num, num)>[
+      (1000.5, 1999),
+      (1000, 1999.5),
+      (1000, 1000),
+      (2000, 1999),
+    ]) {
+      final api = MarketApi(client: MockClient((request) async {
+        expect(request.url.host, 'api.binance.com');
+        return http.Response(jsonEncode([
+          [window.$1, '100', '102', '99', '101', '7', window.$2],
+        ]), 200);
+      }));
+      await expectLater(
+        api.binanceCandles(
+          symbol: 'BTCUSDT', timeframe: '1m',
+          before: DateTime.fromMillisecondsSinceEpoch(4000, isUtc: true),
+        ),
+        throwsA(isA<MarketDataException>()),
+      );
+      api.close();
+    }
+  });
+
+  test('cTrader live quote refuses a fractional provider timestamp', () async {
+    const ms = 1700000000000;
+    for (final badTimestamp in <Object>[ms + .75, '1700000000000']) {
+      final api = MarketApi(client: MockClient((request) async {
+        if (request.url.path == '/v1/symbols') {
+          return http.Response(jsonEncode({'symbols': [
+            {'symbolName': 'XAUUSD', 'symbolId': 42},
+          ]}), 200);
+        }
+        expect(request.url.path, '/v1/spot');
+        return http.Response(jsonEncode({
+          'source': 'ctrader', 'symbolId': '42',
+          'timestamp': badTimestamp, 'bid': 2000.0, 'ask': 2000.2,
+        }), 200);
+      }));
+      await expectLater(
+        api.ctraderQuote(token: 'test', accountId: '1', symbol: 'XAUUSD'),
+        throwsA(isA<MarketDataException>()),
+      );
+      api.close();
+    }
+
+    final validApi = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'symbolId': '42',
+        'timestamp': 1700000000000.0, 'bid': 2000.0, 'ask': 2000.2,
+      }), 200);
+    }));
+    final quote = await validApi.ctraderQuote(
+        token: 'test', accountId: '1', symbol: 'XAUUSD');
+    expect(quote.timestampMs, ms);
+    expect(quote.bid, 2000);
+    validApi.close();
+  });
+
   test('forbids unapproved Binance symbols', () async {
     final api = MarketApi(client: MockClient((_) async => http.Response('[]', 200)));
     expect(() => api.binanceCandles(symbol: 'XAUUSD', timeframe: '15m'),
