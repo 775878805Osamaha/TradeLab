@@ -25,7 +25,7 @@ class ChartTextLayoutCache {
   /// axis values cannot evict a stationary stop/target label every frame.
   final int pillCapacity;
 
-  final LinkedHashMap<(String, Color, double, bool, bool), TextPainter>
+  final LinkedHashMap<(String, Color, double, FontWeight, bool), TextPainter>
       _painters = LinkedHashMap();
   final LinkedHashMap<(String, double, bool), TextPainter> _pills =
       LinkedHashMap();
@@ -36,8 +36,12 @@ class ChartTextLayoutCache {
   TextPainter layout(String value, Color color, double size, {
     bool bold = false,
     bool rtl = false,
+    FontWeight? fontWeight,
   }) {
-    final key = (value, color, size, bold, rtl);
+    // Distinguish the rectangle time tag's normal weight from price tags.
+    // Keep previous chart-axis defaults intact (w500 / bold w800).
+    final weight = fontWeight ?? (bold ? FontWeight.w800 : FontWeight.w500);
+    final key = (value, color, size, weight, rtl);
     final reused = _painters.remove(key);
     if (reused != null) {
       // Promote the most recently used label to the back of the LRU.
@@ -51,7 +55,7 @@ class ChartTextLayoutCache {
         style: TextStyle(
           fontSize: size,
           color: color,
-          fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
+          fontWeight: weight,
         ),
       ),
       textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
