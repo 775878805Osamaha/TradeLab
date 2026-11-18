@@ -74,6 +74,29 @@ void main() {
     expect(() => updated.add(oneNew), throwsUnsupportedError);
   });
 
+
+  test('overlap-only refresh preserves 120k-bar list identity and no copy',
+      () {
+    const start = 1700000000000;
+    final historical = List<MarketBar>.unmodifiable(
+        List<MarketBar>.generate(120000, (index) {
+      final price = 1900.0 + index * .01;
+      return MarketBar(start + index * 60000,
+          TradeCandle(price, price + .6, price - .3, price + .2));
+    }));
+    final overlapOnly = [
+      historical[0], historical[60000], historical[100000], historical.last,
+    ];
+    final result = CTraderCandleStitcher.append(historical, overlapOnly);
+    expect(identical(result, historical), isTrue,
+        reason: 'No new verified bar means no 120k-entry list allocation');
+    expect(result.length, 120000);
+    expect(identical(result.last, historical.last), isTrue);
+    expect(() => result.add(historical.last), throwsUnsupportedError);
+    expect(identical(CTraderCandleStitcher.append(historical, []),
+        historical), isTrue);
+  });
+
   test('old OHLC conflict far inside long verified history fails closed', () {
     const start = 1700000000000;
     final existing = List<MarketBar>.generate(100001, (i) =>
