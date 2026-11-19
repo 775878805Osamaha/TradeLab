@@ -177,6 +177,73 @@ void main() {
       y: double.infinity, plotWidth: width).computeMetrics().isEmpty, isTrue);
   });
 
+  test('configured 8px/4px horizontal dashes preserve every endpoint', () {
+    // The old painter called drawLine 33 times for a 259dp plot.
+    const from = Offset(0, 147.25);
+    const to = Offset(259, 147.25);
+    final contours = ChartLineGeometry.configuredDashPath(
+      from: from, to: to).computeMetrics().toList();
+    expect(contours, hasLength(33));
+    for (var i = 0; i < contours.length; i++) {
+      final start = contours[i].getTangentForOffset(0)!.position;
+      final end = contours[i]
+          .getTangentForOffset(contours[i].length)!.position;
+      final firstX = i * 8.0;
+      final lastX = (firstX + 4).clamp(0.0, 259.0);
+      expect(start.dx, closeTo(firstX, 1e-4));
+      expect(start.dy, closeTo(from.dy, 1e-4));
+      expect(end.dx, closeTo(lastX, 1e-4));
+      expect(end.dy, closeTo(to.dy, 1e-4));
+    }
+    expect(contours.last.length, closeTo(3, 1e-4),
+      reason: 'The final dash must stop at the plot/price-axis boundary');
+  });
+
+  test('configured vertical and diagonal strokes keep their direction', () {
+    final vertical = ChartLineGeometry.configuredDashPath(
+      from: const Offset(24, 2), to: const Offset(24, 100))
+        .computeMetrics().toList();
+    expect(vertical, hasLength(13));
+    expect(vertical.first.getTangentForOffset(0)!.position,
+      const Offset(24, 2));
+    expect(vertical.last.getTangentForOffset(vertical.last.length)!.position,
+      const Offset(24, 100));
+    expect(vertical.last.length, closeTo(2, 1e-4));
+
+    // 30-40-50 triangle; includes the final 2px clipped diagonal dash.
+    final diagonal = ChartLineGeometry.configuredDashPath(
+      from: const Offset(1, 2), to: const Offset(31, 42))
+        .computeMetrics().toList();
+    expect(diagonal, hasLength(7));
+    expect(diagonal.first.length, closeTo(4, 1e-4));
+    expect(diagonal.last.length, closeTo(2, 1e-4));
+    final end = diagonal.last
+        .getTangentForOffset(diagonal.last.length)!.position;
+    expect(end.dx, closeTo(31, 1e-4));
+    expect(end.dy, closeTo(42, 1e-4));
+  });
+
+  test('invalid configured dashes do not emit corrupt path geometry', () {
+    for (final point in <Offset>[
+      const Offset(double.nan, 0),
+      const Offset(double.infinity, 0),
+      const Offset(0, double.negativeInfinity),
+    ]) {
+      expect(ChartLineGeometry.configuredDashPath(
+        from: point, to: const Offset(20, 20))
+          .computeMetrics().isEmpty, isTrue);
+      expect(ChartLineGeometry.configuredDashPath(
+        from: const Offset(0, 0), to: point)
+          .computeMetrics().isEmpty, isTrue);
+    }
+    expect(ChartLineGeometry.configuredDashPath(
+      from: Offset.zero, to: const Offset(.005, 0))
+        .computeMetrics().isEmpty, isTrue);
+    expect(ChartLineGeometry.configuredDashPath(
+      from: Offset.zero, to: const Offset(1, 0))
+        .computeMetrics().single.length, closeTo(1, 1e-4));
+  });
+
   test('trend segment remains between its two anchors', () {
     final lines = ChartLineGeometry.strokes(
       tool: ChartDrawingTool.trendLine,
