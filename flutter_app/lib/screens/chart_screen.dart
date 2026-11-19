@@ -631,11 +631,25 @@ class _ChartScreenState extends State<ChartScreen>
 
   void _refreshDisplayedQuote() {
     final latest = widget.controller.recentQuoteFor(_selectedSymbol);
-    if (!ChartFeedHealth.quoteChanged(_lastObservedQuote, latest)) return;
+    final previous = _lastObservedQuote;
+    if (!ChartFeedHealth.quoteChanged(previous, latest)) return;
     _lastObservedQuote = latest;
-    // A quote update changes only its label. No chart history, viewport,
-    // gesture state, Replay cursor or drawing object is modified.
-    if (mounted) setState(() {});
+    if (!mounted || !widget.active || _replay) return;
+    // Verified BID/ASK movement normally requires a repaint only. Avoid
+    // rebuilding the chart controls, drawing tools and history on each tick.
+    _chartRepaint.value++;
+    if (_selectedSymbol.source == TradeSource.ctrader &&
+        _mode != ChartMode.range && _actualTimestamps.isNotEmpty &&
+        ChartFeedHealth.quoteHeaderEvidenceChanged(
+          previous: previous,
+          next: latest,
+          lastClosedOpenMs: _actualTimestamps.last,
+          timeframe: _timeframe,
+          nowMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+        )) {
+      // Update source minute and stale-candle warnings in the header.
+      setState(() {});
+    }
   }
 
   void _onMarketUpdate() {
@@ -4739,6 +4753,8 @@ class _ChartScreenState extends State<ChartScreen>
                   crosshairProvider: () => _crosshair,
                   priceScaleProvider: (axisWidth, height) =>
                       _priceScale(candles, axisWidth, height),
+                  sourceQuoteProvider: () => _replay || !widget.active
+                      ? null : widget.controller.recentQuoteFor(_selectedSymbol),
                   repaint: _chartRepaint,
                   textCache: _chartTextCache,
                   levels: _drawingsVisible ? List<double>.unmodifiable(_levels) : const [],
@@ -5177,6 +5193,7 @@ class _CandleChartPainter extends CustomPainter {
     required ChartViewport Function() viewportProvider,
     required Offset? Function() crosshairProvider,
     required ChartPriceScale Function(double, double) priceScaleProvider,
+    required MarketQuote? Function() sourceQuoteProvider,
     required Listenable repaint,
     required this.textCache,
     required this.levels,
@@ -5197,6 +5214,7 @@ class _CandleChartPainter extends CustomPainter {
   }) : _viewportProvider = viewportProvider,
        _crosshairProvider = crosshairProvider,
        _priceScaleProvider = priceScaleProvider,
+       _sourceQuoteProvider = sourceQuoteProvider,
        super(repaint: repaint);
 
   final List<TradeCandle> candles;
@@ -5211,6 +5229,7 @@ class _CandleChartPainter extends CustomPainter {
   final ChartViewport Function() _viewportProvider;
   final Offset? Function() _crosshairProvider;
   final ChartPriceScale Function(double, double) _priceScaleProvider;
+  final MarketQuote? Function() _sourceQuoteProvider;
   ChartViewport get viewport => _viewportProvider();
   Offset? get crosshair => _crosshairProvider();
   final List<double> levels;
@@ -5474,13 +5493,15 @@ class _CandleChartPainter extends CustomPainter {
             scaleSettings.indicatorLabels);
       }
     }
-    // Only a fresh verified quote received by an existing market request.
-    // Replay does not display contemporary BID/ASK over historical candles.
-    if (!replayActive && sourceQuote != null &&
+    // Paint-time source quote freshness is necessary for retained painters:
+    // the most recent BID/ASK can change without reconstructing this widget.
+    // The live getter is disabled for Replay; no future price may leak in.
+    final verifiedQuote = replayActive ? null : _sourceQuoteProvider();
+    if (verifiedQuote != null &&
         scaleSettings.bidAsk != ChartPriceLabelMode.hidden) {
-      annotate(sourceQuote!.ask, Color(scaleSettings.askColor),
+      annotate(verifiedQuote.ask, Color(scaleSettings.askColor),
         scaleSettings.bidAsk);
-      annotate(sourceQuote!.bid, Color(scaleSettings.bidColor),
+      annotate(verifiedQuote.bid, Color(scaleSettings.bidColor),
         scaleSettings.bidAsk);
     }
     for (var i = 0; i < shortPositions.length; i++) {
