@@ -207,7 +207,8 @@ class _ChartScreenState extends State<ChartScreen>
   double _doubleTapChartX = 0;
   String get _currentPriceScaleKey =>
       '${widget.controller.accountId}|${_selectedSymbol.source.name}|'
-      '$_symbol|$_timeframe|${_mode.name}|$_rangeTicks';
+      '$_symbol|$_timeframe|${_mode.name}|$_rangeTicks|'
+      '${_replay ? 'replay' : _replaySelectingStart ? 'select' : 'live'}';
   bool get _priceScaleManual =>
       _manualPriceScale != null &&
       _manualPriceScaleKey == _currentPriceScaleKey;
@@ -1734,6 +1735,12 @@ class _ChartScreenState extends State<ChartScreen>
       fallbackIndex: math.max(0, _totalBars - 2));
     setState(() {
       _stopPlayback();
+      // Historical Replay may be at a very different price from the user's
+      // manually scaled live ruler. Restore genuine OHLC auto-range while
+      // retaining horizontal zoom and the chosen candle/time anchor.
+      _manualPriceScale = null;
+      _manualPriceScaleKey = null;
+      _draggingPriceAxis = false;
       _replaySelectingStart = true;
       _replayDraggingStart = false;
       _replayShowTradingButtons = false;
@@ -1812,6 +1819,11 @@ class _ChartScreenState extends State<ChartScreen>
     _momentum.stop();
     setState(() {
       _stopPlayback();
+      // Do not carry a zoom anchored to a historical Replay candle into
+      // the live broker price range on exiting practice mode.
+      _manualPriceScale = null;
+      _manualPriceScaleKey = null;
+      _draggingPriceAxis = false;
       if (_replay) {
         _levels..clear()..addAll(_analysisLevels);
         _patterns..clear()..addAll(_analysisPatterns);

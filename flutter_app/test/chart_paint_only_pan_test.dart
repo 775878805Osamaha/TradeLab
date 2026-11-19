@@ -41,6 +41,56 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('manual ruler range resets on Replay entry and exit', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/v3/klines') {
+        return http.Response(jsonEncode(List.generate(120, (i) {
+          final ms = 1700000000000 + i * 900000;
+          return [ms, '${35000 + i}', '${35100 + i}',
+            '${34900 + i}', '${35050 + i}', '1', ms + 899999];
+        })), 200);
+      }
+      return http.Response('{"error":"offline"}', 503);
+    });
+    final market = MarketController(api: MarketApi(client: client));
+    addTearDown(market.dispose);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: ChartScreen(controller: market, requestedSymbolCode: 'BTCUSDT'),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-source-empty')), findsNothing);
+    final rect = tester.getRect(find.byKey(const Key('chart-gesture-area')));
+    Future<void> manualZoom() async {
+      await tester.dragFrom(
+          Offset(rect.right - 22, rect.center.dy), const Offset(0, -85));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('chart-price-axis-auto')), findsOneWidget);
+    }
+
+    await manualZoom();
+    final start = find.byTooltip('تشغيل Replay داخل الشارت');
+    expect(start, findsOneWidget);
+    await tester.ensureVisible(start);
+    await tester.tap(start);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-start-overlay')), findsOneWidget);
+    expect(find.byKey(const Key('chart-price-axis-auto')), findsNothing,
+      reason: 'Old live zoom must not hide selected historical candles');
+    await tester.tap(find.byKey(const Key('replay-confirm-start')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+
+    await manualZoom();
+    await tester.tap(find.byKey(const Key('replay-close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-price-axis-auto')), findsNothing,
+      reason: 'Old Replay zoom must not hide live market source');
+    expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final width in <double>[320, 390]) {
     testWidgets('crosshair reveals verified OHLC without rebuilding chart '
         'controls at ${width}dp', (tester) async {
