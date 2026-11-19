@@ -90,8 +90,11 @@ class ChartViewport {
   ChartViewport withRightMarginBars(double bars) => ChartViewport(
     barWidth: barWidth, scrollBars: scrollBars, rightMarginBars: bars);
 
-  static const minBarWidth = 5.0;
-  static const maxBarWidth = 30.0;
+  // Allow a wider continuous zoom than the original 5–30px envelope:
+  // users can inspect individual candle structures or a much longer
+  // session without artificial tick interpolation. Default stays 10px.
+  static const minBarWidth = 3.0;
+  static const maxBarWidth = 60.0;
 
   double chartX({
     required int index,
