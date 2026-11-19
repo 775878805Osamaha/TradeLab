@@ -262,6 +262,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
               ),
             ),
           ]),
+          if (_page == 0) ...[
           const SizedBox(height: 12),
           _performanceHero(report),
           const SizedBox(height: 14),
@@ -318,6 +319,29 @@ class _ResultsScreenState extends State<ResultsScreen> {
             ]),
           ),
           const SizedBox(height: 18),
+          ] else ...[
+            const SizedBox(height: 12),
+            Container(
+              key: const Key('results-local-source-note'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: colors.outline.withValues(alpha: .18)),
+              ),
+              child: Row(children: [
+                Icon(Icons.lock_outline_rounded, size: 18,
+                    color: colors.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  'مقاييس من الدفتر التجريبي المحلي فقط، وليست نتائج حساب الوسيط.',
+                  style: TextStyle(fontSize: 11, height: 1.45,
+                      color: colors.onSurfaceVariant),
+                )),
+              ]),
+            ),
+            const SizedBox(height: 14),
+          ],
           if (_page == 0) ...[
             _openPositions(),
             const SizedBox(height: 18),
