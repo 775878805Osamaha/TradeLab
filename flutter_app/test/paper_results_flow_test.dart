@@ -231,47 +231,58 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('عرض 5 من 57 مركزًا تجريبيًا مفتوحًا'),
-          findsOneWidget);
+      // On narrow phones, the large Results overview precedes the open-
+      // positions section. Scroll to each row before asserting its content.
+      final list = find.descendant(
+          of: find.byKey(const Key('results-dashboard-list')),
+          matching: find.byType(Scrollable)).first;
+      Future<void> reveal(String key) async {
+        await tester.scrollUntilVisible(
+          find.byKey(Key(key)), 290,
+          scrollable: list, maxScrolls: 35);
+        await tester.pumpAndSettle();
+      }
+
+      await reveal('results-open-trade-57');
       expect(find.byKey(const Key('results-open-trade-57')), findsOneWidget);
+      await reveal('results-open-trade-53');
       expect(find.byKey(const Key('results-open-trade-53')), findsOneWidget);
       expect(find.byKey(const Key('results-open-trade-52')), findsNothing);
-      expect(find.byKey(const Key('results-all-open-trades')), findsOneWidget);
-      await tester.ensureVisible(
-          find.byKey(const Key('results-all-open-trades')));
-      await tester.pumpAndSettle();
+      await reveal('results-open-trades-count');
+      expect(find.text('عرض 5 من 57 مركزًا تجريبيًا مفتوحًا'),
+          findsOneWidget);
+      await reveal('results-all-open-trades');
       await tester.tap(find.byKey(const Key('results-all-open-trades')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('results-tab-2')), findsOneWidget);
-      expect(find.text('عرض 25 من 57 مركزًا تجريبيًا مفتوحًا'),
-          findsOneWidget);
+      await reveal('results-open-trade-57');
+      expect(find.byKey(const Key('results-open-trade-57')), findsOneWidget);
+      await reveal('results-open-trade-33');
       expect(find.byKey(const Key('results-open-trade-33')), findsOneWidget);
       expect(find.byKey(const Key('results-open-trade-32')), findsNothing);
+      await reveal('results-open-trades-count');
+      expect(find.text('عرض 25 من 57 مركزًا تجريبيًا مفتوحًا'),
+          findsOneWidget);
 
-      final list = find.descendant(
-          of: find.byKey(const Key('results-dashboard-list')),
-          matching: find.byType(Scrollable)).first;
-      await tester.scrollUntilVisible(
-          find.byKey(const Key('results-more-open-trades')), 290,
-          scrollable: list, maxScrolls: 35);
-      await tester.pumpAndSettle();
+      await reveal('results-more-open-trades');
       await tester.tap(find.byKey(const Key('results-more-open-trades')));
       await tester.pumpAndSettle();
-      expect(find.text('عرض 50 من 57 مركزًا تجريبيًا مفتوحًا'),
-          findsOneWidget);
+      await reveal('results-open-trade-8');
       expect(find.byKey(const Key('results-open-trade-8')), findsOneWidget);
       expect(find.byKey(const Key('results-open-trade-7')), findsNothing);
+      await reveal('results-open-trades-count');
+      expect(find.text('عرض 50 من 57 مركزًا تجريبيًا مفتوحًا'),
+          findsOneWidget);
 
-      await tester.scrollUntilVisible(
-          find.byKey(const Key('results-more-open-trades')), 290,
-          scrollable: list, maxScrolls: 35);
-      await tester.pumpAndSettle();
+      await reveal('results-more-open-trades');
       await tester.tap(find.byKey(const Key('results-more-open-trades')));
       await tester.pumpAndSettle();
+      await reveal('results-open-trade-1');
+      expect(find.byKey(const Key('results-open-trade-1')), findsOneWidget);
+      await reveal('results-open-trades-count');
       expect(find.text('عرض 57 من 57 مركزًا تجريبيًا مفتوحًا'),
           findsOneWidget);
-      expect(find.byKey(const Key('results-open-trade-1')), findsOneWidget);
       expect(find.byKey(const Key('results-more-open-trades')), findsNothing);
 
       await journal.useAccount('202');
@@ -280,6 +291,7 @@ void main() {
       expect(find.textContaining('57 مركزًا تجريبيًا'), findsNothing);
       await journal.useAccount('101');
       await tester.pumpAndSettle();
+      await reveal('results-open-trades-count');
       expect(find.text('عرض 25 من 57 مركزًا تجريبيًا مفتوحًا'),
           findsOneWidget,
           reason: 'Switching broker accounts resets open-position pagination');
