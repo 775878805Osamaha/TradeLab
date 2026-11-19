@@ -190,6 +190,58 @@ void main() {
     }
   });
 
+  test('sparse BID gaps are scheduled off the UI isolate by bar work',
+      () async {
+    final quiet = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 100.2),
+      MarketTick(102, 100.3),
+    ];
+    expect(RangeBarTimeline.shouldBuildInBackground(quiet, 1), isFalse);
+    final jumping = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 4200),
+    ];
+    expect(jumping.length, lessThan(5000));
+    expect(RangeBarTimeline.shouldBuildInBackground(jumping, 1), isTrue,
+        reason: 'One authentic tick may close thousands of Range bars');
+
+    final synchronous = RangeBarTimeline.build(jumping, 1);
+    final asynchronous = await RangeBarTimeline.buildAsync(jumping, 1);
+    expect(asynchronous.closedBarCount, 4100);
+    expect(asynchronous.endTickIndices, synchronous.endTickIndices);
+    expect(asynchronous.endTimestamps, synchronous.endTimestamps);
+    expect(asynchronous.endTimestamps.take(asynchronous.closedBarCount)
+        .every((ms) => ms == 101), isTrue,
+        reason: 'Do not invent separate timestamps for a single BID jump');
+    for (var i = 0; i < synchronous.bars.length; i++) {
+      expect(asynchronous.bars[i].open, synchronous.bars[i].open);
+      expect(asynchronous.bars[i].high, synchronous.bars[i].high);
+      expect(asynchronous.bars[i].low, synchronous.bars[i].low);
+      expect(asynchronous.bars[i].close, synchronous.bars[i].close);
+    }
+  });
+
+  test('sparse older BID prepend uses same price-work offload policy',
+      () async {
+    final older = <MarketTick>[MarketTick(90, 100)];
+    final current = <MarketTick>[MarketTick(100, 4200)];
+    expect(RangeBarTimeline.shouldBuildInBackground(
+      older.followedBy(current), 1), isTrue);
+    final expected = RangeBarTimeline.build([...older, ...current], 1);
+    final result = await RangeBarTimeline.prependAndBuildAsync(
+      olderTicks: older,
+      currentTicks: current,
+      priceDistance: 1,
+    );
+    expect(result.ticks.map((tick) => tick.timestamp), [90, 100]);
+    expect(result.timeline.endTickIndices, expected.endTickIndices);
+    expect(result.timeline.endTimestamps, expected.endTimestamps);
+    expect(result.timeline.closedBarCount, expected.closedBarCount);
+    expect(result.timeline.visibleClosedBarsThroughTick(0), 0,
+        reason: 'First tick does not reveal future jumping price');
+  });
+
   test('empty tick window does not invent Range bars', () {
     final timeline = RangeBarTimeline.build(const <MarketTick>[], 1);
     expect(timeline.bars, isEmpty);
