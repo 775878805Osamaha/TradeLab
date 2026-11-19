@@ -2895,16 +2895,24 @@ class _ChartScreenState extends State<ChartScreen>
     ));
   }
 
+  int _debugChartTapHits = 0;
+  Offset? _debugLastChartTap;
+
   /// Read-only gesture test probe. It exposes counts/state, never prices,
   /// broker data, user credentials, or editable drawing collections.
   @visibleForTesting
-  ({bool drawing, bool visible, int levels, int patterns, int undo})
+  ({bool drawing, bool visible, bool locked, int levels, int patterns,
+      int undo, int tapHits, Offset? lastTap, int sourceBars})
       get debugGuideState => (
         drawing: _drawing,
         visible: _drawingsVisible,
+        locked: _drawingsLocked,
         levels: _levels.length,
         patterns: _patterns.length,
         undo: _lineUndo.length,
+        tapHits: _debugChartTapHits,
+        lastTap: _debugLastChartTap,
+        sourceBars: _displayCandles.length,
       );
 
   int get _drawingObjectCount => _levels.length + _patterns.length +
@@ -4598,6 +4606,8 @@ class _ChartScreenState extends State<ChartScreen>
             },
             onLongPressEnd: (_) => setState(() => _crosshair = null),
             onTapUp: (details) {
+              _debugChartTapHits++;
+              _debugLastChartTap = details.localPosition;
               if (_replaySelectingStart &&
                   details.localPosition.dx <= plotWidth) {
                 final candidate = ReplayStartResolver.atX(
