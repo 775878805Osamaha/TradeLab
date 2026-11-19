@@ -14,6 +14,7 @@ import '../chart/chart_type_sheet.dart';
 import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
+import '../chart/chart_ohlc_inspector.dart';
 import '../chart/chart_quick_actions.dart';
 import '../chart/chart_frame_profiler.dart';
 import '../chart/chart_text_layout_cache.dart';
@@ -4885,6 +4886,17 @@ class _ChartScreenState extends State<ChartScreen>
                 ]),
               ),
             ))),
+          // Paint-only OHLC inspection of the exact snapped source candle.
+          if (_crosshair != null && !selecting && chartHint == null &&
+              candles.isNotEmpty)
+            _crosshairOhlcInspector(
+              candles: candles,
+              timestamps: _mode == ChartMode.range
+                  ? _rangeBarTimestamps : _actualTimestamps,
+              plotWidth: plotWidth,
+              chartHeight: constraints.maxHeight,
+              surface: surface,
+            ),
           if (candles.isNotEmpty &&
               (!replayUi || _replayShowDrawingTools))
             _buildDrawingRail(constraints.maxHeight),
@@ -4958,6 +4970,84 @@ class _ChartScreenState extends State<ChartScreen>
         _referenceChartToolbar(surface),
     ]);
   }
+
+  Widget _crosshairOhlcInspector({
+    required List<TradeCandle> candles,
+    required List<int> timestamps,
+    required double plotWidth,
+    required double chartHeight,
+    required Color surface,
+  }) => Positioned(
+    left: 8, top: 8, right: 67,
+    child: IgnorePointer(
+      child: ValueListenableBuilder<int>(
+        valueListenable: _chartRepaint,
+        builder: (context, _, __) {
+          final cursor = _crosshair;
+          if (cursor == null) return const SizedBox.shrink();
+          final selected = ChartOhlcInspector.atCrosshair(
+            viewport: _viewport,
+            touchX: cursor.dx,
+            plotWidth: plotWidth,
+            candles: candles,
+            timestampsUtcMs: timestamps,
+          );
+          if (selected == null) return const SizedBox.shrink();
+          final scale = _priceScale(candles, plotWidth, chartHeight);
+          final digits = _symbolSettings.digitsForTickStep(
+            ChartAxisTicks.decimals(
+              ChartAxisTicks.interval(scale.minimum, scale.maximum)),
+          );
+          final ink = Theme.of(context).colorScheme.onSurface;
+          final trendColor = selected.rising
+              ? TradeColors.positive : TradeColors.negative;
+          final style = TextStyle(
+            color: ink, fontSize: 11, fontWeight: FontWeight.w600,
+          );
+          Widget field(String prefix, String key, double price) => Expanded(
+            child: Text(
+              '$prefix ${selected.formatPrice(price, digits)}',
+              key: Key(key),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textDirection: TextDirection.ltr,
+              style: style,
+            ),
+          );
+          return Semantics(
+            label: 'بيانات الشمعة المحددة رقم ${selected.index + 1}',
+            child: Container(
+              key: const Key('chart-crosshair-ohlc-inspector'),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: surface.withValues(alpha: .93),
+                border: Border(
+                  left: BorderSide(color: trendColor, width: 3)),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(children: [
+                    field('O', 'chart-ohlc-open', selected.candle.open),
+                    const SizedBox(width: 5),
+                    field('H', 'chart-ohlc-high', selected.candle.high),
+                  ]),
+                  const SizedBox(height: 2),
+                  Row(children: [
+                    field('L', 'chart-ohlc-low', selected.candle.low),
+                    const SizedBox(width: 5),
+                    field('C', 'chart-ohlc-close', selected.candle.close),
+                  ]),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ),
+  );
 
   Widget _replayControls(BuildContext context) => ReplayMobileControls(
     selecting: _replaySelectingStart,
