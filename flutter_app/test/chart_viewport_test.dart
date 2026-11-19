@@ -238,11 +238,20 @@ void main() {
       () {
     const viewport = ChartViewport(barWidth: 10, scrollBars: 80,
       rightMarginBars: 4);
-    final close = viewport.dragTimeAxis(
+    // A single large Android centroid jump must be rate-limited, not
+    // interpreted as an instant jump from 10px to 60px.
+    final first = viewport.dragTimeAxis(
         deltaX: 9000, anchorX: 160, plotWidth: 320, candleCount: 1000);
+    expect(first.barWidth, lessThan(ChartViewport.maxBarWidth));
+    var close = viewport;
+    var far = viewport;
+    for (var i = 0; i < 6; i++) {
+      close = close.dragTimeAxis(
+          deltaX: 120, anchorX: 160, plotWidth: 320, candleCount: 1000);
+      far = far.dragTimeAxis(
+          deltaX: -120, anchorX: 160, plotWidth: 320, candleCount: 1000);
+    }
     expect(close.barWidth, ChartViewport.maxBarWidth);
-    final far = viewport.dragTimeAxis(
-        deltaX: -9000, anchorX: 160, plotWidth: 320, candleCount: 1000);
     expect(far.barWidth, ChartViewport.minBarWidth);
     for (final state in [close, far]) {
       final (first, end) = state.visibleIndices(
