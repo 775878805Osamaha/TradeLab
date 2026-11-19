@@ -46,7 +46,7 @@ void main() {
       ..style = ui.PaintingStyle.stroke;
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(
-        recorder, const ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()));
+        recorder, ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()));
     canvas.drawColor(const ui.Color(0xFF101C23), ui.BlendMode.src);
     canvas.save();
     canvas.clipRect(const ui.Rect.fromLTWH(0, 0, plotWidth, chartHeight));
