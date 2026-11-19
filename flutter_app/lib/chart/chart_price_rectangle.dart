@@ -3,8 +3,27 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'chart_viewport.dart';
+import 'chart_symbol_settings.dart';
 import 'chart_text_layout_cache.dart';
 import '../theme/tradelab_theme.dart';
+
+/// A selected rectangle's time tag must agree with the SAME display zone
+/// chosen for the chart candles. Source UTC timestamps remain untouched.
+abstract final class ChartRectangleTimeLabel {
+  static String fromSource(int timestampUtcMs, ChartTimeZone zone) {
+    final time = zone.displayDate(timestampUtcMs);
+    String two(int n) => n.toString().padLeft(2, '0');
+    final zoneText = switch (zone) {
+      ChartTimeZone.utc => 'UTC',
+      ChartTimeZone.device => 'LOCAL',
+      ChartTimeZone.newYork => 'NY UTC${ChartTimeZone.newYorkOffset(
+          DateTime.fromMillisecondsSinceEpoch(
+              timestampUtcMs, isUtc: true)).inHours}',
+    };
+    return '${two(time.day)}/${two(time.month)} '
+        '${two(time.hour)}:${two(time.minute)} $zoneText';
+  }
+}
 
 /// A price/time annotation, not an order or a synthetic market range.
 /// Both axes are anchored to actual candle indices and prices.
@@ -156,6 +175,7 @@ class ChartPriceRectanglePainter extends CustomPainter {
     required this.selectedIndex, required this.viewport, required this.scale,
     required this.candleCount, required this.plotWidth, required this.dark,
     this.timestamps = const [], this.textCache,
+    this.timeZone = ChartTimeZone.utc,
     List<ChartPriceRectangle> Function()? drawingsProvider,
     ChartViewport Function()? viewportProvider,
     ChartPriceScale Function()? scaleProvider,
@@ -187,6 +207,7 @@ class ChartPriceRectanglePainter extends CustomPainter {
   final double plotWidth;
   final bool dark;
   final List<int> timestamps;
+  final ChartTimeZone timeZone;
   // ChartScreen owns the measured text cache across gesture repaints.
   // Standalone renderers without a cache still dispose their paragraphs.
   final ChartTextLayoutCache? textCache;
@@ -203,7 +224,14 @@ class ChartPriceRectanglePainter extends CustomPainter {
       if (!drawing.visibleAt(candleCount)) continue;
       final area = PriceRectangleGeometry.rect(
           drawing, viewport, scale, candleCount, plotWidth);
-      if (area.right < 0 || area.left > plotWidth) continue;
+      // A source-anchored rectangle which is wholly beyond the viewport's
+      // price range needs no clipping, fill, border, or handle allocations
+      // on every pan/pinch frame. Selected handles may show 11.5px of bleed
+      // at the vertical edge, so retain that exact existing visible rim.
+      final verticalBleed = selectedIndex == i ? 11.5 : 0.0;
+      if (area.right < 0 || area.left > plotWidth ||
+          area.bottom < -verticalBleed ||
+          area.top > chartHeight + verticalBleed) continue;
       canvas.save();
       canvas.clipRect(Rect.fromLTWH(0, 0, plotWidth, chartHeight));
       canvas.drawRect(area, Paint()
@@ -248,25 +276,29 @@ class ChartPriceRectanglePainter extends CustomPainter {
   void _timeTag(Canvas canvas, int index, double atX, Size size,
       ChartPriceScale scale) {
     if (index < 0 || index >= timestamps.length) return;
-    final time = DateTime.fromMillisecondsSinceEpoch(
-        timestamps[index], isUtc: true);
-    final label = '${time.day.toString().padLeft(2, '0')}/'
-        '${time.month.toString().padLeft(2, '0')} '
-        '${time.hour.toString().padLeft(2, '0')}:'
-        '${time.minute.toString().padLeft(2, '0')} UTC';
+    final label = ChartRectangleTimeLabel.fromSource(
+        timestamps[index], timeZone);
     // Match the original normal-weight, LTR 11.5px time tag exactly.
     final painter = textCache?.layout(
           label, Colors.white, 11.5, fontWeight: FontWeight.normal) ??
         (TextPainter(text: TextSpan(text: label,
             style: const TextStyle(color: Colors.white, fontSize: 11.5)),
             maxLines: 1, textDirection: TextDirection.ltr)..layout());
+    final badgeWidth = math.min(plotWidth, painter.width + 16);
     final left = (atX - painter.width / 2 - 8).clamp(0.0,
-        math.max(0.0, plotWidth - painter.width - 16)).toDouble();
+        math.max(0.0, plotWidth - badgeWidth)).toDouble();
+    final badgeHeight = math.min(21.0, size.height - scale.height);
     canvas.drawRRect(RRect.fromRectAndRadius(
       Rect.fromLTWH(left, scale.height + 1,
-          painter.width + 16, math.min(21.0, size.height - scale.height)),
+          badgeWidth, badgeHeight),
       const Radius.circular(2)), Paint()..color = TradeColors.rectangleAxisTag);
+    // A narrow Android plot may be smaller than the selected time label.
+    // Clip rather than allowing the text to cover the right price ruler.
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(
+        left, scale.height + 1, badgeWidth, badgeHeight));
     painter.paint(canvas, Offset(left + 8, scale.height + 3));
+    canvas.restore();
     if (textCache == null) painter.dispose();
   }
 
@@ -306,5 +338,6 @@ class ChartPriceRectanglePainter extends CustomPainter {
       old.viewport != viewport || old.scale.minimum != scale.minimum ||
       old.scale.maximum != scale.maximum || old.scale.height != scale.height ||
       old.candleCount != candleCount || old.plotWidth != plotWidth ||
-      old.dark != dark || old.timestamps != timestamps;
+      old.dark != dark || old.timestamps != timestamps ||
+      old.timeZone != timeZone;
 }
