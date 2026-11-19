@@ -63,6 +63,47 @@ void main() {
     expect(RangeHistoryFillPolicy.targetClosedBars(
       plotWidth: 1e7, candleWidth: 1), 128);
   });
+  test('manual BID history request requires verified connected Range chart', () {
+    bool permitted({
+      bool rangeMode = true,
+      bool connected = true,
+      bool hasAccount = true,
+      bool hasVerifiedTicks = true,
+      bool chartActive = true,
+      bool initialLoading = false,
+      bool olderLoading = false,
+      bool autoFilling = false,
+      bool historyExhausted = false,
+      bool replayActive = false,
+      bool selectingReplayStart = false,
+    }) => RangeHistoryFillPolicy.canRequestOlderManually(
+      rangeMode: rangeMode,
+      connected: connected,
+      hasAccount: hasAccount,
+      hasVerifiedTicks: hasVerifiedTicks,
+      chartActive: chartActive,
+      initialLoading: initialLoading,
+      olderLoading: olderLoading,
+      autoFilling: autoFilling,
+      historyExhausted: historyExhausted,
+      replayActive: replayActive,
+      selectingReplayStart: selectingReplayStart,
+    );
+    expect(permitted(), isTrue);
+    expect(permitted(rangeMode: false), isFalse);
+    expect(permitted(connected: false), isFalse);
+    expect(permitted(hasAccount: false), isFalse);
+    expect(permitted(hasVerifiedTicks: false), isFalse,
+        reason: 'No fake broker history paging from an empty chart');
+    expect(permitted(chartActive: false), isFalse);
+    expect(permitted(initialLoading: true), isFalse);
+    expect(permitted(olderLoading: true), isFalse);
+    expect(permitted(autoFilling: true), isFalse);
+    expect(permitted(historyExhausted: true), isFalse);
+    expect(permitted(replayActive: true), isFalse);
+    expect(permitted(selectingReplayStart: true), isFalse);
+  });
+
   test('stale broker response cannot block newly chosen Range symbol', () {
     final gate = RangeAutoFillRevisionGate();
     expect(gate.start(7), isTrue);
