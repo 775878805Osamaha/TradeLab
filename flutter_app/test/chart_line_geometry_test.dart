@@ -157,7 +157,10 @@ void main() {
     expect(metrics.first.length, closeTo(2.2, 1e-5));
     expect(metrics.last.getTangentForOffset(0)!.position.dx,
         closeTo(324, 1e-5));
-    expect(metrics.last.length, closeTo(2.2, 1e-5));
+    // Flutter PathMetrics stores larger canvas coordinates as float32;
+    // near x=324 its 2.2px contour length can differ by ~0.000012px.
+    // Keep a subpixel geometry tolerance, not an impossible float64 one.
+    expect(metrics.last.length, closeTo(2.2, 1e-4));
     final tiny = ChartLineGeometry.lastCloseDashPath(
         y: 4, plotWidth: 1).computeMetrics().toList();
     expect(tiny, hasLength(1));
