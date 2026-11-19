@@ -242,6 +242,39 @@ class ChartViewport {
   int get hashCode => Object.hash(barWidth, scrollBars, rightMarginBars);
 }
 
+/// Resolves a crosshair position to one source candle and its exact x.
+/// The price/time markers must not claim a different candle than the vertical
+/// crosshair line when bars become as narrow as 3px on an Android phone.
+///
+/// Whitespace to the right of the last broker/Replay candle stays whitespace:
+/// no synthetic future index or timestamp is returned.
+class ChartCrosshairSnap {
+  const ChartCrosshairSnap._();
+
+  static ({double x, int? index}) resolve({
+    required ChartViewport viewport,
+    required double touchX,
+    required double plotWidth,
+    required int candleCount,
+  }) {
+    if (!touchX.isFinite || !plotWidth.isFinite || plotWidth <= 0) {
+      return (x: 0, index: null);
+    }
+    final x = touchX.clamp(0.0, plotWidth).toDouble();
+    final index = viewport.indexAt(
+      x: x, plotWidth: plotWidth, candleCount: candleCount);
+    if (index == null) return (x: x, index: null);
+    final centerX = viewport.chartX(
+      index: index, candleCount: candleCount, plotWidth: plotWidth);
+    if (!centerX.isFinite || centerX < 0 || centerX > plotWidth) {
+      // The closest candle center is beyond the visible clip. Do not pin a
+      // label to an off-screen source candle or invent a visible timestamp.
+      return (x: x, index: null);
+    }
+    return (x: centerX, index: index);
+  }
+}
+
 /// Tracks one continuous touch session independently from the chart's OHLC.
  /// When a second finger joins after a pan, the pinch is rebased on the
  /// *current* viewport (not the original touch-down). The first two-finger
