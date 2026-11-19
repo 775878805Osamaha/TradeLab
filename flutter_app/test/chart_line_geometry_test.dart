@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/chart_annotations.dart';
 import 'package:tradelab_flutter/chart/chart_line_geometry.dart';
+import 'package:tradelab_flutter/chart/chart_viewport.dart';
 
 void main() {
   const bounds = Rect.fromLTWH(0, 0, 100, 100);
@@ -319,5 +320,103 @@ void main() {
         }
       }
     }
+  });
+
+  test('early line culling skips only shapes proven entirely outside plot',
+      () {
+    const width = 259.0; // 320dp phone minus 61dp price ruler
+    for (final tool in <ChartDrawingTool>[
+      ChartDrawingTool.trendLine,
+      ChartDrawingTool.horizontal,
+    ]) {
+      expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+        tool: tool, startX: -80, endX: -1, plotWidth: width), isTrue);
+      expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+        tool: tool, startX: 260, endX: 400, plotWidth: width), isTrue);
+      expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+        tool: tool, startX: -80, endX: 400, plotWidth: width), isFalse,
+        reason: 'The finite segment may cross the on-screen candles');
+      expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+        tool: tool, startX: 0, endX: -400, plotWidth: width), isFalse,
+        reason: 'A real endpoint on the plot border is not offscreen');
+    }
+    expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+      tool: ChartDrawingTool.verticalLine,
+      startX: -1, endX: -1, plotWidth: width), isTrue);
+    expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+      tool: ChartDrawingTool.verticalLine,
+      startX: width, endX: width, plotWidth: width), isFalse);
+    expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+      tool: ChartDrawingTool.horizontalRay,
+      startX: width + 1, endX: -900, plotWidth: width), isTrue);
+    expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+      tool: ChartDrawingTool.horizontalRay,
+      startX: -900, endX: -900, plotWidth: width), isFalse);
+  });
+
+  test('reversed Fibonacci and infinite rays keep lines entering the plot',
+      () {
+    const width = 329.0; // 390dp Android phone
+    bool culled(ChartDrawingTool tool, double x1, double x2) =>
+        ChartLineGeometry.definitelyOffscreenHorizontally(
+          tool: tool, startX: x1, endX: x2, plotWidth: width);
+    // The painter extends Fibonacci levels from min(x1,x2), NOT x1 alone.
+    expect(culled(ChartDrawingTool.fibonacci, 500, -2000), isFalse);
+    expect(culled(ChartDrawingTool.fibonacci, 500, 350), isTrue);
+    expect(culled(ChartDrawingTool.fibonacci, -2000, 350), isFalse);
+    expect(ChartLineGeometry.fibonacciLevelStroke(
+      fromX: -2000, levelY: 50,
+      plot: const Rect.fromLTWH(0, 0, 329, 200)), isNotNull);
+    // Extended/ray/channel drawings can enter the viewport even if the
+    // source anchors appear completely outside on one side.
+    for (final tool in <ChartDrawingTool>[
+      ChartDrawingTool.ray,
+      ChartDrawingTool.extendedLine,
+      ChartDrawingTool.parallelChannel,
+    ]) {
+      expect(culled(tool, -500, -100), isFalse);
+      expect(culled(tool, 500, 900), isFalse);
+    }
+    expect(culled(ChartDrawingTool.trendLine, double.nan, 400), isFalse);
+    expect(culled(ChartDrawingTool.trendLine, 400, 500), isTrue);
+    expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+      tool: ChartDrawingTool.trendLine, startX: 10, endX: 20,
+      plotWidth: double.infinity), isFalse);
+  });
+
+  test('30k real indexed source anchors are conservatively culled at deep '
+      '3px and 60px zoom', () {
+    var definitelyInvisible = 0;
+    var kept = 0;
+    for (final plotWidth in <double>[259, 329]) {
+      for (final width in <double>[3, 10, 60]) {
+        for (final scroll in <double>[0, 40, 1400]) {
+          final viewport = ChartViewport(
+              barWidth: width, scrollBars: scroll, rightMarginBars: 4);
+          for (var index = 0; index < 1800; index++) {
+            final x1 = viewport.chartX(index: index,
+                candleCount: 1801, plotWidth: plotWidth);
+            final x2 = viewport.chartX(index: index + 1,
+                candleCount: 1801, plotWidth: plotWidth);
+            final isCulled = ChartLineGeometry.definitelyOffscreenHorizontally(
+                tool: ChartDrawingTool.trendLine,
+                startX: x1, endX: x2, plotWidth: plotWidth);
+            if (isCulled) {
+              definitelyInvisible++;
+              expect(ChartLineGeometry.strokes(
+                tool: ChartDrawingTool.trendLine,
+                start: Offset(x1, 50), end: Offset(x2, 100),
+                bounds: Rect.fromLTWH(0, 0, plotWidth, 180)), isEmpty,
+                reason: 'A pruned segment must NEVER contain a visible '
+                    'real-source stroke');
+            } else {
+              kept++;
+            }
+          }
+        }
+      }
+    }
+    expect(definitelyInvisible, greaterThan(28000));
+    expect(kept, greaterThan(0));
   });
 }
