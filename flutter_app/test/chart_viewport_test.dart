@@ -3,6 +3,62 @@ import 'package:tradelab_flutter/chart/chart_viewport.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 void main() {
+  test('crosshair forex sub-pip price agrees with its painted horizontal line',
+      () {
+    // Manual price-axis zoom can expose a range UNDER 0.00001.
+    // The old crosshair label incorrectly enforced a separate 0.00001 span,
+    // so the price printed at y=height was not the price drawn there.
+    const scale = ChartPriceScale(1.072101, 1.072105, 420);
+    expect(scale.maximum - scale.minimum, lessThan(.00001));
+    for (final y in <double>[0, 23.5, 105, 210, 370.2, 420]) {
+      final displayed = scale.crosshairPrice(y);
+      expect(displayed, isNotNull);
+      expect(displayed, closeTo(scale.price(y), 1e-12),
+          reason: 'The crosshair tag must use the exact candle price scale');
+      expect(scale.y(displayed!), closeTo(y, 1e-7),
+          reason: 'The label must identify its painted horizontal price');
+    }
+    expect(scale.crosshairPrice(420), closeTo(1.072101, 1e-12));
+    expect(scale.crosshairPrice(0), closeTo(1.072105, 1e-12));
+    // A reconstructed, wider proxy span would be demonstrably wrong.
+    final incorrectPrice = scale.maximum - .00001;
+    expect((incorrectPrice - scale.crosshairPrice(420)!).abs(),
+        greaterThan(.000005));
+  });
+
+  test('fine EURUSD chart crosshair preserves price after ruler pinch and resize',
+      () {
+    const original = ChartPriceScale(1.082000, 1.082006, 320);
+    final zoomed = original.dragPriceAxis(deltaY: -120, focalY: 190)
+        .dragPriceAxis(deltaY: -120, focalY: 190);
+    expect(zoomed.maximum - zoomed.minimum, lessThan(.000006));
+    final anchor = original.price(190);
+    expect(zoomed.crosshairPrice(190), closeTo(anchor, 1e-12),
+        reason: 'Manual zoom must not move the finger-anchored market price');
+    final taller = zoomed.withHeight(640);
+    expect(taller.crosshairPrice(380), closeTo(anchor, 1e-12),
+        reason: 'Switching focus/chart height must preserve price axes');
+    expect(taller.y(taller.crosshairPrice(380)!), closeTo(380, 1e-6));
+    expect(zoomed.crosshairPrice(-20),
+        closeTo(zoomed.maximum, 1e-12));
+    expect(zoomed.crosshairPrice(999),
+        closeTo(zoomed.minimum, 1e-12));
+  });
+
+  test('crosshair refuses nonfinite or unusable price ruler coordinates',
+      () {
+    const valid = ChartPriceScale(3987, 3988, 320);
+    expect(valid.crosshairPrice(double.nan), isNull);
+    expect(valid.crosshairPrice(double.infinity), isNull);
+    expect(valid.crosshairPrice(double.negativeInfinity), isNull);
+    expect(const ChartPriceScale(1, 1, 320).crosshairPrice(100), isNull);
+    expect(const ChartPriceScale(1, 2, 0).crosshairPrice(100), isNull);
+    expect(const ChartPriceScale(1, 2, double.nan)
+        .crosshairPrice(100), isNull);
+    expect(const ChartPriceScale(double.nan, 2, 320)
+        .crosshairPrice(100), isNull);
+  });
+
   test('right-price-axis drag zooms prices around touch without time pan', () {
     const scale = ChartPriceScale(100, 200, 400);
     const viewport = ChartViewport(barWidth: 12, scrollBars: 21);
