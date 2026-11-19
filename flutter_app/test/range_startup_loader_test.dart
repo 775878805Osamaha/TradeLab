@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/range_startup_loader.dart';
+import 'package:tradelab_flutter/data/range_bar_timeline.dart';
 
 void main() {
   final now = DateTime.utc(2026, 11, 12, 18).millisecondsSinceEpoch;
@@ -183,6 +184,84 @@ void main() {
     expect(completed.ticks.map((t) => t.bid), [197, 198.5, 199.5, 200]);
     expect(received.last.timeline.bars.length,
         completed.timeline.bars.length);
+  });
+
+  test('large first startup BID page builds one immutable source snapshot',
+      () async {
+    final page = List<MarketTick>.generate(6201, (i) =>
+        MarketTick(now - 12000 + i ~/ 2, 2000 + (i % 19) * .08));
+    final expected = RangeBarTimeline.build(page, .5);
+    final observed = <RangeStartupSnapshot>[];
+    var calls = 0;
+    final result = await RangeStartupLoader.load(
+      endMs: now, priceDistance: .5, minimumClosedBars: 1,
+      getTicks: (from, to) async {
+        calls++;
+        expect((from, to), (now - 5 * minute, now));
+        return page;
+      },
+      onSnapshot: (batch) async => observed.add(batch),
+    );
+    expect(calls, 1, reason: 'First verified interval should draw immediately');
+    expect(result, isNotNull);
+    expect(observed, hasLength(1));
+    expect(result!.ticks.length, page.length);
+    expect(result.timeline.endTickIndices, expected.endTickIndices);
+    expect(result.timeline.endTimestamps, expected.endTimestamps);
+    expect(result.closedBars, expected.closedBarCount);
+    expect(result.ticks[0].bid, page[0].bid);
+    expect(result.ticks[1].timestamp, page[0].timestamp,
+        reason: 'Distinct BID events with the same millisecond are retained');
+    for (var i = 0; i < expected.bars.length; i++) {
+      final a = expected.bars[i];
+      final b = result.timeline.bars[i];
+      expect((b.open, b.high, b.low, b.close),
+          (a.open, a.high, a.low, a.close));
+    }
+    expect(() => result.ticks.clear(), throwsUnsupportedError);
+    page.add(MarketTick(now - 1, 9999));
+    expect(result.ticks.length, 6201,
+        reason: 'Provider buffer mutations must not affect chart history');
+  });
+
+  test('large second startup page prepends and preserves first snapshot',
+      () async {
+    final recent = <MarketTick>[MarketTick(now - 100, 2000)];
+    final older = List<MarketTick>.generate(5300, (i) =>
+        MarketTick(now - 15 * minute + i ~/ 2,
+            1998 + (i % 17) * .12));
+    final source = <MarketTick>[...older, ...recent];
+    final reference = RangeBarTimeline.build(source, .5);
+    final observed = <RangeStartupSnapshot>[];
+    var calls = 0;
+    final result = await RangeStartupLoader.load(
+      endMs: now, priceDistance: .5, minimumClosedBars: 4,
+      getTicks: (from, to) async {
+        calls++;
+        if (calls == 1) return recent;
+        if (calls == 2) {
+          expect((from, to),
+              (now - 15 * minute, now - 5 * minute - 1));
+          return older;
+        }
+        fail('Two verified pages should provide enough closed Range bars');
+      },
+      onSnapshot: (snapshot) async => observed.add(snapshot),
+    );
+    expect(calls, 2);
+    expect(observed, hasLength(2));
+    expect(observed.first.ticks.map((t) => t.bid), [2000]);
+    expect(observed.first.timeline.closedBarCount, 0);
+    expect(result!.ticks.length, source.length);
+    expect(result.timeline.endTickIndices, reference.endTickIndices);
+    expect(result.timeline.endTimestamps, reference.endTimestamps);
+    expect(result.closedBars, reference.closedBarCount);
+    expect(identical(observed.first.ticks, observed.last.ticks), isFalse);
+    expect(result.ticks.first.timestamp, older.first.timestamp);
+    expect(result.ticks.last.timestamp, recent.first.timestamp);
+    expect(result.timeline.visibleClosedBarsThroughTick(0), 0,
+        reason: 'Unrevealed BID ticks must not close future candles');
+    expect(() => result.ticks.add(recent.single), throwsUnsupportedError);
   });
 
   test('verified quiet history keeps coverage without rebuilding BID bars',
