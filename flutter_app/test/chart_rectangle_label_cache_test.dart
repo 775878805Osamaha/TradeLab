@@ -88,4 +88,79 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(cache.length, 0);
   });
+
+  testWidgets('live rectangle viewport and scale repaint without rebuild',
+      (tester) async {
+    final redraw = ValueNotifier<int>(0);
+    final cache = ChartTextLayoutCache();
+    addTearDown(redraw.dispose);
+    addTearDown(cache.clear);
+    var currentViewport = const ChartViewport(
+        barWidth: 10, scrollBars: .5);
+    var currentScale = const ChartPriceScale(100, 180, 666);
+    var viewportReads = 0;
+    var scaleReads = 0;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: Center(child: SizedBox(
+        width: 345.5,
+        height: 690,
+        child: CustomPaint(
+          key: const Key('live-rectangle-canvas'),
+          painter: ChartPriceRectanglePainter(
+            drawings: const [selectedRectangle],
+            selectedIndex: 0,
+            viewport: currentViewport,
+            scale: currentScale,
+            viewportProvider: () {
+              viewportReads++;
+              return currentViewport;
+            },
+            scaleProvider: () {
+              scaleReads++;
+              return currentScale;
+            },
+            repaint: redraw,
+            candleCount: 100,
+            plotWidth: 284.5,
+            dark: false,
+            timestamps: timestamps,
+            textCache: cache,
+          ),
+        ),
+      )),
+    )));
+    await tester.pump();
+    final finder = find.byKey(const Key('live-rectangle-canvas'));
+    final initialPainter = tester.widget<CustomPaint>(finder)
+        .painter! as ChartPriceRectanglePainter;
+    expect(initialPainter.currentViewport, currentViewport);
+    expect(initialPainter.currentScale, currentScale);
+    expect(cache.length, 3);
+    final initialRect = PriceRectangleGeometry.rect(
+        selectedRectangle, currentViewport, currentScale, 100, 284.5);
+    final initialViewportReads = viewportReads;
+    final initialScaleReads = scaleReads;
+
+    currentViewport = const ChartViewport(
+        barWidth: 10, scrollBars: 3.5);
+    currentScale = const ChartPriceScale(90, 170, 666);
+    redraw.value++;
+    await tester.pump();
+    final updatedPainter = tester.widget<CustomPaint>(finder)
+        .painter! as ChartPriceRectanglePainter;
+    expect(identical(initialPainter, updatedPainter), isTrue,
+        reason: 'Only a repaint occurred: no Flutter widget rebuild');
+    expect(viewportReads, greaterThan(initialViewportReads));
+    expect(scaleReads, greaterThan(initialScaleReads));
+    expect(updatedPainter.currentViewport, currentViewport);
+    expect(updatedPainter.currentScale, currentScale);
+    final movedRect = PriceRectangleGeometry.rect(
+        selectedRectangle, updatedPainter.currentViewport,
+        updatedPainter.currentScale, 100, 284.5);
+    expect(movedRect.left, greaterThan(initialRect.left));
+    expect(movedRect.top, greaterThan(initialRect.top));
+    expect(cache.length, 3,
+        reason: 'Existing measured price/time labels remain reused');
+    expect(tester.takeException(), isNull);
+  });
 }
