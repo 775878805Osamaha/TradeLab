@@ -104,13 +104,26 @@ class ReplayTradeOverlayPainter extends CustomPainter {
     required this.scale,
     required this.candleCount,
     required this.plotWidth,
-  });
+    ChartViewport Function()? viewportProvider,
+    ChartPriceScale Function()? scaleProvider,
+    Listenable? repaint,
+  }) : _viewportProvider = viewportProvider,
+       _scaleProvider = scaleProvider,
+       super(repaint: repaint);
 
   final List<ReplayTrainingTrade> trades;
+  // The snapshots are for a normal widget rebuild/shouldRepaint comparison.
+  // During gestures, the chart's shared repaint notifier supplies the latest
+  // viewport and the matching auto-scale without rebuilding the toolbar.
   final ChartViewport viewport;
   final ChartPriceScale scale;
+  final ChartViewport Function()? _viewportProvider;
+  final ChartPriceScale Function()? _scaleProvider;
   final int candleCount;
   final double plotWidth;
+
+  ChartViewport get currentViewport => _viewportProvider?.call() ?? viewport;
+  ChartPriceScale get currentScale => _scaleProvider?.call() ?? scale;
 
   static const _buy = Color(0xFF178F71);
   static const _sell = Color(0xFFE05050);
@@ -140,8 +153,8 @@ class ReplayTradeOverlayPainter extends CustomPainter {
     final plotHeight = size.height - 24;
     final marks = ReplayTradeOverlayLayout.visible(
         trades: trades,
-        viewport: viewport,
-        scale: scale,
+        viewport: currentViewport,
+        scale: currentScale,
         candleCount: candleCount,
         plotWidth: plotWidth);
     if (marks.isEmpty) return;

@@ -224,6 +224,7 @@ void main() {
       bool draggingDrawing = false,
       bool rectangles = false,
       bool practiceLevels = false,
+      bool practiceLevelsTrackViewport = false,
     }) =>
         chartCanUsePaintOnlyViewportUpdate(
           selectingReplayStart: selecting,
@@ -231,6 +232,7 @@ void main() {
           movingDrawing: draggingDrawing,
           visiblePriceRectangles: rectangles,
           replayTradeLevelsVisible: practiceLevels,
+          replayTradeLevelsFollowViewport: practiceLevelsTrackViewport,
         );
 
     expect(paintOnly(), isTrue,
@@ -242,7 +244,14 @@ void main() {
     expect(paintOnly(rectangles: true), isFalse,
         reason: 'Rectangle positions and price tags use painter snapshots');
     expect(paintOnly(practiceLevels: true), isFalse,
-        reason: 'Replay entry, stop and target must move with the candles');
+        reason: 'Static Replay entry, stop and target need rebuilding');
+    expect(paintOnly(practiceLevels: true, practiceLevelsTrackViewport: true),
+        isTrue,
+        reason: 'When price levels repaint with the moving chart, no '
+            'toolbar rebuild is required');
+    expect(paintOnly(rectangles: true,
+        practiceLevels: true, practiceLevelsTrackViewport: true), isFalse,
+        reason: 'Unmigrated price rectangles must still rebuild');
   });
 
   test('momentum displacement preserves direction and viewport bounds', () {
