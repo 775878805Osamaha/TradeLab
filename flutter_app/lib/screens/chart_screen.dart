@@ -5194,7 +5194,6 @@ class _CandleChartPainter extends CustomPainter {
     final scale = _priceScaleProvider(axis, size.height);
     final maximum = scale.maximum;
     final minimum = scale.minimum;
-    final span = math.max(.00001, maximum - minimum);
     double y(double price) => scale.y(price);
     // Reference: no visible candle-area grid. Labels derive from the actual
     // visible price interval, never from screenshot numbers or fake candles.
@@ -5517,12 +5516,18 @@ class _CandleChartPainter extends CustomPainter {
       _configuredLine(canvas, Offset(0, location.dy),
         Offset(axis, location.dy), Color(panel.crosshairColor),
         panel.crosshairStroke, 1);
-      final crossPrice = maximum - location.dy / chartHeight * span;
-      final markerY = (location.dy - 9).clamp(0, chartHeight - 18).toDouble();
-      canvas.drawRect(Rect.fromLTWH(axis, markerY, 61, 18),
-          Paint()..color = TradeColors.blue);
-      _text(canvas, crossPrice.toStringAsFixed(decimals),
-          Offset(axis + 3, markerY + 2), Colors.white, 10);
+      // Match the exact canvas price transform, even at sub-pip forex zoom.
+      // A separate 0.00001 span floor used to put the cursor's numerical
+      // tag at a different price from its horizontal line.
+      final crossPrice = scale.crosshairPrice(location.dy);
+      if (crossPrice != null) {
+        final markerY = (location.dy - 9).clamp(
+            0, chartHeight - 18).toDouble();
+        canvas.drawRect(Rect.fromLTWH(axis, markerY, 61, 18),
+            Paint()..color = TradeColors.blue);
+        _text(canvas, _price(crossPrice, decimals),
+            Offset(axis + 3, markerY + 2), Colors.white, 10);
+      }
       if (timestamps.length >= candles.length &&
           selected.index != null) {
           // This is the same REAL candle that owns the guide at selected.x.
