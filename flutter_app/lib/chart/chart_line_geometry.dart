@@ -98,6 +98,32 @@ class ChartLineGeometry {
     );
   }
 
+  /// Select only the Fibonacci levels the candle canvas actually paints.
+  /// An invisible ratio outside the current price range must not steal a
+  /// touch from candle pan or a neighboring drawing near the plot edge.
+  static bool hitFibonacciLevels({
+    required Offset point,
+    required double fromX,
+    required Iterable<double> levelYs,
+    required Rect plot,
+    double touchRadius = 17,
+  }) {
+    if (!point.dx.isFinite || !point.dy.isFinite ||
+        !touchRadius.isFinite || touchRadius < 0 ||
+        !plot.contains(point)) {
+      return false;
+    }
+    for (final levelY in levelYs) {
+      final visibleStroke = fibonacciLevelStroke(
+        fromX: fromX, levelY: levelY, plot: plot);
+      if (visibleStroke != null &&
+          distanceToStroke(point, visibleStroke) <= touchRadius) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static double distanceToStroke(Offset point, ChartStroke stroke) {
     final d = stroke.end - stroke.start;
     final magnitude = d.distanceSquared;
