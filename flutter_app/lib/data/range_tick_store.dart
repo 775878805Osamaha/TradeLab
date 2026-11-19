@@ -332,8 +332,16 @@ class RangeTickStore {
     final db = await _open();
     final result = <MarketTick>[];
     var cursor = fromMs;
-    var attempts = 0;
+    // Many short, complete cTrader windows can jointly cover a single
+    // older-history query. The previous shared 64-attempt budget counted
+    // SUCCESSFUL windows as failures and forced pointless broker downloads.
+    // Bound valid windows separately from corrupt-manifest fallback work.
+    const maxVerifiedWindows = 2048;
+    const maxRejectedCandidates = 64;
+    var windowsConsumed = 0;
+    var rejectedCandidates = 0;
     while (cursor <= toMs) {
+      if (++windowsConsumed > maxVerifiedWindows) return null;
       // Prefer the furthest-ending verified window, but try a few
       // alternatives if a migrated or corrupted manifest fails validation.
       final candidates = await db.query('range_tick_windows',
@@ -345,12 +353,14 @@ class RangeTickStore {
       List<MarketTick>? validTicks;
       int? coverageEnd;
       for (final row in candidates) {
-        if (++attempts > 64) return null;
         final windowFrom = (row['from_ms'] as num).toInt();
         final windowTo = (row['to_ms'] as num).toInt();
         final verified = await readVerifiedWindow(
           accountId, symbol, fromMs: windowFrom, toMs: windowTo);
-        if (verified == null) continue;
+        if (verified == null) {
+          if (++rejectedCandidates > maxRejectedCandidates) return null;
+          continue;
+        }
         validTicks = verified;
         coverageEnd = windowTo;
         break;
