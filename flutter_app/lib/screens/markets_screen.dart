@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/tradelab_data.dart';
+import '../data/watchlist_favorites_store.dart';
 import '../data/market_controller.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
@@ -8,10 +11,12 @@ import '../widgets/tradelab_dashboard_widgets.dart';
 
 class MarketsScreen extends StatefulWidget {
   const MarketsScreen({required this.controller, this.onSymbolSelected,
-    super.key});
+    this.favoritesStore, super.key});
 
   final MarketController controller;
   final ValueChanged<TradeSymbol>? onSymbolSelected;
+  /// Optional test/embedding store; the app uses its private SQLite by default.
+  final WatchlistFavoritesStore? favoritesStore;
 
   @override
   State<MarketsScreen> createState() => _MarketsScreenState();
@@ -22,11 +27,54 @@ class _MarketsScreenState extends State<MarketsScreen> {
   final _favorites = <String>{'XAUUSD', 'EURUSD'};
   String _filter = 'الكل';
   bool _favoritesOnly = false;
+  late final WatchlistFavoritesStore _store =
+      widget.favoritesStore ?? SqliteWatchlistFavoritesStore();
+  late final Future<void> _initialLoad;
+  bool _loadingFavorites = true;
+  bool _favoritesStoreError = false;
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_rebuild);
+    _initialLoad = _restoreFavorites();
+  }
+
+  Future<void> _restoreFavorites() async {
+    try {
+      final saved = await _store.load();
+      if (!mounted) return;
+      setState(() {
+        // Only symbols in the current catalog can appear in the watchlist.
+        final allowed = tradeSymbols.map((symbol) => symbol.code).toSet();
+        _favorites
+          ..clear()
+          ..addAll(saved.where(allowed.contains));
+        _favoritesStoreError = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _favoritesStoreError = true);
+      // Keep the original default stars in memory if SQLite is unavailable.
+    } finally {
+      if (mounted) setState(() => _loadingFavorites = false);
+    }
+  }
+
+  void _toggleFavorite(String code) {
+    if (_loadingFavorites) return;
+    setState(() {
+      if (!_favorites.add(code)) _favorites.remove(code);
+    });
+    // The store serializes rapid writes and snapshots every selection. A
+    // failed save never silently undoes a star the user just selected.
+    final snapshot = Set<String>.of(_favorites);
+    unawaited(_store.save(snapshot).then((_) {
+      if (mounted && _favoritesStoreError) {
+        setState(() => _favoritesStoreError = false);
+      }
+    }, onError: (Object _, StackTrace __) {
+      if (mounted) setState(() => _favoritesStoreError = true);
+    }));
   }
 
   void _rebuild() { if (mounted) setState(() {}); }
@@ -35,6 +83,11 @@ class _MarketsScreenState extends State<MarketsScreen> {
   void dispose() {
     widget.controller.removeListener(_rebuild);
     _search.dispose();
+    if (widget.favoritesStore == null) {
+      // Do not close the SQLite handle while its first read is in progress;
+      // close() additionally waits for any queued atomic star edits.
+      unawaited(_initialLoad.then((_) => _store.close()));
+    }
     super.dispose();
   }
 
@@ -70,10 +123,15 @@ class _MarketsScreenState extends State<MarketsScreen> {
                 maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900))),
+              if (_favoritesStoreError)
+                const Tooltip(
+                  message: 'تعذر حفظ المفضلة على الجهاز؛ النجوم الحالية مؤقتة.',
+                  child: Icon(Icons.warning_amber_rounded, size: 19),
+                ),
               IconButton(
                 key: const Key('watchlist-favorites-toggle'),
                 tooltip: 'عرض المفضلة فقط',
-                onPressed: () => setState(
+                onPressed: _loadingFavorites ? null : () => setState(
                     () => _favoritesOnly = !_favoritesOnly),
                 icon: Icon(_favoritesOnly
                     ? Icons.star_rounded : Icons.star_outline_rounded,
@@ -247,12 +305,10 @@ class _MarketsScreenState extends State<MarketsScreen> {
             )),
             const SizedBox(width: 4),
             IconButton(
+              key: Key('watchlist-favorite-${symbol.code}'),
               tooltip: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
-              onPressed: () => setState(() {
-                if (!_favorites.add(symbol.code)) {
-                  _favorites.remove(symbol.code);
-                }
-              }),
+              onPressed: _loadingFavorites
+                  ? null : () => _toggleFavorite(symbol.code),
               icon: Icon(isFavorite
                   ? Icons.star_rounded : Icons.star_border_rounded,
                   color: isFavorite ? TradeColors.gold :
