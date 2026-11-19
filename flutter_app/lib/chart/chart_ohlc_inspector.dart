@@ -21,7 +21,7 @@ class ChartOhlcSelection {
 
   /// Keep the price itself as the source of truth; this is presentation only.
   String formatPrice(double value, int digits) =>
-      value.toStringAsFixed(digits.clamp(0, 8));
+      value.toStringAsFixed(digits.clamp(0, 8).toInt());
 
   String get changeDirection => rising ? '▲' : '▼';
 
