@@ -4858,8 +4858,8 @@ class _ChartScreenState extends State<ChartScreen>
                   selectedIndex: _drawing ? _selectedRectangle : null,
                   viewport: _viewport,
                   scale: _priceScale(candles, plotWidth, constraints.maxHeight),
-                  // Keep selected handles, prices and UTC time attached to
-                  // the same moving viewport as the candle chart.
+                  // Keep selected handles, price tags and the selected
+                  // chart timezone on the SAME source candle and viewport.
                   viewportProvider: () => _viewport,
                   scaleProvider: () => _priceScale(
                       candles, plotWidth, constraints.maxHeight),
@@ -4867,6 +4867,7 @@ class _ChartScreenState extends State<ChartScreen>
                   candleCount: candles.length,
                   plotWidth: plotWidth,
                   dark: Theme.of(context).brightness == Brightness.dark,
+                  timeZone: _symbolSettings.timeZone,
                   timestamps: _mode == ChartMode.range
                       ? _rangeBarTimestamps : _actualTimestamps,
                 ),
