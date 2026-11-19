@@ -239,7 +239,8 @@ class _ChartScreenState extends State<ChartScreen>
 
   @visibleForTesting
   ({bool draggingLine, bool draggingPattern, bool draggingRectangle,
-    int levels, int patterns, int? selectedLine, int? selectedPattern})
+    int levels, int patterns, int? selectedLine, int? selectedPattern,
+    double? levelValue, ChartPattern? patternValue})
       get debugGuideDragSelection => (
         draggingLine: _draggingLine,
         draggingPattern: _draggingPattern,
@@ -248,6 +249,12 @@ class _ChartScreenState extends State<ChartScreen>
         patterns: _patterns.length,
         selectedLine: _selectedLine,
         selectedPattern: _selectedPattern,
+        levelValue: _selectedLine != null &&
+            _selectedLine! >= 0 && _selectedLine! < _levels.length
+            ? _levels[_selectedLine!] : null,
+        patternValue: _selectedPattern != null &&
+            _selectedPattern! >= 0 && _selectedPattern! < _patterns.length
+            ? _patterns[_selectedPattern!] : null,
       );
   late final AnimationController _momentum;
   double _previousMomentumX = 0;
@@ -3111,6 +3118,48 @@ class _ChartScreenState extends State<ChartScreen>
     _chartRepaint.value++;
   }
 
+  /// Edit an existing, genuine price/bar anchored drawing on paint-only
+  /// frames. Its undo snapshot was captured once at finger-down.
+  bool _updateDraggedGuide(Offset local, ChartPriceScale scale,
+      double plotWidth, int candleCount) {
+    if (_draggingLine && _selectedLine != null &&
+        _selectedLine! >= 0 && _selectedLine! < _levels.length) {
+      final next = scale.price(local.dy.clamp(0, scale.height).toDouble());
+      if (!next.isFinite || next == _levels[_selectedLine!]) return false;
+      _levels[_selectedLine!] = next;
+      return true;
+    }
+    if (!_draggingPattern || _selectedPattern == null ||
+        _selectedPattern! < 0 || _selectedPattern! >= _patterns.length ||
+        _patternAtDragStart == null) return false;
+    final original = _patternAtDragStart!;
+    ChartPattern next;
+    if (_draggedEndpoint != null) {
+      final anchor = _anchorAt(local, scale, plotWidth, candleCount);
+      if (anchor == null) return false;
+      next = original.withEndpoint(_draggedEndpoint!, anchor);
+    } else {
+      final bars = ((local.dx - _gestureFocalX) /
+          _viewport.barWidth).round();
+      final anchors = [
+        original.start.index,
+        original.end.index,
+        if (original.offsetAnchor != null) original.offsetAnchor!.index,
+      ];
+      final first = anchors.reduce(math.min);
+      final last = anchors.reduce(math.max);
+      final deltaBars = bars.clamp(-first,
+          math.max(0, candleCount - 1 - last)).toInt();
+      final deltaPrice = scale.price(
+          local.dy.clamp(0, scale.height).toDouble()) -
+          scale.price(_gestureFocalY.clamp(0, scale.height).toDouble());
+      if (!deltaPrice.isFinite) return false;
+      next = original.moved(deltaBars, deltaPrice);
+    }
+    _patterns[_selectedPattern!] = next;
+    return true;
+  }
+
   int? _hitLine(double y, ChartPriceScale scale) {
     for (var index = _levels.length - 1; index >= 0; index--) {
       if ((scale.y(_levels[index]) - y).abs() <= 18) return index;
@@ -4487,6 +4536,20 @@ class _ChartScreenState extends State<ChartScreen>
               // Adding/removing a finger shifts Flutter's gesture centroid.
               // Do not reinterpret that shift as a candle pan, zoom or edit.
               if (_touchGesture.ignoredPointerTransition) return;
+              // The retained candle painter observes these exact live
+              // source-anchor arrays. Updating guides via setState on each
+              // touch sample would rebuild toolbars and copy drawing lists.
+              if (details.pointerCount == 1 &&
+                  !_draggingRectangle && _draggingShortHandle == null &&
+                  (_draggingLine || _draggingPattern)) {
+                final scale = _priceScale(
+                    candles, plotWidth, constraints.maxHeight);
+                if (_updateDraggedGuide(details.localFocalPoint, scale,
+                    plotWidth, candles.length)) {
+                  _chartRepaint.value++;
+                }
+                return;
+              }
               final movingDrawing = _draggingRectangle ||
                   _draggingShortHandle != null || _draggingLine ||
                   _draggingPattern;
@@ -4516,39 +4579,6 @@ class _ChartScreenState extends State<ChartScreen>
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 _updateShortDrag(details.localFocalPoint, scale,
                     plotWidth, candles.length);
-              } else if (_draggingLine && _selectedLine != null && details.pointerCount == 1) {
-                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
-                _levels[_selectedLine!] = scale.price(
-                    details.localFocalPoint.dy.clamp(0, scale.height).toDouble());
-              } else if (_draggingPattern && _selectedPattern != null &&
-                  _patternAtDragStart != null && details.pointerCount == 1) {
-                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
-                final original = _patternAtDragStart!;
-                if (_draggedEndpoint != null) {
-                  final anchor = _anchorAt(details.localFocalPoint,
-                      scale, plotWidth, candles.length);
-                  if (anchor != null) {
-                    _patterns[_selectedPattern!] = original.withEndpoint(
-                        _draggedEndpoint!, anchor);
-                  }
-                } else {
-                  final proposedBars = ((details.localFocalPoint.dx -
-                      _gestureFocalX) / _viewport.barWidth).round();
-                  final indices = [
-                    original.start.index,
-                    original.end.index,
-                    if (original.offsetAnchor != null)
-                      original.offsetAnchor!.index,
-                  ];
-                  final minIndex = indices.reduce(math.min);
-                  final maxIndex = indices.reduce(math.max);
-                  final barDelta = proposedBars.clamp(-minIndex,
-                      math.max(0, candles.length - 1 - maxIndex));
-                  final change = scale.price(
-                      details.localFocalPoint.dy.clamp(0, scale.height).toDouble()) -
-                      scale.price(_gestureFocalY.clamp(0, scale.height).toDouble());
-                  _patterns[_selectedPattern!] = original.moved(barDelta.toInt(), change);
-                }
               } else if (details.pointerCount > 1 || _crosshair == null) {
                 // Rebased, incremental touch transform; chart geometry and
                 // source OHLC remain untouched.
@@ -4576,8 +4606,8 @@ class _ChartScreenState extends State<ChartScreen>
                 return;
               }
               final rectangleEdited = _draggingRectangle;
-              final editing = _replayDraggingStart || _draggingLine ||
-                  _draggingPattern ||
+              final guideEdited = _draggingLine || _draggingPattern;
+              final editing = _replayDraggingStart || guideEdited ||
                   _draggingShortHandle != null || _draggingRectangle;
               _replayDraggingStart = false;
               _draggingLine = false;
@@ -4599,7 +4629,11 @@ class _ChartScreenState extends State<ChartScreen>
                   reducedMotion: MediaQuery.disableAnimationsOf(context))) {
                 _startMomentum(velocity, plotWidth);
               }
-              if (rectangleEdited && mounted) setState(() {});
+              // Reconcile selection/undo actions only once at release.
+              // The candle painter already displayed each intermediate move.
+              if ((rectangleEdited || guideEdited) && mounted) {
+                setState(() {});
+              }
             },
             onDoubleTapDown: (details) =>
                 _doubleTapChartX = details.localPosition.dx,
@@ -4819,6 +4853,16 @@ class _ChartScreenState extends State<ChartScreen>
                       ? null : widget.controller.recentQuoteFor(_selectedSymbol),
                   repaint: _chartRepaint,
                   textCache: _chartTextCache,
+                  // Dynamic geometry for edits; immutable copies below remain
+                  // for shouldRepaint after genuine widget rebuilds.
+                  levelsProvider: () => _drawingsVisible
+                      ? _levels : const <double>[],
+                  patternsProvider: () => _drawingsVisible
+                      ? _patterns : const <ChartPattern>[],
+                  selectedLineProvider: () => _drawing && _drawingsVisible
+                      ? _selectedLine : null,
+                  selectedPatternProvider: () => _drawing && _drawingsVisible
+                      ? _selectedPattern : null,
                   levels: _drawingsVisible ? List<double>.unmodifiable(_levels) : const [],
                   patterns: _drawingsVisible ? List<ChartPattern>.unmodifiable(_patterns) : const [],
                   shortPositions: _drawingsVisible ? List<ChartShortPosition>.unmodifiable(_shortPositions) : const [],
@@ -5260,6 +5304,10 @@ class _CandleChartPainter extends CustomPainter {
     required MarketQuote? Function() sourceQuoteProvider,
     required Listenable repaint,
     required this.textCache,
+    required List<double> Function() levelsProvider,
+    required List<ChartPattern> Function() patternsProvider,
+    required int? Function() selectedLineProvider,
+    required int? Function() selectedPatternProvider,
     required this.levels,
     required this.patterns,
     required this.shortPositions,
@@ -5279,6 +5327,10 @@ class _CandleChartPainter extends CustomPainter {
        _crosshairProvider = crosshairProvider,
        _priceScaleProvider = priceScaleProvider,
        _sourceQuoteProvider = sourceQuoteProvider,
+       _levelsProvider = levelsProvider,
+       _patternsProvider = patternsProvider,
+       _selectedLineProvider = selectedLineProvider,
+       _selectedPatternProvider = selectedPatternProvider,
        super(repaint: repaint);
 
   final List<TradeCandle> candles;
@@ -5294,6 +5346,12 @@ class _CandleChartPainter extends CustomPainter {
   final Offset? Function() _crosshairProvider;
   final ChartPriceScale Function(double, double) _priceScaleProvider;
   final MarketQuote? Function() _sourceQuoteProvider;
+  // Live read-only-on-paint callbacks allow frequent pointer edits without
+  // rebuilding the toolbar or copying every existing drawing on each move.
+  final List<double> Function() _levelsProvider;
+  final List<ChartPattern> Function() _patternsProvider;
+  final int? Function() _selectedLineProvider;
+  final int? Function() _selectedPatternProvider;
   ChartViewport get viewport => _viewportProvider();
   Offset? get crosshair => _crosshairProvider();
   final List<double> levels;
@@ -5420,14 +5478,18 @@ class _CandleChartPainter extends CustomPainter {
       canvas.drawPath(linePath, Paint()..color = TradeColors.blue..strokeWidth = 1.6
         ..style = PaintingStyle.stroke);
     }
-    for (var index = 0; index < levels.length; index++) {
-      final levelY = y(levels[index]);
+    final paintLevels = _levelsProvider();
+    final paintPatterns = _patternsProvider();
+    final activeLine = _selectedLineProvider();
+    final activePattern = _selectedPatternProvider();
+    for (var index = 0; index < paintLevels.length; index++) {
+      final levelY = y(paintLevels[index]);
       final marker = Paint()..color = TradeColors.blue.withValues(alpha: .8)
-        ..strokeWidth = selectedLine == index ? 2.4 : 1;
+        ..strokeWidth = activeLine == index ? 2.4 : 1;
       canvas.drawLine(Offset(0, levelY), Offset(axis, levelY), marker);
     }
-    for (var index = 0; index < patterns.length; index++) {
-      final drawing = patterns[index];
+    for (var index = 0; index < paintPatterns.length; index++) {
+      final drawing = paintPatterns[index];
       // Replay is strictly prefix-only: drawings ending in the future stay
       // invisible, even if their coordinates were created in analysis mode.
       if (!drawing.visibleAt(candles.length)) continue;
@@ -5438,7 +5500,7 @@ class _CandleChartPainter extends CustomPainter {
       final y1 = y(drawing.start.price);
       final y2 = y(drawing.end.price);
       final color = Color(drawing.colorValue);
-      final selected = selectedPattern == index;
+      final selected = activePattern == index;
       final drawingPaint = Paint()
         ..color = color
         ..strokeWidth = drawing.strokeWidth + (selected ? 1 : 0)
