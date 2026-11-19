@@ -202,6 +202,85 @@ void main() {
     expect(older.scrollBars, closeTo(4.5, .001));
   });
 
+  test('time-axis drag zooms around the initial real candle, never pans it',
+      () {
+    const viewport = ChartViewport(
+      barWidth: 10, scrollBars: 38, rightMarginBars: 4);
+    const candles = 200;
+    const plotWidth = 300.0;
+    const sourceIndex = 155;
+    final anchorX = viewport.chartX(
+      index: sourceIndex, candleCount: candles, plotWidth: plotWidth);
+    expect(anchorX, closeTo(195, .000001));
+
+    final closer = viewport.dragTimeAxis(
+      deltaX: 80, anchorX: anchorX,
+      plotWidth: plotWidth, candleCount: candles);
+    expect(closer.barWidth, greaterThan(viewport.barWidth));
+    expect(closer.chartX(index: sourceIndex,
+        candleCount: candles, plotWidth: plotWidth),
+        closeTo(anchorX, 1e-7),
+        reason: 'Axis scaling keeps the actual candle under the initial touch');
+    expect(closer.indexAt(x: anchorX,
+        plotWidth: plotWidth, candleCount: candles), sourceIndex);
+
+    final wider = closer.dragTimeAxis(
+      deltaX: -80, anchorX: anchorX,
+      plotWidth: plotWidth, candleCount: candles);
+    expect(wider.barWidth, closeTo(viewport.barWidth, 1e-9));
+    expect(wider.scrollBars, closeTo(viewport.scrollBars, 1e-8));
+    expect(wider.chartX(index: sourceIndex,
+        candleCount: candles, plotWidth: plotWidth),
+        closeTo(anchorX, 1e-7));
+  });
+
+  test('time ruler scaling respects original 3–60px candle bounds',
+      () {
+    const viewport = ChartViewport(barWidth: 10, scrollBars: 80,
+      rightMarginBars: 4);
+    final close = viewport.dragTimeAxis(
+        deltaX: 9000, anchorX: 160, plotWidth: 320, candleCount: 1000);
+    expect(close.barWidth, ChartViewport.maxBarWidth);
+    final far = viewport.dragTimeAxis(
+        deltaX: -9000, anchorX: 160, plotWidth: 320, candleCount: 1000);
+    expect(far.barWidth, ChartViewport.minBarWidth);
+    for (final state in [close, far]) {
+      final (first, end) = state.visibleIndices(
+          plotWidth: 320, candleCount: 1000);
+      expect(first, inInclusiveRange(0, 1000));
+      expect(end, inInclusiveRange(first, 1000),
+          reason: 'No invented candles appear when zooming out');
+      expect(state.scrollBars, isNonNegative);
+    }
+  });
+
+  test('time-axis gestures never invent future Replay source or accept NaN',
+      () {
+    const replay = ChartViewport(barWidth: 10, rightMarginBars: 4);
+    const count = 4;
+    final wider = replay.dragTimeAxis(
+        deltaX: -100, anchorX: 200, plotWidth: 300,
+        candleCount: count);
+    expect(wider.indexAt(x: 300, plotWidth: 300, candleCount: count),
+        isNull, reason: 'Right-hand Replay whitespace is not market history');
+    final (start, end) = wider.visibleIndices(
+        plotWidth: 300, candleCount: count);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, lessThanOrEqualTo(count));
+    expect(identical(replay.dragTimeAxis(
+        deltaX: double.nan, anchorX: 150,
+        plotWidth: 300, candleCount: count), replay), isTrue);
+    expect(identical(replay.dragTimeAxis(
+        deltaX: 40, anchorX: double.infinity,
+        plotWidth: 300, candleCount: count), replay), isTrue);
+    expect(identical(replay.dragTimeAxis(
+        deltaX: 40, anchorX: 150,
+        plotWidth: double.nan, candleCount: count), replay), isTrue);
+    expect(identical(replay.dragTimeAxis(
+        deltaX: 40, anchorX: 150,
+        plotWidth: 300, candleCount: 0), replay), isTrue);
+  });
+
   test('pinch keeps the same price bar under the anchor point', () {
     const initial = ChartViewport(scrollBars: 3);
     final index = 75;
