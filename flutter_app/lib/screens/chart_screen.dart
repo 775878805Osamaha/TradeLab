@@ -15,6 +15,7 @@ import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
 import '../chart/chart_ohlc_inspector.dart';
+import '../chart/chart_crosshair_time_label.dart';
 import '../chart/chart_quick_actions.dart';
 import '../chart/chart_frame_profiler.dart';
 import '../chart/chart_text_layout_cache.dart';
@@ -4677,6 +4678,7 @@ class _ChartScreenState extends State<ChartScreen>
                 size: Size.infinite,
                 painter: _CandleChartPainter(
                   candles: candles,
+                  rangeMode: _mode == ChartMode.range,
                   timestamps: _mode == ChartMode.range
                       ? _rangeBarTimestamps : _actualTimestamps,
                   dark: Theme.of(context).brightness == Brightness.dark,
@@ -5117,6 +5119,7 @@ class _CandleChartPainter extends CustomPainter {
   _CandleChartPainter({
     required this.candles,
     required this.timestamps,
+    required this.rangeMode,
     required this.dark,
     required this.viewportSnapshot,
     required this.crosshairSnapshot,
@@ -5147,6 +5150,7 @@ class _CandleChartPainter extends CustomPainter {
 
   final List<TradeCandle> candles;
   final List<int> timestamps;
+  final bool rangeMode;
   final ChartTextLayoutCache textCache;
   final bool dark;
   // Stable build-time values are for shouldRepaint comparisons. The getters
@@ -5523,13 +5527,26 @@ class _CandleChartPainter extends CustomPainter {
           selected.index != null) {
           // This is the same REAL candle that owns the guide at selected.x.
           // The Replay list is already limited to its confirmed prefix.
-          final date = symbolSettings.timeZone.displayDate(
-              timestamps[selected.index!]);
-          final startX = (location.dx - 37).clamp(0.0, axis - 75).toDouble();
-          canvas.drawRect(Rect.fromLTWH(startX, chartHeight, 75, 20),
+          final label = ChartCrosshairTimeLabel.fromSource(
+            utcTimestampMs: timestamps[selected.index!],
+            zone: symbolSettings.timeZone,
+            rangeMode: rangeMode,
+          );
+          final painter = textCache.layout(label, Colors.white, 9);
+          final badgeWidth = ChartCrosshairTimeLabel.badgeWidth(
+            measuredTextWidth: painter.width, plotWidth: axis);
+          final startX = (location.dx - badgeWidth / 2).clamp(
+              0.0, math.max(0, axis - badgeWidth)).toDouble();
+          canvas.drawRect(Rect.fromLTWH(
+              startX, chartHeight, badgeWidth, 20),
               Paint()..color = TradeColors.blue);
-          _text(canvas, _formatUtc(date),
-              Offset(startX + 5, chartHeight + 4), Colors.white, 9);
+          // The measured width carries milliseconds for Range ticks, but
+          // the badge never paints into the right price scale.
+          canvas.save();
+          canvas.clipRect(Rect.fromLTWH(
+              startX, chartHeight, badgeWidth, 20));
+          painter.paint(canvas, Offset(startX + 5, chartHeight + 4));
+          canvas.restore();
       }
     }
     // A separate LTR price axis keeps digits and decimal points predictable in RTL.
@@ -5661,12 +5678,6 @@ class _CandleChartPainter extends CustomPainter {
     return digits == 0 ? integer : '$integer.${parts.last}';
   }
 
-  static String _formatUtc(DateTime date) =>
-      '${date.day.toString().padLeft(2, '0')}/'
-      '${date.month.toString().padLeft(2, '0')} '
-      '${date.hour.toString().padLeft(2, '0')}:'
-      '${date.minute.toString().padLeft(2, '0')}';
-
   @override
   bool shouldRepaint(covariant _CandleChartPainter old) =>
       old.candles != candles || old.timestamps != timestamps ||
@@ -5677,7 +5688,7 @@ class _CandleChartPainter extends CustomPainter {
       old.actualPriceCandles != actualPriceCandles ||
       old.previousSessionClose != previousSessionClose ||
       old.sourceQuote != sourceQuote ||
-      old.replayActive != replayActive ||
+      old.replayActive != replayActive || old.rangeMode != rangeMode ||
       old.crosshairSnapshot != crosshairSnapshot || old.indicator != indicator ||
       !listEquals(old.levels, levels) ||
       !listEquals(old.patterns, patterns) ||
