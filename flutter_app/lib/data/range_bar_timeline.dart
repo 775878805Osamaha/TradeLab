@@ -4,6 +4,16 @@ import 'market_api.dart';
 import 'range_bar_builder.dart';
 import 'tradelab_data.dart';
 
+/// One published historic BID prefix and its matching Range bar timeline.
+/// Both are produced together: the UI never sees a new tick list paired with
+/// a timeline calculated from a different Range origin.
+class RangePrependBuildResult {
+  const RangePrependBuildResult(this.ticks, this.timeline);
+
+  final List<MarketTick> ticks;
+  final RangeBarTimeline timeline;
+}
+
 /// Maps Range bars back to the exact chronological BID tick that produced
 /// them. Chart Replay can retain its last revealed *event* when older ticks
 /// are prepended, even though all Range bar indices are rebuilt.
@@ -42,6 +52,43 @@ class RangeBarTimeline {
       (ticks, priceDistance),
       debugLabel: 'tradelab-range-bars',
     );
+  }
+
+  /// Prepends a verified older BID page and rebuilds the Range origin in
+  /// one operation. For large histories both the expensive list merge and
+  /// candle generation run away from Flutter's gesture/raster UI isolate.
+  ///
+  /// The exclusive page boundary must already have been verified by the
+  /// caller. Keep that guarantee here too: a duplicate millisecond at the
+  /// boundary would silently reorder broker events and invalidate Replay.
+  static Future<RangePrependBuildResult> prependAndBuildAsync({
+    required List<MarketTick> olderTicks,
+    required List<MarketTick> currentTicks,
+    required double priceDistance,
+  }) async {
+    if (olderTicks.isEmpty || currentTicks.isEmpty ||
+        olderTicks.last.timestamp >= currentTicks.first.timestamp) {
+      throw ArgumentError('Older BID page must precede current history');
+    }
+    final request = (olderTicks, currentTicks, priceDistance);
+    if (olderTicks.length + currentTicks.length < 5000 || kIsWeb) {
+      return _prependAndBuildWorker(request);
+    }
+    return compute<(List<MarketTick>, List<MarketTick>, double),
+        RangePrependBuildResult>(
+      _prependAndBuildWorker, request,
+      debugLabel: 'tradelab-range-prepend-and-build',
+    );
+  }
+
+  static RangePrependBuildResult _prependAndBuildWorker(
+      (List<MarketTick>, List<MarketTick>, double) request) {
+    // One immutable copy is the final source archive; old UI snapshots remain
+    // untouched if a stale load finishes or a provider reuses its page buffer.
+    final combined = List<MarketTick>.unmodifiable(
+        request.$1.followedBy(request.$2));
+    final timeline = build(combined, request.$3);
+    return RangePrependBuildResult(combined, timeline);
   }
 
   static RangeBarTimeline _buildRangeTimelineWorker(
