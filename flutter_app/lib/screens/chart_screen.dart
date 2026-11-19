@@ -5388,7 +5388,7 @@ class _CandleChartPainter extends CustomPainter {
         final isWeekdayLabel =
             scaleSettings.weekdayOnLabels && isDayBoundary;
         final label = isWeekdayLabel
-            ? ChartScaleSettings.localWeekday(local)
+            ? ChartScaleSettings.weekdayForDisplayedDate(local)
             : '${hour.toString().padLeft(2, '0')}:'
               '${local.minute.toString().padLeft(2, '0')} '
               '${local.hour < 12 ? 'AM' : 'PM'}';
