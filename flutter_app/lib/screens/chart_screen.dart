@@ -5888,14 +5888,12 @@ class _CandleChartPainter extends CustomPainter {
       canvas.drawLine(from, to, paint);
       return;
     }
-    final delta = to - from;
-    final distance = delta.distance;
-    if (distance < .01) return;
-    final direction = delta / distance;
-    for (var at = 0.0; at < distance; at += 8) {
-      canvas.drawLine(from + direction * at,
-        from + direction * math.min(at + 4, distance), paint);
-    }
+    // Keep the original dash positions and lengths, but issue one canvas
+    // draw call instead of a drawLine for every 8px during pan/pinch.
+    canvas.drawPath(
+      ChartLineGeometry.configuredDashPath(from: from, to: to),
+      paint..style = PaintingStyle.stroke,
+    );
   }
 
   static String _price(double value, int digits) {
