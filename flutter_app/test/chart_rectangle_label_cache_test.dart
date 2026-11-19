@@ -166,6 +166,10 @@ void main() {
 
   testWidgets('dragging a rectangle repaints its live source anchors only',
       (tester) async {
+    // This fixture contains a 690dp chart plus a real header. Use a phone
+    // viewport rather than Flutter's smaller default 800x600 test surface.
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final candleSignal = ValueNotifier<int>(0);
     final rectangleSignal = ValueNotifier<int>(0);
     final merged = Listenable.merge([candleSignal, rectangleSignal]);
