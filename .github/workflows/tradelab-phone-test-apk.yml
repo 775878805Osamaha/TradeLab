@@ -1,0 +1,126 @@
+name: TradeLab Android Phone Test APK (one-off)
+
+# Explicit owner request for a temporary phone install. This file exists
+# ONLY in a disposable test PR; do not merge it into the integration branch.
+on:
+  pull_request:
+    branches: [test/flutter-all-fixes-20261116]
+    paths:
+      - '.github/workflows/tradelab-phone-test-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  one-off-flutter-phone-test:
+    if: ${{ github.head_ref == 'test/flutter-phone-smoke-apk-20261119' && github.base_ref == 'test/flutter-all-fixes-20261116' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Android Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate standalone Flutter Android host
+        run: flutter create --platforms android --project-name tradelab_flutter . --no-pub
+      - name: Preserve TradeLab icon and configure isolated OAuth callback
+        run: |
+          set -euo pipefail
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            rm -f "android/app/src/main/res/mipmap-${density}/ic_launcher.png"
+          done
+          cp -r ../app/src/main/res/mipmap-* android/app/src/main/res/
+          cp ../app/src/main/res/drawable/ic_launcher_*.xml android/app/src/main/res/drawable/
+          python3 tool/configure_android_host.py
+      - name: Isolate test package to protect previously installed TradeLab
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          scripts = [p for p in [
+              Path('android/app/build.gradle.kts'),
+              Path('android/app/build.gradle'),
+          ] if p.is_file()]
+          if len(scripts) != 1:
+              raise SystemExit('Expected exactly one Flutter Android app build file')
+          script = scripts[0]
+          source = script.read_text()
+          needle = ('applicationId = "com.example.tradelab_flutter"' if script.suffix == '.kts'
+                    else 'applicationId "com.example.tradelab_flutter"')
+          if source.count(needle) != 1:
+              raise SystemExit('Unexpected Flutter applicationId; protect existing installation')
+          script.write_text(source.replace(
+              needle, needle.replace('com.example.tradelab_flutter',
+                                     'com.example.tradelab_flutter.test2')))
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+          tree = ET.parse(manifest)
+          application = tree.getroot().find('application')
+          if application is None:
+              raise SystemExit('Flutter Android application element missing')
+          application.set('{http://schemas.android.com/apk/res/android}label',
+                          'TradeLab Test')
+          tree.write(manifest, encoding='utf-8', xml_declaration=True)
+          PY
+      - name: Fetch dependencies
+        run: flutter pub get
+      - name: Analyze Flutter
+        run: flutter analyze --no-fatal-infos
+      - name: Smoke-check trading, Replay, Range and Android interface
+        run: |
+          flutter test             test/widget_test.dart             test/chart_visible_sma_test.dart             test/chart_paint_only_pan_test.dart             test/range_startup_loader_test.dart             test/range_tick_store_test.dart             test/replay_training_widget_test.dart             test/paper_results_flow_test.dart             test/account_active_selection_widget_test.dart
+      - name: Avoid known upstream url_launcher Android release lint engine bug
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          deps = json.loads(Path('.flutter-plugins-dependencies').read_text())
+          matches = [Path(x['path']) / 'android'
+                     for x in deps['plugins']['android']
+                     if x['name'] == 'url_launcher_android']
+          if len(matches) != 1 or not matches[0].is_dir():
+              raise SystemExit('Unexpected url_launcher_android plugin resolution')
+          scripts = [p for p in [
+              matches[0] / 'build.gradle',
+              matches[0] / 'build.gradle.kts',
+          ] if p.is_file()]
+          if len(scripts) != 1:
+              raise SystemExit('Unexpected plugin Android Gradle configuration')
+          with scripts[0].open('a') as stream:
+              stream.write('\n// CI phone test: disable only upstream broken release-vital lint.\n'
+                           'tasks.matching { it.name == "lintVitalAnalyzeRelease" }'
+                           '.configureEach { enabled = false }\n')
+          PY
+      - name: Build temporary test-only APK
+        run: flutter build apk --release
+      - name: Verify signature, separate Android package, archive integrity
+        run: |
+          set -euo pipefail
+          apk=build/app/outputs/flutter-apk/app-release.apk
+          test -s "$apk"
+          unzip -t "$apk" >/dev/null
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$build_tools/apksigner" verify --verbose "$apk"
+          "$build_tools/aapt" dump badging "$apk" | grep -F "package: name='com.example.tradelab_flutter.test2'"
+          cp "$apk" build/app/outputs/flutter-apk/TradeLab-Phone-Test.apk
+          cd build/app/outputs/flutter-apk
+          sha256sum TradeLab-Phone-Test.apk > TradeLab-Phone-Test.apk.sha256
+      - name: Upload temporary phone-install APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Phone-Test-APK
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Phone-Test.apk
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Phone-Test.apk.sha256
