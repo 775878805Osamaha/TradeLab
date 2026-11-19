@@ -5888,14 +5888,11 @@ class _CandleChartPainter extends CustomPainter {
       canvas.drawLine(from, to, paint);
       return;
     }
-    final delta = to - from;
-    final distance = delta.distance;
-    if (distance < .01) return;
-    final direction = delta / distance;
-    for (var at = 0.0; at < distance; at += 8) {
-      canvas.drawLine(from + direction * at,
-        from + direction * math.min(at + 4, distance), paint);
-    }
+    // Preserve the existing 4px dash / 8px period, but raster the path
+    // with one canvas call instead of allocating dozens of line strokes
+    // during every crosshair/pan frame.
+    canvas.drawPath(ChartLineGeometry.configuredDashPath(
+      from: from, to: to), paint);
   }
 
   static String _price(double value, int digits) {
