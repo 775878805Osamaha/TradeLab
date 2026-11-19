@@ -129,4 +129,66 @@ void main() {
     expect(normal.textDirection, TextDirection.ltr);
     expect(normal.maxLines, 1);
   });
+
+  test('time-axis labels reuse measured Arabic and LTR timestamps', () {
+    final cache = ChartTextLayoutCache();
+    addTearDown(cache.clear);
+    final arabic = cache.layout('الخميس', Colors.black, 11, rtl: true);
+    final repeated = cache.layout('الخميس', Colors.black, 11, rtl: true);
+    final utc = cache.layout('07:25 PM', Colors.black, 11);
+    final changedColor = cache.layout('الخميس', Colors.white, 11, rtl: true);
+    expect(identical(arabic, repeated), isTrue);
+    expect(arabic.textDirection, TextDirection.rtl);
+    expect(utc.textDirection, TextDirection.ltr);
+    expect(identical(arabic, changedColor), isFalse);
+    expect((arabic.text! as TextSpan).style!.fontWeight, FontWeight.w500);
+    expect(arabic.maxLines, 1);
+    expect(cache.length, 3);
+  });
+
+  test('bounded timezone labels reuse exact measured width and RTL', () {
+    final cache = ChartTextLayoutCache(axisCapacity: 2);
+    final zone = cache.layoutBoundedAxis(
+        'New York (UTC-5)', Colors.white, 9, maxWidth: 83);
+    final same = cache.layoutBoundedAxis(
+        'New York (UTC-5)', Colors.white, 9, maxWidth: 83);
+    final narrower = cache.layoutBoundedAxis(
+        'New York (UTC-5)', Colors.white, 9, maxWidth: 63);
+    expect(identical(zone, same), isTrue);
+    expect(zone.width, lessThanOrEqualTo(83));
+    expect(narrower.width, lessThanOrEqualTo(63));
+    expect(identical(zone, narrower), isFalse);
+    expect(zone.maxLines, 1);
+    expect(zone.ellipsis, '…');
+    expect(zone.textDirection, TextDirection.rtl);
+    expect((zone.text! as TextSpan).style!.fontWeight, FontWeight.w500);
+    expect(cache.axisLength, 2);
+    // Refresh first key; eviction must release only the old width.
+    expect(identical(zone, cache.layoutBoundedAxis(
+        'New York (UTC-5)', Colors.white, 9, maxWidth: 83)), isTrue);
+    final darkZone = cache.layoutBoundedAxis(
+        'New York (UTC-5)', Colors.black, 9, maxWidth: 83);
+    expect(narrower.debugDisposed, isTrue);
+    expect(zone.debugDisposed, isFalse);
+    expect(darkZone.debugDisposed, isFalse);
+    cache.clear();
+    expect(cache.axisLength, 0);
+    expect(zone.debugDisposed, isTrue);
+    expect(darkZone.debugDisposed, isTrue);
+  });
+
+  test('bounded timezone does not accept invalid dimensions or capacity', () {
+    expect(() => ChartTextLayoutCache(axisCapacity: 0), throwsArgumentError);
+    final cache = ChartTextLayoutCache();
+    addTearDown(cache.clear);
+    expect(() => cache.layoutBoundedAxis(
+        'UTC', Colors.black, 9, maxWidth: 0), throwsArgumentError);
+    expect(() => cache.layoutBoundedAxis(
+        'UTC', Colors.black, 9, maxWidth: double.nan),
+        throwsArgumentError);
+    expect(() => cache.layoutBoundedAxis(
+        'UTC', Colors.black, 9, maxWidth: double.infinity),
+        throwsArgumentError);
+    expect(cache.axisLength, 0);
+  });
 }
