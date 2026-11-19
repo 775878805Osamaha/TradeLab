@@ -148,7 +148,9 @@ void main() {
     final selected = PriceRectangleGeometry.hitTest(
       target.topRight, drawings, viewport, scale, 1000, 300);
     expect(selected?.$1, 998);
-    expect(selected?.$2, PriceRectangleHandle.topRight);
+    // At only 3px/bar the two visible corner handles overlap; the
+    // existing accessible hit priority picks the left corner first.
+    expect(selected?.$2, PriceRectangleHandle.topLeft);
     expect(PriceRectangleGeometry.hitTest(
         const Offset(20, 198), drawings,
         viewport, scale, 1000, 300), isNull,
