@@ -529,15 +529,12 @@ class RangeTickStore {
              (row['sequence_no'] as num).toInt()):
                 (row['bid'] as num).toDouble(),
         };
-        var checkTime = offset == 0 ? -1 : ticks[offset - 1].timestamp;
-        var checkOrdinal = offset == 0 ? -1 : 0;
-        if (offset > 0) {
-          var index = offset - 1;
-          while (index > 0 && ticks[index - 1].timestamp == checkTime) {
-            checkOrdinal++;
-            index--;
-          }
-        }
+        // The batch writer already computed the precise first ordinal.
+        // Starting a second check cursor from that boundary avoids scanning
+        // every earlier BID event with the same millisecond for each 500-row
+        // batch (quadratic work on dense real broker tick groups).
+        var checkTime = firstTimestamp;
+        var checkOrdinal = firstSequence - 1;
         for (var i = offset; i < end; i++) {
           final tick = ticks[i];
           if (tick.timestamp != checkTime) {

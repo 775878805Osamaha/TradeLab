@@ -372,6 +372,49 @@ void main() {
     expect(full.last.bid, 2210);
   });
 
+  test('dense BID millisecond ordinals stay exact over many 500-tick batches',
+      () async {
+    final start = DateTime.utc(2025, 9, 3).millisecondsSinceEpoch;
+    const account = 'dense-source-bid-account';
+    final dense = List<MarketTick>.generate(3607,
+      (index) => MarketTick(start + 100, 2000 + index / 10000));
+    final page = <MarketTick>[
+      MarketTick(start + 50, 1999),
+      ...dense,
+      MarketTick(start + 150, 2100),
+      MarketTick(start + 150, 2101),
+      MarketTick(start + 200, 2200),
+    ];
+    expect(await RangeTickStore.appendHistorical(
+      account, 'XAUUSD', page), page.length);
+
+    final stored = await RangeTickStore.readHistoricalPage(
+      account, 'XAUUSD', beforeMs: start + 201, limit: 5000);
+    expect(stored, hasLength(page.length));
+    expect(stored.first.sequence, 0);
+    expect(stored.first.tick.bid, 1999);
+    for (var i = 0; i < dense.length; i++) {
+      final actual = stored[i + 1];
+      expect(actual.tick.timestamp, start + 100);
+      expect(actual.sequence, i,
+          reason: 'A 500-row boundary must not change broker event ordinal');
+      expect(actual.tick.bid, dense[i].bid);
+    }
+    expect(stored[dense.length + 1].sequence, 0);
+    expect(stored[dense.length + 2].sequence, 1);
+    expect(stored.last.sequence, 0);
+
+    // Re-archive exactly the same cTrader source events. All 3611
+    // composite keys and prices must match; no duplicate market BID ticks.
+    expect(await RangeTickStore.appendHistorical(
+      account, 'XAUUSD', page), 0);
+    final replayed = await RangeTickStore.readHistoricalPage(
+      account, 'XAUUSD', beforeMs: start + 201, limit: 5000);
+    expect(replayed, hasLength(page.length));
+    expect(replayed[dense.length].sequence, dense.length - 1);
+    expect(replayed.last.tick.bid, 2200);
+  });
+
   test('sorted overlap count scan tolerates gaps but rejects partial ms',
       () async {
     final start = DateTime.utc(2025, 9, 2).millisecondsSinceEpoch;
