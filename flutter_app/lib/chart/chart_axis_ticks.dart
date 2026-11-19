@@ -31,6 +31,28 @@ class ChartAxisTicks {
     }
   }
 
-  static int decimals(double interval) => interval >= 1 ? 2
-      : interval >= .01 ? 3 : interval >= .0001 ? 5 : 7;
+  /// Enough decimals to distinguish adjacent REAL major price ticks.
+  ///
+  /// A manual TradingView-style vertical ruler zoom can produce forex steps
+  /// below 0.0000001. The old hard seven-decimal limit made different price
+  /// labels render identically even though their candle y coordinates differed.
+  /// Do not round or alter the underlying broker prices; this is display only.
+  /// The historical default precision remains unchanged for ordinary ranges.
+  static int decimals(double interval) {
+    if (!interval.isFinite || interval <= 0) return 7;
+    if (interval >= 1) return 2;
+    if (interval >= .01) return 3;
+    if (interval >= .0001) return 5;
+    if (interval >= .000001) return 7;
+
+    // Preserve up to 12 decimal places at extreme zoom. Checking for an
+    // integer scaled step also handles non-power-of-ten multiples such as
+    // 0.00000025, which needs eight rather than seven digits.
+    var scaled = interval * 1e7;
+    for (var digits = 7; digits <= 12; digits++) {
+      if ((scaled - scaled.roundToDouble()).abs() <= 1e-7) return digits;
+      scaled *= 10;
+    }
+    return 12;
+  }
 }
