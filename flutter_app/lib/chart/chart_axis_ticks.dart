@@ -49,6 +49,7 @@ class ChartAxisTicks {
     // integer scaled step also handles non-power-of-ten multiples such as
     // 0.00000025, which needs eight rather than seven digits.
     var scaled = interval * 1e7;
+    if (scaled < 1e-7) return 12;
     for (var digits = 7; digits <= 12; digits++) {
       if ((scaled - scaled.roundToDouble()).abs() <= 1e-7) return digits;
       scaled *= 10;
