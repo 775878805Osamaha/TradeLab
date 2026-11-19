@@ -535,6 +535,7 @@ class _ChartScreenState extends State<ChartScreen>
       crosshairVisible: _crosshair != null,
       movingDrawing: false,
       visiblePriceRectangles: _drawingsVisible && _rectangles.isNotEmpty,
+      priceRectanglesFollowViewport: true,
       replayTradeLevelsVisible: _replay && _training.trades.isNotEmpty,
       replayTradeLevelsFollowViewport: true,
     )) {
@@ -4236,6 +4237,7 @@ class _ChartScreenState extends State<ChartScreen>
                 crosshairVisible: _crosshair != null,
                 movingDrawing: movingDrawing,
                 visiblePriceRectangles: _drawingsVisible && _rectangles.isNotEmpty,
+                priceRectanglesFollowViewport: true,
                 replayTradeLevelsVisible: _replay && _training.trades.isNotEmpty,
                 replayTradeLevelsFollowViewport: true,
               )) {
@@ -4607,6 +4609,12 @@ class _ChartScreenState extends State<ChartScreen>
                   selectedIndex: _drawing ? _selectedRectangle : null,
                   viewport: _viewport,
                   scale: _priceScale(candles, plotWidth, constraints.maxHeight),
+                  // Keep selected handles, prices and UTC time attached to
+                  // the same moving viewport as the candle chart.
+                  viewportProvider: () => _viewport,
+                  scaleProvider: () => _priceScale(
+                      candles, plotWidth, constraints.maxHeight),
+                  repaint: _chartRepaint,
                   candleCount: candles.length,
                   plotWidth: plotWidth,
                   dark: Theme.of(context).brightness == Brightness.dark,

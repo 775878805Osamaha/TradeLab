@@ -133,12 +133,25 @@ class ChartPriceRectanglePainter extends CustomPainter {
   ChartPriceRectanglePainter({required this.drawings,
     required this.selectedIndex, required this.viewport, required this.scale,
     required this.candleCount, required this.plotWidth, required this.dark,
-    this.timestamps = const [], this.textCache});
+    this.timestamps = const [], this.textCache,
+    ChartViewport Function()? viewportProvider,
+    ChartPriceScale Function()? scaleProvider,
+    Listenable? repaint,
+  }) : _viewportProvider = viewportProvider,
+       _scaleProvider = scaleProvider,
+       super(repaint: repaint);
 
   final List<ChartPriceRectangle> drawings;
   final int? selectedIndex;
   final ChartViewport viewport;
   final ChartPriceScale scale;
+  // The chart's painter already reads a live viewport during touch updates.
+  // Use the same source for rectangle handles and time/price labels; a
+  // standalone painter can still use its immutable snapshots.
+  final ChartViewport Function()? _viewportProvider;
+  final ChartPriceScale Function()? _scaleProvider;
+  ChartViewport get currentViewport => _viewportProvider?.call() ?? viewport;
+  ChartPriceScale get currentScale => _scaleProvider?.call() ?? scale;
   final int candleCount;
   final double plotWidth;
   final bool dark;
@@ -150,6 +163,8 @@ class ChartPriceRectanglePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (candleCount == 0 || size.height < 30 || plotWidth <= 0) return;
+    final viewport = currentViewport;
+    final scale = currentScale;
     final chartHeight = scale.height;
     for (var i = 0; i < drawings.length; i++) {
       final drawing = drawings[i];
@@ -189,16 +204,17 @@ class ChartPriceRectanglePainter extends CustomPainter {
       }
       canvas.restore();
       if (selectedIndex == i) {
-        _priceTag(canvas, drawing.upper, scale.y(drawing.upper), size);
-        _priceTag(canvas, drawing.lower, scale.y(drawing.lower), size);
+        _priceTag(canvas, drawing.upper, scale.y(drawing.upper), size, scale);
+        _priceTag(canvas, drawing.lower, scale.y(drawing.lower), size, scale);
         if (timestamps.length >= candleCount) {
-          _timeTag(canvas, drawing.endIndex, area.center.dx, size);
+          _timeTag(canvas, drawing.endIndex, area.center.dx, size, scale);
         }
       }
     }
   }
 
-  void _timeTag(Canvas canvas, int index, double atX, Size size) {
+  void _timeTag(Canvas canvas, int index, double atX, Size size,
+      ChartPriceScale scale) {
     if (index < 0 || index >= timestamps.length) return;
     final time = DateTime.fromMillisecondsSinceEpoch(
         timestamps[index], isUtc: true);
@@ -222,7 +238,8 @@ class ChartPriceRectanglePainter extends CustomPainter {
     if (textCache == null) painter.dispose();
   }
 
-  void _priceTag(Canvas canvas, double value, double y, Size size) {
+  void _priceTag(Canvas canvas, double value, double y, Size size,
+      ChartPriceScale scale) {
     if (y < 0 || y > scale.height) return;
     final span = scale.maximum - scale.minimum;
     final decimals = span < .05 ? 5 : span < 1 ? 4 : span < 20 ? 2 : 1;
