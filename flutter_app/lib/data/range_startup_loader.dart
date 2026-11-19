@@ -80,11 +80,14 @@ class RangeStartupLoader {
         }
         continue;
       }
-      combined = <MarketTick>[...page, ...combined];
+      // Construct the immutable BID archive in one allocation. The prior
+      // spread list followed by List.unmodifiable copied the entire growing
+      // history twice on every nonempty startup page (up to 1m ticks).
+      // Earlier published snapshots must never change when older BID arrives.
+      combined = List<MarketTick>.unmodifiable(page.followedBy(combined));
       final timeline = await RangeBarTimeline.buildAsync(
           combined, priceDistance);
-      latest = RangeStartupSnapshot(
-          fromMs, endMs, List<MarketTick>.unmodifiable(combined), timeline);
+      latest = RangeStartupSnapshot(fromMs, endMs, combined, timeline);
       await onSnapshot(latest);
       lastNotifiedFromMs = fromMs;
       if (latest.closedBars >= minimumClosedBars) break;
