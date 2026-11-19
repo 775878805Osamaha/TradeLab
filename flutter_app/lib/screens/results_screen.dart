@@ -28,6 +28,10 @@ class _ResultsScreenState extends State<ResultsScreen> {
   DateTimeRange? _customRange;
   int? _selectedCurvePoint;
   final Set<int> _closingIds = {};
+  static const int _journalPageSize = 25;
+  int _visibleJournalTrades = _journalPageSize;
+  final ScrollController _resultsScroll = ScrollController();
+  String? _journalAccountKey;
 
   static const _pages = [
     'نظرة عامة', 'المنحنيات البيانية', 'يوميات الصفقات',
@@ -53,6 +57,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     super.initState();
     widget.controller.addListener(_onAccountChange);
     widget.journal?.addListener(_onAccountChange);
+    _journalAccountKey = widget.journal?.accountKey;
   }
 
   @override
@@ -65,17 +70,43 @@ class _ResultsScreenState extends State<ResultsScreen> {
     if (oldWidget.journal != widget.journal) {
       oldWidget.journal?.removeListener(_onAccountChange);
       widget.journal?.addListener(_onAccountChange);
+      _journalAccountKey = widget.journal?.accountKey;
+      _visibleJournalTrades = _journalPageSize;
+      _selectedCurvePoint = null;
     }
   }
 
   void _onAccountChange() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // Price/quote notifications must not reset the user's journal page.
+    // A genuine ledger account switch must not reuse another account's
+    // pagination or a selected historical balance-curve point.
+    final key = widget.journal?.accountKey;
+    if (key != _journalAccountKey) {
+      _journalAccountKey = key;
+      _visibleJournalTrades = _journalPageSize;
+      _selectedCurvePoint = null;
+    }
+    setState(() {});
+  }
+
+  void _selectPage(int index) {
+    if (index == _page) return;
+    setState(() {
+      _page = index;
+      _selectedCurvePoint = null;
+      _visibleJournalTrades = _journalPageSize;
+    });
+    // Replacing the overview with a shorter tab must never leave the user
+    // stranded at the previous tab's deep scroll offset.
+    if (_resultsScroll.hasClients) _resultsScroll.jumpTo(0);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onAccountChange);
     widget.journal?.removeListener(_onAccountChange);
+    _resultsScroll.dispose();
     super.dispose();
   }
 
@@ -176,7 +207,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                     label: Text(_pages[i]),
                     selected: _page == i,
                     showCheckmark: false,
-                    onSelected: (_) => setState(() => _page = i),
+                    onSelected: (_) => _selectPage(i),
                     labelStyle: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -186,6 +217,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
       ),
       const Divider(height: 1),
       Expanded(child: ListView(
+        controller: _resultsScroll,
         key: const Key('results-dashboard-list'),
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 26),
         children: [
@@ -203,6 +235,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   setState(() {
                     _period = value;
                     _selectedCurvePoint = null;
+                    _visibleJournalTrades = _journalPageSize;
                   });
                 }
               },
@@ -759,6 +792,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
       _customRange = dates;
       _period = 'مخصص';
       _selectedCurvePoint = null;
+      _visibleJournalTrades = _journalPageSize;
     });
   }
 }
