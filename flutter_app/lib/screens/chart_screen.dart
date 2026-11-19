@@ -561,6 +561,8 @@ class _ChartScreenState extends State<ChartScreen>
   void _prefetchOlderAtEdge(double plotWidth, int count) {
     if (!_liveRequested || _loading || _olderLoading ||
         _rangeAutoFilling || _historyExhausted ||
+        (_mode == ChartMode.range &&
+            _rangeHistoryTicks.length >= RangeOlderPage.maxLoadedTicks) ||
         _olderLoadError != null || count <= 0 ||
         _viewport.scrollBars <= count - plotWidth / _viewport.barWidth - 25) {
       return;
@@ -1021,7 +1023,8 @@ class _ChartScreenState extends State<ChartScreen>
     }
     if (_olderLoading || _loading || _historyExhausted ||
         !_liveRequested || _mode != ChartMode.range ||
-        _rangeHistoryTicks.isEmpty ||
+        (_rangeHistoryTicks.isEmpty ||
+            _rangeHistoryTicks.length >= RangeOlderPage.maxLoadedTicks) ||
         widget.controller.accountId == null) return;
     final revision = _loadRevision;
     final account = widget.controller.accountId!;
@@ -2611,6 +2614,7 @@ class _ChartScreenState extends State<ChartScreen>
       connected: widget.controller.ctraderConnected && _rangeSourceSupported,
       hasAccount: widget.controller.accountId != null,
       hasVerifiedTicks: bidTickCount > 0,
+      loadedTicks: bidTickCount,
       chartActive: widget.active,
       initialLoading: _loading,
       olderLoading: _olderLoading,
@@ -2659,6 +2663,12 @@ class _ChartScreenState extends State<ChartScreen>
                   if (_rangeAutoFilling)
                     const Text('جارٍ البحث عن تاريخ BID أقدم ضمن حدود '
                       'التحميل التلقائي الآمنة.',
+                      textDirection: TextDirection.rtl),
+                  if (bidTickCount >= RangeOlderPage.maxLoadedTicks)
+                    const Text('تم الوصول إلى الحد الآمن للتيكات '
+                      'المحمّلة في ذاكرة الشارت (مليون BID). '
+                      'هذا ليس نهاية التاريخ المتاح لدى الوسيط، '
+                      'لكن تحميل المزيد يحتاج إدارة ذاكرة مختلفة.',
                       textDirection: TextDirection.rtl),
                 ],
               ),
