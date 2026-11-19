@@ -1,11 +1,88 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/chart_price_rectangle.dart';
+import 'package:tradelab_flutter/chart/chart_symbol_settings.dart';
 import 'package:tradelab_flutter/chart/chart_viewport.dart';
 
 void main() {
   const rectangle = ChartPriceRectangle(
     startIndex: 82, endIndex: 94, upper: 114, lower: 104);
+
+  test('rectangle time tag shares chart selected UTC / NY / device zone', () {
+    final winter = DateTime.utc(2026, 11, 19, 2, 30)
+        .millisecondsSinceEpoch;
+    final summer = DateTime.utc(2026, 7, 15, 2, 30)
+        .millisecondsSinceEpoch;
+    expect(ChartRectangleTimeLabel.fromSource(winter, ChartTimeZone.utc),
+        '19/11 02:30 UTC');
+    expect(ChartRectangleTimeLabel.fromSource(
+        winter, ChartTimeZone.newYork),
+        '18/11 21:30 NY UTC-5');
+    expect(ChartRectangleTimeLabel.fromSource(
+        summer, ChartTimeZone.newYork),
+        '14/07 22:30 NY UTC-4',
+        reason: 'Real source instant gets the correct historical DST offset');
+
+    final deviceDate = ChartTimeZone.device.displayDate(winter);
+    String two(int value) => value.toString().padLeft(2, '0');
+    expect(ChartRectangleTimeLabel.fromSource(
+        winter, ChartTimeZone.device),
+        '${two(deviceDate.day)}/${two(deviceDate.month)} '
+        '${two(deviceDate.hour)}:${two(deviceDate.minute)} LOCAL');
+    expect(ChartRectangleTimeLabel.fromSource(
+        winter, ChartTimeZone.utc),
+        isNot(ChartRectangleTimeLabel.fromSource(
+            winter, ChartTimeZone.newYork)),
+        reason: 'Changing chart display zone must change annotation labels');
+  });
+
+  test('offscreen rectangle painter culls thousands of vertical annotations',
+      () {
+    const viewport = ChartViewport(barWidth: 3);
+    const scale = ChartPriceScale(100, 120, 200);
+    const plotWidth = 259.0;
+    final oldDrawings = List<ChartPriceRectangle>.generate(
+      999, (i) => ChartPriceRectangle(
+          startIndex: 940, endIndex: 980, upper: 145 + i.toDouble(),
+          lower: 130 + i.toDouble()));
+    final active = <ChartPriceRectangle>[
+      ...oldDrawings,
+      const ChartPriceRectangle(
+          startIndex: 940, endIndex: 980, upper: 115, lower: 105),
+    ];
+    var painted = 0;
+    for (var i = 0; i < active.length; i++) {
+      final r = PriceRectangleGeometry.rect(
+          active[i], viewport, scale, 1000, plotWidth);
+      if (PriceRectangleGeometry.visibleInPlot(
+          r, plotWidth, scale.height, selected: i == active.length - 1)) {
+        painted++;
+      }
+    }
+    expect(painted, 1,
+        reason: '999 entirely above-price-range rectangles must not '
+            'allocate clipped canvas layers every touch frame');
+    expect(PriceRectangleGeometry.visibleInPlot(
+        const Rect.fromLTRB(0, -20, 80, -5), 259, 200), isFalse);
+    expect(PriceRectangleGeometry.visibleInPlot(
+        const Rect.fromLTRB(0, -20, 80, -5), 259, 200,
+        selected: true), isTrue,
+        reason: 'Selected 11.5px circular handle is still partially visible');
+    expect(PriceRectangleGeometry.visibleInPlot(
+        const Rect.fromLTRB(0, -30, 80, -12), 259, 200,
+        selected: true), isFalse);
+    expect(PriceRectangleGeometry.visibleInPlot(
+        const Rect.fromLTRB(0, 205, 80, 220), 259, 200,
+        selected: true), isTrue);
+    expect(PriceRectangleGeometry.visibleInPlot(
+        const Rect.fromLTRB(0, 212, 80, 230), 259, 200,
+        selected: true), isFalse);
+    expect(PriceRectangleGeometry.visibleInPlot(
+        const Rect.fromLTRB(double.nan, 10, 80, 100), 259, 200),
+        isFalse);
+    expect(PriceRectangleGeometry.visibleInPlot(
+        const Rect.fromLTRB(0, 10, 80, 100), 0, 200), isFalse);
+  });
 
   test('eight independent handles match screenshot geometry', () {
     final handles = PriceRectangleGeometry.handles(
