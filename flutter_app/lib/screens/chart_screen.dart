@@ -100,6 +100,11 @@ class _ChartScreenState extends State<ChartScreen>
     with SingleTickerProviderStateMixin {
   // Normal pan/fling and crosshair frames invalidate only the candle canvas.
   final ValueNotifier<int> _chartRepaint = ValueNotifier<int>(0);
+  // Rectangle drags repaint an independent layer, not all candles and UI.
+  final ValueNotifier<int> _rectangleRepaint = ValueNotifier<int>(0);
+  late final Listenable _rectanglePaintSignals = Listenable.merge([
+    _chartRepaint, _rectangleRepaint,
+  ]);
   final ChartTextLayoutCache _chartTextCache = ChartTextLayoutCache();
 
   // Session-only BID tick cache: switching Range size rebuilds locally.
@@ -1485,6 +1490,7 @@ class _ChartScreenState extends State<ChartScreen>
     _closedCandleTimer?.cancel();
     _momentum.dispose();
     _chartRepaint.dispose();
+    _rectangleRepaint.dispose();
     _chartTextCache.clear();
     super.dispose();
   }
@@ -4353,6 +4359,8 @@ class _ChartScreenState extends State<ChartScreen>
                 _draggingPattern = false;
                 _draggedEndpoint = null;
               }
+              // Reveal toolbar/handles once; touch updates avoid full rebuilds.
+              if (_draggingRectangle) setState(() {});
             },
             onScaleUpdate: (details) {
               if (_draggingTimeAxis && details.pointerCount == 1) {
@@ -4414,6 +4422,16 @@ class _ChartScreenState extends State<ChartScreen>
                 }
                 // Let two-finger pinch take over, with the touch rebased.
                 _replayDraggingStart = false;
+              }
+              if (_draggingRectangle && details.pointerCount == 1) {
+                final scale = _priceScale(
+                    candles, plotWidth, constraints.maxHeight);
+                _updateRectangleDrag(details.localFocalPoint,
+                    scale, plotWidth, candles.length);
+                // Current coordinates are read from the live drawing list.
+                // Do not invalidate the candle canvas or header each frame.
+                _rectangleRepaint.value++;
+                return;
               }
               final nextViewport = _touchGesture.update(
                 viewport: _viewport,
@@ -4515,6 +4533,7 @@ class _ChartScreenState extends State<ChartScreen>
                 setState(() {});
                 return;
               }
+              final rectangleEdited = _draggingRectangle;
               final editing = _replayDraggingStart || _draggingLine ||
                   _draggingPattern ||
                   _draggingShortHandle != null || _draggingRectangle;
@@ -4538,6 +4557,7 @@ class _ChartScreenState extends State<ChartScreen>
                   reducedMotion: MediaQuery.disableAnimationsOf(context))) {
                 _startMomentum(velocity, plotWidth);
               }
+              if (rectangleEdited && mounted) setState(() {});
             },
             onDoubleTapDown: (details) =>
                 _doubleTapChartX = details.localPosition.dx,
@@ -4834,6 +4854,7 @@ class _ChartScreenState extends State<ChartScreen>
                 painter: ChartPriceRectanglePainter(
                   textCache: _chartTextCache,
                   drawings: List<ChartPriceRectangle>.unmodifiable(_rectangles),
+                  drawingsProvider: () => _rectangles,
                   selectedIndex: _drawing ? _selectedRectangle : null,
                   viewport: _viewport,
                   scale: _priceScale(candles, plotWidth, constraints.maxHeight),
@@ -4842,7 +4863,7 @@ class _ChartScreenState extends State<ChartScreen>
                   viewportProvider: () => _viewport,
                   scaleProvider: () => _priceScale(
                       candles, plotWidth, constraints.maxHeight),
-                  repaint: _chartRepaint,
+                  repaint: _rectanglePaintSignals,
                   candleCount: candles.length,
                   plotWidth: plotWidth,
                   dark: Theme.of(context).brightness == Brightness.dark,
