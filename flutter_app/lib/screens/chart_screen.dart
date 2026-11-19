@@ -2903,7 +2903,7 @@ class _ChartScreenState extends State<ChartScreen>
   /// broker data, user credentials, or editable drawing collections.
   @visibleForTesting
   ({bool drawing, bool visible, bool locked, int levels, int patterns,
-      int undo, int tapHits, int scaleStarts, Offset? lastTap, int sourceBars})
+      int undo, int tapHits, int scaleStarts, bool dragLine, bool dragPattern, bool panelTouched, Offset? lastTap, int sourceBars})
       get debugGuideState => (
         drawing: _drawing,
         visible: _drawingsVisible,
@@ -2913,6 +2913,9 @@ class _ChartScreenState extends State<ChartScreen>
         undo: _lineUndo.length,
         tapHits: _debugChartTapHits,
         scaleStarts: _debugScaleStarts,
+        dragLine: _draggingLine,
+        dragPattern: _draggingPattern,
+        panelTouched: _panelChartTouched,
         lastTap: _debugLastChartTap,
         sourceBars: _displayCandles.length,
       );
