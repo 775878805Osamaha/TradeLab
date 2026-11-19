@@ -27,6 +27,11 @@ class AccountScreen extends StatelessWidget {
   Widget _content(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final linked = controller.ctraderConnected;
+    // Read the authenticated broker's actual active account, never infer
+    // Live/Demo status from an account number or the presence of a token.
+    final activeAccounts = controller.accounts.where(
+        (account) => account.id == controller.accountId);
+    final activeAccount = activeAccounts.isEmpty ? null : activeAccounts.first;
     return ListView(
       key: const Key('account-dashboard-list'),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
@@ -90,7 +95,33 @@ class AccountScreen extends StatelessWidget {
                 icon: Icons.currency_bitcoin,
                 color: const Color(0xFFE8EFFF),
               ),
+              if (linked && activeAccount != null)
+                TradeDashboardPill(
+                  label: activeAccount.isLive
+                      ? 'حساب حقيقي · قراءة فقط' : 'حساب تجريبي · قراءة فقط',
+                  icon: activeAccount.isLive
+                      ? Icons.verified_user_outlined : Icons.science_outlined,
+                  color: const Color(0xFFE8EFFF),
+                ),
             ]),
+            if (!linked) ...[
+              const SizedBox(height: 12),
+              SizedBox(width: double.infinity,
+                child: FilledButton.icon(
+                  key: const Key('ctrader-connect'),
+                  onPressed: controller.busy
+                      ? null : controller.connectCTrader,
+                  icon: const Icon(Icons.link_rounded, size: 19),
+                  label: const Text('ربط حساب cTrader للقراءة فقط',
+                    textAlign: TextAlign.center),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 46),
+                    foregroundColor: const Color(0xFF173D75),
+                    backgroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ]),
         ),
         const SizedBox(height: 16),
@@ -123,42 +154,43 @@ class AccountScreen extends StatelessWidget {
             style: TextStyle(color: scheme.error, fontSize: 12)),
           const SizedBox(height: 10),
         ],
-        if (!linked)
-          FilledButton.icon(
-            key: const Key('ctrader-connect'),
-            onPressed: controller.busy ? null : controller.connectCTrader,
-            icon: const Icon(Icons.link_rounded),
-            label: const Text('ربط حساب cTrader للقراءة فقط'),
-            style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-          ),
         if (linked) ...[
           TradeDashboardPanel(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('الحساب النشط لدى الوسيط',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                key: const Key('ctrader-account-selector'),
-                isExpanded: true,
-                initialValue: controller.accountId,
-                decoration: const InputDecoration(
-                  labelText: 'حساب وسيط cTrader',
-                  prefixIcon: Icon(Icons.account_balance_outlined)),
-                items: controller.accounts.map((account) => DropdownMenuItem(
-                  value: account.id,
-                  child: Text(
-                    '${account.broker} · ${account.id} ${account.isLive ? '(Live)' : '(Demo)'}',
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    textDirection: TextDirection.ltr),
-                )).toList(),
-                onChanged: (value) {
-                  if (value != null) controller.chooseAccount(value);
-                },
+              // Flutter's FormField keeps its initialValue internally.
+              // Recreate only the field state when an account changes
+              // elsewhere (including A -> B -> A), while retaining its
+              // stable public test/accessibility key.
+              KeyedSubtree(
+                key: ValueKey('active-ctrader-account-${controller.accountId}'),
+                child: DropdownButtonFormField<String>(
+                  key: const Key('ctrader-account-selector'),
+                  isExpanded: true,
+                  initialValue: controller.accountId,
+                  decoration: const InputDecoration(
+                    labelText: 'حساب وسيط cTrader',
+                    prefixIcon: Icon(Icons.account_balance_outlined)),
+                  items: controller.accounts.map((account) => DropdownMenuItem(
+                    value: account.id,
+                    child: Text(
+                      '${account.broker} · ${account.id} ${account.isLive ? '(Live)' : '(Demo)'}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      textDirection: TextDirection.ltr),
+                  )).toList(),
+                  onChanged: controller.busy ? null : (value) {
+                    if (value != null && value != controller.accountId) {
+                      controller.chooseAccount(value);
+                    }
+                  },
+                ),
               ),
               Align(
                 alignment: AlignmentDirectional.centerEnd,
                 child: TextButton.icon(
-                  onPressed: controller.disconnect,
+                  onPressed: controller.busy ? null : controller.disconnect,
                   icon: const Icon(Icons.link_off_rounded, size: 18),
                   label: const Text('فصل حساب cTrader')),
               ),
