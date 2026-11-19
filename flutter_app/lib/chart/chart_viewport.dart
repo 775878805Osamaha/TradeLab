@@ -125,9 +125,16 @@ class ChartViewport {
   /// future whitespace to the last candle (important for Replay correctness).
   int? indexAt({required double x, required double plotWidth,
       required int candleCount}) {
-    if (candleCount <= 0 || x < 0 || x > plotWidth) return null;
-    final index = ((x - plotWidth) / barWidth +
-        candleCount - scrollBars - .5 + rightMarginBars).round();
+    // A transient Android multi-pointer centroid must never be rounded
+    // from NaN/Infinity into a candle index or a fake Replay timestamp.
+    if (candleCount <= 0 || !x.isFinite || !plotWidth.isFinite ||
+        plotWidth <= 0 || x < 0 || x > plotWidth ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite) return null;
+    final rawIndex = (x - plotWidth) / barWidth +
+        candleCount - scrollBars - .5 + rightMarginBars;
+    if (!rawIndex.isFinite) return null;
+    final index = rawIndex.round();
     return index < 0 || index >= candleCount ? null : index;
   }
 
@@ -144,12 +151,17 @@ class ChartViewport {
     required double deltaX,
     required double plotWidth,
     required int candleCount,
-  }) => ChartViewport(
-        barWidth: barWidth,
-        rightMarginBars: rightMarginBars,
-        scrollBars: _boundedScroll(
+  }) {
+    if (!deltaX.isFinite || !plotWidth.isFinite || plotWidth <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 || !scrollBars.isFinite ||
+        !rightMarginBars.isFinite || candleCount <= 0) return this;
+    return ChartViewport(
+      barWidth: barWidth,
+      rightMarginBars: rightMarginBars,
+      scrollBars: _boundedScroll(
           scrollBars + deltaX / barWidth, plotWidth, candleCount, barWidth),
-      );
+    );
+  }
 
   /// Keeps the sample under the initial pinch focal point anchored while
   /// zooming. Moving both fingers together also pans the chart naturally.
@@ -160,10 +172,17 @@ class ChartViewport {
     required double plotWidth,
     required int candleCount,
   }) {
+    if (!scale.isFinite || scale <= 0 ||
+        !initialFocalX.isFinite || !currentFocalX.isFinite ||
+        !plotWidth.isFinite || plotWidth <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite ||
+        candleCount <= 0) return this;
     final width = (barWidth * scale).clamp(minBarWidth, maxBarWidth).toDouble();
     final anchoredScroll = scrollBars +
         (plotWidth - initialFocalX) * (1 / barWidth - 1 / width) +
         (currentFocalX - initialFocalX) / width;
+    if (!anchoredScroll.isFinite) return this;
     return ChartViewport(
       barWidth: width,
       rightMarginBars: rightMarginBars,
@@ -278,8 +297,11 @@ class ChartViewport {
     required double plotWidth,
     required int candleCount,
   }) {
-    if (candleCount <= 0) return (0, 0);
+    if (candleCount <= 0 || !plotWidth.isFinite || plotWidth <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite) return (0, 0);
     final edge = candleCount - scrollBars + rightMarginBars;
+    if (!edge.isFinite) return (0, 0);
     final from = (edge - plotWidth / barWidth - 2).floor().clamp(0, candleCount);
     final to = (edge + 2).ceil().clamp(0, candleCount);
     return (from, math.max(from, to));
@@ -354,6 +376,13 @@ class ChartTouchGesture {
     ignoredPointerTransition = false;
     if (pointerCount > 1) {
       hadMultiTouch = true;
+      // Android can briefly report an invalid focal centroid while the
+      // second pointer joins/leaves. Drop that *sample*, not the chart:
+      // the first subsequent valid sample rebases pinch at today's viewport.
+      if (!focalX.isFinite || !scale.isFinite || scale <= 0) {
+        ignoredPointerTransition = true;
+        return viewport;
+      }
       if (!_pinching) {
         _pinching = true;
         _pinchOrigin = viewport;
