@@ -105,6 +105,91 @@ void main() {
     }
   });
 
+  test('older BID prepend preserves source order and strict Replay cutoff',
+      () async {
+    final current = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 101),
+      MarketTick(102, 102),
+    ];
+    final older = <MarketTick>[MarketTick(90, 100.5)];
+    final original = RangeBarTimeline.build(current, 1);
+    final cutoffTick = original.endTickIndices.first;
+    final rebuilt = await RangeBarTimeline.prependAndBuildAsync(
+      olderTicks: older,
+      currentTicks: current,
+      priceDistance: 1,
+    );
+    final direct = RangeBarTimeline.build([...older, ...current], 1);
+    expect(rebuilt.ticks.map((t) => t.timestamp), [90, 100, 101, 102]);
+    expect(rebuilt.timeline.endTickIndices, direct.endTickIndices);
+    expect(rebuilt.timeline.endTimestamps, direct.endTimestamps);
+    expect(rebuilt.timeline.bars.length, direct.bars.length);
+    expect(rebuilt.timeline.visibleBarsThroughTick(
+        older.length + cutoffTick), 0,
+        reason: 'Never reveal a Range bar closed by an unrevealed BID tick');
+    expect(current.map((t) => t.timestamp), [100, 101, 102],
+        reason: 'Existing broker history must not be modified by prepending');
+    expect(() => rebuilt.ticks.add(MarketTick(103, 103)),
+        throwsUnsupportedError);
+    older.add(MarketTick(91, 999));
+    expect(rebuilt.ticks.length, 4,
+        reason: 'Old published BID snapshots cannot change with provider');
+    await expectLater(
+      RangeBarTimeline.prependAndBuildAsync(
+        olderTicks: [MarketTick(100, 100)],
+        currentTicks: current,
+        priceDistance: 1,
+      ),
+      throwsArgumentError,
+      reason: 'Overlapping same-ms source events require original ordering',
+    );
+  });
+
+  test('large older BID prepend matches synchronous Range bars and events',
+      () async {
+    const start = 1700000000000;
+    // Thousands of broker BID events, including identical timestamps inside
+    // both pages. The boundary itself is disjoint by verified millisecond.
+    final older = List<MarketTick>.generate(1300, (index) =>
+        MarketTick(start + index ~/ 2,
+            1900 + (index % 13) * .13 + (index % 3) * .02));
+    final current = List<MarketTick>.generate(5101, (index) =>
+        MarketTick(start + 1000 + index ~/ 2,
+            1901 + (index % 17) * .13 + (index % 5) * .02));
+    final expectedTicks = [...older, ...current];
+    final direct = RangeBarTimeline.build(expectedTicks, .5);
+    final rebuilt = await RangeBarTimeline.prependAndBuildAsync(
+      olderTicks: older,
+      currentTicks: current,
+      priceDistance: .5,
+    );
+    expect(rebuilt.ticks.length, expectedTicks.length);
+    for (var i = 0; i < expectedTicks.length; i++) {
+      expect(rebuilt.ticks[i].timestamp, expectedTicks[i].timestamp);
+      expect(rebuilt.ticks[i].bid, expectedTicks[i].bid);
+    }
+    expect(rebuilt.timeline.endTickIndices, direct.endTickIndices);
+    expect(rebuilt.timeline.endTimestamps, direct.endTimestamps);
+    expect(rebuilt.timeline.bars.length, direct.bars.length);
+    for (var i = 0; i < direct.bars.length; i++) {
+      final a = direct.bars[i];
+      final b = rebuilt.timeline.bars[i];
+      expect(b.open, a.open);
+      expect(b.high, a.high);
+      expect(b.low, a.low);
+      expect(b.close, a.close);
+    }
+    expect(rebuilt.timeline.closedBarCount, direct.closedBarCount);
+    final cutoff = older.length + 212;
+    final revealed = rebuilt.timeline.visibleClosedBarsThroughTick(cutoff);
+    expect(revealed, lessThanOrEqualTo(rebuilt.timeline.closedBarCount));
+    if (revealed > 0) {
+      expect(rebuilt.timeline.endTickIndices[revealed - 1],
+          lessThanOrEqualTo(cutoff));
+    }
+  });
+
   test('empty tick window does not invent Range bars', () {
     final timeline = RangeBarTimeline.build(const <MarketTick>[], 1);
     expect(timeline.bars, isEmpty);
