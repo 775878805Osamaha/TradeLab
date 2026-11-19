@@ -70,6 +70,7 @@ jobs:
             test/chart_line_geometry_test.dart \
             test/chart_candle_wicks_test.dart \
             test/chart_candle_bodies_test.dart \
+            test/chart_candle_body_raster_test.dart \
             test/ctrader_candle_stitcher_test.dart \
             test/ctrader_older_candle_pager_test.dart \
             test/ctrader_account_selection_test.dart \
