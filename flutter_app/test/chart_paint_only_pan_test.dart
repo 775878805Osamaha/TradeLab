@@ -43,6 +43,86 @@ class _QuotePaintController extends MarketController {
 }
 
 void main() {
+  // Flutter's scale recognizer starts after movement crosses touch slop.
+  // Source-anchored drawing hits must resolve at FIRST contact instead of
+  // the finger's displaced position (which could be 24dp away already).
+  for (final width in <double>[320, 390]) {
+    for (final kind in <String>['horizontal', 'trendLine']) {
+      testWidgets('first finger contact owns existing $kind guide after '
+          '24dp scale slop at ${width}dp', (tester) async {
+        await tester.binding.setSurfaceSize(Size(width, 844));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final client = MockClient((request) async {
+          if (request.url.path == '/api/v3/klines') {
+            return http.Response(jsonEncode(List.generate(120, (i) {
+              final ms = 1700000000000 + i * 900000;
+              return [ms, '${35000 + i}', '${35100 + i}',
+                '${34900 + i}', '${35050 + i}', '1', ms + 899999];
+            })), 200);
+          }
+          return http.Response('{"error":"offline"}', 503);
+        });
+        final market = MarketController(api: MarketApi(client: client));
+        addTearDown(market.dispose);
+        await tester.pumpWidget(MaterialApp(home: Scaffold(
+          body: ChartScreen(
+            controller: market, requestedSymbolCode: 'BTCUSDT'),
+        )));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('chart-source-empty')), findsNothing);
+        final rect = tester.getRect(
+            find.byKey(const Key('chart-gesture-area')));
+        final contact = Offset(
+            rect.left + (rect.width - 61) * .55, rect.center.dy);
+        Future<void> chooseDrawing() async {
+          await tester.tap(
+              find.byKey(const Key('drawing-rail-open-catalog')));
+          await tester.pumpAndSettle();
+          final tool = find.byKey(Key('drawing-tool-$kind'));
+          await tester.ensureVisible(tool);
+          await tester.tap(tool);
+          await tester.pumpAndSettle();
+        }
+        await chooseDrawing();
+        final dynamic state = tester.state(find.byType(ChartScreen));
+        if (kind == 'horizontal') {
+          await tester.tapAt(contact);
+        } else {
+          await tester.tapAt(contact - const Offset(38, 28));
+          await tester.pump(const Duration(milliseconds: 400));
+          await tester.tapAt(contact + const Offset(38, 28));
+        }
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+        final created = state.debugGuideDragSelection;
+        expect(kind == 'horizontal' ? created.levels : created.patterns, 1,
+            reason: 'The actual market-anchored guide must exist first');
+        await chooseDrawing();
+
+        final finger = await tester.startGesture(contact);
+        await finger.moveBy(const Offset(0, -24));
+        await tester.pump();
+        final grabbing = state.debugGuideDragSelection;
+        expect(kind == 'horizontal'
+            ? grabbing.draggingLine : grabbing.draggingPattern, isTrue,
+            reason: 'Touch ownership comes from original contact, not '
+                'the position after 24dp of gesture slop');
+        await finger.moveBy(const Offset(0, -12));
+        await tester.pump();
+        final continuing = state.debugGuideDragSelection;
+        expect(kind == 'horizontal'
+            ? continuing.draggingLine : continuing.draggingPattern, isTrue);
+        await finger.up();
+        await tester.pumpAndSettle();
+        final completed = state.debugGuideDragSelection;
+        expect(completed.draggingLine, isFalse);
+        expect(completed.draggingPattern, isFalse);
+        expect(kind == 'horizontal' ? completed.levels : completed.patterns, 1);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets('ordinary chart pan repaints without rebuilding header',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 770));
