@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'range_older_page.dart';
+
 /// A bounded, user-facing goal for genuine cTrader BID Range backfill.
 /// Reaching a target means only "enough closed bars to browse", NEVER
 /// claiming the broker's entire historical archive has been downloaded.
@@ -36,6 +38,7 @@ class RangeHistoryFillPolicy {
     required bool connected,
     required bool hasAccount,
     required bool hasVerifiedTicks,
+    required int loadedTicks,
     required bool chartActive,
     required bool initialLoading,
     required bool olderLoading,
@@ -45,6 +48,7 @@ class RangeHistoryFillPolicy {
     required bool selectingReplayStart,
   }) =>
       rangeMode && connected && hasAccount && hasVerifiedTicks &&
+      loadedTicks > 0 && loadedTicks < RangeOlderPage.maxLoadedTicks &&
       chartActive && !initialLoading && !olderLoading && !autoFilling &&
       !historyExhausted && !replayActive && !selectingReplayStart;
 
