@@ -10,12 +10,16 @@ import 'package:flutter/material.dart';
 /// a theme or axis-settings change cannot reuse a mismatched paragraph.
 /// This is an LRU with a strict bound, never an unbounded per-price cache.
 class ChartTextLayoutCache {
-  ChartTextLayoutCache({this.capacity = 128, this.pillCapacity = 32}) {
+  ChartTextLayoutCache({this.capacity = 128, this.pillCapacity = 32,
+      this.axisCapacity = 32}) {
     if (capacity < 1) {
       throw ArgumentError.value(capacity, 'capacity', 'Must be positive');
     }
     if (pillCapacity < 1) {
       throw ArgumentError.value(pillCapacity, 'pillCapacity', 'Must be positive');
+    }
+    if (axisCapacity < 1) {
+      throw ArgumentError.value(axisCapacity, 'axisCapacity', 'Must be positive');
     }
   }
 
@@ -24,14 +28,20 @@ class ChartTextLayoutCache {
   /// Keep their cache separate from price ticks so a large number of changing
   /// axis values cannot evict a stationary stop/target label every frame.
   final int pillCapacity;
+  /// Bounded layouts for timezone labels with an explicit ellipsis width.
+  /// Time labels without width limits use the ordinary price/text LRU.
+  final int axisCapacity;
 
   final LinkedHashMap<(String, Color, double, FontWeight, bool), TextPainter>
       _painters = LinkedHashMap();
   final LinkedHashMap<(String, double, bool), TextPainter> _pills =
       LinkedHashMap();
+  final LinkedHashMap<(String, Color, double, double, bool), TextPainter>
+      _boundedAxis = LinkedHashMap();
 
   int get length => _painters.length;
   int get pillLength => _pills.length;
+  int get axisLength => _boundedAxis.length;
 
   TextPainter layout(String value, Color color, double size, {
     bool bold = false,
@@ -71,6 +81,38 @@ class ChartTextLayoutCache {
   void paint(Canvas canvas, String value, Offset offset, Color color,
       double size, {bool bold = false, bool rtl = false}) {
     layout(value, color, size, bold: bold, rtl: rtl).paint(canvas, offset);
+  }
+
+  /// Timezone labels are constrained and ellipsized on narrow Android
+  /// screens. Keep their width-specific layouts separate from regular
+  /// axis prices, which are measured without maxWidth or ellipsis.
+  TextPainter layoutBoundedAxis(String value, Color color, double size, {
+    required double maxWidth,
+    bool rtl = true,
+  }) {
+    if (!maxWidth.isFinite || maxWidth <= 0) {
+      throw ArgumentError.value(maxWidth, 'maxWidth',
+          'Must be positive and finite');
+    }
+    final key = (value, color, size, maxWidth, rtl);
+    final reused = _boundedAxis.remove(key);
+    if (reused != null) {
+      _boundedAxis[key] = reused;
+      return reused;
+    }
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: TextStyle(
+        color: color, fontSize: size, fontWeight: FontWeight.w500,
+      )),
+      textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(maxWidth: maxWidth);
+    if (_boundedAxis.length == axisCapacity) {
+      _boundedAxis.remove(_boundedAxis.keys.first)?.dispose();
+    }
+    _boundedAxis[key] = painter;
+    return painter;
   }
 
   /// Reuse exactly measured RTL short-position stop/target/reward labels.
@@ -115,5 +157,9 @@ class ChartTextLayoutCache {
       painter.dispose();
     }
     _pills.clear();
+    for (final painter in _boundedAxis.values) {
+      painter.dispose();
+    }
+    _boundedAxis.clear();
   }
 }
