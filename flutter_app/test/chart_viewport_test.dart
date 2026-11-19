@@ -95,7 +95,65 @@ void main() {
     final zoomed = initial.pinch(
       scale: 100, initialFocalX: 150, currentFocalX: 150,
       plotWidth: 300, candleCount: 90);
-    expect(zoomed.barWidth, 30);
+    expect(zoomed.barWidth, ChartViewport.maxBarWidth);
+  });
+
+  test('wider mobile pinch keeps actual candle under both focal positions',
+      () {
+    const plotWidth = 330.0;
+    const count = 2000;
+    const candleIndex = 1910;
+    const initial = ChartViewport(barWidth: 10, scrollBars: 43.5,
+      rightMarginBars: 4);
+    final originalX = initial.chartX(
+        index: candleIndex, candleCount: count, plotWidth: plotWidth);
+
+    // Zoom far in while moving both fingers, as in TradingView mobile.
+    final large = initial.pinch(
+        scale: 6, initialFocalX: originalX,
+        currentFocalX: originalX + 18,
+        plotWidth: plotWidth, candleCount: count);
+    expect(large.barWidth, 60);
+    expect(large.chartX(index: candleIndex, candleCount: count,
+        plotWidth: plotWidth), closeTo(originalX + 18, .000001));
+    expect(large.indexAt(x: originalX + 18,
+        plotWidth: plotWidth, candleCount: count), candleIndex);
+
+    // Pan/zoom back over more broker history without reordering BID/OHLC.
+    final small = initial.pinch(
+        scale: .3, initialFocalX: originalX,
+        currentFocalX: originalX - 10,
+        plotWidth: plotWidth, candleCount: count);
+    expect(small.barWidth, 3);
+    expect(small.chartX(index: candleIndex, candleCount: count,
+        plotWidth: plotWidth), closeTo(originalX - 10, .000001));
+    expect(small.indexAt(x: originalX - 10,
+        plotWidth: plotWidth, candleCount: count), candleIndex);
+    final (from, end) = small.visibleIndices(
+        plotWidth: plotWidth, candleCount: count);
+    expect(from, greaterThanOrEqualTo(0));
+    expect(end, lessThanOrEqualTo(count),
+        reason: 'Deep zoom out never exposes invented future candles');
+    expect(end - from, greaterThan(90));
+  });
+
+  test('extreme zoom preserves bounded price and time axes on short history',
+      () {
+    const initial = ChartViewport(scrollBars: 0, rightMarginBars: 4);
+    const count = 4;
+    final zoomOut = initial.pinch(scale: .001,
+        initialFocalX: 160, currentFocalX: 160,
+        plotWidth: 320, candleCount: count);
+    expect(zoomOut.barWidth, ChartViewport.minBarWidth);
+    expect(zoomOut.scrollBars, inInclusiveRange(-72.6, 3));
+    final zoomIn = initial.pinch(scale: 10000,
+        initialFocalX: 160, currentFocalX: 160,
+        plotWidth: 320, candleCount: count);
+    expect(zoomIn.barWidth, ChartViewport.maxBarWidth);
+    final (start, end) = zoomIn.visibleIndices(
+        plotWidth: 320, candleCount: count);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, lessThanOrEqualTo(count));
   });
 
   test('historical Range regrouping keeps the same BID bar at the same x', () {
