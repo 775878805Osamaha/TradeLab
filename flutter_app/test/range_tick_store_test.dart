@@ -229,6 +229,53 @@ void main() {
         [1990, 1991, 1991.1, 1992, 1992.1, 1993]);
   });
 
+  test('more than 64 contiguous verified short BID windows restore locally',
+      () async {
+    // A real chart can accumulate many disjoint short startup sessions. An
+    // existing verified 6h archive must not trigger an expensive cTrader
+    // refetch merely because it spans more than 64 manifests.
+    final start = DateTime.utc(2025, 6, 17).millisecondsSinceEpoch;
+    const account = 'multi-short-window-account';
+    const count = 73;
+    const fiveMinutesMs = 5 * 60 * 1000;
+    final expected = <double>[];
+    for (var i = 0; i < count; i++) {
+      final from = start + i * fiveMinutesMs;
+      final bid = 2100 + i / 100;
+      expected.add(bid);
+      final page = <MarketTick>[MarketTick(from + 100, bid)];
+      // Preserve multiplicities within individual verified milliseconds.
+      if (i == 36) {
+        page.add(MarketTick(from + 100, bid + .005));
+        expected.add(bid + .005);
+      }
+      await RangeTickStore.archiveVerifiedWindow(
+        account, 'XAUUSD', page,
+        fromMs: from, toMs: from + fiveMinutesMs - 1,
+      );
+    }
+    final result = await RangeTickStore.readCoveredInterval(
+      account, 'XAUUSD',
+      fromMs: start, toMs: start + count * fiveMinutesMs - 1,
+    );
+    expect(result, isNotNull,
+        reason: '73 individually verified windows are all trustworthy');
+    expect(result!.map((tick) => tick.bid).toList(), expected);
+    expect(result.length, count + 1);
+    expect(result[36].timestamp, result[37].timestamp,
+        reason: 'Two genuine BID events at the same millisecond remain distinct');
+    // One uncovered millisecond is still a hard cache miss.
+    expect(await RangeTickStore.readCoveredInterval(
+      account, 'XAUUSD',
+      fromMs: start - 1,
+      toMs: start + count * fiveMinutesMs - 1,
+    ), isNull);
+    expect(await RangeTickStore.readCoveredInterval(
+      'another-account', 'XAUUSD',
+      fromMs: start, toMs: start + count * fiveMinutesMs - 1,
+    ), isNull);
+  });
+
   test('overlapping verified windows do not duplicate BID ticks', () async {
     final start = DateTime.utc(2025, 7, 1).millisecondsSinceEpoch;
     const dayMs = 86400000;
