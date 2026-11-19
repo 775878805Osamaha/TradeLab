@@ -171,9 +171,14 @@ void main() {
         reason: 'Practice level overlay must repaint, not rebuild');
     expect(secondPainter.currentViewport, isNot(firstViewport),
         reason: 'Practice levels must read the current moving viewport');
-    expect(identical(headerWithOrder, tester.widget(
-        find.byKey(const Key('chart-reference-header'))), isTrue,
-        reason: 'Replay toolbar must remain stable with practice levels');
+    expect(
+      identical(
+        headerWithOrder,
+        tester.widget(find.byKey(const Key('chart-reference-header'))),
+      ),
+      isTrue,
+      reason: 'Replay toolbar must remain stable with practice levels',
+    );
     expect(tester.takeException(), isNull);
     await tester.tap(find.byKey(const Key('replay-more-actions')));
     await tester.pumpAndSettle();
