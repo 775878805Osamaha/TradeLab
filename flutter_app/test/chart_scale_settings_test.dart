@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/chart_axis_source_labels.dart';
 import 'package:tradelab_flutter/chart/chart_scale_settings.dart';
+import 'package:tradelab_flutter/chart/chart_symbol_settings.dart';
 import 'package:tradelab_flutter/chart/chart_scale_settings_page.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
@@ -34,6 +35,33 @@ void main() {
     expect(ChartScaleSettings.decode('{}').weekdayOnLabels, isTrue);
     expect(ChartScaleSettings.decode('{"bidAsk":"unexpected"}').bidAsk,
       ChartPriceLabelMode.hidden);
+  });
+
+  test('New York weekday follows displayed date, not phone timezone', () {
+    // UTC Thursday morning is still Wednesday evening in New York.
+    final winterUtc = DateTime.utc(2026, 11, 19, 2, 30)
+        .millisecondsSinceEpoch;
+    final utc = ChartTimeZone.utc.displayDate(winterUtc);
+    final ny = ChartTimeZone.newYork.displayDate(winterUtc);
+    expect(utc.day, 19);
+    expect(ny.day, 18);
+    expect(ChartScaleSettings.weekdayForDisplayedDate(utc), 'الخميس');
+    expect(ChartScaleSettings.weekdayForDisplayedDate(ny), 'الأربعاء');
+
+    // The same offset difference applies during US daylight saving time,
+    // when New York is UTC-4 rather than the winter UTC-5.
+    final summerUtc = DateTime.utc(2026, 7, 15, 2, 30)
+        .millisecondsSinceEpoch;
+    expect(ChartScaleSettings.weekdayForDisplayedDate(
+        ChartTimeZone.utc.displayDate(summerUtc)), 'الأربعاء');
+    expect(ChartScaleSettings.weekdayForDisplayedDate(
+        ChartTimeZone.newYork.displayDate(summerUtc)), 'الثلاثاء');
+
+    // Device mode has already been converted by displayDate. The calendar
+    // weekday must match the actual date presented on that device.
+    final device = ChartTimeZone.device.displayDate(winterUtc);
+    expect(ChartScaleSettings.weekdayForDisplayedDate(device),
+        ChartScaleSettings.weekdays[device.weekday - 1]);
   });
 
   test('previous close uses provider bars in the visible replay prefix only', () {
