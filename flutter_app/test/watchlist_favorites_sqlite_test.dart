@@ -58,7 +58,7 @@ void main() {
       await Future.wait(edits);
       expect(await store.load(), {'ETHUSDT'},
           reason: 'The last chosen favorite set is authoritative');
-      await store.save({'XAUUSD', 'XAUUSD'});
+      await store.save({'XAUUSD'});
       expect(await store.load(), {'XAUUSD'});
     } finally {
       await store.close();
