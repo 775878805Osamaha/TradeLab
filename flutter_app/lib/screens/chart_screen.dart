@@ -231,6 +231,24 @@ class _ChartScreenState extends State<ChartScreen>
   static const _symbolSettingsKey = 'tradelab-chart-symbol-settings-v1';
   final _panelSettingsStorage = const FlutterSecureStorage();
   ChartTouchGesture _touchGesture = ChartTouchGesture();
+  // Flutter's scale recognizer starts only after the finger passes touch
+  // slop. Preserve where the user's FIRST finger actually landed so a guide
+  // with a 17/18dp hit target remains draggable after that delay.
+  int? _firstChartPointer;
+  Offset? _firstChartDown;
+
+  @visibleForTesting
+  ({bool draggingLine, bool draggingPattern, bool draggingRectangle,
+    int levels, int patterns, int? selectedLine, int? selectedPattern})
+      get debugGuideDragSelection => (
+        draggingLine: _draggingLine,
+        draggingPattern: _draggingPattern,
+        draggingRectangle: _draggingRectangle,
+        levels: _levels.length,
+        patterns: _patterns.length,
+        selectedLine: _selectedLine,
+        selectedPattern: _selectedPattern,
+      );
   late final AnimationController _momentum;
   double _previousMomentumX = 0;
   double _momentumPlotWidth = 1;
@@ -4268,7 +4286,26 @@ class _ChartScreenState extends State<ChartScreen>
                   .y(candles[_replayCandidateIndex].close)
               : 0.0;
           return Stack(children: [
-          Positioned.fill(child: GestureDetector(
+          Positioned.fill(child: Listener(
+            onPointerDown: (event) {
+              if (_firstChartPointer == null) {
+                _firstChartPointer = event.pointer;
+                _firstChartDown = event.localPosition;
+              }
+            },
+            onPointerUp: (event) {
+              if (_firstChartPointer == event.pointer) {
+                _firstChartPointer = null;
+                _firstChartDown = null;
+              }
+            },
+            onPointerCancel: (event) {
+              if (_firstChartPointer == event.pointer) {
+                _firstChartPointer = null;
+                _firstChartDown = null;
+              }
+            },
+            child: GestureDetector(
             key: const Key('chart-gesture-area'),
             behavior: HitTestBehavior.opaque,
             onScaleStart: (details) {
@@ -4278,9 +4315,14 @@ class _ChartScreenState extends State<ChartScreen>
               // A later second-finger touch rebases the pinch on the viewport
               // the first finger has already moved to.
               _touchGesture = ChartTouchGesture();
+              // Anchor ownership and drawing hit-tests to the real
+              // touch-down point, NOT the position after touch slop.
+              final hitStart = details.pointerCount == 1
+                  ? (_firstChartDown ?? details.localFocalPoint)
+                  : details.localFocalPoint;
               _draggingPriceAxis = candles.isNotEmpty &&
                   details.pointerCount == 1 &&
-                  details.localFocalPoint.dx >= plotWidth &&
+                  hitStart.dx >= plotWidth &&
                   !_replaySelectingStart && !_drawing &&
                   !_placingShort && !_placingRectangle;
               // Bottom 24dp is the drawn TIME axis, not the candle plot.
@@ -4288,12 +4330,12 @@ class _ChartScreenState extends State<ChartScreen>
               // while touches in the plot continue their usual drag/pinch.
               _draggingTimeAxis = candles.isNotEmpty &&
                   details.pointerCount == 1 &&
-                  details.localFocalPoint.dx < plotWidth &&
-                  details.localFocalPoint.dy >= constraints.maxHeight - 24 &&
+                  hitStart.dx < plotWidth &&
+                  hitStart.dy >= constraints.maxHeight - 24 &&
                   !_replaySelectingStart && !_drawing &&
                   !_placingShort && !_placingRectangle;
-              _gestureFocalX = details.localFocalPoint.dx;
-              _gestureFocalY = details.localFocalPoint.dy;
+              _gestureFocalX = hitStart.dx;
+              _gestureFocalY = hitStart.dy;
               // A touch on the blue Replay line edits the candidate. Touches
               // elsewhere still pan the chart; a second finger still pinches.
               final lineX = _viewport.chartX(
@@ -4302,7 +4344,7 @@ class _ChartScreenState extends State<ChartScreen>
                 plotWidth: plotWidth);
               _replayDraggingStart = _replaySelectingStart &&
                   details.pointerCount == 1 &&
-                  (details.localFocalPoint.dx - lineX).abs() <= 28;
+                  (hitStart.dx - lineX).abs() <= 28;
               _draggingShortHandle = null;
               _shortAtDragStart = null;
               _draggingRectangle = false;
@@ -4312,10 +4354,10 @@ class _ChartScreenState extends State<ChartScreen>
                   !_eraserMode && !_rulerMode && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 final rectangleHit = PriceRectangleGeometry.hitTest(
-                    details.localFocalPoint, _rectangles, _viewport,
+                    hitStart, _rectangles, _viewport,
                     scale, candles.length, plotWidth);
                 final shortHit = rectangleHit == null
-                    ? _hitShortPosition(details.localFocalPoint,
+                    ? _hitShortPosition(hitStart,
                         scale, plotWidth, candles.length) : null;
                 if (rectangleHit != null) {
                   _selectedRectangle = rectangleHit.$1;
@@ -4328,7 +4370,7 @@ class _ChartScreenState extends State<ChartScreen>
                   _saveDrawingUndo();
                 }
                 _draggedEndpoint = rectangleHit == null && shortHit == null
-                    ? _hitSelectedHandle(details.localFocalPoint,
+                    ? _hitSelectedHandle(hitStart,
                         scale, plotWidth, candles.length) : null;
                 if (shortHit != null) {
                   _selectedShort = shortHit.$1;
@@ -4340,14 +4382,14 @@ class _ChartScreenState extends State<ChartScreen>
                 }
                 _selectedLine = rectangleHit == null && shortHit == null &&
                     _draggedEndpoint == null
-                    ? _hitLine(details.localFocalPoint.dy, scale) : null;
+                    ? _hitLine(hitStart.dy, scale) : null;
                 _draggingLine = _selectedLine != null;
                 if (_draggedEndpoint != null) {
                   _draggingPattern = true;
                 } else {
                   _selectedPattern = rectangleHit != null || shortHit != null ||
                       _draggingLine ? null :
-                      _hitPattern(details.localFocalPoint, scale,
+                      _hitPattern(hitStart, scale,
                           plotWidth, candles.length);
                   _draggingPattern = _selectedPattern != null;
                 }
@@ -4801,7 +4843,7 @@ class _ChartScreenState extends State<ChartScreen>
                 ),
               ),
             ),
-          )),
+          ))),
           // Blue Replay cursor is a visual overlay over verified history;
           // it cannot modify prices or reveal future bars after confirmation.
           if (selecting)
