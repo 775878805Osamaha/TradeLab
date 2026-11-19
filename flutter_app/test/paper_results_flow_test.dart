@@ -114,4 +114,88 @@ void main() {
         reason: 'Returning to the original account restores its results');
     expect(tester.takeException(), isNull);
   });
+
+  for (final width in <double>[320, 390]) {
+    testWidgets('57 real local journal rows remain accessible in 25-row pages '
+        'and reset on account switch at ${width}dp', (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final market = MarketController();
+      final store = _ResultsStore();
+      final journal = PaperJournalController(store: store);
+      addTearDown(market.dispose);
+      addTearDown(journal.dispose);
+
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+      for (var i = 1; i <= 57; i++) {
+        final closedAt = now - (58 - i) * 60000;
+        store.rows.add(LedgerEntry(
+          id: i,
+          accountKey: 'ctrader:101',
+          kind: LedgerKind.closedTrade,
+          timestampMs: closedAt,
+          openedAtMs: closedAt - 60000,
+          symbol: 'XAUUSD',
+          side: PaperSide.buy,
+          quantity: 1,
+          entryPrice: 100,
+          exitPrice: 101,
+        ));
+      }
+      await journal.useAccount('101');
+      await tester.pumpWidget(MaterialApp(home: Scaffold(
+        body: ResultsScreen(controller: market, journal: journal),
+      )));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('results-net-profit-hero')), findsOneWidget,
+          reason: 'Overview keeps its verified local profit summary');
+      final tab = find.byKey(const Key('results-tab-2'));
+      await tester.ensureVisible(tab);
+      await tester.pumpAndSettle();
+      await tester.tap(tab);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('results-net-profit-hero')), findsNothing,
+          reason: 'Journal should not waste the viewport on overview cards');
+      expect(find.byKey(const Key('results-local-source-note')), findsOneWidget);
+      expect(find.byKey(const Key('results-closed-trade-57')), findsOneWidget);
+      expect(find.byKey(const Key('results-closed-trade-33')), findsOneWidget);
+      expect(find.byKey(const Key('results-closed-trade-32')), findsNothing);
+      expect(find.text('عرض 25 من 57 صفقة مغلقة'), findsOneWidget);
+
+      final list = find.descendant(
+          of: find.byKey(const Key('results-dashboard-list')),
+          matching: find.byType(Scrollable)).first;
+      await tester.scrollUntilVisible(
+          find.byKey(const Key('results-more-closed-trades')), 290,
+          scrollable: list, maxScrolls: 24);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('results-more-closed-trades')));
+      await tester.pumpAndSettle();
+      expect(find.text('عرض 50 من 57 صفقة مغلقة'), findsOneWidget);
+      expect(find.byKey(const Key('results-closed-trade-8')), findsOneWidget);
+      expect(find.byKey(const Key('results-closed-trade-7')), findsNothing);
+
+      await tester.scrollUntilVisible(
+          find.byKey(const Key('results-more-closed-trades')), 290,
+          scrollable: list, maxScrolls: 24);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('results-more-closed-trades')));
+      await tester.pumpAndSettle();
+      expect(find.text('عرض 57 من 57 صفقة مغلقة'), findsOneWidget);
+      expect(find.byKey(const Key('results-closed-trade-1')), findsOneWidget);
+      expect(find.byKey(const Key('results-more-closed-trades')), findsNothing);
+
+      await journal.useAccount('202');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('results-closed-trade-57')), findsNothing);
+      expect(find.textContaining('57 صفقة مغلقة'), findsNothing);
+      await journal.useAccount('101');
+      await tester.pumpAndSettle();
+      expect(find.text('عرض 25 من 57 صفقة مغلقة'), findsOneWidget,
+          reason: 'A different broker account never keeps another page cursor');
+      expect(find.byKey(const Key('results-closed-trade-32')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }
