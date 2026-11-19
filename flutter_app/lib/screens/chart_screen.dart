@@ -204,6 +204,7 @@ class _ChartScreenState extends State<ChartScreen>
   ChartPriceScale? _manualPriceScale;
   String? _manualPriceScaleKey;
   bool _draggingPriceAxis = false;
+  bool _draggingTimeAxis = false;
   double _doubleTapChartX = 0;
   String get _currentPriceScaleKey =>
       '${widget.controller.accountId}|${_selectedSymbol.source.name}|'
@@ -4262,6 +4263,15 @@ class _ChartScreenState extends State<ChartScreen>
                   details.localFocalPoint.dx >= plotWidth &&
                   !_replaySelectingStart && !_drawing &&
                   !_placingShort && !_placingRectangle;
+              // Bottom 24dp is the drawn TIME axis, not the candle plot.
+              // Touch there owns an anchored horizontal scale gesture,
+              // while touches in the plot continue their usual drag/pinch.
+              _draggingTimeAxis = candles.isNotEmpty &&
+                  details.pointerCount == 1 &&
+                  details.localFocalPoint.dx < plotWidth &&
+                  details.localFocalPoint.dy >= constraints.maxHeight - 24 &&
+                  !_replaySelectingStart && !_drawing &&
+                  !_placingShort && !_placingRectangle;
               _gestureFocalX = details.localFocalPoint.dx;
               _gestureFocalY = details.localFocalPoint.dy;
               // A touch on the blue Replay line edits the candidate. Touches
@@ -4331,6 +4341,28 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onScaleUpdate: (details) {
+              if (_draggingTimeAxis && details.pointerCount == 1) {
+                final next = _viewport.dragTimeAxis(
+                  deltaX: details.focalPointDelta.dx,
+                  anchorX: _gestureFocalX,
+                  plotWidth: plotWidth,
+                  candleCount: candles.length,
+                );
+                if (next != _viewport) {
+                  // Candle painter, time ticks, source price scale, drawing
+                  // overlays and Replay practice levels use this same live
+                  // viewport; avoid rebuilding the header every touch frame.
+                  _viewport = next;
+                  _chartRepaint.value++;
+                  _prefetchOlderAtEdge(plotWidth, candles.length);
+                }
+                return;
+              }
+              if (_draggingTimeAxis && details.pointerCount > 1) {
+                _draggingTimeAxis = false;
+                // A second finger takes over with the existing pinch
+                // rebase: no sudden jump from the pointer-centroid change.
+              }
               if (_draggingPriceAxis && details.pointerCount == 1) {
                 final current = _priceScale(
                     candles, plotWidth, constraints.maxHeight);
@@ -4456,6 +4488,13 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onScaleEnd: (details) {
+              if (_draggingTimeAxis) {
+                _draggingTimeAxis = false;
+                // Commit the latest scale to any snapshot-only UI once,
+                // after the finger leaves the ruler. Never fling the axis.
+                setState(() {});
+                return;
+              }
               if (_draggingPriceAxis) {
                 _draggingPriceAxis = false;
                 // Only one widget refresh after the completed axis gesture.

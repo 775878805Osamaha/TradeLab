@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/screens/chart_screen.dart';
+import 'package:tradelab_flutter/chart/chart_viewport.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_controller.dart';
 import 'package:tradelab_flutter/main.dart';
@@ -90,6 +91,70 @@ void main() {
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  for (final width in <double>[320, 390]) {
+    testWidgets('bottom time axis zooms actual candles without panning chart '
+        'or rebuilding header every frame at ${width}dp', (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v3/klines') {
+          return http.Response(jsonEncode(List.generate(120, (i) {
+            final ms = 1700000000000 + i * 900000;
+            return [ms, '${35000 + i}', '${35100 + i}',
+              '${34900 + i}', '${35050 + i}', '1', ms + 899999];
+          })), 200);
+        }
+        return http.Response('{"error":"offline"}', 503);
+      });
+      final market = MarketController(api: MarketApi(client: client));
+      addTearDown(market.dispose);
+      await tester.pumpWidget(MaterialApp(home: Scaffold(
+        body: ChartScreen(controller: market, requestedSymbolCode: 'BTCUSDT'),
+      )));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('chart-source-empty')), findsNothing);
+      final chart = find.byKey(const Key('chart-gesture-area'));
+      final header = find.byKey(const Key('chart-reference-header'));
+      final rect = tester.getRect(chart);
+      final plotWidth = rect.width - 61;
+      ChartViewport currentViewport() {
+        final painter = tester.widget<CustomPaint>(find.descendant(
+            of: chart, matching: find.byType(CustomPaint)).first).painter;
+        final dynamic livePainter = painter;
+        return livePainter.viewport as ChartViewport;
+      }
+      final initial = currentViewport();
+      final axisTouch = Offset(
+          rect.left + plotWidth / 2, rect.bottom - 10);
+      final gesture = await tester.startGesture(axisTouch);
+      await gesture.moveBy(const Offset(44, 0));
+      await tester.pump();
+      final afterFirst = currentViewport();
+      expect(afterFirst.barWidth, greaterThan(initial.barWidth),
+        reason: 'Rightward time-ruler drag magnifies the time scale');
+      final headerDuringDrag = tester.widget(header);
+      await gesture.moveBy(const Offset(24, 0));
+      await tester.pump();
+      final afterSecond = currentViewport();
+      expect(afterSecond.barWidth, greaterThan(afterFirst.barWidth));
+      expect(identical(headerDuringDrag, tester.widget(header)), isTrue,
+        reason: 'Time-axis updates use chart painter, not full toolbar build');
+      expect(find.byKey(const Key('chart-price-axis-auto')), findsNothing,
+        reason: 'Time ruler never switches to manual vertical price scale');
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      final widthAfterTimeZoom = currentViewport().barWidth;
+      await tester.dragFrom(
+          Offset(rect.left + plotWidth / 2, rect.center.dy),
+          const Offset(-45, 0));
+      await tester.pumpAndSettle();
+      expect(currentViewport().barWidth, closeTo(widthAfterTimeZoom, 1e-9),
+        reason: 'One-finger drag on the plot pans, not zooms time');
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   for (final width in <double>[320, 390]) {
     testWidgets('crosshair reveals verified OHLC without rebuilding chart '
