@@ -43,6 +43,80 @@ class _QuotePaintController extends MarketController {
 }
 
 void main() {
+  // A selected horizontal level or trendline used to call setState in
+  // every pointer sample, rebuilding the entire chart header/tool strip.
+  // Both guides now use live drawing providers while the CustomPainter
+  // repaints from the shared chart notifier.
+  for (final width in <double>[320, 390]) {
+    for (final kind in <String>['horizontal', 'trendLine']) {
+      testWidgets('$kind drawing drag stays paint-only at ${width}dp, '
+          'then reconciles toolbar once on release', (tester) async {
+        await tester.binding.setSurfaceSize(Size(width, 844));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final client = MockClient((request) async {
+          if (request.url.path == '/api/v3/klines') {
+            return http.Response(jsonEncode(List.generate(120, (i) {
+              final ts = 1700000000000 + i * 900000;
+              return [ts, '${35000 + i}', '${35100 + i}',
+                '${34900 + i}', '${35050 + i}', '1', ts + 899999];
+            })), 200);
+          }
+          return http.Response('{"error":"offline"}', 503);
+        });
+        final controller = MarketController(api: MarketApi(client: client));
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(MaterialApp(home: Scaffold(
+          body: ChartScreen(
+              controller: controller, requestedSymbolCode: 'BTCUSDT'),
+        )));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('chart-source-empty')), findsNothing);
+        await tester.tap(find.byKey(const Key('drawing-rail-open-catalog')));
+        await tester.pumpAndSettle();
+        final tool = find.byKey(Key('drawing-tool-$kind'));
+        await tester.ensureVisible(tool);
+        await tester.tap(tool);
+        await tester.pumpAndSettle();
+
+        final chart = find.byKey(const Key('chart-gesture-area'));
+        final rect = tester.getRect(chart);
+        final origin = Offset(rect.left + (rect.width - 61) * .55,
+            rect.center.dy);
+        if (kind == 'horizontal') {
+          await tester.tapAt(origin);
+        } else {
+          await tester.tapAt(origin - const Offset(38, 28));
+          // Avoid interpreting the next intended anchor as a double tap.
+          await tester.pump(const Duration(milliseconds: 400));
+          await tester.tapAt(origin + const Offset(38, 28));
+        }
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('تراجع'), findsOneWidget,
+            reason: 'A real drawing must have been committed before its drag');
+
+        final pointer = await tester.startGesture(origin);
+        await pointer.moveBy(const Offset(0, -9));
+        await tester.pump();
+        final header = find.byKey(const Key('chart-reference-header'));
+        final retainedHeader = tester.widget(header);
+        for (var step = 0; step < 6; step++) {
+          await pointer.moveBy(const Offset(0, -5));
+          await tester.pump();
+          expect(identical(retainedHeader, tester.widget(header)), isTrue,
+            reason: 'Source-anchored drawing moves via painter only, '
+                'without rebuilding the header on every touch');
+          expect(tester.takeException(), isNull);
+        }
+        await pointer.up();
+        await tester.pumpAndSettle();
+        expect(identical(retainedHeader, tester.widget(header)), isFalse,
+            reason: 'Release must reconcile drawing selection and Undo UI');
+        expect(find.byTooltip('تراجع'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets('ordinary chart pan repaints without rebuilding header',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 770));
