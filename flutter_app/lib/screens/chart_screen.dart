@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../chart/chart_annotations.dart';
 import '../chart/chart_line_geometry.dart';
+import '../chart/chart_candle_wicks.dart';
 import '../chart/chart_short_position.dart';
 import '../chart/chart_price_rectangle.dart';
 import '../chart/chart_type_sheet.dart';
@@ -5434,10 +5435,12 @@ class _CandleChartPainter extends CustomPainter {
     canvas.clipRect(Rect.fromLTWH(0, 0, axis, chartHeight));
     final positiveWick = Paint()
       ..color = Color(symbolSettings.wickBull)
-      ..strokeWidth = 1.0;
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
     final negativeWick = Paint()
       ..color = Color(symbolSettings.wickBear)
-      ..strokeWidth = 1.0;
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
     final positiveBody = Paint()..color = Color(symbolSettings.bodyBull);
     final negativeBody = Paint()..color = Color(symbolSettings.bodyBear);
     final positiveBorder = Paint()
@@ -5448,6 +5451,22 @@ class _CandleChartPainter extends CustomPainter {
       ..color = Color(symbolSettings.borderBear)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
+    // One stroke path per wick color instead of a drawLine per candle on
+    // every momentum/pinch frame. All wicks stay behind their own bodies;
+    // price, market-data order and bar-width geometry are unchanged.
+    if (symbolSettings.wickVisible) {
+      final wicks = ChartCandleWicks.visible(
+        candles: candles,
+        viewport: viewport,
+        start: start,
+        end: ending,
+        plotWidth: axis,
+        priceY: y,
+        colorByPreviousClose: symbolSettings.colorByPreviousClose,
+      );
+      canvas.drawPath(wicks.rising, positiveWick);
+      canvas.drawPath(wicks.falling, negativeWick);
+    }
     for (var i = start; i < ending; i++) {
       final candle = candles[i];
       final rising = symbolSettings.colorByPreviousClose && i > 0
@@ -5455,10 +5474,6 @@ class _CandleChartPainter extends CustomPainter {
       final centerX = viewport.chartX(
         index: i, candleCount: candles.length, plotWidth: axis);
       if (centerX < -viewport.barWidth || centerX > axis + viewport.barWidth) continue;
-      if (symbolSettings.wickVisible) {
-        canvas.drawLine(Offset(centerX, y(candle.high)), Offset(centerX, y(candle.low)),
-          rising ? positiveWick : negativeWick);
-      }
       final openY = y(candle.open);
       final closeY = y(candle.close);
       final bodyRect = Rect.fromLTRB(
