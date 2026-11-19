@@ -125,6 +125,58 @@ void main() {
     expect(hit(const Offset(20, 25), radius: 0), isTrue);
   });
 
+  test('last-close dashes match the old 6px/2.2px geometry at 320dp', () {
+    // 320dp mobile width minus the existing 61dp right price scale.
+    const width = 259.0;
+    const y = 147.25;
+    final metrics = ChartLineGeometry.lastCloseDashPath(
+        y: y, plotWidth: width).computeMetrics().toList();
+    expect(metrics, hasLength(44));
+    for (var index = 0; index < metrics.length; index++) {
+      final firstX = index * 6.0;
+      final lastX = (firstX + 2.2).clamp(0.0, width);
+      final start = metrics[index].getTangentForOffset(0)!.position;
+      final end = metrics[index]
+          .getTangentForOffset(metrics[index].length)!.position;
+      expect(start.dx, closeTo(firstX, 1e-5));
+      expect(start.dy, closeTo(y, 1e-5));
+      expect(end.dx, closeTo(lastX, 1e-5));
+      expect(end.dy, closeTo(y, 1e-5));
+      expect(metrics[index].length, closeTo(lastX - firstX, 1e-5));
+    }
+    expect(metrics.last.length, closeTo(1, 1e-5),
+        reason: 'The final short dash must not enter the price ruler');
+  });
+
+  test('last-close line batching keeps dash spacing at 390dp and tiny plots',
+      () {
+    const width = 329.0;
+    final metrics = ChartLineGeometry.lastCloseDashPath(
+        y: 220, plotWidth: width).computeMetrics().toList();
+    expect(metrics, hasLength(55));
+    expect(metrics.first.length, closeTo(2.2, 1e-5));
+    expect(metrics.last.getTangentForOffset(0)!.position.dx,
+        closeTo(324, 1e-5));
+    // Flutter PathMetrics stores larger canvas coordinates as float32;
+    // near x=324 its 2.2px contour length can differ by ~0.000012px.
+    // Keep a subpixel geometry tolerance, not an impossible float64 one.
+    expect(metrics.last.length, closeTo(2.2, 1e-4));
+    final tiny = ChartLineGeometry.lastCloseDashPath(
+        y: 4, plotWidth: 1).computeMetrics().toList();
+    expect(tiny, hasLength(1));
+    expect(tiny.single.length, closeTo(1, 1e-5));
+    for (final invalidWidth in <double>[
+      0, -1, double.nan, double.infinity, double.negativeInfinity
+    ]) {
+      expect(ChartLineGeometry.lastCloseDashPath(
+        y: 3, plotWidth: invalidWidth).computeMetrics().isEmpty, isTrue);
+    }
+    expect(ChartLineGeometry.lastCloseDashPath(
+      y: double.nan, plotWidth: width).computeMetrics().isEmpty, isTrue);
+    expect(ChartLineGeometry.lastCloseDashPath(
+      y: double.infinity, plotWidth: width).computeMetrics().isEmpty, isTrue);
+  });
+
   test('trend segment remains between its two anchors', () {
     final lines = ChartLineGeometry.strokes(
       tool: ChartDrawingTool.trendLine,

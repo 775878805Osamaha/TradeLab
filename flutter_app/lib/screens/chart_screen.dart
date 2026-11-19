@@ -5606,10 +5606,11 @@ class _CandleChartPainter extends CustomPainter {
           : Color(scaleSettings.symbolNegativeColor);
       if (scaleSettings.symbolLabel == ChartPriceLabelMode.valueAndLine) {
         final marker = Paint()..color = lastColor..strokeWidth = .9;
-        for (var x = 0.0; x < axis; x += 6) {
-          canvas.drawLine(Offset(x, lastY),
-              Offset(math.min(axis, x + 2.2), lastY), marker);
-        }
+        // Batch identical dash contours into one Canvas call per frame.
+        // Each dash remains 2.2px long with a 6px period, clipped to
+        // the source-candle plot rather than extending onto the price ruler.
+        canvas.drawPath(ChartLineGeometry.lastCloseDashPath(
+          y: lastY, plotWidth: axis), marker);
       }
       final tagY = (lastY - 14).clamp(0, chartHeight - 30).toDouble();
       canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 30),
