@@ -105,6 +105,20 @@ enum PriceRectangleHandle {
 }
 
 abstract final class PriceRectangleGeometry {
+  /// Exact clipping predicate for the independent rectangle painter.
+  /// A selected circular handle may extend 11.5 px past the vertical
+  /// plot edge; do not prematurely hide that visible section.
+  static bool visibleInPlot(Rect bounds, double width, double height,
+      {bool selected = false}) {
+    if (!width.isFinite || !height.isFinite ||
+        width <= 0 || height <= 0 ||
+        !bounds.left.isFinite || !bounds.right.isFinite ||
+        !bounds.top.isFinite || !bounds.bottom.isFinite) return false;
+    final bleed = selected ? 11.5 : 0.0;
+    return bounds.right >= 0 && bounds.left <= width &&
+        bounds.bottom >= -bleed && bounds.top <= height + bleed;
+  }
+
   static Rect rect(ChartPriceRectangle drawing, ChartViewport viewport,
       ChartPriceScale scale, int count, double plotWidth) => Rect.fromLTRB(
         viewport.chartX(index: drawing.startIndex,
@@ -228,10 +242,10 @@ class ChartPriceRectanglePainter extends CustomPainter {
       // price range needs no clipping, fill, border, or handle allocations
       // on every pan/pinch frame. Selected handles may show 11.5px of bleed
       // at the vertical edge, so retain that exact existing visible rim.
-      final verticalBleed = selectedIndex == i ? 11.5 : 0.0;
-      if (area.right < 0 || area.left > plotWidth ||
-          area.bottom < -verticalBleed ||
-          area.top > chartHeight + verticalBleed) continue;
+      if (!PriceRectangleGeometry.visibleInPlot(
+          area, plotWidth, chartHeight, selected: selectedIndex == i)) {
+        continue;
+      }
       canvas.save();
       canvas.clipRect(Rect.fromLTWH(0, 0, plotWidth, chartHeight));
       canvas.drawRect(area, Paint()
