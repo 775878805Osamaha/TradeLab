@@ -107,11 +107,29 @@ void main() {
             ? grabbing.draggingLine : grabbing.draggingPattern, isTrue,
             reason: 'Touch ownership comes from original contact, not '
                 'the position after 24dp of gesture slop');
-        await finger.moveBy(const Offset(0, -12));
-        await tester.pump();
-        final continuing = state.debugGuideDragSelection;
-        expect(kind == 'horizontal'
-            ? continuing.draggingLine : continuing.draggingPattern, isTrue);
+        final header = find.byKey(const Key('chart-reference-header'));
+        final retainedHeader = tester.widget(header);
+        final firstPrice = kind == 'horizontal'
+            ? grabbing.levelValue : grabbing.patternValue?.start.price;
+        for (var step = 0; step < 5; step++) {
+          await finger.moveBy(const Offset(0, -7));
+          await tester.pump();
+          expect(identical(retainedHeader, tester.widget(header)), isTrue,
+              reason: 'Each guide touch sample repaints the retained canvas, '
+                  'not the 320/390dp chart toolbar');
+          final active = state.debugGuideDragSelection;
+          expect(kind == 'horizontal'
+              ? active.draggingLine : active.draggingPattern, isTrue);
+          expect(tester.takeException(), isNull);
+        }
+        final moved = state.debugGuideDragSelection;
+        final finalPrice = kind == 'horizontal'
+            ? moved.levelValue : moved.patternValue?.start.price;
+        expect(firstPrice, isNotNull);
+        expect(finalPrice, isNotNull);
+        expect(finalPrice, isNot(firstPrice),
+            reason: 'The source-anchored guide itself must move, not '
+                'just the pointer or header state');
         await finger.up();
         await tester.pumpAndSettle();
         final completed = state.debugGuideDragSelection;
