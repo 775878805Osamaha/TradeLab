@@ -51,6 +51,84 @@ void main() {
         reason: 'Unusable zero-span scales cannot be changed by dragging');
   });
 
+  test('crosshair guide and time marker agree at 3px source candles', () {
+    const viewport = ChartViewport(
+        barWidth: ChartViewport.minBarWidth,
+        scrollBars: 3, rightMarginBars: 4);
+    const count = 200;
+    const index = 180;
+    const width = 320.0;
+    final trueX = viewport.chartX(
+        index: index, candleCount: count, plotWidth: width);
+    final guide = ChartCrosshairSnap.resolve(
+      viewport: viewport,
+      touchX: trueX + 1.2,
+      plotWidth: width,
+      candleCount: count,
+    );
+    expect(guide.index, index);
+    expect(guide.x, closeTo(trueX, 1e-9),
+        reason: 'The guide is centered on the candle used by the time label');
+    final other = ChartCrosshairSnap.resolve(
+      viewport: viewport,
+      touchX: trueX - 2.2,
+      plotWidth: width,
+      candleCount: count,
+    );
+    expect(other.index, index - 1);
+    expect(other.x, viewport.chartX(
+      index: index - 1, candleCount: count, plotWidth: width));
+  });
+
+  test('crosshair follows real 60px close-up candles and no future space',
+      () {
+    const viewport = ChartViewport(barWidth: ChartViewport.maxBarWidth);
+    const width = 320.0;
+    const count = 200;
+    const index = 199;
+    final candleX = viewport.chartX(
+        index: index, candleCount: count, plotWidth: width);
+    final hit = ChartCrosshairSnap.resolve(
+      viewport: viewport, touchX: candleX + 15,
+      plotWidth: width, candleCount: count);
+    expect(hit.index, index);
+    expect(hit.x, candleX);
+
+    const blank = ChartViewport(scrollBars: -15);
+    final realX = blank.chartX(
+        index: 89, candleCount: 90, plotWidth: 300);
+    final real = ChartCrosshairSnap.resolve(
+      viewport: blank, touchX: realX + 3,
+      plotWidth: 300, candleCount: 90);
+    expect(real.index, 89);
+    expect(real.x, closeTo(realX, 1e-9));
+    final future = ChartCrosshairSnap.resolve(
+      viewport: blank, touchX: 280, plotWidth: 300, candleCount: 90);
+    expect(future.index, isNull,
+        reason: 'Future whitespace must not get a fabricated broker time');
+    expect(future.x, 280);
+  });
+
+  test('Replay crosshair cannot select candles beyond visible prefix', () {
+    const viewport = ChartViewport(barWidth: 10);
+    final last = ChartCrosshairSnap.resolve(
+      viewport: viewport, touchX: 295,
+      plotWidth: 300, candleCount: 4);
+    expect(last.index, 3);
+    expect(last.x, 295);
+    final unseen = ChartCrosshairSnap.resolve(
+      viewport: viewport, touchX: 300,
+      plotWidth: 300, candleCount: 4);
+    expect(unseen.index, isNull,
+        reason: 'No forward time label beyond Replay candles');
+    expect(ChartCrosshairSnap.resolve(
+      viewport: viewport, touchX: 100,
+      plotWidth: 300, candleCount: 0).index, isNull);
+    expect(ChartCrosshairSnap.resolve(
+      viewport: viewport, touchX: double.nan,
+      plotWidth: 300, candleCount: 4).index, isNull);
+  });
+
   test('a left drag creates right-side whitespace and centers the last bar', () {
     const initial = ChartViewport();
     final next = initial.pan(deltaX: -150, plotWidth: 300, candleCount: 90);
