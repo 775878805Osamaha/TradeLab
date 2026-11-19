@@ -288,6 +288,9 @@ bool chartCanUsePaintOnlyViewportUpdate({
   required bool crosshairVisible,
   required bool movingDrawing,
   required bool visiblePriceRectangles,
+  // Enable only for rectangles bound to chart's shared repaint signal and
+  // dynamic viewport/auto-scale, never for an unbound snapshot painter.
+  bool priceRectanglesFollowViewport = false,
   required bool replayTradeLevelsVisible,
   // Opt in only when the practice overlay is wired to the SAME viewport
   // notifier and live price scale as the chart painter.
@@ -296,5 +299,5 @@ bool chartCanUsePaintOnlyViewportUpdate({
     !selectingReplayStart &&
     !crosshairVisible &&
     !movingDrawing &&
-    !visiblePriceRectangles &&
+    (!visiblePriceRectangles || priceRectanglesFollowViewport) &&
     (!replayTradeLevelsVisible || replayTradeLevelsFollowViewport);
