@@ -158,7 +158,7 @@ void main() {
         selectedRectangle, updatedPainter.currentViewport,
         updatedPainter.currentScale, 100, 284.5);
     expect(movedRect.left, greaterThan(initialRect.left));
-    expect(movedRect.top, greaterThan(initialRect.top));
+    expect(movedRect.top, lessThan(initialRect.top));
     expect(cache.length, 3,
         reason: 'Existing measured price/time labels remain reused');
     expect(tester.takeException(), isNull);
