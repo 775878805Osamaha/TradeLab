@@ -452,22 +452,32 @@ class RangeTickStore {
       }
       // A later page can overlap an existing millisecond with fewer ticks.
       // Reject partial groups rather than treating the page as complete.
-      final groupedCounts = <int, int>{};
-      for (final tick in ticks) {
-        groupedCounts.update(tick.timestamp, (count) => count + 1,
-            ifAbsent: () => 1);
-      }
+      // Both streams are chronological. Match existing millisecond counts
+      // against the incoming sorted BID page with one cursor instead of a
+      // potentially million-entry timestamp->count Dart hash map.
       final existingCounts = await txn.rawQuery('''
         SELECT timestamp_ms, COUNT(*) AS total
         FROM range_tick_archive
         WHERE account_id = ? AND symbol = ?
           AND timestamp_ms BETWEEN ? AND ?
         GROUP BY timestamp_ms
+        ORDER BY timestamp_ms ASC
       ''', [accountId, symbol, ticks.first.timestamp, ticks.last.timestamp]);
+      var incomingIndex = 0;
       for (final row in existingCounts) {
         final timestamp = (row['timestamp_ms'] as num).toInt();
         final count = (row['total'] as num).toInt();
-        if (groupedCounts[timestamp] != count) {
+        while (incomingIndex < ticks.length &&
+            ticks[incomingIndex].timestamp < timestamp) {
+          incomingIndex++;
+        }
+        var matchingCount = 0;
+        while (incomingIndex < ticks.length &&
+            ticks[incomingIndex].timestamp == timestamp) {
+          matchingCount++;
+          incomingIndex++;
+        }
+        if (matchingCount != count) {
           throw StateError(
               'Incomplete overlapping BID millisecond; archive unchanged');
         }
@@ -476,6 +486,12 @@ class RangeTickStore {
       // SQLite changes() distinguishes ignored duplicates from new rows.
       for (var offset = 0; offset < ticks.length; offset += 500) {
         final end = offset + 500 < ticks.length ? offset + 500 : ticks.length;
+        // Keep the exact inclusive primary-key bounds of this batch.
+        // One market millisecond can contain thousands of distinct BID
+        // events, so timestamps alone would query that group repeatedly.
+        final firstTimestamp = ticks[offset].timestamp;
+        final firstSequence =
+            firstTimestamp == lastTimestamp ? sequence + 1 : 0;
         final batch = txn.batch();
         for (var i = offset; i < end; i++) {
           final tick = ticks[i];
@@ -493,11 +509,19 @@ class RangeTickStore {
         }
         // Reject conflicting overlaps anywhere in this page, not just at
         // the first timestamp. The transaction rolls back on a mismatch.
+        final lastBatchTimestamp = ticks[end - 1].timestamp;
+        final lastBatchSequence = sequence;
         final existing = await txn.query('range_tick_archive',
             columns: ['timestamp_ms', 'sequence_no', 'bid'],
-            where: 'account_id = ? AND symbol = ? AND timestamp_ms BETWEEN ? AND ?',
-            whereArgs: [accountId, symbol, ticks[offset].timestamp,
-                ticks[end - 1].timestamp],
+            where: 'account_id = ? AND symbol = ? AND '
+                '(timestamp_ms > ? OR (timestamp_ms = ? AND sequence_no >= ?)) '
+                'AND (timestamp_ms < ? OR '
+                '(timestamp_ms = ? AND sequence_no <= ?))',
+            whereArgs: [
+              accountId, symbol,
+              firstTimestamp, firstTimestamp, firstSequence,
+              lastBatchTimestamp, lastBatchTimestamp, lastBatchSequence,
+            ],
             orderBy: 'timestamp_ms ASC, sequence_no ASC');
         final known = <(int, int), double>{
           for (final row in existing)

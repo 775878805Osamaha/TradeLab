@@ -324,6 +324,96 @@ void main() {
     );
   });
 
+  test('large same-millisecond BID group verifies bounded batches and rollback',
+      () async {
+    final start = DateTime.utc(2025, 9, 1).millisecondsSinceEpoch;
+    const account = 'large-bid-ordinal-account';
+    final sameMillisecond = List<MarketTick>.generate(1220,
+      (index) => MarketTick(start + 100, 2200 + index / 10000));
+    expect(await RangeTickStore.appendHistorical(
+        account, 'XAUUSD', sameMillisecond), 1220);
+    expect(await RangeTickStore.appendHistorical(
+        account, 'XAUUSD', sameMillisecond), 0,
+        reason: 'Replayed identical source events cannot duplicate ticks');
+
+    final conflicting = <MarketTick>[
+      MarketTick(start + 50, 2199),
+      ...List<MarketTick>.generate(1220, (index) =>
+        MarketTick(start + 100,
+            index == 750 ? 9999 : 2200 + index / 10000)),
+      MarketTick(start + 200, 2210),
+    ];
+    await expectLater(
+      RangeTickStore.appendHistorical(account, 'XAUUSD', conflicting),
+      throwsStateError,
+      reason: 'An interior overlapping BID event crossing a 500-row '
+          'batch boundary must cause an atomic rollback',
+    );
+    final afterFailure = await RangeTickStore.readHistorical(
+      account, 'XAUUSD', beforeMs: start + 300, limit: 2000);
+    expect(afterFailure, hasLength(1220));
+    expect(afterFailure.first.timestamp, start + 100);
+    expect(afterFailure[750].bid, sameMillisecond[750].bid);
+    expect(afterFailure.last.timestamp, start + 100);
+
+    final valid = <MarketTick>[
+      MarketTick(start + 50, 2199),
+      ...sameMillisecond,
+      MarketTick(start + 200, 2210),
+    ];
+    expect(await RangeTickStore.appendHistorical(
+        account, 'XAUUSD', valid), 2);
+    final full = await RangeTickStore.readHistorical(
+      account, 'XAUUSD', beforeMs: start + 300, limit: 2000);
+    expect(full, hasLength(1222));
+    expect(full.first.bid, 2199);
+    expect(full[1].bid, sameMillisecond.first.bid);
+    expect(full[1220].bid, sameMillisecond.last.bid);
+    expect(full.last.bid, 2210);
+  });
+
+  test('sorted overlap count scan tolerates gaps but rejects partial ms',
+      () async {
+    final start = DateTime.utc(2025, 9, 2).millisecondsSinceEpoch;
+    const account = 'sparse-bid-group-account';
+    final base = [
+      MarketTick(start + 2, 2001),
+      MarketTick(start + 2, 2002),
+      MarketTick(start + 6, 2006),
+      MarketTick(start + 10, 2010),
+    ];
+    expect(await RangeTickStore.appendHistorical(account, 'XAUUSD', base), 4);
+    final partial = [
+      MarketTick(start + 1, 2000),
+      MarketTick(start + 2, 2001),
+      MarketTick(start + 4, 2004),
+      MarketTick(start + 6, 2006),
+      MarketTick(start + 8, 2008),
+      MarketTick(start + 10, 2010),
+    ];
+    await expectLater(
+      RangeTickStore.appendHistorical(account, 'XAUUSD', partial),
+      throwsStateError,
+      reason: 'Partial overlapping same-ms group is not verified history',
+    );
+    final complete = [
+      MarketTick(start + 1, 2000),
+      MarketTick(start + 2, 2001),
+      MarketTick(start + 2, 2002),
+      MarketTick(start + 4, 2004),
+      MarketTick(start + 6, 2006),
+      MarketTick(start + 8, 2008),
+      MarketTick(start + 10, 2010),
+      MarketTick(start + 12, 2012),
+    ];
+    expect(await RangeTickStore.appendHistorical(
+      account, 'XAUUSD', complete), 4);
+    final restored = await RangeTickStore.readHistorical(
+      account, 'XAUUSD', beforeMs: start + 13);
+    expect(restored.map((tick) => tick.bid).toList(),
+        [2000, 2001, 2002, 2004, 2006, 2008, 2010, 2012]);
+  });
+
   test('latest verified window restores fresh timestamped ticks', () async {
     final end = DateTime.now().toUtc().millisecondsSinceEpoch - 1000;
     final from = end - sixDaysMs;
