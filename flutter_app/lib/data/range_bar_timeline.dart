@@ -95,8 +95,12 @@ class RangeBarTimeline {
     required List<MarketTick> currentTicks,
     required double priceDistance,
   }) async {
-    if (olderTicks.isEmpty || currentTicks.isEmpty ||
-        olderTicks.last.timestamp >= currentTicks.first.timestamp) {
+    // A first verified startup page has no newer archive yet. It still
+    // needs the same bounded one-pass merge/build operation. Reject only
+    // an empty incoming older page or a shared millisecond boundary.
+    if (olderTicks.isEmpty ||
+        (currentTicks.isNotEmpty &&
+            olderTicks.last.timestamp >= currentTicks.first.timestamp)) {
       throw ArgumentError('Older BID page must precede current history');
     }
     final request = (olderTicks, currentTicks, priceDistance);
