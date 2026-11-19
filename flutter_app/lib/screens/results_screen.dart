@@ -28,6 +28,10 @@ class _ResultsScreenState extends State<ResultsScreen> {
   DateTimeRange? _customRange;
   int? _selectedCurvePoint;
   final Set<int> _closingIds = {};
+  static const int _journalPageSize = 25;
+  int _visibleJournalTrades = _journalPageSize;
+  final ScrollController _resultsScroll = ScrollController();
+  String? _journalAccountKey;
 
   static const _pages = [
     'نظرة عامة', 'المنحنيات البيانية', 'يوميات الصفقات',
@@ -53,6 +57,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     super.initState();
     widget.controller.addListener(_onAccountChange);
     widget.journal?.addListener(_onAccountChange);
+    _journalAccountKey = widget.journal?.accountKey;
   }
 
   @override
@@ -65,17 +70,43 @@ class _ResultsScreenState extends State<ResultsScreen> {
     if (oldWidget.journal != widget.journal) {
       oldWidget.journal?.removeListener(_onAccountChange);
       widget.journal?.addListener(_onAccountChange);
+      _journalAccountKey = widget.journal?.accountKey;
+      _visibleJournalTrades = _journalPageSize;
+      _selectedCurvePoint = null;
     }
   }
 
   void _onAccountChange() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // Price/quote notifications must not reset the user's journal page.
+    // A genuine ledger account switch must not reuse another account's
+    // pagination or a selected historical balance-curve point.
+    final key = widget.journal?.accountKey;
+    if (key != _journalAccountKey) {
+      _journalAccountKey = key;
+      _visibleJournalTrades = _journalPageSize;
+      _selectedCurvePoint = null;
+    }
+    setState(() {});
+  }
+
+  void _selectPage(int index) {
+    if (index == _page) return;
+    setState(() {
+      _page = index;
+      _selectedCurvePoint = null;
+      _visibleJournalTrades = _journalPageSize;
+    });
+    // Replacing the overview with a shorter tab must never leave the user
+    // stranded at the previous tab's deep scroll offset.
+    if (_resultsScroll.hasClients) _resultsScroll.jumpTo(0);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onAccountChange);
     widget.journal?.removeListener(_onAccountChange);
+    _resultsScroll.dispose();
     super.dispose();
   }
 
@@ -176,7 +207,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                     label: Text(_pages[i]),
                     selected: _page == i,
                     showCheckmark: false,
-                    onSelected: (_) => setState(() => _page = i),
+                    onSelected: (_) => _selectPage(i),
                     labelStyle: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -186,6 +217,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
       ),
       const Divider(height: 1),
       Expanded(child: ListView(
+        controller: _resultsScroll,
         key: const Key('results-dashboard-list'),
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 26),
         children: [
@@ -203,6 +235,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   setState(() {
                     _period = value;
                     _selectedCurvePoint = null;
+                    _visibleJournalTrades = _journalPageSize;
                   });
                 }
               },
@@ -229,6 +262,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
               ),
             ),
           ]),
+          if (_page == 0) ...[
           const SizedBox(height: 12),
           _performanceHero(report),
           const SizedBox(height: 14),
@@ -285,6 +319,29 @@ class _ResultsScreenState extends State<ResultsScreen> {
             ]),
           ),
           const SizedBox(height: 18),
+          ] else ...[
+            const SizedBox(height: 12),
+            Container(
+              key: const Key('results-local-source-note'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: colors.outline.withValues(alpha: .18)),
+              ),
+              child: Row(children: [
+                Icon(Icons.lock_outline_rounded, size: 18,
+                    color: colors.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  'مقاييس من الدفتر التجريبي المحلي فقط، وليست نتائج حساب الوسيط.',
+                  style: TextStyle(fontSize: 11, height: 1.45,
+                      color: colors.onSurfaceVariant),
+                )),
+              ]),
+            ),
+            const SizedBox(height: 14),
+          ],
           if (_page == 0) ...[
             _openPositions(),
             const SizedBox(height: 18),
@@ -571,7 +628,10 @@ class _ResultsScreenState extends State<ResultsScreen> {
       ]);
   }
 
-  Widget _recentTrades(LedgerReport report, {bool all = false}) => Column(
+  Widget _recentTrades(LedgerReport report, {bool all = false}) {
+    final total = report.trades.length;
+    final shown = math.min(total, all ? _visibleJournalTrades : 5);
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start, children: [
         const TradeSectionTitle('آخر الصفقات المغلقة'),
         if (report.trades.isEmpty)
@@ -585,9 +645,9 @@ class _ResultsScreenState extends State<ResultsScreen> {
               style: TextStyle(fontSize: 13, height: 1.5),
             )),
           ]))
-        else for (final entry in report.trades.reversed
-            .take(all ? report.trades.length : 5))
-          Padding(padding: const EdgeInsets.only(bottom: 8),
+        else for (final entry in report.trades.reversed.take(shown))
+          Padding(key: Key('results-closed-trade-${entry.id}'),
+            padding: const EdgeInsets.only(bottom: 8),
             child: TradeSurface(child: Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -608,7 +668,28 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 tooltip: 'حذف القيد', icon: const Icon(Icons.delete_outline),
                 onPressed: () => _confirmDelete(entry)),
             ]))),
+        if (all && total > 0) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('عرض $shown من $total صفقة مغلقة',
+              key: const Key('results-closed-trades-count'),
+              style: TextStyle(fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          ),
+          if (shown < total)
+            Align(alignment: AlignmentDirectional.center,
+              child: OutlinedButton.icon(
+                key: const Key('results-more-closed-trades'),
+                onPressed: () => setState(() {
+                  _visibleJournalTrades =
+                      math.min(total, _visibleJournalTrades + _journalPageSize);
+                }),
+                icon: const Icon(Icons.expand_more_rounded),
+                label: const Text('عرض 25 صفقة إضافية'),
+              )),
+        ],
       ]);
+  }
 
   Widget _openPositions() {
     final positions = widget.journal?.entries.where((entry) =>
@@ -759,6 +840,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
       _customRange = dates;
       _period = 'مخصص';
       _selectedCurvePoint = null;
+      _visibleJournalTrades = _journalPageSize;
     });
   }
 }
