@@ -2895,6 +2895,18 @@ class _ChartScreenState extends State<ChartScreen>
     ));
   }
 
+  /// Read-only gesture test probe. It exposes counts/state, never prices,
+  /// broker data, user credentials, or editable drawing collections.
+  @visibleForTesting
+  ({bool drawing, bool visible, int levels, int patterns, int undo})
+      get debugGuideState => (
+        drawing: _drawing,
+        visible: _drawingsVisible,
+        levels: _levels.length,
+        patterns: _patterns.length,
+        undo: _lineUndo.length,
+      );
+
   int get _drawingObjectCount => _levels.length + _patterns.length +
       _rectangles.length + _shortPositions.length;
 
