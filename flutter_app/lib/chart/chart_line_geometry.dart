@@ -35,9 +35,12 @@ class ChartLineGeometry {
       case ChartDrawingTool.verticalLine:
         return startX < 0 || startX > plotWidth;
       case ChartDrawingTool.horizontalRay:
-      case ChartDrawingTool.fibonacci:
-        // Both originate at startX and extend toward increasing candle x.
+        // The single-anchor source ray extends to the right.
         return startX >= plotWidth;
+      case ChartDrawingTool.fibonacci:
+        // The current painter uses the LEFTMOST of both source anchors as
+        // the beginning of each extended level (supports reversed anchors).
+        return math.min(startX, endX) >= plotWidth;
       case ChartDrawingTool.ray:
       case ChartDrawingTool.extendedLine:
       case ChartDrawingTool.parallelChannel:
