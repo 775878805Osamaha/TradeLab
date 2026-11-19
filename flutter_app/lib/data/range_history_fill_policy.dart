@@ -27,6 +27,27 @@ class RangeHistoryFillPolicy {
         math.min(maxVisibleClosedBars, wanted));
   }
 
+  /// A read-only settings action can request the NEXT verified BID page
+  /// only while this exact cTrader chart is active and not being rebuilt.
+  /// A source error may be retried manually; this does not waive the broker
+  /// verification that happens inside RangeOlderPageScanner.
+  static bool canRequestOlderManually({
+    required bool rangeMode,
+    required bool connected,
+    required bool hasAccount,
+    required bool hasVerifiedTicks,
+    required bool chartActive,
+    required bool initialLoading,
+    required bool olderLoading,
+    required bool autoFilling,
+    required bool historyExhausted,
+    required bool replayActive,
+    required bool selectingReplayStart,
+  }) =>
+      rangeMode && connected && hasAccount && hasVerifiedTicks &&
+      chartActive && !initialLoading && !olderLoading && !autoFilling &&
+      !historyExhausted && !replayActive && !selectingReplayStart;
+
   static bool shouldContinue({
     required int completedPages,
     required int closedBars,
