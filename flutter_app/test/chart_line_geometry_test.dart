@@ -9,6 +9,66 @@ void main() {
   const start = Offset(20, 80);
   const end = Offset(60, 40);
 
+  test('historical Fibonacci level and its label start inside viewport', () {
+    // The original first anchor can be 4000px left after panning.
+    // Its real ratio/price level still runs across today's visible chart.
+    final level = ChartLineGeometry.fibonacciLevelStroke(
+      fromX: -4000, levelY: 45, plot: bounds);
+    expect(level, isNotNull);
+    expect(level!.start, const Offset(0, 45));
+    expect(level.end, const Offset(100, 45));
+    // Before the fix the painter placed the label at x=-3995.
+    expect(level.start.dx + 5, inInclusiveRange(0, 100));
+
+    final partlyVisible = ChartLineGeometry.fibonacciLevelStroke(
+      fromX: 38.5, levelY: 72, plot: bounds);
+    expect(partlyVisible?.start, const Offset(38.5, 72));
+    expect(partlyVisible?.end, const Offset(100, 72));
+  });
+
+  test('Fibonacci culls offscreen levels without altering real prices', () {
+    const selected = ChartPattern(
+      tool: ChartDrawingTool.fibonacci,
+      start: ChartAnchor(20, 1925),
+      end: ChartAnchor(35, 1975),
+    );
+    expect(selected.fibonacciPrice(.618), closeTo(1955.9, 1e-9));
+    expect(selected.visibleAt(36), isTrue);
+    expect(selected.visibleAt(35), isFalse,
+      reason: 'Replay cannot show levels anchored to unrevealed bars');
+
+    expect(ChartLineGeometry.fibonacciLevelStroke(
+      fromX: 101, levelY: 50, plot: bounds), isNull,
+      reason: 'No line or text belongs to a future/off-right screen anchor');
+    expect(ChartLineGeometry.fibonacciLevelStroke(
+      fromX: -3000, levelY: 101, plot: bounds), isNull);
+    expect(ChartLineGeometry.fibonacciLevelStroke(
+      fromX: -3000, levelY: -1, plot: bounds), isNull);
+    expect(selected.fibonacciPrice(.618), closeTo(1955.9, 1e-9));
+  });
+
+  test('Fibonacci clipping is finite, bounded, and preserves plot edges', () {
+    const plot = Rect.fromLTWH(10, 12, 250, 180);
+    expect(ChartLineGeometry.fibonacciLevelStroke(
+      fromX: -9000000, levelY: 12, plot: plot)?.start,
+      const Offset(10, 12));
+    expect(ChartLineGeometry.fibonacciLevelStroke(
+      fromX: 15, levelY: 192, plot: plot)?.end,
+      const Offset(260, 192));
+    for (final invalid in [double.nan, double.infinity,
+      double.negativeInfinity]) {
+      expect(ChartLineGeometry.fibonacciLevelStroke(
+        fromX: invalid, levelY: 100, plot: plot), isNull);
+      expect(ChartLineGeometry.fibonacciLevelStroke(
+        fromX: 0, levelY: invalid, plot: plot), isNull);
+    }
+    expect(ChartLineGeometry.fibonacciLevelStroke(
+      fromX: 0, levelY: 100, plot: Rect.zero), isNull);
+    expect(ChartLineGeometry.fibonacciLevelStroke(
+      fromX: 0, levelY: 100,
+      plot: const Rect.fromLTWH(0, 0, 100, 0)), isNull);
+  });
+
   test('trend segment remains between its two anchors', () {
     final lines = ChartLineGeometry.strokes(
       tool: ChartDrawingTool.trendLine,
