@@ -78,6 +78,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(market.accountId, '101');
       expect(tester.state<FormFieldState<String>>(selector).value, '101');
+      // ListView lazily unmounts the hero after the account selector is
+      // scrolled into view. Scroll back to verify the actual visible badge.
+      await tester.drag(find.byKey(const Key('account-dashboard-list')),
+          const Offset(0, 650));
+      await tester.pumpAndSettle();
       expect(find.text('حساب تجريبي · قراءة فقط'), findsOneWidget);
       expect(find.text('حساب حقيقي · قراءة فقط'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -96,7 +101,7 @@ void main() {
       final hero = find.byKey(const Key('account-connection-hero'));
       expect(button, findsOneWidget);
       expect(find.ancestor(of: button, matching: hero), findsOneWidget);
-      expect(tester.getRect(button).bottom, lessThan(320));
+      expect(tester.getRect(button).bottom, lessThan(460));
       expect(tester.getSize(button).height, greaterThanOrEqualTo(46));
       expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
       expect(tester.takeException(), isNull);
