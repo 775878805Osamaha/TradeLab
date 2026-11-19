@@ -223,6 +223,7 @@ void main() {
       bool crosshair = false,
       bool draggingDrawing = false,
       bool rectangles = false,
+      bool rectanglesTrackViewport = false,
       bool practiceLevels = false,
       bool practiceLevelsTrackViewport = false,
     }) =>
@@ -231,6 +232,7 @@ void main() {
           crosshairVisible: crosshair,
           movingDrawing: draggingDrawing,
           visiblePriceRectangles: rectangles,
+          priceRectanglesFollowViewport: rectanglesTrackViewport,
           replayTradeLevelsVisible: practiceLevels,
           replayTradeLevelsFollowViewport: practiceLevelsTrackViewport,
         );
@@ -242,7 +244,12 @@ void main() {
     expect(paintOnly(crosshair: true), isFalse);
     expect(paintOnly(draggingDrawing: true), isFalse);
     expect(paintOnly(rectangles: true), isFalse,
-        reason: 'Rectangle positions and price tags use painter snapshots');
+        reason: 'Snapshot-based rectangles still require a full rebuild');
+    expect(paintOnly(rectangles: true, rectanglesTrackViewport: true), isTrue,
+        reason: 'Bound rectangle layer repaints without rebuilding controls');
+    expect(paintOnly(selecting: true, rectangles: true,
+        rectanglesTrackViewport: true), isFalse,
+        reason: 'Selecting Replay start must still update its cursor widget');
     expect(paintOnly(practiceLevels: true), isFalse,
         reason: 'Static Replay entry, stop and target need rebuilding');
     expect(paintOnly(practiceLevels: true, practiceLevelsTrackViewport: true),
@@ -251,7 +258,10 @@ void main() {
             'toolbar rebuild is required');
     expect(paintOnly(rectangles: true,
         practiceLevels: true, practiceLevelsTrackViewport: true), isFalse,
-        reason: 'Unmigrated price rectangles must still rebuild');
+        reason: 'Unbound rectangles remain unsafe even when trades track pan');
+    expect(paintOnly(rectangles: true, rectanglesTrackViewport: true,
+        practiceLevels: true, practiceLevelsTrackViewport: true), isTrue,
+        reason: 'Both independent layers can paint with the live chart');
   });
 
   test('momentum displacement preserves direction and viewport bounds', () {
