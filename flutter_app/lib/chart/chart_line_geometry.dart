@@ -124,6 +124,32 @@ class ChartLineGeometry {
     return false;
   }
 
+  /// The chart's grid and crosshair already use a 4px stroke / 8px cycle.
+  /// Batch all dash contours into one path so a continuous finger gesture
+  /// needs ONE canvas drawPath instead of dozens of drawLine calls.
+  ///
+  /// Direction is respected for horizontal, vertical and diagonal guides.
+  /// This does not alter the source candle, source time or price level.
+  static Path configuredDashPath({
+    required Offset from,
+    required Offset to,
+  }) {
+    final path = Path();
+    if (!from.dx.isFinite || !from.dy.isFinite ||
+        !to.dx.isFinite || !to.dy.isFinite) return path;
+    final delta = to - from;
+    final distance = delta.distance;
+    if (!distance.isFinite || distance < .01) return path;
+    final direction = delta / distance;
+    for (var at = 0.0; at < distance; at += 8.0) {
+      final start = from + direction * at;
+      final end = from + direction * math.min(at + 4.0, distance);
+      path.moveTo(start.dx, start.dy);
+      path.lineTo(end.dx, end.dy);
+    }
+    return path;
+  }
+
   /// Draw the TradingView-style dashed last-close guide with one Canvas
   /// drawPath instead of dozens of individual drawLine calls per frame.
   /// Keep the existing 6px interval and 2.2px dash length exactly, with
