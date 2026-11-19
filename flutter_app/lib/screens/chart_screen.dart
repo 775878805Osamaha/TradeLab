@@ -536,6 +536,7 @@ class _ChartScreenState extends State<ChartScreen>
       movingDrawing: false,
       visiblePriceRectangles: _drawingsVisible && _rectangles.isNotEmpty,
       replayTradeLevelsVisible: _replay && _training.trades.isNotEmpty,
+      replayTradeLevelsFollowViewport: true,
     )) {
       _viewport = next;
       _chartRepaint.value++;
@@ -4236,6 +4237,7 @@ class _ChartScreenState extends State<ChartScreen>
                 movingDrawing: movingDrawing,
                 visiblePriceRectangles: _drawingsVisible && _rectangles.isNotEmpty,
                 replayTradeLevelsVisible: _replay && _training.trades.isNotEmpty,
+                replayTradeLevelsFollowViewport: true,
               )) {
                 _viewport = nextViewport;
                 _chartRepaint.value++;
@@ -4627,6 +4629,11 @@ class _ChartScreenState extends State<ChartScreen>
                   trades: _training.trades,
                   viewport: _viewport,
                   scale: _priceScale(candles, plotWidth, constraints.maxHeight),
+                  // Share live viewport and price auto-scale with candle painter.
+                  viewportProvider: () => _viewport,
+                  scaleProvider: () => _priceScale(
+                      candles, plotWidth, constraints.maxHeight),
+                  repaint: _chartRepaint,
                   candleCount: candles.length,
                   plotWidth: plotWidth,
                 ),
