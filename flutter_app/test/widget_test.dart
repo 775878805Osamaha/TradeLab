@@ -209,6 +209,12 @@ void main() {
     await tester.tap(find.byKey(const Key('chart-kind-range')));
     await tester.pumpAndSettle();
     expect(find.text('إعدادات شموع المدى'), findsOneWidget);
+    expect(find.byKey(const Key('range-bid-source-status')), findsOneWidget);
+    expect(find.text('تيكات BID الموثقة في الشارت: 0'), findsOneWidget);
+    expect(find.text('شموع Range المكتملة: 0'), findsOneWidget);
+    expect(find.text('آخر تيك موثق (UTC): غير متاح'), findsOneWidget);
+    expect(find.byKey(const Key('range-load-older-action')), findsNothing,
+        reason: 'Unlinked cTrader cannot request or invent older BID pages');
     expect(find.text('1000'), findsOneWidget);
     await tester.tap(find.text('250'));
     await tester.pumpAndSettle();
