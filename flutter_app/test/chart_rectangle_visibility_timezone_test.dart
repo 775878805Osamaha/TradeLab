@@ -93,4 +93,106 @@ void main() {
     expect(PriceRectangleGeometry.visibleInPlot(
         const Rect.fromLTRB(260, 12, 340, 100), 259, 200), false);
   });
+
+  test('horizontal early culling matches old rectangle bounds at every '
+      '3px/60px mobile zoom and scroll position', () {
+    const scale = ChartPriceScale(100, 120, 200);
+    // Large historical drawing archives must keep exactly the same visible
+    // rectangles as the old full-price geometry without drawing offscreen.
+    final drawings = List<ChartPriceRectangle>.generate(2000, (i) =>
+        ChartPriceRectangle(startIndex: i, endIndex: i + 1,
+            upper: 115, lower: 105));
+    var definitelyOffscreen = 0;
+    var visible = 0;
+    for (final plotWidth in <double>[259, 329]) {
+      for (final barWidth in <double>[3, 10, 60]) {
+        for (final scroll in <double>[-15, 0, 35, 480, 1500]) {
+          final viewport = ChartViewport(
+            barWidth: barWidth,
+            scrollBars: scroll,
+            rightMarginBars: 4,
+          );
+          for (final drawing in drawings) {
+            final oldBounds = PriceRectangleGeometry.rect(
+                drawing, viewport, scale, 2001, plotWidth);
+            final oldVisible = PriceRectangleGeometry.visibleInPlot(
+                oldBounds, plotWidth, scale.height);
+            final span = PriceRectangleGeometry.visibleHorizontalSpan(
+                drawing, viewport, 2001, plotWidth);
+            expect(span != null, oldVisible,
+                reason: 'Viewport $plotWidth / ${barWidth}px, '
+                    'scroll $scroll, index ${drawing.startIndex}');
+            if (span == null) {
+              definitelyOffscreen++;
+            } else {
+              visible++;
+              expect(span.left, oldBounds.left);
+              expect(span.right, oldBounds.right);
+            }
+          }
+        }
+      }
+    }
+    expect(definitelyOffscreen, greaterThan(45000),
+        reason: 'Most of 60k historical rectangle checks should skip '
+            'price transforms, clipping, and drawing allocations');
+    expect(visible, greaterThan(0));
+  });
+
+  test('partly clipped historical handles still paint and receive touches',
+      () {
+    const plotWidth = 259.0;
+    const scale = ChartPriceScale(100, 120, 200);
+    const viewport = ChartViewport(barWidth: 3, rightMarginBars: 0);
+    const candleCount = 1000;
+    final (from, to) = viewport.visibleIndices(
+        plotWidth: plotWidth, candleCount: candleCount);
+    expect(to, greaterThan(from + 4));
+    final partiallyVisible = ChartPriceRectangle(
+      startIndex: from - 2, endIndex: from + 5,
+      upper: 115, lower: 105,
+    );
+    final bounds = PriceRectangleGeometry.rect(
+        partiallyVisible, viewport, scale, candleCount, plotWidth);
+    expect(bounds.right, greaterThan(0));
+    expect(PriceRectangleGeometry.visibleHorizontalSpan(
+        partiallyVisible, viewport, candleCount, plotWidth), isNotNull);
+    final hit = PriceRectangleGeometry.hitTest(
+        Offset(bounds.center.dx.clamp(0.0, plotWidth - 1),
+            bounds.center.dy),
+        [partiallyVisible], viewport, scale, candleCount, plotWidth);
+    expect(hit?.$1, 0,
+        reason: 'Selected partly visible rect must retain its hit target');
+    final whollyOld = ChartPriceRectangle(
+        startIndex: 0, endIndex: 1, upper: 115, lower: 105);
+    expect(PriceRectangleGeometry.visibleHorizontalSpan(
+        whollyOld, viewport, candleCount, plotWidth), isNull);
+    expect(PriceRectangleGeometry.hitTest(
+        const Offset(4, 100), [whollyOld], viewport, scale,
+        candleCount, plotWidth), isNull);
+  });
+
+  test('Replay and malformed viewports never expose future rectangles',
+      () {
+    const source = ChartPriceRectangle(
+        startIndex: 30, endIndex: 40, upper: 210, lower: 190);
+    const viewport = ChartViewport(barWidth: 10);
+    expect(PriceRectangleGeometry.visibleHorizontalSpan(
+        source, viewport, 40, 259), isNull,
+        reason: 'End candle belongs to the unrevealed Replay future');
+    expect(PriceRectangleGeometry.visibleHorizontalSpan(
+        source, viewport, 41, 259), isNotNull);
+    for (final invalid in <double>[
+      double.nan, double.infinity, double.negativeInfinity, 0, -1
+    ]) {
+      expect(PriceRectangleGeometry.visibleHorizontalSpan(
+          source, viewport, 41, invalid), isNull);
+    }
+    expect(PriceRectangleGeometry.visibleHorizontalSpan(
+        source, const ChartViewport(barWidth: double.nan),
+        41, 259), isNull);
+    expect(PriceRectangleGeometry.visibleHorizontalSpan(
+        source, const ChartViewport(scrollBars: double.infinity),
+        41, 259), isNull);
+  });
 }
