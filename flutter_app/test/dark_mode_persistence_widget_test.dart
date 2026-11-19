@@ -43,7 +43,9 @@ class _DeferredThemeStore implements ThemePreferenceStore {
   @override
   Future<bool?> loadDarkMode() => pending.future;
   @override
-  Future<void> saveDarkMode(bool enabled) async => lastSaved = enabled;
+  Future<void> saveDarkMode(bool enabled) async {
+    lastSaved = enabled;
+  }
 }
 
 Future<void> openAccount(WidgetTester tester) async {
