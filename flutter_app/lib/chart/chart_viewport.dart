@@ -36,6 +36,24 @@ class ChartPriceScale {
   double y(double price) => (maximum - price) / (maximum - minimum) * height;
   double price(double y) => maximum - y / height * (maximum - minimum);
 
+  /// Read the price displayed by the crosshair from the *same* price scale
+  /// that paints candles, levels, SL/TP and the right axis. Applying a
+  /// separate minimum span (e.g. 0.00001) to only the crosshair label breaks
+  /// the on-screen price/line agreement at fine forex zoom levels.
+  ///
+  /// No broker data is transformed; an invalid scale is not advertised as
+  /// a tradable price. Vertical touches outside the plot use its nearest
+  /// visible edge.
+  double? crosshairPrice(double yPosition) {
+    final span = maximum - minimum;
+    if (!yPosition.isFinite || !height.isFinite || height <= 0 ||
+        !minimum.isFinite || !maximum.isFinite ||
+        !span.isFinite || span <= 0) {
+      return null;
+    }
+    return price(yPosition.clamp(0.0, height).toDouble());
+  }
+
   /// A manually adjusted price interval retains its market-price anchors
   /// when the Android chart canvas changes height (e.g. focus mode / Replay).
   ChartPriceScale withHeight(double newHeight) =>
