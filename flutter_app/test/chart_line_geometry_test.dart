@@ -125,6 +125,90 @@ void main() {
     expect(hit(const Offset(20, 25), radius: 0), isTrue);
   });
 
+  test('batched grid and crosshair retain exact 4/8px dash geometry', () {
+    // 320dp and 390dp mobile devices have 259px / 329px candle plots.
+    for (final width in <double>[259, 329]) {
+      final y = width == 259 ? 147.25 : 201.5;
+      final segments = ChartLineGeometry.configuredDashPath(
+        from: Offset(0, y), to: Offset(width, y),
+      ).computeMetrics().toList();
+      expect(segments, hasLength((width / 8).ceil()));
+      for (var i = 0; i < segments.length; i++) {
+        final left = i * 8.0;
+        final right = (left + 4).clamp(0.0, width);
+        final begin = segments[i].getTangentForOffset(0)!.position;
+        final finish = segments[i].getTangentForOffset(
+          segments[i].length)!.position;
+        expect(begin.dx, closeTo(left, .001));
+        expect(begin.dy, closeTo(y, .001));
+        expect(finish.dx, closeTo(right, .001));
+        expect(finish.dy, closeTo(y, .001));
+        expect(segments[i].length, closeTo(right - left, .001));
+      }
+    }
+    final vertical = ChartLineGeometry.configuredDashPath(
+      from: const Offset(258, 400),
+      to: const Offset(258, 0),
+    ).computeMetrics().toList();
+    expect(vertical, hasLength(50));
+    for (var i = 0; i < vertical.length; i++) {
+      final first = vertical[i].getTangentForOffset(0)!.position;
+      final last = vertical[i].getTangentForOffset(
+        vertical[i].length)!.position;
+      expect(first.dx, closeTo(258, .001));
+      expect(first.dy, closeTo(400 - i * 8, .001));
+      expect(last.dy, closeTo(396 - i * 8, .001));
+    }
+  });
+
+  test('batched diagonal and clipped final dash preserve old endpoints', () {
+    const from = Offset(5, 7);
+    const to = Offset(35, 47); // 30x40, exact total distance 50.
+    final strokes = ChartLineGeometry.configuredDashPath(
+      from: from, to: to).computeMetrics().toList();
+    expect(strokes, hasLength(7));
+    for (var i = 0; i < strokes.length; i++) {
+      final at = i * 8.0;
+      final endDistance = (at + 4).clamp(0.0, 50.0);
+      final start = strokes[i].getTangentForOffset(0)!.position;
+      final end = strokes[i].getTangentForOffset(
+        strokes[i].length)!.position;
+      expect(start.dx, closeTo(from.dx + .6 * at, .001));
+      expect(start.dy, closeTo(from.dy + .8 * at, .001));
+      expect(end.dx, closeTo(from.dx + .6 * endDistance, .001));
+      expect(end.dy, closeTo(from.dy + .8 * endDistance, .001));
+    }
+    expect(strokes.last.length, closeTo(2, .001),
+        reason: 'The last dash ends at the real guide boundary');
+    // Returning along the opposite vector keeps the same spacing relative
+    // to the first touch point, including a negative-direction swipe.
+    final reverse = ChartLineGeometry.configuredDashPath(
+      from: to, to: from).computeMetrics().toList();
+    expect(reverse.first.getTangentForOffset(0)!.position, to);
+    expect((reverse.last.getTangentForOffset(
+      reverse.last.length)!.position - from).distance, lessThan(.001));
+  });
+
+  test('invalid or nearly zero guide never paints non-finite contours', () {
+    const good = Offset(10, 20);
+    final invalid = [
+      const Offset(double.nan, 0),
+      const Offset(double.infinity, 5),
+      const Offset(double.negativeInfinity, 0),
+    ];
+    for (final offset in invalid) {
+      expect(ChartLineGeometry.configuredDashPath(
+        from: offset, to: good).computeMetrics().isEmpty, isTrue);
+      expect(ChartLineGeometry.configuredDashPath(
+        from: good, to: offset).computeMetrics().isEmpty, isTrue);
+    }
+    expect(ChartLineGeometry.configuredDashPath(
+      from: good, to: good).computeMetrics().isEmpty, isTrue);
+    expect(ChartLineGeometry.configuredDashPath(
+      from: good, to: const Offset(10.001, 20.001),
+    ).computeMetrics().isEmpty, isTrue);
+  });
+
   test('last-close dashes match the old 6px/2.2px geometry at 320dp', () {
     // 320dp mobile width minus the existing 61dp right price scale.
     const width = 259.0;
