@@ -5404,8 +5404,17 @@ class _CandleChartPainter extends CustomPainter {
       }
     }
     if (crosshair != null) {
+      // Resolve ONE candle index for both the vertical guide and its time
+      // tag. At 3px/bar the unsnapped guide could sit between two candles
+      // while the label claimed the time of a different source bar.
+      final selected = ChartCrosshairSnap.resolve(
+        viewport: viewport,
+        touchX: crosshair!.dx,
+        plotWidth: axis,
+        candleCount: candles.length,
+      );
       final location = Offset(
-        crosshair!.dx.clamp(0, axis).toDouble(),
+        selected.x,
         crosshair!.dy.clamp(0, chartHeight).toDouble(),
       );
       _configuredLine(canvas, Offset(location.dx, 0),
@@ -5420,17 +5429,17 @@ class _CandleChartPainter extends CustomPainter {
           Paint()..color = TradeColors.blue);
       _text(canvas, crossPrice.toStringAsFixed(decimals),
           Offset(axis + 3, markerY + 2), Colors.white, 10);
-      if (timestamps.length >= candles.length) {
-        final index = viewport.indexAt(
-            x: location.dx, plotWidth: axis, candleCount: candles.length);
-        if (index != null) {
-          final date = symbolSettings.timeZone.displayDate(timestamps[index]);
+      if (timestamps.length >= candles.length &&
+          selected.index != null) {
+          // This is the same REAL candle that owns the guide at selected.x.
+          // The Replay list is already limited to its confirmed prefix.
+          final date = symbolSettings.timeZone.displayDate(
+              timestamps[selected.index!]);
           final startX = (location.dx - 37).clamp(0.0, axis - 75).toDouble();
           canvas.drawRect(Rect.fromLTWH(startX, chartHeight, 75, 20),
               Paint()..color = TradeColors.blue);
           _text(canvas, _formatUtc(date),
               Offset(startX + 5, chartHeight + 4), Colors.white, 9);
-        }
       }
     }
     // A separate LTR price axis keeps digits and decimal points predictable in RTL.
