@@ -5527,10 +5527,17 @@ class _CandleChartPainter extends CustomPainter {
           candleCount: candles.length, plotWidth: axis);
       final x2 = viewport.chartX(index: drawing.end.index,
           candleCount: candles.length, plotWidth: axis);
+      final selected = activePattern == index;
+      // Skip only finite annotations whose source-anchor geometry proves
+      // they cannot touch this plot. The selected pattern keeps its handles;
+      // rays, infinite lines and parallel channels keep their long reach.
+      if (!selected && ChartLineGeometry.definitelyOffscreenHorizontally(
+          tool: drawing.tool, startX: x1, endX: x2, plotWidth: axis)) {
+        continue;
+      }
       final y1 = y(drawing.start.price);
       final y2 = y(drawing.end.price);
       final color = Color(drawing.colorValue);
-      final selected = activePattern == index;
       final drawingPaint = Paint()
         ..color = color
         ..strokeWidth = drawing.strokeWidth + (selected ? 1 : 0)

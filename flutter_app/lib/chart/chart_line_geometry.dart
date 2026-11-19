@@ -10,6 +10,44 @@ typedef ChartStroke = ({Offset start, Offset end});
 class ChartLineGeometry {
   const ChartLineGeometry._();
 
+  /// Conservative x-only rejection for UNSELECTED drawings before
+  /// constructing clipped strokes, Paint objects or Fibonacci labels on
+  /// each frame of Android pan/pinch momentum.
+  ///
+  /// Never reject extended lines, rays, or parallel channels based solely
+  /// on their two anchors: those shapes can enter the plot from far away.
+  /// The selected drawing is exempt, retaining handle circles at the edge.
+  static bool definitelyOffscreenHorizontally({
+    required ChartDrawingTool tool,
+    required double startX,
+    required double endX,
+    required double plotWidth,
+  }) {
+    if (!startX.isFinite || !endX.isFinite ||
+        !plotWidth.isFinite || plotWidth <= 0) return false;
+    switch (tool) {
+      case ChartDrawingTool.trendLine:
+      case ChartDrawingTool.horizontal:
+        // Finite segments cannot cross the plot if BOTH endpoints are on
+        // the same, wholly offscreen side.
+        return math.max(startX, endX) < 0 ||
+            math.min(startX, endX) > plotWidth;
+      case ChartDrawingTool.verticalLine:
+        return startX < 0 || startX > plotWidth;
+      case ChartDrawingTool.horizontalRay:
+        // The single-anchor source ray extends to the right.
+        return startX >= plotWidth;
+      case ChartDrawingTool.fibonacci:
+        // The current painter uses the LEFTMOST of both source anchors as
+        // the beginning of each extended level (supports reversed anchors).
+        return math.min(startX, endX) >= plotWidth;
+      case ChartDrawingTool.ray:
+      case ChartDrawingTool.extendedLine:
+      case ChartDrawingTool.parallelChannel:
+        return false;
+    }
+  }
+
   static List<ChartStroke> strokes({
     required ChartDrawingTool tool,
     required Offset start,
