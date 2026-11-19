@@ -4846,6 +4846,16 @@ class _ChartScreenState extends State<ChartScreen>
                       ? null : widget.controller.recentQuoteFor(_selectedSymbol),
                   repaint: _chartRepaint,
                   textCache: _chartTextCache,
+                  // Dynamic geometry for edits; immutable copies below remain
+                  // for shouldRepaint after genuine widget rebuilds.
+                  levelsProvider: () => _drawingsVisible
+                      ? _levels : const <double>[],
+                  patternsProvider: () => _drawingsVisible
+                      ? _patterns : const <ChartPattern>[],
+                  selectedLineProvider: () => _drawing && _drawingsVisible
+                      ? _selectedLine : null,
+                  selectedPatternProvider: () => _drawing && _drawingsVisible
+                      ? _selectedPattern : null,
                   levels: _drawingsVisible ? List<double>.unmodifiable(_levels) : const [],
                   patterns: _drawingsVisible ? List<ChartPattern>.unmodifiable(_patterns) : const [],
                   shortPositions: _drawingsVisible ? List<ChartShortPosition>.unmodifiable(_shortPositions) : const [],
@@ -5287,6 +5297,10 @@ class _CandleChartPainter extends CustomPainter {
     required MarketQuote? Function() sourceQuoteProvider,
     required Listenable repaint,
     required this.textCache,
+    required List<double> Function() levelsProvider,
+    required List<ChartPattern> Function() patternsProvider,
+    required int? Function() selectedLineProvider,
+    required int? Function() selectedPatternProvider,
     required this.levels,
     required this.patterns,
     required this.shortPositions,
@@ -5306,6 +5320,10 @@ class _CandleChartPainter extends CustomPainter {
        _crosshairProvider = crosshairProvider,
        _priceScaleProvider = priceScaleProvider,
        _sourceQuoteProvider = sourceQuoteProvider,
+       _levelsProvider = levelsProvider,
+       _patternsProvider = patternsProvider,
+       _selectedLineProvider = selectedLineProvider,
+       _selectedPatternProvider = selectedPatternProvider,
        super(repaint: repaint);
 
   final List<TradeCandle> candles;
@@ -5321,6 +5339,12 @@ class _CandleChartPainter extends CustomPainter {
   final Offset? Function() _crosshairProvider;
   final ChartPriceScale Function(double, double) _priceScaleProvider;
   final MarketQuote? Function() _sourceQuoteProvider;
+  // Live read-only-on-paint callbacks allow frequent pointer edits without
+  // rebuilding the toolbar or copying every existing drawing on each move.
+  final List<double> Function() _levelsProvider;
+  final List<ChartPattern> Function() _patternsProvider;
+  final int? Function() _selectedLineProvider;
+  final int? Function() _selectedPatternProvider;
   ChartViewport get viewport => _viewportProvider();
   Offset? get crosshair => _crosshairProvider();
   final List<double> levels;
@@ -5447,14 +5471,18 @@ class _CandleChartPainter extends CustomPainter {
       canvas.drawPath(linePath, Paint()..color = TradeColors.blue..strokeWidth = 1.6
         ..style = PaintingStyle.stroke);
     }
-    for (var index = 0; index < levels.length; index++) {
-      final levelY = y(levels[index]);
+    final paintLevels = _levelsProvider();
+    final paintPatterns = _patternsProvider();
+    final activeLine = _selectedLineProvider();
+    final activePattern = _selectedPatternProvider();
+    for (var index = 0; index < paintLevels.length; index++) {
+      final levelY = y(paintLevels[index]);
       final marker = Paint()..color = TradeColors.blue.withValues(alpha: .8)
-        ..strokeWidth = selectedLine == index ? 2.4 : 1;
+        ..strokeWidth = activeLine == index ? 2.4 : 1;
       canvas.drawLine(Offset(0, levelY), Offset(axis, levelY), marker);
     }
-    for (var index = 0; index < patterns.length; index++) {
-      final drawing = patterns[index];
+    for (var index = 0; index < paintPatterns.length; index++) {
+      final drawing = paintPatterns[index];
       // Replay is strictly prefix-only: drawings ending in the future stay
       // invisible, even if their coordinates were created in analysis mode.
       if (!drawing.visibleAt(candles.length)) continue;
@@ -5465,7 +5493,7 @@ class _CandleChartPainter extends CustomPainter {
       final y1 = y(drawing.start.price);
       final y2 = y(drawing.end.price);
       final color = Color(drawing.colorValue);
-      final selected = selectedPattern == index;
+      final selected = activePattern == index;
       final drawingPaint = Paint()
         ..color = color
         ..strokeWidth = drawing.strokeWidth + (selected ? 1 : 0)
