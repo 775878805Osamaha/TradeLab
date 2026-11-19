@@ -277,3 +277,21 @@ bool chartShouldFling({
     horizontalVelocity.abs() >= 180 && horizontalTravel >= 14 &&
     candleCount > 1 &&
     !multiTouch && !editingDrawing && !reducedMotion;
+
+/// Only the candle painter reads the viewport dynamically during a repaint.
+/// Other viewport-dependent layers use immutable painter/position snapshots
+/// from build(), so they must be rebuilt when visible. In particular, Replay
+/// selection, price rectangles and practice trade levels cannot be left
+/// behind while the candles move underneath them.
+bool chartCanUsePaintOnlyViewportUpdate({
+  required bool selectingReplayStart,
+  required bool crosshairVisible,
+  required bool movingDrawing,
+  required bool visiblePriceRectangles,
+  required bool replayTradeLevelsVisible,
+}) =>
+    !selectingReplayStart &&
+    !crosshairVisible &&
+    !movingDrawing &&
+    !visiblePriceRectangles &&
+    !replayTradeLevelsVisible;

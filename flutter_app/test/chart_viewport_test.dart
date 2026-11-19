@@ -217,6 +217,34 @@ void main() {
     expect(eligible(800, reduce: true), isFalse);
   });
 
+  test('active Replay without anchored overlays uses painter-only gestures', () {
+    bool paintOnly({
+      bool selecting = false,
+      bool crosshair = false,
+      bool draggingDrawing = false,
+      bool rectangles = false,
+      bool practiceLevels = false,
+    }) =>
+        chartCanUsePaintOnlyViewportUpdate(
+          selectingReplayStart: selecting,
+          crosshairVisible: crosshair,
+          movingDrawing: draggingDrawing,
+          visiblePriceRectangles: rectangles,
+          replayTradeLevelsVisible: practiceLevels,
+        );
+
+    expect(paintOnly(), isTrue,
+        reason: 'Replay without overlays should not rebuild the whole screen');
+    expect(paintOnly(selecting: true), isFalse,
+        reason: 'Blue Replay selection cursor must follow the viewport');
+    expect(paintOnly(crosshair: true), isFalse);
+    expect(paintOnly(draggingDrawing: true), isFalse);
+    expect(paintOnly(rectangles: true), isFalse,
+        reason: 'Rectangle positions and price tags use painter snapshots');
+    expect(paintOnly(practiceLevels: true), isFalse,
+        reason: 'Replay entry, stop and target must move with the candles');
+  });
+
   test('momentum displacement preserves direction and viewport bounds', () {
     const viewport = ChartViewport(barWidth: 10, scrollBars: 30);
     final right = viewport.pan(deltaX: 42, plotWidth: 300, candleCount: 200);

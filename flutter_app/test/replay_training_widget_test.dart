@@ -87,6 +87,19 @@ void main() {
         '${firstBar.minute.toString().padLeft(2, '0')} UTC';
     expect(message, contains(firstTime));
     expect(find.byKey(const Key('replay-speed-picker')), findsOneWidget);
+    // Replay with no practice levels or rectangles has no viewport-snapshot
+    // overlays. Touch samples should repaint the chart without rebuilding the
+    // toolbar (same fast path used by the normal chart).
+    final replayChart = find.byKey(const Key('chart-gesture-area'));
+    await tester.drag(replayChart, const Offset(-40, 0));
+    await tester.pumpAndSettle();
+    final replayHeader = find.byKey(const Key('chart-reference-header'));
+    final previousReplayHeader = tester.widget(replayHeader);
+    await tester.drag(replayChart, const Offset(-45, 0));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(identical(previousReplayHeader, tester.widget(replayHeader)), isTrue,
+        reason: 'Normal Replay panning should not rebuild its toolbar');
+    expect(tester.takeException(), isNull);
     // The user complained that toolbars and a giant trading strip obscure
     // the candles. They are HIDDEN until deliberately opened from settings.
     expect(find.byKey(const Key('chart-reference-toolbar')), findsNothing);
