@@ -69,6 +69,7 @@ void main() {
       bool connected = true,
       bool hasAccount = true,
       bool hasVerifiedTicks = true,
+      int loadedTicks = 1,
       bool chartActive = true,
       bool initialLoading = false,
       bool olderLoading = false,
@@ -81,6 +82,7 @@ void main() {
       connected: connected,
       hasAccount: hasAccount,
       hasVerifiedTicks: hasVerifiedTicks,
+      loadedTicks: loadedTicks,
       chartActive: chartActive,
       initialLoading: initialLoading,
       olderLoading: olderLoading,
@@ -95,6 +97,11 @@ void main() {
     expect(permitted(hasAccount: false), isFalse);
     expect(permitted(hasVerifiedTicks: false), isFalse,
         reason: 'No fake broker history paging from an empty chart');
+    expect(permitted(loadedTicks: 0), isFalse);
+    expect(permitted(loadedTicks: 999999), isTrue);
+    expect(permitted(loadedTicks: 1000000), isFalse,
+        reason: 'The local memory ceiling is not broker history exhaustion');
+    expect(permitted(loadedTicks: 1000001), isFalse);
     expect(permitted(chartActive: false), isFalse);
     expect(permitted(initialLoading: true), isFalse);
     expect(permitted(olderLoading: true), isFalse);
