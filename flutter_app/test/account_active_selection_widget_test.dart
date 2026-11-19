@@ -108,7 +108,10 @@ void main() {
 
       market.busy = true;
       market.notifyListeners();
-      await tester.pumpAndSettle();
+      // The deliberately indeterminate LinearProgressIndicator keeps
+      // scheduling frames while busy. One frame is the correct assertion,
+      // whereas pumpAndSettle would time out by design.
+      await tester.pump();
       expect(tester.widget<FilledButton>(button).onPressed, isNull);
       expect(tester.takeException(), isNull);
     });
