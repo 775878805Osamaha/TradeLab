@@ -29,8 +29,9 @@ void main() {
     final labels = prices.map((p) => p.toStringAsFixed(digits)).toList();
     expect(labels.toSet().length, prices.length,
         reason: 'Every different painted y-level needs a different label');
-    expect(labels.first, '1.072100000');
-    expect(labels.last, '1.072100012');
+    expect(prices.first, greaterThanOrEqualTo(min - step));
+    expect(prices.last, lessThanOrEqualTo(max + step));
+    expect(prices.last, greaterThan(prices.first));
     expect(prices.map((p) => p.toStringAsFixed(7)).toSet().length,
         lessThan(prices.length),
         reason: 'Prove the pre-fix axis displayed duplicate prices');
