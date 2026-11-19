@@ -163,4 +163,83 @@ void main() {
         reason: 'Existing measured price/time labels remain reused');
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('dragging a rectangle repaints its live source anchors only',
+      (tester) async {
+    final candleSignal = ValueNotifier<int>(0);
+    final rectangleSignal = ValueNotifier<int>(0);
+    final merged = Listenable.merge([candleSignal, rectangleSignal]);
+    final cache = ChartTextLayoutCache();
+    addTearDown(candleSignal.dispose);
+    addTearDown(rectangleSignal.dispose);
+    addTearDown(cache.clear);
+    var candleNotifications = 0;
+    candleSignal.addListener(() => candleNotifications++);
+    final liveDrawings = <ChartPriceRectangle>[selectedRectangle];
+    var liveReads = 0;
+    const viewport = ChartViewport(barWidth: 10, scrollBars: .5);
+    const scale = ChartPriceScale(100, 180, 666);
+
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Center(
+      child: Column(children: [
+        const Text('شارت TradeLab', key: Key('stable-chart-header')),
+        SizedBox(width: 345.5, height: 690,
+          child: RepaintBoundary(child: CustomPaint(
+            key: const Key('independently-repainted-rectangle'),
+            painter: ChartPriceRectanglePainter(
+              // Keep a snapshot for builds, but live drag coordinates for
+              // each repaint. The painter object must not be recreated.
+              drawings: List<ChartPriceRectangle>.unmodifiable(liveDrawings),
+              drawingsProvider: () {
+                liveReads++;
+                return liveDrawings;
+              },
+              selectedIndex: 0,
+              viewport: viewport, scale: scale, repaint: merged,
+              candleCount: 100, plotWidth: 284.5, dark: false,
+              timestamps: timestamps, textCache: cache,
+            ),
+          )),
+        ),
+      ]),
+    ))));
+    await tester.pump();
+    final overlay = find.byKey(const Key('independently-repainted-rectangle'));
+    final header = find.byKey(const Key('stable-chart-header'));
+    final initialHeaderWidget = tester.widget(header);
+    final originalPainter = tester.widget<CustomPaint>(overlay)
+        .painter! as ChartPriceRectanglePainter;
+    expect(originalPainter.currentDrawings.single, selectedRectangle);
+    expect(cache.length, 3);
+    final initialReads = liveReads;
+    final initialBounds = PriceRectangleGeometry.rect(
+        selectedRectangle, viewport, scale, 100, 284.5);
+
+    // Simulate the chart's onScaleUpdate: mutate only the real drawing
+    // and notify the overlay. No setState or candle signal is involved.
+    liveDrawings[0] = selectedRectangle.moved(2, 3)!;
+    rectangleSignal.value++;
+    await tester.pump();
+    final afterDrag = tester.widget<CustomPaint>(overlay)
+        .painter! as ChartPriceRectanglePainter;
+    expect(identical(afterDrag, originalPainter), isTrue,
+        reason: 'Touching a drawing must not rebuild the chart tree');
+    expect(identical(tester.widget(header), initialHeaderWidget), isTrue);
+    expect(candleNotifications, 0,
+        reason: 'A rectangle move does not invalidate candle rendering');
+    expect(liveReads, greaterThan(initialReads),
+        reason: 'Overlay paints current anchors, not stale build snapshots');
+    expect(afterDrag.drawings.single.upper, 144.3,
+        reason: 'The original snapshot remains immutable');
+    expect(afterDrag.currentDrawings.single.upper, 147.3);
+    expect(afterDrag.currentDrawings.single.lower, 142.7);
+    final newBounds = PriceRectangleGeometry.rect(
+        afterDrag.currentDrawings.single, viewport, scale, 100, 284.5);
+    expect(newBounds.left, greaterThan(initialBounds.left));
+    expect(newBounds.top, lessThan(initialBounds.top));
+    expect(cache.length, 6,
+        reason: 'Only new price and real UTC time tags are measured');
+    expect(tester.takeException(), isNull);
+  });
+
 }
