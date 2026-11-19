@@ -2598,6 +2598,27 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showRangeSettings({bool reloadOnChange = true}) async {
+    // Count only cTrader BID events verified for this active chart; a forming
+    // Range bar is not a completed source-confirmed market bar.
+    final bidTickCount = _rangeHistoryTicks.length;
+    final closedRangeBars = math.max(0, _actualRange.length - 1);
+    final latestTickUtc = bidTickCount == 0
+        ? 'غير متاح'
+        : DateTime.fromMillisecondsSinceEpoch(
+            _rangeHistoryTicks.last.timestamp, isUtc: true).toIso8601String();
+    final canRequestOlder = RangeHistoryFillPolicy.canRequestOlderManually(
+      rangeMode: _mode == ChartMode.range,
+      connected: widget.controller.ctraderConnected && _rangeSourceSupported,
+      hasAccount: widget.controller.accountId != null,
+      hasVerifiedTicks: bidTickCount > 0,
+      chartActive: widget.active,
+      initialLoading: _loading,
+      olderLoading: _olderLoading,
+      autoFilling: _rangeAutoFilling,
+      historyExhausted: _historyExhausted,
+      replayActive: _replay,
+      selectingReplayStart: _replaySelectingStart,
+    );
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -2610,6 +2631,54 @@ class _ChartScreenState extends State<ChartScreen>
           child: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
             const TradeSectionTitle('إعدادات شموع المدى'),
+            Container(
+              key: const Key('range-bid-source-status'),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(sheetContext).colorScheme.primary
+                    .withValues(alpha: .06),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('تيكات BID الموثقة في الشارت: $bidTickCount',
+                    textDirection: TextDirection.rtl),
+                  Text('شموع Range المكتملة: $closedRangeBars',
+                    textDirection: TextDirection.rtl),
+                  Text('آخر تيك موثق (UTC): $latestTickUtc',
+                    textDirection: TextDirection.rtl),
+                  if (bidTickCount == 0)
+                    const Text('لا توجد تيكات BID موثقة في الشارت حاليًا. '
+                      'لا تُعرض شموع بديلة أو أسعار مُفترضة.',
+                      textDirection: TextDirection.rtl),
+                  if (bidTickCount > 0 && closedRangeBars == 0)
+                    const Text('وصلت تيكات حقيقية، لكن لم تكتمل شمعة مدى '
+                      'بعد بهذه المسافة السعرية.',
+                      textDirection: TextDirection.rtl),
+                  if (_rangeAutoFilling)
+                    const Text('جارٍ البحث عن تاريخ BID أقدم ضمن حدود '
+                      'التحميل التلقائي الآمنة.',
+                      textDirection: TextDirection.rtl),
+                ],
+              ),
+            ),
+            if (canRequestOlder)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: SizedBox(width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const Key('range-load-older-action'),
+                    icon: const Icon(Icons.history_rounded),
+                    label: const Text('تحميل فترة BID موثقة أقدم'),
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      if (mounted) unawaited(_loadOlderRangeHistory());
+                    },
+                  ),
+                ),
+              ),
+            const SizedBox(height: 12),
             const Text('البدء المقترح: 25 نقطة. تتفاوت كثافة الشموع حسب الرمز والوسيط.',
               textDirection: TextDirection.rtl),
             const Text(
