@@ -9,6 +9,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../chart/chart_annotations.dart';
 import '../chart/chart_line_geometry.dart';
 import '../chart/chart_candle_wicks.dart';
+import '../chart/chart_candle_bodies.dart';
 import '../chart/chart_short_position.dart';
 import '../chart/chart_price_rectangle.dart';
 import '../chart/chart_type_sheet.dart';
@@ -5467,24 +5468,26 @@ class _CandleChartPainter extends CustomPainter {
       canvas.drawPath(wicks.rising, positiveWick);
       canvas.drawPath(wicks.falling, negativeWick);
     }
-    for (var i = start; i < ending; i++) {
-      final candle = candles[i];
-      final rising = symbolSettings.colorByPreviousClose && i > 0
-          ? candle.close >= candles[i - 1].close : candle.positive;
-      final centerX = viewport.chartX(
-        index: i, candleCount: candles.length, plotWidth: axis);
-      if (centerX < -viewport.barWidth || centerX > axis + viewport.barWidth) continue;
-      final openY = y(candle.open);
-      final closeY = y(candle.close);
-      final bodyRect = Rect.fromLTRB(
-        centerX - viewport.barWidth * .34, math.min(openY, closeY),
-        centerX + viewport.barWidth * .34, math.max(openY + 1, closeY + 1),
+    // Visible source OHLC body rectangles are grouped by candle color.
+    // Reuse each same rectangle path for the fill and optional border;
+    // wicks were drawn first, so they remain behind the candle bodies.
+    if (symbolSettings.bodyVisible || symbolSettings.borderVisible) {
+      final bodies = ChartCandleBodies.visible(
+        candles: candles,
+        viewport: viewport,
+        start: start,
+        end: ending,
+        plotWidth: axis,
+        priceY: y,
+        colorByPreviousClose: symbolSettings.colorByPreviousClose,
       );
       if (symbolSettings.bodyVisible) {
-        canvas.drawRect(bodyRect, rising ? positiveBody : negativeBody);
+        canvas.drawPath(bodies.rising, positiveBody);
+        canvas.drawPath(bodies.falling, negativeBody);
       }
       if (symbolSettings.borderVisible) {
-        canvas.drawRect(bodyRect, rising ? positiveBorder : negativeBorder);
+        canvas.drawPath(bodies.rising, positiveBorder);
+        canvas.drawPath(bodies.falling, negativeBorder);
       }
     }
     if (indicator) {
