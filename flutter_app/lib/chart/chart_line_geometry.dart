@@ -124,6 +124,26 @@ class ChartLineGeometry {
     return false;
   }
 
+  /// Draw the TradingView-style dashed last-close guide with one Canvas
+  /// drawPath instead of dozens of individual drawLine calls per frame.
+  /// Keep the existing 6px interval and 2.2px dash length exactly, with
+  /// the final dash clipped to the candle plot (not the right price ruler).
+  /// This is paint-only geometry: the broker close is never changed.
+  static Path lastCloseDashPath({
+    required double y,
+    required double plotWidth,
+  }) {
+    final path = Path();
+    if (!y.isFinite || !plotWidth.isFinite || plotWidth <= 0) {
+      return path;
+    }
+    for (var x = 0.0; x < plotWidth; x += 6) {
+      path.moveTo(x, y);
+      path.lineTo(math.min(plotWidth, x + 2.2), y);
+    }
+    return path;
+  }
+
   static double distanceToStroke(Offset point, ChartStroke stroke) {
     final d = stroke.end - stroke.start;
     final magnitude = d.distanceSquared;
