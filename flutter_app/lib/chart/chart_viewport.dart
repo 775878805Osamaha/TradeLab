@@ -171,6 +171,40 @@ class ChartViewport {
     );
   }
 
+  /// Dragging the BOTTOM time ruler adjusts candle width independently
+  /// of ordinary one-finger plot panning. Use the EXISTING focal-anchored
+  /// pinch transform with identical start/end anchors, so the verified
+  /// historical candle under the initial touch stays at its x coordinate.
+  ///
+  /// Incremental deltas are capped to avoid sudden jumps from Android
+  /// pointer handoffs. No new timestamps, broker candles or Replay bars are
+  /// synthesized when exposing a wider or narrower source view.
+  ChartViewport dragTimeAxis({
+    required double deltaX,
+    required double anchorX,
+    required double plotWidth,
+    required int candleCount,
+  }) {
+    if (!deltaX.isFinite || !anchorX.isFinite ||
+        !plotWidth.isFinite || plotWidth <= 0 || candleCount <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite ||
+        deltaX == 0) {
+      return this;
+    }
+    final anchor = anchorX.clamp(0.0, plotWidth).toDouble();
+    final factor = math.exp(
+        deltaX.clamp(-120.0, 120.0).toDouble() / 180.0);
+    final next = pinch(
+      scale: factor,
+      initialFocalX: anchor,
+      currentFocalX: anchor,
+      plotWidth: plotWidth,
+      candleCount: candleCount,
+    );
+    return next == this ? this : next;
+  }
+
   /// Keep the same historical candle under the same x-coordinate after
   /// Range bars are regenerated from newly prepended BID ticks. Range bar
   /// counts and indices can both change when the starting price changes.
