@@ -7,11 +7,41 @@ import 'package:tradelab_flutter/screens/chart_screen.dart';
 import 'package:tradelab_flutter/chart/chart_viewport.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_controller.dart';
+import 'package:tradelab_flutter/data/tradelab_data.dart';
 import 'package:tradelab_flutter/main.dart';
 
 /// A moving chart may repaint every frame, but must not rebuild the header,
 /// account controls and tab layout on every pointer sample.
 /// No broker data or fabricated market candles are needed to test this path.
+/// Offline quote publisher: supplies source-shaped, timestamp-validated
+/// prices but makes NO broker/market HTTP calls. It records when the
+/// retained chart painter reads source quotes after a paint notification.
+class _QuotePaintController extends MarketController {
+  _QuotePaintController(MarketApi api) : super(api: api);
+
+  MarketQuote? _quote;
+  int reads = 0;
+
+  @override
+  MarketQuote? recentQuoteFor(TradeSymbol symbol) {
+    reads++;
+    final source = _quote;
+    if (source == null || source.symbol != symbol.code ||
+        source.source != symbol.source) return null;
+    try {
+      source.assertFresh(nowMs: DateTime.now().toUtc().millisecondsSinceEpoch);
+      return source;
+    } on MarketDataException {
+      return null;
+    }
+  }
+
+  void publishQuote(MarketQuote quote) {
+    _quote = quote;
+    notifyListeners();
+  }
+}
+
 void main() {
   testWidgets('ordinary chart pan repaints without rebuilding header',
       (tester) async {
@@ -40,6 +70,49 @@ void main() {
     expect(identical(previousHeaderWidget, tester.widget(header)), isTrue,
         reason: 'Gesture samples should repaint candles, not rebuild controls');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('streaming price changes repaint chart, not entire controls',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/v3/klines') {
+        return http.Response(jsonEncode(List.generate(120, (i) {
+          final ms = 1700000000000 + i * 900000;
+          return [ms, '${35000 + i}', '${35100 + i}',
+            '${34900 + i}', '${35050 + i}', '1', ms + 899999];
+        })), 200);
+      }
+      return http.Response('{"error":"offline"}', 503);
+    });
+    final market = _QuotePaintController(MarketApi(client: client));
+    addTearDown(market.dispose);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: ChartScreen(controller: market, requestedSymbolCode: 'BTCUSDT'),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-source-empty')), findsNothing);
+    final header = find.byKey(const Key('chart-reference-header'));
+    final original = tester.widget(header);
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final sameMinute = now ~/ 60000 * 60000;
+    // Repeated real-structure source BID/ASK revisions in one minute must
+    // update the painter, not rebuild TradeLab's expensive toolbar.
+    for (var i = 0; i < 20; i++) {
+      market.publishQuote(MarketQuote(
+        symbol: 'BTCUSDT', source: TradeSource.binance,
+        bid: 35100 + i / 10, ask: 35100.5 + i / 10,
+        timestampMs: sameMinute,
+      ));
+      final readsOnNotice = market.reads;
+      await tester.pump();
+      expect(market.reads, greaterThan(readsOnNotice),
+        reason: 'Retained CustomPainter must read fresh source at paint time');
+      expect(identical(original, tester.widget(header)), isTrue,
+        reason: 'BID/ASK changes should not rebuild header on each source tick');
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('manual ruler range resets on Replay entry and exit', (tester) async {

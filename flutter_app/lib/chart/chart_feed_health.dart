@@ -32,6 +32,43 @@ abstract final class ChartFeedHealth {
       previous?.bid != next?.bid ||
       previous?.ask != next?.ask;
 
+  /// The full chart header needs a rebuild only if source evidence shown in
+  /// its tooltip/indicator changes. BID/ASK price movement *inside* the same
+  /// minute belongs to the chart painter, not to every header/control widget.
+  ///
+  /// Keeping the staleness transition here matters: it may happen within
+  /// the same minute, as a newer quote crosses the last closed-bar threshold.
+  static bool quoteHeaderEvidenceChanged({
+    required MarketQuote? previous,
+    required MarketQuote? next,
+    required int? lastClosedOpenMs,
+    required String timeframe,
+    required int nowMs,
+  }) {
+    if ((previous == null) != (next == null)) return true;
+    if (previous == null || next == null) return false;
+    if (previous.source != next.source || previous.symbol != next.symbol) {
+      return true;
+    }
+    if (previous.timestampMs ~/ Duration.millisecondsPerMinute !=
+        next.timestampMs ~/ Duration.millisecondsPerMinute) {
+      return true;
+    }
+    final previouslyLagging = closedCandlesLagging(
+      latestClosedOpenMs: lastClosedOpenMs,
+      timeframe: timeframe,
+      nowMs: nowMs,
+      freshQuoteTimestampMs: previous.timestampMs,
+    );
+    final nowLagging = closedCandlesLagging(
+      latestClosedOpenMs: lastClosedOpenMs,
+      timeframe: timeframe,
+      nowMs: nowMs,
+      freshQuoteTimestampMs: next.timestampMs,
+    );
+    return previouslyLagging != nowLagging;
+  }
+
   /// Throttle read-only quote checks to at most once per minute. A fresh
   /// quote already obtained by the Markets screen satisfies the chart, so
   /// the same source is not fetched a second time needlessly.

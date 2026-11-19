@@ -27,6 +27,63 @@ void main() {
       reason: 'Expired quote labels must be removed');
   });
 
+  test('same-minute cTrader BID changes update painter, not chart header',
+      () {
+    final base = DateTime.utc(2026, 11, 19, 12, 3)
+        .millisecondsSinceEpoch;
+    final closed = DateTime.utc(2026, 11, 19, 12, 2)
+        .millisecondsSinceEpoch;
+    MarketQuote sample(int millisecond, double bid) => MarketQuote(
+      symbol: 'XAUUSD', source: TradeSource.ctrader,
+      bid: bid, ask: bid + 0.2, timestampMs: base + millisecond);
+    final first = sample(1000, 3987.0);
+    for (var i = 1; i <= 40; i++) {
+      final updated = sample(i * 1000 + 1000, 3987 + i / 100);
+      expect(ChartFeedHealth.quoteChanged(first, updated), isTrue);
+      expect(ChartFeedHealth.quoteHeaderEvidenceChanged(
+        previous: first, next: updated,
+        lastClosedOpenMs: closed, timeframe: '1m',
+        nowMs: base + 50000), isFalse,
+        reason: 'Per-price source label should repaint without full rebuild');
+    }
+    expect(ChartFeedHealth.quoteHeaderEvidenceChanged(
+      previous: first, next: sample(61000, 3987.99),
+      lastClosedOpenMs: closed, timeframe: '1m',
+      nowMs: base + 62000), isTrue,
+      reason: 'A different verified source minute changes tooltip evidence');
+  });
+
+  test('source expiry, reconnection and mid-minute lag update header',
+      () {
+    final zero = DateTime.utc(2026, 11, 19, 12)
+        .millisecondsSinceEpoch;
+    MarketQuote sample(int offsetMs, [String symbol = 'XAUUSD']) =>
+        MarketQuote(symbol: symbol, source: TradeSource.ctrader,
+          bid: 4000, ask: 4000.5, timestampMs: zero + offsetMs);
+
+    // Price quote status changes from missing to verified, then expires.
+    expect(ChartFeedHealth.quoteHeaderEvidenceChanged(
+      previous: null, next: sample(60000),
+      lastClosedOpenMs: zero, timeframe: '1m', nowMs: zero + 60000), isTrue);
+    expect(ChartFeedHealth.quoteHeaderEvidenceChanged(
+      previous: sample(60000), next: null,
+      lastClosedOpenMs: zero, timeframe: '1m', nowMs: zero + 120000), isTrue);
+    expect(ChartFeedHealth.quoteHeaderEvidenceChanged(
+      previous: sample(60000), next: sample(61000, 'EURUSD'),
+      lastClosedOpenMs: zero, timeframe: '1m', nowMs: zero + 61000), isTrue);
+
+    // Two quotes within 12:10; the first is on the healthy ten-minute
+    // threshold, while the next one crosses that threshold by 1 millisecond.
+    expect(ChartFeedHealth.quoteHeaderEvidenceChanged(
+      previous: sample(600000), next: sample(600001),
+      lastClosedOpenMs: zero, timeframe: '1m',
+      nowMs: zero + 600001), isTrue,
+      reason: 'Stale closed-candle badge changes even within one minute');
+    expect(ChartFeedHealth.quoteHeaderEvidenceChanged(
+      previous: null, next: null,
+      lastClosedOpenMs: zero, timeframe: '1m', nowMs: zero), isFalse);
+  });
+
   test('current forming minute alone is not a missing closed candle', () {
     final now = DateTime.utc(2026, 11, 16, 12, 3).millisecondsSinceEpoch;
     final lastClosed = DateTime.utc(2026, 11, 16, 12, 2)
