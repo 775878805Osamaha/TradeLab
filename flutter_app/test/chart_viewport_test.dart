@@ -102,7 +102,7 @@ void main() {
       () {
     const plotWidth = 330.0;
     const count = 2000;
-    const candleIndex = 1910;
+    const candleIndex = 1945;
     const initial = ChartViewport(barWidth: 10, scrollBars: 43.5,
       rightMarginBars: 4);
     final originalX = initial.chartX(
