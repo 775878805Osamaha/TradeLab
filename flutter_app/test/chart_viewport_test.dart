@@ -3,6 +3,54 @@ import 'package:tradelab_flutter/chart/chart_viewport.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 void main() {
+  test('right-price-axis drag zooms prices around touch without time pan', () {
+    const scale = ChartPriceScale(100, 200, 400);
+    const viewport = ChartViewport(barWidth: 12, scrollBars: 21);
+    const anchorY = 120.0;
+    final anchorPrice = scale.price(anchorY);
+    final candleX = viewport.chartX(
+        index: 45, candleCount: 100, plotWidth: 360);
+    final zoomed = scale.dragPriceAxis(deltaY: -60, focalY: anchorY);
+    expect(zoomed.maximum - zoomed.minimum,
+        lessThan(scale.maximum - scale.minimum),
+        reason: 'Dragging the right price ruler up zooms into prices');
+    expect(zoomed.price(anchorY), closeTo(anchorPrice, 1e-9),
+        reason: 'The market price touched by the finger remains anchored');
+    expect(zoomed.y(anchorPrice), closeTo(anchorY, 1e-8));
+    expect(viewport.chartX(index: 45, candleCount: 100, plotWidth: 360),
+        candleX,
+        reason: 'Vertical price-axis zoom never changes candle timestamps');
+    final zoomedOut = zoomed.dragPriceAxis(deltaY: 60, focalY: anchorY);
+    expect(zoomedOut.maximum - zoomedOut.minimum,
+        closeTo(scale.maximum - scale.minimum, 1e-8));
+    expect(zoomedOut.price(anchorY), closeTo(anchorPrice, 1e-8));
+  });
+
+  test('manual price range retains market anchors across chart height', () {
+    const original = ChartPriceScale(1900, 1950, 300);
+    final expanded = original.withHeight(600);
+    expect(expanded.minimum, original.minimum);
+    expect(expanded.maximum, original.maximum);
+    expect(expanded.price(360), closeTo(original.price(180), 1e-9));
+    expect(expanded.y(1925), closeTo(300, 1e-9));
+    expect(original.y(1925), closeTo(150, 1e-9));
+  });
+
+  test('invalid axis gestures cannot corrupt price scale or broker history',
+      () {
+    const original = ChartPriceScale(1.071, 1.077, 400);
+    expect(identical(original.dragPriceAxis(
+        deltaY: double.nan, focalY: 100), original), isTrue);
+    expect(identical(original.dragPriceAxis(
+        deltaY: 70, focalY: double.infinity), original), isTrue);
+    expect(identical(original.dragPriceAxis(
+        deltaY: 0, focalY: 100), original), isTrue);
+    const flat = ChartPriceScale(10, 10, 400);
+    expect(identical(flat.dragPriceAxis(
+        deltaY: 70, focalY: 100), flat), isTrue,
+        reason: 'Unusable zero-span scales cannot be changed by dragging');
+  });
+
   test('a left drag creates right-side whitespace and centers the last bar', () {
     const initial = ChartViewport();
     final next = initial.pan(deltaX: -150, plotWidth: 300, candleCount: 90);

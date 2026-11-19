@@ -35,6 +35,42 @@ class ChartPriceScale {
 
   double y(double price) => (maximum - price) / (maximum - minimum) * height;
   double price(double y) => maximum - y / height * (maximum - minimum);
+
+  /// A manually adjusted price interval retains its market-price anchors
+  /// when the Android chart canvas changes height (e.g. focus mode / Replay).
+  ChartPriceScale withHeight(double newHeight) =>
+      ChartPriceScale(minimum, maximum, newHeight);
+
+  /// Vertical drag on the RIGHT price scale, independent of time-axis pan.
+  /// The price under the user's finger stays at the same y while zooming.
+  /// An upward drag magnifies price movement; downward reveals more range.
+  /// Pure geometry: no broker OHLC, Replay boundary or drawing is mutated.
+  ChartPriceScale dragPriceAxis({
+    required double deltaY,
+    required double focalY,
+  }) {
+    final span = maximum - minimum;
+    if (!deltaY.isFinite || !focalY.isFinite ||
+        !height.isFinite || height <= 0 ||
+        !minimum.isFinite || !maximum.isFinite ||
+        !span.isFinite || span <= 0 || deltaY == 0) {
+      return this;
+    }
+    final zoomFactor = math.exp(
+        (-deltaY.clamp(-120.0, 120.0).toDouble()) / 240.0);
+    final minSpan = math.max(1e-9, (maximum.abs() + minimum.abs()) * 1e-11);
+    final nextSpan = (span / zoomFactor).clamp(minSpan, 1e15).toDouble();
+    if (nextSpan == span) return this;
+    final anchorY = focalY.clamp(0.0, height).toDouble();
+    final anchorPrice = price(anchorY);
+    final aboveFraction = anchorY / height;
+    final nextMax = anchorPrice + aboveFraction * nextSpan;
+    final nextMin = anchorPrice - (1 - aboveFraction) * nextSpan;
+    if (!nextMin.isFinite || !nextMax.isFinite || nextMax <= nextMin) {
+      return this;
+    }
+    return ChartPriceScale(nextMin, nextMax, height);
+  }
 }
 
 /// Price-chart horizontal viewport. Zero means the newest bar is at the right

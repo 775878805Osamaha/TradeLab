@@ -197,6 +197,18 @@ class _ChartScreenState extends State<ChartScreen>
   // Default zoom is legible; pinch and pan remain fully user-controlled.
   ChartViewport _viewport = const ChartViewport(
     barWidth: 10, scrollBars: 0, rightMarginBars: 4);
+  // A manually scaled price ruler affects drawings and candles equally.
+  // Keep its scope per source, account, timeframe and Range configuration.
+  ChartPriceScale? _manualPriceScale;
+  String? _manualPriceScaleKey;
+  bool _draggingPriceAxis = false;
+  double _doubleTapChartX = 0;
+  String get _currentPriceScaleKey =>
+      '${widget.controller.accountId}|${_selectedSymbol.source.name}|'
+      '$_symbol|$_timeframe|${_mode.name}|$_rangeTicks';
+  bool get _priceScaleManual =>
+      _manualPriceScale != null &&
+      _manualPriceScaleKey == _currentPriceScaleKey;
   ChartPanelSettings _panelSettings = const ChartPanelSettings();
   bool _panelSettingsOpen = false;
   bool _scaleSettingsOpen = false;
@@ -3027,10 +3039,24 @@ class _ChartScreenState extends State<ChartScreen>
     _rectangleFirstCorner = null;
   }
 
-  ChartPriceScale _priceScale(List<TradeCandle> candles, double width, double height) =>
-      ChartPriceScale.visible(candles, _viewport, width, math.max(1, height - 24),
-        topMarginPercent: _panelSettings.topMarginPercent,
-        bottomMarginPercent: _panelSettings.bottomMarginPercent);
+  ChartPriceScale _priceScale(
+      List<TradeCandle> candles, double width, double height) {
+    final plotHeight = math.max(1.0, height - 24);
+    if (_priceScaleManual) return _manualPriceScale!.withHeight(plotHeight);
+    return ChartPriceScale.visible(candles, _viewport, width, plotHeight,
+      topMarginPercent: _panelSettings.topMarginPercent,
+      bottomMarginPercent: _panelSettings.bottomMarginPercent);
+  }
+
+  void _resetPriceAxisToAuto() {
+    setState(() {
+      _manualPriceScale = null;
+      _manualPriceScaleKey = null;
+      _draggingPriceAxis = false;
+    });
+    // Force a live painter refresh even if its widget snapshot is unchanged.
+    _chartRepaint.value++;
+  }
 
   int? _hitLine(double y, ChartPriceScale scale) {
     for (var index = _levels.length - 1; index >= 0; index--) {
@@ -4203,8 +4229,7 @@ class _ChartScreenState extends State<ChartScreen>
                   candleCount: candles.length, plotWidth: plotWidth)
               : 0.0;
           final replayLineY = selecting
-              ? _priceScale(candles, plotWidth,
-                  math.max(1.0, constraints.maxHeight - 24))
+              ? _priceScale(candles, plotWidth, constraints.maxHeight)
                   .y(candles[_replayCandidateIndex].close)
               : 0.0;
           return Stack(children: [
@@ -4218,6 +4243,11 @@ class _ChartScreenState extends State<ChartScreen>
               // A later second-finger touch rebases the pinch on the viewport
               // the first finger has already moved to.
               _touchGesture = ChartTouchGesture();
+              _draggingPriceAxis = candles.isNotEmpty &&
+                  details.pointerCount == 1 &&
+                  details.localFocalPoint.dx >= plotWidth &&
+                  !_replaySelectingStart && !_drawing &&
+                  !_placingShort && !_placingRectangle;
               _gestureFocalX = details.localFocalPoint.dx;
               _gestureFocalY = details.localFocalPoint.dy;
               // A touch on the blue Replay line edits the candidate. Touches
@@ -4287,6 +4317,26 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onScaleUpdate: (details) {
+              if (_draggingPriceAxis && details.pointerCount == 1) {
+                final current = _priceScale(
+                    candles, plotWidth, constraints.maxHeight);
+                final changed = current.dragPriceAxis(
+                  deltaY: details.focalPointDelta.dy,
+                  focalY: details.localFocalPoint.dy,
+                );
+                if (!identical(current, changed)) {
+                  _manualPriceScale = changed;
+                  _manualPriceScaleKey = _currentPriceScaleKey;
+                  // Keep the price ruler, candles and drawing overlays on
+                  // one identical live price coordinate system.
+                  _chartRepaint.value++;
+                }
+                return;
+              }
+              if (_draggingPriceAxis && details.pointerCount > 1) {
+                _draggingPriceAxis = false;
+                // The second finger now belongs to the usual anchored pinch.
+              }
               if (_replaySelectingStart && _replayDraggingStart) {
                 if (details.pointerCount == 1) {
                   final candidate = ReplayStartResolver.atX(
@@ -4392,6 +4442,12 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onScaleEnd: (details) {
+              if (_draggingPriceAxis) {
+                _draggingPriceAxis = false;
+                // Only one widget refresh after the completed axis gesture.
+                setState(() {});
+                return;
+              }
               final editing = _replayDraggingStart || _draggingLine ||
                   _draggingPattern ||
                   _draggingShortHandle != null || _draggingRectangle;
@@ -4416,9 +4472,18 @@ class _ChartScreenState extends State<ChartScreen>
                 _startMomentum(velocity, plotWidth);
               }
             },
+            onDoubleTapDown: (details) =>
+                _doubleTapChartX = details.localPosition.dx,
             onDoubleTap: () {
               _momentum.stop();
-              setState(() { _viewport = _freshViewport(); _crosshair = null; });
+              if (_doubleTapChartX >= plotWidth) {
+                _resetPriceAxisToAuto();
+              } else {
+                setState(() {
+                  _viewport = _freshViewport();
+                  _crosshair = null;
+                });
+              }
             },
             onLongPressStart: (details) {
               _momentum.stop();
@@ -4618,6 +4683,8 @@ class _ChartScreenState extends State<ChartScreen>
                   crosshairSnapshot: _crosshair,
                   viewportProvider: () => _viewport,
                   crosshairProvider: () => _crosshair,
+                  priceScaleProvider: (axisWidth, height) =>
+                      _priceScale(candles, axisWidth, height),
                   repaint: _chartRepaint,
                   textCache: _chartTextCache,
                   levels: _drawingsVisible ? List<double>.unmodifiable(_levels) : const [],
@@ -4849,6 +4916,27 @@ class _ChartScreenState extends State<ChartScreen>
                 ),
               ),
             ),
+          // TradingView-style one-tap return to the genuine OHLC autoscale.
+          // Show only after the owner manually adjusted the price ruler;
+          // unlike a constantly running overlay, this is not rebuilt on pan.
+          if (_priceScaleManual)
+            Positioned(
+              right: 3, top: 4,
+              child: SizedBox(
+                width: 54, height: 26,
+                child: TextButton(
+                  key: const Key('chart-price-axis-auto'),
+                  onPressed: _resetPriceAxisToAuto,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(44, 26),
+                  ),
+                  child: const Text('AUTO',
+                    style: TextStyle(fontSize: 10,
+                        fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ),
           if (_drawing && _selectedShort != null &&
               _selectedShort! < _shortPositions.length && candles.isNotEmpty)
             _buildShortFloatingToolbar(constraints.maxWidth),
@@ -4944,6 +5032,7 @@ class _CandleChartPainter extends CustomPainter {
     required this.crosshairSnapshot,
     required ChartViewport Function() viewportProvider,
     required Offset? Function() crosshairProvider,
+    required ChartPriceScale Function(double, double) priceScaleProvider,
     required Listenable repaint,
     required this.textCache,
     required this.levels,
@@ -4963,6 +5052,7 @@ class _CandleChartPainter extends CustomPainter {
     required this.replayActive,
   }) : _viewportProvider = viewportProvider,
        _crosshairProvider = crosshairProvider,
+       _priceScaleProvider = priceScaleProvider,
        super(repaint: repaint);
 
   final List<TradeCandle> candles;
@@ -4975,6 +5065,7 @@ class _CandleChartPainter extends CustomPainter {
   final Offset? crosshairSnapshot;
   final ChartViewport Function() _viewportProvider;
   final Offset? Function() _crosshairProvider;
+  final ChartPriceScale Function(double, double) _priceScaleProvider;
   ChartViewport get viewport => _viewportProvider();
   Offset? get crosshair => _crosshairProvider();
   final List<double> levels;
@@ -5006,9 +5097,7 @@ class _CandleChartPainter extends CustomPainter {
       candleCount: candles.length,
     );
     if (start >= ending) return;
-    final scale = ChartPriceScale.visible(candles, viewport, axis, chartHeight,
-      topMarginPercent: panel.topMarginPercent,
-      bottomMarginPercent: panel.bottomMarginPercent);
+    final scale = _priceScaleProvider(axis, size.height);
     final maximum = scale.maximum;
     final minimum = scale.minimum;
     final span = math.max(.00001, maximum - minimum);
