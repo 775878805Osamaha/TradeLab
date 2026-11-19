@@ -134,14 +134,23 @@ class ChartPriceRectanglePainter extends CustomPainter {
     required this.selectedIndex, required this.viewport, required this.scale,
     required this.candleCount, required this.plotWidth, required this.dark,
     this.timestamps = const [], this.textCache,
+    List<ChartPriceRectangle> Function()? drawingsProvider,
     ChartViewport Function()? viewportProvider,
     ChartPriceScale Function()? scaleProvider,
     Listenable? repaint,
-  }) : _viewportProvider = viewportProvider,
+  }) : _drawingsProvider = drawingsProvider,
+       _viewportProvider = viewportProvider,
        _scaleProvider = scaleProvider,
        super(repaint: repaint);
 
   final List<ChartPriceRectangle> drawings;
+  // A paint-only drag updates existing source-anchored rectangles. Read the
+  // current list at paint time rather than an obsolete widget-build snapshot.
+  // The optional provider is used only by the interactive chart; isolated
+  // painters retain immutable snapshot semantics.
+  final List<ChartPriceRectangle> Function()? _drawingsProvider;
+  List<ChartPriceRectangle> get currentDrawings =>
+      _drawingsProvider?.call() ?? drawings;
   final int? selectedIndex;
   final ChartViewport viewport;
   final ChartPriceScale scale;
@@ -166,8 +175,9 @@ class ChartPriceRectanglePainter extends CustomPainter {
     final viewport = currentViewport;
     final scale = currentScale;
     final chartHeight = scale.height;
-    for (var i = 0; i < drawings.length; i++) {
-      final drawing = drawings[i];
+    final activeDrawings = currentDrawings;
+    for (var i = 0; i < activeDrawings.length; i++) {
+      final drawing = activeDrawings[i];
       if (!drawing.visibleAt(candleCount)) continue;
       final area = PriceRectangleGeometry.rect(
           drawing, viewport, scale, candleCount, plotWidth);
