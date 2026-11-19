@@ -40,11 +40,40 @@ class RangeBarTimeline {
   /// Several bars may close on one tick when the price jumps.
   final List<int> endTimestamps;
 
-  /// Small pages build immediately. Large archived BID histories are rebuilt
-  /// off the UI isolate so dragging, gestures and repainting remain responsive.
+  /// Range work is not proportional only to the number of BID events:
+  /// a single authentic broker jump can close thousands of price-distance
+  /// bars. Walk only a cheap prefix of source ticks and conservatively
+  /// estimate possible bar crossings before choosing the UI isolate.
+  ///
+  /// The bound is a scheduling heuristic, not a price/bar calculation.
+  /// Every candle and Replay event still comes from RangeBarBuilder.
+  static bool shouldBuildInBackground(
+      Iterable<MarketTick> ticks, double priceDistance) {
+    if (kIsWeb) return false;
+    var count = 0;
+    double? previous;
+    var approximateCrossings = 0.0;
+    for (final tick in ticks) {
+      count++;
+      if (count >= 5000) return true;
+      if (previous != null && priceDistance.isFinite && priceDistance > 0) {
+        approximateCrossings += (tick.bid - previous).abs() / priceDistance;
+        if (!approximateCrossings.isFinite ||
+            approximateCrossings >= 4096) {
+          return true;
+        }
+      }
+      previous = tick.bid;
+    }
+    return false;
+  }
+
+  /// Small inexpensive pages build immediately. Large histories *or* sparse
+  /// pages with a large authentic BID price jump are rebuilt off the UI
+  /// isolate so touch, zoom and rendering can continue smoothly.
   static Future<RangeBarTimeline> buildAsync(
       List<MarketTick> ticks, double priceDistance) async {
-    if (ticks.length < 5000 || kIsWeb) {
+    if (!shouldBuildInBackground(ticks, priceDistance)) {
       return build(ticks, priceDistance);
     }
     return compute<(List<MarketTick>, double), RangeBarTimeline>(
@@ -71,7 +100,10 @@ class RangeBarTimeline {
       throw ArgumentError('Older BID page must precede current history');
     }
     final request = (olderTicks, currentTicks, priceDistance);
-    if (olderTicks.length + currentTicks.length < 5000 || kIsWeb) {
+    // Avoid a UI-isolate merge even for a sparse page with few source ticks
+    // if their authentic price gaps imply thousands of Range bars.
+    if (!shouldBuildInBackground(
+        olderTicks.followedBy(currentTicks), priceDistance)) {
       return _prependAndBuildWorker(request);
     }
     return compute<(List<MarketTick>, List<MarketTick>, double),
