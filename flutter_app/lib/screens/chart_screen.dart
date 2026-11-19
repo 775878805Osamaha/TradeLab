@@ -3087,6 +3087,48 @@ class _ChartScreenState extends State<ChartScreen>
     _chartRepaint.value++;
   }
 
+  /// Update only the selected source-anchored guide. Undo is saved at
+  /// drag start and the painter reads this live state on each repaint.
+  bool _updateDraggedGuide(Offset local, ChartPriceScale scale,
+      double plotWidth, int candleCount) {
+    if (_draggingLine && _selectedLine != null &&
+        _selectedLine! >= 0 && _selectedLine! < _levels.length) {
+      final next = scale.price(local.dy.clamp(0, scale.height).toDouble());
+      if (!next.isFinite || next == _levels[_selectedLine!]) return false;
+      _levels[_selectedLine!] = next;
+      return true;
+    }
+    if (!_draggingPattern || _selectedPattern == null ||
+        _selectedPattern! < 0 || _selectedPattern! >= _patterns.length ||
+        _patternAtDragStart == null) return false;
+    final original = _patternAtDragStart!;
+    ChartPattern next;
+    if (_draggedEndpoint != null) {
+      final anchor = _anchorAt(local, scale, plotWidth, candleCount);
+      if (anchor == null) return false;
+      next = original.withEndpoint(_draggedEndpoint!, anchor);
+    } else {
+      final proposedBars = ((local.dx - _gestureFocalX) /
+          _viewport.barWidth).round();
+      final indices = [
+        original.start.index,
+        original.end.index,
+        if (original.offsetAnchor != null) original.offsetAnchor!.index,
+      ];
+      final minIndex = indices.reduce(math.min);
+      final maxIndex = indices.reduce(math.max);
+      final barDelta = proposedBars.clamp(-minIndex,
+          math.max(0, candleCount - 1 - maxIndex));
+      final change = scale.price(
+          local.dy.clamp(0, scale.height).toDouble()) -
+          scale.price(_gestureFocalY.clamp(0, scale.height).toDouble());
+      if (!change.isFinite) return false;
+      next = original.moved(barDelta.toInt(), change);
+    }
+    _patterns[_selectedPattern!] = next;
+    return true;
+  }
+
   int? _hitLine(double y, ChartPriceScale scale) {
     for (var index = _levels.length - 1; index >= 0; index--) {
       if ((scale.y(_levels[index]) - y).abs() <= 18) return index;
@@ -4430,6 +4472,19 @@ class _ChartScreenState extends State<ChartScreen>
               final movingDrawing = _draggingRectangle ||
                   _draggingShortHandle != null || _draggingLine ||
                   _draggingPattern;
+              // The selected guide's live painter tracks this model in
+              // paint-only frames: never rebuild the chart header per touch.
+              if (details.pointerCount == 1 &&
+                  !_draggingRectangle && _draggingShortHandle == null &&
+                  (_draggingLine || _draggingPattern)) {
+                final scale = _priceScale(
+                    candles, plotWidth, constraints.maxHeight);
+                if (_updateDraggedGuide(details.localFocalPoint, scale,
+                    plotWidth, candles.length)) {
+                  _chartRepaint.value++;
+                }
+                return;
+              }
               if (!movingDrawing && nextViewport == _viewport) return;
               // Regular one/two finger gestures only change candle geometry.
               // Keep the header and expensive control tree out of each frame.
@@ -4456,39 +4511,6 @@ class _ChartScreenState extends State<ChartScreen>
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 _updateShortDrag(details.localFocalPoint, scale,
                     plotWidth, candles.length);
-              } else if (_draggingLine && _selectedLine != null && details.pointerCount == 1) {
-                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
-                _levels[_selectedLine!] = scale.price(
-                    details.localFocalPoint.dy.clamp(0, scale.height).toDouble());
-              } else if (_draggingPattern && _selectedPattern != null &&
-                  _patternAtDragStart != null && details.pointerCount == 1) {
-                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
-                final original = _patternAtDragStart!;
-                if (_draggedEndpoint != null) {
-                  final anchor = _anchorAt(details.localFocalPoint,
-                      scale, plotWidth, candles.length);
-                  if (anchor != null) {
-                    _patterns[_selectedPattern!] = original.withEndpoint(
-                        _draggedEndpoint!, anchor);
-                  }
-                } else {
-                  final proposedBars = ((details.localFocalPoint.dx -
-                      _gestureFocalX) / _viewport.barWidth).round();
-                  final indices = [
-                    original.start.index,
-                    original.end.index,
-                    if (original.offsetAnchor != null)
-                      original.offsetAnchor!.index,
-                  ];
-                  final minIndex = indices.reduce(math.min);
-                  final maxIndex = indices.reduce(math.max);
-                  final barDelta = proposedBars.clamp(-minIndex,
-                      math.max(0, candles.length - 1 - maxIndex));
-                  final change = scale.price(
-                      details.localFocalPoint.dy.clamp(0, scale.height).toDouble()) -
-                      scale.price(_gestureFocalY.clamp(0, scale.height).toDouble());
-                  _patterns[_selectedPattern!] = original.moved(barDelta.toInt(), change);
-                }
               } else if (details.pointerCount > 1 || _crosshair == null) {
                 // Rebased, incremental touch transform; chart geometry and
                 // source OHLC remain untouched.
@@ -4515,8 +4537,8 @@ class _ChartScreenState extends State<ChartScreen>
                 setState(() {});
                 return;
               }
-              final editing = _replayDraggingStart || _draggingLine ||
-                  _draggingPattern ||
+              final editedGuide = _draggingLine || _draggingPattern;
+              final editing = _replayDraggingStart || editedGuide ||
                   _draggingShortHandle != null || _draggingRectangle;
               _replayDraggingStart = false;
               _draggingLine = false;
@@ -4528,6 +4550,8 @@ class _ChartScreenState extends State<ChartScreen>
               _draggingRectangle = false;
               _rectangleDragHandle = null;
               _rectangleAtDragStart = null;
+              // Reconcile toolbar and snapshot-based undo controls once at drag end.
+              if (editedGuide) setState(() {});
               final velocity = details.velocity.pixelsPerSecond.dx;
               if (chartShouldFling(
                   horizontalVelocity: velocity,
