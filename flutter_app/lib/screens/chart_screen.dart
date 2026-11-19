@@ -239,7 +239,8 @@ class _ChartScreenState extends State<ChartScreen>
 
   @visibleForTesting
   ({bool draggingLine, bool draggingPattern, bool draggingRectangle,
-    int levels, int patterns, int? selectedLine, int? selectedPattern})
+    int levels, int patterns, int? selectedLine, int? selectedPattern,
+    double? levelValue, ChartPattern? patternValue})
       get debugGuideDragSelection => (
         draggingLine: _draggingLine,
         draggingPattern: _draggingPattern,
@@ -248,6 +249,12 @@ class _ChartScreenState extends State<ChartScreen>
         patterns: _patterns.length,
         selectedLine: _selectedLine,
         selectedPattern: _selectedPattern,
+        levelValue: _selectedLine != null &&
+            _selectedLine! >= 0 && _selectedLine! < _levels.length
+            ? _levels[_selectedLine!] : null,
+        patternValue: _selectedPattern != null &&
+            _selectedPattern! >= 0 && _selectedPattern! < _patterns.length
+            ? _patterns[_selectedPattern!] : null,
       );
   late final AnimationController _momentum;
   double _previousMomentumX = 0;
