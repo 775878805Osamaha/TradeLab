@@ -3169,6 +3169,13 @@ class _ChartScreenState extends State<ChartScreen>
 
   int? _hitPattern(Offset position, ChartPriceScale scale,
       double width, int visibleCount) {
+    // Never select an offscreen drawing from a touch on the price ruler,
+    // time axis or outside the actual, visible candle plot.
+    if (!position.dx.isFinite || !position.dy.isFinite ||
+        !width.isFinite || width <= 0 ||
+        !scale.height.isFinite || scale.height <= 0 ||
+        position.dx < 0 || position.dx >= width ||
+        position.dy < 0 || position.dy >= scale.height) return null;
     for (var i = _patterns.length - 1; i >= 0; i--) {
       final pattern = _patterns[i];
       if (!pattern.visibleAt(visibleCount)) continue;
@@ -3179,12 +3186,16 @@ class _ChartScreenState extends State<ChartScreen>
       final y1 = scale.y(pattern.start.price);
       final y2 = scale.y(pattern.end.price);
       if (pattern.tool == ChartDrawingTool.fibonacci) {
-        final left = math.min(x1, x2) - 15;
-        if (position.dx < left || position.dx > width) continue;
-        if (ChartPattern.fibonacciRatios.any((ratio) =>
-            (scale.y(pattern.fibonacciPrice(ratio)) - position.dy).abs() < 17)) {
-          return i;
-        }
+        // Match the exact plot-clipped segments painted on the canvas.
+        // A ratio at y=-8 was previously selectable by a touch at y=0,
+        // despite having no visible line at all.
+        if (ChartLineGeometry.hitFibonacciLevels(
+          point: position,
+          fromX: math.min(x1, x2),
+          levelYs: ChartPattern.fibonacciRatios.map((ratio) =>
+              scale.y(pattern.fibonacciPrice(ratio))),
+          plot: Rect.fromLTWH(0, 0, width, scale.height),
+        )) return i;
       } else {
         final offset = pattern.offsetAnchor == null ? null : Offset(
           _viewport.chartX(index: pattern.offsetAnchor!.index,
