@@ -10,6 +10,7 @@ import 'package:tradelab_flutter/data/market_controller.dart';
 import 'package:tradelab_flutter/main.dart';
 import 'package:tradelab_flutter/replay/replay_training_session.dart';
 import 'package:tradelab_flutter/replay/replay_mobile_controls.dart';
+import 'package:tradelab_flutter/replay/replay_trade_overlay.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -148,6 +149,32 @@ void main() {
     expect(find.byKey(const Key('replay-practice-levels-overlay')),
         findsOneWidget,
         reason: 'An entered practice trade should have chart markers');
+
+    // Real verified Replay candles + actual local practice order: gestures
+    // must move the chart and its independent SL/TP painter together,
+    // without rebuilding the enclosing Replay header for every sample.
+    final gestureArea = find.byKey(const Key('chart-gesture-area'));
+    final practiceLayer =
+        find.byKey(const Key('replay-practice-levels-overlay'));
+    await tester.drag(gestureArea, const Offset(-35, 0));
+    await tester.pumpAndSettle();
+    final headerWithOrder = tester.widget(
+        find.byKey(const Key('chart-reference-header')));
+    final firstPainter = tester.widget<CustomPaint>(practiceLayer)
+        .painter! as ReplayTradeOverlayPainter;
+    final firstViewport = firstPainter.currentViewport;
+    await tester.drag(gestureArea, const Offset(-40, 0));
+    await tester.pump(const Duration(milliseconds: 400));
+    final secondPainter = tester.widget<CustomPaint>(practiceLayer)
+        .painter! as ReplayTradeOverlayPainter;
+    expect(identical(firstPainter, secondPainter), isTrue,
+        reason: 'Practice level overlay must repaint, not rebuild');
+    expect(secondPainter.currentViewport, isNot(firstViewport),
+        reason: 'Practice levels must read the current moving viewport');
+    expect(identical(headerWithOrder, tester.widget(
+        find.byKey(const Key('chart-reference-header'))), isTrue,
+        reason: 'Replay toolbar must remain stable with practice levels');
+    expect(tester.takeException(), isNull);
     await tester.tap(find.byKey(const Key('replay-more-actions')));
     await tester.pumpAndSettle();
     expect(find.text('صفقاتي (1)'), findsOneWidget);
