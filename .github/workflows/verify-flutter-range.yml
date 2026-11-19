@@ -97,3 +97,9 @@ jobs:
             test/replay_trade_overlay_test.dart \
             test/paper_results_flow_test.dart \
             test/chart_frame_profiler_test.dart
+      # The original bug appears on phones whose local timezone differs
+      # from the selected chart timezone (e.g. New York on a Yemen device).
+      - name: Verify chart weekdays under Yemen device timezone
+        env:
+          TZ: Asia/Aden
+        run: flutter test test/chart_scale_settings_test.dart
