@@ -2896,13 +2896,14 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   int _debugChartTapHits = 0;
+  int _debugScaleStarts = 0;
   Offset? _debugLastChartTap;
 
   /// Read-only gesture test probe. It exposes counts/state, never prices,
   /// broker data, user credentials, or editable drawing collections.
   @visibleForTesting
   ({bool drawing, bool visible, bool locked, int levels, int patterns,
-      int undo, int tapHits, Offset? lastTap, int sourceBars})
+      int undo, int tapHits, int scaleStarts, Offset? lastTap, int sourceBars})
       get debugGuideState => (
         drawing: _drawing,
         visible: _drawingsVisible,
@@ -2911,6 +2912,7 @@ class _ChartScreenState extends State<ChartScreen>
         patterns: _patterns.length,
         undo: _lineUndo.length,
         tapHits: _debugChartTapHits,
+        scaleStarts: _debugScaleStarts,
         lastTap: _debugLastChartTap,
         sourceBars: _displayCandles.length,
       );
@@ -4328,6 +4330,7 @@ class _ChartScreenState extends State<ChartScreen>
             key: const Key('chart-gesture-area'),
             behavior: HitTestBehavior.opaque,
             onScaleStart: (details) {
+              _debugScaleStarts++;
               _momentum.stop(); // A new gesture owns the chart immediately.
               if (!_panelChartTouched) setState(() => _panelChartTouched = true);
               // Begin a fresh gesture, independent of any earlier fling.
