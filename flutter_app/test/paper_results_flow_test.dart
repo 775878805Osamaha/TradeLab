@@ -198,4 +198,105 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  for (final width in <double>[320, 390]) {
+    testWidgets('57 local open positions use preview and 25-row journal pages '
+        'with account isolation at ${width}dp', (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final market = MarketController();
+      final store = _ResultsStore();
+      final journal = PaperJournalController(store: store);
+      addTearDown(market.dispose);
+      addTearDown(journal.dispose);
+
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+      for (var i = 1; i <= 57; i++) {
+        final openedAt = now - (58 - i) * 60000;
+        store.rows.add(LedgerEntry(
+          id: i,
+          accountKey: 'ctrader:101',
+          kind: LedgerKind.openTrade,
+          timestampMs: openedAt,
+          openedAtMs: openedAt,
+          symbol: 'XAUUSD',
+          side: PaperSide.buy,
+          quantity: 1,
+          entryPrice: 2000 + i.toDouble(),
+        ));
+      }
+      await journal.useAccount('101');
+      await tester.pumpWidget(MaterialApp(home: Scaffold(
+        body: ResultsScreen(controller: market, journal: journal),
+      )));
+      await tester.pumpAndSettle();
+
+      // On narrow phones, the large Results overview precedes the open-
+      // positions section. Scroll to each row before asserting its content.
+      final list = find.descendant(
+          of: find.byKey(const Key('results-dashboard-list')),
+          matching: find.byType(Scrollable)).first;
+      Future<void> reveal(String key) async {
+        await tester.scrollUntilVisible(
+          find.byKey(Key(key)), 290,
+          scrollable: list, maxScrolls: 35);
+        await tester.pumpAndSettle();
+      }
+
+      await reveal('results-open-trade-57');
+      expect(find.byKey(const Key('results-open-trade-57')), findsOneWidget);
+      await reveal('results-open-trade-53');
+      expect(find.byKey(const Key('results-open-trade-53')), findsOneWidget);
+      expect(find.byKey(const Key('results-open-trade-52')), findsNothing);
+      await reveal('results-open-trades-count');
+      expect(find.text('عرض 5 من 57 مركزًا تجريبيًا مفتوحًا'),
+          findsOneWidget);
+      await reveal('results-all-open-trades');
+      await tester.tap(find.byKey(const Key('results-all-open-trades')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('results-tab-2')), findsOneWidget);
+      await reveal('results-open-trade-57');
+      expect(find.byKey(const Key('results-open-trade-57')), findsOneWidget);
+      await reveal('results-open-trade-33');
+      expect(find.byKey(const Key('results-open-trade-33')), findsOneWidget);
+      expect(find.byKey(const Key('results-open-trade-32')), findsNothing);
+      await reveal('results-open-trades-count');
+      expect(find.text('عرض 25 من 57 مركزًا تجريبيًا مفتوحًا'),
+          findsOneWidget);
+
+      await reveal('results-more-open-trades');
+      await tester.tap(find.byKey(const Key('results-more-open-trades')));
+      await tester.pumpAndSettle();
+      await reveal('results-open-trade-8');
+      expect(find.byKey(const Key('results-open-trade-8')), findsOneWidget);
+      expect(find.byKey(const Key('results-open-trade-7')), findsNothing);
+      await reveal('results-open-trades-count');
+      expect(find.text('عرض 50 من 57 مركزًا تجريبيًا مفتوحًا'),
+          findsOneWidget);
+
+      await reveal('results-more-open-trades');
+      await tester.tap(find.byKey(const Key('results-more-open-trades')));
+      await tester.pumpAndSettle();
+      await reveal('results-open-trade-1');
+      expect(find.byKey(const Key('results-open-trade-1')), findsOneWidget);
+      await reveal('results-open-trades-count');
+      expect(find.text('عرض 57 من 57 مركزًا تجريبيًا مفتوحًا'),
+          findsOneWidget);
+      expect(find.byKey(const Key('results-more-open-trades')), findsNothing);
+
+      await journal.useAccount('202');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('results-open-trade-57')), findsNothing);
+      expect(find.textContaining('57 مركزًا تجريبيًا'), findsNothing);
+      await journal.useAccount('101');
+      await tester.pumpAndSettle();
+      await reveal('results-open-trades-count');
+      expect(find.text('عرض 25 من 57 مركزًا تجريبيًا مفتوحًا'),
+          findsOneWidget,
+          reason: 'Switching broker accounts resets open-position pagination');
+      expect(find.byKey(const Key('results-open-trade-32')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

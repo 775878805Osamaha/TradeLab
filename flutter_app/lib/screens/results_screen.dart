@@ -30,6 +30,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
   final Set<int> _closingIds = {};
   static const int _journalPageSize = 25;
   int _visibleJournalTrades = _journalPageSize;
+  int _visibleOpenPositions = _journalPageSize;
   final ScrollController _resultsScroll = ScrollController();
   String? _journalAccountKey;
 
@@ -72,6 +73,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
       widget.journal?.addListener(_onAccountChange);
       _journalAccountKey = widget.journal?.accountKey;
       _visibleJournalTrades = _journalPageSize;
+      _visibleOpenPositions = _journalPageSize;
       _selectedCurvePoint = null;
     }
   }
@@ -85,6 +87,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     if (key != _journalAccountKey) {
       _journalAccountKey = key;
       _visibleJournalTrades = _journalPageSize;
+      _visibleOpenPositions = _journalPageSize;
       _selectedCurvePoint = null;
     }
     setState(() {});
@@ -96,6 +99,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
       _page = index;
       _selectedCurvePoint = null;
       _visibleJournalTrades = _journalPageSize;
+      _visibleOpenPositions = _journalPageSize;
     });
     // Replacing the overview with a shorter tab must never leave the user
     // stranded at the previous tab's deep scroll offset.
@@ -236,6 +240,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                     _period = value;
                     _selectedCurvePoint = null;
                     _visibleJournalTrades = _journalPageSize;
+                    _visibleOpenPositions = _journalPageSize;
                   });
                 }
               },
@@ -359,7 +364,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
           ] else if (_page == 1) ...[
             _curve(report),
           ] else if (_page == 2) ...[
-            _openPositions(),
+            _openPositions(all: true),
             const SizedBox(height: 16),
             _recentTrades(report, all: true),
           ] else if (_page == 3) ...[
@@ -691,15 +696,22 @@ class _ResultsScreenState extends State<ResultsScreen> {
       ]);
   }
 
-  Widget _openPositions() {
+  Widget _openPositions({bool all = false}) {
+    // A compact overview and bounded journal pages avoid building every
+    // position card when a local paper account holds many open trades.
     final positions = widget.journal?.entries.where((entry) =>
-        entry.kind == LedgerKind.openTrade).toList().reversed.toList() ?? const <LedgerEntry>[];
+        entry.kind == LedgerKind.openTrade).toList(growable: false) ??
+        const <LedgerEntry>[];
+    final total = positions.length;
+    final shown = math.min(total, all ? _visibleOpenPositions : 5);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const TradeSectionTitle('المراكز التجريبية المفتوحة'),
-      if (positions.isEmpty)
+      if (total == 0)
         _emptyMessage('لا توجد مراكز مفتوحة. يمكنك فتح صفقة تجريبية من الشارت.'),
-      for (final position in positions)
-        Padding(padding: const EdgeInsets.only(bottom: 8),
+      for (final position in positions.reversed.take(shown))
+        Padding(
+          key: Key('results-open-trade-${position.id}'),
+          padding: const EdgeInsets.only(bottom: 8),
           child: TradeSurface(child: Row(children: [
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -716,6 +728,34 @@ class _ResultsScreenState extends State<ResultsScreen> {
               child: Text(_closingIds.contains(position.id) ? 'انتظر' : 'إغلاق تجريبي'),
             ),
           ]))),
+      if (total > 0) ...[
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text('عرض $shown من $total مركزًا تجريبيًا مفتوحًا',
+            key: const Key('results-open-trades-count'),
+            style: TextStyle(fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ),
+        if (all && shown < total)
+          Align(alignment: AlignmentDirectional.center,
+            child: OutlinedButton.icon(
+              key: const Key('results-more-open-trades'),
+              onPressed: () => setState(() {
+                _visibleOpenPositions =
+                    math.min(total, _visibleOpenPositions + _journalPageSize);
+              }),
+              icon: const Icon(Icons.expand_more_rounded),
+              label: const Text('عرض 25 مركزًا إضافيًا'),
+            )),
+        if (!all && total > shown)
+          Align(alignment: AlignmentDirectional.center,
+            child: TextButton.icon(
+              key: const Key('results-all-open-trades'),
+              onPressed: () => _selectPage(2),
+              icon: const Icon(Icons.list_alt_rounded),
+              label: const Text('عرض جميع المراكز في يوميات الصفقات'),
+            )),
+      ],
     ]);
   }
 
@@ -841,6 +881,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
       _period = 'مخصص';
       _selectedCurvePoint = null;
       _visibleJournalTrades = _journalPageSize;
+      _visibleOpenPositions = _journalPageSize;
     });
   }
 }
