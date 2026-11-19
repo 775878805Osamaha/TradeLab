@@ -119,6 +119,30 @@ abstract final class PriceRectangleGeometry {
         bounds.bottom >= -bleed && bounds.top <= height + bleed;
   }
 
+  /// Screen-space x bounds for source-anchored rectangles that can reach the
+  /// current candle plot. Discard offscreen historical annotations BEFORE
+  /// calculating price y, allocating a Rect/Paint, or creating handles.
+  ///
+  /// This deliberately uses the exact same inclusive left/right clip as
+  /// [visibleInPlot]. At 3px candles an edge at x=0 is still a real selected
+  /// handle; future Replay anchors remain gated by [visibleAt].
+  static ({double left, double right})? visibleHorizontalSpan(
+    ChartPriceRectangle drawing, ChartViewport viewport,
+    int count, double plotWidth,
+  ) {
+    if (!drawing.visibleAt(count) || !plotWidth.isFinite ||
+        plotWidth <= 0 || !viewport.barWidth.isFinite ||
+        viewport.barWidth <= 0 || !viewport.scrollBars.isFinite ||
+        !viewport.rightMarginBars.isFinite) return null;
+    final left = viewport.chartX(index: drawing.startIndex,
+        candleCount: count, plotWidth: plotWidth);
+    final right = viewport.chartX(index: drawing.endIndex,
+        candleCount: count, plotWidth: plotWidth);
+    if (!left.isFinite || !right.isFinite ||
+        right < 0 || left > plotWidth) return null;
+    return (left: left, right: right);
+  }
+
   static Rect rect(ChartPriceRectangle drawing, ChartViewport viewport,
       ChartPriceScale scale, int count, double plotWidth) => Rect.fromLTRB(
         viewport.chartX(index: drawing.startIndex,
@@ -156,8 +180,14 @@ abstract final class PriceRectangleGeometry {
         point.dy < 0 || point.dy >= scale.height) return null;
     for (var i = drawings.length - 1; i >= 0; i--) {
       final drawing = drawings[i];
-      if (!drawing.visibleAt(count)) continue;
-      final area = rect(drawing, viewport, scale, count, plotWidth);
+      // Cheap horizontal rejection first: deep-history drawings should not
+      // compute price geometry or allocate eight handles during touch hit.
+      final visibleX = visibleHorizontalSpan(
+          drawing, viewport, count, plotWidth);
+      if (visibleX == null) continue;
+      final area = Rect.fromLTRB(
+          visibleX.left, scale.y(drawing.upper),
+          visibleX.right, scale.y(drawing.lower));
       // Most historical drawings are beyond the visible candle viewport.
       // Reject their bounds before creating all eight handle positions.
       // The painter clips rectangles at the plot's left/right edges.
@@ -235,9 +265,12 @@ class ChartPriceRectanglePainter extends CustomPainter {
     final activeDrawings = currentDrawings;
     for (var i = 0; i < activeDrawings.length; i++) {
       final drawing = activeDrawings[i];
-      if (!drawing.visibleAt(candleCount)) continue;
-      final area = PriceRectangleGeometry.rect(
-          drawing, viewport, scale, candleCount, plotWidth);
+      final visibleX = PriceRectangleGeometry.visibleHorizontalSpan(
+          drawing, viewport, candleCount, plotWidth);
+      if (visibleX == null) continue;
+      final area = Rect.fromLTRB(
+          visibleX.left, scale.y(drawing.upper),
+          visibleX.right, scale.y(drawing.lower));
       // A source-anchored rectangle which is wholly beyond the viewport's
       // price range needs no clipping, fill, border, or handle allocations
       // on every pan/pinch frame. Selected handles may show 11.5px of bleed
