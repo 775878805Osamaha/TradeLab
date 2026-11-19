@@ -45,9 +45,10 @@ void main() {
         deltaY: 70, focalY: double.infinity), original), isTrue);
     expect(identical(original.dragPriceAxis(
         deltaY: 0, focalY: 100), original), isTrue);
-    expect(identical(const ChartPriceScale(10, 10, 400).dragPriceAxis(
-        deltaY: 70, focalY: 100), const ChartPriceScale(10, 10, 400)), isFalse,
-        reason: 'Constant price is valid input only via autoscale expansion');
+    const flat = ChartPriceScale(10, 10, 400);
+    expect(identical(flat.dragPriceAxis(
+        deltaY: 70, focalY: 100), flat), isTrue,
+        reason: 'Unusable zero-span scales cannot be changed by dragging');
   });
 
   test('a left drag creates right-side whitespace and centers the last bar', () {
