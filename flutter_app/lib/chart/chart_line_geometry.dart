@@ -144,6 +144,32 @@ class ChartLineGeometry {
     return path;
   }
 
+  /// Preserve the existing 8px gap pattern (4px stroke + 4px gap) while
+  /// batching its Canvas drawLine calls into a single stroked drawPath.
+  /// Supports crosshair, vertical/horizontal grid guides and diagonal
+  /// strokes without changing the source market/viewport coordinates.
+  static Path configuredDashPath({
+    required Offset from,
+    required Offset to,
+  }) {
+    final path = Path();
+    if (!from.dx.isFinite || !from.dy.isFinite ||
+        !to.dx.isFinite || !to.dy.isFinite) {
+      return path;
+    }
+    final delta = to - from;
+    final distance = delta.distance;
+    if (!distance.isFinite || distance < .01) return path;
+    final direction = delta / distance;
+    for (var at = 0.0; at < distance; at += 8) {
+      final dashStart = from + direction * at;
+      final dashEnd = from + direction * math.min(at + 4, distance);
+      path.moveTo(dashStart.dx, dashStart.dy);
+      path.lineTo(dashEnd.dx, dashEnd.dy);
+    }
+    return path;
+  }
+
   static double distanceToStroke(Offset point, ChartStroke stroke) {
     final d = stroke.end - stroke.start;
     final magnitude = d.distanceSquared;
