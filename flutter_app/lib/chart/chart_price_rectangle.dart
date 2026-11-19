@@ -114,12 +114,34 @@ abstract final class PriceRectangleGeometry {
   static (int, PriceRectangleHandle?)? hitTest(Offset point,
       List<ChartPriceRectangle> drawings, ChartViewport viewport,
       ChartPriceScale scale, int count, double plotWidth) {
+    // A drawing tool must never steal touch events from the right price
+    // ruler, bottom time axis or an invalid Flutter gesture coordinate.
+    if (!point.dx.isFinite || !point.dy.isFinite ||
+        !plotWidth.isFinite || plotWidth <= 0 ||
+        !scale.height.isFinite || scale.height <= 0 ||
+        point.dx < 0 || point.dx >= plotWidth ||
+        point.dy < 0 || point.dy >= scale.height) return null;
     for (var i = drawings.length - 1; i >= 0; i--) {
       final drawing = drawings[i];
       if (!drawing.visibleAt(count)) continue;
       final area = rect(drawing, viewport, scale, count, plotWidth);
+      // Most historical drawings are beyond the visible candle viewport.
+      // Reject their bounds before creating all eight handle positions.
+      // The painter clips rectangles at the plot's left/right edges.
+      if (area.right < 0 || area.left > plotWidth ||
+          area.bottom < -11.5 ||
+          area.top > scale.height + 11.5 ||
+          !area.inflate(23).contains(point)) continue;
       for (final entry in handles(area).entries) {
-        if ((entry.value - point).distance <= 23) return (i, entry.key);
+        final center = entry.value;
+        // Hit radius is intentionally 23px for accessibility, but a handle
+        // wholly clipped from the plot (visual radius 11.5px) may not be
+        // selected invisibly after panning or extreme 3px-bar zoom.
+        if (center.dx < -11.5 || center.dx > plotWidth + 11.5 ||
+            center.dy < -11.5 || center.dy > scale.height + 11.5) {
+          continue;
+        }
+        if ((center - point).distance <= 23) return (i, entry.key);
       }
       if (area.inflate(4).contains(point)) return (i, null);
     }

@@ -69,6 +69,98 @@ void main() {
         [rectangle], viewport, scale, 100, 400), isNull);
   });
 
+  test('offscreen rectangle handles cannot steal visible chart touches', () {
+    const viewport = ChartViewport(barWidth: 10);
+    const scale = ChartPriceScale(100, 120, 200);
+    const hidden = ChartPriceRectangle(
+        startIndex: 50, endIndex: 62, upper: 114, lower: 104);
+    final clipped = PriceRectangleGeometry.rect(
+        hidden, viewport, scale, 100, 400);
+    expect(clipped.right, -15);
+    // Its hit radius reaches into the plot, but the painter clips the
+    // ENTIRE rectangle because the final edge is offscreen.
+    expect(PriceRectangleGeometry.hitTest(
+        const Offset(5, 60), [hidden],
+        viewport, scale, 100, 400), isNull);
+    expect(PriceRectangleGeometry.hitTest(
+        const Offset(5, 100), [hidden],
+        viewport, scale, 100, 400), isNull);
+
+    // The first edge is partly clipped yet its 11.5px white handle really
+    // is visible; touch access to the visible portion must remain.
+    const visibleEdge = ChartPriceRectangle(
+        startIndex: 63, endIndex: 75, upper: 114, lower: 104);
+    final partiallyShown = PriceRectangleGeometry.rect(
+        visibleEdge, viewport, scale, 100, 400);
+    expect(partiallyShown.left, -5);
+    expect(PriceRectangleGeometry.hitTest(
+        const Offset(4, 60), [visibleEdge],
+        viewport, scale, 100, 400)?.$2,
+        PriceRectangleHandle.topLeft);
+  });
+
+  test('time and price axes cannot select rectangle handles', () {
+    const viewport = ChartViewport(barWidth: 10, rightMarginBars: 0);
+    const scale = ChartPriceScale(100, 120, 200);
+    const atRight = ChartPriceRectangle(
+        startIndex: 90, endIndex: 99, upper: 114, lower: 104);
+    expect(PriceRectangleGeometry.rect(
+        atRight, viewport, scale, 100, 400).right, 395);
+    expect(PriceRectangleGeometry.hitTest(
+        const Offset(404, 60), [atRight],
+        viewport, scale, 100, 400), isNull,
+        reason: 'The price ruler is reserved for its own gestures');
+    expect(PriceRectangleGeometry.hitTest(
+        const Offset(394, 60), [atRight],
+        viewport, scale, 100, 400)?.$2,
+        PriceRectangleHandle.topRight);
+
+    const nearTimeAxis = ChartPriceRectangle(
+        startIndex: 90, endIndex: 99, upper: 107, lower: 100.5);
+    expect(PriceRectangleGeometry.hitTest(
+        const Offset(395, 205), [nearTimeAxis],
+        viewport, scale, 100, 400), isNull,
+        reason: 'The bottom 24dp belongs to the time ruler, not drawings');
+    expect(PriceRectangleGeometry.hitTest(
+        const Offset(395, 194), [nearTimeAxis],
+        viewport, scale, 100, 400)?.$2,
+        PriceRectangleHandle.bottomRight);
+    expect(PriceRectangleGeometry.hitTest(
+        const Offset(double.nan, 110), [atRight],
+        viewport, scale, 100, 400), isNull);
+    expect(PriceRectangleGeometry.hitTest(
+        const Offset(100, double.infinity), [atRight],
+        viewport, scale, 100, 400), isNull);
+  });
+
+  test('large historical rectangle collection keeps topmost visible hit',
+      () {
+    const viewport = ChartViewport(barWidth: 3);
+    const scale = ChartPriceScale(100, 120, 200);
+    final drawings = List<ChartPriceRectangle>.generate(
+      999, (index) => ChartPriceRectangle(
+        startIndex: index, endIndex: index + 1,
+        upper: 114, lower: 104),
+    );
+    final target = PriceRectangleGeometry.rect(
+        drawings.last, viewport, scale, 1000, 300);
+    expect(target.right, inInclusiveRange(0, 300));
+    final selected = PriceRectangleGeometry.hitTest(
+      target.topRight, drawings, viewport, scale, 1000, 300);
+    expect(selected?.$1, 998);
+    // At only 3px/bar the two visible corner handles overlap; the
+    // existing accessible hit priority picks the left corner first.
+    expect(selected?.$2, PriceRectangleHandle.topLeft);
+    expect(PriceRectangleGeometry.hitTest(
+        const Offset(20, 198), drawings,
+        viewport, scale, 1000, 300), isNull,
+        reason: 'Thousands of offscreen handles stay untouchable');
+    // Replay prefix cannot expose a drawing ending beyond revealed bars.
+    expect(PriceRectangleGeometry.hitTest(
+        target.topRight, [drawings.last],
+        viewport, scale, 999, 300), isNull);
+  });
+
   testWidgets('isolated painter renders selected rectangle without market data',
       (tester) async {
     tester.view.devicePixelRatio = 2.0;
