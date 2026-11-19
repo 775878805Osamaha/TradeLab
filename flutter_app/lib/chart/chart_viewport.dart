@@ -289,9 +289,12 @@ bool chartCanUsePaintOnlyViewportUpdate({
   required bool movingDrawing,
   required bool visiblePriceRectangles,
   required bool replayTradeLevelsVisible,
+  // Opt in only when the practice overlay is wired to the SAME viewport
+  // notifier and live price scale as the chart painter.
+  bool replayTradeLevelsFollowViewport = false,
 }) =>
     !selectingReplayStart &&
     !crosshairVisible &&
     !movingDrawing &&
     !visiblePriceRectangles &&
-    !replayTradeLevelsVisible;
+    (!replayTradeLevelsVisible || replayTradeLevelsFollowViewport);
