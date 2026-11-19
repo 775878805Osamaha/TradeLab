@@ -628,7 +628,10 @@ class _ResultsScreenState extends State<ResultsScreen> {
       ]);
   }
 
-  Widget _recentTrades(LedgerReport report, {bool all = false}) => Column(
+  Widget _recentTrades(LedgerReport report, {bool all = false}) {
+    final total = report.trades.length;
+    final shown = math.min(total, all ? _visibleJournalTrades : 5);
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start, children: [
         const TradeSectionTitle('آخر الصفقات المغلقة'),
         if (report.trades.isEmpty)
@@ -642,9 +645,9 @@ class _ResultsScreenState extends State<ResultsScreen> {
               style: TextStyle(fontSize: 13, height: 1.5),
             )),
           ]))
-        else for (final entry in report.trades.reversed
-            .take(all ? report.trades.length : 5))
-          Padding(padding: const EdgeInsets.only(bottom: 8),
+        else for (final entry in report.trades.reversed.take(shown))
+          Padding(key: Key('results-closed-trade-${entry.id}'),
+            padding: const EdgeInsets.only(bottom: 8),
             child: TradeSurface(child: Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -665,7 +668,28 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 tooltip: 'حذف القيد', icon: const Icon(Icons.delete_outline),
                 onPressed: () => _confirmDelete(entry)),
             ]))),
+        if (all && total > 0) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('عرض $shown من $total صفقة مغلقة',
+              key: const Key('results-closed-trades-count'),
+              style: TextStyle(fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          ),
+          if (shown < total)
+            Align(alignment: AlignmentDirectional.center,
+              child: OutlinedButton.icon(
+                key: const Key('results-more-closed-trades'),
+                onPressed: () => setState(() {
+                  _visibleJournalTrades =
+                      math.min(total, _visibleJournalTrades + _journalPageSize);
+                }),
+                icon: const Icon(Icons.expand_more_rounded),
+                label: const Text('عرض 25 صفقة إضافية'),
+              )),
+        ],
       ]);
+  }
 
   Widget _openPositions() {
     final positions = widget.journal?.entries.where((entry) =>
