@@ -76,6 +76,28 @@ class ChartLineGeometry {
     return stroke == null ? [] : [stroke];
   }
 
+  /// Visible portion of a Fibonacci level. A first anchor can be far left
+  /// of the screen while its level still spans the current chart.
+  /// Geometry only: never manufacture future bars or modify broker prices.
+  static ChartStroke? fibonacciLevelStroke({
+    required double fromX,
+    required double levelY,
+    required Rect plot,
+  }) {
+    if (!fromX.isFinite || !levelY.isFinite ||
+        !plot.left.isFinite || !plot.right.isFinite ||
+        !plot.top.isFinite || !plot.bottom.isFinite ||
+        plot.width <= 0 || plot.height <= 0 ||
+        fromX >= plot.right ||
+        levelY < plot.top || levelY > plot.bottom) {
+      return null;
+    }
+    return (
+      start: Offset(math.max(fromX, plot.left), levelY),
+      end: Offset(plot.right, levelY),
+    );
+  }
+
   static double distanceToStroke(Offset point, ChartStroke stroke) {
     final d = stroke.end - stroke.start;
     final magnitude = d.distanceSquared;

@@ -5507,14 +5507,26 @@ class _CandleChartPainter extends CustomPainter {
         ..style = PaintingStyle.stroke;
       if (drawing.tool == ChartDrawingTool.fibonacci) {
         final fromX = math.min(x1, x2);
+        final plot = Rect.fromLTWH(0, 0, axis, chartHeight);
         for (final ratio in ChartPattern.fibonacciRatios) {
           final price = drawing.fibonacciPrice(ratio);
-          final levelY = y(price);
-          canvas.drawLine(Offset(fromX, levelY),
-              Offset(axis, levelY), drawingPaint);
+          final stroke = ChartLineGeometry.fibonacciLevelStroke(
+            fromX: fromX,
+            levelY: y(price),
+            plot: plot,
+          );
+          if (stroke == null) continue;
+          canvas.drawLine(stroke.start, stroke.end, drawingPaint);
           if (drawing.showLabels) {
-            _text(canvas, '${(ratio * 100).toStringAsFixed(1)}% ${price.toStringAsFixed(decimals)}',
-                Offset(fromX + 5, levelY - 13), color, 10);
+            final label =
+                '${(ratio * 100).toStringAsFixed(1)}% ${price.toStringAsFixed(decimals)}';
+            final paragraph = textCache.layout(label, color, 10);
+            // Keep the label at its visible beginning and entirely before
+            // the right price ruler, even with an ancient off-screen anchor.
+            if (stroke.end.dx - stroke.start.dx >= paragraph.width + 10) {
+              paragraph.paint(canvas,
+                  Offset(stroke.start.dx + 5, stroke.start.dy - 13));
+            }
           }
         }
       } else {
