@@ -530,12 +530,18 @@ class _ChartScreenState extends State<ChartScreen>
       _momentum.stop();
       return;
     }
-    if (_replay || _replaySelectingStart) {
-      // Replay has viewport-positioned widgets outside the candle canvas.
-      setState(() => _viewport = next);
-    } else {
+    if (chartCanUsePaintOnlyViewportUpdate(
+      selectingReplayStart: _replaySelectingStart,
+      crosshairVisible: _crosshair != null,
+      movingDrawing: false,
+      visiblePriceRectangles: _drawingsVisible && _rectangles.isNotEmpty,
+      replayTradeLevelsVisible: _replay && _training.trades.isNotEmpty,
+    )) {
       _viewport = next;
       _chartRepaint.value++;
+    } else {
+      // Rebuild overlays with snapshot-based viewport positions as well.
+      setState(() => _viewport = next);
     }
     _prefetchOlderAtEdge(_momentumPlotWidth, count);
   }
@@ -4224,8 +4230,13 @@ class _ChartScreenState extends State<ChartScreen>
               if (!movingDrawing && nextViewport == _viewport) return;
               // Regular one/two finger gestures only change candle geometry.
               // Keep the header and expensive control tree out of each frame.
-              if (!movingDrawing && _crosshair == null &&
-                  !_replay && !_replaySelectingStart) {
+              if (chartCanUsePaintOnlyViewportUpdate(
+                selectingReplayStart: _replaySelectingStart,
+                crosshairVisible: _crosshair != null,
+                movingDrawing: movingDrawing,
+                visiblePriceRectangles: _drawingsVisible && _rectangles.isNotEmpty,
+                replayTradeLevelsVisible: _replay && _training.trades.isNotEmpty,
+              )) {
                 _viewport = nextViewport;
                 _chartRepaint.value++;
                 _prefetchOlderAtEdge(plotWidth, candles.length);
