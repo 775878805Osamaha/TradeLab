@@ -77,6 +77,11 @@ void main() {
         await tester.ensureVisible(tool);
         await tester.tap(tool);
         await tester.pumpAndSettle();
+        final dynamic guideState = tester.state(find.byType(ChartScreen));
+        final active = guideState.debugGuideState;
+        expect(active.drawing, isTrue,
+            reason: 'Catalog selection must activate real drawing mode: $active');
+        expect(active.visible, isTrue);
 
         final chart = find.byKey(const Key('chart-gesture-area'));
         final rect = tester.getRect(chart);
@@ -91,8 +96,11 @@ void main() {
           await tester.tapAt(origin + const Offset(38, 28));
         }
         await tester.pumpAndSettle();
-        expect(find.byTooltip('تراجع'), findsOneWidget,
-            reason: 'A real drawing must have been committed before its drag');
+        final created = guideState.debugGuideState;
+        expect(kind == 'horizontal' ? created.levels : created.patterns, 1,
+            reason: 'Touch must create a real source-anchored $kind: $created');
+        expect(created.undo, greaterThan(0),
+            reason: 'Undo snapshot must exist before a guide drag: $created');
 
         final pointer = await tester.startGesture(origin);
         await pointer.moveBy(const Offset(0, -9));
@@ -111,7 +119,8 @@ void main() {
         await tester.pumpAndSettle();
         expect(identical(retainedHeader, tester.widget(header)), isFalse,
             reason: 'Release must reconcile drawing selection and Undo UI');
-        expect(find.byTooltip('تراجع'), findsOneWidget);
+        expect(guideState.debugGuideState.undo, greaterThan(0),
+            reason: 'The undo snapshot must survive the paint-only drag');
         expect(tester.takeException(), isNull);
       });
     }
