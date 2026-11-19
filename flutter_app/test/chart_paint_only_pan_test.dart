@@ -118,8 +118,14 @@ void main() {
         expect(guideState.debugGuideState.drawing, isTrue);
 
         final pointer = await tester.startGesture(origin);
-        await pointer.moveBy(const Offset(0, -9));
+        // Flutter waits for touch-slop before awarding the scale/drag
+        // recognizer. Establish an active drag before asserting that later
+        // touch samples do not rebuild the header.
+        await pointer.moveBy(const Offset(0, -24));
         await tester.pump();
+        final tracking = guideState.debugGuideState;
+        expect(kind == 'horizontal' ? tracking.dragLine : tracking.dragPattern,
+            isTrue, reason: 'Source guide must actually be grabbed: $tracking');
         final header = find.byKey(const Key('chart-reference-header'));
         final retainedHeader = tester.widget(header);
         for (var step = 0; step < 6; step++) {
