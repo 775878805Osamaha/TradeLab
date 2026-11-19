@@ -145,6 +145,46 @@ void main() {
     expect(ticks.where((x) => x.timestamp == now - 5 * minute), hasLength(2));
     expect(ticks.where((x) => x.timestamp == now - 5 * minute - 1), hasLength(2));
   });
+  test('each older BID page publishes an immutable independent snapshot',
+      () async {
+    final recentProviderPage = <MarketTick>[MarketTick(now - 1000, 200)];
+    final received = <RangeStartupSnapshot>[];
+    var calls = 0;
+    final completed = await RangeStartupLoader.load(
+      endMs: now, priceDistance: 1, minimumClosedBars: 2,
+      getTicks: (from, to) async {
+        calls++;
+        if (calls == 1) return recentProviderPage;
+        if (calls == 2) {
+          return [
+            MarketTick(to - 3, 197),
+            MarketTick(to - 2, 198.5),
+            MarketTick(to - 1, 199.5),
+          ];
+        }
+        return <MarketTick>[];
+      },
+      onSnapshot: (batch) async => received.add(batch),
+    );
+    expect(completed, isNotNull);
+    expect(received.length, greaterThanOrEqualTo(2));
+    expect(received.first.ticks.map((t) => t.bid), [200]);
+    expect(completed!.ticks.map((t) => t.bid), [197, 198.5, 199.5, 200]);
+    expect(identical(received.first.ticks, completed.ticks), isFalse);
+    expect(
+      () => completed.ticks.add(MarketTick(now, 210)),
+      throwsUnsupportedError,
+      reason: 'Published BID history must not be changed by UI or provider',
+    );
+    // The gateway can release or reuse its page buffer after it returns.
+    // A published snapshot still owns exactly the verified market events.
+    recentProviderPage.add(MarketTick(now, 999));
+    expect(received.first.ticks.map((t) => t.bid), [200]);
+    expect(completed.ticks.map((t) => t.bid), [197, 198.5, 199.5, 200]);
+    expect(received.last.timeline.bars.length,
+        completed.timeline.bars.length);
+  });
+
   test('verified quiet history keeps coverage without rebuilding BID bars',
       () async {
     var calls = 0;
