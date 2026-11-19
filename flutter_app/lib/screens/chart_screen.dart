@@ -4916,6 +4916,27 @@ class _ChartScreenState extends State<ChartScreen>
                 ),
               ),
             ),
+          // TradingView-style one-tap return to the genuine OHLC autoscale.
+          // Show only after the owner manually adjusted the price ruler;
+          // unlike a constantly running overlay, this is not rebuilt on pan.
+          if (_priceScaleManual)
+            Positioned(
+              right: 3, top: 4,
+              child: SizedBox(
+                width: 54, height: 26,
+                child: TextButton(
+                  key: const Key('chart-price-axis-auto'),
+                  onPressed: _resetPriceAxisToAuto,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(44, 26),
+                  ),
+                  child: const Text('AUTO',
+                    style: TextStyle(fontSize: 10,
+                        fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ),
           if (_drawing && _selectedShort != null &&
               _selectedShort! < _shortPositions.length && candles.isNotEmpty)
             _buildShortFloatingToolbar(constraints.maxWidth),
