@@ -5259,14 +5259,8 @@ class _CandleChartPainter extends CustomPainter {
           lastVisibleIndex: ending - 1);
       final zoneWidth = math.min(120.0, axis * .30);
       if (zoneWidth > 24) {
-        final zonePainter = TextPainter(
-          text: TextSpan(text: zoneLabel,
-              style: TextStyle(color: labelColor, fontSize: 9,
-                  fontWeight: FontWeight.w500)),
-          textDirection: TextDirection.rtl,
-          maxLines: 1,
-          ellipsis: '…',
-        )..layout(maxWidth: zoneWidth);
+        final zonePainter = textCache.layoutBoundedAxis(
+          zoneLabel, labelColor, 9, maxWidth: zoneWidth);
         final zoneLeft = axis - zonePainter.width - 3;
         // Place timezone at the right of the plot, away from the drawing
         // rail overlay on the left, then reserve its measured width.
@@ -5297,14 +5291,10 @@ class _CandleChartPainter extends CustomPainter {
             : '${hour.toString().padLeft(2, '0')}:'
               '${local.minute.toString().padLeft(2, '0')} '
               '${local.hour < 12 ? 'AM' : 'PM'}';
-        final labelPainter = TextPainter(
-          text: TextSpan(text: label,
-              style: TextStyle(color: labelColor, fontSize: fontSize,
-                  fontWeight: FontWeight.w500)),
-          textDirection: isWeekdayLabel
-              ? TextDirection.rtl : TextDirection.ltr,
-          maxLines: 1,
-        )..layout();
+        // Reuse text shaping on ordinary pan, pinch and momentum frames.
+        // Width, RTL direction and the original 500 font weight are intact.
+        final labelPainter = textCache.layout(
+          label, labelColor, fontSize, rtl: isWeekdayLabel);
         if (timeAxisLayout.reserveCentered(
             centerX: x, width: labelPainter.width)) {
           labelPainter.paint(
