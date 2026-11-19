@@ -25,6 +25,7 @@ import '../chart/chart_scale_settings_page.dart';
 import '../chart/chart_symbol_settings.dart';
 import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
+import '../chart/chart_visible_sma.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/chart_time_axis_label_layout.dart';
 import '../chart/chart_historical_time_zone.dart';
@@ -5228,16 +5229,17 @@ class _CandleChartPainter extends CustomPainter {
         annotate(extremes.$2, Color(scaleSettings.lowColor), scaleSettings.highLow);
       }
     }
-    if (indicator && scaleSettings.indicatorLabels != ChartPriceLabelMode.hidden &&
-        candles.isNotEmpty) {
-      // The label must equal the SMA12 actually painted above, including
-      // Heikin Ashi / Range presentations, never an unrelated raw series.
-      final count = math.min(12, candles.length);
-      var sum = 0.0;
-      for (var i = candles.length - count; i < candles.length; i++) {
-        sum += candles[i].close;
+    if (indicator &&
+        scaleSettings.indicatorLabels != ChartPriceLabelMode.hidden) {
+      // The rightmost PAINTED SMA12 point belongs to visible bar ending-1.
+      // The full broker archive can contain later candles while the user
+      // scrolls into history. Never label their unseen SMA as the currently
+      // plotted indicator, including in historical Replay or Range mode.
+      final visibleSma = ChartVisibleSma.atVisibleEnd(candles, ending);
+      if (visibleSma != null) {
+        annotate(visibleSma, TradeColors.blue,
+            scaleSettings.indicatorLabels);
       }
-      annotate(sum / count, TradeColors.blue, scaleSettings.indicatorLabels);
     }
     // Only a fresh verified quote received by an existing market request.
     // Replay does not display contemporary BID/ASK over historical candles.
