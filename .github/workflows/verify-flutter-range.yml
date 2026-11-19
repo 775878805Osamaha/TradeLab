@@ -55,6 +55,7 @@ jobs:
             test/chart_paint_only_pan_test.dart \
             test/chart_text_layout_cache_test.dart \
             test/chart_rectangle_label_cache_test.dart \
+            test/chart_rectangle_visibility_timezone_test.dart \
             test/chart_timeframe_catalog_test.dart \
             test/chart_panel_settings_test.dart \
             test/chart_symbol_settings_test.dart \
