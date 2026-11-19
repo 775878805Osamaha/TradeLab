@@ -1094,7 +1094,9 @@ class _ChartScreenState extends State<ChartScreen>
         return;
       }
       final prefix = older;
-      final combined = [...prefix, ..._rangeHistoryTicks];
+      // Capture the previous verified source list before the async worker:
+      // canceled/superseded requests must never splice newer account data.
+      final previousTicks = _rangeHistoryTicks;
       final point = _rangePointCache['$account:${symbol.code}'];
       if (point == null || !point.isFinite || point <= 0) {
         throw StateError('Missing verified symbol point size');
@@ -1107,8 +1109,17 @@ class _ChartScreenState extends State<ChartScreen>
               _visibleThrough <= _rangeBarEndTickIndices.length
           ? _rangeBarEndTickIndices[_visibleThrough - 1]
           : null;
-      final timeline = await RangeBarTimeline.buildAsync(combined, _rangeTicks * point);
+      // Large history prepends and their full Range rebuild share one
+      // background worker, instead of first copying up to 1m BID events
+      // synchronously on the gesture/UI isolate.
+      final rebuilt = await RangeBarTimeline.prependAndBuildAsync(
+        olderTicks: prefix,
+        currentTicks: previousTicks,
+        priceDistance: _rangeTicks * point,
+      );
       if (!mounted || revision != _loadRevision) return;
+      final combined = rebuilt.ticks;
+      final timeline = rebuilt.timeline;
       // The start selection is not yet a playback cutoff, but it still owns
       // one VERIFIED BID event. Prepending older ticks may shift every Range
       // bar; never leave the cursor attached to a stale bar index.
