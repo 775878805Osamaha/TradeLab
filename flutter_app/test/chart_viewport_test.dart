@@ -59,6 +59,107 @@ void main() {
         .crosshairPrice(100), isNull);
   });
 
+  test('invalid Android touch samples never select a phantom source bar', () {
+    const viewport = ChartViewport(
+        barWidth: 10, scrollBars: 12, rightMarginBars: 4);
+    const sourceCount = 160;
+    final x = viewport.chartX(
+        index: 135, candleCount: sourceCount, plotWidth: 320);
+    expect(viewport.indexAt(
+        x: x, plotWidth: 320, candleCount: sourceCount), 135);
+    for (final invalid in <double>[
+      double.nan, double.infinity, double.negativeInfinity
+    ]) {
+      expect(viewport.indexAt(x: invalid, plotWidth: 320,
+          candleCount: sourceCount), isNull);
+      expect(viewport.indexAt(x: x, plotWidth: invalid,
+          candleCount: sourceCount), isNull);
+      expect(identical(viewport.pan(deltaX: invalid,
+          plotWidth: 320, candleCount: sourceCount), viewport), isTrue);
+      expect(identical(viewport.pinch(scale: invalid,
+          initialFocalX: 130, currentFocalX: 130,
+          plotWidth: 320, candleCount: sourceCount), viewport), isTrue);
+      expect(identical(viewport.pinch(scale: 1.5,
+          initialFocalX: invalid, currentFocalX: 130,
+          plotWidth: 320, candleCount: sourceCount), viewport), isTrue);
+      expect(identical(viewport.pinch(scale: 1.5,
+          initialFocalX: 130, currentFocalX: invalid,
+          plotWidth: 320, candleCount: sourceCount), viewport), isTrue);
+      expect(viewport.visibleIndices(plotWidth: invalid,
+          candleCount: sourceCount), (0, 0));
+    }
+    expect(viewport.indexAt(x: x, plotWidth: 0,
+        candleCount: sourceCount), isNull);
+    expect(identical(viewport.pan(deltaX: 12, plotWidth: 0,
+        candleCount: sourceCount), viewport), isTrue);
+    expect(identical(viewport.pinch(scale: 0,
+        initialFocalX: 130, currentFocalX: 130,
+        plotWidth: 320, candleCount: sourceCount), viewport), isTrue);
+    expect(viewport.visibleIndices(plotWidth: 0,
+        candleCount: sourceCount), (0, 0));
+    // No coordinate normalization should mutate the stored viewport.
+    expect(viewport.scrollBars, 12);
+    expect(viewport.indexAt(x: x, plotWidth: 320,
+        candleCount: sourceCount), 135);
+  });
+
+  test('invalid pointer centroid is ignored and valid two-finger pinch recovers',
+      () {
+    final gesture = ChartTouchGesture();
+    const initial = ChartViewport(barWidth: 10, scrollBars: 25);
+    ChartViewport update(ChartViewport v, {
+      required int pointers,
+      required double focal,
+      required double scale,
+    }) => gesture.update(
+      viewport: v, pointerCount: pointers, focalX: focal,
+      scale: scale, deltaX: 0, plotWidth: 320, candleCount: 160,
+    );
+
+    final invalid = update(initial, pointers: 2,
+        focal: double.nan, scale: 1);
+    expect(identical(invalid, initial), isTrue);
+    expect(gesture.hadMultiTouch, isTrue);
+    expect(gesture.ignoredPointerTransition, isTrue);
+    final firstValid = update(invalid, pointers: 2,
+        focal: 150, scale: 1.0);
+    expect(identical(firstValid, initial), isTrue,
+        reason: 'First valid sample establishes a new pinch origin');
+    final zoomed = update(firstValid, pointers: 2,
+        focal: 154, scale: 1.5);
+    expect(zoomed.barWidth, closeTo(15, 1e-10));
+    expect(zoomed.scrollBars.isFinite, isTrue);
+    expect(gesture.ignoredPointerTransition, isFalse);
+    final lifted = update(zoomed, pointers: 1,
+        focal: 154, scale: 1.0);
+    expect(identical(lifted, zoomed), isTrue,
+        reason: 'Lifting the second finger cannot jump the candle viewport');
+    final pan = gesture.update(
+      viewport: lifted, pointerCount: 1,
+      focalX: 156, scale: 1, deltaX: 15,
+      plotWidth: 320, candleCount: 160,
+    );
+    expect(pan.scrollBars, greaterThan(lifted.scrollBars),
+        reason: 'Valid one-finger panning still works after a bad pinch sample');
+  });
+
+  test('bad persisted or transient viewport geometry is not hit-testable', () {
+    const invalidWidth = ChartViewport(barWidth: 0);
+    const invalidScroll = ChartViewport(scrollBars: double.nan);
+    const invalidMargin = ChartViewport(rightMarginBars: double.infinity);
+    for (final viewport in [invalidWidth, invalidScroll, invalidMargin]) {
+      expect(viewport.indexAt(x: 100, plotWidth: 320,
+          candleCount: 10), isNull);
+      expect(viewport.visibleIndices(
+          plotWidth: 320, candleCount: 10), (0, 0));
+      expect(identical(viewport.pan(deltaX: 10,
+          plotWidth: 320, candleCount: 10), viewport), isTrue);
+      expect(identical(viewport.pinch(scale: 1.3,
+          initialFocalX: 100, currentFocalX: 110,
+          plotWidth: 320, candleCount: 10), viewport), isTrue);
+    }
+  });
+
   test('right-price-axis drag zooms prices around touch without time pan', () {
     const scale = ChartPriceScale(100, 200, 400);
     const viewport = ChartViewport(barWidth: 12, scrollBars: 21);
