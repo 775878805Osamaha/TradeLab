@@ -91,16 +91,31 @@ void main() {
           await tester.tapAt(origin);
         } else {
           await tester.tapAt(origin - const Offset(38, 28));
-          // Avoid interpreting the next intended anchor as a double tap.
+          // Double-tap recognizer deliberately delays a single-tap
+          // callback; advance Flutter's FAKE test clock to finalize each
+          // deliberate candle anchor instead of treating its pending timer
+          // as a missing real-world drawing.
           await tester.pump(const Duration(milliseconds: 400));
           await tester.tapAt(origin + const Offset(38, 28));
         }
+        await tester.pump(const Duration(milliseconds: 400));
         await tester.pumpAndSettle();
         final created = guideState.debugGuideState;
         expect(kind == 'horizontal' ? created.levels : created.patterns, 1,
             reason: 'Touch must create a real source-anchored $kind: $created');
         expect(created.undo, greaterThan(0),
             reason: 'Undo snapshot must exist before a guide drag: $created');
+
+        // Completing an ordinary drawing exits placement mode. Re-activate
+        // the same tool to EDIT the verified existing guide, not fabricate a
+        // new one. The selected index is resolved by chart hit-testing.
+        await tester.tap(find.byKey(const Key('drawing-rail-open-catalog')));
+        await tester.pumpAndSettle();
+        final editTool = find.byKey(Key('drawing-tool-$kind'));
+        await tester.ensureVisible(editTool);
+        await tester.tap(editTool);
+        await tester.pumpAndSettle();
+        expect(guideState.debugGuideState.drawing, isTrue);
 
         final pointer = await tester.startGesture(origin);
         await pointer.moveBy(const Offset(0, -9));
