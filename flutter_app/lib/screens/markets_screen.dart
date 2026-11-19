@@ -32,12 +32,14 @@ class _MarketsScreenState extends State<MarketsScreen> {
   late final Future<void> _initialLoad;
   bool _loadingFavorites = true;
   bool _favoritesStoreError = false;
+  Timer? _quoteExpiryTimer;
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_rebuild);
     _initialLoad = _restoreFavorites();
+    _scheduleQuoteExpiry();
   }
 
   Future<void> _restoreFavorites() async {
@@ -77,11 +79,41 @@ class _MarketsScreenState extends State<MarketsScreen> {
     }));
   }
 
-  void _rebuild() { if (mounted) setState(() {}); }
+  /// cTrader prices are valid for only 90 seconds. A verified quote may
+  /// expire while the user is reading the Watchlist with no new broker event.
+  /// Schedule exactly one local UI invalidation at the earliest expiry;
+  /// do not poll the broker or rebuild every frame.
+  void _scheduleQuoteExpiry() {
+    _quoteExpiryTimer?.cancel();
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    int? earliest;
+    for (final symbol in tradeSymbols) {
+      if (symbol.source != TradeSource.ctrader) continue;
+      final quote = widget.controller.recentQuoteFor(symbol);
+      if (quote == null) continue;
+      final expires = quote.timestampMs + 90001;
+      if (expires <= now) continue;
+      if (earliest == null || expires < earliest) earliest = expires;
+    }
+    if (earliest == null) return;
+    _quoteExpiryTimer = Timer(
+      Duration(milliseconds: earliest - now + 1), () {
+        if (!mounted) return;
+        setState(() {});
+        _scheduleQuoteExpiry();
+      });
+  }
+
+  void _rebuild() {
+    if (!mounted) return;
+    setState(() {});
+    _scheduleQuoteExpiry();
+  }
 
   @override
   void dispose() {
     widget.controller.removeListener(_rebuild);
+    _quoteExpiryTimer?.cancel();
     _search.dispose();
     if (widget.favoritesStore == null) {
       // Do not close the SQLite handle while its first read is in progress;
@@ -236,8 +268,13 @@ class _MarketsScreenState extends State<MarketsScreen> {
     final isCrypto = symbol.kind == InstrumentKind.crypto;
     final accent = isGold ? TradeColors.gold :
         isCrypto ? const Color(0xFF8B68D6) : TradeColors.blue;
+    // Only a fresh, validated BID/ASK source quote may be advertised as
+    // a current cTrader price. forexPrices retains the last fetched number
+    // for compatibility, but that number has no expiration timestamp.
+    final verifiedQuote = symbol.source == TradeSource.ctrader
+        ? widget.controller.recentQuoteFor(symbol) : null;
     final price = symbol.source == TradeSource.ctrader
-        ? widget.controller.forexPrices[symbol.code]
+        ? verifiedQuote?.bid
         : widget.controller.cryptoPrices[symbol.code];
     final decimals = symbol.code == 'USDJPY' ? 3 :
         symbol.kind == InstrumentKind.forex ? 5 : 2;
@@ -246,10 +283,14 @@ class _MarketsScreenState extends State<MarketsScreen> {
         ? 'cTrader' : 'Binance';
     final status = hasPrice
         ? symbol.source == TradeSource.ctrader
-            ? 'سعر BID من cTrader' : 'سعر من Binance'
+            ? 'سعر BID حديث من cTrader' : 'سعر من Binance'
         : symbol.source == TradeSource.ctrader &&
                 !widget.controller.ctraderConnected
-            ? 'يتطلب ربط cTrader' : 'لا يتوفر سعر مؤكد';
+            ? 'يتطلب ربط cTrader'
+            : symbol.source == TradeSource.ctrader &&
+                    widget.controller.forexPrices.containsKey(symbol.code)
+                ? 'انتهت صلاحية السعر — حدّث الأسعار'
+                : 'لا يتوفر سعر مؤكد';
 
     return TradeDashboardPanel(
       padding: EdgeInsets.zero,
