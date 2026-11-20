@@ -139,6 +139,68 @@ void main() {
         throwsArgumentError);
   });
 
+  test('older cached islands cannot skip periods that were never archived',
+      () {
+    const minute = 60000;
+    const t = 1700000000000;
+    const candle = TradeCandle(100, 101, 99, 100.5);
+    final cached = [
+      for (var i in [0, 1, 2, 40, 41, 42])
+        MarketBar(t + i * minute, candle),
+    ];
+    final suffix = MarketCandleStore.contiguousOlderPage(
+      source: cached, beforeMs: t + 43 * minute, timeframe: '1m');
+    expect(suffix.map((bar) => bar.timestamp), [
+      t + 40 * minute, t + 41 * minute, t + 42 * minute,
+    ]);
+    final unverifiedGap = MarketCandleStore.contiguousOlderPage(
+      source: cached.take(3).toList(growable: false),
+      beforeMs: t + 40 * minute, timeframe: '1m');
+    expect(unverifiedGap, isEmpty,
+        reason: 'Do not skip actual possible cTrader candles 3..39');
+    expect(cached, hasLength(6));
+  });
+
+  test('full continuous local page preserves original source list identity',
+      () {
+    const t = 1700000000000;
+    const candle = TradeCandle(100, 101, 99, 100.5);
+    final page = List<MarketBar>.generate(2000,
+        (i) => MarketBar(t + i * 60000, candle), growable: false);
+    final selected = MarketCandleStore.contiguousOlderPage(
+      source: page, beforeMs: t + page.length * 60000,
+      timeframe: '1m');
+    expect(selected, same(page),
+        reason: 'Avoid another 2000-object page copy for chart gestures');
+    expect(selected, hasLength(2000));
+    expect(MarketCandleStore.contiguousOlderPage(
+      source: page, beforeMs: t + (page.length + 5) * 60000,
+      timeframe: '1m'), isEmpty);
+  });
+
+  test('market closures and variable calendar months require broker coverage',
+      () {
+    const t = 1700000000000;
+    const candle = TradeCandle(100, 101, 99, 100.5);
+    final page = [const MarketBar(t, candle)];
+    expect(MarketCandleStore.contiguousOlderPage(
+      source: page, beforeMs: t + 3 * 86400000,
+      timeframe: '1D'), isEmpty);
+    expect(MarketCandleStore.contiguousOlderPage(
+      source: page, beforeMs: t + 31 * 86400000,
+      timeframe: '1M'), isEmpty);
+    expect(() => MarketCandleStore.contiguousOlderPage(
+      source: page, beforeMs: t, timeframe: '1m'),
+      throwsA(isA<MarketDataException>()));
+    expect(() => MarketCandleStore.contiguousOlderPage(
+      source: page, beforeMs: 0, timeframe: '1m'),
+      throwsArgumentError);
+    expect(() => MarketCandleStore.contiguousOlderPage(
+      source: [MarketBar(t + 60000, candle), MarketBar(t, candle)],
+      beforeMs: t + 120000, timeframe: '1m'),
+      throwsA(isA<MarketDataException>()));
+  });
+
   test('persist 120 verified market candles; no fabricated gaps', () async {
     final account = 'cache-test-${DateTime.now().microsecondsSinceEpoch}';
     final bars = List<MarketBar>.generate(120, (i) {

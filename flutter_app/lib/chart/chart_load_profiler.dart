@@ -32,10 +32,19 @@ class ChartLoadStatsCollector {
 
   final int reportEvery;
   final int maxSamples;
-  final Map<ChartLoadPhase, List<int>> _byPhase = {};
-  final Map<ChartLoadPhase, int> _totals = {};
+  // Range, Heikin Ashi and raw candles have different work profiles.
+  // Never attribute expensive Range rebuilds to a candle-only p95 cohort.
+  final Map<(ChartLoadPhase, String), List<int>> _byPhase = {};
+  final Map<(ChartLoadPhase, String), int> _totals = {};
 
-  int sampleCount(ChartLoadPhase phase) => _byPhase[phase]?.length ?? 0;
+  int sampleCount(ChartLoadPhase phase, {String? mode}) {
+    if (mode != null) return _byPhase[(phase, mode)]?.length ?? 0;
+    var count = 0;
+    for (final entry in _byPhase.entries) {
+      if (entry.key.$1 == phase) count += entry.value.length;
+    }
+    return count;
+  }
 
   static int percentileUs(List<int> values, double percentile) {
     if (values.isEmpty || percentile < 0 || percentile > 1) {
@@ -56,11 +65,12 @@ class ChartLoadStatsCollector {
         !const ['candles', 'heikinAshi', 'range'].contains(mode)) {
       throw ArgumentError('Invalid chart load timing and workload');
     }
-    final samples = _byPhase.putIfAbsent(phase, () => <int>[]);
+    final key = (phase, mode);
+    final samples = _byPhase.putIfAbsent(key, () => <int>[]);
     samples.add(durationUs);
     if (samples.length > maxSamples) samples.removeAt(0);
-    final total = (_totals[phase] ?? 0) + 1;
-    _totals[phase] = total;
+    final total = (_totals[key] ?? 0) + 1;
+    _totals[key] = total;
     if (total % reportEvery != 0) return null;
     return <String, Object>{
       'type': 'rolling-source-load-time',

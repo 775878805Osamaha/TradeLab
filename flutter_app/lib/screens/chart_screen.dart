@@ -1568,6 +1568,13 @@ class _ChartScreenState extends State<ChartScreen>
           symbol.source == TradeSource.ctrader ? sourceAccount : null,
           beforeMs: cursor, limit: capacity,
         );
+        // SQLite may contain two disconnected verified history islands.
+        // Only a tightly attached tail can be shown before its missing
+        // seam is checked against the original cTrader/Binance provider.
+        // This is conservative for weekends, broker holidays and months:
+        // never assume missing cached candles did not exist.
+        localPage = MarketCandleStore.contiguousOlderPage(
+          source: localPage, beforeMs: cursor, timeframe: timeframe);
         _historyLoadProfiler.finish(olderCacheClock,
             phase: ChartLoadPhase.olderCacheRead, mode: _mode.name,
             displayedBars: localPage.length, bidTicks: 0);
