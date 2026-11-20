@@ -1045,7 +1045,11 @@ class _ChartScreenState extends State<ChartScreen>
       if (refresh.appended == 0) {
         // Overlap-only cTrader responses do not allocate or publish a new
         // 100k+ chart snapshot and must not advance the Replay cursor.
-        setState(() => _loadError = null);
+        // If no error is displayed, do not rebuild the toolbar or chart
+        // just because an unchanged broker-close poll finished.
+        if (_loadError != null) {
+          setState(() => _loadError = null);
+        }
         return;
       }
       final snapshot = refresh.snapshot!;
