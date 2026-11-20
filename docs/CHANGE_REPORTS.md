@@ -229,3 +229,11 @@
 - **التغطية:** 200k توقيت مع `ListBase` لحساب قراءات مصدر 180 عملية بحث، تغيّر snapshots/عداد الشموع، Range نفس المللي ثانية، مصدر غير مرتب، الإبطال لكل بُعد من منتقي الوقت. ليست بيانات تداول حقيقية، ولا تغيير مصدر أو سعر.
 - **التحقق حتى الآن:** CI `PENDING`، اختبار Android Profile وفريمات الهاتف الحقيقي `NOT RUN`. حالة PR ستُسجل بعد فتحه. لا إنشاء APK.
 - **الخطوة التالية الوحيدة:** افتح PR إلى `test/flutter-all-fixes-20261116`، تأكد من نجاح CI والاختبارات، أصلح أي فشل، ثم دمج فرع التطوير فقط وتحديث SHA/CI الفعلي.
+
+### 2026-11-20T23:01:53.828Z — نجاح اختبار ودمج #575 لتحسين اختيار توقيت Replay وإبطال نوافذ المصدر القديم
+- **GitHub:** [PR #575](https://github.com/775878805Osamaha/TradeLab/pull/575) **MERGED** في فرع `test/flutter-all-fixes-20261116`، SHA الفعلي `e7ffbd80db2add402cc16b89a7ef60576a7b6887`. تم التحقق من حالة PR ورأس فرع التطوير.
+- **CI:** [Actions #44833280061](https://github.com/775878805Osamaha/TradeLab/actions/runs/44833280061) = **completed/success** على مصدر PR `6ea07bfbbe5c8cf530edb3f70ca9ae5a483f38f5`؛ نجح `flutter analyze` وفحص الشارت/Range/Replay وتوقيت اليمن.
+- **الملفات:** `flutter_app/lib/replay/replay_start_resolver.dart`، `flutter_app/test/replay_start_resolver_test.dart`، `flutter_app/lib/screens/chart_screen.dart`، `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
+- **الأثر:** اختيار تاريخ Replay يتعامل مع snapshot مُتحقق منه مع بحث ثنائي متكرر O(log N)؛ اختيار التاريخ/الوقت/DST الذي يبقى مفتوحًا أثناء انتقال الحساب/المصدر لا يحرك مؤشر أو شمعات الجلسة الجديدة. تدعم الاختبارات تسلسل 200k ومختلف أسباب إبطال الجلسة؛ لا كشف أسعار مستقبلية ولا تغيير بيانات السوق.
+- **الحدود:** `main` دون تغيير SHA `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`، لا APK، لا تحديث مشاريع أخرى، لا تجربة Android Profile أو حساب cTrader الحقيقي. لم تُقَس p95/p99 لأداء الهاتف.
+- **الخطوة التالية الوحيدة:** تحسين محاكاة صفقات Replay عند القفز بين عشرات آلاف الشموع مع اختبارات توقف/هدف/إعادة تقديم، دون الاعتماد على بيانات مستقبلية.
