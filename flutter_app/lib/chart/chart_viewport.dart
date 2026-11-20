@@ -4,10 +4,26 @@ import '../data/tradelab_data.dart';
 /// Stable price coordinates shared by drawing gestures and chart painting.
 /// Drawings are anchored to market prices, not screen-height fractions.
 class ChartPriceScale {
-  const ChartPriceScale(this.minimum, this.maximum, this.height);
+  const ChartPriceScale(this.minimum, this.maximum, this.height, {
+    this.sourceCandles,
+    this.sourceMinimum,
+    this.sourceMaximum,
+    this.sourceVisibleStart,
+    this.sourceVisibleEnd,
+  });
   final double minimum;
   final double maximum;
   final double height;
+
+  // Verified unpadded extrema are calculated in the same visible-OHLC pass
+  // that constructs automatic price geometry. They are distinct from the
+  // padded minimum/maximum used for drawing coordinates. Null for a manual
+  // ruler scale, empty/offscreen source or free-standing scale.
+  final List<TradeCandle>? sourceCandles;
+  final double? sourceMinimum;
+  final double? sourceMaximum;
+  final int? sourceVisibleStart;
+  final int? sourceVisibleEnd;
 
   factory ChartPriceScale.visible(List<TradeCandle> candles, ChartViewport viewport,
       double width, double height, {
@@ -30,7 +46,13 @@ class ChartPriceScale {
     final fullSpan = span / visibleFraction;
     return ChartPriceScale(
       minPrice - fullSpan * bottomMarginPercent / 100,
-      maxPrice + fullSpan * topMarginPercent / 100, height);
+      maxPrice + fullSpan * topMarginPercent / 100, height,
+      sourceCandles: candles,
+      sourceMinimum: minPrice,
+      sourceMaximum: maxPrice,
+      sourceVisibleStart: start,
+      sourceVisibleEnd: end,
+    );
   }
 
   double y(double price) => (maximum - price) / (maximum - minimum) * height;
@@ -57,7 +79,12 @@ class ChartPriceScale {
   /// A manually adjusted price interval retains its market-price anchors
   /// when the Android chart canvas changes height (e.g. focus mode / Replay).
   ChartPriceScale withHeight(double newHeight) =>
-      ChartPriceScale(minimum, maximum, newHeight);
+      ChartPriceScale(minimum, maximum, newHeight,
+        sourceCandles: sourceCandles,
+        sourceMinimum: sourceMinimum,
+        sourceMaximum: sourceMaximum,
+        sourceVisibleStart: sourceVisibleStart,
+        sourceVisibleEnd: sourceVisibleEnd);
 
   /// Vertical drag on the RIGHT price scale, independent of time-axis pan.
   /// The price under the user's finger stays at the same y while zooming.
