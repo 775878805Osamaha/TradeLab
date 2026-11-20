@@ -813,11 +813,18 @@ class _ChartScreenState extends State<ChartScreen>
           _rangePointCache[cacheKey] = point;
         }
         final windowEnd = DateTime.now().toUtc().millisecondsSinceEpoch;
+        final pendingArchivePages = <int>{};
+        bool isCurrentRange() => mounted && revision == _loadRevision &&
+            widget.controller.accountId == account &&
+            _selectedSymbol.code == symbol.code &&
+            _selectedSymbol.source == symbol.source &&
+            _mode == ChartMode.range;
         final snapshot = await RangeStartupLoader.load(
           endMs: windowEnd,
+          isCurrent: isCurrentRange,
           priceDistance: _rangeTicks * point,
           getTicks: (fromMs, toMs) async {
-            if (revision != _loadRevision || !mounted) {
+            if (!isCurrentRange()) {
               throw const MarketDataException('تغير الشارت أثناء تحميل تيكات المدى.');
             }
             List<MarketTick>? verified;
@@ -830,19 +837,24 @@ class _ChartScreenState extends State<ChartScreen>
             if (verified != null) return verified;
             final fetched = await widget.controller.rangeTicksBetween(
               symbol, fromMs: fromMs, toMs: toMs);
-            if (revision != _loadRevision || !mounted) {
+            if (!isCurrentRange()) {
               throw const MarketDataException('تغير الحساب أثناء تحميل المدى.');
             }
-            // Every page is certified by the broker before recording its
-            // exact time coverage. Short windows must never claim six days.
-            unawaited(RangeTickStore.archiveVerifiedWindow(
-              account, symbol.code, fetched,
-              fromMs: fromMs, toMs: toMs,
-            ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+            // The loader must validate this exact inclusive window
+            // (including empty broker responses) before persistence.
+            pendingArchivePages.add(fromMs);
             return fetched;
           },
+          onVerifiedPage: (fromMs, toMs, page) {
+            if (!isCurrentRange() ||
+                !pendingArchivePages.remove(fromMs)) return;
+            unawaited(RangeTickStore.archiveVerifiedWindow(
+              account, symbol.code, page,
+              fromMs: fromMs, toMs: toMs,
+            ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+          },
           onSnapshot: (page) async {
-            if (revision != _loadRevision || !mounted) return;
+            if (!isCurrentRange()) return;
             // Display authentic BID Range bars as soon as a short interval
             // completes. Continue widening history only if too few bars
             // formed to make the chart useful.
