@@ -1,9 +1,5 @@
 name: "Manual storage cleanup - keep latest two APKs"
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/manual-cleanup-old-releases-artifacts.yml'
   workflow_dispatch:
     inputs:
       execute:
@@ -21,7 +17,7 @@ permissions:
   actions: write
 jobs:
   cleanup:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'RUN_BOUNDED_CLEANUP_ONCE TradeLab'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
