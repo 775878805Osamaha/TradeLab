@@ -155,4 +155,95 @@ void main() {
     }
     expect(calls, 0);
   });
+
+  test('archives only verified large broker page after worker validation',
+      () async {
+    final certified = <(int, int, int)>[];
+    final initial = DateTime.utc(2026, 11, 18).millisecondsSinceEpoch;
+    final result = await RangeOlderPageScanner.scan(
+      cursorMs: initial,
+      alreadyLoaded: 500,
+      isCurrent: () => true,
+      maxPages: 1,
+      fetchVerified: (from, to) async {
+        // An original verified cTrader page with same-ms BID multiplicity.
+        return List<MarketTick>.generate(6200,
+            (index) => MarketTick(from + index ~/ 2,
+                3900 + index * .0001));
+      },
+      onVerifiedPage: (from, to, ticks) {
+        certified.add((from, to, ticks.length));
+      },
+    );
+    expect(result, isNotNull);
+    expect(result!.ticks, hasLength(6200));
+    expect(certified, hasLength(1));
+    expect(certified.single.$1, result.fromMs);
+    expect(certified.single.$2, result.toMs);
+    expect(certified.single.$3, 6200);
+  });
+
+  test('malformed large BID page is never delivered to archive callback',
+      () async {
+    var certified = 0;
+    final initial = DateTime.utc(2026, 11, 18).millisecondsSinceEpoch;
+    await expectLater(
+      RangeOlderPageScanner.scan(
+        cursorMs: initial,
+        alreadyLoaded: 0,
+        maxPages: 1,
+        isCurrent: () => true,
+        fetchVerified: (from, to) async {
+          final page = List<MarketTick>.generate(6100,
+              (i) => MarketTick(from + i, 3900 + i * .0001));
+          page[6099] = MarketTick(to + 1, 3901);
+          return page;
+        },
+        onVerifiedPage: (from, to, ticks) => certified++,
+      ),
+      throwsA(isA<MarketDataException>()),
+    );
+    expect(certified, 0,
+        reason: 'No failed provider window is persisted as complete');
+  });
+
+  test('verified empty windows are certified without fabricating ticks',
+      () async {
+    final archived = <(int, int)>[];
+    final initial = DateTime.utc(2026, 11, 18).millisecondsSinceEpoch;
+    final result = await RangeOlderPageScanner.scan(
+      cursorMs: initial, alreadyLoaded: 0, maxPages: 3,
+      isCurrent: () => true,
+      fetchVerified: (from, to) async => const <MarketTick>[],
+      onVerifiedPage: (from, to, ticks) {
+        expect(ticks, isEmpty);
+        archived.add((from, to));
+      },
+    );
+    expect(result!.ticks, isEmpty);
+    expect(result.emptyWindows, 3);
+    expect(archived, hasLength(3));
+    for (var i = 1; i < archived.length; i++) {
+      expect(archived[i].$2, archived[i - 1].$1 - 1);
+    }
+  });
+
+  test('stale account never receives verified-page archive callback',
+      () async {
+    var active = true;
+    var notified = false;
+    final initial = DateTime.utc(2026, 11, 18).millisecondsSinceEpoch;
+    final result = await RangeOlderPageScanner.scan(
+      cursorMs: initial,
+      alreadyLoaded: 0,
+      isCurrent: () => active,
+      fetchVerified: (from, to) async {
+        active = false;
+        return [MarketTick(from, 3900)];
+      },
+      onVerifiedPage: (_, __, ___) => notified = true,
+    );
+    expect(result, isNull);
+    expect(notified, isFalse);
+  });
 }
