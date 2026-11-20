@@ -130,3 +130,13 @@
 - **الملفات:** `flutter_app/lib/data/market_api.dart` و`flutter_app/test/market_api_test.dart` و`docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`.
 - **الحدود:** لا APK/Release جديد، لا تغييرات في التداول الحقيقي أو أسعار وهمية أو `main` أو مشاريع أخرى. ملف APK المنشور أقدم من #567–#570.
 - **الخطوة التالية:** توحيد سقف التاريخ المحمل من SQLite مع الشارت على 200 ألف شمعة وقت، ومنع append تاريخ زائد قبل تخصيص المصفوفات، ثم إجراء CI ودمج التطوير فقط.
+
+### 2026-11-20T22:15:58.010Z — توحيد حد تاريخ الشموع الزمنية بين SQLite وcTrader وReplay
+- **المستودع والفرع:** `775878805Osamaha/TradeLab`، `feat/market-candle-200k-history-budget-20261121` عن التطوير عند `3bfd3e806202f682c32b7e8145a87a7e14086315`. لا تغيير `main` أو المشاريع الأخرى؛ لا APK/Release.
+- **سبب الإصلاح:** القراءة الأولية ودمج الشموع من SQLite كانا يقصان التاريخ افتراضيًا عند **100,000** شمعة بينما cTrader refresh يسمح حتى **200,000**؛ قد تختفي أقدم شموع معتمدة بعد التنقل وإعادة تحميل الكاش.
+- **التنفيذ:** مصدر ميزانية مشترك `MarketHistoryBudget.maxVisibleTimeCandles = 200000`، وإعادة استخدامه في `MarketCandleStore.read`/`mergeVerified` و`CTraderCandleStitcher` و`VerifiedMarketHistorySnapshot` و`OlderCandlePrepend`. يسمح بأكثر من 100k ويمنع تخصيص arrays غير محدودة، مع رسالة خطأ عند محاولة إضافة شمعة تفوق سقف 200k.
+- **الفرق المهم:** البيانات الأقدم الموثقة يمكن أن تظل في أرشيف SQLite، والسقف للعرض المؤقت في الذاكرة فقط؛ لا يغيّر OHLC أو توقيت المصدر ولا يُنشئ شموعًا أو يكشف مستقبل Replay.
+- **ملفات المصدر (5):** `flutter_app/lib/data/market_history_budget.dart`، `market_candle_store.dart`، `older_candle_prepend.dart`، `ctrader_candle_stitcher.dart`، `verified_market_history_snapshot.dart`.
+- **الاختبارات (4):** `market_candle_store_test.dart` و`older_candle_prepend_test.dart` و`verified_market_history_snapshot_test.dart` و`market_history_budget_test.dart`؛ 120001 شمعة، منع تجاوز 200k، رفض الحدود غير الآمنة، والحفاظ على قائمة المصدر عند الصفحات المرفوضة.
+- **حالة التحقق أثناء كتابة هذا التقرير:** CI **PENDING** حتى فتح PR، Flutter SDK محلي وAndroid Profile **NOT RUN**. لا ادعاء بتجاوز ذاكرة الهاتف أو تاريخ cTrader غير محدود.
+- **الخطوة التالية الواحدة:** ارفع PR إلى فرع التطوير، نفذ GitHub Flutter/SQLite tests، أصلح FAIL، ثم ادمج ودوّن SHA وCI في هذا السجل.

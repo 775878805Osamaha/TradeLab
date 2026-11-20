@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/older_candle_prepend.dart';
+import 'package:tradelab_flutter/data/market_history_budget.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 class _CountingBars extends ListBase<MarketBar> {
@@ -216,6 +217,25 @@ void main() {
     expect(result.bars[shifted - 1].timestamp,
         current[replayVisibleThrough - 1].timestamp);
     expect(result.bars.last.timestamp, 9000);
+  });
+
+  test('rejects 200001st old candle before rebuilding huge viewport arrays',
+      () {
+    const start = 1700000000000;
+    final full = List<MarketBar>.generate(
+      MarketHistoryBudget.maxVisibleTimeCandles,
+      (i) => MarketBar(start + (i + 1) * 60000, b0),
+      growable: false);
+    expect(() => OlderCandlePrepend.prepare(
+        existing: full,
+        older: const [MarketBar(start, b1)]),
+        throwsA(isA<MarketDataException>()));
+    final unchanged = OlderCandlePrepend.prepare(
+        existing: full, older: const <MarketBar>[]);
+    expect(unchanged.bars, same(full));
+    expect(unchanged.prefix, isEmpty);
+    expect(full.last.timestamp,
+        start + MarketHistoryBudget.maxVisibleTimeCandles * 60000);
   });
 
   test('requires a pre-existing verified chart archive', () {

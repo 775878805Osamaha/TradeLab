@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/market_candle_store.dart';
+import 'package:tradelab_flutter/data/market_history_budget.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 void main() {
@@ -140,6 +141,32 @@ void main() {
     final limited = MarketCandleStore.mergeVerified(old, recent, maxCount: 2);
     expect(limited.map((bar) => bar.timestamp), [2000, 3000]);
   });
+  test('120001 provider candles remain available beyond old 100k default', () {
+    const start = 1700000000000;
+    final original = List<MarketBar>.generate(120001, (i) =>
+        MarketBar(start + i * 60000,
+            const TradeCandle(100, 101, 99, 100.5)), growable: false);
+    expect(MarketHistoryBudget.maxVisibleTimeCandles, 200000);
+    final visible = MarketCandleStore.mergeVerified(
+        original, const <MarketBar>[]);
+    expect(visible, hasLength(120001));
+    expect(visible.first.timestamp, start);
+    expect(visible.last.timestamp, original.last.timestamp);
+    expect(original, hasLength(120001));
+  });
+
+  test('oversized on-screen SQLite read and merge limits fail closed',
+      () async {
+    for (final count in [0, -1, 200001]) {
+      await expectLater(
+        MarketCandleStore.read(gold, '1m', 'budget-check', limit: count),
+        throwsArgumentError);
+      expect(() => MarketCandleStore.mergeVerified(
+        const <MarketBar>[], const <MarketBar>[], maxCount: count),
+        throwsArgumentError);
+    }
+  });
+
   test('SQLite archive is idempotent and never overwrites broker OHLC', () async {
     final account = 'integrity-${DateTime.now().microsecondsSinceEpoch}';
     const start = 1700000000000;

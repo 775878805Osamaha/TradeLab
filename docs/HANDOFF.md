@@ -1,5 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## توحيد تاريخ الشموع الزمنية إلى 200 ألف — PR قيد الاختبار
+- فرع `feat/market-candle-200k-history-budget-20261121` من التطوير `3bfd3e806202f682c32b7e8145a87a7e14086315`. لا APK/Release، ولا تعديل `main`.
+- `MarketCandleStore.read`/`mergeVerified`: رفع السقف الافتراضي من 100k إلى **200k** شمعة زمنية موثقة مع عدم قص التاريخ الأقدم عند إعادة فتح رمز cTrader؛ `CTraderCandleStitcher` والـsnapshot يستخدمان السقف المشترك.
+- `OlderCandlePrepend` يرفض تجاوز 200k قبل تخصيص القوائم ومحاور الرسم؛ أرشيف SQLite يبقى مستقلًا ويحفظ التاريخ الحقيقي خارج نافذة الذاكرة. هذا ليس تحميل تاريخ غير محدود في RAM.
+- 4 اختبارات إضافية لأرشيف 120001، والحد 200k+، ورفض تجاوز العرض. **CI: PENDING**؛ اختبار الهاتف/قياس FPS **NOT RUN**.
+- **التالي:** افتح PR، راجع Flutter/SQLite/Range/Replay، ادمج فرع التطوير فقط عند PASS واحفظ CI/SHA الفعلي.
+
 ## دفعة تطوير ناجحة ومدمجة — PR #570: تحميل BID متوازن وآمن
 - [PR #570](https://github.com/775878805Osamaha/TradeLab/pull/570) **MERGED** إلى فرع التطوير، commit `7f68458a69e51817f2b396bb5bf74bdb41460d9d`. تطوير cTrader BID بتوزيع العاملين مع بقاء حدّ الطلبات، مصدر الحساب، وأحداث نفس المللي ثانية.
 - [Actions #44826685592](https://github.com/775878805Osamaha/TradeLab/actions/runs/44826685592) **PASS / completed / success**: تحليل Flutter، اختبارات BID والتاريخ/Range/Replay وتوقيت اليمن. Android Profile وFPS على هاتف **NOT RUN**.
