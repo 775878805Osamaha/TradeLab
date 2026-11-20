@@ -115,6 +115,9 @@ class _ChartScreenState extends State<ChartScreen>
   // Shared by candle paint, rectangles, Replay price levels and touch hits.
   // Exactly one immutable auto-scale per source/viewport/plot configuration.
   final ChartPriceScaleCache _autoPriceScaleCache = ChartPriceScaleCache();
+  // Chart snapshots replace timestamp lists rather than mutating them.
+  // Validate the selected source once and make subsequent Replay seeks fast.
+  final ReplayVerifiedTimeIndex _replayTimeIndex = ReplayVerifiedTimeIndex();
   // Opt-in, privacy-safe load timings share TRADELAB_PROFILE_CHART with
   // the frame profiler; normal Android releases never allocate a stopwatch.
   final ChartLoadProfiler _historyLoadProfiler = const ChartLoadProfiler();
@@ -1740,6 +1743,7 @@ class _ChartScreenState extends State<ChartScreen>
     _frameProfiler.detach();
     _heikinCache.dispose();
     _autoPriceScaleCache.clear();
+    _replayTimeIndex.clear();
     widget.controller.removeListener(_onMarketUpdate);
     _loadRevision++;
     _replayTimer?.cancel();
@@ -1996,7 +2000,7 @@ class _ChartScreenState extends State<ChartScreen>
   void _enterReplayStartSelection() {
     final times = _replaySourceTimestamps;
     if (_totalBars < 2 ||
-        !ReplayStartResolver.hasVerifiedTimes(times, _totalBars)) {
+        !_replayTimeIndex.hasVerifiedTimes(times, _totalBars)) {
       _replayMessage('يتطلب تحديد بداية Replay شمعتين مغلقتين '
           'بتوقيت موثق من مصدر السوق. حمّل بيانات الرمز أولًا.');
       return;
@@ -2032,7 +2036,7 @@ class _ChartScreenState extends State<ChartScreen>
 
   void _confirmReplayStart() {
     if (!_replaySelectingStart || _replay) return;
-    if (!ReplayStartResolver.hasVerifiedTimes(
+    if (!_replayTimeIndex.hasVerifiedTimes(
         _replaySourceTimestamps, _totalBars)) {
       _replayMessage('تعذر التحقق من توقيت العمود التاريخي المحدد.');
       return;
@@ -2041,7 +2045,7 @@ class _ChartScreenState extends State<ChartScreen>
     final selected = _replayCandidateIndex.clamp(
         0, ReplayStartResolver.maxStart(_totalBars)).toInt();
     // Assert the selected bar belongs to actual broker/source timestamps.
-    ReplayStartResolver.timestampAt(
+    _replayTimeIndex.timestampAt(
         _replaySourceTimestamps, selected, _totalBars);
     _stopMomentum();
     setState(() {
@@ -2187,14 +2191,38 @@ class _ChartScreenState extends State<ChartScreen>
     }
     if (!mounted || !_replaySelectingStart) return;
     final timestamps = _replaySourceTimestamps;
-    if (!ReplayStartResolver.hasVerifiedTimes(timestamps, _totalBars)) return;
+    if (!_replayTimeIndex.hasVerifiedTimes(timestamps, _totalBars)) return;
     final zone = _symbolSettings.timeZone;
+    // Replay date dialogs remain mounted across asynchronous source changes.
+    // A date belonging to an old account/history must NEVER select a bar in
+    // the next account or expose future bars after a session replacement.
+    final selectionGuard = ReplayDateSelectionGuard(
+      timestamps: timestamps, completedCount: _totalBars,
+      loadRevision: _loadRevision,
+      symbol: _selectedSymbol.code, timeframe: _timeframe,
+      provider: _selectedSymbol.source.name,
+      accountId: widget.controller.accountId,
+      zoneKey: zone.name,
+    );
+    bool sourceStillActive() => mounted && !_replay &&
+        selectionGuard.isCurrent(
+          timestamps: _replaySourceTimestamps,
+          completedCount: _totalBars,
+          loadRevision: _loadRevision,
+          symbol: _selectedSymbol.code, timeframe: _timeframe,
+          provider: _selectedSymbol.source.name,
+          accountId: widget.controller.accountId,
+          zoneKey: _symbolSettings.timeZone.name,
+          selectingStart: _replaySelectingStart,
+        );
+    final initialIndex = _replayCandidateIndex.clamp(
+        0, ReplayStartResolver.maxStart(_totalBars)).toInt();
     final first = ReplayDateTimeResolver.displayWallTime(
         zone, timestamps.first);
     final last = ReplayDateTimeResolver.displayWallTime(
         zone, timestamps[ReplayStartResolver.maxStart(_totalBars)]);
     final initial = ReplayDateTimeResolver.displayWallTime(
-        zone, timestamps[_replayCandidateIndex]);
+        zone, timestamps[initialIndex]);
     // Date and time on the picker MUST use the chart's configured zone.
     // The previous implementation used the device timezone even when chart
     // axis was configured for New York (wrong at historical DST boundaries).
@@ -2205,13 +2233,13 @@ class _ChartScreenState extends State<ChartScreen>
       lastDate: DateTime(last.year, last.month, last.day),
       initialDate: DateTime(initial.year, initial.month, initial.day),
     );
-    if (date == null || !mounted || !_replaySelectingStart) return;
+    if (date == null || !sourceStillActive()) return;
     final time = await showTimePicker(
       context: context,
       helpText: 'الساعة والدقيقة بتوقيت ${zone.nameArabic}',
       initialTime: TimeOfDay.fromDateTime(initial),
     );
-    if (time == null || !mounted || !_replaySelectingStart) return;
+    if (time == null || !sourceStillActive()) return;
     final candidates = ReplayDateTimeResolver.utcCandidates(
       zone: zone, year: date.year, month: date.month, day: date.day,
       hour: time.hour, minute: time.minute);
@@ -2251,8 +2279,8 @@ class _ChartScreenState extends State<ChartScreen>
         ),
       );
     }
-    if (candidate == null || !mounted || !_replaySelectingStart) return;
-    final index = ReplayStartResolver.atOrBefore(
+    if (candidate == null || !sourceStillActive()) return;
+    final index = _replayTimeIndex.atOrBefore(
         timestamps, _totalBars, candidate);
     if (index < 0) {
       _replayMessage('لا توجد شمعة موثقة قبل هذا التاريخ ضمن البيانات المحمّلة.');
