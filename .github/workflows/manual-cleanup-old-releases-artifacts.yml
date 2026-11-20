@@ -21,16 +21,17 @@ permissions:
   actions: write
 jobs:
   cleanup:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'RUN_BOUNDED_CLEANUP_ONCE TradeLab'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 8
     steps:
       - name: "Review protected versions and optionally delete old files"
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const {owner, repo} = context.repo;
             const inputs = context.payload.inputs || {};
-            const authorizedPush = context.eventName === "push" && context.payload.head_commit?.message === "Run one-time storage cleanup for TradeLab keep two APK releases";
+            const authorizedPush = context.eventName === "push" && context.payload.head_commit?.message === "RUN_BOUNDED_CLEANUP_ONCE TradeLab";
             const execute = authorizedPush || String(inputs.execute ?? "false") === "true";
             if (execute && !authorizedPush && inputs.confirm !== "DELETE_OLD_KEEP_2") {
               throw new Error("No deletion: type DELETE_OLD_KEEP_2 into confirm.");
@@ -46,7 +47,7 @@ jobs:
               allApk.filter(r => apkAssets(r).some(a => new RegExp(role, "i").test(a.name)))
                 .slice(0,2).forEach(r => keep.add(r.id));
             }
-            const oldReleases = allApk.filter(r => r.prerelease && !keep.has(r.id));
+            const oldReleases = allApk.filter(r => r.prerelease && !keep.has(r.id)).slice(0,20);
             // Never delete drafts, stable releases, or releases without an APK.
             const artifacts = (await github.paginate(github.rest.actions.listArtifactsForRepo, {owner,repo,per_page:100}))
               .filter(a => !a.expired)
@@ -67,7 +68,8 @@ jobs:
             const backup = /backup|keystore|key-store|signing|secret|database|db-backup|source|archive|export/i;
             const temporary = /apk|aab|android|coverage|test|result|report|log|screen|capture|golden|preview/i;
             const oldArtifacts = artifacts.filter(a => !aKeep.has(a.id) &&
-              !backup.test(a.name) && temporary.test(a.name));
+              !backup.test(a.name) && temporary.test(a.name) &&
+              Date.now() - new Date(a.created_at).getTime() >= 7 * 86400000).slice(0,35);
             const releaseBytes = oldReleases.reduce((s,r)=>s+(r.assets||[]).reduce((n,a)=>n+(a.size||0),0),0);
             const artifactBytes = oldArtifacts.reduce((s,a)=>s+(a.size_in_bytes||0),0);
             core.summary.addHeading("Storage cleanup: "+owner+"/"+repo,2)
@@ -75,18 +77,21 @@ jobs:
               .addRaw("\nOld prerelease candidates: "+oldReleases.length+" ("+releaseBytes+" bytes).")
               .addRaw("\nOld artifact candidates: "+oldArtifacts.length+" ("+artifactBytes+" bytes).");
             core.info("Protected APK Releases: "+allApk.filter(r=>keep.has(r.id)).map(r=>r.tag_name).join(", "));
-            for (const r of oldReleases) core.info((execute?"DELETE":"WOULD_DELETE")+" RELEASE "+r.id+" "+r.tag_name+" "+(r.html_url||""));
-            for (const a of oldArtifacts) core.info((execute?"DELETE":"WOULD_DELETE")+" ARTIFACT "+a.id+" "+a.name+" "+a.size_in_bytes);
+            for (const r of oldReleases) core.info((execute?"ATTEMPT_DELETE":"WOULD_DELETE")+" RELEASE "+r.id+" "+r.tag_name+" "+(r.html_url||""));
+            for (const a of oldArtifacts) core.info((execute?"ATTEMPT_DELETE":"WOULD_DELETE")+" ARTIFACT "+a.id+" "+a.name+" "+a.size_in_bytes);
             let deletedReleases=0,deletedArtifacts=0;
             if (execute) {
               for (const r of oldReleases) {
                 await github.rest.repos.deleteRelease({owner,repo,release_id:r.id});
                 deletedReleases++;
+                core.info('CONFIRMED_DELETED_RELEASE '+r.id);
               }
               for (const a of oldArtifacts) {
                 await github.rest.actions.deleteArtifact({owner,repo,artifact_id:a.id});
                 deletedArtifacts++;
+                core.info('CONFIRMED_DELETED_ARTIFACT '+a.id);
               }
             }
             core.summary.addRaw("\nActually deleted: "+deletedReleases+" Releases; "+deletedArtifacts+" Artifacts.").write();
             core.info("Repository source, tags, branches, draft Releases, stable Releases, and latest two APK releases were not deleted.");
+            core.info("Batch limit: max 20 older releases and 35 artifacts per run; seven-day age protection for artifacts.");
