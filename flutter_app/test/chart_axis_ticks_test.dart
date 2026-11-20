@@ -63,4 +63,54 @@ void main() {
     expect(ChartAxisTicks.ticks(20, 19).toList(), isEmpty);
     expect(ChartAxisTicks.interval(20, 20), 1);
   });
+
+  test('shared chart axis step produces identical real ticks for all markets',
+      () {
+    const ranges = <(double, double)>[
+      (4020, 4072),
+      (3900.3, 3912.8),
+      (1.071, 1.077),
+      (1.072100000, 1.072100012),
+      (52000, 53000),
+      (50000, 51200),
+      (0.00001, 0.000011),
+      (-250, -150),
+      (-5.5, 4.5),
+      (0, 2000),
+      (10, 10),
+      (20, 19),
+    ];
+    for (final (min, max) in ranges) {
+      for (final wanted in [4, 8, 12, 20]) {
+        final step = ChartAxisTicks.interval(
+          min, max, desiredIntervals: wanted);
+        final viaExisting = ChartAxisTicks.ticks(
+          min, max, desiredIntervals: wanted).toList();
+        final reused = ChartAxisTicks.ticksWithStep(
+          min, max, step: step).toList();
+        expect(reused, viaExisting,
+            reason: 'Painter must preserve every legacy price tick '
+                'for $min..$max at $wanted intervals');
+        expect(reused.length, lessThanOrEqualTo(100),
+            reason: 'Never grow the axis label array with tiny step sizes');
+      }
+    }
+  });
+
+  test('precomputed step honors the old 100-label guard and invalid ranges',
+      () {
+    expect(ChartAxisTicks.ticksWithStep(0, 2000, step: 1).toList(),
+        List<double>.generate(100, (index) => index.toDouble()));
+    expect(ChartAxisTicks.ticksWithStep(5, 4, step: 1), isEmpty);
+    expect(ChartAxisTicks.ticksWithStep(
+      double.nan, 100, step: 1), isEmpty);
+    expect(ChartAxisTicks.ticksWithStep(
+      0, 100, step: double.nan), isEmpty);
+    expect(ChartAxisTicks.ticksWithStep(
+      0, 100, step: double.infinity), isEmpty);
+    expect(ChartAxisTicks.ticksWithStep(
+      0, 100, step: 0), isEmpty);
+    expect(ChartAxisTicks.ticksWithStep(
+      0, 100, step: -1), isEmpty);
+  });
 }
