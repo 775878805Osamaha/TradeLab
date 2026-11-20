@@ -1,7 +1,32 @@
+import 'dart:collection';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/ctrader_candle_stitcher.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
+
+class _CountedVerifiedBars extends ListBase<MarketBar> {
+  _CountedVerifiedBars(this.source);
+  final List<MarketBar> source;
+  int reads = 0;
+
+  @override
+  int get length => source.length;
+
+  @override
+  set length(int value) =>
+      throw UnsupportedError('The verified archive is immutable');
+
+  @override
+  MarketBar operator [](int index) {
+    reads++;
+    return source[index];
+  }
+
+  @override
+  void operator []=(int index, MarketBar value) =>
+      throw UnsupportedError('The verified archive is immutable');
+}
 
 void main() {
   const one = MarketBar(1000, TradeCandle(100, 101, 99, 100.5));
@@ -44,6 +69,45 @@ void main() {
     expect(() => CTraderCandleStitcher.append(
       [one], [two, two],
     ), throwsA(isA<MarketDataException>()));
+  });
+
+  test('120k archive live refresh uses logarithmic overlap lookup', () {
+    const firstMs = 1700000000000;
+    final historical = List<MarketBar>.generate(120000, (index) =>
+        MarketBar(firstMs + index * 60000, one.candle),
+        growable: false);
+    final measured = _CountedVerifiedBars(historical);
+    final overlaps = [historical.first, historical[60000], historical.last];
+
+    expect(CTraderCandleStitcher.countNewFromVerifiedHistory(
+        measured, overlaps), 0);
+    expect(measured.reads, lessThan(90),
+        reason: 'Every 30-second poll must not traverse 120k closed bars');
+    expect(identical(CTraderCandleStitcher.appendPreviouslyVerified(
+        measured, overlaps), measured), isTrue);
+    expect(measured.reads, lessThan(180),
+        reason: 'Overlap-only refresh still avoids the 120k source scan');
+
+    final future = MarketBar(historical.last.timestamp + 60000, one.candle);
+    final appended = CTraderCandleStitcher.appendPreviouslyVerified(
+        measured, [historical.last, future]);
+    expect(appended, hasLength(120001));
+    expect(appended.last, same(future));
+    expect(historical, hasLength(120000));
+  });
+
+  test('trusted cTrader refresh still rejects revised and backfill OHLC', () {
+    const revised = MarketBar(2000, TradeCandle(100.5, 108, 100, 101));
+    const late = MarketBar(1500, TradeCandle(100, 101, 99, 100.5));
+    expect(() => CTraderCandleStitcher.countNewFromVerifiedHistory(
+        [one, two], [revised]), throwsA(isA<MarketDataException>()));
+    expect(() => CTraderCandleStitcher.countNewFromVerifiedHistory(
+        [one, two], [late]), throwsA(isA<MarketDataException>()));
+    expect(CTraderCandleStitcher.appendPreviouslyVerified(
+        [one, two], [two, three]), hasLength(3));
+    expect(() => CTraderCandleStitcher.append(
+        [two, one], [three]), throwsA(isA<MarketDataException>()),
+        reason: 'Unknown direct callers must still validate full archives');
   });
 
   test('120k source candles append only two genuine new closes', () {
