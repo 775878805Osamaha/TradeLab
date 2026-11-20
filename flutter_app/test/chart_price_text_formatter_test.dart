@@ -7,7 +7,7 @@ String _previousPaintText(double value, int digits) {
   final parts = value.toStringAsFixed(digits).split('.');
   final integer = parts.first.replaceAllMapped(
     RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
-  return digits == 0 ? integer : '$' + 'integer.' + '${parts.last}';
+  return digits == 0 ? integer : '$integer.${parts.last}';
 }
 
 void main() {
