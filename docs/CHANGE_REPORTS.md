@@ -174,3 +174,11 @@
 - **الفرع والملفات:** `775878805Osamaha/TradeLab`، `feat/local-first-candle-paging-20261121`، `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/replay_training_widget_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`. لا APK ولا `main`.
 - **التحقق الجديد:** CI **PENDING** على الالتزام الجديد؛ Android Profile **NOT RUN**. لن يُذكر PASS أو دمج إلا بعد التحقق الفعلي.
 - **الخطوة التالية الواحدة:** راقب اختبار Replay/SQLite وCI بالكامل في PR #572 ثم دمج فرع التطوير فقط عند PASS.
+
+### 2026-11-20T22:38:19.584Z — نجاح بوابة CI ودمج دفعة SQLite Local-first وReplay PR #572
+- **النتيجة المعتمدة:** [PR #572](https://github.com/775878805Osamaha/TradeLab/pull/572) **MERGED** (squash) إلى `test/flutter-all-fixes-20261116`، SHA الفعلي [d746dea](https://github.com/775878805Osamaha/TradeLab/commit/d746dea22a7d11804ad5e19b56f5465a306f1c9d). جرى جلب حالة PR ورأس فرع التطوير والتحقق من مطابقتهما بعد الدمج.
+- **فحص PR النهائي:** [GitHub Actions #44830135551](https://github.com/775878805Osamaha/TradeLab/actions/runs/44830135551) **PASS / completed / success**؛ خطوات `Analyze Dart and Flutter`, `Verify historical tick archive and chart interactions` (تتضمن اختبارات SQLite وReplay)، `Verify chart weekdays under Yemen device timezone` جميعها ناجحة. المحاولتان الأوليان **FAIL** مسجلتان في السجل بلا إخفاء.
+- **الأثر:** 4000 شمعة محفوظة أوليًا بدل 200k، تحميل صفحات source-verified أقدم (2000) محليًا مع cursor حصري وفصل الحساب ثم الرجوع إلى broker عند الحاجة؛ ميزانية 200k تمنع تخصيص ذاكرة متجاوزة. السحب داخل Replay لا يفعّل تحميلًا تلقائيًا؛ لا يتغير سوق التداول ولا المصدر.
+- **ملفات العمل:** `flutter_app/lib/data/market_candle_store.dart`, `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/market_candle_store_test.dart`, `flutter_app/test/replay_training_widget_test.dart`، `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`. لا تغيير `main` (بقي SHA `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`).
+- **التحقق غير المنفذ:** Android device/Profile/FPS/Broker login **NOT RUN**؛ لا APK أو Release جديد. آخر APK منشور أقدم من هذه الدفعة ولا يحتوي #567–#572.
+- **الخطوة التالية الواحدة:** جمع مؤشرات زمن التحميل/FPS في Android Profile وتكرار تجربة cTrader Range/Replay على هاتف حقيقي، ثم إصلاح أي اختناق مدعوم بقياس مع حفظ تقرير GitHub.

@@ -1,12 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## أحدث دفعة قيد الفحص — صفحات OHLC المحلية وتحميل الشارت السريع
-- فرع `feat/local-first-candle-paging-20261121` من `908f42abb28c8d6e3dd9b5a7b6e7835972776c44`، بدون تغيير `main` أو APK.
-- فتح الشارت يقرأ آخر **4000** شمعة زمنية من SQLite، بدل 200 ألف، للتقليل من حجم الذاكرة وتأخير الاسترجاع الأولي. تحميل المزيد عند السحب لليسار يتم في صفحات **2000** شمعة source-verified من SQLite باستخدام cursor حصري، ولا يتصل cTrader/Binance إلا عند فشل/نفاد الكاش.
-- يظل Replay ونقل الرسومات عبر مسار `OlderCandlePrepend.prepareAsync` الحالي، مع إلغاء نشر الصفحة عند تغير الحساب/الرمز، والتحقق من السعة المتبقية حتى سقف 200 ألف شمعة محملة.
-- الاختبارات الجديدة: 4200 شمعة مع فجوة سوق حقيقية، تتابع صفحات 1602، فصل الحسابات، cursor حصري، وحدود الذاكرة. فحص [Actions #44829082109](https://github.com/775878805Osamaha/TradeLab/actions/runs/44829082109): تحليل Flutter و590 اختبارًا نجحوا؛ فشل واحد في Replay widget بسبب `pumpAndSettle` بعد gesture أسرع من عتبة fling. أصلحنا اختبار repaint باستخدام `timedDrag` أبطأ من 180px/s دون تغيير حركة التطبيق؛ **CI للتصحيح PENDING**. لم يُقَس زمن التحميل/FPS على هاتف فعلي.
-- **النتيجة الحالية:** CI #44829082109 و#44829601262 **FAIL** (590 PASS واختبار واحد Replay `pumpAndSettle`). بعد تعيين سبب محتمل في مسار التطبيق، منعنا التحميل التلقائي من الحافة أثناء `_replay` أو اختيار بدايته؛ يظل خيار تحميل الأقدم اليدوي موجودًا، كما أضيف اختبار لعدم إصدار طلب Binance أثناء Replay pan. **CI للتصحيح PENDING**، لا دمج حتى نجاحه.
-- **الخطوة التالية:** تحقق من PR #572 ثم ادمج في التطوير فقط إذا نجحت كل الاختبارات وسجل SHA الحقيقي.
+## آخر دفعة مكتملة — PR #572: تحميل الشموع المحلي وReplay مستقر
+- **MERGED:** [PR #572](https://github.com/775878805Osamaha/TradeLab/pull/572) إلى `test/flutter-all-fixes-20261116` عند SHA [d746dea](https://github.com/775878805Osamaha/TradeLab/commit/d746dea22a7d11804ad5e19b56f5465a306f1c9d).
+- **الاختبارات:** [Actions #44830135551](https://github.com/775878805Osamaha/TradeLab/actions/runs/44830135551) = **SUCCESS / completed** لتحليل Flutter، واختبارات مصدر التاريخ/SQLite/Range/Replay، وتوقيت اليمن. المحاولتان السابقتان [#44829082109](https://github.com/775878805Osamaha/TradeLab/actions/runs/44829082109) و[#44829601262](https://github.com/775878805Osamaha/TradeLab/actions/runs/44829601262) **FAIL** بسبب `pumpAndSettle` بعد سحب Replay؛ عولج السبب في الكود وجُرب اختبار انحدار لا يصدر طلبًا إضافيًا أثناء Replay.
+- **كود الإنتاج:** استعادة أحدث **4000** شمعة زمنية محفوظة عند فتح الشارت، ثم صفحات SQLite محلية **2000** شمعة أقدم حسب حساب cTrader/الرمز/الفريم و`timestamp < cursor`، قبل طلب الوسيط عند فقد الكاش. الحد الآمن الحالي للشارت **200000 شمعة معتمدة بالذاكرة**؛ التاريخ الأقدم قد يبقى على القرص.
+- **سلامة Replay:** السحب/التكبير داخل Replay أو أثناء اختيار بدايته لا يفتح تحميلًا تلقائيًا من الحافة. أمر `ReplayExtrasAction.loadOlder` اليدوي ما زال يعمل حين يطلب المستخدم تاريخًا أقدم. لا افتراضات أسعار أو تيكات وهمية ولا تسريب المستقبل.
+- **الملفات:** `flutter_app/lib/data/market_candle_store.dart`, `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/market_candle_store_test.dart`, `flutter_app/test/replay_training_widget_test.dart` وملفا التوثيق.
+- **المتبقي:** لم يُقَس تحسين زمن فتح الشارت أو p50/p95/p99 لفريمات السحب على جهاز Android فعلي؛ هذا التغيير **غير موجود في APK المنشور بتاريخ 2026-11-20**. لا APK جديد دون طلب؛ `main` لم يتغير.
+- **الخطوة التالية:** إجراء اختبار Android Profile حقيقي على شارت cTrader / Binance مع 4k و100k+ وRange وReplay، ثم إصلاح أي اختناق مثبت دون تغيير `main`.
 
 ## اكتمل توحيد تاريخ الشموع الزمنية — PR #571
 - **MERGED:** [PR #571](https://github.com/775878805Osamaha/TradeLab/pull/571) إلى `test/flutter-all-fixes-20261116`، SHA الحقيقي [35444db](https://github.com/775878805Osamaha/TradeLab/commit/35444db050757d40561cd8f54525773709ed11c0).
