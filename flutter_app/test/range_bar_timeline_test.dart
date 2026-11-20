@@ -28,6 +28,31 @@ void main() {
     expect(timeline.visibleClosedBarsThroughTick(1), 2);
   });
 
+  test('Range timeline rejects reversed BID timestamps without Replay leak',
+      () async {
+    final reversed = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(102, 101),
+      MarketTick(101, 102),
+    ];
+    expect(() => RangeBarTimeline.build(reversed, 1),
+        throwsA(isA<MarketDataException>()));
+    await expectLater(RangeBarTimeline.buildAsync(reversed, 1),
+        throwsA(isA<MarketDataException>()));
+    expect(() => RangeBarTimeline.build(
+        [MarketTick(-1, 100)], 1),
+        throwsA(isA<MarketDataException>()));
+    final sameMs = RangeBarTimeline.build([
+      MarketTick(100, 100),
+      MarketTick(100, 101),
+      MarketTick(100, 102),
+    ], 1);
+    expect(sameMs.endTimestamps.every((ms) => ms == 100), isTrue);
+    expect(sameMs.closedBarCount, 2);
+    expect(sameMs.endTickIndices.take(2), [1, 2],
+        reason: 'Same-ms BID events preserve original ordinal source order');
+  });
+
   test('one authentic tick produces a forming bar but zero Replay bars', () {
     final timeline = RangeBarTimeline.build([MarketTick(100, 102)], 1);
     expect(timeline.bars, hasLength(1));
