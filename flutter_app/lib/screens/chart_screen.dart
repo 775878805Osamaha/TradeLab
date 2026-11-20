@@ -390,7 +390,15 @@ class _ChartScreenState extends State<ChartScreen>
     unawaited(_loadScaleSettings());
     unawaited(_loadSymbolSettings());
     _momentum = AnimationController.unbounded(vsync: this)
-      ..addListener(_tickMomentum);
+      ..addListener(_tickMomentum)
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed ||
+            status == AnimationStatus.dismissed) {
+          // Natural friction finish is a real user-visible end. Never keep
+          // sampling idle toolbar frames after kinetic scrolling stops.
+          _frameProfiler.endInteraction();
+        }
+      });
     _linkedBefore = widget.controller.ctraderConnected;
     _accountBefore = widget.controller.accountId;
     widget.controller.addListener(_onMarketUpdate);
@@ -554,12 +562,21 @@ class _ChartScreenState extends State<ChartScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) _momentum.stop();
+    if (MediaQuery.disableAnimationsOf(context)) _stopMomentum();
+  }
+
+  void _stopMomentum() {
+    // A new touch, account change, Replay transition or modal action can
+    // cancel friction before its natural AnimationStatus.completed event.
+    // End that exact cohort first, so future idle frames cannot be
+    // mislabelled as kinetic chart motion.
+    _frameProfiler.endInteraction();
+    _momentum.stop();
   }
 
   void _tickMomentum() {
     if (!mounted || _loading) {
-      _momentum.stop();
+      _stopMomentum();
       return;
     }
     final deltaX = _momentum.value - _previousMomentumX;
@@ -567,7 +584,7 @@ class _ChartScreenState extends State<ChartScreen>
     if (deltaX.abs() < 0.000001) return;
     final count = _displayCandles.length;
     if (count < 2) {
-      _momentum.stop();
+      _stopMomentum();
       return;
     }
     final next = _viewport.pan(
@@ -576,7 +593,7 @@ class _ChartScreenState extends State<ChartScreen>
         candleCount: count);
     if (next == _viewport) {
       // The chart reached its historical or future-whitespace bound.
-      _momentum.stop();
+      _stopMomentum();
       return;
     }
     if (chartCanUsePaintOnlyViewportUpdate(
@@ -598,7 +615,15 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   void _startMomentum(double horizontalVelocity, double plotWidth) {
-    _momentum.stop();
+    _stopMomentum();
+    _frameProfiler.beginInteraction(
+      interaction: ChartFrameInteraction.momentum,
+      chartMode: _mode.name,
+      replay: _replay || _replaySelectingStart,
+      displayedCandles: _displayCandles.length,
+      rangeBidTicks:
+          _mode == ChartMode.range ? _rangeHistoryTicks.length : 0,
+    );
     _previousMomentumX = 0;
     _momentumPlotWidth = plotWidth;
     // Pixels/second, signed like the finger. The friction simulation is
@@ -688,7 +713,7 @@ class _ChartScreenState extends State<ChartScreen>
     final linked = widget.controller.ctraderConnected;
     final changedAccount = _accountBefore != widget.controller.accountId;
     if (_linkedBefore != linked || changedAccount) {
-      _momentum.stop();
+      _stopMomentum();
       _rangeBidCache.clear();
       _rangeBidCachedAt.clear();
       _rangePointCache.clear();
@@ -740,7 +765,7 @@ class _ChartScreenState extends State<ChartScreen>
 
   Future<void> _loadRealHistory() async {
     if (_replay) _recordTraining();
-    _momentum.stop();
+    _stopMomentum();
     final revision = ++_loadRevision;
     if (!mounted) return;
     final sourceSymbol = _selectedSymbol;
@@ -1866,7 +1891,7 @@ class _ChartScreenState extends State<ChartScreen>
           'بتوقيت موثق من مصدر السوق. حمّل بيانات الرمز أولًا.');
       return;
     }
-    _momentum.stop();
+    _stopMomentum();
     final plotWidth = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
     final index = ReplayStartResolver.atX(
       viewport: _viewport,
@@ -1908,7 +1933,7 @@ class _ChartScreenState extends State<ChartScreen>
     // Assert the selected bar belongs to actual broker/source timestamps.
     ReplayStartResolver.timestampAt(
         _replaySourceTimestamps, selected, _totalBars);
-    _momentum.stop();
+    _stopMomentum();
     setState(() {
       _stopPlayback();
       _training.clear();
@@ -1958,7 +1983,7 @@ class _ChartScreenState extends State<ChartScreen>
   void _exitReplay() {
     if (!_replay && !_replaySelectingStart) return;
     if (_replay) _recordTraining();
-    _momentum.stop();
+    _stopMomentum();
     setState(() {
       _stopPlayback();
       // Do not carry a zoom anchored to a historical Replay candle into
@@ -2032,7 +2057,7 @@ class _ChartScreenState extends State<ChartScreen>
   void _revealReplayCandidate(int index) {
     if (!_replaySelectingStart || index < 0 ||
         index > ReplayStartResolver.maxStart(_totalBars)) return;
-    _momentum.stop();
+    _stopMomentum();
     final width = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
     final viewport = _viewport.revealHistoricalBar(
       index: index,
@@ -2289,7 +2314,7 @@ class _ChartScreenState extends State<ChartScreen>
       if (!mounted || !_replay || sessionId != _trainingSessionId ||
           sourceKey != _trainingSourceKey) return;
     }
-    _momentum.stop();
+    _stopMomentum();
     setState(() {
       _stopPlayback();
       _training.clear();
@@ -2412,7 +2437,7 @@ class _ChartScreenState extends State<ChartScreen>
 
   void _changeSymbol(TradeSymbol item) {
     if (item.code == _symbol) return;
-    _momentum.stop();
+    _stopMomentum();
     // Any in-flight response from the previous symbol is invalid from now on.
     _loadRevision++;
     if (_replay) _recordTraining();
@@ -2461,7 +2486,7 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showSymbolPicker() async {
-    _momentum.stop();
+    _stopMomentum();
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -2498,7 +2523,7 @@ class _ChartScreenState extends State<ChartScreen>
           'الشموع المستقبلية تلقائيًا.');
       return;
     }
-    _momentum.stop();
+    _stopMomentum();
     final frames = ChartTimeframeCatalog.forSource(_selectedSymbol.source);
     await showModalBottomSheet<void>(
       context: context,
@@ -2530,7 +2555,7 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showAnalysisHub() async {
-    _momentum.stop();
+    _stopMomentum();
     final action = await showModalBottomSheet<AnalysisHubAction>(
       context: context,
       isScrollControlled: true,
@@ -2625,12 +2650,12 @@ class _ChartScreenState extends State<ChartScreen>
 
   Future<void> _showChartAppearance() async {
     // Chart display settings must not reset the candle cache or Replay cursor.
-    _momentum.stop();
+    _stopMomentum();
     setState(() => _panelSettingsOpen = true);
   }
 
   void _showCandleSettings() {
-    _momentum.stop();
+    _stopMomentum();
     setState(() {
       _symbolSettingsReturnToPanel = false;
       _panelSettingsOpen = false;
@@ -2642,7 +2667,7 @@ class _ChartScreenState extends State<ChartScreen>
   /// A predictable one-tap exit from drawing/selection modes. Drawing objects
   /// and their undo history remain untouched; finger drags return to pan.
   void _enableMoveChart() {
-    _momentum.stop();
+    _stopMomentum();
     setState(() {
       _drawing = false;
       _eraserMode = false;
@@ -2705,7 +2730,7 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showChartTypePicker() async {
-    _momentum.stop();
+    _stopMomentum();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -2923,7 +2948,7 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showDrawingTools() async {
-    _momentum.stop();
+    _stopMomentum();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -3115,7 +3140,7 @@ class _ChartScreenState extends State<ChartScreen>
       );
 
   void _zoomBy(double factor) {
-    _momentum.stop();
+    _stopMomentum();
     final width = math.max(80.0, MediaQuery.sizeOf(context).width - 61);
     final count = _displayCandles.length;
     setState(() => _viewport = _viewport.pinch(
@@ -4095,7 +4120,7 @@ class _ChartScreenState extends State<ChartScreen>
               key: const Key('chart-back-to-live'),
               tooltip: 'العودة إلى أحدث شمعة',
               onPressed: () {
-                _momentum.stop();
+                _stopMomentum();
                 setState(() => _viewport = _viewport.jumpToLatest());
               },
               icon: Icon(Icons.last_page_outlined, color: ink, size: 21),
@@ -4171,7 +4196,7 @@ class _ChartScreenState extends State<ChartScreen>
     onIndicators: _showIndicatorCatalog,
     onMove: _enableMoveChart,
     onLatest: () {
-      _momentum.stop();
+      _stopMomentum();
       setState(() {
         _viewport = _viewport.jumpToLatest();
         _crosshair = null;
@@ -4307,7 +4332,7 @@ class _ChartScreenState extends State<ChartScreen>
               _panelChartTouched))
           _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة من الشريط',
               onPressed: () {
-                _momentum.stop();
+                _stopMomentum();
                 setState(() => _viewport = _viewport.jumpToLatest());
               }),
         if (widget.journal != null && !_replay)
@@ -4465,7 +4490,7 @@ class _ChartScreenState extends State<ChartScreen>
             key: const Key('chart-gesture-area'),
             behavior: HitTestBehavior.opaque,
             onScaleStart: (details) {
-              _momentum.stop(); // A new gesture owns the chart immediately.
+              _stopMomentum(); // A new gesture owns the chart immediately.
               if (!_panelChartTouched) setState(() => _panelChartTouched = true);
               // Begin a fresh gesture, independent of any earlier fling.
               // A later second-finger touch rebases the pinch on the viewport
@@ -4766,7 +4791,7 @@ class _ChartScreenState extends State<ChartScreen>
             onDoubleTapDown: (details) =>
                 _doubleTapChartX = details.localPosition.dx,
             onDoubleTap: () {
-              _momentum.stop();
+              _stopMomentum();
               if (_doubleTapChartX >= plotWidth) {
                 _resetPriceAxisToAuto();
               } else {
@@ -4777,7 +4802,7 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onLongPressStart: (details) {
-              _momentum.stop();
+              _stopMomentum();
               setState(() => _crosshair = details.localPosition);
             },
             onLongPressMoveUpdate: (details) {
