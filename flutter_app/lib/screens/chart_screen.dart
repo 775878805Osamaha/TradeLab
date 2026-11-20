@@ -20,6 +20,7 @@ import '../chart/chart_ohlc_inspector.dart';
 import '../chart/chart_crosshair_time_label.dart';
 import '../chart/chart_quick_actions.dart';
 import '../chart/chart_frame_profiler.dart';
+import '../chart/chart_load_profiler.dart';
 import '../chart/chart_text_layout_cache.dart';
 import '../chart/chart_feed_health.dart';
 import '../chart/chart_panel_settings.dart';
@@ -114,6 +115,9 @@ class _ChartScreenState extends State<ChartScreen>
   // Shared by candle paint, rectangles, Replay price levels and touch hits.
   // Exactly one immutable auto-scale per source/viewport/plot configuration.
   final ChartPriceScaleCache _autoPriceScaleCache = ChartPriceScaleCache();
+  // Opt-in, privacy-safe load timings share TRADELAB_PROFILE_CHART with
+  // the frame profiler; normal Android releases never allocate a stopwatch.
+  final ChartLoadProfiler _historyLoadProfiler = const ChartLoadProfiler();
 
   // Session-only BID tick cache: switching Range size rebuilds locally.
   // Scoped by account and symbol; not a substitute for persistent history.
@@ -854,6 +858,7 @@ class _ChartScreenState extends State<ChartScreen>
             _selectedSymbol.code == symbol.code &&
             _selectedSymbol.source == symbol.source &&
             _mode == ChartMode.range;
+        final rangeLoadClock = _historyLoadProfiler.start();
         final snapshot = await RangeStartupLoader.load(
           endMs: windowEnd,
           isCurrent: isCurrentRange,
@@ -908,18 +913,26 @@ class _ChartScreenState extends State<ChartScreen>
               'لم تصل تيكات BID موثقة من cTrader خلال آخر 6 أيام. '
               'تحقق من اتصال الحساب وتوفر تاريخ التيكات لدى الوسيط.');
         }
+        _historyLoadProfiler.finish(rangeLoadClock,
+          phase: ChartLoadPhase.rangeStartup, mode: _mode.name,
+          displayedBars: snapshot.timeline.bars.length,
+          bidTicks: snapshot.ticks.length);
       } else {
         // Render verified, account-scoped history immediately on a return to
         // this symbol. A recently synchronized cache needs no new OHLC call.
         List<MarketBar> cached = const [];
         var fresh = false;
         try {
+          final cacheClock = _historyLoadProfiler.start();
           // Restore a bounded verified source page immediately, not a 200k
           // chart archive on every tab opening. Older source bars remain
           // available from SQLite when the user pans into history.
           cached = await MarketCandleStore.read(
               sourceSymbol, sourceTimeframe, sourceAccount,
               limit: MarketCandleStore.initialChartPageSize);
+          _historyLoadProfiler.finish(cacheClock,
+              phase: ChartLoadPhase.initialCacheRead, mode: _mode.name,
+              displayedBars: cached.length, bidTicks: 0);
           fresh = cached.isNotEmpty && await MarketCandleStore.isFresh(
               sourceSymbol, sourceTimeframe, sourceAccount);
         } catch (_) {
@@ -931,8 +944,12 @@ class _ChartScreenState extends State<ChartScreen>
           // The source cache has already been SHA/SQLite validated by its
           // reader. A large mapped candle/timestamp snapshot is built on an
           // isolate, never synchronously in the chart's gesture event loop.
+          final snapshotClock = _historyLoadProfiler.start();
           final cachedSnapshot =
               await VerifiedMarketHistorySnapshot.fromVerifiedAsync(cached);
+          _historyLoadProfiler.finish(snapshotClock,
+              phase: ChartLoadPhase.initialCacheSnapshot, mode: _mode.name,
+              displayedBars: cachedSnapshot.bars.length, bidTicks: 0);
           if (revision != _loadRevision || !mounted ||
               _selectedSymbol.code != sourceSymbol.code ||
               _timeframe != sourceTimeframe ||
@@ -946,14 +963,22 @@ class _ChartScreenState extends State<ChartScreen>
           });
         }
         if (fresh) return;
+        final brokerClock = _historyLoadProfiler.start();
         final bars = await widget.controller.history(sourceSymbol, sourceTimeframe);
+        _historyLoadProfiler.finish(brokerClock,
+            phase: ChartLoadPhase.initialBrokerFetch, mode: _mode.name,
+            displayedBars: bars.length, bidTicks: 0);
         if (revision != _loadRevision || !mounted) return;
         // Preserve the verified conflict-detecting merge, but move its
         // large source/axis allocations off the UI isolate. Small pages
         // remain synchronous to avoid unnecessary isolate setup overhead.
+        final mergeClock = _historyLoadProfiler.start();
         final mergedSnapshot =
             await VerifiedMarketHistorySnapshot.mergeVerifiedAsync(
               cached: cached, fetched: bars);
+        _historyLoadProfiler.finish(mergeClock,
+            phase: ChartLoadPhase.initialBrokerMerge, mode: _mode.name,
+            displayedBars: mergedSnapshot.bars.length, bidTicks: 0);
         if (revision != _loadRevision || !mounted ||
             _selectedSymbol.code != sourceSymbol.code ||
             _timeframe != sourceTimeframe ||
@@ -1072,8 +1097,12 @@ class _ChartScreenState extends State<ChartScreen>
     final lastTimestamp = _actualBars.last.timestamp;
     _refreshingClosedCandles = true;
     try {
+      final fetchClock = _historyLoadProfiler.start();
       final recent = await widget.controller.closedCandlesSince(
           symbol, timeframe, lastTimestamp);
+      _historyLoadProfiler.finish(fetchClock,
+          phase: ChartLoadPhase.closedCandleFetch, mode: _mode.name,
+          displayedBars: recent.length, bidTicks: 0);
       if (!mounted || revision != _loadRevision || _replay ||
           _selectedSymbol.code != symbol.code || _timeframe != timeframe ||
           widget.controller.accountId != account ||
@@ -1084,8 +1113,13 @@ class _ChartScreenState extends State<ChartScreen>
       // The cTrader stitcher's exact overlap validation, 200k-bar memory cap
       // and OHLC conflict policy stay in force, but for large archives run
       // away from the chart's Android gesture/paint isolate.
+      final closedMergeClock = _historyLoadProfiler.start();
       final refresh = await VerifiedClosedCandleRefresh.appendVerifiedAsync(
         existing: previousBars, recent: recent);
+      _historyLoadProfiler.finish(closedMergeClock,
+          phase: ChartLoadPhase.closedCandleMerge, mode: _mode.name,
+          displayedBars: previousBars.length + refresh.appended,
+          bidTicks: 0);
       if (!mounted || revision != _loadRevision || _replay ||
           _selectedSymbol.code != symbol.code || _timeframe != timeframe ||
           widget.controller.accountId != account ||
@@ -1221,6 +1255,7 @@ class _ChartScreenState extends State<ChartScreen>
       // succeed before *any* broker response (including a quiet one) may
       // become a trusted local coverage manifest.
       final pendingArchivePages = <int>{};
+      final scanClock = _historyLoadProfiler.start();
       final scanned = await RangeOlderPageScanner.scan(
         cursorMs: cursorMs,
         alreadyLoaded: previouslyLoaded,
@@ -1258,6 +1293,9 @@ class _ChartScreenState extends State<ChartScreen>
         },
       );
       if (scanned == null || !isCurrent()) return;
+      _historyLoadProfiler.finish(scanClock,
+          phase: ChartLoadPhase.olderRangeScan, mode: _mode.name,
+          displayedBars: _actualRange.length, bidTicks: scanned.ticks.length);
       final older = scanned.ticks;
       // The scanner verified the entire original BID page (including
       // same-ms ordering) off the UI isolate. Its last source timestamp
@@ -1298,12 +1336,17 @@ class _ChartScreenState extends State<ChartScreen>
       // Large history prepends and their full Range rebuild share one
       // background worker, instead of first copying up to 1m BID events
       // synchronously on the gesture/UI isolate.
+      final rebuildClock = _historyLoadProfiler.start();
       final rebuilt = await RangeBarTimeline.prependAndBuildAsync(
         olderTicks: prefix,
         currentTicks: previousTicks,
         priceDistance: _rangeTicks * point,
       );
       if (!mounted || revision != _loadRevision) return;
+      _historyLoadProfiler.finish(rebuildClock,
+          phase: ChartLoadPhase.olderRangeRebuild, mode: _mode.name,
+          displayedBars: rebuilt.timeline.bars.length,
+          bidTicks: rebuilt.ticks.length);
       final combined = rebuilt.ticks;
       final timeline = rebuilt.timeline;
       // The start selection is not yet a playback cutoff, but it still owns
@@ -1519,11 +1562,15 @@ class _ChartScreenState extends State<ChartScreen>
       }
       List<MarketBar> localPage = const <MarketBar>[];
       try {
+        final olderCacheClock = _historyLoadProfiler.start();
         localPage = await MarketCandleStore.readOlder(
           symbol, timeframe,
           symbol.source == TradeSource.ctrader ? sourceAccount : null,
           beforeMs: cursor, limit: capacity,
         );
+        _historyLoadProfiler.finish(olderCacheClock,
+            phase: ChartLoadPhase.olderCacheRead, mode: _mode.name,
+            displayedBars: localPage.length, bidTicks: 0);
       } catch (_) {
         // A broken cache is not a market feed: authenticate via the
         // original broker fetch below instead of displaying bad rows.
@@ -1540,6 +1587,7 @@ class _ChartScreenState extends State<ChartScreen>
         // The existing prepend path handles Replay and drawing anchors.
         older = localPage;
       } else if (symbol.source == TradeSource.ctrader) {
+        final olderBrokerClock = _historyLoadProfiler.start();
         final page = await CTraderOlderCandlePager.load(
           cursorMs: cursor,
           lookback: MarketApi.ctraderCandleLookback(timeframe),
@@ -1553,11 +1601,18 @@ class _ChartScreenState extends State<ChartScreen>
         if (page == null) return;
         older = page.bars;
         quietCursor = page.nextCursorMs;
+        _historyLoadProfiler.finish(olderBrokerClock,
+            phase: ChartLoadPhase.olderBrokerFetch, mode: _mode.name,
+            displayedBars: older.length, bidTicks: 0);
       } else {
         final before = DateTime.fromMillisecondsSinceEpoch(
             cursor - 1, isUtc: true);
+        final olderBrokerClock = _historyLoadProfiler.start();
         older = await widget.controller.history(
             symbol, timeframe, before: before);
+        _historyLoadProfiler.finish(olderBrokerClock,
+            phase: ChartLoadPhase.olderBrokerFetch, mode: _mode.name,
+            displayedBars: older.length, bidTicks: 0);
       }
       if (revision != _loadRevision || !mounted ||
           _selectedSymbol.code != symbol.code || _timeframe != timeframe ||
@@ -1567,8 +1622,12 @@ class _ChartScreenState extends State<ChartScreen>
       // prepend/axis rebuild is done on a worker isolate so 100k+ locally
       // verified candles do not pause the Android gesture/UI isolate.
       final previousBars = _actualBars;
+      final prependClock = _historyLoadProfiler.start();
       final prepared = await OlderCandlePrepend.prepareAsync(
         existing: previousBars, older: older);
+      _historyLoadProfiler.finish(prependClock,
+          phase: ChartLoadPhase.olderCandlePrepend, mode: _mode.name,
+          displayedBars: prepared.bars.length, bidTicks: 0);
       // A slow worker result must never overwrite a newer account, symbol,
       // timeframe, feed or session. Preserve Replay's source candle indices.
       if (revision != _loadRevision || !mounted ||

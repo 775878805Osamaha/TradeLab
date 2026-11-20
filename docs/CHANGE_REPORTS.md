@@ -182,3 +182,12 @@
 - **ملفات العمل:** `flutter_app/lib/data/market_candle_store.dart`, `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/market_candle_store_test.dart`, `flutter_app/test/replay_training_widget_test.dart`، `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`. لا تغيير `main` (بقي SHA `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`).
 - **التحقق غير المنفذ:** Android device/Profile/FPS/Broker login **NOT RUN**؛ لا APK أو Release جديد. آخر APK منشور أقدم من هذه الدفعة ولا يحتوي #567–#572.
 - **الخطوة التالية الواحدة:** جمع مؤشرات زمن التحميل/FPS في Android Profile وتكرار تجربة cTrader Range/Replay على هاتف حقيقي، ثم إصلاح أي اختناق مدعوم بقياس مع حفظ تقرير GitHub.
+
+### 2026-11-20T22:43:51.849Z — إعداد قياس أداء تحميل الشارت ببيانات آمنة وبمراحل منفصلة
+- **المستودع والفرع:** `775878805Osamaha/TradeLab`، `feat/tradelab-chart-load-profiler-20261121` من `400c24a20b67eda1824c0c594f1e96b29cde97a3`. `main` دون تغيير؛ لا APK/Release ولا تعديلات المشاريع الأخرى.
+- **الإضافة:** `flutter_app/lib/chart/chart_load_profiler.dart` و`flutter_app/test/chart_load_profiler_test.dart`، ودمج نقاط القياس في `flutter_app/lib/screens/chart_screen.dart`: 12 مرحلة فعلية منفصلة بين cache read، cache snapshot، broker fetch، broker merge، Range startup، older SQLite/Broker، older append، Range older scan/rebuild، closed candle poll/merge. يُستخدم `Stopwatch` فقط عند وجود `TRADELAB_PROFILE_CHART=true` ويُطبع زمن حقيقي لكل عملية بعد إكمالها.
+- **تحليلات الأداء:** `ChartLoadStatsCollector` يحتفظ بحد أقصى 40 عينة لكل مرحلة منفصلة، ويصدر p50/p95/p99 بعد كل 4 عمليات للمرحلة نفسها؛ لا تختلط فترات انتظار الإنترنت بأزمنة فك ترميز SQLite أو بناء Range.
+- **الخصوصية والدقة:** السجلات تتضمن أسماء مراحل عامة ووضع الرسم وعدد الشموع/التيكات وقياسات ميكروثانية فقط؛ لا بيانات حساب cTrader أو رمز التداول أو السعر أو توقيت مصدر سوق أو أي رمز دخول. الأرقام لا تُدّعى موجودة حتى تشغيل جلسة Profile على Android فعلي.
+- **الملفات:** `flutter_app/lib/chart/chart_load_profiler.dart`, `flutter_app/test/chart_load_profiler_test.dart`, `flutter_app/lib/screens/chart_screen.dart`، وملفا تسليم HANDOFF/CHANGE_REPORTS.
+- **التحقق عند الحفظ:** `PENDING` لبوابة Flutter analyze واختبارات Range/Replay، Android Profile `NOT RUN`. لا تنشئ APK آليًا.
+- **الخطوة التالية الوحيدة:** فتح PR إلى التطوير، إصلاح أي فشل CI حتى PASS، دمج التطوير فقط، وتوثيق SHA/رابط النتيجة.
