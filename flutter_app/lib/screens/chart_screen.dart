@@ -33,6 +33,7 @@ import '../chart/chart_axis_ticks.dart';
 import '../chart/chart_time_axis_label_layout.dart';
 import '../chart/chart_historical_time_zone.dart';
 import '../chart/candle_prefix.dart';
+import '../chart/chart_heikin_ashi.dart';
 import '../replay/replay_playback_speed.dart';
 import '../replay/replay_mobile_controls.dart';
 import '../replay/replay_start_overlay.dart';
@@ -135,8 +136,7 @@ class _ChartScreenState extends State<ChartScreen>
   int? _olderCursorMs;
   String? _olderLoadError;
   String? _loadError;
-  List<TradeCandle>? _heikinSource;
-  List<TradeCandle>? _heikinCache;
+  final ChartHeikinAshiCache _heikinCache = ChartHeikinAshiCache();
   bool _linkedBefore = false;
   String? _accountBefore;
   String _symbol = 'XAUUSD';
@@ -1558,6 +1558,7 @@ class _ChartScreenState extends State<ChartScreen>
   void dispose() {
     _recordTraining();
     _frameProfiler.detach();
+    _heikinCache.dispose();
     widget.controller.removeListener(_onMarketUpdate);
     _loadRevision++;
     _replayTimer?.cancel();
@@ -2340,30 +2341,27 @@ class _ChartScreenState extends State<ChartScreen>
     if (_mode != ChartMode.heikinAshi) {
       return _replay ? CandlePrefix(source, _visibleThrough) : source;
     }
-    // A Heikin-Ashi candle depends only on past candles. Compute the full
-    // causal sequence once per source, then reveal a prefix in Replay.
-    if (!identical(source, _heikinSource)) {
-      _heikinSource = source;
-      _heikinCache = _buildHeikinAshi(source);
-    }
-    final smoothed = _heikinCache!;
+    // Recompute this display-only Heikin-Ashi view when the authentic
+    // source list changes. Large histories are built off the Android touch
+    // isolate; while pending, never display stale source or raw OHLC as HA.
+    final smoothed = _heikinCache.resolve(
+      source,
+      onReady: () {
+        if (mounted && _mode == ChartMode.heikinAshi &&
+            identical(_actualCandles, source)) {
+          setState(() {});
+        }
+      },
+      onError: () {
+        if (mounted && _mode == ChartMode.heikinAshi &&
+            identical(_actualCandles, source)) {
+          setState(() => _loadError =
+              'تعذّر تجهيز شموع هيكناشي من بيانات المصدر. اضغط إعادة المحاولة.');
+        }
+      },
+    );
+    if (smoothed == null) return const <TradeCandle>[];
     return _replay ? CandlePrefix(smoothed, _visibleThrough) : smoothed;
-  }
-
-  static List<TradeCandle> _buildHeikinAshi(List<TradeCandle> raw) {
-    if (raw.isEmpty) return const [];
-    final result = <TradeCandle>[];
-    var previousOpen = (raw.first.open + raw.first.close) / 2;
-    var previousClose = (raw.first.open + raw.first.high + raw.first.low + raw.first.close) / 4;
-    for (final current in raw) {
-      final close = (current.open + current.high + current.low + current.close) / 4;
-      final open = result.isEmpty ? previousOpen : (previousOpen + previousClose) / 2;
-      result.add(TradeCandle(open, math.max(current.high, math.max(open, close)),
-          math.min(current.low, math.min(open, close)), close));
-      previousOpen = open;
-      previousClose = close;
-    }
-    return result;
   }
 
   void _changeSymbol(TradeSymbol item) {
@@ -4364,6 +4362,9 @@ class _ChartScreenState extends State<ChartScreen>
         MaterialBanner(content: Text(_loadError!), actions: [
           TextButton(onPressed: _loadRealHistory, child: const Text('إعادة المحاولة')),
         ]),
+      if (_mode == ChartMode.heikinAshi &&
+          _heikinCache.isPendingFor(_actualCandles))
+        const LinearProgressIndicator(minHeight: 2),
       if (_olderLoading) const LinearProgressIndicator(minHeight: 2),
       if (_olderLoadError != null && !replayUi)
         Container(
