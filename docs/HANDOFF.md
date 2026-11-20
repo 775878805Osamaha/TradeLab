@@ -1,5 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة قياس الأداء قيد الاختبار — تحميل بيانات الشارت وRange
+- فرع `feat/tradelab-chart-load-profiler-20261121` من `400c24a20b67eda1824c0c594f1e96b29cde97a3`، بعد دمج PR #572. لا تعديل `main` ولا APK.
+- إضافة `ChartLoadProfiler` اختياري عبر `--dart-define=TRADELAB_PROFILE_CHART=true` لقياس **12 مرحلة حقيقية**: SQLite الأولية والأقدم، mapping للأرشيف، جلب وسيط cTrader/Binance ودمج OHLC، جلب وتحديث الشموع المغلقة، بداية Range، جلب صفحات Range الأقدم وإعادة بنائها.
+- قياسات Stopwatch فعلية بالميكروثانية، أحداث `TRADELAB_CHART_LOAD_EVENT` لكل إكمال، وحساب p50/p95/p99 لكل مرحلة على حدة عبر سجل دائري محدد 40 عينة. لا أسعار ولا تواريخ تيكات ولا رموز ولا معرفات حساب ولا بيانات صفقات في السجلات.
+- اختبارات وحدة مستقلة للعزل بين المراحل، النسب المئوية، حدود الذاكرة، والتحقق من عدم تسجيل أسماء الحسابات/الرموز. `CI PENDING`، و**لا توجد قياسات Android Profile حقيقية بعد**.
+- **الخطوة التالية:** فتح PR والفحص، ثم دمج التطوير إذا اجتاز CI، وبعدها جمع سجل Profile فعلي لاستهداف التحسين التالي بأرقام بدل تخمين.
+
 ## آخر دفعة مكتملة — PR #572: تحميل الشموع المحلي وReplay مستقر
 - **MERGED:** [PR #572](https://github.com/775878805Osamaha/TradeLab/pull/572) إلى `test/flutter-all-fixes-20261116` عند SHA [d746dea](https://github.com/775878805Osamaha/TradeLab/commit/d746dea22a7d11804ad5e19b56f5465a306f1c9d).
 - **الاختبارات:** [Actions #44830135551](https://github.com/775878805Osamaha/TradeLab/actions/runs/44830135551) = **SUCCESS / completed** لتحليل Flutter، واختبارات مصدر التاريخ/SQLite/Range/Replay، وتوقيت اليمن. المحاولتان السابقتان [#44829082109](https://github.com/775878805Osamaha/TradeLab/actions/runs/44829082109) و[#44829601262](https://github.com/775878805Osamaha/TradeLab/actions/runs/44829601262) **FAIL** بسبب `pumpAndSettle` بعد سحب Replay؛ عولج السبب في الكود وجُرب اختبار انحدار لا يصدر طلبًا إضافيًا أثناء Replay.
