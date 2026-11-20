@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show VoidCallback, compute, kIsWeb;
 
@@ -28,12 +29,8 @@ class ChartHeikinAshi {
           result.isEmpty ? previousOpen : (previousOpen + previousClose) / 2;
       result.add(TradeCandle(
         open,
-        current.high > open
-            ? (current.high > close ? current.high : close)
-            : (open > close ? open : close),
-        current.low < open
-            ? (current.low < close ? current.low : close)
-            : (open < close ? open : close),
+        math.max(current.high, math.max(open, close)),
+        math.min(current.low, math.min(open, close)),
         close,
       ));
       previousOpen = open;
