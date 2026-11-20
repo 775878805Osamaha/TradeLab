@@ -37,6 +37,10 @@ class RangeOlderPageScanner {
     required Future<List<MarketTick>> Function(int fromMs, int toMs)
         fetchVerified,
     required bool Function() isCurrent,
+    // Invoked only AFTER the full inclusive source page passed verification.
+    // Also receives verified empty windows, for legitimate cache coverage.
+    void Function(int fromMs, int toMs, List<MarketTick> ticks)?
+        onVerifiedPage,
     int maxPages = maxQuietWindowsPerAttempt,
   }) async {
     if (cursorMs < 0 || alreadyLoaded < 0 ||
@@ -57,10 +61,14 @@ class RangeOlderPageScanner {
       lastToMs = bounds.toMs;
       final ticks = await fetchVerified(bounds.fromMs, bounds.toMs);
       if (!isCurrent()) return null;
-      RangeOlderPage.verify(
+      await RangeOlderPage.verifyAsync(
         page: ticks, fromMs: bounds.fromMs, toMs: bounds.toMs,
         alreadyLoaded: alreadyLoaded,
       );
+      // Worker verification can finish after the account/symbol was
+      // switched. Do not archive or publish a page from the old session.
+      if (!isCurrent()) return null;
+      onVerifiedPage?.call(bounds.fromMs, bounds.toMs, ticks);
       final next = bounds.fromMs > 0 ? bounds.fromMs - 1 : 0;
       if (ticks.isNotEmpty) {
         return RangeOlderScanResult(
