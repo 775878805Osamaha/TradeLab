@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'market_api.dart';
 import 'range_bar_builder.dart';
+import 'range_drawing_rebase_search.dart';
 import 'tradelab_data.dart';
 
 /// One published historic BID prefix and its matching Range bar timeline.
@@ -198,25 +199,17 @@ class RangeBarTimeline {
     final sourceTick = oldEndTickIndices[oldIndex] + prependedTicks;
     final through = visibleBarsThroughTick(sourceTick);
     if (through == 0) return null;
-    // Prefer bars closed by that exact BID event and closest to the drawing
-    // price, which matters when one tick crosses several Range boundaries.
-    var first = through - 1;
-    while (first > 0 && endTickIndices[first - 1] == sourceTick) {
-      first--;
-    }
-    if (endTickIndices[first] != sourceTick) return through - 1;
-    var nearest = first;
-    var distance = double.infinity;
-    for (var i = first; i < through; i++) {
-      final candle = bars[i];
-      final delta = anchorPrice < candle.low ? candle.low - anchorPrice
-          : anchorPrice > candle.high ? anchorPrice - candle.high : 0.0;
-      if (delta < distance) {
-        distance = delta;
-        nearest = i;
-      }
-    }
-    return nearest;
+    // First event boundary and nearest exact-source price bar are both
+    // O(log N), even if one authentic BID jump closed 100k Range bars.
+    // Preserve the previous earliest-tie and last-confirmed-bar behavior;
+    // future Replay/source events remain outside [0, through).
+    return RangeDrawingRebaseSearch.closestFromVerifiedEvent(
+      endTickIndices: endTickIndices,
+      bars: bars,
+      through: through,
+      sourceTick: sourceTick,
+      anchorPrice: anchorPrice,
+    );
   }
 
   /// Returns a safe Replay cutoff that never includes a bar created from a
