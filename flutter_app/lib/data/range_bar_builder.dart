@@ -27,15 +27,17 @@ class RangeBarBuilder {
   // The timeline worker can transfer ownership of this list exactly once.
   // After transfer the builder must not mutate its published chart snapshot.
   bool _sealed = false;
+  bool _sealedForming = false;
   double? _open;
   double? _high;
   double? _low;
   double? _lastPrice;
 
-  List<TradeCandle> get closed => List.unmodifiable(_closed);
+  List<TradeCandle> get closed => List.unmodifiable(
+      _sealedForming ? _closed.take(_closed.length - 1) : _closed);
 
   /// O(1) completion count for timestamp/tick-index tracking.
-  int get closedCount => _closed.length;
+  int get closedCount => _closed.length - (_sealedForming ? 1 : 0);
 
   TradeCandle? get forming => _open == null
       ? null
@@ -85,8 +87,10 @@ class RangeBarBuilder {
   /// Read-only-in-practice legacy snapshot: always returns an independent
   /// list, so an incremental builder may safely accept more verified ticks.
   List<TradeCandle> snapshot({bool includeForming = true}) => [
-        ..._closed,
-        if (includeForming && !_sealed && forming != null) forming!,
+        ...(_sealedForming
+            ? _closed.take(_closed.length - 1)
+            : _closed),
+        if (includeForming && forming != null) forming!,
       ];
 
   /// One-time finalization for a RangeBarTimeline worker. Reuse the already
@@ -104,6 +108,7 @@ class RangeBarBuilder {
     }
     final unfinished = includeForming ? forming : null;
     _sealed = true;
+    _sealedForming = unfinished != null;
     if (unfinished != null) _closed.add(unfinished);
     return _closed;
   }
