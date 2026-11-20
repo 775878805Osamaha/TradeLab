@@ -70,7 +70,7 @@ void main() {
     expect(candles.reads, 0,
         reason: 'Repeated pan/pinch repaint labels must reuse scanned OHLC');
     expect(scale.sourceMaximum, original!.$1);
-    expect(scale.sourceMinimum, original!.$2);
+    expect(scale.sourceMinimum, original.$2);
     expect(scale.maximum, greaterThan(original.$1));
     expect(scale.minimum, lessThan(original.$2));
   });
@@ -162,7 +162,7 @@ void main() {
     expect(ChartAxisSourceLabels.visibleHighLowForPaint(
       source: extended, displayed: extended, scale: scale,
       start: nextStart, end: nextEnd), expected);
-    expect(expected!.$1, greaterThan(extremes!.$1));
+    expect(expected!.$1, greaterThan(extremes.$1));
   });
 
   test('empty/offscreen source preserves legacy no-axis-label behavior',
