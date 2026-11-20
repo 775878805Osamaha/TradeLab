@@ -1,5 +1,11 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## تطوير قيد التحقق — تعارض شموع OHLC المتداخلة
+- فرع العمل: `fix/tradelab-older-ohlc-overlap-20261120`، من التطوير `facacf9b3eb4da10a367e926eb3d5569bf19b083`. لا APK، لا تغيير `main`.
+- `OlderCandlePrepend.prepare` يتحقق ببحث ثنائي من كل شمعة تُعاد ضمن الأرشيف الموثق؛ تعارض نفس timestamp في open/high/low/close يرفض الصفحة بدل تجاهل اختلاف المصدر، مع عدم تغيير مسارات Replay أو الفجوات الحقيقية.
+- 3 اختبارات جديدة تشمل أرشيف 120,000 شمعة، اختلاف OHLC الحدّي والداخلي، وثبات الفجوات. **CI: PENDING** حتى رابط PR ونتيجة Actions النهائية.
+- **التالي:** افتح PR إلى `test/flutter-all-fixes-20261116`، افحص CI، ثم دمج في التطوير فقط وتحديث السجل؛ لا بناء APK جديد دون طلب.
+
 ## أحدث APK قابل للتثبيت — 20 نوفمبر 2026
 - **الحالة: جاهز للتحميل والتجربة اليدوية**. [تحميل TradeLab Android Test APK](https://github.com/775878805Osamaha/TradeLab/releases/download/tradelab-phone-test-6cecd765d1c2/TradeLab-Android-Test.apk)، 59,096,319 بايت، [GitHub Release](https://github.com/775878805Osamaha/TradeLab/releases/tag/tradelab-phone-test-6cecd765d1c2).
 - مصدر البناء `6cecd765d1c29b3e9e460d18fe2ffaf8269ed494` على `test/tradelab-phone-apk-20261120`، مشتق من أحدث فرع التطوير عند `03794ca53590accb7ae777d5889bd72f5c66a90f` بعد دمج PR #565؛ لم يُعدَّل `main`.
