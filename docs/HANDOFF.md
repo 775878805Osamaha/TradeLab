@@ -1,5 +1,11 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## حماية Range من تجاوز الذاكرة — قيد الاختبار
+- فرع `feat/range-replay-memory-budget-20261120`، استكمالًا لدفعة PR #568. سقف مصدر BID `1,000,000` تيك، وسقف Range `250,000` شمعة مغلقة لكل بناء؛ منع إنشاء مصدر أكبر من ميزانية الذاكرة قبل نسخه إلى isolate، وفشل آمن دون نشر بيانات Replay جزئية.
+- اختبار sync وasync وprepend والحدود وعدّاد مصدر ضخم، مع الإبقاء على same-ms events كما هي.
+- **الحالة: CI PENDING**؛ لا Android Profile ولا APK جديد، ولا تعديل `main`.
+- **التالي:** افتح PR، انتظر نجاح اختبارات GitHub ثم دمج إلى فرع التطوير فقط وتوثيق SHA الحقيقي.
+
 ## دفعة تطوير كبيرة مكتملة — PR #568
 - **MERGED:** [PR #568](https://github.com/775878805Osamaha/TradeLab/pull/568) إلى `test/flutter-all-fixes-20261116`، SHA الفعلي [db9c2cf](https://github.com/775878805Osamaha/TradeLab/commit/db9c2cfa02bef9fea5f6f1a7f76e23140404e9b8).
 - **نجحت الاختبارات:** [Actions #44816709629](https://github.com/775878805Osamaha/TradeLab/actions/runs/44816709629) = **SUCCESS** لتحليل Flutter ودورات Range/Replay/الشارت وYemen timezone؛ هذه نتائج آلية وليست قياسات FPS حقيقية.

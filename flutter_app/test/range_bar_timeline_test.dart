@@ -1,7 +1,28 @@
+import 'dart:collection';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/range_bar_timeline.dart';
 import 'package:tradelab_flutter/data/range_bar_builder.dart';
+
+/// Refuse oversized provider requests without materializing million-row BID
+/// arrays or even attempting to access a tick on the UI isolate.
+class _UnmaterializedHugeBidWindow extends ListBase<MarketTick> {
+  @override
+  int get length => RangeBarTimeline.maxSourceTicks + 1;
+
+  @override
+  set length(int value) =>
+      throw UnsupportedError('Only verified source windows can be published');
+
+  @override
+  MarketTick operator [](int index) =>
+      throw StateError('Unbounded source was read before rejecting its size');
+
+  @override
+  void operator []=(int index, MarketTick value) =>
+      throw UnsupportedError('Only verified source windows can be published');
+}
 
 void main() {
   test('Range bars are tied to the originating BID event, including jumps', () {
@@ -51,6 +72,77 @@ void main() {
     expect(sameMs.closedBarCount, 2);
     expect(sameMs.endTickIndices.take(2), [1, 2],
         reason: 'Same-ms BID events preserve original ordinal source order');
+  });
+
+  test('Range limits cap total closed bars before any Replay is published',
+      () async {
+    final ticks = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 103),
+    ];
+    final withinBudget =
+        RangeBarTimeline.build(ticks, 1, closedBarLimit: 3);
+    expect(withinBudget.closedBarCount, 3);
+    expect(withinBudget.bars.last.close, 103);
+    expect(withinBudget.visibleClosedBarsThroughTick(0), 0);
+    expect(withinBudget.visibleClosedBarsThroughTick(1), 3);
+    expect(() => RangeBarTimeline.build(
+        ticks, 1, closedBarLimit: 2),
+        throwsA(isA<MarketDataException>()));
+    await expectLater(
+        RangeBarTimeline.buildAsync(
+            ticks, 1, closedBarLimit: 2),
+        throwsA(isA<MarketDataException>()),
+    );
+    expect(ticks.map((t) => t.timestamp), [100, 101],
+        reason: 'Failing a build must not change authentic source ticks');
+  });
+
+  test('older BID prepend obeys identical Range bar memory ceiling',
+      () async {
+    final older = <MarketTick>[MarketTick(90, 100)];
+    final current = <MarketTick>[MarketTick(100, 104)];
+    final permitted = await RangeBarTimeline.prependAndBuildAsync(
+      olderTicks: older, currentTicks: current,
+      priceDistance: 1, closedBarLimit: 4,
+    );
+    expect(permitted.timeline.closedBarCount, 4);
+    expect(permitted.timeline.endTickIndices.take(4), [1, 1, 1, 1]);
+    await expectLater(
+      RangeBarTimeline.prependAndBuildAsync(
+        olderTicks: older, currentTicks: current,
+        priceDistance: 1, closedBarLimit: 3,
+      ),
+      throwsA(isA<MarketDataException>()),
+    );
+    expect(older.single.timestamp, 90);
+    expect(current.single.timestamp, 100);
+  });
+
+  test('one million BID cap rejects giant source before reading any tick',
+      () async {
+    final huge = _UnmaterializedHugeBidWindow();
+    expect(() => RangeBarTimeline.build(huge, 1),
+        throwsA(isA<MarketDataException>()));
+    await expectLater(
+      RangeBarTimeline.buildAsync(huge, 1),
+      throwsA(isA<MarketDataException>()),
+    );
+    await expectLater(
+      RangeBarTimeline.prependAndBuildAsync(
+        olderTicks: huge,
+        currentTicks: const <MarketTick>[],
+        priceDistance: 1,
+      ),
+      throwsA(isA<MarketDataException>()),
+    );
+    expect(() => RangeBarTimeline.build(
+      const <MarketTick>[], 1, closedBarLimit: 0),
+      throwsArgumentError);
+    expect(() => RangeBarTimeline.build(
+      const <MarketTick>[], 1,
+      closedBarLimit: RangeBarTimeline.maxClosedBarCount + 1),
+      throwsArgumentError);
   });
 
   test('one authentic tick produces a forming bar but zero Replay bars', () {
