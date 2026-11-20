@@ -5,6 +5,7 @@ import '../data/tradelab_data.dart';
 /// Drawings are anchored to market prices, not screen-height fractions.
 class ChartPriceScale {
   const ChartPriceScale(this.minimum, this.maximum, this.height, {
+    this.sourceCandles,
     this.sourceMinimum,
     this.sourceMaximum,
     this.sourceVisibleStart,
@@ -18,6 +19,7 @@ class ChartPriceScale {
   // that constructs automatic price geometry. They are distinct from the
   // padded minimum/maximum used for drawing coordinates. Null for a manual
   // ruler scale, empty/offscreen source or free-standing scale.
+  final List<TradeCandle>? sourceCandles;
   final double? sourceMinimum;
   final double? sourceMaximum;
   final int? sourceVisibleStart;
@@ -45,6 +47,7 @@ class ChartPriceScale {
     return ChartPriceScale(
       minPrice - fullSpan * bottomMarginPercent / 100,
       maxPrice + fullSpan * topMarginPercent / 100, height,
+      sourceCandles: candles,
       sourceMinimum: minPrice,
       sourceMaximum: maxPrice,
       sourceVisibleStart: start,
@@ -77,6 +80,7 @@ class ChartPriceScale {
   /// when the Android chart canvas changes height (e.g. focus mode / Replay).
   ChartPriceScale withHeight(double newHeight) =>
       ChartPriceScale(minimum, maximum, newHeight,
+        sourceCandles: sourceCandles,
         sourceMinimum: sourceMinimum,
         sourceMaximum: sourceMaximum,
         sourceVisibleStart: sourceVisibleStart,
