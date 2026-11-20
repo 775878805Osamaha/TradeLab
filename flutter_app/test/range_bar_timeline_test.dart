@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/range_bar_timeline.dart';
+import 'package:tradelab_flutter/data/range_bar_builder.dart';
 
 void main() {
   test('Range bars are tied to the originating BID event, including jumps', () {
