@@ -1,5 +1,9 @@
 name: "Manual storage cleanup - keep latest two APKs"
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/manual-cleanup-old-releases-artifacts.yml'
   workflow_dispatch:
     inputs:
       execute:
@@ -26,8 +30,9 @@ jobs:
           script: |
             const {owner, repo} = context.repo;
             const inputs = context.payload.inputs || {};
-            const execute = String(inputs.execute ?? "false") === "true";
-            if (execute && inputs.confirm !== "DELETE_OLD_KEEP_2") {
+            const authorizedPush = context.eventName === "push" && context.payload.head_commit?.message === "Run one-time storage cleanup for TradeLab keep two APK releases";
+            const execute = authorizedPush || String(inputs.execute ?? "false") === "true";
+            if (execute && !authorizedPush && inputs.confirm !== "DELETE_OLD_KEEP_2") {
               throw new Error("No deletion: type DELETE_OLD_KEEP_2 into confirm.");
             }
             const listReleases = await github.paginate(github.rest.repos.listReleases, {owner, repo, per_page:100});
