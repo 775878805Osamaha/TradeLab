@@ -210,3 +210,11 @@
 - **الاختبارات:** منع القفز عبر gap بين جزيرتي كاش، اتصال 2000 شمعة دون نسخ، عطلات السوق/التقويم الشهري، رفض الترتيب الخاطئ، وفصل أرقام p95 لكل نوع شموع.
 - **التحقق:** `PENDING` حتى PR وGitHub Actions، Android Profile/FPS/الوسيط الفعلي `NOT RUN`. هذه بيانات اختبار محلية فقط وليست أسعارًا منشورة.
 - **الخطوة التالية الوحيدة:** PR وFlutter analyze واختبارات history/SQLite/Range/Replay، وإصلاح أي FAIL قبل الدمج إلى التطوير، ثم تحديث SHA/CI النهائي.
+
+### 2026-11-20T22:53:57.778Z — نجاح CI ودمج PR #574 لتوصيل صفحات SQLite دون تجاوز تاريخ غير مؤكد
+- **GitHub:** [PR #574](https://github.com/775878805Osamaha/TradeLab/pull/574) **MERGED** إلى `test/flutter-all-fixes-20261116`، SHA فعلي [32ae4f83](https://github.com/775878805Osamaha/TradeLab/commit/32ae4f83fc47f8541a70b756b508fc39d23c9939). تحقق من نتيجة PR ورأس فرع التطوير بعد الدمج.
+- **CI:** [Actions #44832321863](https://github.com/775878805Osamaha/TradeLab/actions/runs/44832321863) = **PASS/completed/success** على مصدر PR `de231c5d91054fd71295ee9a59d9a915f2384edb`: Flutter analyze واختبارات التاريخ وSQLite والشارت وRange/Replay والتوقيت اليمني نجحت.
+- **التنفيذ:** حماية source-contiguous لسلسلة الشموع المحلية قبل older prepend، fallback إلى مصدر الوسيط عند gap غير مؤكدة، خطوات زمن صحيحة للإطارات الأصلية، لا تخمين طول أشهر المصدر، وحفاظ على هوية القائمة الأصلية لصفحة متصلة 2000 شمعة. فصل `ChartLoadStatsCollector` بالمرحلة ووضع الرسم؛ اختبار عزل p95.
+- **المصدر/الاختبار:** `flutter_app/lib/data/chart_timeframe_catalog.dart`, `flutter_app/test/chart_timeframe_catalog_test.dart`, `flutter_app/lib/data/market_candle_store.dart`, `flutter_app/test/market_candle_store_test.dart`, `flutter_app/lib/chart/chart_load_profiler.dart`, `flutter_app/test/chart_load_profiler_test.dart`, `flutter_app/lib/screens/chart_screen.dart`. ملفات التسليم: `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`.
+- **القيود:** لم يتغير `main` (بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`) ولا أي مشروع آخر. لا APK أو Release. Android Profile/FPS واختبار حقيقي مع حساب cTrader `NOT RUN`، ولا يدّعي تقرير CI تحسنًا مقاسًا للهاتف.
+- **الخطوة التالية الوحيدة:** اختبار Android Profile للشارت وBID Range وتحليل سجل التحميل والـframe p95 الجديد، ثم تنفيذ إصلاح موجّه بمؤشرات فعلية؛ لا APK قبل تصريح المستخدم.

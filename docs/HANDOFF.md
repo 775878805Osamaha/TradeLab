@@ -1,11 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## تحسين قيد فحص GitHub — منع القفز عبر تاريخ محلي غير مكتمل
-- الفرع `fix/tradelab-sqlite-history-seam-20261121` من `a6a96d4e2c750c4ba8210ce9e1101bd9d1bb048d` بعد دمج #573. `main` دون تغيير؛ لا APK.
-- حماية local-first: عندما يحتوي SQLite على شموع قديمة متصلة ببعضها لكن تفصلها عن الشارت **فترات غير مؤرشفة**، لا يستخدمها التطبيق لتجاوز الفترة المفقودة. `contiguousOlderPage` يحتفظ فقط بآخر جزء متصل زمنيًا، ويرجع إلى cTrader/Binance الموثوق عند أي فجوة أو حد شهري متغير. إجازات السوق لا تعني أن كل الفترة مؤكدة دون الرجوع إلى الوسيط.
-- عزل إحصاءات المدة لكل `(مرحلة التحميل، نوع الشموع)` حتى لا تختلط p95 لشارت Range مع كاش شموع الزمن. 4 اختبارات أمان/أداء جديدة مع اختبار جديد لفواصل الزمن.
-- `CI: PENDING` حتى نجاح بوابة Flutter وتوقيتها؛ **Android Profile NOT RUN**؛ لا أسعار أو فواصل زمنية مصطنعة، ولا مصدر بيانات ثالث.
-- **التالي:** فتح PR واختبار SQLite/Range/Replay وChart Profile، ثم الدمج على التطوير فقط عند PASS وتسجيل SHA.
+## دفعة مكتملة — PR #574: سلامة صفحات SQLite القديمة وقياس Range
+- **MERGED:** [PR #574](https://github.com/775878805Osamaha/TradeLab/pull/574) إلى `test/flutter-all-fixes-20261116` عند SHA [32ae4f8](https://github.com/775878805Osamaha/TradeLab/commit/32ae4f83fc47f8541a70b756b508fc39d23c9939).
+- **CI:** [GitHub Actions #44832321863](https://github.com/775878805Osamaha/TradeLab/actions/runs/44832321863) **PASS / completed / success**، يشمل Flutter analyze واختبارات SQLite/الشارت/Range/Replay وتوقيت اليمن.
+- `MarketCandleStore.contiguousOlderPage`: لا يخترق التاريخ المحمّل جزيرة SQLite أقدم بينها وبين الشارت فترة لم يثبت تنزيلها؛ يستخدم اتصالًا معروفًا لشموع المصدر، ثم يستعين بوسيط cTrader أو Binance الحقيقي عند gap أو مدة شهر متغيرة. صفحة متصلة كاملة (2000 شمعة) تُعاد بدون نسخ إضافي. لا تعبئة شموع وهمية أو تغيير Replay.
+- فصل سجل p50/p95/p99 حسب `(مرحلة التحميل، نوع الرسم)` حتى لا تختلط أزمنة Range والشموع الزمنية.
+- **التسليم:** جميع تغييرات #573 و#574 موجودة في فرع التطوير فقط؛ `main` بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc` دون تغيير. APK المنشور سابقًا **لا يحتوي هذه التغييرات**. **Android Profile/قياس FPS/اتصال cTrader الحقيقي NOT RUN**.
+- **الخطوة التالية:** اختبار أداء الشارت وRange/Replay على جهاز Android بوضع Profile وتوثيق p50/p95/p99 ثم معالجة اختناق مثبت، أو تطوير إدارة نوافذ التاريخ فوق حد 200 ألف شمعة دون اختلاق بيانات. لا APK جديد دون طلب صريح.
 
 ## دفعة مدمجة — PR #573: قياس مراحل تحميل TradeLab على Android
 - **MERGED:** [PR #573](https://github.com/775878805Osamaha/TradeLab/pull/573)، SHA [5750837](https://github.com/775878805Osamaha/TradeLab/commit/5750837b87f2c6a974b2b3ebb480defaccff7dc2) إلى `test/flutter-all-fixes-20261116`. أبقينا `main` عند `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc` بدون تعديل.
