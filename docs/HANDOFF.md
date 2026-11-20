@@ -18,7 +18,7 @@
 ## استثناء اختبار APK المصرح به في 20 نوفمبر 2026
 - طلب المستخدم صراحة: «APK انشاء حتى اختبرة». هذا **استثناء لبناء واحد** على فرع `test/tradelab-phone-apk-20261120`، المصدر المبدئي `03794ca53590accb7ae777d5889bd72f5c66a90f` بعد إصلاحات PR #564 و#565.
 - المسار: workflow مستقل `.github/workflows/tradelab-phone-apk-once-20261120.yml`، تشغيل push خاص بإنشاء الملف على نفس فرع الاختبار، ثم GitHub prerelease بفئة `com.example.tradelab_flutter.test2` إذا نجح التحقق والتوقيع.
-- **الحالة وقت التوثيق: PENDING**؛ تحقق من Actions وملف Release فعليًا قبل إرسال رابط. لا مساس بـ `main` ولا إزالة التطبيق الأصلي، والتوقيع التجريبي قد لا يطابق أي نسخة اختبار سابقة.
+- **النتيجة المؤكدة: SUCCESS** — [Actions #44803312522](https://github.com/775878805Osamaha/TradeLab/actions/runs/44803312522) مكتمل بنجاح؛ [تحميل TradeLab Test APK](https://github.com/775878805Osamaha/TradeLab/releases/download/tradelab-phone-test-6cecd765d1c2/TradeLab-Android-Test.apk) 59,096,319 بايت؛ [صفحة الإصدار](https://github.com/775878805Osamaha/TradeLab/releases/tag/tradelab-phone-test-6cecd765d1c2). نجحت اختبارات/تحليل Flutter وفحص الحزمة وتوقيعها. [PR #566](https://github.com/775878805Osamaha/TradeLab/pull/566) أُغلق دون دمج كي لا يصبح مسار البناء متكررًا في فرع التطوير. لا APK آخر بلا طلب.
 - عند الانتهاء: وثّق SHA/build/run/release/رابط الملف والحالة في السجل وحدث هذا الملف على فرع التطوير؛ امتنع عن إعادة البناء التلقائي بلا طلب جديد.
 
 ## القيود التي يجب عدم تغييرها
