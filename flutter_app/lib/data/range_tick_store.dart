@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
 import 'market_api.dart';
+import 'range_bid_page_verifier.dart';
 
 /// Collect a SHA-256 digest without assembling a giant JSON string of ticks.
 class _DigestCollector implements Sink<Digest> {
@@ -236,13 +237,22 @@ class RangeTickStore {
     required int fromMs,
     required int toMs,
   }) async {
+    // This method must remain safe for direct callers, not only pages
+    // validated earlier by ChartScreen/RangeStartupLoader. The shared
+    // appendHistorical verifier below checks *every* ordered timestamp and
+    // positive finite BID on a worker for large pages. After that strict
+    // ordering check, the first and last timestamps prove all records are
+    // inside the exact inclusive manifest bounds. No 120k-event .any()
+    // scan is needed on Flutter's gesture/UI isolate.
     if (accountId.isEmpty || symbol.isEmpty || fromMs < 0 || toMs < fromMs ||
         toMs - fromMs > verifiedWindowDuration.inMilliseconds ||
-        ticks.any((tick) => tick.timestamp < fromMs || tick.timestamp > toMs)) {
+        (ticks.isNotEmpty &&
+            (ticks.first.timestamp < fromMs ||
+                ticks.last.timestamp > toMs))) {
       throw ArgumentError('Invalid verified BID window bounds');
     }
     // appendHistorical checks chronological ordering, exact overlap values
-    // and same-millisecond multiplicities, inside its own transaction.
+    // and same-millisecond multiplicities before committing to SQLite.
     await appendHistorical(accountId, symbol, ticks);
     // Hash before entering the SQLite transaction. Never hold a database
     // write lock while waiting on a large CPU-bound checksum.
@@ -426,15 +436,23 @@ class RangeTickStore {
     if (accountId.isEmpty || symbol.isEmpty) {
       throw ArgumentError('An account and symbol are required');
     }
-    var previous = -1;
-    for (final tick in ticks) {
-      if (tick.timestamp < 0 || tick.timestamp < previous ||
-          !tick.bid.isFinite || tick.bid <= 0) {
-        throw ArgumentError('Historical BID ticks must be ordered and valid');
-      }
-      previous = tick.timestamp;
-    }
     if (ticks.isEmpty) return 0;
+    // A complete broker window can have 100k+ BID events. Reuse the strict
+    // ordered/finite source validator off the UI isolate rather than
+    // walking every event synchronously during SQLite writes. The last
+    // timestamp is the inclusive upper bound only AFTER ordering is
+    // verified; an out-of-order interior value therefore fails closed.
+    // Retain the original ArgumentError API for callers.
+    try {
+      await RangeBidPageVerifier.verifyAsync(
+        page: ticks,
+        fromMs: 0,
+        toMs: ticks.last.timestamp,
+        errorMessage: 'Historical BID ticks must be ordered and valid',
+      );
+    } on MarketDataException {
+      throw ArgumentError('Historical BID ticks must be ordered and valid');
+    }
     final db = await _open();
     return db.transaction((txn) async {
       // total_changes() counts successful INSERTs, not ignored duplicates.
