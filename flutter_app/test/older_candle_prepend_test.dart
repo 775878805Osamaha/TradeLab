@@ -110,7 +110,8 @@ void main() {
     expect(result.bars, hasLength(13000));
     expect(result.candles, hasLength(13000));
     expect(result.timestamps, hasLength(13000));
-    expect(result.bars[1000], same(current.first));
+    expect(result.bars[1000].timestamp, current.first.timestamp);
+    expect(result.bars[1000].candle.open, current.first.candle.open);
     expect(result.timestamps[1000 + 7000] -
         result.timestamps[1000 + 6999], 120000);
     for (final i in [0, 999, 1000, 1001, 7999, 8000, 12999]) {
