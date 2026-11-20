@@ -47,6 +47,7 @@ import '../replay/replay_training_order_dialog.dart';
 import '../replay/replay_training_archive.dart';
 import '../replay/replay_trade_overlay.dart';
 import '../data/range_bar_timeline.dart';
+import '../data/range_live_bid_delta.dart';
 import '../data/range_startup_loader.dart';
 import '../data/ctrader_older_candle_pager.dart';
 import '../data/older_candle_prepend.dart';
@@ -136,6 +137,8 @@ class _ChartScreenState extends State<ChartScreen>
   List<MarketTick> _rangeHistoryTicks = [];
   List<int> _rangeBarEndTickIndices = [];
   List<int> _rangeBarTimestamps = [];
+  RangeBarTimeline? _rangeTimeline;
+  bool _pollingLiveRange = false;
   int? _rangeOlderCursorMs;
   int _loadRevision = 0;
   bool _loading = false;
@@ -424,6 +427,7 @@ class _ChartScreenState extends State<ChartScreen>
         unawaited(_refreshClosedCTraderCandles());
         unawaited(_retryEmptyCTraderHistory());
         unawaited(_refreshSelectedCTraderQuote());
+        unawaited(_refreshLiveRange());
         // Quote labels must disappear after their 90-second validity
         // expires, including when the chart is in Range mode.
         _refreshDisplayedQuote();
@@ -703,6 +707,111 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  /// cTrader BID Range must advance from authenticated ORDERED TICKS.
+  /// A current quote's BID/ASK price is not evidence of a completed Range
+  /// bar and cannot be spliced into historical Replay as a fabricated event.
+  /// Called at most once per 30-second chart timer; no overlapping polls.
+  Future<void> _refreshLiveRange() async {
+    if (!mounted || !widget.active || _pollingLiveRange ||
+        _loading || _olderLoading || _rangeAutoFilling ||
+        _replay || _replaySelectingStart ||
+        _mode != ChartMode.range || !_liveRequested ||
+        _selectedSymbol.source != TradeSource.ctrader ||
+        !widget.controller.ctraderConnected) return;
+
+    final account = widget.controller.accountId;
+    if (account == null) return;
+    final symbol = _selectedSymbol;
+    final previous = _rangeHistoryTicks;
+    final timeline = _rangeTimeline;
+    final point = _rangePointCache['$account:${symbol.code}'];
+    if (previous.isEmpty || timeline == null ||
+        point == null || !point.isFinite || point <= 0 ||
+        previous.length >= RangeBarTimeline.maxSourceTicks) return;
+    final size = _rangeTicks;
+    final distance = size * point;
+    if (!distance.isFinite || distance <= 0) return;
+    final fromMs = previous.last.timestamp;
+    final toMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    if (toMs <= fromMs) return;
+    if (toMs - fromMs > const Duration(days: 6).inMilliseconds) {
+      const message = 'تاريخ BID أقدم من ستة أيام. '
+          'أعد تحميل الشارت للحصول على فترة Range موثقة كاملة.';
+      if (_loadError != message && mounted) {
+        setState(() => _loadError = message);
+      }
+      return;
+    }
+    final revision = _loadRevision;
+    bool validSession() => mounted && widget.active &&
+        revision == _loadRevision &&
+        !_loading && !_olderLoading && !_rangeAutoFilling &&
+        !_replay && !_replaySelectingStart &&
+        _mode == ChartMode.range && _rangeTicks == size &&
+        widget.controller.accountId == account &&
+        _selectedSymbol.code == symbol.code &&
+        _selectedSymbol.source == symbol.source &&
+        identical(_rangeHistoryTicks, previous) &&
+        identical(_rangeTimeline, timeline);
+
+    _pollingLiveRange = true;
+    try {
+      final clock = _historyLoadProfiler.start();
+      // Inclusive last-millisecond fetch. Every previously displayed event
+      // at that millisecond must be present as an exact ordered prefix.
+      final page = await widget.controller.rangeTicksBetween(
+          symbol, fromMs: fromMs, toMs: toMs);
+      if (!validSession()) return;
+      final suffix = await RangeLiveBidDelta.verifiedSuffixAsync(
+        previouslyVerified: previous,
+        brokerPage: page,
+        toMs: toMs,
+      );
+      if (!validSession() || suffix.isEmpty) return;
+      final next = await RangeBarTimeline.appendVerifiedSuffixAsync(
+        currentTicks: previous,
+        currentTimeline: timeline,
+        verifiedSuffix: suffix,
+        priceDistance: distance,
+      );
+      if (!validSession()) return;
+      _historyLoadProfiler.finish(clock,
+          phase: ChartLoadPhase.liveRangeUpdate, mode: _mode.name,
+          displayedBars: next.timeline.bars.length,
+          bidTicks: suffix.length);
+      final newlyClosed =
+          next.timeline.closedBarCount - timeline.closedBarCount;
+      setState(() {
+        if (newlyClosed > 0) {
+          _viewport = _viewport.afterAppending(newlyClosed);
+        }
+        // Publish BID ticks + OHLC + Replay event indices ATOMICALLY.
+        // Older candles keep exact ordinal IDs; no future tick is revealed
+        // in Replay because polling is disabled for that mode.
+        _rangeHistoryTicks = next.ticks;
+        _rangeTimeline = next.timeline;
+        _actualRange = next.timeline.bars;
+        _rangeBarEndTickIndices = next.timeline.endTickIndices;
+        _rangeBarTimestamps = next.timeline.endTimestamps;
+        if (_loadError?.startsWith('تعذر تحديث Range الحي:') == true) {
+          _loadError = null;
+        }
+      });
+    } on MarketDataException catch (error) {
+      if (validSession()) {
+        final message = 'تعذر تحديث Range الحي: ${error.message}';
+        if (_loadError != message) setState(() => _loadError = message);
+      }
+    } catch (_) {
+      if (validSession()) {
+        const message = 'تعذر تحديث Range الحي: تحقق من اتصال cTrader.';
+        if (_loadError != message) setState(() => _loadError = message);
+      }
+    } finally {
+      _pollingLiveRange = false;
+    }
+  }
+
   void _refreshDisplayedQuote() {
     final latest = widget.controller.recentQuoteFor(_selectedSymbol);
     final previous = _lastObservedQuote;
@@ -763,6 +872,7 @@ class _ChartScreenState extends State<ChartScreen>
         _actualTimestamps = [];
         _actualRange = [];
         _rangeHistoryTicks = [];
+        _rangeTimeline = null;
         _rangeBarEndTickIndices = [];
         _rangeBarTimestamps = [];
         _rangeOlderCursorMs = null;
@@ -822,6 +932,7 @@ class _ChartScreenState extends State<ChartScreen>
       _actualTimestamps = [];
       _actualRange = [];
       _rangeHistoryTicks = [];
+      _rangeTimeline = null;
       _rangeBarEndTickIndices = [];
       _rangeBarTimestamps = [];
       _rangeOlderCursorMs = null;
@@ -905,6 +1016,7 @@ class _ChartScreenState extends State<ChartScreen>
               _rangeHistoryTicks = page.ticks;
               _rangeOlderCursorMs = page.fromMs - 1;
               _actualRange = page.timeline.bars;
+              _rangeTimeline = page.timeline;
               _rangeBarEndTickIndices = page.timeline.endTickIndices;
               _rangeBarTimestamps = page.timeline.endTimestamps;
             });
@@ -1480,6 +1592,7 @@ class _ChartScreenState extends State<ChartScreen>
         _rangeHistoryTicks = combined;
         _rangeOlderCursorMs = scanned.nextCursorMs;
         _actualRange = timeline.bars;
+        _rangeTimeline = timeline;
         _rangeBarEndTickIndices = timeline.endTickIndices;
         _rangeBarTimestamps = timeline.endTimestamps;
         if (_replaySelectingStart && remappedStart != null) {
@@ -2605,6 +2718,7 @@ class _ChartScreenState extends State<ChartScreen>
       _actualTimestamps = [];
       _actualRange = [];
       _rangeHistoryTicks = [];
+      _rangeTimeline = null;
       _rangeBarEndTickIndices = [];
       _rangeBarTimestamps = [];
       _rangeOlderCursorMs = null;

@@ -10,6 +10,7 @@ enum ChartLoadPhase {
   initialBrokerFetch,
   initialBrokerMerge,
   rangeStartup,
+  liveRangeUpdate,
   olderCacheRead,
   olderBrokerFetch,
   olderCandlePrepend,

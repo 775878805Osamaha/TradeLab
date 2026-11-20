@@ -17,6 +17,30 @@ class RangeBarBuilder {
     }
   }
 
+  /// Continue EXACT same distance-defined, source-verified Range origin
+  /// after a published snapshot's final still-forming bar. This avoids
+  /// rebuilding up to one million earlier BID events at every live poll.
+  ///
+  /// The last forming bar contains all required state (open, extreme prices,
+  /// final BID close). The caller must use only an already source-verified
+  /// published timeline, never arbitrary user-entered OHLC or future ticks.
+  factory RangeBarBuilder.resumeFromVerifiedForming(
+      double priceDistance, TradeCandle forming) {
+    if (!forming.open.isFinite || !forming.high.isFinite ||
+        !forming.low.isFinite || !forming.close.isFinite ||
+        forming.low <= 0 || forming.high < forming.low ||
+        forming.open < forming.low || forming.open > forming.high ||
+        forming.close < forming.low || forming.close > forming.high) {
+      throw ArgumentError('Invalid previously verified forming Range candle');
+    }
+    final builder = RangeBarBuilder(priceDistance);
+    builder._open = forming.open;
+    builder._high = forming.high;
+    builder._low = forming.low;
+    builder._lastPrice = forming.close;
+    return builder;
+  }
+
   final double priceDistance;
 
   // One broker tick may legitimately cross several Range prices. A single

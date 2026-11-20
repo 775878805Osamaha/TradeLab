@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/range_bar_timeline.dart';
 import 'package:tradelab_flutter/data/range_bar_builder.dart';
+import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 /// Refuse oversized provider requests without materializing million-row BID
 /// arrays or even attempting to access a tick on the UI isolate.
@@ -143,6 +144,114 @@ void main() {
       const <MarketTick>[], 1,
       closedBarLimit: RangeBarTimeline.maxClosedBarCount + 1),
       throwsArgumentError);
+  });
+
+  test('live Range append equals complete source rebuild after 6200 BID ticks',
+      () async {
+    const start = 1700000000000;
+    final old = List<MarketTick>.generate(6200, (i) =>
+        MarketTick(start + i ~/ 2,
+            3900 + (i % 9) * .13 + (i % 5) * .02),
+        growable: false);
+    final suffix = List<MarketTick>.generate(37, (i) =>
+        MarketTick(old.last.timestamp + i ~/ 3,
+            3901 + (i % 11) * .15 + (i % 3) * .04),
+        growable: false);
+    final prior = RangeBarTimeline.build(old, .5);
+    final next = await RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: old, currentTimeline: prior,
+      verifiedSuffix: suffix, priceDistance: .5,
+    );
+    final complete = RangeBarTimeline.build([...old, ...suffix], .5);
+    expect(next.timeline.closedBarCount, complete.closedBarCount);
+    expect(next.timeline.endTickIndices, complete.endTickIndices);
+    expect(next.timeline.endTimestamps, complete.endTimestamps);
+    expect(next.timeline.bars.length, complete.bars.length);
+    for (var i = 0; i < complete.bars.length; i++) {
+      final a = next.timeline.bars[i], b = complete.bars[i];
+      expect((a.open, a.high, a.low, a.close),
+          (b.open, b.high, b.low, b.close));
+    }
+    expect(next.ticks.map((t) => t.timestamp),
+      [...old, ...suffix].map((t) => t.timestamp));
+    expect(() => next.ticks.add(const MarketTick(999, 2)),
+        throwsUnsupportedError);
+    expect(() => next.timeline.bars.add(
+        const TradeCandle(1, 2, 1, 2)), throwsUnsupportedError);
+    expect(next.timeline.visibleClosedBarsThroughTick(old.length - 1),
+        prior.closedBarCount,
+        reason: 'New broker events must not close bars in older Replay');
+    expect(old.length, 6200);
+    expect(prior.endTickIndices.last, old.length - 1);
+  });
+
+  test('live Range same-ms events and tick gaps retain exact source ordinal',
+      () async {
+    const old = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(100, 101),
+      MarketTick(101, 101.1),
+    ];
+    const extra = <MarketTick>[
+      MarketTick(101, 101.8),
+      MarketTick(101, 102.5),
+      MarketTick(105, 103.6),
+    ];
+    final initial = RangeBarTimeline.build(old, 1);
+    final appended = await RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: old, currentTimeline: initial,
+      verifiedSuffix: extra, priceDistance: 1);
+    final complete = RangeBarTimeline.build([...old, ...extra], 1);
+    expect(appended.timeline.endTickIndices, complete.endTickIndices);
+    expect(appended.timeline.endTimestamps, complete.endTimestamps);
+    expect(appended.timeline.closedBarCount, complete.closedBarCount);
+    expect(appended.timeline.bars.map((c) =>
+        (c.open, c.high, c.low, c.close)),
+        complete.bars.map((c) => (c.open, c.high, c.low, c.close)));
+    expect(appended.timeline.visibleClosedBarsThroughTick(2),
+        initial.closedBarCount);
+    expect(appended.timeline.endTimestamps.last, 105);
+  });
+
+  test('live Range no-op keeps published immutable source list identity',
+      () async {
+    const old = <MarketTick>[
+      MarketTick(100, 100), MarketTick(101, 102),
+    ];
+    final timeline = RangeBarTimeline.build(old, 1);
+    final unchanged = await RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: old, currentTimeline: timeline,
+      verifiedSuffix: const [], priceDistance: 1);
+    expect(identical(unchanged.ticks, old), isTrue);
+    expect(identical(unchanged.timeline, timeline), isTrue);
+  });
+
+  test('live Range over-budget, malformed and stale timelines fail closed',
+      () async {
+    const old = <MarketTick>[
+      MarketTick(100, 100), MarketTick(101, 101),
+    ];
+    final prior = RangeBarTimeline.build(old, 1);
+    await expectLater(RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: old, currentTimeline: prior,
+      verifiedSuffix: const [MarketTick(102, 105)],
+      priceDistance: 1, closedBarLimit: 2),
+      throwsA(isA<MarketDataException>()));
+    await expectLater(RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: old, currentTimeline: prior,
+      verifiedSuffix: const [MarketTick(99, 101)],
+      priceDistance: 1), throwsA(isA<MarketDataException>()));
+    await expectLater(RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: old, currentTimeline: prior,
+      verifiedSuffix: const [MarketTick(102, -1)],
+      priceDistance: 1), throwsA(isA<MarketDataException>()));
+    await expectLater(RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: const [MarketTick(100, 100)],
+      currentTimeline: prior,
+      verifiedSuffix: const [MarketTick(102, 104)],
+      priceDistance: 1), throwsA(isA<MarketDataException>()));
+    expect(prior.closedBarCount, 1);
+    expect(prior.bars.last.close, 101);
   });
 
   test('one authentic tick produces a forming bar but zero Replay bars', () {

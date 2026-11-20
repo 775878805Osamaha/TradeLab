@@ -1,7 +1,36 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/range_bar_builder.dart';
+import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 void main() {
+  test('verified forming Range state resumes exactly without old tick replay',
+      () {
+    const prices = <double>[100, 100.7, 102.4, 101.2];
+    final old = RangeBarBuilder(1);
+    for (final price in prices) old.appendBidTick(price);
+    final frozen = old.sealSnapshot();
+    final resumed = RangeBarBuilder.resumeFromVerifiedForming(
+        1, frozen.last);
+    final uninterrupted = RangeBarBuilder(1);
+    for (final price in prices) uninterrupted.appendBidTick(price);
+    const incoming = <double>[101.6, 102.8, 100.3, 99.8];
+    for (final price in incoming) {
+      resumed.appendBidTick(price);
+      uninterrupted.appendBidTick(price);
+    }
+    final resumedBars = resumed.sealSnapshot();
+    final full = uninterrupted.sealSnapshot();
+    expect([
+      ...frozen.take(frozen.length - 1), ...resumedBars,
+    ].map((bar) => (bar.open, bar.high, bar.low, bar.close)),
+    full.map((bar) => (bar.open, bar.high, bar.low, bar.close)));
+    expect(() => RangeBarBuilder.resumeFromVerifiedForming(
+        1, const TradeCandle(100, 90, 101, 100)),
+        throwsArgumentError);
+    expect(() => RangeBarBuilder.resumeFromVerifiedForming(
+        0, frozen.last), throwsArgumentError);
+  });
+
   test('starts with a forming bar and no artificial completion', () {
     final bars = RangeBarBuilder(1);
     bars.appendBidTick(100);

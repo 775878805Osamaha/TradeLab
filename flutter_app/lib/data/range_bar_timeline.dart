@@ -15,6 +15,16 @@ class RangePrependBuildResult {
   final RangeBarTimeline timeline;
 }
 
+/// The live BID suffix and its matching Range history must be committed as
+/// one immutable snapshot. Never publish new source ticks with old timeline
+/// indices, including when multiple real BID events share a millisecond.
+class RangeLiveAppendBuildResult {
+  const RangeLiveAppendBuildResult(this.ticks, this.timeline);
+
+  final List<MarketTick> ticks;
+  final RangeBarTimeline timeline;
+}
+
 /// Maps Range bars back to the exact chronological BID tick that produced
 /// them. Chart Replay can retain its last revealed *event* when older ticks
 /// are prepended, even though all Range bar indices are rebuilt.
@@ -149,6 +159,111 @@ class RangeBarTimeline {
       _prependAndBuildWorker, request,
       debugLabel: 'tradelab-range-prepend-and-build',
     );
+  }
+
+  /// Extend a VERIFIED Range timeline with only new authenticated broker
+  /// events, including newer events on the very same last millisecond. The
+  /// caller MUST first validate the entire inclusive cTrader page using
+  /// RangeLiveBidDelta.verifiedSuffixAsync; that guard verifies event
+  /// multiplicity and exact price/order of the previously loaded boundary.
+  ///
+  /// Existing closed bars preserve source indices exactly. Only the old
+  /// unclosed forming bar is resumed by RangeBarBuilder; this never
+  /// recomputes a different Range origin or borrows a future Replay tick.
+  ///
+  /// Use a background isolate when the old archive is large, since even
+  /// appending one verified tick publishes a fresh immutable bar/tick list.
+  static Future<RangeLiveAppendBuildResult> appendVerifiedSuffixAsync({
+    required List<MarketTick> currentTicks,
+    required RangeBarTimeline currentTimeline,
+    required List<MarketTick> verifiedSuffix,
+    required double priceDistance,
+    int closedBarLimit = maxClosedBarCount,
+  }) async {
+    _checkBudget(currentTicks.length, closedBarLimit);
+    if (verifiedSuffix.length > maxSourceTicks - currentTicks.length) {
+      throw const MarketDataException(
+          'تيكات BID الحية تجاوزت حد الذاكرة الآمن لشارت المدى.');
+    }
+    if (currentTicks.isEmpty || currentTimeline.bars.isEmpty ||
+        currentTimeline.bars.length != currentTimeline.endTickIndices.length ||
+        currentTimeline.bars.length != currentTimeline.endTimestamps.length ||
+        currentTimeline.closedBarCount > closedBarLimit ||
+        currentTimeline.endTickIndices.last != currentTicks.length - 1 ||
+        currentTimeline.endTimestamps.last != currentTicks.last.timestamp) {
+      throw const MarketDataException(
+          'تاريخ شموع Range لا يتطابق مع آخر مصدر BID موثق.');
+    }
+    if (verifiedSuffix.isEmpty) {
+      return RangeLiveAppendBuildResult(currentTicks, currentTimeline);
+    }
+    final request = (currentTicks, currentTimeline, verifiedSuffix,
+        priceDistance, closedBarLimit);
+    if (!kIsWeb && (currentTicks.length > 5000 ||
+        currentTimeline.bars.length > 4096 ||
+        shouldBuildInBackground(verifiedSuffix, priceDistance))) {
+      return compute<
+        (List<MarketTick>, RangeBarTimeline, List<MarketTick>, double, int),
+        RangeLiveAppendBuildResult>(
+        _appendVerifiedRangeWorker, request,
+        debugLabel: 'tradelab-incremental-live-range',
+      );
+    }
+    return _appendVerifiedRangeWorker(request);
+  }
+
+  static RangeLiveAppendBuildResult _appendVerifiedRangeWorker(
+      (List<MarketTick>, RangeBarTimeline,
+          List<MarketTick>, double, int) request) {
+    final existingTicks = request.$1;
+    final previousTimeline = request.$2;
+    final suffix = request.$3;
+    final priceDistance = request.$4;
+    final closedBarLimit = request.$5;
+    final priorClosed = previousTimeline.closedBarCount;
+    final builder = RangeBarBuilder.resumeFromVerifiedForming(
+        priceDistance, previousTimeline.bars.last);
+    final newCloseIndices = <int>[];
+    final newCloseTimes = <int>[];
+    var lastTime = existingTicks.last.timestamp;
+    for (var index = 0; index < suffix.length; index++) {
+      final tick = suffix[index];
+      if (tick.timestamp < lastTime || tick.timestamp < 0 ||
+          !tick.bid.isFinite || tick.bid <= 0) {
+        throw const MarketDataException(
+            'سلسلة BID الحية غير مرتبة أو تحتوي سعرًا غير صالح.');
+      }
+      lastTime = tick.timestamp;
+      final before = builder.closedCount;
+      builder.appendBidTick(tick.bid);
+      if (priorClosed + builder.closedCount > closedBarLimit) {
+        throw const MarketDataException(
+            'المدى الحي تجاوز ميزانية شموع Range المغلقة للهاتف.');
+      }
+      for (var n = before; n < builder.closedCount; n++) {
+        newCloseIndices.add(existingTicks.length + index);
+        newCloseTimes.add(tick.timestamp);
+      }
+    }
+    final suffixBars = builder.sealSnapshot();
+    final appendedTicks =
+        List<MarketTick>.unmodifiable(existingTicks.followedBy(suffix));
+    final combinedBars = List<TradeCandle>.unmodifiable(
+        previousTimeline.bars.take(priorClosed).followedBy(suffixBars));
+    final endIndices = List<int>.unmodifiable(
+        previousTimeline.endTickIndices.take(priorClosed)
+        .followedBy(newCloseIndices)
+        .followedBy([appendedTicks.length - 1]));
+    final endTimes = List<int>.unmodifiable(
+        previousTimeline.endTimestamps.take(priorClosed)
+        .followedBy(newCloseTimes)
+        .followedBy([appendedTicks.last.timestamp]));
+    if (combinedBars.length != endIndices.length ||
+        combinedBars.length != endTimes.length) {
+      throw StateError('Incremental live Range timeline/source mismatch');
+    }
+    return RangeLiveAppendBuildResult(appendedTicks,
+        RangeBarTimeline._(combinedBars, endIndices, endTimes));
   }
 
   static RangePrependBuildResult _prependAndBuildWorker(

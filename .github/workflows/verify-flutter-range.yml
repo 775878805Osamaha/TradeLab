@@ -46,10 +46,13 @@ jobs:
             test/range_tick_store_test.dart \
             test/range_verified_bid_window_slice_test.dart \
             test/widget_test.dart \
+            test/candle_prefix_test.dart \
             test/range_tick_rollforward_test.dart \
             test/range_bar_timeline_test.dart \
+            test/range_live_bid_delta_test.dart \
             test/range_drawing_rebase_search_test.dart \
             test/range_bar_builder_test.dart \
+            test/range_bar_validation_test.dart \
             test/chart_viewport_test.dart \
             test/chart_120k_viewport_workload_test.dart \
             test/chart_price_scale_cache_test.dart \
@@ -62,6 +65,7 @@ jobs:
             test/chart_visible_sma_test.dart \
             test/chart_paint_only_pan_test.dart \
             test/chart_frame_profiler_test.dart \
+            test/chart_load_profiler_test.dart \
             test/chart_text_layout_cache_test.dart \
             test/chart_rectangle_label_cache_test.dart \
             test/chart_rectangle_visibility_timezone_test.dart \
@@ -83,6 +87,7 @@ jobs:
             test/ctrader_candle_stitcher_test.dart \
             test/ctrader_older_candle_pager_test.dart \
             test/older_candle_prepend_test.dart \
+            test/market_history_budget_test.dart \
             test/verified_market_history_snapshot_test.dart \
             test/ctrader_account_selection_test.dart \
             test/account_active_selection_widget_test.dart \
@@ -92,6 +97,7 @@ jobs:
             test/market_api_test.dart \
             test/ctrader_closed_bar_cutoff_test.dart \
             test/replay_start_resolver_test.dart \
+            test/replay_revealed_exit_index_test.dart \
             test/replay_mobile_controls_test.dart \
             test/replay_playback_speed_test.dart \
             test/chart_historical_time_zone_test.dart \
