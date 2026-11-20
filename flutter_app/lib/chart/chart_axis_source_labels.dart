@@ -51,6 +51,7 @@ abstract final class ChartAxisSourceLabels {
     required int end,
   }) {
     if (identical(source, displayed) &&
+        identical(scale.sourceCandles, source) &&
         scale.sourceMinimum != null &&
         scale.sourceMaximum != null &&
         scale.sourceVisibleStart == start &&
