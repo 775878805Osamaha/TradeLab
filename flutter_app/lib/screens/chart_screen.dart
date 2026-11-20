@@ -1099,6 +1099,20 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  void _profileTouchGesture(ChartFrameInteraction interaction,
+      List<TradeCandle> displayedCandles) {
+    // These are safe workload COUNTS, not source quotes, order history,
+    // broker names or account identifiers. Disabled in normal releases.
+    _frameProfiler.beginInteraction(
+      interaction: interaction,
+      chartMode: _mode.name,
+      replay: _replay || _replaySelectingStart,
+      displayedCandles: displayedCandles.length,
+      rangeBidTicks: _mode == ChartMode.range
+          ? _rangeHistoryTicks.length : 0,
+    );
+  }
+
   Future<void> _autoFillRangeHistory(int revision) async {
     if (!mounted || revision != _loadRevision ||
         !_rangeAutoFillRevisionGate.start(revision)) return;
@@ -4543,10 +4557,28 @@ class _ChartScreenState extends State<ChartScreen>
                 _draggingPattern = false;
                 _draggedEndpoint = null;
               }
+              // Measure chart interactions separately in Android Profile
+              // mode: idle/menu frame timings must not pollute pan/pinch p95.
+              _profileTouchGesture(
+                _draggingPriceAxis ? ChartFrameInteraction.priceAxis :
+                _draggingTimeAxis ? ChartFrameInteraction.timeAxis :
+                details.pointerCount > 1 ? ChartFrameInteraction.pinch :
+                _replayDraggingStart ? ChartFrameInteraction.replaySelection :
+                (_draggingRectangle || _draggingShortHandle != null ||
+                    _draggingLine || _draggingPattern)
+                    ? ChartFrameInteraction.drawing
+                    : ChartFrameInteraction.pan,
+                candles,
+              );
               // Reveal toolbar/handles once; touch updates avoid full rebuilds.
               if (_draggingRectangle) setState(() {});
             },
             onScaleUpdate: (details) {
+              if (details.pointerCount > 1) {
+                // A second finger starts a distinct pinch cohort. The
+                // previous pan/ruler cohort ends before this switch.
+                _profileTouchGesture(ChartFrameInteraction.pinch, candles);
+              }
               if (_draggingTimeAxis && details.pointerCount == 1) {
                 final next = _viewport.dragTimeAxis(
                   deltaX: details.focalPointDelta.dx,
@@ -4685,6 +4717,9 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onScaleEnd: (details) {
+              // Release flushes only measured touch frames. Subsequent
+              // toolbars/menus and idle refreshes belong to no gesture.
+              _frameProfiler.endInteraction();
               if (_draggingTimeAxis) {
                 _draggingTimeAxis = false;
                 // Commit the latest scale to any snapshot-only UI once,
