@@ -140,3 +140,10 @@
 - **الاختبارات (4):** `market_candle_store_test.dart` و`older_candle_prepend_test.dart` و`verified_market_history_snapshot_test.dart` و`market_history_budget_test.dart`؛ 120001 شمعة، منع تجاوز 200k، رفض الحدود غير الآمنة، والحفاظ على قائمة المصدر عند الصفحات المرفوضة.
 - **حالة التحقق أثناء كتابة هذا التقرير:** CI **PENDING** حتى فتح PR، Flutter SDK محلي وAndroid Profile **NOT RUN**. لا ادعاء بتجاوز ذاكرة الهاتف أو تاريخ cTrader غير محدود.
 - **الخطوة التالية الواحدة:** ارفع PR إلى فرع التطوير، نفذ GitHub Flutter/SQLite tests، أصلح FAIL، ثم ادمج ودوّن SHA وCI في هذا السجل.
+
+### 2026-11-20T22:19:30.082Z — نجاح CI ودمج PR #571 لمواءمة 200k شمعة مصدرية في الذاكرة
+- **المستودع/الدمج:** [PR #571](https://github.com/775878805Osamaha/TradeLab/pull/571) **MERGED** في `test/flutter-all-fixes-20261116`، SHA الفعلي [35444db](https://github.com/775878805Osamaha/TradeLab/commit/35444db050757d40561cd8f54525773709ed11c0). تم التحقق من رأس التطوير مباشرة بعد الدمج؛ `main` بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc` دون تغيير.
+- **الاختبارات:** [Actions #44827584931](https://github.com/775878805Osamaha/TradeLab/actions/runs/44827584931) = **PASS / completed / success** على رأس PR `5e325c9cbe164e4ae4e6b57a1bacdc594803b4b1`: `flutter analyze`، اختبارات تاريخ المصدر/SQLite/Range/Replay وتوقيت اليمن. لا قياسات FPS على هاتف فعلي.
+- **التنفيذ الفعلي:** 5 ملفات source (ملف ميزانية جديد) و4 ملفات اختبار + 2 docs. عرض حتى 200k شمعة زمنية من SQLite بدل 100k؛ مشاركة سقف الذاكرة مع cTrader refresh وsnapshot وolder prepend؛ إيقاف المحاولة قبل تخصيص محاور/قائمة >200k دون تغيير البيانات المصدرية أو Replay.
+- **قيود:** التاريخ الأقدم يمكن حفظه في أرشيف SQLite لكن غير محمّل كله في RAM في نفس الوقت؛ ما زال يلزم نظام عرض نوافذ لاحقًا للوصول لأكثر من 200k بلا توقف. لم يُنشأ APK/Release جديد، وآخر APK المتاح يسبق PR #567–#571؛ `main` والمشاريع الأخرى لم تُمس.
+- **الخطوة التالية الواحدة:** اختبار تطبيق TradeLab على Android Profile مع بيانات cTrader BID الحقيقية وقياس p50/p95/p99، وإصلاح أية مشكلة تظهر ثم حفظ تقرير جديد.

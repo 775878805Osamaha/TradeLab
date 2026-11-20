@@ -1,11 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## توحيد تاريخ الشموع الزمنية إلى 200 ألف — PR قيد الاختبار
-- فرع `feat/market-candle-200k-history-budget-20261121` من التطوير `3bfd3e806202f682c32b7e8145a87a7e14086315`. لا APK/Release، ولا تعديل `main`.
-- `MarketCandleStore.read`/`mergeVerified`: رفع السقف الافتراضي من 100k إلى **200k** شمعة زمنية موثقة مع عدم قص التاريخ الأقدم عند إعادة فتح رمز cTrader؛ `CTraderCandleStitcher` والـsnapshot يستخدمان السقف المشترك.
-- `OlderCandlePrepend` يرفض تجاوز 200k قبل تخصيص القوائم ومحاور الرسم؛ أرشيف SQLite يبقى مستقلًا ويحفظ التاريخ الحقيقي خارج نافذة الذاكرة. هذا ليس تحميل تاريخ غير محدود في RAM.
-- 4 اختبارات إضافية لأرشيف 120001، والحد 200k+، ورفض تجاوز العرض. **CI: PENDING**؛ اختبار الهاتف/قياس FPS **NOT RUN**.
-- **التالي:** افتح PR، راجع Flutter/SQLite/Range/Replay، ادمج فرع التطوير فقط عند PASS واحفظ CI/SHA الفعلي.
+## اكتمل توحيد تاريخ الشموع الزمنية — PR #571
+- **MERGED:** [PR #571](https://github.com/775878805Osamaha/TradeLab/pull/571) إلى `test/flutter-all-fixes-20261116`، SHA الحقيقي [35444db](https://github.com/775878805Osamaha/TradeLab/commit/35444db050757d40561cd8f54525773709ed11c0).
+- [Actions #44827584931](https://github.com/775878805Osamaha/TradeLab/actions/runs/44827584931) = **PASS / completed / success**: Flutter analyze واختبارات SQLite وRange/Replay وتوقيت اليمن؛ 4 اختبارات انحدار جديدة.
+- `MarketCandleStore.read`/`mergeVerified`: استعادة/دمج حتى **200,000** شمعة مصدرية زمنية بدل قص القديم عند 100,000 افتراضيًا؛ المصدر المشترك `MarketHistoryBudget` يحمي أيضًا `OlderCandlePrepend` و`VerifiedMarketHistorySnapshot` وتحديثات cTrader.
+- هذا حد **نافذة عرض في ذاكرة الشارت** وليس نهاية أرشيف الوسيط؛ إذا تم تجاوزه يُرفض نسخ مزيد من arrays بدل خطر انهيار التطبيق. لا أسعار وهمية ولا بيانات مستقبل Replay.
+- ملف APK المنشور بتاريخ 2026-11-20 أقدم من PR #567–#571؛ لا ينقل هذا الإصلاح للهاتف إلا APK جديد بطلب صريح. **Android FPS وcTrader على جهاز فعلي NOT RUN**. `main` كما هو.
+- **التالي:** اختبار شارت كامل على هاتف Android بالـProfile لقياس pan/pinch والمحتوى الحقيقي وBID Range، ثم إصلاح أول اختناق مثبت. لا APK تلقائيًا.
 
 ## دفعة تطوير ناجحة ومدمجة — PR #570: تحميل BID متوازن وآمن
 - [PR #570](https://github.com/775878805Osamaha/TradeLab/pull/570) **MERGED** إلى فرع التطوير، commit `7f68458a69e51817f2b396bb5bf74bdb41460d9d`. تطوير cTrader BID بتوزيع العاملين مع بقاء حدّ الطلبات، مصدر الحساب، وأحداث نفس المللي ثانية.
