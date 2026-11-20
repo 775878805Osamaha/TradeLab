@@ -130,6 +130,28 @@ void main() {
     expect(snapshot.candles[cutoffIndex].close,
         cached[cutoffIndex].candle.close);
   });
+  test('120k no-new-close poll avoids source transfer and UI array rebuild',
+      () async {
+    const start = 1700000000000;
+    final archive = List<MarketBar>.generate(120000, (i) =>
+        MarketBar(start + i * 60000, first), growable: false);
+    final result = await VerifiedClosedCandleRefresh.appendVerifiedAsync(
+      existing: archive,
+      recent: [archive.first, archive[60000], archive.last],
+    );
+    expect(result.appended, 0);
+    expect(result.snapshot, isNull,
+        reason: 'No isolate copy and no replacement 120k candle/time axes');
+    expect(archive, hasLength(120000));
+    final changed = MarketBar(archive[60000].timestamp,
+        const TradeCandle(100, 103, 99, 101));
+    await expectLater(
+      VerifiedClosedCandleRefresh.appendVerifiedAsync(
+        existing: archive, recent: [changed]),
+      throwsA(isA<MarketDataException>()),
+    );
+  });
+
   test('overlap-only cTrader refresh publishes no replacement chart arrays',
       () {
     const existing = <MarketBar>[
