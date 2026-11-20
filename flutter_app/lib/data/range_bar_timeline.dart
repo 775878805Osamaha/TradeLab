@@ -136,12 +136,22 @@ class RangeBarTimeline {
     final builder = RangeBarBuilder(priceDistance);
     final endTickIndices = <int>[];
     final endTimestamps = <int>[];
+    var previousTimestamp = -1;
     for (var index = 0; index < ticks.length; index++) {
+      final tick = ticks[index];
+      // Equal-ms BID events retain their authentic source order. Backward
+      // timestamps would make Range Replay depend on a future event, so
+      // fail closed without sorting or inventing another timestamp.
+      if (tick.timestamp < 0 || tick.timestamp < previousTimestamp) {
+        throw const MarketDataException(
+            'ترتيب أحداث BID غير صالح؛ أوقفنا بناء المدى لحماية Replay.');
+      }
+      previousTimestamp = tick.timestamp;
       final closedBefore = builder.closedCount;
-      builder.appendBidTick(ticks[index].bid);
+      builder.appendBidTick(tick.bid);
       for (var n = closedBefore; n < builder.closedCount; n++) {
         endTickIndices.add(index);
-        endTimestamps.add(ticks[index].timestamp);
+        endTimestamps.add(tick.timestamp);
       }
     }
     // Transfer the builder's final candle buffer exactly once. A second

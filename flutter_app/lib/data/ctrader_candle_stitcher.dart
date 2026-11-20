@@ -10,53 +10,79 @@ class CTraderCandleStitcher {
     List<MarketBar> recent,
   ) {
     validateBars(existing);
-    validateBars(recent);
-    if (existing.isEmpty) return List<MarketBar>.unmodifiable(recent);
-    if (recent.isEmpty) return existing;
+    // Direct callers still validate the entire input archive. The chart's
+    // already-verified refresh path below may avoid this 120k+ re-scan.
+    return appendPreviouslyVerified(existing, recent);
+  }
 
-    // Both verified inputs are timestamp-ascending. A streaming cursor
-    // finds every overlapping closed bar in O(existing + recent) time
-    // without building a 100k/200k-entry timestamp -> bar hash map on
-    // each broker refresh. Validate ALL overlaps before copying the archive.
-    final appended = <MarketBar>[];
-    final latest = existing.last.timestamp;
-    var archiveIndex = 0;
-    for (final bar in recent) {
-      while (archiveIndex < existing.length &&
-          existing[archiveIndex].timestamp < bar.timestamp) {
-        archiveIndex++;
+  /// Count new closed candles without allocating a replacement source array.
+  /// PRECONDITION: [existing] is an immutable archive already validated by
+  /// the authenticated cTrader feed or verified SQLite history.
+  /// The small fresh broker response is *always* validated here.
+  ///
+  /// All overlaps use lower-bound search, so a no-change 30-second poll
+  /// checks O(recent * log(existing.length)) rather than walking 120k bars.
+  /// Historical gaps and revised OHLC are rejected before any publication.
+  static int countNewFromVerifiedHistory(
+      List<MarketBar> existing, List<MarketBar> recent) {
+    validateBars(recent);
+    if (existing.isEmpty) {
+      if (recent.length > 200000) {
+        throw const MarketDataException(
+            'تجاوز التاريخ المحمّل حد الذاكرة. أعد فتح الشارت.');
       }
-      if (archiveIndex < existing.length &&
-          existing[archiveIndex].timestamp == bar.timestamp) {
-        final prior = existing[archiveIndex];
-        if (prior.candle.open != bar.candle.open ||
-            prior.candle.high != bar.candle.high ||
-            prior.candle.low != bar.candle.low ||
-            prior.candle.close != bar.candle.close) {
-          throw const MarketDataException(
-              'تغيّرت قيم شمعة cTrader تاريخية بين طلبين؛ '
-              'أوقفنا التحديث حتى يُراجع المصدر.');
+      return recent.length;
+    }
+    final latest = existing.last.timestamp;
+    var appended = 0;
+    for (final bar in recent) {
+      if (bar.timestamp > latest) {
+        appended++;
+        continue;
+      }
+      var low = 0;
+      var high = existing.length;
+      while (low < high) {
+        final mid = low + (high - low) ~/ 2;
+        if (existing[mid].timestamp < bar.timestamp) {
+          low = mid + 1;
+        } else {
+          high = mid;
         }
-      } else if (bar.timestamp > latest) {
-        appended.add(bar);
-      } else {
-        // The broker returned an old candle missing from the previously
-        // displayed history. Do not silently insert bars into Replay indices.
+      }
+      if (low == existing.length ||
+          existing[low].timestamp != bar.timestamp) {
         throw const MarketDataException(
             'تاريخ cTrader غير متصل؛ ظهرت شموع قديمة لم تُحمّل سابقًا.');
       }
+      final prior = existing[low].candle;
+      final incoming = bar.candle;
+      if (prior.open != incoming.open ||
+          prior.high != incoming.high ||
+          prior.low != incoming.low ||
+          prior.close != incoming.close) {
+        throw const MarketDataException(
+            'تغيّرت قيم شمعة cTrader تاريخية بين طلبين؛ '
+            'أوقفنا التحديث حتى يُراجع المصدر.');
+      }
     }
-    if (existing.length + appended.length > 200000) {
+    if (existing.length + appended > 200000) {
       throw const MarketDataException(
           'تجاوز التاريخ المحمّل حد الذاكرة. أعد فتح الشارت.');
     }
-    if (appended.isEmpty) {
-      // All returned provider bars matched verified CLOSED history. Preserve
-      // the existing list identity: a poll with zero new closes must not
-      // copy 100k+ candles into a fresh unmodifiable list.
-      // Every overlap, gap and history limit has already been verified above.
-      return existing;
-    }
-    return List<MarketBar>.unmodifiable([...existing, ...appended]);
+    return appended;
+  }
+
+  /// The chart has already validated its stored history before publishing
+  /// it. Preserve original object identity when all broker closes overlap.
+  static List<MarketBar> appendPreviouslyVerified(
+      List<MarketBar> existing, List<MarketBar> recent) {
+    final appended = countNewFromVerifiedHistory(existing, recent);
+    if (existing.isEmpty) return List<MarketBar>.unmodifiable(recent);
+    if (appended == 0) return existing;
+    return List<MarketBar>.unmodifiable([
+      ...existing,
+      ...recent.skip(recent.length - appended),
+    ]);
   }
 }

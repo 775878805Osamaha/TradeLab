@@ -87,7 +87,10 @@ class VerifiedClosedCandleRefresh {
     required List<MarketBar> existing,
     required List<MarketBar> recent,
   }) {
-    final combined = CTraderCandleStitcher.append(existing, recent);
+    // The chart publishes only authenticated, verified historical archives.
+    // Avoid validating 120k older bars on each closed-candle refresh.
+    final combined =
+        CTraderCandleStitcher.appendPreviouslyVerified(existing, recent);
     final appended = combined.length - existing.length;
     return ClosedCandleRefreshResult(
       appended: appended,
@@ -103,6 +106,14 @@ class VerifiedClosedCandleRefresh {
     if (!VerifiedMarketHistorySnapshot.shouldOffload(
         existing.length + recent.length)) {
       return appendVerified(existing: existing, recent: recent);
+    }
+    // A no-new-close poll is the common case. Check the small fresh page
+    // against the verified archive before transferring 120k+ bars into a
+    // worker isolate. Keep the existing chart arrays and repaint untouched.
+    if (CTraderCandleStitcher.countNewFromVerifiedHistory(
+            existing, recent) == 0) {
+      return const ClosedCandleRefreshResult(
+          appended: 0, snapshot: null);
     }
     return compute<_VerifiedClosedAppendInput, ClosedCandleRefreshResult>(
       _appendClosedWorker,

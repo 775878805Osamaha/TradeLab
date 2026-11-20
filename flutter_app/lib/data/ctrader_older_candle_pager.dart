@@ -51,6 +51,14 @@ class CTraderOlderCandlePager {
           beforeMs, isUtc: true));
       if (!isCurrent()) return null;
       if (bars.isNotEmpty) {
+        // cTrader's count-back fallback can legitimately extend far into
+        // the past, but no source event may cross this EXCLUSIVE cursor.
+        // Refuse a misrouted/out-of-order reply rather than moving Replay.
+        validateBars(bars);
+        if (bars.last.timestamp > beforeMs) {
+          throw const MarketDataException(
+              'صفحة تاريخ cTrader الأقدم تتجاوز حد الشموع المطلوب.');
+        }
         return CTraderOlderCandlePage(
             bars: bars, nextCursorMs: cursor,
             quietWindows: quietWindows);
