@@ -21,6 +21,25 @@ class RangePrependBuildResult {
 class RangeBarTimeline {
   const RangeBarTimeline._(this.bars, this.endTickIndices, this.endTimestamps);
 
+  // A six-day verified BID archive may contain up to a million source ticks,
+  // but small Range sizes can create many more bars than ticks when prices
+  // jump. Bound BOTH the source transfer and the rebuilt candle timeline
+  // before it can exhaust low-memory Android devices.
+  static const maxSourceTicks = 1000000;
+  static const maxClosedBarCount = 250000;
+
+  static void _checkBudget(int tickCount, int closedBarLimit) {
+    if (closedBarLimit < 1 || closedBarLimit > maxClosedBarCount) {
+      throw ArgumentError.value(
+          closedBarLimit, 'closedBarLimit', 'Outside chart memory budget');
+    }
+    if (tickCount < 0 || tickCount > maxSourceTicks) {
+      throw const MarketDataException(
+          'تجاوز تاريخ BID حد الذاكرة الآمن؛ '
+          'لن نحمّل بيانات إضافية إلى الشارت.');
+    }
+  }
+
   final List<TradeCandle> bars;
 
   /// All source ticks form a final, still-open Range bar. This last
@@ -73,13 +92,18 @@ class RangeBarTimeline {
   /// pages with a large authentic BID price jump are rebuilt off the UI
   /// isolate so touch, zoom and rendering can continue smoothly.
   static Future<RangeBarTimeline> buildAsync(
-      List<MarketTick> ticks, double priceDistance) async {
+      List<MarketTick> ticks, double priceDistance, {
+      int closedBarLimit = maxClosedBarCount,
+  }) async {
+    // Reject pathological source sizes BEFORE scheduling any isolate
+    // transfer, sampling BID prices or duplicating giant source buffers.
+    _checkBudget(ticks.length, closedBarLimit);
     if (!shouldBuildInBackground(ticks, priceDistance)) {
-      return build(ticks, priceDistance);
+      return build(ticks, priceDistance, closedBarLimit: closedBarLimit);
     }
-    return compute<(List<MarketTick>, double), RangeBarTimeline>(
+    return compute<(List<MarketTick>, double, int), RangeBarTimeline>(
       _buildRangeTimelineWorker,
-      (ticks, priceDistance),
+      (ticks, priceDistance, closedBarLimit),
       debugLabel: 'tradelab-range-bars',
     );
   }
@@ -95,7 +119,15 @@ class RangeBarTimeline {
     required List<MarketTick> olderTicks,
     required List<MarketTick> currentTicks,
     required double priceDistance,
+    int closedBarLimit = maxClosedBarCount,
   }) async {
+    // Check total source size first, before touching a potentially oversized
+    // page or concatenating into a second 1m+ element array.
+    _checkBudget(currentTicks.length, closedBarLimit);
+    if (olderTicks.length > maxSourceTicks - currentTicks.length) {
+      throw const MarketDataException(
+          'إضافة تيكات BID الأقدم تتجاوز حد الذاكرة الآمن.');
+    }
     // A first verified startup page has no newer archive yet. It still
     // needs the same bounded one-pass merge/build operation. Reject only
     // an empty incoming older page or a shared millisecond boundary.
@@ -104,14 +136,15 @@ class RangeBarTimeline {
             olderTicks.last.timestamp >= currentTicks.first.timestamp)) {
       throw ArgumentError('Older BID page must precede current history');
     }
-    final request = (olderTicks, currentTicks, priceDistance);
+    final request = (
+      olderTicks, currentTicks, priceDistance, closedBarLimit);
     // Avoid a UI-isolate merge even for a sparse page with few source ticks
     // if their authentic price gaps imply thousands of Range bars.
     if (!shouldBuildInBackground(
         olderTicks.followedBy(currentTicks), priceDistance)) {
       return _prependAndBuildWorker(request);
     }
-    return compute<(List<MarketTick>, List<MarketTick>, double),
+    return compute<(List<MarketTick>, List<MarketTick>, double, int),
         RangePrependBuildResult>(
       _prependAndBuildWorker, request,
       debugLabel: 'tradelab-range-prepend-and-build',
@@ -119,20 +152,24 @@ class RangeBarTimeline {
   }
 
   static RangePrependBuildResult _prependAndBuildWorker(
-      (List<MarketTick>, List<MarketTick>, double) request) {
+      (List<MarketTick>, List<MarketTick>, double, int) request) {
     // One immutable copy is the final source archive; old UI snapshots remain
     // untouched if a stale load finishes or a provider reuses its page buffer.
     final combined = List<MarketTick>.unmodifiable(
         request.$1.followedBy(request.$2));
-    final timeline = build(combined, request.$3);
+    final timeline = build(
+        combined, request.$3, closedBarLimit: request.$4);
     return RangePrependBuildResult(combined, timeline);
   }
 
   static RangeBarTimeline _buildRangeTimelineWorker(
-      (List<MarketTick>, double) request) =>
-      build(request.$1, request.$2);
+      (List<MarketTick>, double, int) request) =>
+      build(request.$1, request.$2, closedBarLimit: request.$3);
 
-  static RangeBarTimeline build(List<MarketTick> ticks, double priceDistance) {
+  static RangeBarTimeline build(List<MarketTick> ticks, double priceDistance, {
+      int closedBarLimit = maxClosedBarCount,
+  }) {
+    _checkBudget(ticks.length, closedBarLimit);
     final builder = RangeBarBuilder(priceDistance);
     final endTickIndices = <int>[];
     final endTimestamps = <int>[];
@@ -149,6 +186,15 @@ class RangeBarTimeline {
       previousTimestamp = tick.timestamp;
       final closedBefore = builder.closedCount;
       builder.appendBidTick(tick.bid);
+      if (builder.closedCount > closedBarLimit) {
+        // The current worker's partially built buffer is discarded; not a
+        // single speculative bar reaches the painter, paper-trade ledger or
+        // historical Replay. One tick itself is already capped separately
+        // by RangeBarBuilder.maxBarsPerSingleTick.
+        throw const MarketDataException(
+            'عدد شموع المدى يتجاوز الحد الآمن للهاتف. '
+            'اختر مدى أكبر أو قلّص الفترة التاريخية.');
+      }
       for (var n = closedBefore; n < builder.closedCount; n++) {
         endTickIndices.add(index);
         endTimestamps.add(tick.timestamp);
