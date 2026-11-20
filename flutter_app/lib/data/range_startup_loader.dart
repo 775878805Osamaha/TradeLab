@@ -1,5 +1,6 @@
 import 'market_api.dart';
 import 'range_bar_timeline.dart';
+import 'range_bid_page_verifier.dart';
 
 /// A contiguous, source-verified set of BID ticks used to draw Range bars.
 /// The loader requests short, disjoint intervals newest first. It never
@@ -55,15 +56,16 @@ class RangeStartupLoader {
       final fromMs = endMs - horizon.inMilliseconds;
       final toMs = priorFrom - 1;
       final page = await getTicks(fromMs, toMs);
-      var previous = fromMs;
-      for (final tick in page) {
-        if (tick.timestamp < previous || tick.timestamp > toMs ||
-            !tick.bid.isFinite || tick.bid <= 0) {
-          throw const MarketDataException(
-              'تيكات cTrader لا تتوافق مع النوافذ الزمنية المطلوبة.');
-        }
-        previous = tick.timestamp;
-      }
+      // An authenticated 12-hour cTrader interval can contain 100k+ BID
+      // events. Verify exact bounds/order off the UI isolate before any
+      // snapshot or persistent cache publication; preserve same-ms ticks.
+      await RangeBidPageVerifier.verifyAsync(
+        page: page,
+        fromMs: fromMs,
+        toMs: toMs,
+        errorMessage:
+            'تيكات cTrader لا تتوافق مع النوافذ الزمنية المطلوبة.',
+      );
       if (combined.length + page.length > maxStartupTicks) {
         throw const MarketDataException(
             'تاريخ cTrader أكبر من الحد الآمن للذاكرة. '
