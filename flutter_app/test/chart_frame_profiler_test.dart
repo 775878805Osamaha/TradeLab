@@ -167,4 +167,56 @@ void main() {
     ), throwsArgumentError);
     expect(sampler.pendingSamples, 0);
   });
+
+  test('kinetic momentum starts a clean cohort after touch-up', () {
+    final sampler = ChartInteractionFrameSampler(
+      batchSize: 10, minimumReportSamples: 4);
+    sampler.start(
+      interaction: ChartFrameInteraction.pan,
+      chartMode: 'candles', replay: false,
+      displayedCandles: 2000, rangeBidTicks: 0);
+    for (var i = 0; i < 4; i++) {
+      sampler.record(buildUs: 4000, rasterUs: 6000, totalUs: 17000);
+    }
+    final panReport = sampler.end()!;
+    expect(panReport['interaction'], 'pan');
+    expect(panReport['count'], 4);
+    sampler.start(
+      interaction: ChartFrameInteraction.momentum,
+      chartMode: 'candles', replay: false,
+      displayedCandles: 2000, rangeBidTicks: 0);
+    for (var i = 0; i < 4; i++) {
+      sampler.record(buildUs: 1000, rasterUs: 2000, totalUs: 4000);
+    }
+    final flingReport = sampler.end()!;
+    expect(flingReport['interaction'], 'momentum');
+    expect(flingReport['count'], 4);
+    expect(flingReport['framesOver16ms'], 0,
+        reason: 'Fling duration samples must not inherit slower finger pan');
+    expect(sampler.pendingSamples, 0);
+  });
+
+  test('cancelled momentum never includes subsequent unrelated UI frames',
+      () {
+    final sampler = ChartInteractionFrameSampler(
+      batchSize: 10, minimumReportSamples: 4);
+    sampler.start(
+      interaction: ChartFrameInteraction.momentum,
+      chartMode: 'range', replay: true,
+      displayedCandles: 100000, rangeBidTicks: 500000);
+    for (var i = 0; i < 6; i++) {
+      sampler.record(buildUs: 2000, rasterUs: 5000, totalUs: 9000);
+    }
+    final finished = sampler.end()!;
+    expect(finished['interaction'], 'momentum');
+    expect(finished['count'], 6);
+    expect(finished['rangeBidTicks'], 500000);
+    for (var i = 0; i < 12; i++) {
+      expect(sampler.record(
+        buildUs: 30000, rasterUs: 30000, totalUs: 60000), isNull);
+    }
+    expect(sampler.pendingSamples, 0,
+        reason: 'Opening account modal or a new screen cannot pollute fling');
+    expect(sampler.end(), isNull);
+  });
 }
