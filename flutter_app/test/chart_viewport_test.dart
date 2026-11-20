@@ -197,6 +197,37 @@ void main() {
     expect(panned.scrollBars, greaterThan(lifted.scrollBars));
   });
 
+  test('direct finger lift after invalid active pinch cannot pan the chart',
+      () {
+    final gesture = ChartTouchGesture();
+    const original = ChartViewport(barWidth: 12, scrollBars: 42);
+    ChartViewport sample(ChartViewport current, {
+      required int pointers, required double focal,
+      required double scale, required double dx,
+    }) => gesture.update(
+      viewport: current, pointerCount: pointers,
+      focalX: focal, scale: scale, deltaX: dx,
+      plotWidth: 320, candleCount: 500,
+    );
+    final began = sample(original,
+        pointers: 2, focal: 154, scale: 1, dx: 0);
+    final zoomed = sample(began,
+        pointers: 2, focal: 158, scale: 1.5, dx: 4);
+    expect(zoomed.barWidth, 18);
+    final interrupted = sample(zoomed,
+        pointers: 2, focal: double.nan, scale: 1.5, dx: 0);
+    expect(identical(interrupted, zoomed), isTrue);
+    final lifted = sample(interrupted,
+        pointers: 1, focal: 300, scale: 1, dx: 142);
+    expect(identical(lifted, zoomed), isTrue,
+        reason: 'First one-finger frame after a bad pinch is only centroid shift');
+    expect(gesture.ignoredPointerTransition, isTrue);
+    final panned = sample(lifted,
+        pointers: 1, focal: 300, scale: 1, dx: 11);
+    expect(panned.scrollBars, greaterThan(lifted.scrollBars),
+        reason: 'Deliberate one-finger pan resumes on next valid sample');
+  });
+
   test('bad persisted or transient viewport geometry is not hit-testable', () {
     const invalidWidth = ChartViewport(barWidth: 0);
     const invalidScroll = ChartViewport(scrollBars: double.nan);
