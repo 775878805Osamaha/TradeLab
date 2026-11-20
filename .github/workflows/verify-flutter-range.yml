@@ -56,6 +56,7 @@ jobs:
             test/chart_axis_ticks_test.dart \
             test/chart_price_text_formatter_test.dart \
             test/chart_axis_source_labels_test.dart \
+            test/chart_visible_highlow_reuse_test.dart \
             test/chart_ohlc_inspector_test.dart \
             test/chart_crosshair_time_label_test.dart \
             test/chart_visible_sma_test.dart \
