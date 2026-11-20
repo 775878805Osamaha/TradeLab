@@ -1,5 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## تحسين كبير قيد الاختبار — بحث وقف/هدف Replay عند قفزات تاريخية طويلة
+- **الفرع:** `feat/tradelab-replay-large-seek-exit-index-20261121` من `f696e3feba13e74bc468332b1ce7e93afa996a68`، دون تعديل `main` أو APK أو المشاريع الأخرى.
+- **أداء القفز:** `ReplayRevealedExitIndex` يبني شجرة min-low/max-high دقيقة من الشموع **التي كشفها Replay فقط**؛ أثناء قفزات طويلة مع 8+ صفقات ذات SL/TP، يُحدّد لكل صفقة أول شمعة مطابقة في `O(log N)` بدل المرور على كل شمعة × كل صفقة. يشمل سقف Range الموثّق (250 ألف مغلقة + شمعة متكوّنة لا تدخل في التنفيذ).
+- **تطابق التنفيذ:** `ReplayTrainingSession.moveTo` يُبقي المسار التسلسلي الخفيف للتشغيل العادي؛ مسار الشجرة مفعّل فقط إذا كبرت قفزة الشموع والصفقات معًا. نفس قاعدة التنفيذ للصفقات: لا توقيف في شمعة الدخول، أولوية SL إذا بلغ SL/TP في نفس الشمعة، وملء SL عند سعر فتح أكثر سلبية إذا قفز السوق عبره. عند rewind أو prepend أو مسح التدريب يُسقط الفهرس السابق لحماية الشموع المستقبلية.
+- **الاختبارات:** قيود قراءة الشموع المكشوفة فقط، إضافة مصدر 100k تدريجيًا دون الوصول للمستقبل، التحقق من فهارس Stop/Target، قفزة 120k مع 24 صفقة وrewind، وحالة short مبكرة. `CI: PENDING`، Android Profile `NOT RUN`.
+- **التالي:** افتح PR على فرع التطوير، تحقق من Flutter analyze وجميع اختبارات Replay/Range/التوقيت، أصلح أي إخفاق ثم ادمج التطوير فقط واحفظ SHA وCI.
+
 ## دفعة مكتملة — PR #575: Replay تاريخي سريع مع حماية اختيار الوقت
 - **MERGED:** [PR #575](https://github.com/775878805Osamaha/TradeLab/pull/575) إلى `test/flutter-all-fixes-20261116`، SHA الفعلي [e7ffbd8](https://github.com/775878805Osamaha/TradeLab/commit/e7ffbd80db2add402cc16b89a7ef60576a7b6887).
 - **CI:** [GitHub Actions #44833280061](https://github.com/775878805Osamaha/TradeLab/actions/runs/44833280061) **PASS / completed / success**؛ Flutter analyze واختبارات الشارت وRange وReplay والتوقيت في اليمن. لا اختبار هاتف Android فعلي ولا FPS مقاس.
