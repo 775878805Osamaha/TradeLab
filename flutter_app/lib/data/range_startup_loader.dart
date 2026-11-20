@@ -65,6 +65,14 @@ class RangeStartupLoader {
       final toMs = priorFrom - 1;
       final page = await getTicks(fromMs, toMs);
       if (isCurrent != null && !isCurrent()) return null;
+      // Reject oversized provider pages BEFORE spawning an isolate and
+      // duplicating up to a million BID objects across worker boundaries.
+      // Failed pages must never be certified as complete local coverage.
+      if (page.length > maxStartupTicks - combined.length) {
+        throw const MarketDataException(
+            'تاريخ cTrader أكبر من الحد الآمن للذاكرة. '
+            'اختر مدى أكبر أو حدّث بيانات الوسيط.');
+      }
       // An authenticated 12-hour cTrader interval can contain 100k+ BID
       // events. Verify exact bounds/order off the UI isolate before any
       // snapshot or persistent cache publication; preserve same-ms ticks.
@@ -76,11 +84,6 @@ class RangeStartupLoader {
             'تيكات cTrader لا تتوافق مع النوافذ الزمنية المطلوبة.',
       );
       if (isCurrent != null && !isCurrent()) return null;
-      if (combined.length + page.length > maxStartupTicks) {
-        throw const MarketDataException(
-            'تاريخ cTrader أكبر من الحد الآمن للذاكرة. '
-            'اختر مدى أكبر أو حدّث بيانات الوسيط.');
-      }
       // Do not certify a window until it is fully validated, below the
       // memory cap and still belongs to this account/symbol/revision.
       onVerifiedPage?.call(fromMs, toMs, page);
