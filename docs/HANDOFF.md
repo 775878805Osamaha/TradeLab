@@ -1,10 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## حماية Range من تجاوز الذاكرة — قيد الاختبار
-- فرع `feat/range-replay-memory-budget-20261120`، استكمالًا لدفعة PR #568. سقف مصدر BID `1,000,000` تيك، وسقف Range `250,000` شمعة مغلقة لكل بناء؛ منع إنشاء مصدر أكبر من ميزانية الذاكرة قبل نسخه إلى isolate، وفشل آمن دون نشر بيانات Replay جزئية.
-- اختبار sync وasync وprepend والحدود وعدّاد مصدر ضخم، مع الإبقاء على same-ms events كما هي.
-- **الحالة: CI PENDING**؛ لا Android Profile ولا APK جديد، ولا تعديل `main`.
-- **التالي:** افتح PR، انتظر نجاح اختبارات GitHub ثم دمج إلى فرع التطوير فقط وتوثيق SHA الحقيقي.
+## اكتمال حماية الذاكرة وتحميل Range — PR #569
+- **MERGED:** [PR #569](https://github.com/775878805Osamaha/TradeLab/pull/569)، SHA [b7ee472](https://github.com/775878805Osamaha/TradeLab/commit/b7ee47267bfd039c2705e07587fcca1de33ceab1) في `test/flutter-all-fixes-20261116`.
+- **اختبارات ناجحة:** [Actions #44817561584](https://github.com/775878805Osamaha/TradeLab/actions/runs/44817561584) = **SUCCESS**؛ تحليل Dart/Flutter، اختبارات مصدر BID وRange/Replay وتوقيت اليمن كلها نجحت. Android Profile/FPS **NOT RUN**.
+- سقف مصدر BID `1,000,000` تيك وسقف Range `250,000` شمعة مغلقة لكل بناء. يمنع النظام تجاوز السقف قبل نسخ الأرشيف إلى worker، ويرفض تجاوز عدد شموع Range دون نشر Replay مجتزأ. ينطبق ذلك على البناء المباشر والخلفي وإضافة التاريخ الأقدم.
+- هذه الحزمة تكمل [PR #568](https://github.com/775878805Osamaha/TradeLab/pull/568) الذي نفّذ خمسة تحسينات مصدر وخمسة ملفات اختبار للتحميل والأداء والتاريخ.
+- **الأحدث على GitHub ليس في APK السابق**؛ لا APK جديد دون طلب صريح. `main` وبقية المشاريع دون تغيير.
+- **الخطوة التالية:** اختبار السلاسة على Android Profile فعلي، ثم معالجة أول اختناق بأرقام p50/p95/p99 من جهاز.
 
 ## دفعة تطوير كبيرة مكتملة — PR #568
 - **MERGED:** [PR #568](https://github.com/775878805Osamaha/TradeLab/pull/568) إلى `test/flutter-all-fixes-20261116`، SHA الفعلي [db9c2cf](https://github.com/775878805Osamaha/TradeLab/commit/db9c2cfa02bef9fea5f6f1a7f76e23140404e9b8).
