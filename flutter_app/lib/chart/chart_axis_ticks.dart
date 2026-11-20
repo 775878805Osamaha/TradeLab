@@ -23,7 +23,18 @@ class ChartAxisTicks {
       {int desiredIntervals = 12}) sync* {
     final step = interval(minimum, maximum,
         desiredIntervals: desiredIntervals);
-    if (!minimum.isFinite || !maximum.isFinite || maximum <= minimum) return;
+    yield* ticksWithStep(minimum, maximum, step: step);
+  }
+
+  /// The candle canvas already computes [step] for tick importance and
+  /// decimal precision. Reuse that exact step for the visible labels instead
+  /// of performing the same log/pow/step search a second time each frame.
+  /// All tick coordinates, old rounding rules and the 100-label guard stay
+  /// identical to [ticks].
+  static Iterable<double> ticksWithStep(
+      double minimum, double maximum, {required double step}) sync* {
+    if (!minimum.isFinite || !maximum.isFinite || maximum <= minimum ||
+        !step.isFinite || step <= 0) return;
     final first = (minimum / step).ceil();
     final last = (maximum / step).floor();
     for (var i = first; i <= last && i < first + 100; i++) {
