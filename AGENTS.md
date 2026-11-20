@@ -18,7 +18,7 @@ This repository contains an owner-requested durable handoff system. **Every AI c
 ## Project guardrails
 - XAUUSD والـForex عبر cTrader، والكريبتو عبر Binance؛ لا تُنشئ أسعار أو شموع وهمية، ولا تكشف بيانات Replay المستقبلية.
 - التداول ورقي/تدريبي فقط؛ لا فتح صفقات بأموال حقيقية.
-- لا APK أو Release حتى يكتمل التطبيق ويطلب المستخدم ذلك؛ اترك `main` دون تغيير.
+- لا APK أو Release تلقائيًا قبل اكتمال التطبيق. استثناء تاريخ 2026-11-20: طلب المستخدم نسخة APK واحدة للتجربة، ونُشرت بنجاح في [Release](https://github.com/775878805Osamaha/TradeLab/releases/tag/tradelab-phone-test-6cecd765d1c2)؛ انتهى هذا التفويض. أي بناء جديد يحتاج إذنًا صريحًا آخر؛ اترك `main` دون تغيير.
 - لا ادعاء بنجاح اختبار جهاز حقيقي اعتمادًا على CI وحده.
 
 ## Resume entrypoints for a new chat

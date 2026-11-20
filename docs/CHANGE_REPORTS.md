@@ -49,3 +49,13 @@
 - **الملفات:** `flutter_app/lib/chart/chart_viewport.dart`, `flutter_app/test/chart_viewport_test.dart`, `docs/CHANGE_REPORTS.md`, `docs/HANDOFF.md`.
 - **ما لم يُنفَّذ:** Android Profile على جهاز حقيقي **NOT RUN**؛ لا APK ولا Release، ولا اختبار مستقل بعد squash merge (بوابة PR النهائية ناجحة).
 - **الخطوة التالية الواحدة:** قياس pan/pinch/momentum على Android Profile حقيقي وحفظ p50/p95/p99، ثم إصلاح أول اختناق مثبت على فرع التطوير فقط.
+
+### 2026-11-20T19:41:26.618Z — تسليم APK اختبار ناجح برابط مباشر (PR #566 مغلق دون دمج)
+- **الموافقة:** المستخدم طلب «APK انشاء حتى اختبرة» بعد سياسة عدم بناء APK سابقًا؛ تفويض نسخة اختبار واحدة فقط.
+- **المشروع/الفرع:** `775878805Osamaha/TradeLab`، كود المصدر المدمج في `test/flutter-all-fixes-20261116` عند SHA `03794ca53590accb7ae777d5889bd72f5c66a90f`، فرع البناء المنفصل `test/tradelab-phone-apk-20261120` عند SHA `6cecd765d1c29b3e9e460d18fe2ffaf8269ed494` (ملفات التوثيق وworkflow فقط فوق كود التطوير). `main` دون تغيير.
+- **النتيجة:** [GitHub Actions #44803312522](https://github.com/775878805Osamaha/TradeLab/actions/runs/44803312522) **completed/success**، بما في ذلك Flutter analyze واختبارات chart/Range/Replay/OAuth و`flutter build apk --release`، التحقق من `unzip -t`، فحص توقيع `apksigner verify`، وفحص package ID `com.example.tradelab_flutter.test2`، ورفع Artifact ونشر Release.
+- **التنزيل المؤكد:** [TradeLab-Android-Test.apk](https://github.com/775878805Osamaha/TradeLab/releases/download/tradelab-phone-test-6cecd765d1c2/TradeLab-Android-Test.apk) (**59,096,319 bytes**، حالة asset `uploaded`) و[SHA256](https://github.com/775878805Osamaha/TradeLab/releases/download/tradelab-phone-test-6cecd765d1c2/TradeLab-Android-Test.apk.sha256) و[صفحة إصدار الاختبار](https://github.com/775878805Osamaha/TradeLab/releases/tag/tradelab-phone-test-6cecd765d1c2).
+- **PR والأمان:** [#566](https://github.com/775878805Osamaha/TradeLab/pull/566) **CLOSED / NOT MERGED** بعد نجاح البناء للحفاظ على workflow أحادي الاستعمال خارج فرع التطوير. لا تشغيل متكرر أو تعديل السوق أو إصدار إنتاجي.
+- **قيود الاختبار:** لم يتم تشغيل APK على هاتف المستخدم أو قياس FPS فعلي/اختبار دخول cTrader الفعلي؛ التوقيع التجريبي المؤقت قد يختلف عن توقيع APK سابق لحزمة test2، لذا قد يحتاج حذف **TradeLab Test 2 القديم فقط** قبل تثبيت الاختبار الجديد، مع إبقاء التطبيق الأصلي.
+- **الملفات التي تحمل هذا التوثيق:** `docs/CHANGE_REPORTS.md` و`docs/HANDOFF.md` و`AGENTS.md`، دون تغيير كود Flutter.
+- **الخطوة التالية الواحدة:** اختبار أحدث APK على Android ورفع ملاحظات اللمس/السحب/Range/Replay ولقطات الشاشة، ثم إصلاح المشكلات المثبتة قبل طلب بناء جديد.
