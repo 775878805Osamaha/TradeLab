@@ -147,3 +147,30 @@
 - **التنفيذ الفعلي:** 5 ملفات source (ملف ميزانية جديد) و4 ملفات اختبار + 2 docs. عرض حتى 200k شمعة زمنية من SQLite بدل 100k؛ مشاركة سقف الذاكرة مع cTrader refresh وsnapshot وolder prepend؛ إيقاف المحاولة قبل تخصيص محاور/قائمة >200k دون تغيير البيانات المصدرية أو Replay.
 - **قيود:** التاريخ الأقدم يمكن حفظه في أرشيف SQLite لكن غير محمّل كله في RAM في نفس الوقت؛ ما زال يلزم نظام عرض نوافذ لاحقًا للوصول لأكثر من 200k بلا توقف. لم يُنشأ APK/Release جديد، وآخر APK المتاح يسبق PR #567–#571؛ `main` والمشاريع الأخرى لم تُمس.
 - **الخطوة التالية الواحدة:** اختبار تطبيق TradeLab على Android Profile مع بيانات cTrader BID الحقيقية وقياس p50/p95/p99، وإصلاح أية مشكلة تظهر ثم حفظ تقرير جديد.
+
+### 2026-11-20T22:26:46.403Z — نافذة بدء الشارت + تاريخ شموع SQLite محلي على صفحات
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab`، `feat/local-first-candle-paging-20261121` من `908f42abb28c8d6e3dd9b5a7b6e7835972776c44`، دون تعديل `main` أو مشاريع أخرى، ودون APK/Release.
+- **الأداء:** `ChartScreen._loadRealHistory` يبدأ بآخر 4000 شمعة زمنية مصدرية بدل استرجاع 200000 صف عند كل فتح للشارت. هذا تغيير في سياسة استهلاك الذاكرة وحجم SQLite query، وليس قياس زمن Android فعلي.
+- **التاريخ الأقدم:** `MarketCandleStore.readOlder` يدعم strict `timestamp_ms < beforeMs`، ترتيب تنازلي في SQLite واسترجاع تصاعدي صالح للرسم، حد افتراضي 2000، وبنفس مفاتيح الرمز/الفريم/الحساب؛ لا إعادة تحميل صفحة المصدر المحفوظة من الإنترنت.
+- **تكامل الشاشة:** بحث local-first عند السحب لليسار، ثم حصة broker authenticated فقط عند cache miss/invalid cache. تعطيل النشر عند تغير الحساب/الرمز أثناء الانتظار، استخدام نفس إعدادات Replay/drawing rebase، ومنع الطلبات الجديدة قبل تجاوز حد 200k نافذة RAM.
+- **الاختبارات:** ثلاث حالات جديدة في `flutter_app/test/market_candle_store_test.dart`: 4200 مصدر مع فجوة أصلية والعودة إلى 4000+200، صفحات 600/600 منفصلة حسب الحساب، وحدود 200k وargs.
+- **ملفات المصدر:** `flutter_app/lib/data/market_candle_store.dart`، `flutter_app/lib/screens/chart_screen.dart`. **التوثيق:** `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
+- **التحقق:** GitHub Actions **PENDING** عند هذه النقطة، Flutter SDK المحلي وAndroid Profile/FPS **NOT RUN**، ولا ادعاء بمطابقة TradingView الفعلية.
+- **التالي:** افتح PR، راقب Flutter analyze وSQLite/Range/Replay، أصلح أي FAIL، ثم دمج إلى فرع التطوير فقط وتحديث SHA/CI الفعلي.
+
+### 2026-11-20T22:30:50.872Z — CI فشل اختبار Replay بسبب سحب آلي يفعّل القصور: إصلاح محدد
+- **الواقعة المثبتة:** [Actions #44829082109](https://github.com/775878805Osamaha/TradeLab/actions/runs/44829082109) = **FAIL**، تحليل Dart/Flutter **PASS**، و590 اختبارات **PASS** مقابل اختبار واحد **FAIL**: `replay_training_widget_test.dart` عند السطر 96، `pumpAndSettle timed out` بعد `tester.drag`. لا دمج على هذا الفشل.
+- **تشخيص مصدر السلوك من الكود:** `chartShouldFling` يشغّل قصور الحركة عند |velocity| ≥ 180px/s ومسافة أفقية ≥14px. استخدام `tester.drag` بالسرعة الافتراضية في اختبار هدفه التأكد من repaint من دون إعادة بناء toolbar يمكن أن يبدأ animation طويلًا، ثم `pumpAndSettle` ينتظر انتهاء القصور لا اكتمال حركة الإصبع. لا يوجد دليل من السجل على فساد بيانات الوسيط أو فشل SQLite؛ لا ننسب الفشل إليها.
+- **الإصلاح:** جعل الإيماءات الأربع المستخدمة لاختبار repaint بالذات `tester.timedDrag(..., Duration(milliseconds:500))`، بحيث سرعة 35–45px خلال 500ms أقل من عتبة fling. لا تعطيل لقصور حركة التطبيق ولا تغيير لكود الإنتاج. يحافظ الاختبار على تأكيد تحديث viewport/Replay overlay دون إعادة بناء الواجهات.
+- **الفرع والملفات:** `775878805Osamaha/TradeLab`، `feat/local-first-candle-paging-20261121`؛ `flutter_app/test/replay_training_widget_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`. `main` وAPK غير متغيرين.
+- **حالة التحقق بعد التصحيح:** CI للالتزام الجديد **PENDING** حتى انتهاء GitHub Actions؛ Android الحقيقي/قياس FPS **NOT RUN**. عند PASS يدمج إلى فرع التطوير، ثم يكتب SHA الدمج والاختبارات الفعلية؛ عند FAIL يتوقف الدمج ويصلح السبب المحدد.
+- **الخطوة التالية الوحيدة:** تحقق من CI على رأس PR #572 المحدث ثم دمج التطوير فقط عند PASS.
+
+### 2026-11-20T22:34:38.442Z — تفسير فشل CI الثاني وحماية Replay من جلب التاريخ غير المطلوب أثناء السحب
+- **الفشل المؤكد:** [Actions #44829601262](https://github.com/775878805Osamaha/TradeLab/actions/runs/44829601262) = **FAIL**، رغم PASS لتحليل Flutter و590 اختبارًا. اختبار `replay_training_widget_test.dart` ما زال يتعطل عند `pumpAndSettle` (سطر 101 بعد تغيير `timedDrag`)؛ لذا **لم يدمج PR #572**. فشل المحاولة الأولى/الثانية محفوظ في السجل.
+- **الخلل في مسار التطبيق وليس السرعة فقط:** فحص `ChartScreen._prefetchOlderAtEdge` كشف أنه يمكن استدعاء `_loadOlderHistory` تلقائيًا بمجرد السحب في Replay حتى إن لم يطلب المستخدم التاريخ الأقدم. وبعد إضافة SQLite local-first، هذا قد يبقي spinner/async متحركًا أثناء اختبار السحب ويمكّن تغيير فهرس شموع التدريب دون إجراء صريح.
+- **الإصلاح في التطبيق:** منع التحميل التلقائي من الحافة عند `_replay || _replaySelectingStart`؛ **الأمر اليدوي `ReplayExtrasAction.loadOlder` باقٍ** للتحميل المقصود مع منطق إعادة تثبيت المؤشر الحالي. غير Replay يحتفظ بتحميل المصدر المحلي ثم الوسيط تلقائيًا كما كان.
+- **اختبار انحدار مباشر:** `replay_training_widget_test.dart` يحتسب طلبات Binance /api/v3/klines ويتأكد أن سحب شارت Replay لا يصدر طلب مصدر إضافيًا، بالإضافة إلى تأكيد repaint وحدود العرض. استخدام `timedDrag` يستمر لأنه اختبار repaint لا اختبار fling.
+- **الفرع والملفات:** `775878805Osamaha/TradeLab`، `feat/local-first-candle-paging-20261121`، `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/replay_training_widget_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`. لا APK ولا `main`.
+- **التحقق الجديد:** CI **PENDING** على الالتزام الجديد؛ Android Profile **NOT RUN**. لن يُذكر PASS أو دمج إلا بعد التحقق الفعلي.
+- **الخطوة التالية الواحدة:** راقب اختبار Replay/SQLite وCI بالكامل في PR #572 ثم دمج فرع التطوير فقط عند PASS.

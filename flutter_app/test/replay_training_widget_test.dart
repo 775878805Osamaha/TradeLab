@@ -19,7 +19,9 @@ void main() {
       (tester) async {
     // Reuse the fixed, known-good Binance fixture from widget_test.dart,
     // which already proves the real chart and Replay entry point work.
+    var sourcePageRequests = 0;
     final client = MockClient((request) async {
+      sourcePageRequests++;
       expect(request.url.host, 'api.binance.com');
       expect(request.url.path, '/api/v3/klines');
       expect(request.url.queryParameters['symbol'], 'BTCUSDT');
@@ -88,15 +90,24 @@ void main() {
         '${firstBar.minute.toString().padLeft(2, '0')} UTC';
     expect(message, contains(firstTime));
     expect(find.byKey(const Key('replay-speed-picker')), findsOneWidget);
+    final requestsBeforeReplayPan = sourcePageRequests;
     // Replay with no practice levels or rectangles has no viewport-snapshot
     // overlays. Touch samples should repaint the chart without rebuilding the
     // toolbar (same fast path used by the normal chart).
     final replayChart = find.byKey(const Key('chart-gesture-area'));
-    await tester.drag(replayChart, const Offset(-40, 0));
+    // This test measures paint-only viewport updates, NOT inertia.
+    // A 40px/500ms drag stays below chartShouldFling's 180 px/s
+    // threshold: pumpAndSettle must not wait for an active fling animation.
+    // Dedicated momentum tests exercise high-velocity gestures separately.
+    await tester.timedDrag(replayChart, const Offset(-40, 0),
+        const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
+    expect(sourcePageRequests, requestsBeforeReplayPan,
+        reason: 'Replay pan must not automatically request older broker data');
     final replayHeader = find.byKey(const Key('chart-reference-header'));
     final previousReplayHeader = tester.widget(replayHeader);
-    await tester.drag(replayChart, const Offset(-45, 0));
+    await tester.timedDrag(replayChart, const Offset(-45, 0),
+        const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 400));
     expect(identical(previousReplayHeader, tester.widget(replayHeader)), isTrue,
         reason: 'Normal Replay panning should not rebuild its toolbar');
@@ -156,14 +167,16 @@ void main() {
     final gestureArea = find.byKey(const Key('chart-gesture-area'));
     final practiceLayer =
         find.byKey(const Key('replay-practice-levels-overlay'));
-    await tester.drag(gestureArea, const Offset(-35, 0));
+    await tester.timedDrag(gestureArea, const Offset(-35, 0),
+        const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     final headerWithOrder = tester.widget(
         find.byKey(const Key('chart-reference-header')));
     final firstPainter = tester.widget<CustomPaint>(practiceLayer)
         .painter! as ReplayTradeOverlayPainter;
     final firstViewport = firstPainter.currentViewport;
-    await tester.drag(gestureArea, const Offset(-40, 0));
+    await tester.timedDrag(gestureArea, const Offset(-40, 0),
+        const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 400));
     final secondPainter = tester.widget<CustomPaint>(practiceLayer)
         .painter! as ReplayTradeOverlayPainter;

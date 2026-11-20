@@ -42,6 +42,21 @@ class MarketCandleStore {
   static Database? _database;
   static Future<Database>? _opening;
 
+  // Start with enough recent source candles for a fluid Android chart.
+  // Deep SQLite history remains on disk until the user pans left.
+  static const initialChartPageSize = 4000;
+  static const olderChartPageSize = 2000;
+
+  static int olderPageCapacity(int loadedBars) {
+    if (loadedBars < 0 ||
+        loadedBars > MarketHistoryBudget.maxVisibleTimeCandles) {
+      throw ArgumentError.value(
+          loadedBars, 'loadedBars', 'Outside chart memory budget');
+    }
+    final remaining = MarketHistoryBudget.maxVisibleTimeCandles - loadedBars;
+    return remaining < olderChartPageSize ? remaining : olderChartPageSize;
+  }
+
   static String key(TradeSymbol symbol, String timeframe, String? accountId) {
     if (symbol.source == TradeSource.ctrader &&
         (accountId == null || accountId.isEmpty)) {
@@ -169,6 +184,35 @@ class MarketCandleStore {
       return compute<List<Map<String, Object?>>, List<MarketBar>>(
         _decodeArchivedCandleRows, rows,
         debugLabel: 'tradelab-verified-candle-sqlite-decode');
+    }
+    return _decodeArchivedCandleRows(rows);
+  }
+
+  /// An account-scoped source-verified page from the disk archive. The
+  /// exclusive UTC cursor is applied by SQLite BEFORE parsing/allocating
+  /// any bars, even when the disk retains far more than 200k candles.
+  /// Empty means cache miss, never proof that the broker has no history.
+  static Future<List<MarketBar>> readOlder(
+      TradeSymbol symbol, String timeframe, String? accountId, {
+      required int beforeMs,
+      int limit = olderChartPageSize,
+  }) async {
+    if (beforeMs < 1 || limit < 1 ||
+        limit > MarketHistoryBudget.maxVisibleTimeCandles) {
+      throw ArgumentError('Invalid bounded older candle cache request');
+    }
+    final db = await _open();
+    final rows = await db.query('candle_history',
+      where: 'cache_key = ? AND timestamp_ms < ?',
+      whereArgs: [key(symbol, timeframe, accountId), beforeMs],
+      orderBy: 'timestamp_ms DESC',
+      limit: limit,
+    );
+    if (MarketCandleDecodePolicy.shouldOffload(rows.length)) {
+      return compute<List<Map<String, Object?>>, List<MarketBar>>(
+        _decodeArchivedCandleRows, rows,
+        debugLabel: 'tradelab-older-candle-sqlite-page',
+      );
     }
     return _decodeArchivedCandleRows(rows);
   }
