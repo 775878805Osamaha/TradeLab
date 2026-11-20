@@ -1151,6 +1151,11 @@ class _ChartScreenState extends State<ChartScreen>
           widget.controller.accountId == account &&
           _selectedSymbol.code == symbol.code &&
           _mode == ChartMode.range;
+      // An unarchived provider page is registered only for this exact
+      // inclusive window. The scanner's off-isolate verification must
+      // succeed before *any* broker response (including a quiet one) may
+      // become a trusted local coverage manifest.
+      final pendingArchivePages = <int>{};
       final scanned = await RangeOlderPageScanner.scan(
         cursorMs: cursorMs,
         alreadyLoaded: previouslyLoaded,
@@ -1171,19 +1176,20 @@ class _ChartScreenState extends State<ChartScreen>
           if (cached != null) return cached;
           // rangeTicks() fetches six days and cannot prove this short
           // interval. Request only the exact missing inclusive BID page.
-          final verified = await widget.controller.rangeTicksBetween(
+          final fetched = await widget.controller.rangeTicksBetween(
             symbol, fromMs: fromMs, toMs: toMs,
           );
           if (!isCurrent()) return const <MarketTick>[];
-          RangeOlderPage.verify(
-            page: verified, fromMs: fromMs, toMs: toMs,
-            alreadyLoaded: previouslyLoaded,
-          );
-          // Persist only a complete cTrader page, including quiet sessions.
+          pendingArchivePages.add(fromMs);
+          return fetched;
+        },
+        onVerifiedPage: (fromMs, toMs, page) {
+          if (!isCurrent() || !pendingArchivePages.remove(fromMs)) return;
+          // Store only a COMPLETE window confirmed by the scanner, not
+          // unverified source ticks from an in-flight broker response.
           unawaited(RangeTickStore.archiveVerifiedWindow(
-            account, symbol.code, verified, fromMs: fromMs, toMs: toMs,
+            account, symbol.code, page, fromMs: fromMs, toMs: toMs,
           ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-          return verified;
         },
       );
       if (scanned == null || !isCurrent()) return;
