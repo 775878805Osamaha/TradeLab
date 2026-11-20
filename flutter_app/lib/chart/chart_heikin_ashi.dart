@@ -39,6 +39,33 @@ class ChartHeikinAshi {
     return result;
   }
 
+  /// Extend a causal HA view from *verified appended* raw OHLC candles.
+  /// The last HA open/close is sufficient because the formula depends only
+  /// on past candles. Call only after broker overlap integrity checks have
+  /// proved the old source prefix is unchanged.
+  static List<TradeCandle> extendVerified(
+      List<TradeCandle> existingHeikin, List<TradeCandle> appendedRaw) {
+    if (appendedRaw.isEmpty) return const <TradeCandle>[];
+    if (existingHeikin.isEmpty) return build(appendedRaw);
+    var previousOpen = existingHeikin.last.open;
+    var previousClose = existingHeikin.last.close;
+    final newHeikin = <TradeCandle>[];
+    for (final current in appendedRaw) {
+      final close =
+          (current.open + current.high + current.low + current.close) / 4;
+      final open = (previousOpen + previousClose) / 2;
+      newHeikin.add(TradeCandle(
+        open,
+        math.max(current.high, math.max(open, close)),
+        math.min(current.low, math.min(open, close)),
+        close,
+      ));
+      previousOpen = open;
+      previousClose = close;
+    }
+    return newHeikin;
+  }
+
   static Future<List<TradeCandle>> buildAsync(List<TradeCandle> raw) async {
     if (!shouldOffload(raw.length)) return build(raw);
     return compute<List<TradeCandle>, List<TradeCandle>>(
@@ -123,6 +150,38 @@ class ChartHeikinAshiCache {
       _failedSource = source;
       onError?.call();
     }
+  }
+
+  /// Adopt the new market history only when the cTrader stitcher has
+  /// already verified a pure append, with no revised historical candle or
+  /// inserted market gap. Reuse existing HA history instead of recomputing
+  /// 100k+ derived bars for a single newly closed source bar.
+  ///
+  /// The source list identity check prevents carrying results across a
+  /// different account/symbol/timeframe or a historical prepend. A source
+  /// that is still computing is left to its normal worker path.
+  bool adoptVerifiedAppend({
+    required List<TradeCandle> previousSource,
+    required List<TradeCandle> nextSource,
+    required int appended,
+  }) {
+    if (_disposed || appended <= 0 ||
+        !identical(_readySource, previousSource) ||
+        _readyCandles == null ||
+        nextSource.length != previousSource.length + appended ||
+        _readyCandles!.length != previousSource.length) {
+      return false;
+    }
+    final extra = ChartHeikinAshi.extendVerified(
+      _readyCandles!, nextSource.sublist(previousSource.length));
+    // An append is a new source identity. Build a distinct result rather
+    // than mutating a previous Replay/painter snapshot.
+    _readyCandles = <TradeCandle>[..._readyCandles!, ...extra];
+    _readySource = nextSource;
+    _revision++;
+    _pendingSource = null;
+    _failedSource = null;
+    return true;
   }
 
   void dispose() {

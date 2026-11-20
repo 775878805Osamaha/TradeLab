@@ -1055,6 +1055,14 @@ class _ChartScreenState extends State<ChartScreen>
       final snapshot = refresh.snapshot!;
       setState(() {
         _loadError = null;
+        // The cTrader stitcher has already verified an append-only broker
+        // response. Extend a prepared HA view causally from its last bar,
+        // instead of recalculating the full archive while drawing.
+        _heikinCache.adoptVerifiedAppend(
+          previousSource: _actualCandles,
+          nextSource: snapshot.candles,
+          appended: refresh.appended,
+        );
         _actualBars = snapshot.bars;
         _actualCandles = snapshot.candles;
         _actualTimestamps = snapshot.timestamps;
