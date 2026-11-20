@@ -9,6 +9,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'market_api.dart';
 import 'range_bid_page_verifier.dart';
+import 'range_verified_bid_window_slice.dart';
 
 /// Collect a SHA-256 digest without assembling a giant JSON string of ticks.
 class _DigestCollector implements Sink<Digest> {
@@ -377,11 +378,20 @@ class RangeTickStore {
       }
       if (validTicks == null || coverageEnd == null) return null;
       final segmentEnd = coverageEnd < toMs ? coverageEnd : toMs;
-      for (final tick in validTicks) {
-        if (tick.timestamp < cursor) continue;
-        if (tick.timestamp > segmentEnd) break;
-        result.add(tick);
-        if (result.length > maxTicks) return null;
+      // The manifest SHA + source order were verified by
+      // readVerifiedWindow(). When a 120k-tick window overlaps only a few
+      // milliseconds of this requested interval, find its real source
+      // timestamps in O(log N) rather than scanning the entire cached
+      // window again on Flutter's gesture/UI isolate.
+      // Never partially copy an over-budget slice.
+      if (!RangeVerifiedBidWindowSlice.appendWithinLimit(
+        verified: validTicks,
+        fromMs: cursor,
+        toMs: segmentEnd,
+        output: result,
+        maxTicks: maxTicks,
+      )) {
+        return null;
       }
       cursor = segmentEnd + 1;
     }
