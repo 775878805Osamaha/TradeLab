@@ -109,7 +109,7 @@ void main() {
   test('first candle may carry earlier wicks; still agrees with linear choice',
       () {
     for (final rising in [true, false]) {
-      final initial = rising ? 100.0 : 20000.0;
+      final initial = rising ? 100.0 : 40000.0;
       final ticks = [
         MarketTick(100, initial),
         MarketTick(101, initial + (rising ? .8 : -.8)),
