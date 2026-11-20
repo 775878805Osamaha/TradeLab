@@ -45,6 +45,7 @@ import '../replay/replay_trade_overlay.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_startup_loader.dart';
 import '../data/ctrader_older_candle_pager.dart';
+import '../data/older_candle_prepend.dart';
 import '../data/range_history_fill_policy.dart';
 import '../data/range_older_page.dart';
 import '../data/range_older_page_scanner.dart';
@@ -1409,16 +1410,24 @@ class _ChartScreenState extends State<ChartScreen>
         older = await widget.controller.history(
             symbol, timeframe, before: before);
       }
-      if (revision != _loadRevision || !mounted) return;
-      final earliest = _actualBars.first.timestamp;
-      // Providers can return pages out of order or with duplicate timestamps.
-      // Normalize before prepending so chart indices and Replay stay stable.
-      final byTimestamp = <int, MarketBar>{};
-      for (final bar in older) {
-        if (bar.timestamp < earliest) byTimestamp[bar.timestamp] = bar;
-      }
-      final unique = byTimestamp.values.toList()
-        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      if (revision != _loadRevision || !mounted ||
+          _selectedSymbol.code != symbol.code || _timeframe != timeframe ||
+          widget.controller.accountId != sourceAccount ||
+          _mode == ChartMode.range) return;
+      // Keep the exact source snapshot used for this page. A large
+      // prepend/axis rebuild is done on a worker isolate so 100k+ locally
+      // verified candles do not pause the Android gesture/UI isolate.
+      final previousBars = _actualBars;
+      final prepared = await OlderCandlePrepend.prepareAsync(
+        existing: previousBars, older: older);
+      // A slow worker result must never overwrite a newer account, symbol,
+      // timeframe, feed or session. Preserve Replay's source candle indices.
+      if (revision != _loadRevision || !mounted ||
+          _selectedSymbol.code != symbol.code || _timeframe != timeframe ||
+          widget.controller.accountId != sourceAccount ||
+          _mode == ChartMode.range ||
+          !identical(_actualBars, previousBars)) return;
+      final unique = prepared.prefix;
       if (unique.isEmpty) {
         if (_selectedSymbol.source == TradeSource.binance) {
           _historyExhausted = true;
@@ -1442,9 +1451,9 @@ class _ChartScreenState extends State<ChartScreen>
                 ? widget.controller.accountId : null, unique)
             .catchError((Object _) {}));
         setState(() {
-        _actualBars = [...unique, ..._actualBars];
-        _actualCandles = _actualBars.map((bar) => bar.candle).toList(growable: false);
-        _actualTimestamps = _actualBars.map((bar) => bar.timestamp).toList(growable: false);
+        _actualBars = prepared.bars;
+        _actualCandles = prepared.candles;
+        _actualTimestamps = prepared.timestamps;
         for (var index = 0; index < _patterns.length; index++) {
           _patterns[index] = _patterns[index].shifted(unique.length);
         }
@@ -1494,6 +1503,10 @@ class _ChartScreenState extends State<ChartScreen>
           _replayCandidateIndex += unique.length;
         }
         });
+      }
+    } on MarketDataException catch (error) {
+      if (revision == _loadRevision && mounted) {
+        _olderLoadError = error.message;
       }
     } catch (_) {
       if (revision == _loadRevision && mounted) {
