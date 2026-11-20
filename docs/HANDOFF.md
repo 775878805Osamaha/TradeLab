@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة قيد الاختبار — فهرسة Replay آمنة وسريعة لتاريخ 200k
+- **الفرع:** `feat/tradelab-replay-safe-fast-timeline-20261121` مبني على تطوير `36a1f3de805b3dd658e320c7e65a6886890fc82f`. `main` غير متغير؛ لا APK أو Release.
+- **التحسين:** `ReplayVerifiedTimeIndex` يتحقق مرة واحدة من تسلسل التوقيتات المصدرية لكل snapshot محمّل ثم ينفذ طلبات التاريخ والتأكيد ببحث ثنائي `O(log N)` في 200 ألف شمعة بدل إعادة فحص القائمة كلها كل مرة. يحتفظ `ReplayStartResolver` العام بفحصه الكامل للبيانات غير الموثوقة، ويدعم Range أحداث مللي ثانية واحدة متكررة ولا يظهر الشمعة المغلقة الأخيرة عند بدء التدريب.
+- **سلامة النوافذ:** `ReplayDateSelectionGuard` يرفض نتيجة نافذة اختيار وقت بقيت مفتوحة بعد تبديل الحساب/الرمز/الفريم/المزود/المنطقة الزمنية أو تغيير تحميل الشموع أو خروج وضع اختيار Replay. إعادة التحقق بعد كل `await` داخل منتقي التاريخ/الوقت/DST. فهرس البدء محمي من تجاوز طول المصدر.
+- **الاختبارات المضافة:** 200 ألف توقيت بتتبع عدد القراءات، تغيير هوية timestamp list واختلاف completedCount، مللي ثانية Range المتساوية، اختبار كل أبعاد إبطال جلسة منتقي التاريخ.
+- **التحقق:** GitHub CI **PENDING** حتى فتح PR؛ Android Profile/حساب cTrader الحقيقي **NOT RUN**. لا ادعاء بسرعة أو FPS مقاسة.
+- **الخطوة التالية:** افتح PR، افحص Flutter analyze واختبارات Replay/Range/التاريخ، أصلح الفشل إن وقع، ثم ادمج التطوير فقط وسجل SHA والنتيجة.
+
 ## دفعة مكتملة — PR #574: سلامة صفحات SQLite القديمة وقياس Range
 - **MERGED:** [PR #574](https://github.com/775878805Osamaha/TradeLab/pull/574) إلى `test/flutter-all-fixes-20261116` عند SHA [32ae4f8](https://github.com/775878805Osamaha/TradeLab/commit/32ae4f83fc47f8541a70b756b508fc39d23c9939).
 - **CI:** [GitHub Actions #44832321863](https://github.com/775878805Osamaha/TradeLab/actions/runs/44832321863) **PASS / completed / success**، يشمل Flutter analyze واختبارات SQLite/الشارت/Range/Replay وتوقيت اليمن.

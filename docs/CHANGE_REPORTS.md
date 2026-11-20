@@ -218,3 +218,14 @@
 - **المصدر/الاختبار:** `flutter_app/lib/data/chart_timeframe_catalog.dart`, `flutter_app/test/chart_timeframe_catalog_test.dart`, `flutter_app/lib/data/market_candle_store.dart`, `flutter_app/test/market_candle_store_test.dart`, `flutter_app/lib/chart/chart_load_profiler.dart`, `flutter_app/test/chart_load_profiler_test.dart`, `flutter_app/lib/screens/chart_screen.dart`. ملفات التسليم: `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`.
 - **القيود:** لم يتغير `main` (بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`) ولا أي مشروع آخر. لا APK أو Release. Android Profile/FPS واختبار حقيقي مع حساب cTrader `NOT RUN`، ولا يدّعي تقرير CI تحسنًا مقاسًا للهاتف.
 - **الخطوة التالية الوحيدة:** اختبار Android Profile للشارت وBID Range وتحليل سجل التحميل والـframe p95 الجديد، ثم تنفيذ إصلاح موجّه بمؤشرات فعلية؛ لا APK قبل تصريح المستخدم.
+
+### 2026-11-20T22:58:23.167Z — حماية منتقي Replay من الحساب/المصدر القديم وتسريع بحث 200 ألف توقيت
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab`، `feat/tradelab-replay-safe-fast-timeline-20261121` عن فرع التطوير `36a1f3de805b3dd658e320c7e65a6886890fc82f`. لا تعديلات `main` أو باقي المشاريع؛ لا APK/Release.
+- **المشكلة الأولى بالكود:** `ReplayStartResolver.hasVerifiedTimes` يمسح كل timestamps عند الدخول والتأكيد والاختيار من التقويم؛ `atOrBefore` يستخدم فحص كامل O(200k) قبل البحث الثنائي، حتى لو تحقق الشارت بالفعل من نفس snapshot.
+- **الإصلاح:** `ReplayVerifiedTimeIndex` يعيد استعمال التحقق على نفس مصدر timestamps/عدد الشموع الموثقة، ويجعل البحث التالي `O(log N)` والتأكيد `O(1)`. يتجدد التحقق عند تغير هوية snapshot أو عدد الشموع، ولا يغير static resolver للجهات غير الموثوقة. يدعم تواريخ Range متساوية UTC ولا يكشف آخر شمعة مستقبلية عند بدء Replay.
+- **المشكلة الثانية بالكود:** اختيار تاريخ Replay يستخدم `timestamps` أُخذ قبل `showDatePicker` و`showTimePicker` وDialog التوقيت الصيفي؛ إذا تغير الحساب/الرمز/المزود/المنطقة الزمنية أثناء بقاء النافذة يمكن استخدام فهرس من الرسم القديم على الرسم الحالي.
+- **الإصلاح:** `ReplayDateSelectionGuard` يتحقق من هوية قائمة مصدر التوقيت، `_loadRevision`، العدد، الحساب/الرمز/الفريم/المزود/المنطقة الزمنية ووضع تحديد البداية بعد كل `await`. يتوقف دون تغيير اختيار المستخدم أو Replay عند فقد صلاحية المصدر. كما يضبط candidate index داخل حدود المصدر.
+- **الملفات:** `flutter_app/lib/replay/replay_start_resolver.dart`, `flutter_app/test/replay_start_resolver_test.dart`, `flutter_app/lib/screens/chart_screen.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **التغطية:** 200k توقيت مع `ListBase` لحساب قراءات مصدر 180 عملية بحث، تغيّر snapshots/عداد الشموع، Range نفس المللي ثانية، مصدر غير مرتب، الإبطال لكل بُعد من منتقي الوقت. ليست بيانات تداول حقيقية، ولا تغيير مصدر أو سعر.
+- **التحقق حتى الآن:** CI `PENDING`، اختبار Android Profile وفريمات الهاتف الحقيقي `NOT RUN`. حالة PR ستُسجل بعد فتحه. لا إنشاء APK.
+- **الخطوة التالية الوحيدة:** افتح PR إلى `test/flutter-all-fixes-20261116`، تأكد من نجاح CI والاختبارات، أصلح أي فشل، ثم دمج فرع التطوير فقط وتحديث SHA/CI الفعلي.
