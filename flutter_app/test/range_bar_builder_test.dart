@@ -75,4 +75,59 @@ void main() {
     expect(bars.forming!.close, 102);
   });
 
+
+  test('sealing a verified Range buffer preserves completed and forming bars',
+      () {
+    final builder = RangeBarBuilder(1);
+    for (final price in <double>[100, 100.7, 102.4, 101.2, 99.8]) {
+      builder.appendBidTick(price);
+    }
+    final before = builder.snapshot();
+    final beforeClosed = builder.closed;
+    final count = builder.closedCount;
+    expect(count, greaterThan(0));
+    final sealed = builder.sealSnapshot();
+    expect(sealed, hasLength(before.length));
+    for (var i = 0; i < sealed.length; i++) {
+      expect((sealed[i].open, sealed[i].high, sealed[i].low,
+          sealed[i].close),
+          (before[i].open, before[i].high, before[i].low, before[i].close));
+    }
+    expect(builder.closedCount, count,
+        reason: 'The final forming bar is not an executed Range close');
+    expect(builder.closed, hasLength(count));
+    expect(builder.snapshot(), hasLength(before.length));
+    expect(builder.snapshot(includeForming: false), hasLength(count));
+    expect(beforeClosed, hasLength(count));
+    expect(() => builder.appendBidTick(104), throwsStateError,
+        reason: 'Worker must not mutate the published timeline');
+    expect(() => builder.sealSnapshot(), throwsStateError,
+        reason: 'The owned array can only be transferred once');
+    expect(sealed, hasLength(before.length));
+    expect(before, hasLength(before.length));
+  });
+
+  test('sealing without forming bar preserves completed-only history', () {
+    final builder = RangeBarBuilder(.5);
+    builder.appendBidTick(50);
+    builder.appendBidTick(51.2);
+    final closedCount = builder.closedCount;
+    final sealed = builder.sealSnapshot(includeForming: false);
+    expect(sealed, hasLength(closedCount));
+    expect(builder.closedCount, closedCount);
+    expect(builder.closed, hasLength(closedCount));
+    expect(builder.snapshot(includeForming: false), hasLength(closedCount));
+    expect(builder.snapshot(), hasLength(closedCount + 1));
+    expect(() => builder.appendBidTick(52), throwsStateError);
+  });
+
+  test('empty source transfers an empty Range buffer, not a phantom bar', () {
+    final builder = RangeBarBuilder(1);
+    final sealed = builder.sealSnapshot();
+    expect(sealed, isEmpty);
+    expect(builder.forming, isNull);
+    expect(builder.closedCount, 0);
+    expect(builder.snapshot(), isEmpty);
+    expect(() => builder.appendBidTick(100), throwsStateError);
+  });
 }

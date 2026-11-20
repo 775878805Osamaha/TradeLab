@@ -143,7 +143,10 @@ class RangeBarTimeline {
         endTimestamps.add(ticks[index].timestamp);
       }
     }
-    final bars = builder.snapshot();
+    // Transfer the builder's final candle buffer exactly once. A second
+    // full-history List copy here increased peak worker memory for dense
+    // Range timelines; sealSnapshot forbids later mutation of the buffer.
+    final bars = builder.sealSnapshot();
     // RangeBarBuilder always has one forming bar after the first BID tick.
     if (bars.length > endTickIndices.length && ticks.isNotEmpty) {
       endTickIndices.add(ticks.length - 1);
