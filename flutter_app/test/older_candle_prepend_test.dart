@@ -1,8 +1,31 @@
+import 'dart:collection';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/older_candle_prepend.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
+
+class _CountingBars extends ListBase<MarketBar> {
+  _CountingBars(this.source);
+  final List<MarketBar> source;
+  int reads = 0;
+
+  @override
+  int get length => source.length;
+
+  @override
+  set length(int value) => throw UnsupportedError('Verified history is immutable');
+
+  @override
+  MarketBar operator [](int index) {
+    reads++;
+    return source[index];
+  }
+
+  @override
+  void operator []=(int index, MarketBar value) =>
+      throw UnsupportedError('Verified history is immutable');
+}
 
 void main() {
   const b0 = TradeCandle(100, 102, 99, 101);
@@ -43,6 +66,64 @@ void main() {
     );
     expect(current.single.timestamp, 5000);
     expect(conflicting, hasLength(2));
+  });
+
+  test('conflicting repeated oldest source candle fails closed before prepend',
+      () {
+    const current = <MarketBar>[
+      MarketBar(5000, b2), MarketBar(7000, b3),
+    ];
+    const older = <MarketBar>[
+      MarketBar(1000, b0), MarketBar(3000, b1),
+      MarketBar(5000, b3), // Same UTC but changed verified OHLC
+    ];
+    expect(() => OlderCandlePrepend.prepare(
+      existing: current, older: older),
+      throwsA(isA<MarketDataException>()),
+      reason: 'A disagreeing cTrader boundary must not silently be ignored');
+    expect(current.first.candle.close, 104);
+    expect(older, hasLength(3));
+  });
+
+  test('deeper duplicate conflict is detected without rewriting source gaps',
+      () {
+    const current = <MarketBar>[
+      MarketBar(5000, b2), MarketBar(7000, b3),
+      MarketBar(9000, b1),
+    ];
+    expect(() => OlderCandlePrepend.prepare(
+      existing: current, older: const [
+        MarketBar(1000, b0),
+        MarketBar(7000, b2), // Existing bar has b3, not b2.
+      ]),
+      throwsA(isA<MarketDataException>()));
+    final intact = OlderCandlePrepend.prepare(
+      existing: current, older: const [
+        MarketBar(1000, b0),
+        MarketBar(7000, b3),
+        MarketBar(6000, b1), // Interior timestamp not in verified archive
+      ]);
+    expect(intact.prefix.map((bar) => bar.timestamp), [1000]);
+    expect(intact.bars.map((bar) => bar.timestamp),
+        [1000, 5000, 7000, 9000],
+        reason: 'Do not fill real historical gaps or change Replay indices');
+    expect(intact.bars[2], same(current[1]));
+  });
+
+  test('120k verified archive overlaps use logarithmic source reads',
+      () {
+    const first = 1700000000000;
+    final base = List<MarketBar>.generate(120000,
+        (i) => MarketBar(first + i * 60000, b0), growable: false);
+    final tracked = _CountingBars(base);
+    final overlap = <MarketBar>[base[0], base[60000], base[119999]];
+    final unchanged = OlderCandlePrepend.prepare(
+      existing: tracked, older: overlap);
+    expect(unchanged.prefix, isEmpty);
+    expect(unchanged.bars, same(tracked),
+        reason: 'An all-overlap page does not allocate a new archive');
+    expect(tracked.reads, lessThan(90),
+        reason: 'Three overlaps should not walk 120k verified candles');
   });
 
   test('rejects corrupt old OHLC before touching chart or Replay', () {

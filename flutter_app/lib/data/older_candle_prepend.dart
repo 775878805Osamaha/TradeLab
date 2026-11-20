@@ -83,11 +83,44 @@ class OlderCandlePrepend {
     }
 
     final earliest = existing.first.timestamp;
+    final latest = existing.last.timestamp;
     final byTimestamp = <int, MarketBar>{};
     for (final bar in older) {
-      // Older pages may repeat the newest boundary, but must never inject
-      // values already owned by the visible archive.
-      if (bar.timestamp >= earliest) continue;
+      // A provider may repeat an existing closed candle at the boundary or
+      // anywhere inside a previously verified history. Skipping a conflicting
+      // overlap silently would leave Replay showing disputed source OHLC.
+      // The archive is strictly timestamp-ascending: use lower-bound lookup
+      // instead of scanning 120k+ existing candles for every older page.
+      if (bar.timestamp >= earliest) {
+        if (bar.timestamp <= latest) {
+          var low = 0;
+          var high = existing.length;
+          while (low < high) {
+            final middle = low + (high - low) ~/ 2;
+            if (existing[middle].timestamp < bar.timestamp) {
+              low = middle + 1;
+            } else {
+              high = middle;
+            }
+          }
+          if (low < existing.length &&
+              existing[low].timestamp == bar.timestamp) {
+            final original = existing[low].candle;
+            final repeated = bar.candle;
+            if (original.open != repeated.open ||
+                original.high != repeated.high ||
+                original.low != repeated.low ||
+                original.close != repeated.close) {
+              throw const MarketDataException(
+                  'تعارض في قيم شمعة محفوظة عند تحميل تاريخ أقدم؛ '
+                  'أوقفنا الدمج لحماية الشارت وReplay.');
+            }
+          }
+        }
+        // A timestamp inside a source gap is not proof that the active
+        // archive can be rewritten. Retain its real gap, as before.
+        continue;
+      }
       final previous = byTimestamp[bar.timestamp];
       if (previous != null) {
         final left = previous.candle;
