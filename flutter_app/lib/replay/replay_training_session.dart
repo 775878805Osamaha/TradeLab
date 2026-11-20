@@ -1,4 +1,5 @@
 import '../data/tradelab_data.dart';
+import 'replay_revealed_exit_index.dart';
 
 /// Replay practice is entirely local and never submits an order to a broker
 /// or the live/paper trading journal. P&L is PRICE DELTA x quantity, not USD.
@@ -97,6 +98,44 @@ class ReplayTrainingSession {
   final List<ReplayTrainingTrade> _trades = [];
   int _visibleCount = 0;
   int _nextId = 1;
+  ReplayRevealedExitIndex? _exitIndex;
+
+  // For a handful of practice trades or normal one-bar playback, the
+  // existing sequential loop avoids an unnecessary tree allocation.
+  // A deep seek with MANY bracketed trades would otherwise perform
+  // thousands of source-bar reads per trade on Flutter's UI isolate.
+  static bool shouldUseIndexedExitSearch({
+    required int newlyRevealedBars,
+    required int watchedTrades,
+  }) => newlyRevealedBars >= 2048 && watchedTrades >= 8 &&
+      newlyRevealedBars * watchedTrades >= 100000;
+
+  /// One authoritative fill policy shared by small-step playback and the
+  /// indexed long-seek path. The trade never fills on its own entry bar;
+  /// stop wins a same-bar SL+TP tie, and a stop gap fills at adverse open.
+  static ReplayTrainingTrade? _exitOnBar(
+      ReplayTrainingTrade trade, TradeCandle candle, int bar) {
+    if (trade.entryIndex >= bar) return null;
+    final stopped = trade.stopLoss != null &&
+        (trade.side == ReplaySide.buy
+            ? candle.low <= trade.stopLoss!
+            : candle.high >= trade.stopLoss!);
+    final targeted = trade.takeProfit != null &&
+        (trade.side == ReplaySide.buy
+            ? candle.high >= trade.takeProfit!
+            : candle.low <= trade.takeProfit!);
+    if (stopped) {
+      final fill = trade.side == ReplaySide.buy
+          ? (candle.open < trade.stopLoss! ? candle.open : trade.stopLoss!)
+          : (candle.open > trade.stopLoss! ? candle.open : trade.stopLoss!);
+      return trade.close(bar, fill, ReplayExitReason.stopLoss);
+    }
+    if (targeted) {
+      return trade.close(
+          bar, trade.takeProfit!, ReplayExitReason.takeProfit);
+    }
+    return null;
+  }
 
   int get visibleCount => _visibleCount;
   List<ReplayTrainingTrade> get trades =>
@@ -109,11 +148,14 @@ class ReplayTrainingSession {
     _trades.clear();
     _visibleCount = 0;
     _nextId = 1;
+    _exitIndex = null;
   }
 
   void prepend(int count) {
     if (count < 0) throw ArgumentError.value(count, 'count');
     if (count == 0) return;
+    // A prepended verified prefix changes source indices and identity.
+    _exitIndex = null;
     for (var index = 0; index < _trades.length; index++) {
       _trades[index] = _trades[index].shifted(count);
     }
@@ -125,6 +167,9 @@ class ReplayTrainingSession {
       throw RangeError.range(newVisibleCount, 0, candles.length);
     }
     if (newVisibleCount < _visibleCount) {
+      // Previously revealed bars are now future history again; drop their
+      // extrema even though every query is separately prefix-bounded.
+      _exitIndex = null;
       _trades.removeWhere((trade) => trade.entryIndex >= newVisibleCount);
       for (var i = 0; i < _trades.length; i++) {
         final trade = _trades[i];
@@ -151,38 +196,52 @@ class ReplayTrainingSession {
       _visibleCount = newVisibleCount;
       return;
     }
+
+    if (shouldUseIndexedExitSearch(
+      newlyRevealedBars: newVisibleCount - _visibleCount,
+      watchedTrades: watchedTrades.length,
+    )) {
+      // The index reads ONLY source candles already revealed by THIS move.
+      // Source swaps, Range prepend and rewind invalidate the old tree;
+      // it cannot accidentally use the later OHLC bars hidden by Replay.
+      final prior = _exitIndex;
+      final tree = prior != null && identical(prior.source, candles) &&
+              prior.indexedThrough <= newVisibleCount
+          ? prior
+          : ReplayRevealedExitIndex(candles);
+      tree.indexThrough(newVisibleCount);
+      _exitIndex = tree;
+      for (final slot in watchedTrades) {
+        final trade = _trades[slot];
+        final fromBar = trade.entryIndex + 1 > _visibleCount
+            ? trade.entryIndex + 1 : _visibleCount;
+        if (fromBar >= newVisibleCount) continue;
+        final firstHit = tree.firstCrossing(
+          fromInclusive: fromBar,
+          throughExclusive: newVisibleCount,
+          lowAtMost: trade.side == ReplaySide.buy
+              ? trade.stopLoss : trade.takeProfit,
+          highAtLeast: trade.side == ReplaySide.buy
+              ? trade.takeProfit : trade.stopLoss,
+        );
+        if (firstHit == null) continue;
+        final settled = _exitOnBar(trade, candles[firstHit], firstHit);
+        if (settled != null) _trades[slot] = settled;
+      }
+      _visibleCount = newVisibleCount;
+      return;
+    }
+
+    // Fast, allocation-free sequential processing for ordinary 1-bar Replay
+    // playback and small groups of trades. Exact fill policy is shared
+    // with indexed long seeks above.
     for (var bar = _visibleCount; bar < newVisibleCount; bar++) {
       final candle = candles[bar];
       for (var slot = watchedTrades.length - 1; slot >= 0; slot--) {
         final index = watchedTrades[slot];
-        final trade = _trades[index];
-        // A trade entered at a candle's close is NOT exposed to its
-        // earlier high/low: only subsequent revealed candles can fill exits.
-        if (trade.entryIndex >= bar) continue;
-        final stopped = trade.stopLoss != null &&
-            (trade.side == ReplaySide.buy
-                ? candle.low <= trade.stopLoss!
-                : candle.high >= trade.stopLoss!);
-        final targeted = trade.takeProfit != null &&
-            (trade.side == ReplaySide.buy
-                ? candle.high >= trade.takeProfit!
-                : candle.low <= trade.takeProfit!);
-        if (stopped) {
-          // A gap past the stop is filled at the more adverse opening price.
-          final fill = trade.side == ReplaySide.buy
-              ? (candle.open < trade.stopLoss! ? candle.open : trade.stopLoss!)
-              : (candle.open > trade.stopLoss! ? candle.open : trade.stopLoss!);
-          _trades[index] = trade.close(
-              bar, fill, ReplayExitReason.stopLoss);
-        } else if (targeted) {
-          _trades[index] = trade.close(
-              bar, trade.takeProfit!, ReplayExitReason.takeProfit);
-        } else {
-          continue;
-        }
-        // Trades are independent. Swap-removing a finished trade avoids
-        // rechecking it on all later bars without shifting the trade list
-        // or changing any stable order IDs or journal records.
+        final settled = _exitOnBar(_trades[index], candle, bar);
+        if (settled == null) continue;
+        _trades[index] = settled;
         watchedTrades[slot] = watchedTrades.last;
         watchedTrades.removeLast();
       }
