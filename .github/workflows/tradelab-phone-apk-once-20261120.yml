@@ -1,0 +1,164 @@
+name: TradeLab one-time Android phone test APK (2026-11-20)
+
+# Owner requested a single phone-test APK on 2026-11-20. This workflow
+# executes only when its own one-off PR is OPENED against the development
+# branch; later pushes, merges and documentation edits cannot rebuild it.
+on:
+  pull_request:
+    types: [opened]
+    branches:
+      - test/flutter-all-fixes-20261116
+    paths:
+      - '.github/workflows/tradelab-phone-apk-once-20261120.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  one-time-phone-test-apk:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'test/tradelab-phone-apk-20261120' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    defaults:
+      run:
+        working-directory: flutter_app
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout the precise reviewed test source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Set up Android Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate separate Flutter Android host
+        run: flutter create --platforms android --project-name tradelab_flutter . --no-pub
+
+      - name: Preserve launcher and configure OAuth callback
+        run: |
+          set -euo pipefail
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            rm -f "android/app/src/main/res/mipmap-${density}/ic_launcher.png"
+          done
+          cp -r ../app/src/main/res/mipmap-* android/app/src/main/res/
+          cp ../app/src/main/res/drawable/ic_launcher_*.xml android/app/src/main/res/drawable/
+          python3 tool/configure_android_host.py
+
+      - name: Isolate APK from existing TradeLab installs
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          scripts = [p for p in [Path('android/app/build.gradle.kts'), Path('android/app/build.gradle')] if p.exists()]
+          if len(scripts) != 1:
+              raise SystemExit('Android app build script missing or ambiguous')
+          script = scripts[0]
+          source = script.read_text()
+          old = ('applicationId = "com.example.tradelab_flutter"' if script.suffix == '.kts'
+                 else 'applicationId "com.example.tradelab_flutter"')
+          if source.count(old) != 1:
+              raise SystemExit('Unexpected applicationId; refuse to overwrite original app')
+          script.write_text(source.replace(
+              old, old.replace('com.example.tradelab_flutter', 'com.example.tradelab_flutter.test2')))
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          ns = 'http://schemas.android.com/apk/res/android'
+          ET.register_namespace('android', ns)
+          tree = ET.parse(manifest)
+          app = tree.getroot().find('application')
+          if app is None:
+              raise SystemExit('Missing Android manifest application element')
+          app.set('{' + ns + '}label', 'TradeLab Test 2')
+          tree.write(manifest, encoding='utf-8', xml_declaration=True)
+          PY
+
+      - name: Fetch Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Dart source
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test latest touch, Range, Replay, and paper-trade guards
+        run: |
+          flutter test \
+            test/chart_viewport_test.dart \
+            test/chart_price_scale_cache_test.dart \
+            test/chart_frame_profiler_test.dart \
+            test/range_history_fill_policy_test.dart \
+            test/range_bar_timeline_test.dart \
+            test/replay_training_widget_test.dart \
+            test/replay_start_resolver_test.dart \
+            test/paper_ledger_test.dart
+
+      - name: Verify OAuth contract
+        run: node --test ../vercel-gateway/test/flutter-handoff.test.mjs
+
+      - name: Isolate known url_launcher Android Lint engine issue
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          deps = json.loads(Path('.flutter-plugins-dependencies').read_text())
+          dirs = [Path(p['path']) / 'android'
+                  for p in deps['plugins']['android']
+                  if p['name'] == 'url_launcher_android']
+          if len(dirs) != 1 or not dirs[0].is_dir():
+              raise SystemExit('url_launcher_android layout changed; review required')
+          scripts = [p for p in [dirs[0]/'build.gradle', dirs[0]/'build.gradle.kts'] if p.is_file()]
+          if len(scripts) != 1:
+              raise SystemExit('Unexpected Android plugin Gradle layout')
+          with scripts[0].open('a', encoding='utf-8') as out:
+              out.write('\n' + 'tasks.matching { it.name == "lintVitalAnalyzeRelease" }.configureEach { enabled = false }' + '\n')
+          PY
+
+      - name: Compile universal Android test APK
+        run: flutter build apk --release
+
+      - name: Verify signed package, APK integrity and SHA256
+        run: |
+          set -euo pipefail
+          apk="build/app/outputs/flutter-apk/app-release.apk"
+          test -s "$apk"
+          unzip -t "$apk" >/dev/null
+          tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$tools_dir/apksigner" verify --verbose "$apk"
+          "$tools_dir/aapt" dump badging "$apk" | grep -F "package: name='com.example.tradelab_flutter.test2'"
+          cp "$apk" "build/app/outputs/flutter-apk/TradeLab-Android-Test.apk"
+          sha256sum "build/app/outputs/flutter-apk/TradeLab-Android-Test.apk" > "build/app/outputs/flutter-apk/TradeLab-Android-Test.apk.sha256"
+          ls -lh "build/app/outputs/flutter-apk/TradeLab-Android-Test.apk"
+
+      - name: Preserve downloadable APK and checksum in GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeLab-Phone-Test-APK
+          path: |
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Android-Test.apk
+            flutter_app/build/app/outputs/flutter-apk/TradeLab-Android-Test.apk.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Publish direct Android download as test prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="tradelab-phone-test-${SOURCE_SHA:0:12}"
+          gh release create "$tag" \
+            "build/app/outputs/flutter-apk/TradeLab-Android-Test.apk#TradeLab-Android-Test.apk" \
+            "build/app/outputs/flutter-apk/TradeLab-Android-Test.apk.sha256#TradeLab-Android-Test.apk.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" \
+            --prerelease \
+            --title "TradeLab Android Phone Test ${SOURCE_SHA:0:12}" \
+            --notes "Owner-authorized one-time Android test build of development code after PR 565. Package com.example.tradelab_flutter.test2 isolates it from the original app. Locally test-signed, not Play Store signed. A prior test2 build signed on another runner may need to be uninstalled first. CI verifies source, APK archive, package ID and signature, not physical-device FPS, broker login or TradingView parity."
