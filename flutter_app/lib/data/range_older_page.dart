@@ -15,6 +15,21 @@ class RangeOlderPage {
     return (fromMs: endMs - lookback.inMilliseconds, toMs: endMs);
   }
 
+  /// The scanner has already authenticated and validated source ordering
+  /// and the exact inclusive 12-hour window. A single last-tick comparison
+  /// proves that ALL older ticks precede the currently displayed earliest
+  /// BID event. Do not scan 120k+ ticks again on the Flutter gesture isolate.
+  ///
+  /// Equality is an overlap: different broker events can share a timestamp,
+  /// so an overlapping millisecond cannot be silently spliced or deduplicated.
+  /// Call only after verify/verifyAsync succeeded for this page.
+  static bool overlapsLoadedHistory({
+    required List<MarketTick> sortedVerifiedOlder,
+    required int earliestLoadedMs,
+  }) =>
+      sortedVerifiedOlder.isNotEmpty &&
+      sortedVerifiedOlder.last.timestamp >= earliestLoadedMs;
+
   /// Both a signed cTrader response and an SHA-verified SQLite cache read
   /// must obey these same bounds. Do not trim or silently deduplicate.
   static List<MarketTick> verify({
