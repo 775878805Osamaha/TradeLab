@@ -1,11 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## دفعة قيد فحص CI — إزالة آلاف ضربات SL/TP غير المرئية في Replay
-- الفرع `fix/tradelab-replay-overlay-visible-dashes-20261121` من `e4124586310bd881588f04520c4aafdd4bbcdf3c`، لا تغيير `main`، ولا APK/Release.
-- **خلل الأداء الفعلي في المصدر:** `ReplayTradeOverlayPainter._dashed` كان يمر على كل 12 بكسل من نقطة دخول الصفقة إلى آخر شمعة مُكشوفة، حتى لو كانت البداية خارج شاشة الهاتف بمليوني بكسل، لأن `clipRect` لا يوقف حلقة Dart التي ترسم هذه الشرطات. يؤدي هذا إلى عمل O(طول التاريخ) أثناء السحب والتكبير.
-- **الإصلاح:** `ReplayTradeOverlayLayout.visibleDashSegments` يتخطى الفترات المخفية حسابيًا، ويحافظ على موضع طور الشرطات الأصلي، ويرسم فقط خطوط SL/TP المرئية O(عرض الشاشة / 12). قص خط الدخول المتصل بـ`visibleStroke` وإخفاء علامات الدخول/الخروج غير المرئية دون تعديل سعر أو توقيت أو مؤشر مصدر Replay.
-- **الاختبارات:** خط يبدأ -2,000,000px ويصل داخل 300px يعيد ≤27 شرطة، فحص الطور والترتيب والتفريغ عند الاختفاء وNaN، وwidget paint مع 200 ألف شمعة مُكشوفة. `CI PENDING`، Android Profile `NOT RUN`.
-- **التالي:** افتح PR على التطوير، افحص Flutter analyze واختبارات الرسم وReplay/Range، أصلح أي فشل ثم ادمج التطوير فقط ودوّن SHA/CI.
+## دفعة مكتملة — PR #577: قص خطوط وقف/هدف Replay إلى الشاشة
+- **MERGED:** [PR #577](https://github.com/775878805Osamaha/TradeLab/pull/577) إلى `test/flutter-all-fixes-20261116` عند SHA [98db797](https://github.com/775878805Osamaha/TradeLab/commit/98db797faf2bb98941734ea77b9228571d08e159).
+- **CI:** [GitHub Actions #44835136904](https://github.com/775878805Osamaha/TradeLab/actions/runs/44835136904) = **PASS/completed/success**؛ Flutter analyze واختبارات الرسم/Replay/Range والتوقيت.
+- **المشكلة التي عولجت:** خط SL/TP لصفقة تدريبية قد يبدأ قبل 200 ألف شمعة، فكان رسمه يولد شرطات على امتداد ملايين البكسلات المخفية رغم `clipRect`. بات `visibleDashSegments` يتخطى مباشرة كل الفترات غير المرئية ويحافظ على طور الشرطات المصدرية ويولد فقط O(plotWidth/12) شرطة. `visibleStroke` يقص الخط المتصل، ولا تُرسم علامات دخول/خروج خارج الشاشة.
+- **الاختبارات:** عرض 300px مع نقطة بداية -2,000,000px ينتج ≤27 شرطة، اختبار طور الشرطات والقص وNaN، ورسم widget لصفقة على 200 ألف شمعة. هذا لا يغير سعرًا أو Replay cutoff أو نتيجة صفقة.
+- **الحالة:** `main` لم يُعدل (SHA `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`)، ولا APK/Release جديد؛ ما زال الأداء الحقيقي على Android غير مقاس.
+- **الخطوة التالية:** تحسين تحديث BID Range الحي من صفحات cTrader الموثقة دون إعادة تنزيل التاريخ الطويل، ثم اختبارات حساب/مصدر وتطابق بناء Range وReplay؛ لا APK جديد دون إذن.
 
 ## دفعة مكتملة — PR #576: وقف/هدف Replay سريع للقفزات الطويلة
 - **MERGED:** [PR #576](https://github.com/775878805Osamaha/TradeLab/pull/576) إلى `test/flutter-all-fixes-20261116`، SHA الفعلي [84e9c5c](https://github.com/775878805Osamaha/TradeLab/commit/84e9c5c3eb038b2cca30427101af8f95149f3851).

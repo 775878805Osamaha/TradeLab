@@ -266,3 +266,11 @@
 - **اختبارات انحدار:** O(plotWidth) مع امتداد -2 مليون بكسل، الحفاظ على phase عند القص، خطوط offscreen/NaN، ورسم widget مع Position عبر 200 ألف شمعة، دون تغيير الصفقات.
 - **التحقق:** GitHub CI `PENDING` قبل فتح PR؛ Android FPS / Profile `NOT RUN`. لا ادعاء بقياس FPS حقيقي.
 - **الخطوة التالية:** PR وCI، إصلاح FAIL، دمج التطوير فقط بعد PASS وتسجيل SHA/رابط الاختبار.
+
+### 2026-11-20T23:15:59.980Z — دمج PR #577 بعد نجاح اختبارات حدود رسم الصفقات الطويلة
+- **العمل والدمج:** [PR #577](https://github.com/775878805Osamaha/TradeLab/pull/577) **MERGED** (squash) في `test/flutter-all-fixes-20261116`، SHA فعلي [98db797](https://github.com/775878805Osamaha/TradeLab/commit/98db797faf2bb98941734ea77b9228571d08e159).
+- **CI:** [GitHub Actions #44835136904](https://github.com/775878805Osamaha/TradeLab/actions/runs/44835136904) **completed/success** على `be9fce0caa2f2fcd5bb2726362312b554d73dcb0`، مع تحليل Flutter واختبارات chart/Replay/Range/tz اليمن.
+- **المصدر:** `flutter_app/lib/replay/replay_trade_overlay.dart`؛ الرسم المتقطع للـSL/TP الآن O(عرض شاشة Android) لا O(طول الصفقة التاريخية)، مع طور dashed أصلي وإحداثيات price scale صحيحة؛ خط الدخول المتصل وقص العلامات يتبع viewport فقط. **الاختبارات:** `flutter_app/test/replay_trade_overlay_test.dart` على -2m pixels و200k-bar replay، مع عدم تغيير التداول التدريبي.
+- **التوثيق:** `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`؛ التغيير الحقيقي اكتمل وحُفظ على GitHub.
+- **الحدود:** `main` بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`؛ لا APK/Release ولا مشاريع أخرى. Android FPS/Profile أو حساب cTrader الحقيقي `NOT RUN`.
+- **الخطوة التالية الوحيدة:** تطوير تحديث شموع Range من تيكات BID الجديدة الموثقة في cTrader، وليس من اقتباس السعر وحده، مع الحفاظ على التوقيت والتسجيل الآمن.
