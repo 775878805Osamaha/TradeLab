@@ -104,3 +104,11 @@
 - **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_timeline_test.dart`, وملفا التسليم.
 - **حالة التحقق:** `PENDING` حتى فتح PR ونجاح GitHub Actions. SDK Flutter محلي وAndroid Profile/FPS `NOT RUN`، ولا شيء من هذه الحزمة موجود في APK المنشور مسبقًا.
 - **الخطوة التالية الوحيدة:** افتح PR إلى التطوير، حل أي فشل Dart/Flutter في CI، ثم دمج التطوير فقط وتسجيل SHA ونتيجة الفحص النهائية.
+
+### 2026-11-20T21:11:34.056Z — نجاح اختبارات ودمج حماية سقف ذاكرة Range PR #569
+- **المستودع/الدمج المؤكد:** `775878805Osamaha/TradeLab`، [PR #569](https://github.com/775878805Osamaha/TradeLab/pull/569) **MERGED** في `test/flutter-all-fixes-20261116`، SHA الحقيقي [b7ee472](https://github.com/775878805Osamaha/TradeLab/commit/b7ee47267bfd039c2705e07587fcca1de33ceab1). تمت مطابقة رأس فرع التطوير مع SHA الدمج. `main` لم يتغير وبقي عند `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`.
+- **CI المعتمد:** [GitHub Actions #44817561584](https://github.com/775878805Osamaha/TradeLab/actions/runs/44817561584) = **PASS / completed / success** على رأس PR `2ee03468ef34eef540312acae0d0357fcc8f9341`؛ نجح تحليل Flutter واختبارات مصدر BID/Range/Replay وتوقيت اليمن. لا يُفهم من ذلك نجاح اختبار Android Profile على هاتف.
+- **مخرجات ثانية بعد PR #568:** وضع سقف **1,000,000** تيك BID مصدر و**250,000** شمعة Range مغلقة في `RangeBarTimeline` عبر `build` و`buildAsync` و`prependAndBuildAsync`، ورفض صفحات مصدر أكبر من الميزانية قبل فحص/نسخ الملايين أو النقل إلى isolate، مع الامتناع عن نشر تاريخ Range جزئي عند تجاوز حد الشموع. اختبارات للمزامنة والخلفية وprepend والمصدر الضخم الاصطناعي (كحد اختباري لا بيانات سوق مزيفة).
+- **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart` و`flutter_app/test/range_bar_timeline_test.dart` و`docs/CHANGE_REPORTS.md` و`docs/HANDOFF.md`.
+- **القيود:** لا APK ولا Release جديد؛ آخر APK المتاح سابق لدمج PR #568 وPR #569، وليس متضمنًا لهما. قياس FPS على جهاز Android واتصال cTrader الفعلي **NOT RUN**؛ لا تعديل في مشاريع أخرى.
+- **الخطوة التالية الواحدة:** في دفعة العمل القادمة قياس أداء أحدث الشارت على Android Profile فعلي مع cTrader BID وRange أثناء pan/pinch/Replay، ثم معالجة أول اختناق مثبت وتوثيق النتيجة. إذا طلب المستخدم APK جديدًا، يُبنى من أحدث فرع تطوير مع فحص التوقيع.
