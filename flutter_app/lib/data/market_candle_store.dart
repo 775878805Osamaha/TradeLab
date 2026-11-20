@@ -3,6 +3,7 @@ import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
 import 'market_api.dart';
+import 'chart_timeframe_catalog.dart';
 import 'market_history_budget.dart';
 import 'tradelab_data.dart';
 
@@ -55,6 +56,43 @@ class MarketCandleStore {
     }
     final remaining = MarketHistoryBudget.maxVisibleTimeCandles - loadedBars;
     return remaining < olderChartPageSize ? remaining : olderChartPageSize;
+  }
+
+  /// Accept only a contiguous cached prefix that directly attaches to the
+  /// current oldest chart candle. Stored islands (e.g. bars 1..10 and
+  /// 50..100) cannot certify that unarchived bars 11..49 never existed.
+  /// For any uncertain gap, fetch the authenticated broker page instead.
+  ///
+  /// A genuine weekend/holiday may cause a gap as well: without a broker
+  /// coverage manifest the source must confirm it. Never synthesize bars.
+  static List<MarketBar> contiguousOlderPage({
+    required List<MarketBar> source,
+    required int beforeMs,
+    required String timeframe,
+  }) {
+    if (beforeMs < 1) {
+      throw ArgumentError.value(beforeMs, 'beforeMs',
+          'Expected a positive historical cursor');
+    }
+    if (source.isEmpty) return source;
+    validateBars(source);
+    if (source.last.timestamp >= beforeMs) {
+      throw const MarketDataException(
+          'شموع الأرشيف الأقدم تتجاوز حد الشارت الزمني.');
+    }
+    final step = ChartTimeframeCatalog.fixedOpenStepMs(timeframe);
+    if (step == null || source.last.timestamp != beforeMs - step) {
+      // An older disconnected archive island or calendar month cannot
+      // prove that intermediate broker candles have all been downloaded.
+      return const <MarketBar>[];
+    }
+    var begin = source.length - 1;
+    while (begin > 0 &&
+        source[begin].timestamp - source[begin - 1].timestamp == step) {
+      begin--;
+    }
+    // Avoid copying even a bounded 2000-bar page if it is all continuous.
+    return begin == 0 ? source : source.sublist(begin);
   }
 
   static String key(TradeSymbol symbol, String timeframe, String? accountId) {

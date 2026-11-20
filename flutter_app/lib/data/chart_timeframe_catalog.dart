@@ -20,6 +20,25 @@ class ChartTimeframeCatalog {
   static List<String> forSource(TradeSource source) =>
       source == TradeSource.ctrader ? ctrader : binance;
 
+  /// Nominal verified source open-time step. Months are variable length.
+  /// This does NOT prove there was market trading in a missing interval;
+  /// it only decides if a cached older page may join the displayed history
+  /// without skipping a period whose broker data was never cached.
+  static int? fixedOpenStepMs(String timeframe) => switch (timeframe) {
+    '1m' => 60000,
+    '2m' => 120000,
+    '3m' => 180000,
+    '5m' => 300000,
+    '15m' => 900000,
+    '30m' => 1800000,
+    '1h' => 3600000,
+    '2h' => 7200000,
+    '4h' => 14400000,
+    '1D' => 86400000,
+    '1W' => 604800000,
+    _ => null,
+  };
+
   /// Arabic UI label for a native market-provider interval. The machine
   /// timeframe remains unchanged for authenticated broker requests/Replay.
   /// Use a single mapping in both the chart and Replay toolbar.

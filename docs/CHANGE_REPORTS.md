@@ -199,3 +199,14 @@
 - **الأثر:** 12 نقطة Stopwatch حول تحميل وعزل مصدر الشموع وإعادة بنائها؛ تسجيل آمن للأعداد والمدد فقط عند تفعيل `TRADELAB_PROFILE_CHART`. رسائل metrics مع p50/p95/p99 بعد 4 عمليات لكل مرحلة. تم التحقق باختبارات وحدات لكن **لم يتم قياس أي زمن Android حقيقي أو FPS على هاتف**.
 - **قيود:** `main` بقي SHA `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`، لا APK أو Release جديد، لا مساس بمشاريع أخرى.
 - **الخطوة التالية الوحيدة:** إضافة حارس اتصال صفحات SQLite القديمة لمنع تجاوز تاريخ لم يثبت اكتمال كاشه، اختباره ثم دمجه إلى التطوير فقط.
+
+### 2026-11-20T22:50:48.862Z — حماية اتصال صفحات SQLite وفصل مؤشرات زمن Range عن الشموع العادية
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab`، `fix/tradelab-sqlite-history-seam-20261121` مشتق من فرع التطوير `a6a96d4e2c750c4ba8210ce9e1101bd9d1bb048d`، دون تغيير `main` أو التطبيقات الأخرى، ودون بناء APK/Release.
+- **المشكلة المصدرية:** استرجاع `readOlder` يثبت سلامة OHLC للشموع الموجودة فقط، وليس اكتمال الفترات بين جزيرتين في ذاكرة SQLite. يمكن اختيار جزيرة أقدم مباشرة وتفويت اتصال تاريخي لم يُحمَّل أصلاً من cTrader/Binance. هذه ثغرة في استدلال الكاش موثقة من الكود وليست تأكيدًا بأن بيانات حساب المستخدم تأثرت.
+- **الإصلاح 1:** `MarketCandleStore.contiguousOlderPage` يقيّد صفحة الكاش بآخر تسلسل source-verified متصل بخطوة فتح الإطار المطلوبة ومتصل مباشرة بـ`beforeMs`، دون نسخ عند اتصال الصفحة كاملة. أي فجوة محلية مجهولة أو أطوال أشهر متغيرة تنقل طلب أقدم إلى مصدر الوسيط الأصلي، بدلاً من القفز على تاريخ قد يضم شموعًا حقيقية. لا حذف SQLite ولا تعبئة شموع وهمية.
+- **الإصلاح 2:** `ChartTimeframeCatalog.fixedOpenStepMs` يقدم خطوات فتح المصدر الإسمية للإطارات الثابتة، ولا يفترض طولًا ثابتًا لـ1M. كل فجوة عطلة سوق لا تُستنتج صحتها من SQLite وحده.
+- **الإصلاح 3:** `ChartLoadStatsCollector` يفصل النوافذ الدورية بزوج `(ChartLoadPhase, chartMode)` بدل phase فقط، لكيلا تختلط p95/p99 لRange والشموع الزمنية.
+- **الملفات:** `flutter_app/lib/data/chart_timeframe_catalog.dart`, `flutter_app/test/chart_timeframe_catalog_test.dart`, `flutter_app/lib/data/market_candle_store.dart`, `flutter_app/test/market_candle_store_test.dart`, `flutter_app/lib/chart/chart_load_profiler.dart`, `flutter_app/test/chart_load_profiler_test.dart`, `flutter_app/lib/screens/chart_screen.dart`، وملفا التوثيق.
+- **الاختبارات:** منع القفز عبر gap بين جزيرتي كاش، اتصال 2000 شمعة دون نسخ، عطلات السوق/التقويم الشهري، رفض الترتيب الخاطئ، وفصل أرقام p95 لكل نوع شموع.
+- **التحقق:** `PENDING` حتى PR وGitHub Actions، Android Profile/FPS/الوسيط الفعلي `NOT RUN`. هذه بيانات اختبار محلية فقط وليست أسعارًا منشورة.
+- **الخطوة التالية الوحيدة:** PR وFlutter analyze واختبارات history/SQLite/Range/Replay، وإصلاح أي FAIL قبل الدمج إلى التطوير، ثم تحديث SHA/CI النهائي.

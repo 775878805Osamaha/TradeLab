@@ -35,6 +35,34 @@ void main() {
       reason: 'Broker latency must not contaminate SQLite p95');
   });
 
+  test('candle and Range latency percentiles never mix across modes', () {
+    final stats = ChartLoadStatsCollector(reportEvery: 2);
+    expect(stats.record(
+      phase: ChartLoadPhase.initialCacheRead,
+      durationUs: 1000, mode: 'candles',
+      displayedBars: 4000, bidTicks: 0), isNull);
+    expect(stats.record(
+      phase: ChartLoadPhase.initialCacheRead,
+      durationUs: 900000, mode: 'range',
+      displayedBars: 250000, bidTicks: 300000), isNull);
+    final candle = stats.record(
+      phase: ChartLoadPhase.initialCacheRead,
+      durationUs: 2000, mode: 'candles',
+      displayedBars: 4000, bidTicks: 0)!;
+    expect(candle['chartMode'], 'candles');
+    expect(candle['p95Us'], 2000);
+    expect(stats.sampleCount(ChartLoadPhase.initialCacheRead,
+      mode: 'candles'), 2);
+    expect(stats.sampleCount(ChartLoadPhase.initialCacheRead,
+      mode: 'range'), 1);
+    final range = stats.record(
+      phase: ChartLoadPhase.initialCacheRead,
+      durationUs: 950000, mode: 'range',
+      displayedBars: 250000, bidTicks: 300000)!;
+    expect(range['chartMode'], 'range');
+    expect(range['p95Us'], 950000);
+  });
+
   test('fixed capacity rolling window evicts old outlier load samples', () {
     final stats = ChartLoadStatsCollector(
         reportEvery: 2, maxSamples: 4);

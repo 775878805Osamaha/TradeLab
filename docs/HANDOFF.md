@@ -1,5 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## تحسين قيد فحص GitHub — منع القفز عبر تاريخ محلي غير مكتمل
+- الفرع `fix/tradelab-sqlite-history-seam-20261121` من `a6a96d4e2c750c4ba8210ce9e1101bd9d1bb048d` بعد دمج #573. `main` دون تغيير؛ لا APK.
+- حماية local-first: عندما يحتوي SQLite على شموع قديمة متصلة ببعضها لكن تفصلها عن الشارت **فترات غير مؤرشفة**، لا يستخدمها التطبيق لتجاوز الفترة المفقودة. `contiguousOlderPage` يحتفظ فقط بآخر جزء متصل زمنيًا، ويرجع إلى cTrader/Binance الموثوق عند أي فجوة أو حد شهري متغير. إجازات السوق لا تعني أن كل الفترة مؤكدة دون الرجوع إلى الوسيط.
+- عزل إحصاءات المدة لكل `(مرحلة التحميل، نوع الشموع)` حتى لا تختلط p95 لشارت Range مع كاش شموع الزمن. 4 اختبارات أمان/أداء جديدة مع اختبار جديد لفواصل الزمن.
+- `CI: PENDING` حتى نجاح بوابة Flutter وتوقيتها؛ **Android Profile NOT RUN**؛ لا أسعار أو فواصل زمنية مصطنعة، ولا مصدر بيانات ثالث.
+- **التالي:** فتح PR واختبار SQLite/Range/Replay وChart Profile، ثم الدمج على التطوير فقط عند PASS وتسجيل SHA.
+
 ## دفعة مدمجة — PR #573: قياس مراحل تحميل TradeLab على Android
 - **MERGED:** [PR #573](https://github.com/775878805Osamaha/TradeLab/pull/573)، SHA [5750837](https://github.com/775878805Osamaha/TradeLab/commit/5750837b87f2c6a974b2b3ebb480defaccff7dc2) إلى `test/flutter-all-fixes-20261116`. أبقينا `main` عند `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc` بدون تعديل.
 - **CI المعتمد:** [GitHub Actions #44831381260](https://github.com/775878805Osamaha/TradeLab/actions/runs/44831381260) = **PASS / completed / success**. نجح Flutter analyze واختبارات الشارت وSQLite وRange/Replay وYemen timezone.

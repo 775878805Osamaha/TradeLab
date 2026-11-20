@@ -3,6 +3,19 @@ import 'package:tradelab_flutter/data/chart_timeframe_catalog.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 void main() {
+  test('fixed native candle open steps do not invent a calendar month', () {
+    expect(ChartTimeframeCatalog.fixedOpenStepMs('1m'), 60000);
+    expect(ChartTimeframeCatalog.fixedOpenStepMs('2m'), 120000);
+    expect(ChartTimeframeCatalog.fixedOpenStepMs('1h'), 3600000);
+    expect(ChartTimeframeCatalog.fixedOpenStepMs('2h'), 7200000);
+    expect(ChartTimeframeCatalog.fixedOpenStepMs('4h'), 14400000);
+    expect(ChartTimeframeCatalog.fixedOpenStepMs('1D'), 86400000);
+    expect(ChartTimeframeCatalog.fixedOpenStepMs('1W'), 604800000);
+    expect(ChartTimeframeCatalog.fixedOpenStepMs('1M'), isNull);
+    expect(ChartTimeframeCatalog.fixedOpenStepMs('invalid'), isNull);
+  });
+
+
   test('cTrader native M2 is selectable without OHLC aggregation', () {
     expect(ChartTimeframeCatalog.forSource(TradeSource.ctrader),
         contains('2m'));
