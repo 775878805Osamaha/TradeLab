@@ -1,10 +1,11 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## تطوير قيد التحقق — تعارض شموع OHLC المتداخلة
-- فرع العمل: `fix/tradelab-older-ohlc-overlap-20261120`، من التطوير `facacf9b3eb4da10a367e926eb3d5569bf19b083`. لا APK، لا تغيير `main`.
-- `OlderCandlePrepend.prepare` يتحقق ببحث ثنائي من كل شمعة تُعاد ضمن الأرشيف الموثق؛ تعارض نفس timestamp في open/high/low/close يرفض الصفحة بدل تجاهل اختلاف المصدر، مع عدم تغيير مسارات Replay أو الفجوات الحقيقية.
-- 3 اختبارات جديدة تشمل أرشيف 120,000 شمعة، اختلاف OHLC الحدّي والداخلي، وثبات الفجوات. **CI: PENDING** حتى رابط PR ونتيجة Actions النهائية.
-- **التالي:** افتح PR إلى `test/flutter-all-fixes-20261116`، افحص CI، ثم دمج في التطوير فقط وتحديث السجل؛ لا بناء APK جديد دون طلب.
+## أحدث إصلاح مدمج — PR #567 (20 نوفمبر 2026)
+- [PR #567](https://github.com/775878805Osamaha/TradeLab/pull/567) **MERGED** إلى `test/flutter-all-fixes-20261116` عند [commit 68169f9](https://github.com/775878805Osamaha/TradeLab/commit/68169f92627c40983c195872bf50c9836f8eff36).
+- `OlderCandlePrepend.prepare`: رفض تضارب open/high/low/close إذا أعاد المزود شمعة بنفس وقت مصدر موجود، بدلاً من تجاهلها بصمت. بحث ثنائي في الأرشيف الموثق، دون تبديل الأسعار أو ملء فجوات التاريخ أو كشف شموع Replay المستقبلية. اختبارات الحالة الحدية والتعارض الداخلي وأرشيف 120 ألف شمعة.
+- [GitHub Actions #44814969933](https://github.com/775878805Osamaha/TradeLab/actions/runs/44814969933): **PASS** لتحليل Flutter وجميع الاختبارات المطلوبة ومنها Range وReplay والتوقيت المحلي. Android FPS/اختبار جهاز حقيقي **NOT RUN**.
+- **تنبيه الإصدار:** أحدث APK المثبت/المنشور أقدم من هذا الإصلاح، ولا يتضمن PR #567. لا APK جديد ولا تعديل `main` وفق طلب الاستمرار في التطوير.
+- **التالي:** مراجعة نتائج اختبار APK اليدوي على Android وإصلاح أي مشكلة مثبتة؛ أو متابعة اختبار سلامة تاريخ Range/Replay تحت ضغط 100k+ من بيانات حقيقية، مع توثيق كل تغيير.
 
 ## أحدث APK قابل للتثبيت — 20 نوفمبر 2026
 - **الحالة: جاهز للتحميل والتجربة اليدوية**. [تحميل TradeLab Android Test APK](https://github.com/775878805Osamaha/TradeLab/releases/download/tradelab-phone-test-6cecd765d1c2/TradeLab-Android-Test.apk)، 59,096,319 بايت، [GitHub Release](https://github.com/775878805Osamaha/TradeLab/releases/tag/tradelab-phone-test-6cecd765d1c2).
