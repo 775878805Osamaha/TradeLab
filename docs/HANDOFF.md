@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة تطوير: تحميل BID المتوازي المستمر وحماية صفحات cTrader
+- فرع الميزات `feat/ctrader-bid-adaptive-paging-20261121` متفرع من `570141ef3129ffb092a9b95a060a49ada4cb6ef4`، بدون تعديل `main`.
+- `MarketApi.ctraderBidTicksRange`: عاملان يعملان باستمرار على طابور صفحات cTrader BID غير المكتملة بدل التوازي الأولي فقط، مع حد طلبات 4096، وحد مليون تيك، وحماية المللي ثانية الواحدة والاحتفاظ بترتيب كل حدث أصلي؛ لا مصدر ثانوي ولا تيكات مصطنعة.
+- رفض `accountId` المخالف إذا أعاده gateway بجانب مصدر وسيمبول BID الصحيح؛ لا تخمين هوية حساب بديل.
+- 3 اختبارات جديدة: 31 نافذة مع استجابات غير مرتبة وتأخير غير متوازن، فشل صفحة واحدة يمنع نشر أي تاريخ ناقص، وعدم السماح بتداخل حساب آخر.
+- **CI PENDING** حتى فتح PR ونجاح GitHub Actions. Android Profile **NOT RUN** ولا APK جديد.
+- **التالي:** افتح PR إلى `test/flutter-all-fixes-20261116` ثم افحص CI وادمج التطوير فقط عند PASS، ووثق SHA الدمج الحقيقي.
+
 ## اكتمال حماية الذاكرة وتحميل Range — PR #569
 - **MERGED:** [PR #569](https://github.com/775878805Osamaha/TradeLab/pull/569)، SHA [b7ee472](https://github.com/775878805Osamaha/TradeLab/commit/b7ee47267bfd039c2705e07587fcca1de33ceab1) في `test/flutter-all-fixes-20261116`.
 - **اختبارات ناجحة:** [Actions #44817561584](https://github.com/775878805Osamaha/TradeLab/actions/runs/44817561584) = **SUCCESS**؛ تحليل Dart/Flutter، اختبارات مصدر BID وRange/Replay وتوقيت اليمن كلها نجحت. Android Profile/FPS **NOT RUN**.

@@ -19,37 +19,6 @@ class MarketJsonDecodePolicy {
       path == '/v1/ticks' && chars >= minOffloadChars;
 }
 
-/// Keep simultaneous cTrader history requests bounded. One truncated
-/// interval can spawn many child intervals; this gate limits only in-flight
-/// HTTP requests, while independent results retain their chronological
-/// interval positions and are validated before joining the chart.
-class _BidRequestGate {
-  _BidRequestGate(this.limit);
-  final int limit;
-  int _active = 0;
-  final Queue<Completer<void>> _queued = Queue<Completer<void>>();
-
-  Future<T> run<T>(Future<T> Function() fetch) async {
-    if (_active >= limit) {
-      final ready = Completer<void>();
-      _queued.addLast(ready);
-      await ready.future;
-    } else {
-      _active++;
-    }
-    try {
-      return await fetch();
-    } finally {
-      if (_queued.isEmpty) {
-        _active--;
-      } else {
-        // Hand over the existing slot without exceeding the concurrency cap.
-        _queued.removeFirst().complete();
-      }
-    }
-  }
-}
-
 /// Accept broker milliseconds only when the source number is exact.
 /// Truncating 1700000000000.75 via toInt() would silently move an authentic
 /// BID event or candle open into a different millisecond, corrupting Replay.
@@ -404,97 +373,136 @@ class MarketApi {
     const maxTicks = 1000000;
     const maxRequests = 4096;
     const maxPageTicks = 100000;
-    // Two concurrent verified cTrader pages reduce serial wait when the
-    // broker truncates history without overwhelming the provider.
-    final gate = _BidRequestGate(2);
+
+    // Work-stealing two-lane interval queue. The previous algorithm only
+    // split the root in parallel; each half then ran depth-first in a single
+    // lane. When one half ended early, its lane stayed idle while the other
+    // had dozens of remaining truncated cTrader pages. Both lanes now draw
+    // from the SAME bounded queue until all authenticated intervals finish.
+    //
+    // A pending entry represents a *real inclusive broker interval*, never
+    // inferred market activity or a synthetic BID tick. Intervals split at
+    // exact millisecond boundaries; each original event is kept, even if
+    // multiple BID updates have identical timestamps.
+    final waiting = Queue<({int fromMs, int toMs})>()
+      ..add((fromMs: fromMs, toMs: toMs));
+    final pages = <int, List<MarketTick>>{};
+    var pending = 1; // Queued and currently in-flight source intervals.
     var requests = 0;
     var loadedTicks = 0;
-    final pages = <int, List<MarketTick>>{};
+    Completer<void>? wakeup;
+    Object? failure;
+    StackTrace? failureTrace;
 
-    Future<void> loadInterval(int fromMs, int toMs,
-        {bool allowParallel = true}) async {
-      requests++;
-      if (requests > maxRequests) {
-        throw const MarketDataException(
-            'تجاوز تاريخ cTrader عدد الطلبات الآمن؛ جرّب فترة أقصر.');
-      }
-      final data = await gate.run(() => _json(_gateway('/v1/ticks', {
-        'accountId': accountId, 'symbolId': '$id',
-        'from': '$fromMs', 'to': '$toMs',
-      }), token: token));
-      if (data['source'] != 'ctrader' ||
-          data['quoteType'] != 'bid' ||
-          '${data['symbolId']}' != '$id' ||
-          data['hasMore'] is! bool) {
-        throw const MarketDataException(
-            'تعذر التحقق من مصدر تيكات BID أو حالة اكتمالها.');
-      }
-
-      if (data['hasMore'] == true) {
-        if (fromMs == toMs) {
-          // The provider cannot disambiguate more ticks within a single
-          // millisecond. No fabricated ordering or partial Range candles.
-          throw const MarketDataException(
-              'cTrader أعاد تيكات غير مكتملة داخل مللي ثانية واحدة.');
-        }
-        final middle = fromMs + (toMs - fromMs) ~/ 2;
-        // Parallelize only this first split. Each child continues
-        // depth-first to a definitive broker page, preventing thousands of
-        // speculative requests if a provider always returns hasMore=true.
-        if (allowParallel) {
-          await Future.wait<void>([
-            loadInterval(fromMs, middle, allowParallel: false),
-            loadInterval(middle + 1, toMs, allowParallel: false),
-          ]);
-        } else {
-          await loadInterval(fromMs, middle, allowParallel: false);
-          await loadInterval(middle + 1, toMs, allowParallel: false);
-        }
-        return;
-      }
-
-      final rows = data['ticks'];
-      if (rows is! List || rows.length > maxPageTicks ||
-          loadedTicks + rows.length > maxTicks) {
-        throw const MarketDataException(
-            'تجاوزت تيكات cTrader الحد الآمن للذاكرة أو حجم الصفحة.');
-      }
-      final page = <MarketTick>[];
-      var previous = fromMs;
-      for (final entry in rows) {
-        final int? time;
-        final double? price;
-        if (entry is MarketTick) {
-          time = entry.timestamp;
-          price = entry.bid;
-        } else if (entry is Map) {
-          final rawTime = entry['timestamp'];
-          final rawPrice = entry['price'];
-          time = _exactBrokerMillisecond(rawTime);
-          price = rawPrice is num ? rawPrice.toDouble() : null;
-        } else {
-          throw const MarketDataException('تيكات cTrader غير صالحة.');
-        }
-        if (time == null || time < fromMs || time > toMs ||
-            time < previous || price == null ||
-            !price.isFinite || price <= 0) {
-          throw const MarketDataException(
-              'ترتيب تيكات cTrader أو أسعارها غير صالح.');
-        }
-        page.add(entry is MarketTick ? entry : MarketTick(time, price));
-        previous = time;
-      }
-      loadedTicks += page.length;
-      pages[fromMs] = page;
+    void notifyWaitingWorkers() {
+      final waitingWorker = wakeup;
+      wakeup = null;
+      waitingWorker?.complete();
     }
 
-    // Reassemble only after every disjoint broker interval is verified.
-    // Never sort individual ticks or collapse same-millisecond BID events.
-    await loadInterval(fromMs, toMs);
+    Future<void> downloadWorker() async {
+      while (failure == null) {
+        if (waiting.isEmpty) {
+          if (pending == 0) return;
+          // Another lane is waiting on the broker and may enqueue children.
+          // Do not exit while authenticated history remains unfinished.
+          await (wakeup ??= Completer<void>()).future;
+          continue;
+        }
+        final window = waiting.removeFirst();
+        final pageFrom = window.fromMs;
+        final pageTo = window.toMs;
+        try {
+          requests++;
+          if (requests > maxRequests) {
+            throw const MarketDataException(
+                'تجاوز تاريخ cTrader عدد الطلبات الآمن؛ جرّب فترة أقصر.');
+          }
+          final data = await _json(_gateway('/v1/ticks', {
+            'accountId': accountId, 'symbolId': '$id',
+            'from': '$pageFrom', 'to': '$pageTo',
+          }), token: token);
+          if (data['source'] != 'ctrader' ||
+              data['quoteType'] != 'bid' ||
+              '${data['symbolId']}' != '$id' ||
+              // Some gateway versions omit accountId in the signed response.
+              // If the broker does supply it, refuse to splice another
+              // authorized account's BID history into the current chart.
+              (data['accountId'] != null &&
+                  '${data['accountId']}' != accountId) ||
+              data['hasMore'] is! bool) {
+            throw const MarketDataException(
+                'تعذر التحقق من مصدر تيكات BID أو حالة اكتمالها.');
+          }
+          if (data['hasMore'] == true) {
+            if (pageFrom == pageTo) {
+              // Splitting below one millisecond would drop real same-ms
+              // events. Never label an incomplete page as verified.
+              throw const MarketDataException(
+                  'cTrader أعاد تيكات غير مكتملة داخل مللي ثانية واحدة.');
+            }
+            final middle = pageFrom + (pageTo - pageFrom) ~/ 2;
+            pending += 2;
+            waiting.add((fromMs: pageFrom, toMs: middle));
+            waiting.add((fromMs: middle + 1, toMs: pageTo));
+            continue;
+          }
+
+          final rows = data['ticks'];
+          if (rows is! List || rows.length > maxPageTicks ||
+              loadedTicks + rows.length > maxTicks) {
+            throw const MarketDataException(
+                'تجاوزت تيكات cTrader الحد الآمن للذاكرة أو حجم الصفحة.');
+          }
+          final page = <MarketTick>[];
+          var previous = pageFrom;
+          for (final entry in rows) {
+            final int? time;
+            final double? price;
+            if (entry is MarketTick) {
+              time = entry.timestamp;
+              price = entry.bid;
+            } else if (entry is Map) {
+              time = _exactBrokerMillisecond(entry['timestamp']);
+              final rawPrice = entry['price'];
+              price = rawPrice is num ? rawPrice.toDouble() : null;
+            } else {
+              throw const MarketDataException('تيكات cTrader غير صالحة.');
+            }
+            if (time == null || time < pageFrom || time > pageTo ||
+                time < previous || price == null ||
+                !price.isFinite || price <= 0) {
+              throw const MarketDataException(
+                  'ترتيب تيكات cTrader أو أسعارها غير صالح.');
+            }
+            page.add(entry is MarketTick ? entry : MarketTick(time, price));
+            previous = time;
+          }
+          loadedTicks += page.length;
+          pages[pageFrom] = page;
+        } catch (error, stack) {
+          // Never return a partially downloaded archive after *any* failed
+          // leaf, malformed source, memory cap or request-budget error.
+          // An already running second request may finish, but cannot publish.
+          failure ??= error;
+          failureTrace ??= stack;
+        } finally {
+          pending--;
+          notifyWaitingWorkers();
+        }
+      }
+    }
+
+    await Future.wait<void>([downloadWorker(), downloadWorker()]);
+    if (failure != null) {
+      Error.throwWithStackTrace(failure!, failureTrace!);
+    }
+    // Stable chronological reassembly by VERIFIED, disjoint source bounds.
+    // Never reorder same-millisecond events inside a downloaded leaf.
     final starts = pages.keys.toList()..sort();
     final result = <MarketTick>[];
-    for (final start in starts) {
-      result.addAll(pages[start]!);
+    for (final firstMs in starts) {
+      result.addAll(pages[firstMs]!);
     }
     return result;
   }

@@ -539,6 +539,126 @@ void main() {
     ]);
   });
 
+  test('work-stealing broker BID pages keep both bounded lanes useful',
+      () async {
+    const first = 1700000000000;
+    const last = first + 31;
+    final seen = <(int, int)>[];
+    var active = 0;
+    var maximumActive = 0;
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      expect(request.url.path, '/v1/ticks');
+      final from = int.parse(request.url.queryParameters['from']!);
+      final to = int.parse(request.url.queryParameters['to']!);
+      seen.add((from, to));
+      active++;
+      if (active > maximumActive) maximumActive = active;
+      try {
+        // Unequal broker latency forces one worker to help another branch,
+        // while responses arrive in an order unrelated to market chronology.
+        await Future<void>.delayed(Duration(
+            milliseconds: from < first + 16 ? 4 : 1));
+        if (to - from > 1) {
+          return http.Response(jsonEncode({
+            'source': 'ctrader', 'accountId': '1', 'quoteType': 'bid',
+            'symbolId': '42', 'hasMore': true, 'ticks': [],
+          }), 200);
+        }
+        return http.Response(jsonEncode({
+          'source': 'ctrader', 'accountId': '1', 'quoteType': 'bid',
+          'symbolId': '42', 'hasMore': false,
+          'ticks': [
+            {'timestamp': to, 'price': 1900.0 + to - first},
+            {'timestamp': to, 'price': 1900.25 + to - first},
+          ],
+        }), 200);
+      } finally {
+        active--;
+      }
+    }));
+    final result = await api.ctraderBidTicksRange(
+      token: 'test', accountId: '1', symbol: 'XAUUSD',
+      fromMs: first, toMs: last,
+    );
+    expect(seen.length, 31);
+    expect(maximumActive, 2,
+        reason: 'Never exceed two simultaneous authenticated BID calls');
+    expect(result, hasLength(32));
+    expect(result.map((t) => t.timestamp), [
+      for (var step = 1; step <= 31; step += 2) ...[
+        first + step, first + step,
+      ],
+    ]);
+    expect(result[0].bid, 1901.0);
+    expect(result[1].bid, 1901.25);
+    expect(result.last.bid, 1931.25);
+    expect(result.every((t) => t.bid.isFinite && t.bid > 0), isTrue);
+    api.close();
+  });
+
+  test('split broker BID failures discard all sibling pages without fallback',
+      () async {
+    const first = 1700000000000;
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      final from = int.parse(request.url.queryParameters['from']!);
+      final to = int.parse(request.url.queryParameters['to']!);
+      if (to - from > 1) {
+        return http.Response(jsonEncode({
+          'source': 'ctrader', 'quoteType': 'bid',
+          'symbolId': '42', 'hasMore': true, 'ticks': [],
+        }), 200);
+      }
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'quoteType': 'bid',
+        'symbolId': '42', 'hasMore': false,
+        'ticks': [
+          {'timestamp': to,
+           'price': from == first ? -1 : 2000.0},
+        ],
+      }), 200);
+    }));
+    await expectLater(
+      api.ctraderBidTicksRange(token: 'test', accountId: '1',
+          symbol: 'XAUUSD', fromMs: first, toMs: first + 7),
+      throwsA(isA<MarketDataException>()),
+      reason: 'No partial authenticated history may leak on one bad page');
+    api.close();
+  });
+
+  test('cTrader BID response rejects another account when identity supplied',
+      () async {
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'accountId': 'another-account',
+        'quoteType': 'bid', 'symbolId': '42',
+        'hasMore': false, 'ticks': [
+          {'timestamp': 1700000000000, 'price': 2000.0},
+        ],
+      }), 200);
+    }));
+    await expectLater(
+      api.ctraderBidTicksRange(token: 'test', accountId: '1',
+        symbol: 'XAUUSD', fromMs: 1700000000000, toMs: 1700000000001),
+      throwsA(isA<MarketDataException>()),
+      reason: 'Cross-account BID history must never enter the chart cache');
+    api.close();
+  });
+
   test('incremental BID refresh requests exactly the missing milliseconds',
       () async {
     final toMs = DateTime.utc(2026, 11, 8).millisecondsSinceEpoch;
