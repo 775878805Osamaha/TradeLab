@@ -44,6 +44,7 @@ jobs:
             test/range_startup_loader_test.dart \
             test/range_history_fill_policy_test.dart \
             test/range_tick_store_test.dart \
+            test/range_verified_bid_window_slice_test.dart \
             test/widget_test.dart \
             test/range_tick_rollforward_test.dart \
             test/range_bar_timeline_test.dart \
