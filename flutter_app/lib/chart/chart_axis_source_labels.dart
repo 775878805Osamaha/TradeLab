@@ -11,15 +11,27 @@ abstract final class ChartAxisSourceLabels {
     if (end < 2) return null;
     final activeDay = DateTime.fromMillisecondsSinceEpoch(
       bars[end - 1].timestamp, isUtc: true);
-    for (var i = end - 2; i >= 0; i--) {
-      final stamp = DateTime.fromMillisecondsSinceEpoch(
-        bars[i].timestamp, isUtc: true);
-      if (stamp.year != activeDay.year || stamp.month != activeDay.month ||
-          stamp.day != activeDay.day) {
-        return bars[i].candle.close;
+    // The broker/cache contract guarantees strictly ascending UTC
+    // timestamps. Find the first candle of the latest visible UTC day with
+    // O(log N) source reads instead of scanning a full intraday session.
+    // Replay must search ONLY [0, end): never inspect hidden future bars.
+    final startOfDayMs =
+        DateTime.utc(activeDay.year, activeDay.month, activeDay.day)
+            .millisecondsSinceEpoch;
+    var low = 0;
+    var high = end;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (bars[middle].timestamp < startOfDayMs) {
+        low = middle + 1;
+      } else {
+        high = middle;
       }
     }
-    return null;
+    // The candle immediately before midnight's first recorded bar is the
+    // last authentic close of the previous session. Market holidays/gaps
+    // must remain gaps: do not fabricate a midnight candle.
+    return low == 0 ? null : bars[low - 1].candle.close;
   }
 
   static (double, double)? visibleHighLow(
