@@ -130,4 +130,103 @@ void main() {
     expect(snapshot.candles[cutoffIndex].close,
         cached[cutoffIndex].candle.close);
   });
+  test('overlap-only cTrader refresh publishes no replacement chart arrays',
+      () {
+    const existing = <MarketBar>[
+      MarketBar(1000, first), MarketBar(3000, second),
+    ];
+    const overlap = <MarketBar>[MarketBar(3000, second)];
+    final result = VerifiedClosedCandleRefresh.appendVerified(
+      existing: existing, recent: overlap);
+    expect(result.appended, 0);
+    expect(result.snapshot, isNull);
+    expect(existing, hasLength(2));
+  });
+
+  test('new cTrader close preserves historical gaps and viewport bar count',
+      () {
+    const existing = <MarketBar>[
+      MarketBar(1000, first), MarketBar(3000, second),
+    ];
+    const recent = <MarketBar>[
+      MarketBar(3000, second), MarketBar(9000, third),
+    ];
+    final result = VerifiedClosedCandleRefresh.appendVerified(
+      existing: existing, recent: recent);
+    expect(result.appended, 1);
+    final snapshot = result.snapshot!;
+    expect(snapshot.timestamps, [1000, 3000, 9000]);
+    expect(snapshot.candles.map((c) => c.close), [101, 104, 103]);
+    expect(snapshot.bars.last.timestamp, 9000);
+    expect(existing.length, 2);
+  });
+
+  test('closed cTrader revision or surprise backfill is rejected', () {
+    const old = <MarketBar>[
+      MarketBar(1000, first), MarketBar(3000, second),
+    ];
+    const revised = <MarketBar>[
+      MarketBar(3000, TradeCandle(101, 105, 100, 102)),
+    ];
+    expect(() => VerifiedClosedCandleRefresh.appendVerified(
+      existing: old, recent: revised),
+      throwsA(isA<MarketDataException>()));
+    const hiddenBackfill = <MarketBar>[
+      MarketBar(2000, TradeCandle(100, 103, 99, 102)),
+    ];
+    expect(() => VerifiedClosedCandleRefresh.appendVerified(
+      existing: old, recent: hiddenBackfill),
+      throwsA(isA<MarketDataException>()));
+    expect(old.map((bar) => bar.timestamp), [1000, 3000]);
+  });
+
+  test('120k cached bars get an async verified close with aligned axes',
+      () async {
+    const base = 1700000000000;
+    final existing = List<MarketBar>.generate(120000, (i) {
+      final p = 3900.0 + i * .01;
+      return MarketBar(base + i * 60000,
+        TradeCandle(p, p + 1, p - 1, p + .1));
+    }, growable: false);
+    MarketBar next(int offset) {
+      final index = existing.length + offset;
+      final p = 3900.0 + index * .01;
+      return MarketBar(base + index * 60000,
+        TradeCandle(p, p + 1, p - 1, p + .1));
+    }
+    final result = await VerifiedClosedCandleRefresh.appendVerifiedAsync(
+      existing: existing,
+      recent: [existing.last, next(0), next(1)],
+    );
+    expect(result.appended, 2);
+    final snapshot = result.snapshot!;
+    expect(snapshot.bars, hasLength(120002));
+    expect(snapshot.candles, hasLength(120002));
+    expect(snapshot.timestamps, hasLength(120002));
+    expect(snapshot.timestamps.last, next(1).timestamp);
+    for (final index in [0, 999, 119998, 119999, 120000, 120001]) {
+      expect(snapshot.timestamps[index], snapshot.bars[index].timestamp);
+      expect(snapshot.candles[index].close,
+        snapshot.bars[index].candle.close);
+    }
+    expect(existing, hasLength(120000));
+  });
+
+  test('large overlap-only poll returns no new chart snapshot', () async {
+    const base = 1700000000000;
+    final existing = List<MarketBar>.generate(6000, (i) {
+      final price = 3200.0 + i * .01;
+      return MarketBar(base + i * 60000,
+        TradeCandle(price, price + 1, price - 1, price + .1));
+    }, growable: false);
+    final result = await VerifiedClosedCandleRefresh.appendVerifiedAsync(
+      existing: existing,
+      recent: [existing[0], existing[3000], existing.last],
+    );
+    expect(result.appended, 0);
+    expect(result.snapshot, isNull,
+      reason: 'No new broker close: no full-size UI axis array allocation');
+    expect(existing.length, 6000);
+  });
+
 }
