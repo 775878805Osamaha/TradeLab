@@ -274,3 +274,15 @@
 - **التوثيق:** `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`؛ التغيير الحقيقي اكتمل وحُفظ على GitHub.
 - **الحدود:** `main` بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`؛ لا APK/Release ولا مشاريع أخرى. Android FPS/Profile أو حساب cTrader الحقيقي `NOT RUN`.
 - **الخطوة التالية الوحيدة:** تطوير تحديث شموع Range من تيكات BID الجديدة الموثقة في cTrader، وليس من اقتباس السعر وحده، مع الحفاظ على التوقيت والتسجيل الآمن.
+
+### 2026-11-20T23:21:05.849Z — تنفيذ تحديث شموع Range الحية من cTrader BID أصلي دون إعادة بناء التاريخ الطويل
+- **المستودع والفرع:** `775878805Osamaha/TradeLab`، `feat/tradelab-verified-live-range-20261121` من `70ea5371d2dd8625f36d78d7ae7c6795c056da8a`. `main` دون تغيير، لا APK أو Release ولا مشاريع أخرى.
+- **الخلل الوظيفي في الشارت:** كانت أسعار BID/ASK الحية تعيد رسم السعر فقط، دون إضافة تيكات BID المؤرّخة إلى شموع Range؛ التغيير الحالي يضيف مصدر تحديث تيكات فعلي ولا يستخدم quote كنقطة مزيفة.
+- **التحقق من تداخل المصدر:** `RangeLiveBidDelta.verifiedSuffixAsync` يفحص صفحة cTrader الموقعة ضمن الفترة [lastTimestamp,now]؛ يطابق **جميع الأحداث القديمة من المللي ثانية الأخيرة بالترتيب والقيمة والعدد** ويعيد اللاحق فقط بما فيه أحداث أخرى بنفس المللي ثانية. صفحة ناقصة أو مصدر تغيّر/تكرر بشكل غير متوافق يفشل ولا يُنشر تاريخ خاطئ. صفحات >5000 تُفحص على worker.
+- **بناء Range:** `RangeBarBuilder.resumeFromVerifiedForming` يستعيد حالة الشمعة Range المتكوّنة من مصدر موثوق؛ `RangeBarTimeline.appendVerifiedSuffixAsync` لا يمر على كل التيكات القديمة، يحافظ على الشموع المغلقة ومؤشرات أحداث BID الأصلية، ويبني فقط الزيادة مع نشر لقطة `RangeLiveAppendBuildResult` متطابقة. يعزل البناء الكبير على worker ويحافظ على حدود 1m tick/250k closed bars.
+- **تكامل الإنتاج:** `ChartScreen._refreshLiveRange` عند timer 30 ثانية للحساب/الرمز/المقاس الصحيح فقط، دون Replay أو تحديث خلال جلب تاريخ قديم/ملء آلي، ويتحقق من `revision` وهوية قائمة التيكات والـtimeline بعد كل await. يُحدث `_rangeHistoryTicks`, `_actualRange`, `_rangeBarEndTickIndices`, `_rangeBarTimestamps` **ذريًا في setState** ويثبت محور الزمن أثناء إضافة الشموع المغلقة. لا اتصال باسم مستخدم/حساب آخر ولا بيانات مستقبلية.
+- **القياس:** `ChartLoadPhase.liveRangeUpdate` يضيف توقيتًا اختياريًا دون سعر أو حساب وفق نظام Android Profile الموجود. لا ادعاء بنتائج موبايل واقعية الآن.
+- **المصدر:** `flutter_app/lib/data/range_live_bid_delta.dart`, `range_bar_builder.dart`, `range_bar_timeline.dart`, `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/lib/chart/chart_load_profiler.dart`.
+- **الاختبارات:** `flutter_app/test/range_live_bid_delta_test.dart`, `range_bar_builder_test.dart`, `range_bar_timeline_test.dart`: ترتيب وتطابق BID بنفس المللي ثانية، page failure، حجم 6500 تيك وworker، تطابق rebuild الكامل بعد 6200 تيك، حفظ cutoff Replay، عدم تغيير snapshot القديم والـhard budgets.
+- **التحقق عند الحفظ:** GitHub Actions `PENDING` حتى PR، Android Profile وcTrader broker live `NOT RUN`. لا أسواق مختلقة أو تداول حقيقي، لا APK.
+- **الخطوة التالية الوحيدة:** إنشاء PR والتأكد من PASS في Flutter analyze/Range/Replay ثم الدمج في التطوير مع SHA ورابط CI، وإصلاح أي FAIL قبل الدمج.

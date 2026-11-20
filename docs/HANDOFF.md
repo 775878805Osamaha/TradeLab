@@ -1,5 +1,15 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## تطوير قيد الاختبار — تحديث شموع Range الحية بتيكات BID حقيقية من cTrader
+- الفرع `feat/tradelab-verified-live-range-20261121` من `70ea5371d2dd8625f36d78d7ae7c6795c056da8a`، لا تغيير `main` أو APK أو أي مشروع آخر.
+- **المشكلة التي عالجناها في كود الشاشة:** تحديث BID/ASK يعيد الرسم ويغيّر شارة السعر، لكنه لا يُلحق تيكات جديدة بشموع Range. لا يمكن استخدام سعر Quote منفرد لاستنتاج شمعات Range حقيقية.
+- **التنفيذ:** طلب `rangeTicksBetween` دوري (30 ثانية) من cTrader **من آخر مللي ثانية محمّلة بشكل شامل**؛ `RangeLiveBidDelta` يرفض أي فقد/تعارض في ترتيب أو أسعار أحداث تلك المللي ثانية ويستخلص الأحداث الجديدة فقط، حتى لو شاركت نفس الطابع الزمني وبنفس السعر.
+- **الأداء:** `RangeBarBuilder.resumeFromVerifiedForming` + `RangeBarTimeline.appendVerifiedSuffixAsync` يعيدان بناء الشمعة المتكوّنة والشموع الجديدة فقط بعد كل تحديث، مع الاحتفاظ بمؤشرات وOHLC الشموع المغلقة سابقًا، ونشر لقطة بيانات واحدة متطابقة (تيكات/شموع/مؤشرات انتهاء) باستخدام isolate للبيانات الكبيرة. لا يغيّر أصل Range أو الأسعار.
+- **السلامة:** التحديث لا يعمل في Replay أو أثناء اختيار البداية أو تحميل الشموع الأقدم أو تغيير حساب/رمز/مقاس المدى، ويستعمل `loadRevision` وهوية مصدر BID قبل النشر. حد مليون تيك/250 ألف Range بار؛ لا طلب يزيد ستة أيام بلا تحديث تاريخ كامل. `TRADELAB_PROFILE_CHART` يسجل زمن `liveRangeUpdate` دون تفاصيل الحساب أو أسعار.
+- **الاختبارات:** تداخل عدة تيكات في مللي ثانية واحدة، رفض أي تغير في المصدر أو ترتيب الأحداث، تطابق البناء التدريجي مع البناء الكامل بعد 6200 تيك + إضافات، حماية cutoff Replay، العمل في isolate >5000، وحدود الذاكرة.
+- **حالة التحقق:** CI `PENDING` حتى فتح PR، واختبار حساب cTrader حقيقي/هاتف Android Profile `NOT RUN`. لا تُدّعى سلاسة TradingView أو سرعة FPS فعلية.
+- **الخطوة التالية:** افتح PR في فرع التطوير، افحص Flutter analyze وRange/Replay/التوقيت، أصلح أي FAIL، ثم ادمج ودوّن SHA وCI.
+
 ## دفعة مكتملة — PR #577: قص خطوط وقف/هدف Replay إلى الشاشة
 - **MERGED:** [PR #577](https://github.com/775878805Osamaha/TradeLab/pull/577) إلى `test/flutter-all-fixes-20261116` عند SHA [98db797](https://github.com/775878805Osamaha/TradeLab/commit/98db797faf2bb98941734ea77b9228571d08e159).
 - **CI:** [GitHub Actions #44835136904](https://github.com/775878805Osamaha/TradeLab/actions/runs/44835136904) = **PASS/completed/success**؛ Flutter analyze واختبارات الرسم/Replay/Range والتوقيت.
