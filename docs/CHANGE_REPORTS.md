@@ -191,3 +191,11 @@
 - **الملفات:** `flutter_app/lib/chart/chart_load_profiler.dart`, `flutter_app/test/chart_load_profiler_test.dart`, `flutter_app/lib/screens/chart_screen.dart`، وملفا تسليم HANDOFF/CHANGE_REPORTS.
 - **التحقق عند الحفظ:** `PENDING` لبوابة Flutter analyze واختبارات Range/Replay، Android Profile `NOT RUN`. لا تنشئ APK آليًا.
 - **الخطوة التالية الوحيدة:** فتح PR إلى التطوير، إصلاح أي فشل CI حتى PASS، دمج التطوير فقط، وتوثيق SHA/رابط النتيجة.
+
+### 2026-11-20T22:47:33.827Z — دمج PR #573 ونجاح جميع اختبارات قياس مراحل تحميل الشارت
+- **المصدر/النتيجة:** [PR #573](https://github.com/775878805Osamaha/TradeLab/pull/573) **MERGED** في `test/flutter-all-fixes-20261116`، SHA الفعلي `5750837b87f2c6a974b2b3ebb480defaccff7dc2`. جرى التحقق من حالة PR ورأس الفرع بعد الدمج.
+- **GitHub Actions:** [#44831381260](https://github.com/775878805Osamaha/TradeLab/actions/runs/44831381260) **PASS / completed / success** على رأس العمل `da05dbf6fae1699d39c51c8fb9177fffa2af434a`. نجاح Flutter analyze، التاريخ/Range/Replay والتوقيت.
+- **ملفات:** `flutter_app/lib/chart/chart_load_profiler.dart`، `flutter_app/test/chart_load_profiler_test.dart`، `flutter_app/lib/screens/chart_screen.dart`، `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
+- **الأثر:** 12 نقطة Stopwatch حول تحميل وعزل مصدر الشموع وإعادة بنائها؛ تسجيل آمن للأعداد والمدد فقط عند تفعيل `TRADELAB_PROFILE_CHART`. رسائل metrics مع p50/p95/p99 بعد 4 عمليات لكل مرحلة. تم التحقق باختبارات وحدات لكن **لم يتم قياس أي زمن Android حقيقي أو FPS على هاتف**.
+- **قيود:** `main` بقي SHA `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`، لا APK أو Release جديد، لا مساس بمشاريع أخرى.
+- **الخطوة التالية الوحيدة:** إضافة حارس اتصال صفحات SQLite القديمة لمنع تجاوز تاريخ لم يثبت اكتمال كاشه، اختباره ثم دمجه إلى التطوير فقط.

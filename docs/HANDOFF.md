@@ -1,11 +1,11 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## دفعة قياس الأداء قيد الاختبار — تحميل بيانات الشارت وRange
-- فرع `feat/tradelab-chart-load-profiler-20261121` من `400c24a20b67eda1824c0c594f1e96b29cde97a3`، بعد دمج PR #572. لا تعديل `main` ولا APK.
-- إضافة `ChartLoadProfiler` اختياري عبر `--dart-define=TRADELAB_PROFILE_CHART=true` لقياس **12 مرحلة حقيقية**: SQLite الأولية والأقدم، mapping للأرشيف، جلب وسيط cTrader/Binance ودمج OHLC، جلب وتحديث الشموع المغلقة، بداية Range، جلب صفحات Range الأقدم وإعادة بنائها.
-- قياسات Stopwatch فعلية بالميكروثانية، أحداث `TRADELAB_CHART_LOAD_EVENT` لكل إكمال، وحساب p50/p95/p99 لكل مرحلة على حدة عبر سجل دائري محدد 40 عينة. لا أسعار ولا تواريخ تيكات ولا رموز ولا معرفات حساب ولا بيانات صفقات في السجلات.
-- اختبارات وحدة مستقلة للعزل بين المراحل، النسب المئوية، حدود الذاكرة، والتحقق من عدم تسجيل أسماء الحسابات/الرموز. `CI PENDING`، و**لا توجد قياسات Android Profile حقيقية بعد**.
-- **الخطوة التالية:** فتح PR والفحص، ثم دمج التطوير إذا اجتاز CI، وبعدها جمع سجل Profile فعلي لاستهداف التحسين التالي بأرقام بدل تخمين.
+## دفعة مدمجة — PR #573: قياس مراحل تحميل TradeLab على Android
+- **MERGED:** [PR #573](https://github.com/775878805Osamaha/TradeLab/pull/573)، SHA [5750837](https://github.com/775878805Osamaha/TradeLab/commit/5750837b87f2c6a974b2b3ebb480defaccff7dc2) إلى `test/flutter-all-fixes-20261116`. أبقينا `main` عند `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc` بدون تعديل.
+- **CI المعتمد:** [GitHub Actions #44831381260](https://github.com/775878805Osamaha/TradeLab/actions/runs/44831381260) = **PASS / completed / success**. نجح Flutter analyze واختبارات الشارت وSQLite وRange/Replay وYemen timezone.
+- إعداد `--dart-define=TRADELAB_PROFILE_CHART=true` يفعّل قياس 12 مرحلة للأداء (SQLite/cTrader/Binance/Range/Replay) باستخدام Stopwatch حقيقي مع p50/p95/p99 لكل مرحلة عبر 40 عينة، والتسجيل لا يتضمن رمز تداول/بيانات حساب/سعر/تواريخ سوق. **لم تُشغّل جلسة Android Profile حقيقية**؛ هذا تجهيز للقياس وليس نتيجة سرعة.
+- **أحدث APK منشور أقدم من هذا التعديل** ولا يحتوي #567–#573؛ لا APK جديد دون طلب صريح.
+- **التالي:** منع اختصار قفزات تاريخية غير مؤكدة بين شموع SQLite المحفوظة، ثم اختبارات رجعية ودمج في التطوير؛ لاحقًا قياس Android Profile على جهاز.
 
 ## آخر دفعة مكتملة — PR #572: تحميل الشموع المحلي وReplay مستقر
 - **MERGED:** [PR #572](https://github.com/775878805Osamaha/TradeLab/pull/572) إلى `test/flutter-all-fixes-20261116` عند SHA [d746dea](https://github.com/775878805Osamaha/TradeLab/commit/d746dea22a7d11804ad5e19b56f5465a306f1c9d).
