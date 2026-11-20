@@ -10,6 +10,7 @@ import 'package:flutter/scheduler.dart';
 enum ChartFrameInteraction {
   pan,
   pinch,
+  momentum,
   priceAxis,
   timeAxis,
   drawing,
