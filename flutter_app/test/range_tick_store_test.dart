@@ -526,4 +526,71 @@ void main() {
     // that event. This avoids overlapping cached windows after a restart.
     expect(restored.fromMs - 1, lessThan(restored.ticks.first.timestamp));
   });
+
+  test('large directly appended BID page rejects late disorder atomically',
+      () async {
+    final start = DateTime.utc(2026, 11, 18).millisecondsSinceEpoch;
+    const account = 'worker-order-reject-account';
+    final source = List<MarketTick>.generate(
+      6300, (i) => MarketTick(start + i ~/ 2, 3900.0 + i * .0001));
+    // The last source event is inside the source window. Only a full
+    // verification detects an interior reversal of the broker event order.
+    source[6200] = MarketTick(start + 1000, 3900.62);
+    await expectLater(
+      RangeTickStore.appendHistorical(account, 'XAUUSD', source),
+      throwsArgumentError,
+    );
+    expect(await RangeTickStore.readHistorical(
+      account, 'XAUUSD', beforeMs: start + 10000), isEmpty,
+      reason: 'Invalid worker-verified page must never enter the archive');
+    expect(source, hasLength(6300),
+      reason: 'Validation cannot sort, deduplicate or mutate the provider');
+  });
+
+  test('invalid 6k-tick source interior never creates a trusted BID manifest',
+      () async {
+    final start = DateTime.utc(2026, 11, 19).millisecondsSinceEpoch;
+    const account = 'worker-archive-reject-account';
+    final source = List<MarketTick>.generate(6250,
+      (i) => MarketTick(start + i, 3900.0 + i * .0001));
+    // First and last timestamps are IN bounds, but the middle is outside.
+    // A first/last-only check must be followed by strict worker ordering
+    // verification before SQLite is touched.
+    source[3100] = MarketTick(start + 200000, 3900.31);
+    await expectLater(
+      RangeTickStore.archiveVerifiedWindow(
+        account, 'XAUUSD', source,
+        fromMs: start, toMs: start + 10000,
+      ),
+      throwsArgumentError,
+    );
+    expect(await RangeTickStore.readVerifiedWindow(
+      account, 'XAUUSD', fromMs: start, toMs: start + 10000,
+    ), isNull);
+    expect(await RangeTickStore.readHistorical(
+      account, 'XAUUSD', beforeMs: start + 250000,
+    ), isEmpty);
+  });
+
+  test('large invalid BID price fails without modifying previous archive',
+      () async {
+    final start = DateTime.utc(2026, 11, 20).millisecondsSinceEpoch;
+    const account = 'worker-price-atomic-account';
+    final initial = [MarketTick(start + 1, 2000),
+      MarketTick(start + 2, 2001)];
+    expect(await RangeTickStore.appendHistorical(account, 'XAUUSD', initial),
+        2);
+    final bad = List<MarketTick>.generate(6200,
+      (i) => MarketTick(start + 100 + i, 2000 + i * .0001));
+    bad[6198] = MarketTick(start + 100 + 6198, double.nan);
+    await expectLater(
+      RangeTickStore.appendHistorical(account, 'XAUUSD', bad),
+      throwsArgumentError,
+    );
+    final retained = await RangeTickStore.readHistorical(
+      account, 'XAUUSD', beforeMs: start + 10000);
+    expect(retained.map((tick) => tick.bid), [2000, 2001],
+      reason: 'A failed validation cannot leave partly committed BID ticks');
+    expect(bad[6198].bid.isNaN, isTrue);
+  });
 }
