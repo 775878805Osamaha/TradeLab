@@ -165,3 +165,12 @@
 - **الفرع والملفات:** `775878805Osamaha/TradeLab`، `feat/local-first-candle-paging-20261121`؛ `flutter_app/test/replay_training_widget_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`. `main` وAPK غير متغيرين.
 - **حالة التحقق بعد التصحيح:** CI للالتزام الجديد **PENDING** حتى انتهاء GitHub Actions؛ Android الحقيقي/قياس FPS **NOT RUN**. عند PASS يدمج إلى فرع التطوير، ثم يكتب SHA الدمج والاختبارات الفعلية؛ عند FAIL يتوقف الدمج ويصلح السبب المحدد.
 - **الخطوة التالية الوحيدة:** تحقق من CI على رأس PR #572 المحدث ثم دمج التطوير فقط عند PASS.
+
+### 2026-11-20T22:34:38.442Z — تفسير فشل CI الثاني وحماية Replay من جلب التاريخ غير المطلوب أثناء السحب
+- **الفشل المؤكد:** [Actions #44829601262](https://github.com/775878805Osamaha/TradeLab/actions/runs/44829601262) = **FAIL**، رغم PASS لتحليل Flutter و590 اختبارًا. اختبار `replay_training_widget_test.dart` ما زال يتعطل عند `pumpAndSettle` (سطر 101 بعد تغيير `timedDrag`)؛ لذا **لم يدمج PR #572**. فشل المحاولة الأولى/الثانية محفوظ في السجل.
+- **الخلل في مسار التطبيق وليس السرعة فقط:** فحص `ChartScreen._prefetchOlderAtEdge` كشف أنه يمكن استدعاء `_loadOlderHistory` تلقائيًا بمجرد السحب في Replay حتى إن لم يطلب المستخدم التاريخ الأقدم. وبعد إضافة SQLite local-first، هذا قد يبقي spinner/async متحركًا أثناء اختبار السحب ويمكّن تغيير فهرس شموع التدريب دون إجراء صريح.
+- **الإصلاح في التطبيق:** منع التحميل التلقائي من الحافة عند `_replay || _replaySelectingStart`؛ **الأمر اليدوي `ReplayExtrasAction.loadOlder` باقٍ** للتحميل المقصود مع منطق إعادة تثبيت المؤشر الحالي. غير Replay يحتفظ بتحميل المصدر المحلي ثم الوسيط تلقائيًا كما كان.
+- **اختبار انحدار مباشر:** `replay_training_widget_test.dart` يحتسب طلبات Binance /api/v3/klines ويتأكد أن سحب شارت Replay لا يصدر طلب مصدر إضافيًا، بالإضافة إلى تأكيد repaint وحدود العرض. استخدام `timedDrag` يستمر لأنه اختبار repaint لا اختبار fling.
+- **الفرع والملفات:** `775878805Osamaha/TradeLab`، `feat/local-first-candle-paging-20261121`، `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/replay_training_widget_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`. لا APK ولا `main`.
+- **التحقق الجديد:** CI **PENDING** على الالتزام الجديد؛ Android Profile **NOT RUN**. لن يُذكر PASS أو دمج إلا بعد التحقق الفعلي.
+- **الخطوة التالية الواحدة:** راقب اختبار Replay/SQLite وCI بالكامل في PR #572 ثم دمج فرع التطوير فقط عند PASS.

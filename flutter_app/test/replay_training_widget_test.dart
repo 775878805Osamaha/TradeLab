@@ -19,7 +19,9 @@ void main() {
       (tester) async {
     // Reuse the fixed, known-good Binance fixture from widget_test.dart,
     // which already proves the real chart and Replay entry point work.
+    var sourcePageRequests = 0;
     final client = MockClient((request) async {
+      sourcePageRequests++;
       expect(request.url.host, 'api.binance.com');
       expect(request.url.path, '/api/v3/klines');
       expect(request.url.queryParameters['symbol'], 'BTCUSDT');
@@ -88,6 +90,7 @@ void main() {
         '${firstBar.minute.toString().padLeft(2, '0')} UTC';
     expect(message, contains(firstTime));
     expect(find.byKey(const Key('replay-speed-picker')), findsOneWidget);
+    final requestsBeforeReplayPan = sourcePageRequests;
     // Replay with no practice levels or rectangles has no viewport-snapshot
     // overlays. Touch samples should repaint the chart without rebuilding the
     // toolbar (same fast path used by the normal chart).
@@ -99,6 +102,8 @@ void main() {
     await tester.timedDrag(replayChart, const Offset(-40, 0),
         const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
+    expect(sourcePageRequests, requestsBeforeReplayPan,
+        reason: 'Replay pan must not automatically request older broker data');
     final replayHeader = find.byKey(const Key('chart-reference-header'));
     final previousReplayHeader = tester.widget(replayHeader);
     await tester.timedDrag(replayChart, const Offset(-45, 0),

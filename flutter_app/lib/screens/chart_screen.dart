@@ -638,6 +638,11 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   void _prefetchOlderAtEdge(double plotWidth, int count) {
+    // Replay/selection are historical, deterministic views. A gesture must
+    // never launch a broker/SQLite history request in the background and
+    // shift the training cutoff or its chart/drawing indices. The Replay
+    // extras menu provides an EXPLICIT "load older" action when requested.
+    if (_replay || _replaySelectingStart) return;
     if (!_liveRequested || _loading || _olderLoading ||
         _rangeAutoFilling || _historyExhausted ||
         (_mode == ChartMode.range &&
