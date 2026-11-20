@@ -35,6 +35,58 @@ class ReplayTradeOverlayMark {
 class ReplayTradeOverlayLayout {
   const ReplayTradeOverlayLayout._();
 
+  /// Paint bounds are a finite, narrow Android chart viewport, while the
+  /// market source may contain 200k+ candles. A practice trade beginning on
+  /// an old candle can span MILLIONS of offscreen pixels. Skia's clipRect
+  /// clips the *result*, not the Dart loop that previously created 160k+
+  /// dashed strokes per frame for each long open SL/TP line.
+  ///
+  /// Keep the dash phase anchored at the original entry x even when most
+  /// of that line is offscreen. Skip whole hidden periods arithmetically:
+  /// the number of yielded marks is O(plotWidth / 12), independent of the
+  /// number of archived source candles or scroll distance.
+  static Iterable<(double, double)> visibleDashSegments({
+    required double x1,
+    required double x2,
+    required double plotWidth,
+  }) sync* {
+    if (!x1.isFinite || !x2.isFinite ||
+        !plotWidth.isFinite || plotWidth <= 0) return;
+    const dashPeriod = 12.0;
+    const dashLength = 7.0;
+    final left = math.min(x1, x2);
+    final right = math.min(math.max(x1, x2), plotWidth);
+    if (right <= 0 || left >= plotWidth || right <= left) return;
+    // x + dashLength must be positive to be even partially visible.
+    final first = math.max(0,
+        ((-left - dashLength) / dashPeriod).ceil());
+    for (var k = first; ; k++) {
+      final start = left + k * dashPeriod;
+      if (start >= right) break;
+      final clippedStart = math.max(0.0, start);
+      final clippedEnd = math.min(right, start + dashLength);
+      if (clippedEnd > clippedStart) {
+        yield (clippedStart, clippedEnd);
+      }
+    }
+  }
+
+  /// All horizontal Replay practice overlays must share the same plot
+  /// clipping, including their solid entry and result segments. This avoids
+  /// passing multi-million-pixel stroke endpoints into the raster backend.
+  static (double, double)? visibleStroke({
+    required double x1,
+    required double x2,
+    required double plotWidth,
+  }) {
+    if (!x1.isFinite || !x2.isFinite ||
+        !plotWidth.isFinite || plotWidth <= 0) return null;
+    final left = math.max(0.0, math.min(x1, x2));
+    final right = math.min(plotWidth, math.max(x1, x2));
+    if (left >= right) return null;
+    return (left, right);
+  }
+
   static List<ReplayTradeOverlayMark> visible({
     required List<ReplayTrainingTrade> trades,
     required ChartViewport viewport,
@@ -42,7 +94,8 @@ class ReplayTradeOverlayLayout {
     required int candleCount,
     required double plotWidth,
   }) {
-    if (trades.isEmpty || candleCount < 1 || plotWidth <= 0) {
+    if (trades.isEmpty || candleCount < 1 ||
+        !plotWidth.isFinite || plotWidth <= 0) {
       return const [];
     }
     final marks = <ReplayTradeOverlayMark>[];
@@ -67,8 +120,9 @@ class ReplayTradeOverlayLayout {
           index: endIndex,
           candleCount: candleCount,
           plotWidth: plotWidth);
-      // Skip off-screen trades rather than paying the cost to paint them.
-      if (math.max(entryX, endX) < -8 ||
+      // Skip off-screen and nonfinite geometry before reaching the renderer.
+      if (!entryX.isFinite || !endX.isFinite ||
+          math.max(entryX, endX) < -8 ||
           math.min(entryX, endX) > plotWidth + 8) {
         continue;
       }
@@ -131,25 +185,30 @@ class ReplayTradeOverlayPainter extends CustomPainter {
   static const _target = Color(0xFF0D968A);
 
   static void _dashed(Canvas canvas, double x1, double x2, double y,
-      Color color) {
-    final left = math.min(x1, x2);
-    final right = math.max(x1, x2);
+      Color color, double plotWidth) {
+    if (!x1.isFinite || !x2.isFinite || !y.isFinite ||
+        !plotWidth.isFinite || plotWidth <= 0) return;
     final paint = Paint()
       ..color = color.withValues(alpha: .9)
       ..strokeWidth = 1.35;
-    if (right - left < 3) {
-      canvas.drawCircle(Offset(left, y), 2.0, paint);
+    if ((x2 - x1).abs() < 3) {
+      final left = math.min(x1, x2);
+      if (left >= 0 && left <= plotWidth) {
+        canvas.drawCircle(Offset(left, y), 2.0, paint);
+      }
       return;
     }
-    for (var x = left; x < right; x += 12) {
-      canvas.drawLine(
-          Offset(x, y), Offset(math.min(x + 7, right), y), paint);
+    for (final (start, end) in ReplayTradeOverlayLayout.visibleDashSegments(
+      x1: x1, x2: x2, plotWidth: plotWidth,
+    )) {
+      canvas.drawLine(Offset(start, y), Offset(end, y), paint);
     }
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.height <= 24 || plotWidth <= 0 || candleCount < 1) return;
+    if (size.height <= 24 || !plotWidth.isFinite ||
+        plotWidth <= 0 || candleCount < 1) return;
     final plotHeight = size.height - 24;
     final marks = ReplayTradeOverlayLayout.visible(
         trades: trades,
@@ -162,32 +221,44 @@ class ReplayTradeOverlayPainter extends CustomPainter {
     canvas.clipRect(Rect.fromLTWH(0, 0, plotWidth, plotHeight));
     for (final mark in marks) {
       final color = mark.trade.side == ReplaySide.buy ? _buy : _sell;
-      canvas.drawLine(
-        Offset(mark.entryX, mark.entryY),
-        Offset(mark.endX, mark.entryY),
-        Paint()..color = color.withValues(alpha: .9)..strokeWidth = 1.8,
-      );
+      final line = ReplayTradeOverlayLayout.visibleStroke(
+          x1: mark.entryX, x2: mark.endX, plotWidth: plotWidth);
+      if (line != null && mark.entryY.isFinite) {
+        canvas.drawLine(
+          Offset(line.$1, mark.entryY),
+          Offset(line.$2, mark.entryY),
+          Paint()..color = color.withValues(alpha: .9)..strokeWidth = 1.8,
+        );
+      }
       if (mark.stopY != null) {
-        _dashed(canvas, mark.entryX, mark.endX, mark.stopY!, _stop);
+        _dashed(canvas, mark.entryX, mark.endX,
+            mark.stopY!, _stop, plotWidth);
       }
       if (mark.targetY != null) {
-        _dashed(canvas, mark.entryX, mark.endX, mark.targetY!, _target);
+        _dashed(canvas, mark.entryX, mark.endX,
+            mark.targetY!, _target, plotWidth);
       }
-      canvas.drawCircle(
-          Offset(mark.entryX, mark.entryY), 4,
-          Paint()..color = color);
-      canvas.drawCircle(
-          Offset(mark.entryX, mark.entryY), 4,
-          Paint()..color = const Color(0xFFFFFFFF)..style = PaintingStyle.stroke
-            ..strokeWidth = 1);
-      if (mark.exitY != null) {
+      if (mark.entryX >= 0 && mark.entryX <= plotWidth &&
+          mark.entryY.isFinite) {
+        canvas.drawCircle(
+            Offset(mark.entryX, mark.entryY), 4,
+            Paint()..color = color);
+        canvas.drawCircle(
+            Offset(mark.entryX, mark.entryY), 4,
+            Paint()..color = const Color(0xFFFFFFFF)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1);
+      }
+      if (mark.exitY != null && mark.exitY!.isFinite &&
+          mark.endX >= 0 && mark.endX <= plotWidth) {
         canvas.drawCircle(
           Offset(mark.endX, mark.exitY!), 4,
           Paint()..color = const Color(0xFFFFFFFF),
         );
         canvas.drawCircle(
           Offset(mark.endX, mark.exitY!), 4,
-          Paint()..color = color..style = PaintingStyle.stroke
+          Paint()..color = color
+            ..style = PaintingStyle.stroke
             ..strokeWidth = 1.6,
         );
       }

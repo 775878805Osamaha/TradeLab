@@ -256,3 +256,13 @@
 - **الاختبارات الإضافية:** 100 ألف شمعة بواجهة `ListBase` تمنع حتى قراءة شمعة بعد cutoff، 120 ألف شمعة و24 صفقة مع SL+TP وgap/rewind، قفزة 25 ألف شمعة واختبار short entry، منع تجاوز 250001 source bars. لا تحميل أسعار وهمية للتطبيق؛ الاختبارات تستخدم fixtures محلية فقط.
 - **القيود:** لا تطبيق على `main` (بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`)، لا APK أو Release جديد، لا مشاريع أخرى، واختبار Android Profile/قياس FPS/حساب cTrader الحقيقي `NOT RUN`.
 - **الخطوة التالية الواحدة:** تشغيل جلسة Android Profile لقياس p50/p95/p99 مع شارت Range و120k وReplay على هاتف، ثم معالجة أول اختناق موثق؛ لا إنشاء APK دون إذن.
+
+### 2026-11-20T23:12:32.362Z — قص خطوط الصفقات التدريبية الطويلة داخل شاشة Replay بدل آلاف الشرطات المخفية
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab`، `fix/tradelab-replay-overlay-visible-dashes-20261121` عن التطوير `e4124586310bd881588f04520c4aafdd4bbcdf3c`. لا تعديل `main` أو المشاريع الأخرى، لا APK/Release.
+- **المشكلة من الكود المراجع:** `ReplayTradeOverlayPainter._dashed` يرسم SL وTP بحلقة `for x = left; x < right; x += 12` دون الاقتصار على viewport؛ دخول صفقة قبل 200 ألف شمعة عند 10px للشمعة يمكن أن يعني ~166,000 شرطة لكل خط رغم `canvas.clipRect`. حلقة Dart نفسها باقية حتى لو أخفى Skia ناتج الرسم.
+- **التحسين:** دالة pure `ReplayTradeOverlayLayout.visibleDashSegments` تحسب أول dash يمكن أن يدخل شاشة الهاتف مباشرة باستخدام حساب صحيح لطور الشرطات الأصلي وتنتج فقط الجزء داخل `0..plotWidth`. `visibleStroke` يقيّد امتداد الخطوط المتصلة للسعر، و`ReplayTradeOverlayPainter` يتجنب رسم العلامات خارج المنطقة المرئية وبيانات الإحداثيات غير النهائية.
+- **سلامة السوق:** الأسعار وأزمنة الوسيط وشموع المصدر وReplay cutoff والتدريب الورقي ثابتة؛ تغيير رسم/رستر فقط. لا استنتاج Candle جديد ولا رسم أسعار مستقبلية.
+- **الملفات:** `flutter_app/lib/replay/replay_trade_overlay.dart`, `flutter_app/test/replay_trade_overlay_test.dart`، `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **اختبارات انحدار:** O(plotWidth) مع امتداد -2 مليون بكسل، الحفاظ على phase عند القص، خطوط offscreen/NaN، ورسم widget مع Position عبر 200 ألف شمعة، دون تغيير الصفقات.
+- **التحقق:** GitHub CI `PENDING` قبل فتح PR؛ Android FPS / Profile `NOT RUN`. لا ادعاء بقياس FPS حقيقي.
+- **الخطوة التالية:** PR وCI، إصلاح FAIL، دمج التطوير فقط بعد PASS وتسجيل SHA/رابط الاختبار.
