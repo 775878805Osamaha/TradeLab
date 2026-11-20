@@ -46,6 +46,7 @@ import '../data/range_bar_timeline.dart';
 import '../data/range_startup_loader.dart';
 import '../data/ctrader_older_candle_pager.dart';
 import '../data/older_candle_prepend.dart';
+import '../data/verified_market_history_snapshot.dart';
 import '../data/range_history_fill_policy.dart';
 import '../data/range_older_page.dart';
 import '../data/range_older_page_scanner.dart';
@@ -877,25 +878,43 @@ class _ChartScreenState extends State<ChartScreen>
         }
         if (revision != _loadRevision || !mounted) return;
         if (cached.isNotEmpty) {
+          // The source cache has already been SHA/SQLite validated by its
+          // reader. A large mapped candle/timestamp snapshot is built on an
+          // isolate, never synchronously in the chart's gesture event loop.
+          final cachedSnapshot =
+              await VerifiedMarketHistorySnapshot.fromVerifiedAsync(cached);
+          if (revision != _loadRevision || !mounted ||
+              _selectedSymbol.code != sourceSymbol.code ||
+              _timeframe != sourceTimeframe ||
+              (sourceSymbol.source == TradeSource.ctrader &&
+                  widget.controller.accountId != sourceAccount)) return;
           setState(() {
-            _actualBars = cached;
-            _actualCandles = cached.map((bar) => bar.candle).toList(growable: false);
-            _actualTimestamps = cached.map((bar) => bar.timestamp).toList(growable: false);
-            _olderCursorMs = cached.first.timestamp;
+            _actualBars = cachedSnapshot.bars;
+            _actualCandles = cachedSnapshot.candles;
+            _actualTimestamps = cachedSnapshot.timestamps;
+            _olderCursorMs = cachedSnapshot.bars.first.timestamp;
           });
         }
         if (fresh) return;
         final bars = await widget.controller.history(sourceSymbol, sourceTimeframe);
         if (revision != _loadRevision || !mounted) return;
-        // MarketApi already validated strictly ascending broker timestamps
-        // and OHLC. Do not sort or deduplicate again in the UI: doing so
-        // would conceal a source/protocol defect behind plausible candles.
-        final merged = MarketCandleStore.mergeVerified(cached, bars);
-        _actualBars = merged;
-        _actualCandles = merged.map((bar) => bar.candle).toList(growable: false);
-        _actualTimestamps =
-            merged.map((bar) => bar.timestamp).toList(growable: false);
-        if (merged.isNotEmpty) _olderCursorMs = merged.first.timestamp;
+        // Preserve the verified conflict-detecting merge, but move its
+        // large source/axis allocations off the UI isolate. Small pages
+        // remain synchronous to avoid unnecessary isolate setup overhead.
+        final mergedSnapshot =
+            await VerifiedMarketHistorySnapshot.mergeVerifiedAsync(
+              cached: cached, fetched: bars);
+        if (revision != _loadRevision || !mounted ||
+            _selectedSymbol.code != sourceSymbol.code ||
+            _timeframe != sourceTimeframe ||
+            (sourceSymbol.source == TradeSource.ctrader &&
+                widget.controller.accountId != sourceAccount)) return;
+        _actualBars = mergedSnapshot.bars;
+        _actualCandles = mergedSnapshot.candles;
+        _actualTimestamps = mergedSnapshot.timestamps;
+        if (mergedSnapshot.bars.isNotEmpty) {
+          _olderCursorMs = mergedSnapshot.bars.first.timestamp;
+        }
         if (bars.isNotEmpty) {
           unawaited(MarketCandleStore.archive(sourceSymbol, sourceTimeframe,
               sourceAccount, bars, markFresh: true).catchError((Object _) {}));
