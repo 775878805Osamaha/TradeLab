@@ -123,6 +123,71 @@ void main() {
       candleCount: 1000, plotWidth: 300), isEmpty);
   });
 
+  test('visible SL/TP dashes skip millions of hidden pixels in O(viewport)',
+      () {
+    final dashes = ReplayTradeOverlayLayout.visibleDashSegments(
+        x1: -2000000, x2: 295, plotWidth: 300).toList();
+    expect(dashes.length, lessThanOrEqualTo(27));
+    expect(dashes, isNotEmpty);
+    expect(dashes.every((dash) =>
+        dash.$1 >= 0 && dash.$2 <= 300 && dash.$2 > dash.$1), isTrue);
+    // Retain the original dash period even when x1 is far left.
+    for (final (start, end) in dashes) {
+      expect(end - start, lessThanOrEqualTo(7));
+      final phase = ((start + 2000000) % 12);
+      expect(phase, lessThanOrEqualTo(7));
+    }
+    expect(ReplayTradeOverlayLayout.visibleStroke(
+        x1: -2000000, x2: 295, plotWidth: 300), (0.0, 295.0));
+    expect(ReplayTradeOverlayLayout.visibleStroke(
+        x1: -2000000, x2: -10, plotWidth: 300), isNull);
+    expect(ReplayTradeOverlayLayout.visibleStroke(
+        x1: 400, x2: 600, plotWidth: 300), isNull);
+  });
+
+  test('dash phase stays anchored while panning and zooming', () {
+    final segments = ReplayTradeOverlayLayout.visibleDashSegments(
+        x1: 10, x2: 55, plotWidth: 300).toList();
+    expect(segments, [(10.0, 17.0), (22.0, 29.0),
+      (34.0, 41.0), (46.0, 53.0)]);
+    final clipped = ReplayTradeOverlayLayout.visibleDashSegments(
+        x1: -2, x2: 28, plotWidth: 30).toList();
+    expect(clipped, [(0.0, 5.0), (10.0, 17.0),
+      (22.0, 28.0)]);
+    expect(ReplayTradeOverlayLayout.visibleDashSegments(
+        x1: -100, x2: -20, plotWidth: 300), isEmpty);
+    expect(ReplayTradeOverlayLayout.visibleDashSegments(
+        x1: 10, x2: 300, plotWidth: double.nan), isEmpty);
+    expect(ReplayTradeOverlayLayout.visibleStroke(
+        x1: double.infinity, x2: 2, plotWidth: 300), isNull);
+  });
+
+  testWidgets('overlay safely paints a 200k-bar historical practice position',
+      (tester) async {
+    const longOpen = ReplayTrainingTrade(
+      id: 77, side: ReplaySide.buy, entryIndex: 0,
+      entryPrice: 103, quantity: 1,
+      stopLoss: 98, takeProfit: 112,
+    );
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: Center(child: SizedBox(
+        width: 320, height: 240,
+        child: CustomPaint(
+          key: const Key('long-practice-position'),
+          painter: ReplayTradeOverlayPainter(
+            trades: const [longOpen],
+            viewport: const ChartViewport(barWidth: 10),
+            scale: const ChartPriceScale(90, 120, 216),
+            candleCount: 200000, plotWidth: 259,
+          ),
+        ),
+      )),
+    ));
+    expect(find.byKey(const Key('long-practice-position')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('isolated overlay paints without altering gestures or source',
       (tester) async {
     await tester.pumpWidget(Directionality(

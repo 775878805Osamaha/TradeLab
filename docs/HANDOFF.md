@@ -1,5 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة قيد فحص CI — إزالة آلاف ضربات SL/TP غير المرئية في Replay
+- الفرع `fix/tradelab-replay-overlay-visible-dashes-20261121` من `e4124586310bd881588f04520c4aafdd4bbcdf3c`، لا تغيير `main`، ولا APK/Release.
+- **خلل الأداء الفعلي في المصدر:** `ReplayTradeOverlayPainter._dashed` كان يمر على كل 12 بكسل من نقطة دخول الصفقة إلى آخر شمعة مُكشوفة، حتى لو كانت البداية خارج شاشة الهاتف بمليوني بكسل، لأن `clipRect` لا يوقف حلقة Dart التي ترسم هذه الشرطات. يؤدي هذا إلى عمل O(طول التاريخ) أثناء السحب والتكبير.
+- **الإصلاح:** `ReplayTradeOverlayLayout.visibleDashSegments` يتخطى الفترات المخفية حسابيًا، ويحافظ على موضع طور الشرطات الأصلي، ويرسم فقط خطوط SL/TP المرئية O(عرض الشاشة / 12). قص خط الدخول المتصل بـ`visibleStroke` وإخفاء علامات الدخول/الخروج غير المرئية دون تعديل سعر أو توقيت أو مؤشر مصدر Replay.
+- **الاختبارات:** خط يبدأ -2,000,000px ويصل داخل 300px يعيد ≤27 شرطة، فحص الطور والترتيب والتفريغ عند الاختفاء وNaN، وwidget paint مع 200 ألف شمعة مُكشوفة. `CI PENDING`، Android Profile `NOT RUN`.
+- **التالي:** افتح PR على التطوير، افحص Flutter analyze واختبارات الرسم وReplay/Range، أصلح أي فشل ثم ادمج التطوير فقط ودوّن SHA/CI.
+
 ## دفعة مكتملة — PR #576: وقف/هدف Replay سريع للقفزات الطويلة
 - **MERGED:** [PR #576](https://github.com/775878805Osamaha/TradeLab/pull/576) إلى `test/flutter-all-fixes-20261116`، SHA الفعلي [84e9c5c](https://github.com/775878805Osamaha/TradeLab/commit/84e9c5c3eb038b2cca30427101af8f95149f3851).
 - **CI:** [GitHub Actions #44834326339](https://github.com/775878805Osamaha/TradeLab/actions/runs/44834326339) **PASS / completed / success**؛ Flutter analyze واختبارات التاريخ والشارت وReplay/Range وتوقيت اليمن. لا قياسات Android Profile/FPS حقيقية حتى الآن.
