@@ -15,6 +15,7 @@ import '../chart/chart_type_sheet.dart';
 import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
+import '../chart/chart_price_scale_cache.dart';
 import '../chart/chart_ohlc_inspector.dart';
 import '../chart/chart_crosshair_time_label.dart';
 import '../chart/chart_quick_actions.dart';
@@ -109,6 +110,9 @@ class _ChartScreenState extends State<ChartScreen>
     _chartRepaint, _rectangleRepaint,
   ]);
   final ChartTextLayoutCache _chartTextCache = ChartTextLayoutCache();
+  // Shared by candle paint, rectangles, Replay price levels and touch hits.
+  // Exactly one immutable auto-scale per source/viewport/plot configuration.
+  final ChartPriceScaleCache _autoPriceScaleCache = ChartPriceScaleCache();
 
   // Session-only BID tick cache: switching Range size rebuilds locally.
   // Scoped by account and symbol; not a substitute for persistent history.
@@ -1630,6 +1634,7 @@ class _ChartScreenState extends State<ChartScreen>
     _recordTraining();
     _frameProfiler.detach();
     _heikinCache.dispose();
+    _autoPriceScaleCache.clear();
     widget.controller.removeListener(_onMarketUpdate);
     _loadRevision++;
     _replayTimer?.cancel();
@@ -3221,9 +3226,14 @@ class _ChartScreenState extends State<ChartScreen>
       List<TradeCandle> candles, double width, double height) {
     final plotHeight = math.max(1.0, height - 24);
     if (_priceScaleManual) return _manualPriceScale!.withHeight(plotHeight);
-    return ChartPriceScale.visible(candles, _viewport, width, plotHeight,
+    return _autoPriceScaleCache.resolve(
+      candles: candles,
+      viewport: _viewport,
+      plotWidth: width,
+      plotHeight: plotHeight,
       topMarginPercent: _panelSettings.topMarginPercent,
-      bottomMarginPercent: _panelSettings.bottomMarginPercent);
+      bottomMarginPercent: _panelSettings.bottomMarginPercent,
+    );
   }
 
   void _resetPriceAxisToAuto() {
