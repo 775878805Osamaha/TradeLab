@@ -147,3 +147,13 @@
 - **التنفيذ الفعلي:** 5 ملفات source (ملف ميزانية جديد) و4 ملفات اختبار + 2 docs. عرض حتى 200k شمعة زمنية من SQLite بدل 100k؛ مشاركة سقف الذاكرة مع cTrader refresh وsnapshot وolder prepend؛ إيقاف المحاولة قبل تخصيص محاور/قائمة >200k دون تغيير البيانات المصدرية أو Replay.
 - **قيود:** التاريخ الأقدم يمكن حفظه في أرشيف SQLite لكن غير محمّل كله في RAM في نفس الوقت؛ ما زال يلزم نظام عرض نوافذ لاحقًا للوصول لأكثر من 200k بلا توقف. لم يُنشأ APK/Release جديد، وآخر APK المتاح يسبق PR #567–#571؛ `main` والمشاريع الأخرى لم تُمس.
 - **الخطوة التالية الواحدة:** اختبار تطبيق TradeLab على Android Profile مع بيانات cTrader BID الحقيقية وقياس p50/p95/p99، وإصلاح أية مشكلة تظهر ثم حفظ تقرير جديد.
+
+### 2026-11-20T22:26:46.403Z — نافذة بدء الشارت + تاريخ شموع SQLite محلي على صفحات
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab`، `feat/local-first-candle-paging-20261121` من `908f42abb28c8d6e3dd9b5a7b6e7835972776c44`، دون تعديل `main` أو مشاريع أخرى، ودون APK/Release.
+- **الأداء:** `ChartScreen._loadRealHistory` يبدأ بآخر 4000 شمعة زمنية مصدرية بدل استرجاع 200000 صف عند كل فتح للشارت. هذا تغيير في سياسة استهلاك الذاكرة وحجم SQLite query، وليس قياس زمن Android فعلي.
+- **التاريخ الأقدم:** `MarketCandleStore.readOlder` يدعم strict `timestamp_ms < beforeMs`، ترتيب تنازلي في SQLite واسترجاع تصاعدي صالح للرسم، حد افتراضي 2000، وبنفس مفاتيح الرمز/الفريم/الحساب؛ لا إعادة تحميل صفحة المصدر المحفوظة من الإنترنت.
+- **تكامل الشاشة:** بحث local-first عند السحب لليسار، ثم حصة broker authenticated فقط عند cache miss/invalid cache. تعطيل النشر عند تغير الحساب/الرمز أثناء الانتظار، استخدام نفس إعدادات Replay/drawing rebase، ومنع الطلبات الجديدة قبل تجاوز حد 200k نافذة RAM.
+- **الاختبارات:** ثلاث حالات جديدة في `flutter_app/test/market_candle_store_test.dart`: 4200 مصدر مع فجوة أصلية والعودة إلى 4000+200، صفحات 600/600 منفصلة حسب الحساب، وحدود 200k وargs.
+- **ملفات المصدر:** `flutter_app/lib/data/market_candle_store.dart`، `flutter_app/lib/screens/chart_screen.dart`. **التوثيق:** `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
+- **التحقق:** GitHub Actions **PENDING** عند هذه النقطة، Flutter SDK المحلي وAndroid Profile/FPS **NOT RUN**، ولا ادعاء بمطابقة TradingView الفعلية.
+- **التالي:** افتح PR، راقب Flutter analyze وSQLite/Range/Replay، أصلح أي FAIL، ثم دمج إلى فرع التطوير فقط وتحديث SHA/CI الفعلي.

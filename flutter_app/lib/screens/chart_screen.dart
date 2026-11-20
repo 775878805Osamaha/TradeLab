@@ -909,8 +909,12 @@ class _ChartScreenState extends State<ChartScreen>
         List<MarketBar> cached = const [];
         var fresh = false;
         try {
+          // Restore a bounded verified source page immediately, not a 200k
+          // chart archive on every tab opening. Older source bars remain
+          // available from SQLite when the user pans into history.
           cached = await MarketCandleStore.read(
-              sourceSymbol, sourceTimeframe, sourceAccount);
+              sourceSymbol, sourceTimeframe, sourceAccount,
+              limit: MarketCandleStore.initialChartPageSize);
           fresh = cached.isNotEmpty && await MarketCandleStore.isFresh(
               sourceSymbol, sourceTimeframe, sourceAccount);
         } catch (_) {
@@ -1499,9 +1503,38 @@ class _ChartScreenState extends State<ChartScreen>
       final symbol = _selectedSymbol;
       final timeframe = _timeframe;
       final sourceAccount = widget.controller.accountId;
+      // A 200k on-screen limit is not the end of broker history; do
+      // not spend a network request when no additional bars fit in RAM.
+      final capacity =
+          MarketCandleStore.olderPageCapacity(_actualBars.length);
+      if (capacity == 0) {
+        throw const MarketDataException(
+            'وصل الشارت إلى حد 200 ألف شمعة في الذاكرة. '
+            'أعد فتحه بنافذة أحدث لعرض فترة أخرى.');
+      }
+      List<MarketBar> localPage = const <MarketBar>[];
+      try {
+        localPage = await MarketCandleStore.readOlder(
+          symbol, timeframe,
+          symbol.source == TradeSource.ctrader ? sourceAccount : null,
+          beforeMs: cursor, limit: capacity,
+        );
+      } catch (_) {
+        // A broken cache is not a market feed: authenticate via the
+        // original broker fetch below instead of displaying bad rows.
+      }
+      if (!mounted || revision != _loadRevision ||
+          widget.controller.accountId != sourceAccount ||
+          _selectedSymbol.code != symbol.code ||
+          _timeframe != timeframe || _mode == ChartMode.range) return;
+
       final List<MarketBar> older;
       var quietCursor = cursor;
-      if (symbol.source == TradeSource.ctrader) {
+      if (localPage.isNotEmpty) {
+        // SQL only returns account-scoped, strictly older verified bars.
+        // The existing prepend path handles Replay and drawing anchors.
+        older = localPage;
+      } else if (symbol.source == TradeSource.ctrader) {
         final page = await CTraderOlderCandlePager.load(
           cursorMs: cursor,
           lookback: MarketApi.ctraderCandleLookback(timeframe),

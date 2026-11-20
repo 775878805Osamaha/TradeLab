@@ -64,6 +64,81 @@ void main() {
         isEmpty);
   });
 
+  test('startup restores 4000 recent source candles, then local older page',
+      () async {
+    final account = 'startup-${DateTime.now().microsecondsSinceEpoch}';
+    const first = 1700000000000;
+    final archive = List<MarketBar>.generate(4200, (i) {
+      final time = first + (i + (i >= 3100 ? 1 : 0)) * 60000;
+      final price = 4000.0 + i * .01;
+      return MarketBar(time,
+          TradeCandle(price, price + .5, price - .4, price + .1));
+    });
+    await MarketCandleStore.archive(gold, '1m', account, archive);
+    final shown = await MarketCandleStore.read(gold, '1m', account,
+        limit: MarketCandleStore.initialChartPageSize);
+    expect(shown, hasLength(4000));
+    expect(shown.first.timestamp, archive[200].timestamp);
+    final older = await MarketCandleStore.readOlder(
+        gold, '1m', account, beforeMs: shown.first.timestamp);
+    expect(older, hasLength(200));
+    expect(older.first.timestamp, archive.first.timestamp);
+    expect(older.last.timestamp, archive[199].timestamp);
+    final full = [...older, ...shown];
+    expect(full.map((b) => b.timestamp),
+        archive.map((b) => b.timestamp));
+    expect(full[3100].timestamp - full[3099].timestamp, 120000,
+        reason: 'Never fabricate a missing verified broker minute');
+  });
+
+  test('local older pages are account-isolated and strictly before cursor',
+      () async {
+    final account = 'older-${DateTime.now().microsecondsSinceEpoch}';
+    const start = 1702000000000;
+    final archive = List<MarketBar>.generate(1602, (i) {
+      final price = 1900.0 + i * .01;
+      return MarketBar(start + i * 60000,
+          TradeCandle(price, price + .5, price - .3, price + .1));
+    });
+    await MarketCandleStore.archive(gold, '1m', account, archive);
+    final recent = await MarketCandleStore.read(gold, '1m', account,
+        limit: 100);
+    final page1 = await MarketCandleStore.readOlder(
+        gold, '1m', account, beforeMs: recent.first.timestamp, limit: 600);
+    final page2 = await MarketCandleStore.readOlder(
+        gold, '1m', account, beforeMs: page1.first.timestamp, limit: 600);
+    expect(page1, hasLength(600));
+    expect(page2, hasLength(600));
+    expect(page1.last.timestamp, lessThan(recent.first.timestamp));
+    expect(page2.last.timestamp, lessThan(page1.first.timestamp));
+    expect(page2.first.timestamp, archive[302].timestamp);
+    expect(await MarketCandleStore.readOlder(
+        gold, '1m', 'another-account', beforeMs: recent.first.timestamp),
+        isEmpty);
+    expect(await MarketCandleStore.readOlder(
+        btc, '1m', null, beforeMs: recent.first.timestamp), isEmpty);
+    expect(await MarketCandleStore.readOlder(
+        gold, '1m', account, beforeMs: archive.first.timestamp), isEmpty);
+    for (final (time, size) in <(int, int)>[
+      (0, 10), (-1, 10), (start, 0), (start, 200001),
+    ]) {
+      await expectLater(MarketCandleStore.readOlder(
+        gold, '1m', account, beforeMs: time, limit: size),
+        throwsArgumentError);
+    }
+  });
+
+  test('older page respects remaining 200k chart-memory budget', () {
+    expect(MarketCandleStore.olderPageCapacity(0), 2000);
+    expect(MarketCandleStore.olderPageCapacity(198000), 2000);
+    expect(MarketCandleStore.olderPageCapacity(199999), 1);
+    expect(MarketCandleStore.olderPageCapacity(200000), 0);
+    expect(() => MarketCandleStore.olderPageCapacity(-1),
+        throwsArgumentError);
+    expect(() => MarketCandleStore.olderPageCapacity(200001),
+        throwsArgumentError);
+  });
+
   test('persist 120 verified market candles; no fabricated gaps', () async {
     final account = 'cache-test-${DateTime.now().microsecondsSinceEpoch}';
     final bars = List<MarketBar>.generate(120, (i) {
