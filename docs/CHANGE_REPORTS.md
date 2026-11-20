@@ -122,3 +122,11 @@
 - **الاختبارات الإضافية:** 31 صفحة بتأخير متفاوت وإجابات تصل خارج الترتيب مع حد طلبين متزامنين؛ فشل ورقة مع سلامة بقية الأوراق، ورفض صفحة بعلامة حساب متعارضة. تغطي الاختبارات القائمة تقسيم الصفحات في حافة المللي ثانية، كثافة 6000 تيك، ورفض الأوقات الكسرية.
 - **التحقق عند الحفظ:** GitHub Actions **PENDING** بعد فتح PR، Flutter SDK محلي وAndroid Profile **NOT RUN**، لا تدّعِ FPS محسنًا دون قياس.
 - **الخطوة التالية الوحيدة:** PR واحد وCI، إصلاح أي إخفاق، دمج في فرع التطوير فقط بعد PASS وتسجيل SHA/CI، دون بناء APK.
+
+### 2026-11-20T22:13:15.990Z — نجاح CI ودمج PR #570 لجدولة تحميل BID المتكيفة
+- **GitHub:** [PR #570](https://github.com/775878805Osamaha/TradeLab/pull/570) **MERGED** إلى `test/flutter-all-fixes-20261116`، SHA الحقيقي [7f68458](https://github.com/775878805Osamaha/TradeLab/commit/7f68458a69e51817f2b396bb5bf74bdb41460d9d). تم التحقق من HEAD التطوير بعد الدمج، و`main` بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc` بلا تغيير.
+- **التحقق:** [Actions #44826685592](https://github.com/775878805Osamaha/TradeLab/actions/runs/44826685592) = **PASS / completed / success** على PR head `3f349dcafc272ceb44f82dab55a9ed17c906ca93`؛ Flutter analyze وكل فحوص BID/Range/Replay/timezone نجحت. Android physical/profile **NOT RUN**.
+- **التنفيذ:** استبدال تقسيم cTrader BID الذي يبدأ بمسارين ثم يكمل كل منهما منفردًا بطابور عمل مستمر بعاملين، سقف 4096 طلب / 100 ألف تيك لكل صفحة / مليون إجمالي، والتحقق من accountId إذا أعاده gateway؛ عدم نشر صفحات ناقصة أو تغيير ترتيب أحداث بنفس المللي ثانية. 3 اختبارات حمل/فشل/مصدر.
+- **الملفات:** `flutter_app/lib/data/market_api.dart` و`flutter_app/test/market_api_test.dart` و`docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`.
+- **الحدود:** لا APK/Release جديد، لا تغييرات في التداول الحقيقي أو أسعار وهمية أو `main` أو مشاريع أخرى. ملف APK المنشور أقدم من #567–#570.
+- **الخطوة التالية:** توحيد سقف التاريخ المحمل من SQLite مع الشارت على 200 ألف شمعة وقت، ومنع append تاريخ زائد قبل تخصيص المصفوفات، ثم إجراء CI ودمج التطوير فقط.
