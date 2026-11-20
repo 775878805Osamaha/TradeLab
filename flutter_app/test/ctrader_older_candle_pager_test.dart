@@ -68,6 +68,37 @@ void main() {
     expect(secondRequested.single, requested.last - span - 1);
   });
 
+  test('rejects misrouted, duplicated and invalid OHLC older pages',
+      () async {
+    Future<CTraderOlderCandlePage?> load(List<MarketBar> data) =>
+        CTraderOlderCandlePager.load(
+          cursorMs: end, lookback: lookback, maxPages: 1,
+          fetch: (_) async => data,
+          isCurrent: () => true,
+        );
+    await expectLater(load([MarketBar(end, candle)]),
+        throwsA(isA<MarketDataException>()),
+        reason: 'An event at the exclusive cursor cannot become old history');
+    await expectLater(load([MarketBar(end + 1000, candle)]),
+        throwsA(isA<MarketDataException>()));
+    await expectLater(load([
+      MarketBar(end - 2000, candle), MarketBar(end - 2000, candle),
+    ]), throwsA(isA<MarketDataException>()));
+    await expectLater(load([
+      MarketBar(end - 2000, const TradeCandle(100, 101, 99, 105)),
+    ]), throwsA(isA<MarketDataException>()));
+  });
+
+  test('valid count-back broker page can cross quiet weekend', () async {
+    final old = MarketBar(end - 30 * span, candle);
+    final result = await CTraderOlderCandlePager.load(
+      cursorMs: end, lookback: lookback, maxPages: 1,
+      fetch: (_) async => [old], isCurrent: () => true,
+    );
+    expect(result!.bars.single, same(old));
+    expect(result.nextCursorMs, end);
+  });
+
   test('cancels immediately when chart account or symbol changes', () async {
     var active = true;
     var requests = 0;
