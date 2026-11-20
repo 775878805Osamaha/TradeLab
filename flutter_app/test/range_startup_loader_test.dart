@@ -289,4 +289,121 @@ void main() {
         reason: 'Keep the same verified event list when no older BID arrived');
   });
 
+
+  test('120k verified startup BID ticks are certified before publication',
+      () async {
+    final page = List<MarketTick>.generate(120000, (i) =>
+        MarketTick(now - 125000 + i ~/ 2, 3900 + (i % 97) * .01),
+        growable: false);
+    final certified = <(int, int, List<MarketTick>)>[];
+    final snapshots = <RangeStartupSnapshot>[];
+    final result = await RangeStartupLoader.load(
+      endMs: now,
+      priceDistance: .5,
+      minimumClosedBars: 1,
+      isCurrent: () => true,
+      getTicks: (from, to) async => page,
+      onVerifiedPage: (from, to, ticks) {
+        certified.add((from, to, ticks));
+        expect(snapshots, isEmpty,
+            reason: 'Archive certification precedes chart publication');
+      },
+      onSnapshot: (snapshot) async {
+        expect(certified, hasLength(1),
+            reason: 'No Range bars before strict BID verification');
+        snapshots.add(snapshot);
+      },
+    );
+    expect(certified, hasLength(1));
+    expect(identical(certified.single.$3, page), isTrue);
+    expect(result, isNotNull);
+    expect(result!.ticks, hasLength(120000));
+    expect(result.closedBars, greaterThan(0));
+    expect(snapshots, hasLength(1));
+  });
+
+  test('invalid large startup BID page is never certified or drawn',
+      () async {
+    final page = List<MarketTick>.generate(6300, (i) =>
+        MarketTick(now - 12000 + i, 3900 + i * .001));
+    page[6299] = MarketTick(now + 1000, 3900);
+    var certified = 0;
+    var snapshots = 0;
+    await expectLater(
+      RangeStartupLoader.load(
+        endMs: now,
+        priceDistance: 1,
+        getTicks: (_, __) async => page,
+        onVerifiedPage: (_, __, ___) => certified++,
+        onSnapshot: (_) async => snapshots++,
+      ),
+      throwsA(isA<MarketDataException>()),
+    );
+    expect(certified, 0);
+    expect(snapshots, 0);
+  });
+
+  test('broker-confirmed empty windows are archived without fake bars',
+      () async {
+    final certified = <(int, int)>[];
+    final source = await RangeStartupLoader.load(
+      endMs: now,
+      priceDistance: 1,
+      getTicks: (from, to) async => const <MarketTick>[],
+      onVerifiedPage: (from, to, ticks) {
+        expect(ticks, isEmpty);
+        certified.add((from, to));
+      },
+      onSnapshot: (_) async => fail('No source ticks means no Range bar'),
+    );
+    expect(source, isNull);
+    expect(certified, hasLength(RangeStartupLoader.horizons.length));
+    for (var i = 1; i < certified.length; i++) {
+      expect(certified[i].$2, certified[i - 1].$1 - 1);
+    }
+  });
+
+  test('account revision cancellation stops startup archive and snapshots',
+      () async {
+    var current = true;
+    var certified = 0;
+    var snapshots = 0;
+    final result = await RangeStartupLoader.load(
+      endMs: now,
+      priceDistance: 1,
+      isCurrent: () => current,
+      getTicks: (from, to) async {
+        // An authenticated response for a previously active account
+        // arrives only after the new account/symbol has been selected.
+        current = false;
+        return [MarketTick(to - 100, 3900)];
+      },
+      onVerifiedPage: (_, __, ___) => certified++,
+      onSnapshot: (_) async => snapshots++,
+    );
+    expect(result, isNull);
+    expect(certified, 0);
+    expect(snapshots, 0);
+  });
+
+  test('over-memory-cap startup page cannot become trusted cache coverage',
+      () async {
+    final page = List<MarketTick>.generate(
+      RangeStartupLoader.maxStartupTicks + 1,
+      (i) => MarketTick(now - 120000 + i ~/ 10, 3900.0),
+      growable: false,
+    );
+    var certified = 0;
+    await expectLater(
+      RangeStartupLoader.load(
+        endMs: now,
+        priceDistance: 1,
+        getTicks: (_, __) async => page,
+        onVerifiedPage: (_, __, ___) => certified++,
+        onSnapshot: (_) async => fail('Memory cap must reject publication'),
+      ),
+      throwsA(isA<MarketDataException>()),
+    );
+    expect(certified, 0);
+  });
 }
