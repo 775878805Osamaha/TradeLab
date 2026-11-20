@@ -143,6 +143,91 @@ void main() {
         reason: 'Valid one-finger panning still works after a bad pinch sample');
   });
 
+  test('invalid Android centroid mid-pinch rebases at current candle viewport',
+      () {
+    final gesture = ChartTouchGesture();
+    const original = ChartViewport(
+        barWidth: 10, scrollBars: 45, rightMarginBars: 3);
+    ChartViewport sample(ChartViewport current,
+        {required double focal, required double scale, int pointers = 2,
+         double deltaX = 0}) => gesture.update(
+          viewport: current, pointerCount: pointers,
+          focalX: focal, scale: scale, deltaX: deltaX,
+          plotWidth: 320, candleCount: 500,
+        );
+
+    final started = sample(original, focal: 160, scale: 1);
+    expect(identical(started, original), isTrue);
+    final zoomed = sample(started, focal: 164, scale: 1.8);
+    expect(zoomed.barWidth, closeTo(18, 1e-10));
+    expect(gesture.ignoredPointerTransition, isFalse);
+
+    // A bad Android centroid can occur after an established two-finger zoom.
+    // It must not undo the valid zoom or keep the now-stale initial anchor.
+    final interrupted = sample(zoomed, focal: double.nan, scale: 1.8);
+    expect(identical(interrupted, zoomed), isTrue);
+    expect(gesture.ignoredPointerTransition, isTrue);
+    expect(gesture.hadMultiTouch, isTrue);
+
+    // The next valid Android sample may carry a different centroid and
+    // cumulative scale, but is only a new baseline (not an actual gesture).
+    final resumed = sample(interrupted, focal: 242, scale: 2.4);
+    expect(identical(resumed, zoomed), isTrue,
+        reason: 'Finger centroid recovery must not jump old candles');
+    expect(gesture.ignoredPointerTransition, isTrue);
+    final continued = sample(resumed, focal: 245, scale: 2.64);
+    expect(continued.barWidth, closeTo(19.8, 1e-9),
+        reason: 'Only the post-recovery scale ratio 2.64/2.4 applies');
+    expect(continued.scrollBars.isFinite, isTrue);
+    expect(gesture.ignoredPointerTransition, isFalse);
+
+    // Another corrupted scale while zooming has the same restart guarantee.
+    final interruptedAgain =
+        sample(continued, focal: 245, scale: double.infinity);
+    expect(identical(interruptedAgain, continued), isTrue);
+    final resumedAgain = sample(interruptedAgain, focal: 280, scale: 3);
+    expect(identical(resumedAgain, continued), isTrue);
+    final afterRecovery = sample(resumedAgain, focal: 281, scale: 3.3);
+    expect(afterRecovery.barWidth, closeTo(21.78, 1e-9));
+    final lifted = sample(afterRecovery, focal: 281, scale: 1, pointers: 1);
+    expect(identical(lifted, afterRecovery), isTrue);
+    expect(gesture.ignoredPointerTransition, isTrue);
+    final panned = sample(lifted, focal: 280, scale: 1,
+        pointers: 1, deltaX: 12);
+    expect(panned.scrollBars, greaterThan(lifted.scrollBars));
+  });
+
+  test('direct finger lift after invalid active pinch cannot pan the chart',
+      () {
+    final gesture = ChartTouchGesture();
+    const original = ChartViewport(barWidth: 12, scrollBars: 42);
+    ChartViewport sample(ChartViewport current, {
+      required int pointers, required double focal,
+      required double scale, required double dx,
+    }) => gesture.update(
+      viewport: current, pointerCount: pointers,
+      focalX: focal, scale: scale, deltaX: dx,
+      plotWidth: 320, candleCount: 500,
+    );
+    final began = sample(original,
+        pointers: 2, focal: 154, scale: 1, dx: 0);
+    final zoomed = sample(began,
+        pointers: 2, focal: 158, scale: 1.5, dx: 4);
+    expect(zoomed.barWidth, 18);
+    final interrupted = sample(zoomed,
+        pointers: 2, focal: double.nan, scale: 1.5, dx: 0);
+    expect(identical(interrupted, zoomed), isTrue);
+    final lifted = sample(interrupted,
+        pointers: 1, focal: 300, scale: 1, dx: 142);
+    expect(identical(lifted, zoomed), isTrue,
+        reason: 'First one-finger frame after a bad pinch is only centroid shift');
+    expect(gesture.ignoredPointerTransition, isTrue);
+    final panned = sample(lifted,
+        pointers: 1, focal: 300, scale: 1, dx: 11);
+    expect(panned.scrollBars, greaterThan(lifted.scrollBars),
+        reason: 'Deliberate one-finger pan resumes on next valid sample');
+  });
+
   test('bad persisted or transient viewport geometry is not hit-testable', () {
     const invalidWidth = ChartViewport(barWidth: 0);
     const invalidScroll = ChartViewport(scrollBars: double.nan);
