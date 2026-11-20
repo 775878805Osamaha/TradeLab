@@ -415,6 +415,13 @@ class ChartTouchGesture {
       // second pointer joins/leaves. Drop that *sample*, not the chart:
       // the first subsequent valid sample rebases pinch at today's viewport.
       if (!focalX.isFinite || !scale.isFinite || scale <= 0) {
+        // An invalid sample can arrive *during* a valid Android pinch, not
+        // only when the second finger first joins. Flutter's subsequent
+        // centroid/scale may be rebased, so abandon the old gesture origin.
+        // The next valid two-pointer sample must anchor to the viewport
+        // visible now instead of jumping back to the stale origin.
+        _pinching = false;
+        _pinchOrigin = null;
         ignoredPointerTransition = true;
         return viewport;
       }
