@@ -12,6 +12,6 @@ abstract final class ChartPriceTextFormatter {
     final parts = value.toStringAsFixed(digits).split('.');
     final integer = parts.first.replaceAllMapped(
       _thousands, (_) => ',');
-    return digits == 0 ? integer : '$' + 'integer.' + '${parts.last}';
+    return digits == 0 ? integer : '$integer.${parts.last}';
   }
 }
