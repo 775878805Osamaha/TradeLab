@@ -1,0 +1,87 @@
+name: "Manual storage cleanup - keep latest two APKs"
+on:
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: "DELETE old APK Releases and temporary Actions Artifacts (default: preview only)"
+        required: true
+        type: boolean
+        default: false
+      confirm:
+        description: "To DELETE, type DELETE_OLD_KEEP_2 (ignored in preview)"
+        required: false
+        type: string
+        default: ""
+permissions:
+  contents: write
+  actions: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: "Review protected versions and optionally delete old files"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const inputs = context.payload.inputs || {};
+            const execute = String(inputs.execute ?? "false") === "true";
+            if (execute && inputs.confirm !== "DELETE_OLD_KEEP_2") {
+              throw new Error("No deletion: type DELETE_OLD_KEEP_2 into confirm.");
+            }
+            const listReleases = await github.paginate(github.rest.repos.listReleases, {owner, repo, per_page:100});
+            const apkAssets = r => (r.assets || []).filter(a => /\.apk$/i.test(a.name));
+            const allApk = listReleases.filter(r => !r.draft && apkAssets(r).length)
+              .sort((a,b) => new Date(b.published_at || b.created_at) - new Date(a.published_at || a.created_at));
+            // Two newest published APK releases must survive, even if all are prereleases.
+            const keep = new Set(allApk.slice(0,2).map(r => r.id));
+            // Explicitly protect the newest two per worker/manager app if both are present.
+            for (const role of ["manager", "worker"]) {
+              allApk.filter(r => apkAssets(r).some(a => new RegExp(role, "i").test(a.name)))
+                .slice(0,2).forEach(r => keep.add(r.id));
+            }
+            const oldReleases = allApk.filter(r => r.prerelease && !keep.has(r.id));
+            // Never delete drafts, stable releases, or releases without an APK.
+            const artifacts = (await github.paginate(github.rest.actions.listArtifactsForRepo, {owner,repo,per_page:100}))
+              .filter(a => !a.expired)
+              .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+            const aKeep = new Set(artifacts.slice(0,2).map(a=>a.id));
+            const family = n => n.toLowerCase()
+              .replace(/\b[0-9a-f]{8,40}\b/g,"")
+              .replace(/\bv?\d+(?:[._-]\d+){1,4}\b/g,"")
+              .replace(/[0-9]{8,14}/g,"")
+              .replace(/[._\s-]+/g,"-");
+            const groups = new Map();
+            for (const a of artifacts) {
+              const key=family(a.name);
+              if (!groups.has(key)) groups.set(key,[]);
+              groups.get(key).push(a);
+            }
+            for (const xs of groups.values()) xs.slice(0,2).forEach(a=>aKeep.add(a.id));
+            const backup = /backup|keystore|key-store|signing|secret|database|db-backup|source|archive|export/i;
+            const temporary = /apk|aab|android|coverage|test|result|report|log|screen|capture|golden|preview/i;
+            const oldArtifacts = artifacts.filter(a => !aKeep.has(a.id) &&
+              !backup.test(a.name) && temporary.test(a.name));
+            const releaseBytes = oldReleases.reduce((s,r)=>s+(r.assets||[]).reduce((n,a)=>n+(a.size||0),0),0);
+            const artifactBytes = oldArtifacts.reduce((s,a)=>s+(a.size_in_bytes||0),0);
+            core.summary.addHeading("Storage cleanup: "+owner+"/"+repo,2)
+              .addRaw("Mode: "+(execute?"DELETE":"PREVIEW")+", protected latest two APK releases and latest two artifact-family builds.")
+              .addRaw("\nOld prerelease candidates: "+oldReleases.length+" ("+releaseBytes+" bytes).")
+              .addRaw("\nOld artifact candidates: "+oldArtifacts.length+" ("+artifactBytes+" bytes).");
+            core.info("Protected APK Releases: "+allApk.filter(r=>keep.has(r.id)).map(r=>r.tag_name).join(", "));
+            for (const r of oldReleases) core.info((execute?"DELETE":"WOULD_DELETE")+" RELEASE "+r.id+" "+r.tag_name+" "+(r.html_url||""));
+            for (const a of oldArtifacts) core.info((execute?"DELETE":"WOULD_DELETE")+" ARTIFACT "+a.id+" "+a.name+" "+a.size_in_bytes);
+            let deletedReleases=0,deletedArtifacts=0;
+            if (execute) {
+              for (const r of oldReleases) {
+                await github.rest.repos.deleteRelease({owner,repo,release_id:r.id});
+                deletedReleases++;
+              }
+              for (const a of oldArtifacts) {
+                await github.rest.actions.deleteArtifact({owner,repo,artifact_id:a.id});
+                deletedArtifacts++;
+              }
+            }
+            core.summary.addRaw("\nActually deleted: "+deletedReleases+" Releases; "+deletedArtifacts+" Artifacts.").write();
+            core.info("Repository source, tags, branches, draft Releases, stable Releases, and latest two APK releases were not deleted.");
