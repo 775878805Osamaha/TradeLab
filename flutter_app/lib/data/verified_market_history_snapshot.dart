@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show compute, kIsWeb;
 
 import 'market_api.dart';
+import 'ctrader_candle_stitcher.dart';
 import 'market_candle_store.dart';
 import 'tradelab_data.dart';
 
@@ -65,6 +66,60 @@ class VerifiedMarketHistorySnapshot {
       debugLabel: 'tradelab-verified-ohlc-merge-and-axis');
   }
 }
+
+/// An overlap-only closed-bar poll needs no new chart arrays. This is
+/// distinct from an accepted append that must publish every array atomically.
+class ClosedCandleRefreshResult {
+  const ClosedCandleRefreshResult({
+    required this.appended,
+    required this.snapshot,
+  });
+
+  final int appended;
+  final VerifiedMarketHistorySnapshot? snapshot;
+}
+
+class VerifiedClosedCandleRefresh {
+  const VerifiedClosedCandleRefresh._();
+  /// Source-validated cTrader refresh. The existing stitcher continues to
+  /// reject revised historical OHLC and late broker backfills.
+  static ClosedCandleRefreshResult appendVerified({
+    required List<MarketBar> existing,
+    required List<MarketBar> recent,
+  }) {
+    final combined = CTraderCandleStitcher.append(existing, recent);
+    final appended = combined.length - existing.length;
+    return ClosedCandleRefreshResult(
+      appended: appended,
+      snapshot: appended == 0
+          ? null : VerifiedMarketHistorySnapshot.fromVerified(combined),
+    );
+  }
+
+  static Future<ClosedCandleRefreshResult> appendVerifiedAsync({
+    required List<MarketBar> existing,
+    required List<MarketBar> recent,
+  }) async {
+    if (!VerifiedMarketHistorySnapshot.shouldOffload(
+        existing.length + recent.length)) {
+      return appendVerified(existing: existing, recent: recent);
+    }
+    return compute<_VerifiedClosedAppendInput, ClosedCandleRefreshResult>(
+      _appendClosedWorker,
+      (existing: existing, recent: recent),
+      debugLabel: 'tradelab-ctrader-closed-candle-refresh');
+  }
+}
+
+typedef _VerifiedClosedAppendInput = ({
+  List<MarketBar> existing,
+  List<MarketBar> recent,
+});
+
+ClosedCandleRefreshResult _appendClosedWorker(
+    _VerifiedClosedAppendInput input) =>
+    VerifiedClosedCandleRefresh.appendVerified(
+      existing: input.existing, recent: input.recent);
 
 typedef _VerifiedMarketMergeInput = ({
   List<MarketBar> cached,

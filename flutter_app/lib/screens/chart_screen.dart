@@ -55,7 +55,6 @@ import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
 import '../data/chart_timeframe_catalog.dart';
 import '../data/market_candle_store.dart';
-import '../data/ctrader_candle_stitcher.dart';
 import '../data/market_controller.dart';
 import '../paper/paper_journal_controller.dart';
 import '../paper/paper_ledger.dart';
@@ -1018,36 +1017,53 @@ class _ChartScreenState extends State<ChartScreen>
     final revision = _loadRevision;
     final symbol = _selectedSymbol;
     final timeframe = _timeframe;
+    final account = widget.controller.accountId;
     final lastTimestamp = _actualBars.last.timestamp;
     _refreshingClosedCandles = true;
     try {
       final recent = await widget.controller.closedCandlesSince(
           symbol, timeframe, lastTimestamp);
       if (!mounted || revision != _loadRevision || _replay ||
-          _selectedSymbol.code != symbol.code || _timeframe != timeframe) {
+          _selectedSymbol.code != symbol.code || _timeframe != timeframe ||
+          widget.controller.accountId != account ||
+          _mode == ChartMode.range) {
         return;
       }
-      final combined = CTraderCandleStitcher.append(_actualBars, recent);
-      final appended = combined.length - _actualBars.length;
-      if (appended == 0) {
-        // A broker response with no new CLOSED bar still proves the request
-        // recovered. Never leave a transient network error latched forever.
-        setState(() => _loadError = null);
+      final previousBars = _actualBars;
+      // The cTrader stitcher's exact overlap validation, 200k-bar memory cap
+      // and OHLC conflict policy stay in force, but for large archives run
+      // away from the chart's Android gesture/paint isolate.
+      final refresh = await VerifiedClosedCandleRefresh.appendVerifiedAsync(
+        existing: previousBars, recent: recent);
+      if (!mounted || revision != _loadRevision || _replay ||
+          _selectedSymbol.code != symbol.code || _timeframe != timeframe ||
+          widget.controller.accountId != account ||
+          _mode == ChartMode.range ||
+          !identical(_actualBars, previousBars)) {
         return;
       }
+      if (refresh.appended == 0) {
+        // Overlap-only cTrader responses do not allocate or publish a new
+        // 100k+ chart snapshot and must not advance the Replay cursor.
+        // If no error is displayed, do not rebuild the toolbar or chart
+        // just because an unchanged broker-close poll finished.
+        if (_loadError != null) {
+          setState(() => _loadError = null);
+        }
+        return;
+      }
+      final snapshot = refresh.snapshot!;
       setState(() {
         _loadError = null;
-        _actualBars = combined;
-        _actualCandles =
-            combined.map((bar) => bar.candle).toList(growable: false);
-        _actualTimestamps =
-            combined.map((bar) => bar.timestamp).toList(growable: false);
-        // Keep the visible candle anchored during historical inspection or
-        // deliberate right-side whitespace; follow new bars at the live edge.
-        _viewport = _viewport.afterAppending(appended);
+        _actualBars = snapshot.bars;
+        _actualCandles = snapshot.candles;
+        _actualTimestamps = snapshot.timestamps;
+        // Keep historical pan/whitespace anchored as each real closed
+        // candle arrives; do not jump back to the latest bar.
+        _viewport = _viewport.afterAppending(refresh.appended);
       });
       unawaited(MarketCandleStore.archive(symbol, timeframe,
-          widget.controller.accountId, recent, markFresh: true)
+          account, recent, markFresh: true)
           .catchError((Object _) {}));
     } on MarketDataException catch (error) {
       if (mounted && revision == _loadRevision) {
