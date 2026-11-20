@@ -1,4 +1,5 @@
 import 'market_api.dart';
+import 'market_history_budget.dart';
 
 /// Merge chronologically verified broker candles without inventing missing
 /// minutes or silently replacing historical OHLC from a second response.
@@ -27,7 +28,7 @@ class CTraderCandleStitcher {
       List<MarketBar> existing, List<MarketBar> recent) {
     validateBars(recent);
     if (existing.isEmpty) {
-      if (recent.length > 200000) {
+      if (recent.length > MarketHistoryBudget.maxVisibleTimeCandles) {
         throw const MarketDataException(
             'تجاوز التاريخ المحمّل حد الذاكرة. أعد فتح الشارت.');
       }
@@ -66,7 +67,7 @@ class CTraderCandleStitcher {
             'أوقفنا التحديث حتى يُراجع المصدر.');
       }
     }
-    if (existing.length + appended > 200000) {
+    if (existing.length + appended > MarketHistoryBudget.maxVisibleTimeCandles) {
       throw const MarketDataException(
           'تجاوز التاريخ المحمّل حد الذاكرة. أعد فتح الشارت.');
     }

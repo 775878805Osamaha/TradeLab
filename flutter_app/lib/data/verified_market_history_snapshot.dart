@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show compute, kIsWeb;
 
 import 'market_api.dart';
+import 'market_history_budget.dart';
 import 'ctrader_candle_stitcher.dart';
 import 'market_candle_store.dart';
 import 'tradelab_data.dart';
@@ -26,6 +27,7 @@ class VerifiedMarketHistorySnapshot {
 
   static VerifiedMarketHistorySnapshot fromVerified(
       List<MarketBar> bars) {
+    MarketHistoryBudget.requireCapacity(bars.length);
     // MarketCandleStore.read() and the broker request already strictly
     // validated all source timestamps and OHLC. Mapping must not sort,
     // synthesize missing minutes, deduplicate or transform prices.

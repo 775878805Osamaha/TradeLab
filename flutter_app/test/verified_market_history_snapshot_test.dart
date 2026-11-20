@@ -3,11 +3,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 import 'package:tradelab_flutter/data/verified_market_history_snapshot.dart';
+import 'package:tradelab_flutter/data/market_history_budget.dart';
 
 void main() {
   const first = TradeCandle(100, 102, 99, 101);
   const second = TradeCandle(101, 105, 100, 104);
   const third = TradeCandle(104, 106, 102, 103);
+
+  test('oversized chart source fails before mapping 200k+ axis arrays', () {
+    const bar = MarketBar(1000, first);
+    final source = List<MarketBar>.filled(
+        MarketHistoryBudget.maxVisibleTimeCandles + 1, bar,
+        growable: false);
+    expect(() => VerifiedMarketHistorySnapshot.fromVerified(source),
+        throwsA(isA<MarketDataException>()));
+  });
 
   test('cached verified OHLC becomes coherent candle/time arrays', () {
     const bars = <MarketBar>[

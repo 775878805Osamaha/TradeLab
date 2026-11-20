@@ -3,6 +3,7 @@ import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
 import 'market_api.dart';
+import 'market_history_budget.dart';
 import 'tradelab_data.dart';
 
 /// Parse a dense SQLite result and validate all stored OHLC in a worker.
@@ -64,8 +65,9 @@ class MarketCandleStore {
   /// Replay must never inherit those revisions as if its past were unchanged.
   static List<MarketBar> mergeVerified(
       List<MarketBar> existing, List<MarketBar> fetched,
-      {int maxCount = 100000}) {
-    if (maxCount <= 0) {
+      {int maxCount = MarketHistoryBudget.maxVisibleTimeCandles}) {
+    if (maxCount <= 0 ||
+        maxCount > MarketHistoryBudget.maxVisibleTimeCandles) {
       throw ArgumentError.value(maxCount, 'maxCount', 'Must be positive');
     }
     validateBars(existing);
@@ -153,7 +155,10 @@ class MarketCandleStore {
   /// must additionally verify that the correct source is authenticated.
   static Future<List<MarketBar>> read(
       TradeSymbol symbol, String timeframe, String? accountId,
-      {int limit = 100000}) async {
+      {int limit = MarketHistoryBudget.maxVisibleTimeCandles}) async {
+    if (limit < 1 || limit > MarketHistoryBudget.maxVisibleTimeCandles) {
+      throw ArgumentError.value(limit, 'limit', 'Outside chart memory budget');
+    }
     final db = await _open();
     final rows = await db.query('candle_history',
         where: 'cache_key = ?', whereArgs: [key(symbol, timeframe, accountId)],

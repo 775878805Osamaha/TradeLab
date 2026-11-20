@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show compute, kIsWeb;
 
 import 'market_api.dart';
+import 'market_history_budget.dart';
 import 'tradelab_data.dart';
 
 /// Immutable, source-only historical prepend. The three resulting lists
@@ -73,6 +74,7 @@ class OlderCandlePrepend {
     if (existing.isEmpty) {
       throw ArgumentError('Cannot prepend older history to an empty chart');
     }
+    MarketHistoryBudget.requireCapacity(existing.length);
     if (older.isEmpty) {
       return OlderCandlePrependResult(
         prefix: const <MarketBar>[],
@@ -143,6 +145,8 @@ class OlderCandlePrepend {
         timestamps: const <int>[],
       );
     }
+    // Check before allocating three full-sized chart/Replay arrays.
+    MarketHistoryBudget.requireCapacity(existing.length + byTimestamp.length);
     final prefix = byTimestamp.values.toList(growable: false)
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
     validateBars(prefix);
