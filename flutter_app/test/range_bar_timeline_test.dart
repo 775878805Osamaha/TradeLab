@@ -412,4 +412,61 @@ void main() {
     ), isNull,
       reason: 'Cannot reset to a candle that only closes after the old start');
   });
+
+  test('120k BID events: sealed Range output matches independent builder OHLC',
+      () async {
+    const tickCount = 120000;
+    const first = 1700000000000;
+    final source = List<MarketTick>.generate(tickCount, (index) {
+      final oscillation = (index % 37) * .12;
+      return MarketTick(first + index ~/ 2, 3900.0 + oscillation);
+    }, growable: false);
+    final legacy = RangeBarBuilder(.5);
+    final expectedEndTicks = <int>[];
+    final expectedTimes = <int>[];
+    for (var index = 0; index < source.length; index++) {
+      final before = legacy.closedCount;
+      legacy.appendBidTick(source[index].bid);
+      for (var i = before; i < legacy.closedCount; i++) {
+        expectedEndTicks.add(index);
+        expectedTimes.add(source[index].timestamp);
+      }
+    }
+    final expected = legacy.snapshot();
+    expectedEndTicks.add(source.length - 1);
+    expectedTimes.add(source.last.timestamp);
+    final output = await RangeBarTimeline.buildAsync(source, .5);
+    expect(output.endTickIndices, expectedEndTicks);
+    expect(output.endTimestamps, expectedTimes);
+    expect(output.bars, hasLength(expected.length));
+    expect(output.closedBarCount, expected.length - 1);
+    for (var index = 0; index < expected.length; index++) {
+      final a = output.bars[index];
+      final b = expected[index];
+      expect((a.open, a.high, a.low, a.close),
+          (b.open, b.high, b.low, b.close));
+    }
+    final cutoff = source.length ~/ 2;
+    final visible = output.visibleClosedBarsThroughTick(cutoff);
+    expect(visible, lessThanOrEqualTo(output.closedBarCount));
+    if (visible > 0) {
+      expect(output.endTickIndices[visible - 1], lessThanOrEqualTo(cutoff));
+    }
+    if (visible < output.closedBarCount) {
+      expect(output.endTickIndices[visible], greaterThan(cutoff));
+    }
+    expect(source.first.timestamp, first);
+    expect(source.last.timestamp, first + (tickCount - 1) ~/ 2);
+  });
+
+  test('forming Range bar remains non-executable with a one-tick history',
+      () {
+    final single = RangeBarTimeline.build([MarketTick(12345, 3900)], 1);
+    expect(single.bars, hasLength(1));
+    expect(single.closedBarCount, 0);
+    expect(single.endTickIndices, [0]);
+    expect(single.endTimestamps, [12345]);
+    expect(single.visibleBarsThroughTick(0), 1);
+    expect(single.visibleClosedBarsThroughTick(0), 0);
+  });
 }
