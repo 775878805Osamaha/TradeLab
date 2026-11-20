@@ -157,3 +157,11 @@
 - **ملفات المصدر:** `flutter_app/lib/data/market_candle_store.dart`، `flutter_app/lib/screens/chart_screen.dart`. **التوثيق:** `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
 - **التحقق:** GitHub Actions **PENDING** عند هذه النقطة، Flutter SDK المحلي وAndroid Profile/FPS **NOT RUN**، ولا ادعاء بمطابقة TradingView الفعلية.
 - **التالي:** افتح PR، راقب Flutter analyze وSQLite/Range/Replay، أصلح أي FAIL، ثم دمج إلى فرع التطوير فقط وتحديث SHA/CI الفعلي.
+
+### 2026-11-20T22:30:50.872Z — CI فشل اختبار Replay بسبب سحب آلي يفعّل القصور: إصلاح محدد
+- **الواقعة المثبتة:** [Actions #44829082109](https://github.com/775878805Osamaha/TradeLab/actions/runs/44829082109) = **FAIL**، تحليل Dart/Flutter **PASS**، و590 اختبارات **PASS** مقابل اختبار واحد **FAIL**: `replay_training_widget_test.dart` عند السطر 96، `pumpAndSettle timed out` بعد `tester.drag`. لا دمج على هذا الفشل.
+- **تشخيص مصدر السلوك من الكود:** `chartShouldFling` يشغّل قصور الحركة عند |velocity| ≥ 180px/s ومسافة أفقية ≥14px. استخدام `tester.drag` بالسرعة الافتراضية في اختبار هدفه التأكد من repaint من دون إعادة بناء toolbar يمكن أن يبدأ animation طويلًا، ثم `pumpAndSettle` ينتظر انتهاء القصور لا اكتمال حركة الإصبع. لا يوجد دليل من السجل على فساد بيانات الوسيط أو فشل SQLite؛ لا ننسب الفشل إليها.
+- **الإصلاح:** جعل الإيماءات الأربع المستخدمة لاختبار repaint بالذات `tester.timedDrag(..., Duration(milliseconds:500))`، بحيث سرعة 35–45px خلال 500ms أقل من عتبة fling. لا تعطيل لقصور حركة التطبيق ولا تغيير لكود الإنتاج. يحافظ الاختبار على تأكيد تحديث viewport/Replay overlay دون إعادة بناء الواجهات.
+- **الفرع والملفات:** `775878805Osamaha/TradeLab`، `feat/local-first-candle-paging-20261121`؛ `flutter_app/test/replay_training_widget_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`. `main` وAPK غير متغيرين.
+- **حالة التحقق بعد التصحيح:** CI للالتزام الجديد **PENDING** حتى انتهاء GitHub Actions؛ Android الحقيقي/قياس FPS **NOT RUN**. عند PASS يدمج إلى فرع التطوير، ثم يكتب SHA الدمج والاختبارات الفعلية؛ عند FAIL يتوقف الدمج ويصلح السبب المحدد.
+- **الخطوة التالية الوحيدة:** تحقق من CI على رأس PR #572 المحدث ثم دمج التطوير فقط عند PASS.
