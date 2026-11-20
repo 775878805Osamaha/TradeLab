@@ -5039,9 +5039,13 @@ class _ChartScreenState extends State<ChartScreen>
                   scaleSettings: _scaleSettings,
                   symbolSettings: _symbolSettings,
                   actualPriceCandles: _mode == ChartMode.range
-                    ? const [] : _replay
-                      ? CandlePrefix(_actualCandles, _visibleThrough)
-                      : _actualCandles,
+                    ? const [] : _mode == ChartMode.candles
+                      // Share exactly this verified Replay prefix with the
+                      // painter; keep original OHLC for HA source labels.
+                      ? candles
+                      : _replay
+                        ? CandlePrefix(_actualCandles, _visibleThrough)
+                        : _actualCandles,
                   previousSessionClose: _mode == ChartMode.range
                     ? null : ChartAxisSourceLabels.previousSessionClose(
                       _actualBars, candles.length),
@@ -5803,8 +5807,13 @@ class _CandleChartPainter extends CustomPainter {
         scaleSettings.previousClose);
     }
     if (scaleSettings.highLow != ChartPriceLabelMode.hidden) {
-      final extremes = ChartAxisSourceLabels.visibleHighLow(
-        actualPriceCandles, start, ending);
+      final extremes = ChartAxisSourceLabels.visibleHighLowForPaint(
+        source: actualPriceCandles,
+        displayed: candles,
+        scale: scale,
+        start: start,
+        end: ending,
+      );
       if (extremes != null) {
         annotate(extremes.$1, Color(scaleSettings.highColor), scaleSettings.highLow);
         annotate(extremes.$2, Color(scaleSettings.lowColor), scaleSettings.highLow);
