@@ -54,7 +54,7 @@ class ChartInteractionFrameSampler {
     required int rangeBidTicks,
   }) {
     if (displayedCandles < 0 || rangeBidTicks < 0 ||
-        !const <String>['ohlc', 'range', 'heikinAshi'].contains(chartMode)) {
+        !const <String>['candles', 'range', 'heikinAshi'].contains(chartMode)) {
       throw ArgumentError('Invalid chart workload descriptor');
     }
     if (_interaction == interaction && _chartMode == chartMode &&
