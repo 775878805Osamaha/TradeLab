@@ -31,6 +31,7 @@ import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
 import '../chart/chart_visible_sma.dart';
 import '../chart/chart_axis_ticks.dart';
+import '../chart/chart_price_text_formatter.dart';
 import '../chart/chart_time_axis_label_layout.dart';
 import '../chart/chart_historical_time_zone.dart';
 import '../chart/candle_prefix.dart';
@@ -5555,7 +5556,8 @@ class _CandleChartPainter extends CustomPainter {
     final step = ChartAxisTicks.interval(minimum, maximum);
     final decimals = symbolSettings.digitsForTickStep(
       ChartAxisTicks.decimals(step));
-    for (final tick in ChartAxisTicks.ticks(minimum, maximum)) {
+    for (final tick in ChartAxisTicks.ticksWithStep(
+        minimum, maximum, step: step)) {
       final py = y(tick);
       final important = (tick / (step * 5) -
           (tick / (step * 5)).round()).abs() < 0.000001;
@@ -6073,12 +6075,8 @@ class _CandleChartPainter extends CustomPainter {
     );
   }
 
-  static String _price(double value, int digits) {
-    final parts = value.toStringAsFixed(digits).split('.');
-    final integer = parts.first.replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
-    return digits == 0 ? integer : '$integer.${parts.last}';
-  }
+  static String _price(double value, int digits) =>
+      ChartPriceTextFormatter.price(value, digits);
 
   @override
   bool shouldRepaint(covariant _CandleChartPainter old) =>
