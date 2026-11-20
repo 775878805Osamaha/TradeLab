@@ -261,7 +261,9 @@ class ChartViewport {
     required int newCount,
     required int newIndex,
   }) {
-    if (scrollBars <= 0 || oldCount < 1 || newCount < 1 ||
+    if (!barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite ||
+        scrollBars <= 0 || oldCount < 1 || newCount < 1 ||
         oldIndex < 0 || oldIndex >= oldCount ||
         newIndex < 0 || newIndex >= newCount) {
       return this;
@@ -270,6 +272,7 @@ class ChartViewport {
     // Preserve that expression at the same bar width and plot width.
     final remapped = scrollBars +
         (newCount - oldCount) - (newIndex - oldIndex);
+    if (!remapped.isFinite) return this;
     return ChartViewport(
       barWidth: barWidth,
       rightMarginBars: rightMarginBars,
@@ -288,12 +291,17 @@ class ChartViewport {
     required double plotWidth,
   }) {
     if (index < 0 || index >= candleCount ||
-        !plotWidth.isFinite || plotWidth <= 0) {
+        !plotWidth.isFinite || plotWidth <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite) {
       return this;
     }
     final wantedX = plotWidth / 2;
     final proposed = candleCount - index - .5 + rightMarginBars -
         (plotWidth - wantedX) / barWidth;
+    // A malformed/restored ultra-small bar width must not produce Infinity
+    // and jump Replay to an unrelated historical candle.
+    if (!proposed.isFinite) return this;
     return ChartViewport(
       barWidth: barWidth,
       rightMarginBars: rightMarginBars,

@@ -4,7 +4,9 @@
 
 ## أين نعمل وما آخر دليل؟
 - فرع العمل المعتمد: `test/flutter-all-fixes-20261116`. مصدر الحالة المؤكد قبل إضافة ملفات التسليم: [commit 7fa9fd4](https://github.com/775878805Osamaha/TradeLab/commit/7fa9fd4ceabb6e878b9d6a80c818349b63ee2a76).
-- آخر إصلاح موثق: [PR #563](https://github.com/775878805Osamaha/TradeLab/pull/563) — إعادة استخدام أعلى/أدنى OHLC المرئيين من حساب النطاق لتقليل تكرار القراءة، مع حماية Heikin Ashi وReplay.
+- آخر إصلاح **مدمج في التطوير**: [PR #563](https://github.com/775878805Osamaha/TradeLab/pull/563) — إعادة استخدام أعلى/أدنى OHLC المرئيين.
+- **العمل الجاري من هذه المحادثة:** [PR #564](https://github.com/775878805Osamaha/TradeLab/pull/564)، فرع `fix/chart-replay-range-viewport-guards-20261120`، Commit الشيفرة `ad9a5a0933ed663cd6ad8aba684402cffdd01930`. حماية Replay reveal وRange historical anchor من هندسة viewport غير صالحة مع اختبارين جديدين؛ **لم يُدمج بعد**.
+- **الفحص الجديد:** [Actions #44797495267](https://github.com/775878805Osamaha/TradeLab/actions/runs/44797495267) بدأ لاختبار PR #564؛ حالته **PENDING عند هذا التوثيق**، ويجب الرجوع لنتيجته المباشرة قبل ادعاء النجاح.
 - آخر فحص **بعد الدمج**: [Actions #44791818293](https://github.com/775878805Osamaha/TradeLab/actions/runs/44791818293)؛ نجح **563 اختبار Flutter + 7 اختبارات توقيت اليمن**. لا يعني ذلك قياس FPS على هاتف.
 - أعمال حديثة مرتبطة: [#562](https://github.com/775878805Osamaha/TradeLab/pull/562) تحسين تدرجات المحور وتنسيق السعر؛ [#561](https://github.com/775878805Osamaha/TradeLab/pull/561) ذاكرة حساب نطاق السعر؛ [#559](https://github.com/775878805Osamaha/TradeLab/pull/559) و[#560](https://github.com/775878805Osamaha/TradeLab/pull/560) قياس الإطارات حسب الإيماءة وحركة السحب؛ [#557](https://github.com/775878805Osamaha/TradeLab/pull/557) و[#558](https://github.com/775878805Osamaha/TradeLab/pull/558) كاش BID.
 - `main` عند المراجعة: `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`، **لا تنقل تطوير Flutter إليه دون طلب صريح**.
@@ -15,6 +17,10 @@
 - التداول ورقي/تدريبي فقط؛ لا فتح صفقات بأموال حقيقية.
 - لا APK أو Release حتى يكتمل التطبيق ويطلب المستخدم ذلك؛ اترك `main` دون تغيير.
 - لا ادعاء بنجاح اختبار جهاز حقيقي اعتمادًا على CI وحده.
+
+## مهمة الاستكمال الفورية
+1. راجع نتيجة [اختبار PR #564](https://github.com/775878805Osamaha/TradeLab/actions/runs/44797495267) الفعلية؛ إن فشل أصلح الاختبارات، وإن نجح تأكد من عدم وجود تعارض ثم ادمجه في `test/flutter-all-fixes-20261116` فقط.
+2. بعد الدمج، اجلب SHA الحقيقي ونتيجة CI الجديدة، وأضف إدخالًا مؤرخًا في `docs/CHANGE_REPORTS.md` وحدّث هنا. لا APK ولا Release.
 
 ## آخر ما ينبغي تنفيذه
 1. قياس p50/p95/p99 لعمليات السحب والتكبير وحركة القصور باستخدام `TRADELAB_PROFILE_CHART=true` في Android Profile على جهاز فعلي؛ هذه القياسات **لم تُنفّذ** بعد.

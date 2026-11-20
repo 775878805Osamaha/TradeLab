@@ -479,6 +479,56 @@ void main() {
     expect(end, lessThanOrEqualTo(count));
   });
 
+  test('Replay reveal ignores invalid geometry instead of jumping history', () {
+    // Corrupt persisted chart settings and transient Android geometry must
+    // not create a synthetic Replay selection or shift its historical anchor.
+    const invalid = <ChartViewport>[
+      ChartViewport(barWidth: 0, scrollBars: 12),
+      ChartViewport(barWidth: double.nan, scrollBars: 12),
+      ChartViewport(barWidth: double.infinity, scrollBars: 12),
+      ChartViewport(barWidth: 1e-320, scrollBars: 12),
+      ChartViewport(scrollBars: double.nan),
+      ChartViewport(scrollBars: double.infinity),
+      ChartViewport(rightMarginBars: double.nan),
+      ChartViewport(rightMarginBars: double.infinity),
+    ];
+    for (final viewport in invalid) {
+      expect(identical(viewport.revealHistoricalBar(
+          index: 18, candleCount: 80, plotWidth: 320), viewport), isTrue);
+    }
+    const valid = ChartViewport(barWidth: 10, rightMarginBars: 4);
+    for (final badWidth in <double>[
+      double.nan, double.infinity, double.negativeInfinity, 0,
+    ]) {
+      expect(identical(valid.revealHistoricalBar(
+          index: 85, candleCount: 120, plotWidth: badWidth), valid), isTrue);
+    }
+    expect(identical(valid.revealHistoricalBar(
+        index: 120, candleCount: 120, plotWidth: 320), valid), isTrue);
+    final revealed = valid.revealHistoricalBar(
+        index: 85, candleCount: 120, plotWidth: 320);
+    expect(revealed.chartX(index: 85, candleCount: 120, plotWidth: 320),
+        closeTo(160, 1e-9),
+        reason: 'A valid authentic Replay candle remains finger-centered');
+  });
+
+  test('Range rebase ignores invalid viewport geometry without moving bars', () {
+    const invalid = <ChartViewport>[
+      ChartViewport(barWidth: 0, scrollBars: 28.75),
+      ChartViewport(barWidth: double.nan, scrollBars: 28.75),
+      ChartViewport(scrollBars: double.nan),
+      ChartViewport(scrollBars: double.infinity),
+      ChartViewport(scrollBars: 28.75, rightMarginBars: double.nan),
+      ChartViewport(scrollBars: 28.75, rightMarginBars: double.infinity),
+    ];
+    for (final viewport in invalid) {
+      expect(identical(viewport.remapHistoricalAnchor(
+          oldCount: 120, oldIndex: 90,
+          newCount: 175, newIndex: 141), viewport), isTrue,
+          reason: 'Invalid Range anchors cannot jump to a fabricated bar');
+    }
+  });
+
   test('historical Range regrouping keeps the same BID bar at the same x', () {
     const before = ChartViewport(barWidth: 12, scrollBars: 28.75);
     const plotWidth = 360.0;
