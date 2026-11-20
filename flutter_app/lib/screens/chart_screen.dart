@@ -1206,8 +1206,14 @@ class _ChartScreenState extends State<ChartScreen>
       );
       if (scanned == null || !isCurrent()) return;
       final older = scanned.ticks;
-      // The cursor is exclusive, even when multiple BID events share a ms.
-      if (older.any((tick) => tick.timestamp >= earliest)) {
+      // The scanner verified the entire original BID page (including
+      // same-ms ordering) off the UI isolate. Its last source timestamp
+      // alone proves the whole sorted page precedes the display boundary:
+      // don't scan all 120k+ authenticated ticks on the touch isolate.
+      if (RangeOlderPage.overlapsLoadedHistory(
+        sortedVerifiedOlder: older,
+        earliestLoadedMs: earliest,
+      )) {
         throw const MarketDataException(
           'تيكات الصفحة الأقدم تتداخل مع حد الشارت؛ تم إيقاف الدمج.');
       }
