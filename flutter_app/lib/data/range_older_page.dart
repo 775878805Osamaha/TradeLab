@@ -1,4 +1,5 @@
 import 'market_api.dart';
+import 'range_bid_page_verifier.dart';
 
 /// Plans one backward Range page and checks it against the requested
 /// *inclusive* interval. A cTrader call must use these exact bounds, not the
@@ -22,25 +23,62 @@ class RangeOlderPage {
     required int toMs,
     required int alreadyLoaded,
   }) {
+    _checkBounds(
+      pageLength: page.length,
+      fromMs: fromMs,
+      toMs: toMs,
+      alreadyLoaded: alreadyLoaded,
+    );
+    RangeBidPageVerifier.verify(
+      page: page,
+      fromMs: fromMs,
+      toMs: toMs,
+      errorMessage:
+          'تيكات صفحة المدى الأقدم لا تطابق الفترة الزمنية الموثقة.',
+    );
+    return page;
+  }
+
+  /// A large authenticated BID page must not block drawing gestures while
+  /// validating every source tick. Retain the exact original page instance;
+  /// no sorting, deduplication or artificial continuity is introduced.
+  static Future<List<MarketTick>> verifyAsync({
+    required List<MarketTick> page,
+    required int fromMs,
+    required int toMs,
+    required int alreadyLoaded,
+  }) async {
+    _checkBounds(
+      pageLength: page.length,
+      fromMs: fromMs,
+      toMs: toMs,
+      alreadyLoaded: alreadyLoaded,
+    );
+    await RangeBidPageVerifier.verifyAsync(
+      page: page,
+      fromMs: fromMs,
+      toMs: toMs,
+      errorMessage:
+          'تيكات صفحة المدى الأقدم لا تطابق الفترة الزمنية الموثقة.',
+    );
+    return page;
+  }
+
+  static void _checkBounds({
+    required int pageLength,
+    required int fromMs,
+    required int toMs,
+    required int alreadyLoaded,
+  }) {
     if (fromMs < 0 || toMs < fromMs ||
         toMs - fromMs != lookback.inMilliseconds ||
         alreadyLoaded < 0 || alreadyLoaded > maxLoadedTicks) {
       throw ArgumentError('Invalid older Range page bounds');
     }
-    if (page.length > maxLoadedTicks - alreadyLoaded) {
+    if (pageLength > maxLoadedTicks - alreadyLoaded) {
       throw const MarketDataException(
           'عدد تيكات المدى يتجاوز الحد الآمن للذاكرة. '
           'حمّل تاريخًا أقصر قبل متابعة التمرير.');
     }
-    var previous = fromMs;
-    for (final tick in page) {
-      if (tick.timestamp < previous || tick.timestamp > toMs ||
-          !tick.bid.isFinite || tick.bid <= 0) {
-        throw const MarketDataException(
-            'تيكات صفحة المدى الأقدم لا تطابق الفترة الزمنية الموثقة.');
-      }
-      previous = tick.timestamp;
-    }
-    return page;
   }
 }
