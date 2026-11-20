@@ -24,6 +24,9 @@ class RangeBarBuilder {
   // number of candles on the chart/UI isolate.
   static const maxBarsPerSingleTick = 100000;
   final List<TradeCandle> _closed = [];
+  // The timeline worker can transfer ownership of this list exactly once.
+  // After transfer the builder must not mutate its published chart snapshot.
+  bool _sealed = false;
   double? _open;
   double? _high;
   double? _low;
@@ -39,6 +42,9 @@ class RangeBarBuilder {
       : TradeCandle(_open!, _high!, _low!, _lastPrice!);
 
   void appendBidTick(double price) {
+    if (_sealed) {
+      throw StateError('Sealed Range history cannot accept more BID ticks');
+    }
     if (!price.isFinite || price <= 0) {
       throw ArgumentError.value(price, 'price', 'BID price must be finite and positive');
     }
@@ -76,8 +82,29 @@ class RangeBarBuilder {
     _low = math.min(_low!, price);
   }
 
+  /// Read-only-in-practice legacy snapshot: always returns an independent
+  /// list, so an incremental builder may safely accept more verified ticks.
   List<TradeCandle> snapshot({bool includeForming = true}) => [
         ..._closed,
-        if (includeForming && forming != null) forming!,
+        if (includeForming && !_sealed && forming != null) forming!,
       ];
+
+  /// One-time finalization for a RangeBarTimeline worker. Reuse the already
+  /// allocated closed-bar array instead of copying all 100k+ candle references
+  /// into a second growable list at the end of every historical rebuild.
+  ///
+  /// The last forming bar remains visible on the live chart but is not a
+  /// closed/executable Replay bar. After transfer this builder is sealed:
+  /// neither further BID events nor another transfer can mutate published
+  /// chart history. Existing snapshot() remains independent for callers
+  /// that deliberately keep processing new ticks.
+  List<TradeCandle> sealSnapshot({bool includeForming = true}) {
+    if (_sealed) {
+      throw StateError('Range snapshot has already been transferred');
+    }
+    final unfinished = includeForming ? forming : null;
+    _sealed = true;
+    if (unfinished != null) _closed.add(unfinished);
+    return _closed;
+  }
 }
