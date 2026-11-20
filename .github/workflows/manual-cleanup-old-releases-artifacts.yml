@@ -69,7 +69,7 @@ jobs:
             const temporary = /apk|aab|android|coverage|test|result|report|log|screen|capture|golden|preview/i;
             const oldArtifacts = artifacts.filter(a => !aKeep.has(a.id) &&
               !backup.test(a.name) && temporary.test(a.name) &&
-              Date.now() - new Date(a.created_at).getTime() >= 7 * 86400000).slice(0,35);
+              Date.now() - new Date(a.created_at).getTime() >= 7 * 86400000).slice(0,200);
             const releaseBytes = oldReleases.reduce((s,r)=>s+(r.assets||[]).reduce((n,a)=>n+(a.size||0),0),0);
             const artifactBytes = oldArtifacts.reduce((s,a)=>s+(a.size_in_bytes||0),0);
             core.summary.addHeading("Storage cleanup: "+owner+"/"+repo,2)
@@ -94,4 +94,4 @@ jobs:
             }
             core.summary.addRaw("\nActually deleted: "+deletedReleases+" Releases; "+deletedArtifacts+" Artifacts.").write();
             core.info("Repository source, tags, branches, draft Releases, stable Releases, and latest two APK releases were not deleted.");
-            core.info("Batch limit: max 20 older releases and 35 artifacts per run; seven-day age protection for artifacts.");
+            core.info("Batch limit: max 20 older releases and 200 artifacts per run; seven-day age protection for artifacts.");
