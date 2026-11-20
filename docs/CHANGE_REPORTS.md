@@ -286,3 +286,9 @@
 - **الاختبارات:** `flutter_app/test/range_live_bid_delta_test.dart`, `range_bar_builder_test.dart`, `range_bar_timeline_test.dart`: ترتيب وتطابق BID بنفس المللي ثانية، page failure، حجم 6500 تيك وworker، تطابق rebuild الكامل بعد 6200 تيك، حفظ cutoff Replay، عدم تغيير snapshot القديم والـhard budgets.
 - **التحقق عند الحفظ:** GitHub Actions `PENDING` حتى PR، Android Profile وcTrader broker live `NOT RUN`. لا أسواق مختلقة أو تداول حقيقي، لا APK.
 - **الخطوة التالية الوحيدة:** إنشاء PR والتأكد من PASS في Flutter analyze/Range/Replay ثم الدمج في التطوير مع SHA ورابط CI، وإصلاح أي FAIL قبل الدمج.
+
+### 2026-11-20T23:23:14.349Z — إصلاح فشل CI #44836213938 وتوسيع بوابة اختبارات Range/Replay
+- **فشل موثق:** [GitHub Actions #44836213938](https://github.com/775878805Osamaha/TradeLab/actions/runs/44836213938) **FAIL/completed/failure** في `flutter analyze --no-fatal-infos`: `test/range_bar_builder_test.dart:27` و`test/range_bar_timeline_test.dart:179` تستخدمان `TradeCandle` من دون استيراد `data/tradelab_data.dart`. **لم يحدث دمج للفرع الفاشل**.
+- **الإصلاح:** إضافة الاستيراد الصريح في الاختبارين دون تعديل كود الحسابات أو source BID؛ ثم توسيع `.github/workflows/verify-flutter-range.yml` ليشمل `range_live_bid_delta_test.dart` و`replay_revealed_exit_index_test.dart` و`chart_load_profiler_test.dart` و`range_bar_validation_test.dart` و`market_history_budget_test.dart` و`candle_prefix_test.dart`. كانت بعض الاختبارات السابقة موجودة بالكود لكنها لم تكن ضمن القائمة الثابتة لعمل CI؛ لا ندّعي أنها اجتازت تشغيلًا لم يشملها.
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab`، `feat/tradelab-verified-live-range-20261121` على PR #578؛ `main` دون تعديل، لا APK/Release. **التحقق حاليًا: PENDING** حتى فحص commit المصحح.
+- **الخطوة التالية الوحيدة:** مراقبة فحص GitHub Actions الجديد للملفات الستة، إصلاح أي فشل، ثم دمج PR #578 إلى التطوير عند PASS.

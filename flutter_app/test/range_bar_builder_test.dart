@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/range_bar_builder.dart';
+import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 void main() {
   test('verified forming Range state resumes exactly without old tick replay',

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/range_bar_timeline.dart';
 import 'package:tradelab_flutter/data/range_bar_builder.dart';
+import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 /// Refuse oversized provider requests without materializing million-row BID
 /// arrays or even attempting to access a tick on the UI isolate.
