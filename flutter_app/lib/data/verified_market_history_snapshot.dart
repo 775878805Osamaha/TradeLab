@@ -79,7 +79,8 @@ class ClosedCandleRefreshResult {
   final VerifiedMarketHistorySnapshot? snapshot;
 }
 
-extension VerifiedClosedCandleRefresh on VerifiedMarketHistorySnapshot {
+class VerifiedClosedCandleRefresh {
+  const VerifiedClosedCandleRefresh._();
   /// Source-validated cTrader refresh. The existing stitcher continues to
   /// reject revised historical OHLC and late broker backfills.
   static ClosedCandleRefreshResult appendVerified({
