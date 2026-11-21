@@ -248,7 +248,13 @@ class ChartPriceScale {
         ? math.log(minimum) : minimum;
     final maxCoordinate = logarithmicCoordinates
         ? math.log(maximum) : maximum;
-    final center = minCoordinate + (maxCoordinate - minCoordinate) / 2;
+    final oldSpan = maxCoordinate - minCoordinate;
+    // Most pan frames keep the same bar width and therefore require no
+    // replacement scale object. Keep all verified candle metadata cached.
+    if ((coordinateSpan - oldSpan).abs() <= oldSpan.abs() * 1e-12) {
+      return this;
+    }
+    final center = minCoordinate + oldSpan / 2;
     final targetMin = center - coordinateSpan / 2;
     final targetMax = center + coordinateSpan / 2;
     final newMin = logarithmicCoordinates
