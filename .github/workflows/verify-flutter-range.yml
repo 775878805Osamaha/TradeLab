@@ -65,6 +65,7 @@ jobs:
             test/chart_visible_sma_test.dart \
             test/chart_short_position_test.dart \
             test/chart_long_position_widget_test.dart \
+            test/chart_position_paint_only_drag_test.dart \
             test/chart_double_tap_guide_test.dart \
             test/chart_paint_only_pan_test.dart \
             test/chart_frame_profiler_test.dart \

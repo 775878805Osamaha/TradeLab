@@ -4,6 +4,14 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-22 — منع إعادة بناء واجهة الشارت لكل عينة إصبع أثناء سحب مركز Long/Short
+- **Branch:** `perf/tradelab-position-drag-paint-only-20261122` من `test/flutter-all-fixes-20261116` بعد PR #598؛ لا APK ولا تغيير `main`.
+- **المشكلة المثبتة:** مسار `_draggingShortHandle` في `ChartScreen.onScaleUpdate` كان يحدث `setState` لكل حركة مما يعيد بناء الرأس/الأدوات والرسومات، في حين تستخدم خطوط الاتجاه painter retained. لم يُقَس زمن الإطارات فعليًا على Android.
+- **الكود:** [5a39fc4](https://github.com/775878805Osamaha/TradeLab/commit/5a39fc405f9927635adcadc204fcd1661d3ce762) يدعم callback live لرسومات الشراء/البيع وselection داخل painter، ويحوّل تحرير المقبض إلى `_chartRepaint` مع `setState` واحدة عند الإفلات؛ يمنع no-op refresh. هندسة السعر/الزمن والحسابات وReplay وcTrader/Binance غير متغيرة.
+- **الاختبار:** [b0253a9](https://github.com/775878805Osamaha/TradeLab/commit/b0253a9723a09216983b243d23bc504c434de8dd) Widget test لأربعة سيناريوهات Long/Short في 320/390dp، يتحقق من تطور stop وعدم إعادة بناء الشريط العلوي أثناء خمس عينات. [ae9c6f8](https://github.com/775878805Osamaha/TradeLab/commit/ae9c6f84706fea67588fec43f1d2ada9f50c499f) يضيف الاختبار إلى CI.
+- **حالة التحقق:** Flutter analyze/CI **PENDING** عند هذا التقرير، Android Profile/FPS وTradingView screenshot diff وcTrader live **NOT RUN**. لا تقدير أداء رقمي مفبرك.
+- **التالي:** PR ثم اختبارات GitHub؛ إصلاح أي إخفاق، دمج فرع التطوير فقط بعد PASS، وكتابة commit SHA وروابط النتائج الفعلية.
+
 ### 2026-11-21 — تفعيل أداة Long Position الفعلية في TradeLab Flutter
 - **الفرع:** `feat/tradelab-long-position-drawing-20261121` من فرع التطوير `test/flutter-all-fixes-20261116` بعد PR #597؛ `main` لا يتغير.
 - **الدليل:** `DrawingCatalogKind.longPosition` مسجل في القائمة والمفضلة، لكن `implemented=false`، بينما `ChartScreen` لا يدعم إلا `_selectDrawingMode(short: true)`.
