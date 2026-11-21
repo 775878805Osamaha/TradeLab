@@ -10,6 +10,7 @@ import '../chart/chart_annotations.dart';
 import '../chart/chart_line_geometry.dart';
 import '../chart/chart_candle_wicks.dart';
 import '../chart/chart_short_position.dart';
+import '../chart/chart_position_viewport_visibility.dart';
 import '../chart/chart_price_rectangle.dart';
 import '../chart/chart_type_sheet.dart';
 import '../chart/analysis_hub_sheet.dart';
@@ -6448,7 +6449,11 @@ class _CandleChartPainter extends CustomPainter {
     final visiblePositions = _shortPositionsProvider();
     for (var i = 0; i < visiblePositions.length; i++) {
       final item = visiblePositions[i];
-      if (!item.visibleAt(candles.length)) continue;
+      // The box and its axis markers share the exact same source-viewport
+      // visibility. Do not leave stale SL/TP labels for offscreen positions.
+      if (!ChartPositionViewportVisibility.overlapsPlot(
+          position: item, viewport: viewport,
+          candleCount: candles.length, plotWidth: axis)) continue;
       _shortAxisTag(canvas, axis, chartHeight, scale.y(item.stop),
           _price(item.stop, decimals), TradeColors.shortLabelRed);
       _shortAxisTag(canvas, axis, chartHeight, scale.y(item.target),
@@ -6589,7 +6594,9 @@ class _CandleChartPainter extends CustomPainter {
     final activePosition = _selectedShortProvider();
     for (var i = 0; i < livePositions.length; i++) {
       final item = livePositions[i];
-      if (!item.visibleAt(count)) continue;
+      if (!ChartPositionViewportVisibility.overlapsPlot(
+          position: item, viewport: viewport,
+          candleCount: count, plotWidth: axis)) continue;
       final x1 = viewport.chartX(index: item.startIndex,
           candleCount: count, plotWidth: axis);
       final x2 = viewport.chartX(index: item.endIndex,
@@ -6599,7 +6606,6 @@ class _CandleChartPainter extends CustomPainter {
       final yStop = scale.y(item.stop);
       final yEntry = scale.y(item.entry);
       final yTarget = scale.y(item.target);
-      if (right < 0 || left > axis) continue;
       // The same risk/reward box paints BOTH sides: short risk is above
       // entry, long risk below. Flutter Rect needs ordered edges, otherwise
       // its long stop/target regions are inverted and disappear.
