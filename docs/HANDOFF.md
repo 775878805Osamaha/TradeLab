@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة أداء قيد التحقق — سحب وقف/هدف مركز الشراء والبيع عبر repaint فقط (22 نوفمبر 2026)
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab` / `perf/tradelab-position-drag-paint-only-20261122` من `test/flutter-all-fixes-20261116` بعد دمج PR #598. لا مساس بـ `main`.
+- **الخلل الموثق من الكود:** `ChartScreen.onScaleUpdate` كان ينفّذ `setState` في كل عينة لمس عند `_draggingShortHandle != null` لتغيير الوقف/الدخول/الهدف/جسم الرسم، بعكس خطوط الاتجاه والمستطيلات التي تتحدث عبر `_chartRepaint`. يعيد هذا بناء رأس الشارت/القوائم على كل عينة، وربما ينسخ قوائم الرسوم. ليس FPS مقاسًا على هاتف.
+- **الإصلاح:** مصدر رسم `_CandleChartPainter` يحصل على `shortPositionsProvider` و`selectedShortProvider` للقراءة من قائمة الرسومات الحقيقية أثناء `paint`، سواء عند رسم صندوق المخاطرة/العائد أو وسوم الأسعار على محور السعر. `_updateShortDrag` يعيد `bool` ويمنع إعادة الرسم عند عدم تغير الهندسة. أثناء حركة المقبض يجري تحديث القائمة و`_chartRepaint.value++` دون `setState` لكل إصبع؛ عند رفع الإصبع تحدث `setState` واحدة لمزامنة الواجهة. يدعم Long/Short، وكل مصدر الأسعار والبار/Replay كما هو، لا توجد بيانات مخترعة أو أوامر حقيقية.
+- **التغييرات:** `flutter_app/lib/screens/chart_screen.dart` [5a39fc4](https://github.com/775878805Osamaha/TradeLab/commit/5a39fc405f9927635adcadc204fcd1661d3ce762). اختبار `flutter_app/test/chart_position_paint_only_drag_test.dart` [b0253a9](https://github.com/775878805Osamaha/TradeLab/commit/b0253a9723a09216983b243d23bc504c434de8dd): Long/Short عند 320/390dp بمصدر اختبار مغلق، إصبع يحرك مقبض Stop، قيمة وقف حقيقية تتغير، رأس الشارت يبقى بنفس Widget خلال خمس عينات، مع تحقق عدم الاستثناءات. `.github/workflows/verify-flutter-range.yml` [ae9c6f8](https://github.com/775878805Osamaha/TradeLab/commit/ae9c6f84706fea67588fec43f1d2ada9f50c499f) يضم الاختبار إلى بوابة chart/Range/Replay/history/timezone.
+- **حالة الثقة:** CI/PR **PENDING**. Flutter محليًا وAndroid Profile/FPS/قياس p95 ولقطات مقارنة TradingView وcTrader live **NOT RUN**. تحسين موثق لمسار إعادة البناء لا ادعاء زيادة FPS مقاسة. لا APK/Release.
+- **التالي:** فتح PR إلى فرع التطوير؛ تشغيل Flutter analyze وبوابة CI؛ عند FAIL فحص سجلات الاختبار وإصلاح فعلي قبل الدمج، وعند PASS دمج ثم تحديث HANDOFF/CHANGE_REPORTS SHA/CI؛ لا إعلان مطابقة كاملة.
+
 ## دفعة ميزة قيد التحقق — مركز الشراء Long Position كأداة رسم حقيقية (21 نوفمبر 2026)
 - **المشروع والفرع:** `775878805Osamaha/TradeLab` / `feat/tradelab-long-position-drawing-20261121` مبني من `test/flutter-all-fixes-20261116` بعد PR #597. `main` دون تعديل.
 - **الفجوة المثبتة من الشيفرة:** `DrawingCatalogKind.longPosition` كان ظاهرًا في كتالوج المفضلة لكنه `implemented=false`، دون مسار رسم. توجد أداة `ChartShortPosition` للبيع فقط.
