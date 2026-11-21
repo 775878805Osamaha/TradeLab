@@ -8,8 +8,9 @@
 - **الفرع:** `fix/tradelab-stale-doubletap-guide-session-20261121` مشتق من فرع تطوير TradeLab بعد PR #596.
 - **المصدر المعاين:** `_doubleTapGuideArmed` يستمر من نقرة مزدوجة قديمة عندما يتبدل الرمز/الشموع أو يخرج المستخدم من الشارت، وقد يلتقط سحبة خاطئة على محور الوقت/السعر؛ لم يكن وضع التحرير يحمل هوية المصدر أو نطاق الرسم.
 - **التنفيذ:** [58a7bb3](https://github.com/775878805Osamaha/TradeLab/commit/58a7bb34b0599b3e3a124897d6b6cfaf2d6ab4c4) — `chart_screen.dart` تضيف حارس مصدر الشموع ومفتاح الجلسة وحدود الرسم وإلغاء الحالة عند انتقالات الشارت وحركة الأدوات. [23b3ae2](https://github.com/775878805Osamaha/TradeLab/commit/23b3ae2680dc33f5a76ca6e7743e379c57fb6c46) — اختبار widget يعيد سيناريو BTCUSDT→ETHUSDT وإخفاء التبويب مع إعداد خط سابق للنقل.
-- **الحالة الفعلية وقت التسجيل:** Flutter المحلي **NOT RUN**، PR/CI **PENDING**؛ الكود والتجربة موثقان على فرع التطوير المقترح فقط. لا بيانات سوق وهمية في التطبيق ولا APK أو تعديل main.
-- **التالي:** عرض تغيير الكود على PR، فحص اختبارات chart/Range/Replay/Yemen timezone، ثم توثيق نتيجة CI وSHA الدمج إن نجحت.
+- **النتيجة النهائية:** [PR #597](https://github.com/775878805Osamaha/TradeLab/pull/597) **MERGED/squash** في `test/flutter-all-fixes-20261116` عند SHA [465067c](https://github.com/775878805Osamaha/TradeLab/commit/465067c30dc4bcdc9ff186b4f2137ce6315b4434). [Actions #44939023798](https://github.com/775878805Osamaha/TradeLab/actions/runs/44939023798) **completed/success** على HEAD `a2b61017335aa611e89628598062006da90c7a2f`: تحليل Flutter واختبارات الشارت/Range/Replay/history وتوقيت اليمن اجتازت. تأكيد الدمج لا يساوي اختبار Android فعلي.
+- **ما لم يُنفذ:** Flutter المحلي، Android Profile/FPS، Live cTrader، مقارنة صور TradingView **NOT RUN**. لا APK/Release ولا تغيير `main` أو مشاريع أخرى.
+- **التالي:** أكمل أصغر فجوة وظيفية مؤكدة في أدوات TradingView أو اطلب بيانات قياس Android حقيقية؛ وثّق كل PR في هذا الملف.
 
 ### 2026-11-21 — إصلاح سلوك النقر المزدوج على خطوط الرسم في Android
 - **الفرع:** `fix/tradelab-mobile-doubletap-drawing-move-20261121` من فرع تطوير TradeLab بعد PR #595؛ `main` محفوظ.
