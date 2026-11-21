@@ -103,6 +103,23 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('inverted price scale checkbox commits true and round trips',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 872));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    ChartScaleSettings? committed;
+    await mount(tester, onApply: (v) => committed = v,
+        onCancel: () {});
+    final checkbox = find.byKey(const Key('scale-inverted'));
+    await tester.ensureVisible(checkbox);
+    await tester.tap(checkbox);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scale-apply')));
+    await tester.pumpAndSettle();
+    expect(committed?.inverted, isTrue);
+    expect(ChartScaleSettings.decode(committed!.encode()).inverted, isTrue);
+  });
+
   testWidgets('real logarithmic price-scale mode is selectable and saved',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(393, 872));
