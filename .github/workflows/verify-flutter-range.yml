@@ -61,6 +61,7 @@ jobs:
             test/chart_inverted_price_scale_test.dart \
             test/chart_inverted_axis_menu_widget_test.dart \
             test/chart_axis_ticks_test.dart \
+            test/chart_axis_mobile_density_test.dart \
             test/chart_price_text_formatter_test.dart \
             test/chart_axis_source_labels_test.dart \
             test/chart_visible_highlow_reuse_test.dart \

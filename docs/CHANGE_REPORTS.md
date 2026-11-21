@@ -4,6 +4,14 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-22 — كثافة علامات محور السعر تتكيف مع ارتفاع شاشة Android
+- **الفرع:** `fix/tradelab-mobile-price-axis-label-density-20261122` من `test/flutter-all-fixes-20261116` بعد PR #603.
+- **المشكلة المثبتة:** 12 فاصل سعر ثابت في الشارت حتى لو صار plot بارتفاع 84dp أثناء Replay؛ تتراكب أرقام tick والتواريخ بصريًا. حجب التسميات المتقاربة كان ينفذ للـLOG فقط.
+- **الإصلاح:** [b823484](https://github.com/775878805Osamaha/TradeLab/commit/b823484bba8373c1c87a16759596882af4329f4f) `intervalsForHeight` و`spacedByPixels` تأخذ إحداثيات المقياس الحالية وتتجنب التسميات خارج الحدود والمتقاربة وNaN؛ [d01ae5a](https://github.com/775878805Osamaha/TradeLab/commit/d01ae5a6496f07ebf6784d72f5927c1e7b36e406) يوحد فلاتر التسميات والخطوط في كل Linear/LOG وInverted بدون تغيير الأسعار.
+- **التحقق المُعد:** [c840b0b](https://github.com/775878805Osamaha/TradeLab/commit/c840b0bd1ac37d36f31b4dab1b8ac2d1c8cff674) + [b2f8c7f](https://github.com/775878805Osamaha/TradeLab/commit/b2f8c7f30bfea694512ba66f488b16f23237104d) اختبارات 84/155/440dp، أقصى الفواصل، قيمة السوق/Replay وعكس المحور؛ [620303e](https://github.com/775878805Osamaha/TradeLab/commit/620303edcf5f5fc52024122a7db1bd26ca97d8ac) إدراج CI.
+- **الحالة:** PR/CI **PENDING**؛ لم تُجرَ Android screenshots وProfile/FPS وcTrader live. لا APK/Release أو main أو مشروع آخر.
+- **التالي:** CI كامل ودمج عند PASS فقط، ثم تسجيل SHA/PR/CI مؤكدين في هذا الملف.
+
 ### 2026-11-22 — عكس محور السعر من قائمة Android مع إحداثيات حقيقية وصفر تسرب Replay
 - **الفرع:** `feat/tradelab-invert-price-axis-20261122` مبني على `test/flutter-all-fixes-20261116` بعد PR #602.
 - **المرجع:** https://www.tradingview.com/support/solutions/43000475599-how-to-invert-reverse-the-chart-price-scale/

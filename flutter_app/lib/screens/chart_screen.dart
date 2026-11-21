@@ -6245,19 +6245,20 @@ class _CandleChartPainter extends CustomPainter {
     double y(double price) => scale.y(price);
     // Reference: no visible candle-area grid. Labels derive from the actual
     // visible price interval, never from screenshot numbers or fake candles.
-    final step = ChartAxisTicks.interval(minimum, maximum);
+    final step = ChartAxisTicks.interval(minimum, maximum,
+      desiredIntervals: ChartAxisTicks.intervalsForHeight(chartHeight));
     final logAxis = scale.usesLogarithmic;
     final decimals = symbolSettings.digitsForTickStep(
       ChartAxisTicks.decimals(logAxis ? minimum * .1 : step));
     final axisTicks = logAxis
         ? ChartAxisTicks.logarithmicTicks(minimum, maximum)
         : ChartAxisTicks.ticksWithStep(minimum, maximum, step: step);
-    var lastMajorY = double.negativeInfinity;
-    for (final tick in axisTicks) {
+    // Ordinary, LOG and inverted axes share one collision-checked ruler.
+    // Small Replay panes must never overlap tick text or render extra grid
+    // lines for labels that were rejected by the visible-height layout.
+    for (final tick in ChartAxisTicks.spacedByPixels(axisTicks,
+        y: y, plotHeight: chartHeight)) {
       final py = y(tick);
-      if (!py.isFinite || py < 0 || py > chartHeight ||
-          (logAxis && (py - lastMajorY).abs() < 19)) continue;
-      lastMajorY = py;
       final important = logAxis
           ? (math.log(tick) / math.ln10 -
               (math.log(tick) / math.ln10).round()).abs() < 1e-8
