@@ -63,6 +63,7 @@ jobs:
             test/chart_ohlc_inspector_test.dart \
             test/chart_crosshair_time_label_test.dart \
             test/chart_visible_sma_test.dart \
+            test/chart_double_tap_guide_test.dart \
             test/chart_paint_only_pan_test.dart \
             test/chart_frame_profiler_test.dart \
             test/chart_load_profiler_test.dart \
