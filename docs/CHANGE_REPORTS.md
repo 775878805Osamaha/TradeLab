@@ -549,3 +549,9 @@
 - **التصحيح:** [43256e8](https://github.com/775878805Osamaha/TradeLab/commit/43256e8b7a6149092650026d2af325c7ad46fede) في flutter_app/test/chart_paint_only_pan_test.dart يستبدل pump() بـ pumpAndSettle() بعد نقرة إنهاء tracking، حتى تنتظر Flutter test timers ولن يخلّف مؤقتًا بعد انتهاء الاختبار. لم يغيّر الكود أي أسعار أو شموع أو Replay.
 - **الملفات:** flutter_app/test/chart_paint_only_pan_test.dart وdocs/HANDOFF.md وdocs/CHANGE_REPORTS.md. **CI PENDING** للتصحيح؛ Android Profile/FPS وcTrader live NOT RUN، لا APK/Release/main.
 - **التالي:** تحقق من CI الكامل، وصحح أي FAIL آخر ثم merge dev وتوثيق SHA الفعلي.
+
+### 2026-11-21T16:24:16.091Z — نجاح CI الثالث لـ PR #592 ورفض الدمج بسبب PR head غير متزامن
+- **اختبار ناجح:** [Actions #44923997988](https://github.com/775878805Osamaha/TradeLab/actions/runs/44923997988) completed/success على afae3e2316ddd74a516783ade2214d067facd8a0، بما فيه Flutter analyze، crosshair widget tests 320/390dp، gesture، Range، Replay، history، Yemen timezone.
+- **اختلاف GitHub REST:** PR #592 head SHA afae3e2316ddd74a516783ade2214d067facd8a0، لكن branch fix/tradelab-mobile-crosshair-persistent-tracking-20261121 ref هو 049c2c97637837926b423551fe47dddcb784c8d7 (commit docs-only من parent afae3e). أول merge عبر GitHub returned 409 Head branch is out of date، لذا **PR NOT MERGED** ولا تعديل dev/main.
+- **الإجراء:** تحديث PR body لشرح ثلاث جولات CI (2 فشل ثم نجاح) والحالة التقنية، ومحاولة توثيق هذا الحدث في docs/HANDOFF.md وdocs/CHANGE_REPORTS.md؛ لا تعديل source أو الاختبارات بعد نجاح CI. Android Profile/cTrader live NOT RUN، لا APK.
+- **الخطوة التالية:** إعادة مزامنة HEAD بطريقة آمنة دون force، تحقّق من CI، ثم merge وتسجّل SHA الدمج الحقيقي.
