@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:ui' show FrameTiming;
+import 'dart:ui' show FramePhase, FrameTiming;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
@@ -133,6 +133,167 @@ class ChartInteractionFrameSampler {
   }
 }
 
+/// The same engine clock is used by SchedulerBinding.currentFrameTimeStamp
+/// and FrameTiming.buildStart. Engine timings arrive *later*, in chronological
+/// batches. Never attribute those older frames to whichever gesture happens
+/// to be active when the batch is delivered.
+///
+/// The lower boundary is exclusive: an interaction begins after the latest
+/// frame start observed by Flutter. The upper boundary is inclusive: a
+/// completed chart frame started before touch-up belongs to that gesture.
+typedef ChartTimedFrame = ({
+  int startUs,
+  int buildUs,
+  int rasterUs,
+  int totalUs,
+});
+
+class _ChartTimingWindow {
+  _ChartTimingWindow(this.startUs, this.interaction, this.mode,
+      this.replay, this.sampler);
+
+  final int startUs;
+  final ChartFrameInteraction interaction;
+  final String mode;
+  final bool replay;
+  final ChartInteractionFrameSampler sampler;
+  int? endUs;
+}
+
+/// Bounded, deterministic attribution of late engine batches to their real
+/// interaction. Old windows remain available until Flutter reports frames
+/// with start timestamps at/after their release boundary. This avoids both
+/// dropping the last frames of a gesture and counting subsequent idle/menu
+/// frames in its p95.
+class ChartFrameTimingAttribution {
+  ChartFrameTimingAttribution({
+    this.batchSize = 120,
+    this.minimumReportSamples = 4,
+    this.maxBufferedWindows = 16,
+  }) {
+    if (batchSize < 1 || minimumReportSamples < 1 ||
+        minimumReportSamples > batchSize || maxBufferedWindows < 2) {
+      throw ArgumentError('Invalid frame timing attribution limits');
+    }
+  }
+
+  final int batchSize;
+  final int minimumReportSamples;
+  final int maxBufferedWindows;
+  final List<_ChartTimingWindow> _windows = [];
+  _ChartTimingWindow? _active;
+
+  int get bufferedWindows => _windows.length;
+  bool get active => _active != null;
+
+  List<Map<String, Object>> startAt({
+    required int frameTimeUs,
+    required ChartFrameInteraction interaction,
+    required String chartMode,
+    required bool replay,
+    required int displayedCandles,
+    required int rangeBidTicks,
+  }) {
+    if (frameTimeUs < 0) {
+      throw ArgumentError('Frame timestamps must not be negative');
+    }
+    if (_active != null &&
+        _active!.interaction == interaction &&
+        _active!.mode == chartMode && _active!.replay == replay) {
+      return const [];
+    }
+    endAt(frameTimeUs);
+    final sampler = ChartInteractionFrameSampler(
+        batchSize: batchSize,
+        minimumReportSamples: minimumReportSamples);
+    sampler.start(
+      interaction: interaction,
+      chartMode: chartMode,
+      replay: replay,
+      displayedCandles: displayedCandles,
+      rangeBidTicks: rangeBidTicks,
+    );
+    final window = _ChartTimingWindow(
+        frameTimeUs, interaction, chartMode, replay, sampler);
+    _windows.add(window);
+    _active = window;
+    final reports = <Map<String, Object>>[];
+    // Repeated sub-frame taps without any raster work must not create an
+    // unbounded backlog; a forced flush reports only genuinely received
+    // frames and never invents missing engine timings.
+    while (_windows.length > maxBufferedWindows) {
+      final expired = _windows.removeAt(0);
+      final summary = expired.sampler.end();
+      if (summary != null) reports.add(summary);
+    }
+    return reports;
+  }
+
+  void endAt(int frameTimeUs) {
+    if (frameTimeUs < 0) {
+      throw ArgumentError('Frame timestamps must not be negative');
+    }
+    final window = _active;
+    if (window == null) return;
+    window.endUs = frameTimeUs < window.startUs
+        ? window.startUs : frameTimeUs;
+    _active = null;
+  }
+
+  List<Map<String, Object>> recordBatch(Iterable<ChartTimedFrame> frames) {
+    final reports = <Map<String, Object>>[];
+    int? latestTimestamp;
+    for (final frame in frames) {
+      if (frame.startUs < 0 || frame.buildUs < 0 ||
+          frame.rasterUs < 0 || frame.totalUs < 0) {
+        throw ArgumentError('Invalid engine frame timings');
+      }
+      if (latestTimestamp != null && frame.startUs < latestTimestamp) {
+        throw ArgumentError('Engine batches must be chronological');
+      }
+      latestTimestamp = frame.startUs;
+      for (final window in _windows) {
+        if (frame.startUs <= window.startUs ||
+            (window.endUs != null && frame.startUs > window.endUs!)) {
+          continue;
+        }
+        final summary = window.sampler.record(
+          buildUs: frame.buildUs,
+          rasterUs: frame.rasterUs,
+          totalUs: frame.totalUs,
+        );
+        if (summary != null) reports.add(summary);
+        break;
+      }
+    }
+    // A later completed frame confirms all earlier frame starts have been
+    // delivered in chronological order, including the last touch frame.
+    // Do not finalize an ended window prematurely when its timings are
+    // still buffered in the engine.
+    if (latestTimestamp != null) {
+      while (_windows.isNotEmpty &&
+          _windows.first.endUs != null &&
+          _windows.first.endUs! <= latestTimestamp) {
+        final finished = _windows.removeAt(0);
+        final summary = finished.sampler.end();
+        if (summary != null) reports.add(summary);
+      }
+    }
+    return reports;
+  }
+
+  List<Map<String, Object>> detach() {
+    final reports = <Map<String, Object>>[];
+    for (final window in _windows) {
+      final summary = window.sampler.end();
+      if (summary != null) reports.add(summary);
+    }
+    _windows.clear();
+    _active = null;
+    return reports;
+  }
+}
+
 /// Opt-in REAL engine frame timing, scoped to gestures. Previously this
 /// profiler aggregated every frame while ChartScreen was mounted, including
 /// menus and idle app activity, making pan/pinch p95 uninterpretable.
@@ -145,8 +306,8 @@ class ChartFrameProfiler {
       'TRADELAB_PROFILE_CHART', defaultValue: false);
   static const sampleSize = 120;
 
-  final ChartInteractionFrameSampler _sampler =
-      ChartInteractionFrameSampler(batchSize: sampleSize);
+  final ChartFrameTimingAttribution _timing =
+      ChartFrameTimingAttribution(batchSize: sampleSize);
   bool _attached = false;
 
   static int percentileUs(List<int> measurements, double percentile) {
@@ -172,7 +333,9 @@ class ChartFrameProfiler {
     required int rangeBidTicks,
   }) {
     if (!enabled || !_attached) return;
-    _emit(_sampler.start(
+    _emitAll(_timing.startAt(
+      frameTimeUs:
+          SchedulerBinding.instance.currentFrameTimeStamp.inMicroseconds,
       interaction: interaction,
       chartMode: chartMode,
       replay: replay,
@@ -183,24 +346,30 @@ class ChartFrameProfiler {
 
   void endInteraction() {
     if (!enabled || !_attached) return;
-    _emit(_sampler.end());
+    _timing.endAt(
+        SchedulerBinding.instance.currentFrameTimeStamp.inMicroseconds);
   }
 
   void detach() {
     if (!_attached) return;
-    _emit(_sampler.end());
+    _emitAll(_timing.detach());
     SchedulerBinding.instance.removeTimingsCallback(_collect);
     _attached = false;
   }
 
   void _collect(List<FrameTiming> timings) {
-    if (!_sampler.active) return;
-    for (final frame in timings) {
-      _emit(_sampler.record(
-        buildUs: frame.buildDuration.inMicroseconds,
-        rasterUs: frame.rasterDuration.inMicroseconds,
-        totalUs: frame.totalSpan.inMicroseconds,
-      ));
+    if (timings.isEmpty) return;
+    _emitAll(_timing.recordBatch(timings.map((frame) => (
+      startUs: frame.timestampInMicroseconds(FramePhase.buildStart),
+      buildUs: frame.buildDuration.inMicroseconds,
+      rasterUs: frame.rasterDuration.inMicroseconds,
+      totalUs: frame.totalSpan.inMicroseconds,
+    ))));
+  }
+
+  static void _emitAll(Iterable<Map<String, Object>> reports) {
+    for (final report in reports) {
+      _emit(report);
     }
   }
 

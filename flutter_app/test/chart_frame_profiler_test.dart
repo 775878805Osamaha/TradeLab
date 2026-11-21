@@ -219,4 +219,105 @@ void main() {
         reason: 'Opening account modal or a new screen cannot pollute fling');
     expect(sampler.end(), isNull);
   });
+  test('delayed Flutter engine batch still belongs to the completed pan', () {
+    final timing = ChartFrameTimingAttribution(
+        batchSize: 10, minimumReportSamples: 4);
+    expect(timing.startAt(
+      frameTimeUs: 100,
+      interaction: ChartFrameInteraction.pan, chartMode: 'range',
+      replay: false, displayedCandles: 120000, rangeBidTicks: 500000,
+    ), isEmpty);
+    timing.endAt(400);
+    expect(timing.active, isFalse);
+    expect(timing.bufferedWindows, 1,
+        reason: 'Touch-up must NOT discard engine timings still in flight');
+
+    // The engine reports these frames AFTER touch-up: timings are batched
+    // independently of scale gesture callbacks.
+    final deliveredLate = timing.recordBatch([
+      for (var start = 150; start <= 350; start += 50)
+        (startUs: start, buildUs: 1100, rasterUs: 1800, totalUs: 19000),
+    ]);
+    expect(deliveredLate, isEmpty,
+        reason: 'Wait until chronological delivery crosses the release');
+    final flushed = timing.recordBatch([
+      (startUs: 450, buildUs: 9000, rasterUs: 12000, totalUs: 30000),
+    ]);
+    expect(flushed, hasLength(1));
+    expect(flushed.single['interaction'], 'pan');
+    expect(flushed.single['mode'], 'range');
+    expect(flushed.single['rangeBidTicks'], 500000);
+    expect(flushed.single['count'], 5);
+    expect(flushed.single['frameP95Us'], 19000,
+        reason: 'Idle frame beyond release must not pollute pan p95');
+    expect(timing.bufferedWindows, 0);
+  });
+
+  test('late interleaved pan and pinch batches keep exact time windows', () {
+    final timing = ChartFrameTimingAttribution(
+        batchSize: 10, minimumReportSamples: 4);
+    timing.startAt(
+      frameTimeUs: 100, interaction: ChartFrameInteraction.pan,
+      chartMode: 'candles', replay: false,
+      displayedCandles: 400, rangeBidTicks: 0);
+    timing.endAt(350);
+    timing.startAt(
+      frameTimeUs: 400, interaction: ChartFrameInteraction.pinch,
+      chartMode: 'candles', replay: true,
+      displayedCandles: 200, rangeBidTicks: 0);
+    timing.endAt(750);
+
+    final first = timing.recordBatch([
+      for (final start in [150, 200, 250, 300])
+        (startUs: start, buildUs: 1000, rasterUs: 2000, totalUs: 18000),
+      (startUs: 380, buildUs: 50000, rasterUs: 30000, totalUs: 90000),
+      for (final start in [450, 500])
+        (startUs: start, buildUs: 2000, rasterUs: 3000, totalUs: 6000),
+    ]);
+    expect(first, hasLength(1));
+    expect(first.single['interaction'], 'pan');
+    expect(first.single['count'], 4);
+    expect(first.single['frameP95Us'], 18000);
+    expect(first.single['replay'], isFalse);
+    expect(timing.bufferedWindows, 1,
+        reason: 'Pending pinch frames can arrive in a later batch');
+    final second = timing.recordBatch([
+      for (final start in [550, 600, 650, 700])
+        (startUs: start, buildUs: 2000, rasterUs: 3000, totalUs: 6000),
+      (startUs: 800, buildUs: 55000, rasterUs: 40000, totalUs: 110000),
+    ]);
+    expect(second, hasLength(1));
+    expect(second.single['interaction'], 'pinch');
+    expect(second.single['count'], 6);
+    expect(second.single['frameP95Us'], 6000);
+    expect(second.single['replay'], isTrue);
+    expect(second.single['displayedCandles'], 200);
+    expect(timing.bufferedWindows, 0);
+    expect(timing.detach(), isEmpty);
+  });
+
+  test('late profiler cohort stays bounded without fabricating frames', () {
+    final timing = ChartFrameTimingAttribution(
+      batchSize: 120, minimumReportSamples: 4,
+      maxBufferedWindows: 3,
+    );
+    for (var i = 0; i < 12; i++) {
+      timing.startAt(
+        frameTimeUs: i * 10,
+        interaction: ChartFrameInteraction.pan,
+        chartMode: 'range', replay: false,
+        displayedCandles: 100, rangeBidTicks: 1000);
+      timing.endAt(i * 10 + 5);
+      expect(timing.bufferedWindows, lessThanOrEqualTo(3));
+    }
+    expect(timing.detach(), isEmpty,
+        reason: 'Taps without rendered frames must not produce fake p95');
+    expect(timing.bufferedWindows, 0);
+    expect(() => ChartFrameTimingAttribution(maxBufferedWindows: 1),
+        throwsArgumentError);
+    expect(() => timing.recordBatch([
+      (startUs: -1, buildUs: 1, rasterUs: 1, totalUs: 1),
+    ]), throwsArgumentError);
+  });
+
 }
