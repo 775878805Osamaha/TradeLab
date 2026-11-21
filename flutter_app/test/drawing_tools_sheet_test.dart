@@ -51,8 +51,16 @@ void main() {
       DrawingCatalogKind.horizontal,
       DrawingCatalogKind.horizontalRay,
       DrawingCatalogKind.verticalLine,
+      DrawingCatalogKind.crossLine,
       DrawingCatalogKind.parallelChannel,
     ]);
+  });
+
+  test('crossline is enabled as a single-touch trend drawing', () {
+    expect(DrawingCatalogKind.crossLine.implemented, isTrue);
+    expect(DrawingCatalogKind.crossLine.category, DrawingCategory.trend);
+    expect(DrawingCatalogKind.crossLine.label, 'خط عرضي');
+    expect(DrawingCatalogKind.infoLine.implemented, isFalse);
   });
 
   test('risk/reward drawings support both real long and short tools', () {
