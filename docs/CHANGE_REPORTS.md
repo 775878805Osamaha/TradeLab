@@ -470,3 +470,11 @@
 - **اختبارات جديدة:** `flutter_app/test/chart_frame_profiler_test.dart` commit [57404a7](https://github.com/775878805Osamaha/TradeLab/commit/57404a75dd947fc70348522a721c280979179e2c) ثلاث حالات دفعات متأخرة، تداخل gestures دون خلط، وذاكرة محدودة/عينات غير مخترعة.
 - **التحقق:** GitHub Actions **PENDING**، جهاز Android حقيقي/FPS/cTrader حي **NOT RUN**. ملفات التوثيق: `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`. لا main ولا APK/Release.
 - **التالي:** فتح PR، التحقق من Flutter analyze وCI، إصلاح أي FAIL، دمج في التطوير فقط وحفظ CI URL وSHA النهائي.
+
+### 2026-11-21 (UTC) — نجاح CI ودمج PR #588 لربط تأخر FrameTiming بزمن الإيماءة
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab`، [PR #588](https://github.com/775878805Osamaha/TradeLab/pull/588) **MERGED/squash** في `test/flutter-all-fixes-20261116` عند [SHA `10ab6bd66348b9319302818f0cc0504e6ae5cbbc`](https://github.com/775878805Osamaha/TradeLab/commit/10ab6bd66348b9319302818f0cc0504e6ae5cbbc).
+- **نتيجة GitHub الفعلية:** [Actions #44918861973](https://github.com/775878805Osamaha/TradeLab/actions/runs/44918861973) **completed/success** على HEAD `e52ff229b08d6c0b5934c85cf04fbfdf844d8eb1`. نجح تحليل Flutter واختبارات chart/Range/Replay/history وYemen timezone، بما فيها 3 اختبارات انحدار للتوقيت المؤجل.
+- **التغيير:** `flutter_app/lib/chart/chart_frame_profiler.dart` يُبقي نوافذ الإيماءات إلى وصول الدفعات الزمنية الحقيقية، ويُسند كل `FrameTiming.buildStart` إلى pan أو pinch وفق حدودها الزمنية بدل وقت تسليم callback. يمنع تلويث p95 بإطار idle بعد رفع الإصبع أو بإيماءة لاحقة. حد 16 نافذة، لا أسماء رموز أو أسعار أو حسابات، profiling اختياري فقط؛ `flutter_app/test/chart_frame_profiler_test.dart` يتحقق من الحالات.
+- **التوثيق:** تحديث `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md` بعد الدمج مع SHA ورابط CI الصحيح.
+- **حدود الاختبار:** Android Profile/FPS/CTrader session فعلي **NOT RUN**، فلا ادعاء بتحسن سلاسة مقاس؛ لا APK أو Release أو main/مشاريع أخرى.
+- **التالي:** جهاز Android/حساب cTrader موثّق وقياس p50/p95/p99 لـ pan/pinch/momentum، ثم إصلاح الاختناق الذي يظهر بالبيانات.
