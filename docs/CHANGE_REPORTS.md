@@ -4,6 +4,16 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-21 — دفعة أداء Replay: إعادة استخدام CandlePrefix الموثق
+- **الحدث:** إنشاء `perf/tradelab-replay-prefix-stability-20261121` من `test/flutter-all-fixes-20261116`، بدون تعديل `main`.
+- **المشكلة المثبتة من الشيفرة:** `_displayCandles` كان يُنشئ قائمة Replay مغلفة جديدة عند إعادة بناء الواجهة مع نفس مصدر OHLC ونفس حد الكشف، فيُبطل `ChartPriceScaleCache` حتى لو لم تتحرك حدود الشموع. هذا مسار حساب إضافي؛ تأثيره الزمني على هاتف حقيقي **غير مقاس**.
+- **Commit 1:** [00c143c](https://github.com/775878805Osamaha/TradeLab/commit/00c143c4c9ab93ee41ba6de9dffdbcbd853c7f27) — `flutter_app/lib/chart/candle_prefix.dart`: cache خانة واحدة، source identity/count/bounded through، لا كشف للمستقبل.
+- **Commit 2:** [6c5dc97](https://github.com/775878805Osamaha/TradeLab/commit/6c5dc970518dfb507423d064e461c4d8c8fa3f32) — `flutter_app/lib/screens/chart_screen.dart`: الاستخدام في وضع Replay مع Candles/Range/Heikin-Ashi وتحرير cache في dispose.
+- **Commit 3:** [7d92c2e](https://github.com/775878805Osamaha/TradeLab/commit/7d92c2e68665bb873bffeb7d03c799c8bbc68794) — `flutter_app/test/candle_prefix_test.dart`: ثبات الهوية، تغير cutoff، استبدال المصدر، منع المستقبل، وهندسة مقياس السعر.
+- **التحقق الآن:** الملفات محفوظة في GitHub؛ Flutter/Android المحلي **NOT RUN**؛ CI **PENDING** قبل PR؛ لا APK/Release ولا بيانات سوق مصطنعة.
+- **المخاطر:** التسريع النظري بتقليل إعادة الغلاف ومسح مجال السعر لم يُقَس بالأرقام؛ يتطلب Flutter analyze واختبارات الانحدار على GitHub، ثم Android Profile، قبل نسبة أي تحسن بالمئة.
+- **التالي:** افتح PR إلى فرع التطوير ثم تعامل مع CI الحقيقي، وانقل رابط PR/نتيجة Actions/commit الدمج لهذا التقرير وHANDOFF.
+
 ### 2026-11-20 — تمهيد سجل الاستكمال
 - الحدث: إنشاء بروتوكول التسليم الدائم لهذه النسخة من TradeLab (ملف الوكلاء + حالة الاستكمال + سجل الأحداث)؛ **توثيق فقط، دون تغيير شيفرة التطبيق أو تشغيل APK**.
 - مرجع الكود قبل إنشاء التوثيق: [7fa9fd4](https://github.com/775878805Osamaha/TradeLab/commit/7fa9fd4ceabb6e878b9d6a80c818349b63ee2a76)، فرع `test/flutter-all-fixes-20261116`.
