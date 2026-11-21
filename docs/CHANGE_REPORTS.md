@@ -535,3 +535,10 @@
 - **التقارير:** docs/HANDOFF.md, docs/CHANGE_REPORTS.md؛ تغييرات أخرى خارج TradeLab **NONE**.
 - **التحقق:** GitHub CI **PENDING**، Android real device Profile/FPS وcTrader live **NOT RUN**، ولا APK أو Release أو main.
 - **التالي:** افتح PR، راجع CI وأصلح FAIL ثم ادمج إلى dev فقط بعد PASS واحفظ الحالة الحقيقية.
+
+### 2026-11-21T16:16:32.499Z — PR #592: تحليل فشل CI وإصلاح تعارض Tap/Scale مع Crosshair الطويل
+- **CI الأول FAIL:** [Actions #44923242646](https://github.com/775878805Osamaha/TradeLab/actions/runs/44923242646) finished failure؛ Flutter analyze PASS، 4 failures فقط في widget cases 320/390dp لـ chart_ohlc_inspector_test.dart وchart_paint_only_pan_test.dart. تفصيل log: crosshair بقي ظاهرًا بعد tap جديد لأن Scale recognizer يملك اللمسة فلا يصل onTapUp؛ الاختبار القديم ينتظر اختفاء OHLC عند finger lift وهذا عكس السلوك الصحيح المستهدف.
+- **تصحيح السلوك:** [9e56e40](https://github.com/775878805Osamaha/TradeLab/commit/9e56e40ba3cd398eb63cb7a7b2f74195772fce78) في flutter_app/lib/screens/chart_screen.dart: Listener.onPointerDown يزيل crosshair فور لمس جديد حتى عندما يفشل onTapUp، مع حماية من تحرير رسم/تغيير Replay، ومع reset عند pointer cancel أو بدء long-press آخر.
+- **تحديث اختبار سابق:** [6a04286](https://github.com/775878805Osamaha/TradeLab/commit/6a0428669f621568f822d60c3b32240a3b2e66d1) في flutter_app/test/chart_paint_only_pan_test.dart: يتأكد من بقاء OHLC بعد up والإخفاء بعد tap واحد. الاختباران الجديدان في chart_ohlc_inspector_test.dart يبقيان.
+- **التوثيق:** docs/HANDOFF.md وdocs/CHANGE_REPORTS.md؛ branch fix/tradelab-mobile-crosshair-persistent-tracking-20261121، PR #592 إلى test/flutter-all-fixes-20261116. **CI revalidation PENDING**؛ Android real/Profile/FPS وcTrader live NOT RUN، لا APK/Release/main.
+- **الخطوة التالية:** التحقق من آخر GitHub Actions run بعد التصحيح ودمج PR فقط إذا completed/success.
