@@ -9,8 +9,9 @@
 - **المشكلة المثبتة:** صندوق المركز كان يُحجب إذا خرج أفقيًا عن الشاشة، بينما وسوم SL/TP على محور السعر كانت تُرسم لكل مركز معلوم بالنطاق الزمني حتى عند الابتعاد عنه عشرات آلاف الشموع.
 - **الإصلاح:** [a101c0f](https://github.com/775878805Osamaha/TradeLab/commit/a101c0f2d066fe57372284d2b7c3e7ffc2785e29) helper visibility موحد O(1) لفهرس الرسم مع `ChartViewport`؛ [f72a137](https://github.com/775878805Osamaha/TradeLab/commit/f72a137863ee14f2916aed15d269c05f6020d51d) ربط كل من box والوسوم بنفس الشرط، دون لمس OHLC أو كشف مستقبل Replay.
 - **اختبار:** [2510f1b](https://github.com/775878805Osamaha/TradeLab/commit/2510f1b39f6f5ab70d939080c6da0fc03e8ef35d) يغطي 120k source bars، الحواف، العودة إلى الماضي، المستقبل وNaN على عرضين؛ [45bac91](https://github.com/775878805Osamaha/TradeLab/commit/45bac919c5a774509595c98b92329b0500efcfee) أدرجه في CI.
-- **التحقق:** PR/CI **PENDING**. Android Profile/FPS، مقارنة TradingView pixel، cTrader live **NOT RUN**. لا APK/Release ولا main أو مشروع آخر.
-- **التالي:** CI ثم دمج فرع التطوير فقط عند PASS وتسجيل رابط PR/Actions وSHA الفعلية.
+- **النتيجة المؤكدة:** [PR #600](https://github.com/775878805Osamaha/TradeLab/pull/600) **MERGED/squash** إلى `test/flutter-all-fixes-20261116` عند [SHA 6ea0d87](https://github.com/775878805Osamaha/TradeLab/commit/6ea0d87134b01acc6329cccf804c6231b3858477). [Actions #44958775049](https://github.com/775878805Osamaha/TradeLab/actions/runs/44958775049) **completed/success** على HEAD `7b8e32d29ffa9fff7d0888a3cd08df643b9c6859`: Flutter analyze، 120k viewport visibility tests، chart/Range/Replay/history، long/short catalog وYemen timezone كلها نجحت.
+- **ما لم يُنفذ:** Android Profile/FPS، مقارنة TradingView pixel وcTrader live **NOT RUN**. لا APK/Release، ولا تغيير `main` أو مشاريع أخرى.
+- **التالي:** اختبار مرئي ولمسي على هاتف Android حقيقي ببيانات حقيقية ثم معالجة فروقات مثبتة بالأدلة.
 
 ### 2026-11-22 — منع إعادة بناء واجهة الشارت لكل عينة إصبع أثناء سحب مركز Long/Short
 - **Branch:** `perf/tradelab-position-drag-paint-only-20261122` من `test/flutter-all-fixes-20261116` بعد PR #598؛ لا APK ولا تغيير `main`.
