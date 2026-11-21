@@ -2,10 +2,11 @@
 /// coordinates. Historical pagination shifts indices but never prices.
 enum ChartDrawingTool {
   horizontal, trendLine, fibonacci,
-  ray, extendedLine, horizontalRay, verticalLine, parallelChannel;
+  ray, extendedLine, horizontalRay, verticalLine, crossLine,
+  parallelChannel;
 
   bool get oneAnchor =>
-      this == horizontalRay || this == verticalLine;
+      this == horizontalRay || this == verticalLine || this == crossLine;
   bool get threeAnchors => this == parallelChannel;
 }
 enum ChartAnchorEndpoint { start, end, offset }

@@ -3500,6 +3500,8 @@ class _ChartScreenState extends State<ChartScreen>
         _selectDrawingMode(tool: ChartDrawingTool.horizontalRay);
       case DrawingCatalogKind.verticalLine:
         _selectDrawingMode(tool: ChartDrawingTool.verticalLine);
+      case DrawingCatalogKind.crossLine:
+        _selectDrawingMode(tool: ChartDrawingTool.crossLine);
       case DrawingCatalogKind.parallelChannel:
         _selectDrawingMode(tool: ChartDrawingTool.parallelChannel);
       case DrawingCatalogKind.shortPosition:
@@ -6446,6 +6448,15 @@ class _CandleChartPainter extends CustomPainter {
       annotate(verifiedQuote.bid, Color(scaleSettings.bidColor),
         scaleSettings.bidAsk);
     }
+    // Crossline's price tag belongs to its ONE verified source price,
+    // not a synthetic quote. Respect per-drawing Show labels and the
+    // source-prefix boundary; ordinary candle labels remain unaffected.
+    for (final drawing in paintPatterns.reversed) {
+      if (drawing.tool != ChartDrawingTool.crossLine ||
+          !drawing.showLabels || !drawing.visibleAt(candles.length)) continue;
+      annotate(drawing.start.price, Color(drawing.colorValue),
+          ChartPriceLabelMode.value);
+    }
     final visiblePositions = _shortPositionsProvider();
     for (var i = 0; i < visiblePositions.length; i++) {
       final item = visiblePositions[i];
@@ -6480,6 +6491,37 @@ class _CandleChartPainter extends CustomPainter {
         if (timeAxisLayout.reserve(
             left: zoneLeft, right: zoneLeft + zonePainter.width)) {
           zonePainter.paint(canvas, Offset(zoneLeft, chartHeight + 4));
+        }
+      }
+
+      // A persistent crossline shows the selected source bar's time in
+      // the chart timezone. Reserve the actual label width BEFORE ordinary
+      // axis ticks so their text never overlaps its visible date marker.
+      for (final drawing in paintPatterns.reversed) {
+        if (drawing.tool != ChartDrawingTool.crossLine ||
+            !drawing.showLabels ||
+            !drawing.visibleAt(candles.length)) continue;
+        final index = drawing.start.index;
+        if (index < 0 || index >= timestamps.length) continue;
+        final x = viewport.chartX(index: index,
+            candleCount: candles.length, plotWidth: axis);
+        if (!x.isFinite || x < 0 || x >= axis) continue;
+        final date = symbolSettings.timeZone.displayDate(timestamps[index]);
+        final label =
+            '${date.day.toString().padLeft(2, '0')}.'
+            '${date.month.toString().padLeft(2, '0')} '
+            '${date.hour.toString().padLeft(2, '0')}:'
+            '${date.minute.toString().padLeft(2, '0')}';
+        final labelPainter = textCache.layoutBoundedAxis(
+            label, Colors.white, 9, maxWidth: math.min(axis * .45, 110));
+        final labelWidth = labelPainter.width + 4;
+        if (timeAxisLayout.reserveCentered(
+            centerX: x, width: labelWidth)) {
+          canvas.drawRect(Rect.fromLTWH(x - labelWidth / 2,
+              chartHeight + 1, labelWidth, 20),
+              Paint()..color = Color(drawing.colorValue));
+          labelPainter.paint(canvas,
+              Offset(x - labelPainter.width / 2, chartHeight + 4));
         }
       }
 

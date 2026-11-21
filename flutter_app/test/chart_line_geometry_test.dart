@@ -293,6 +293,63 @@ void main() {
     expect(lines.single.end, const Offset(20, 100));
   });
 
+  test('Crossline uses one source crossing for full X and Y chart strokes',
+      () {
+    final lines = ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.crossLine,
+      start: start,
+      end: start,
+      bounds: bounds,
+    );
+    expect(lines, hasLength(2));
+    expect(lines[0].start, const Offset(0, 80));
+    expect(lines[0].end, const Offset(100, 80));
+    expect(lines[1].start, const Offset(20, 0));
+    expect(lines[1].end, const Offset(20, 100));
+    expect(ChartLineGeometry.distanceToStroke(
+        const Offset(72, 80), lines[0]), closeTo(0, 1e-8));
+    expect(ChartLineGeometry.distanceToStroke(
+        const Offset(20, 10), lines[1]), closeTo(0, 1e-8));
+  });
+
+  test('Crossline draws only visible arms while offscreen source crossing',
+      () {
+    final oldTime = ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.crossLine,
+      start: const Offset(-5000, 40),
+      end: const Offset(-5000, 40),
+      bounds: bounds,
+    );
+    expect(oldTime, hasLength(1),
+        reason: 'Horizontal price arm can remain visible in history pan');
+    expect(oldTime.single.start, const Offset(0, 40));
+    expect(oldTime.single.end, const Offset(100, 40));
+    expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+        tool: ChartDrawingTool.crossLine,
+        startX: -5000, endX: -5000, plotWidth: 100), isFalse);
+
+    final oldPrice = ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.crossLine,
+      start: const Offset(30, 999),
+      end: const Offset(30, 999),
+      bounds: bounds,
+    );
+    expect(oldPrice, hasLength(1),
+        reason: 'The source-time vertical arm stays within the plot');
+    expect(oldPrice.single.start, const Offset(30, 0));
+    expect(oldPrice.single.end, const Offset(30, 100));
+    expect(ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.crossLine,
+      start: const Offset(double.nan, 50),
+      end: const Offset(double.nan, 50),
+      bounds: bounds,
+    ), isEmpty);
+    expect(ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.crossLine,
+      start: start, end: start, bounds: Rect.zero,
+    ), isEmpty);
+  });
+
   test('three-anchor channel creates two independent parallel borders', () {
     final lines = ChartLineGeometry.strokes(
       tool: ChartDrawingTool.parallelChannel,

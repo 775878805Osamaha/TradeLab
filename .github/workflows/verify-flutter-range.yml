@@ -67,6 +67,7 @@ jobs:
             test/chart_position_viewport_visibility_test.dart \
             test/chart_long_position_widget_test.dart \
             test/chart_position_paint_only_drag_test.dart \
+            test/chart_crossline_widget_test.dart \
             test/chart_double_tap_guide_test.dart \
             test/chart_paint_only_pan_test.dart \
             test/chart_frame_profiler_test.dart \
@@ -134,6 +135,8 @@ jobs:
       # the original visual tests for environments with their true baselines.
       - name: Verify Long and Short catalog selection without missing goldens
         run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'risk/reward drawings support both real long and short tools'
+      - name: Verify Crossline catalog choice without missing screenshot goldens
+        run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'crossline is enabled as a single-touch trend drawing'
       # The original bug appears on phones whose local timezone differs
       # from the selected chart timezone (e.g. New York on a Yemen device).
       - name: Verify chart weekdays under Yemen device timezone

@@ -43,7 +43,10 @@ class ChartLineGeometry {
         return math.min(startX, endX) >= plotWidth;
       case ChartDrawingTool.ray:
       case ChartDrawingTool.extendedLine:
+      case ChartDrawingTool.crossLine:
       case ChartDrawingTool.parallelChannel:
+        // Crossline's horizontal arm may remain visible even when its
+        // source-time crossing is outside the plotted candle window.
         return false;
     }
   }
@@ -78,6 +81,22 @@ class ChartLineGeometry {
       return (start: a + direction * minT, end: a + direction * maxT);
     }
 
+    if (tool == ChartDrawingTool.crossLine) {
+      // A single genuine market bar/price anchor creates two perpendicular
+      // full-plot strokes. Never infer any second/future candle.
+      if (!start.dx.isFinite || !start.dy.isFinite ||
+          !bounds.left.isFinite || !bounds.top.isFinite ||
+          !bounds.width.isFinite || bounds.width <= 0 ||
+          !bounds.height.isFinite || bounds.height <= 0) return [];
+      final horizontal = segment(start, start + const Offset(1, 0),
+          low: double.negativeInfinity, high: double.infinity);
+      final vertical = segment(start, start + const Offset(0, 1),
+          low: double.negativeInfinity, high: double.infinity);
+      return [
+        if (horizontal != null) horizontal,
+        if (vertical != null) vertical,
+      ];
+    }
     if (tool == ChartDrawingTool.verticalLine) {
       final stroke = segment(start, start + const Offset(0, 1),
           low: double.negativeInfinity, high: double.infinity);
