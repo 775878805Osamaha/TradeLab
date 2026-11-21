@@ -6557,9 +6557,14 @@ class _CandleChartPainter extends CustomPainter {
       final yEntry = scale.y(item.entry);
       final yTarget = scale.y(item.target);
       if (right < 0 || left > axis) continue;
-      canvas.drawRect(Rect.fromLTRB(left, yStop, right, yEntry),
+      // The same risk/reward box paints BOTH sides: short risk is above
+      // entry, long risk below. Flutter Rect needs ordered edges, otherwise
+      // its long stop/target regions are inverted and disappear.
+      canvas.drawRect(Rect.fromLTRB(left, math.min(yStop, yEntry),
+              right, math.max(yStop, yEntry)),
         Paint()..color = TradeColors.shortStopFill.withValues(alpha: .75));
-      canvas.drawRect(Rect.fromLTRB(left, yEntry, right, yTarget),
+      canvas.drawRect(Rect.fromLTRB(left, math.min(yEntry, yTarget),
+              right, math.max(yEntry, yTarget)),
         Paint()..color = TradeColors.shortTargetFill.withValues(alpha: .75));
       canvas.drawLine(Offset(left, yEntry), Offset(right, yEntry),
           Paint()..color = TradeColors.shortHandle..strokeWidth = 1.4);
@@ -6568,7 +6573,8 @@ class _CandleChartPainter extends CustomPainter {
           ..color = TradeColors.shortHandle
           ..strokeWidth = 2
           ..style = PaintingStyle.stroke;
-        canvas.drawRect(Rect.fromLTRB(left, yStop, right, yTarget), outline);
+        canvas.drawRect(Rect.fromLTRB(left, math.min(yStop, yTarget),
+            right, math.max(yStop, yTarget)), outline);
         for (final handle in <(Offset, bool)>[
           (Offset(left, yStop), false),
           (Offset(left, yEntry), true),
@@ -6591,7 +6597,8 @@ class _CandleChartPainter extends CustomPainter {
       final reward = _price(item.reward, decimals);
       _shortPill(canvas,
           'الإيقاف: \u2066$risk\u2069 (\u2066${item.riskPercent.toStringAsFixed(3)}%\u2069)',
-          Offset(axis - 8, yStop - 39), TradeColors.shortLabelRed,
+          Offset(axis - 8, item.isLong ? yStop + 12 : yStop - 39),
+          TradeColors.shortLabelRed,
           axis, scale.height);
       _shortPill(canvas,
           'العائد المحتمل: \u2066$reward\u2069   نسبة العائد/المخاطرة: '
@@ -6601,7 +6608,8 @@ class _CandleChartPainter extends CustomPainter {
           twoLines: true);
       _shortPill(canvas,
           'الهدف: \u2066$reward\u2069 (\u2066${item.rewardPercent.toStringAsFixed(3)}%\u2069)',
-          Offset(axis - 8, yTarget + 19), TradeColors.shortLabelBlue,
+          Offset(axis - 8, item.isLong ? yTarget - 39 : yTarget + 19),
+          TradeColors.shortLabelBlue,
           axis, scale.height);
     }
   }
