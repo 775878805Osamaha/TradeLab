@@ -21,6 +21,40 @@ void main() {
     timestampsUtcMs: timestamps ?? times,
     startScreen: start, endScreen: end);
 
+  test('Trend Angle degrees mirror real canvas direction and source endpoints',
+      () {
+    const angle = ChartPattern(
+      tool: ChartDrawingTool.trendAngle,
+      start: ChartAnchor(10, 200),
+      end: ChartAnchor(14, 225),
+    );
+    final up = stats(angle,
+        start: const Offset(30, 200),
+        end: const Offset(130, 100));
+    expect(up, isNotNull);
+    expect(up!.angleDegrees, closeTo(45, 1e-8));
+    expect(up.priceChange, 25);
+    expect(up.bars, 4);
+    expect(up.elapsedMs, 3600000);
+    final down = stats(angle,
+        start: const Offset(30, 100),
+        end: const Offset(130, 200));
+    expect(down!.angleDegrees, closeTo(-45, 1e-8),
+        reason: 'Inverting the price axis must invert the on-screen angle');
+    expect(down.priceChange, 25,
+        reason: 'Display inversion cannot mutate source price difference');
+    expect(stats(angle, revealedCount: 14), isNull,
+        reason: 'Trend Angle must hide before its second Replay bar');
+    final changed = angle.withEndpoint(
+        ChartAnchorEndpoint.end, const ChartAnchor(15, 235));
+    final moved = stats(changed);
+    expect(moved?.priceChange, 35);
+    expect(moved?.bars, 5);
+    expect(changed.start.price, 200);
+    expect(angle.end.price, 225,
+        reason: 'Editing the angle must not modify its undo source snapshot');
+  });
+
   test('two real source anchors show delta, percent, bars, UTC, angle', () {
     final s = stats(line);
     expect(s, isNotNull);

@@ -28,6 +28,7 @@ class ChartLineGeometry {
     switch (tool) {
       case ChartDrawingTool.trendLine:
       case ChartDrawingTool.infoLine:
+      case ChartDrawingTool.trendAngle:
       case ChartDrawingTool.horizontal:
         // Finite segments cannot cross the plot if BOTH endpoints are on
         // the same, wholly offscreen side.

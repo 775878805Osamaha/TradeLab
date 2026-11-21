@@ -10,6 +10,33 @@ void main() {
   const start = Offset(20, 80);
   const end = Offset(60, 40);
 
+  test('Trend Angle shares finite clipped source coordinates and culling',
+      () {
+    final strokes = ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.trendAngle,
+      start: const Offset(20, 80),
+      end: const Offset(60, 40),
+      bounds: bounds,
+    );
+    expect(strokes, hasLength(1));
+    expect(strokes.single.start, const Offset(20, 80));
+    expect(strokes.single.end, const Offset(60, 40));
+    expect(ChartLineGeometry.distanceToStroke(
+        const Offset(40, 60), strokes.single), closeTo(0, 1e-8));
+    expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+        tool: ChartDrawingTool.trendAngle,
+        startX: 300, endX: 350, plotWidth: 259), isTrue);
+    expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+        tool: ChartDrawingTool.trendAngle,
+        startX: -20, endX: 40, plotWidth: 259), isFalse);
+    expect(ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.trendAngle,
+      start: const Offset(-20, 120),
+      end: const Offset(-10, 130),
+      bounds: bounds,
+    ), isEmpty);
+  });
+
   test('Info Line finite source segment uses trend-line geometry, not an infinite ray',
       () {
     const realStart = Offset(20, 80);
