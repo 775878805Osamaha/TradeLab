@@ -1,13 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## دفعة قيد التحقق — حماية حدود لقطات BID في تحديث Range الحي (21 نوفمبر 2026)
+## دفعة مكتملة — PR #581: حماية حدود مصدر BID وشمعة Range (21 نوفمبر 2026)
 - **الفرع:** `fix/tradelab-range-snapshot-boundary-20261121` من التطوير `test/flutter-all-fixes-20261116` عند `358f38532a7347fef92172935c2d465a85b7195b`؛ آخر commit للشيفرة والاختبار [6122183](https://github.com/775878805Osamaha/TradeLab/commit/6122183d0ae425582c21e36af6b527389b233657) قبل تحديث التوثيق.
 - **الإصلاح:** `RangeBarTimeline.appendVerifiedSuffixAsync` يرفض الآن اللقطة غير المطابقة عندما يختلف سعر BID الأول/الأخير أو تاريخ أول حدث إغلاق، حتى لو تطابق عدد تيكات المصدر وآخر طابع UTC؛ الفحص ثابت الزمن لا يمسح مليون تيك. `ChartScreen._refreshLiveRange` يسقط نتيجة polling قديمة إذا تغير مضاعف نقطة cTrader أثناء انتظار الشبكة أو عامل Range، منعًا لدمج شموع بمسافة سعرية مختلفة.
 - **الانحدار:** `range_bar_timeline_test.dart` يغطي أول سعر مختلف، وآخر سعر مختلف، وزمن إغلاق أول شمعة مختلف، ونجاح إلحاق BID موثق صحيح دون تغيير timeline السابقة.
-- **الحالة:** **Flutter analyze/tests PENDING** حتى فحص GitHub Actions على PR؛ **Android Profile وحساب cTrader حي NOT RUN**، وFlutter SDK محليًا غير متاح في بيئة هذا الإجراء. لا يُدّعى تحسن FPS.
+- **النتيجة:** [PR #581](https://github.com/775878805Osamaha/TradeLab/pull/581) **MERGED/squash** إلى فرع التطوير عند [SHA 9a8997f9](https://github.com/775878805Osamaha/TradeLab/commit/9a8997f92905e77ca28ea9acb371406e2f037de4). [GitHub Actions #44908442478](https://github.com/775878805Osamaha/TradeLab/actions/runs/44908442478) = **completed/success**: Flutter analyze واختبارات التاريخ والشارت وRange وReplay وتوقيت اليمن. **Android Profile وحساب cTrader حي NOT RUN**، ولا ادعاء بقياس FPS.
 - **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/range_bar_timeline_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
 - **الحدود:** دون تغييرات `main`، لا APK/Release ولا مصادر أسعار جديدة ولا تداول حقيقي.
-- **الخطوة التالية الوحيدة:** افتح PR إلى فرع التطوير، انتظر نتيجة `verify-flutter-range`، عالج أي FAIL قبل الدمج؛ عند PASS ادمج وسجّل رابط CI وSHA الفعلي.
+- **الخطوة التالية الوحيدة:** قياس Android Profile على جهاز فعلي بحساب cTrader واستخراج p50/p95/p99 للشارت/Range/Replay ثم معالجة أول اختناق موثق دون APK تلقائيًا.
 
 ## دفعة مكتملة — PR #580: عامل واحد للتحقق من صفحة BID الحية
 - **MERGED:** [PR #580](https://github.com/775878805Osamaha/TradeLab/pull/580) إلى `test/flutter-all-fixes-20261116` عند SHA [b2c323e](https://github.com/775878805Osamaha/TradeLab/commit/b2c323eeb2a4d110176bdb92a15371d859c0c53c).
