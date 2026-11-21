@@ -155,7 +155,7 @@ void main() {
     expect(fresh.referencePrice, 135);
   });
 
-  test('relative ruler's ticks convert to real prices and retain intervals',
+  test('relative ruler ticks convert to real prices and retain intervals',
       () {
     final scale = ChartPriceScale.visible(source, viewport, 259, 440,
         referenceMode: ChartPriceReferenceMode.percent);
