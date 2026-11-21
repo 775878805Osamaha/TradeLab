@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة محور سعر قيد التحقق — منع تزاحم تسميات 14dp عند تصغير الشارت وReplay (22 نوفمبر 2026)
+- **المشروع والفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-mobile-price-axis-label-density-20261122` من `test/flutter-all-fixes-20261116` بعد PR #603. لا APK ولا تغيير `main`.
+- **الفجوة المثبتة من المصدر:** `_CandleChartPainter.paint` يطلب 12 فاصل سعر حتى في شارت Replay صغير الارتفاع، فيكون تباعد العلامات أقل من ارتفاع الخط؛ وجدت حماية `19px` للـLOG فقط، بينما التسميات الخطية والمعكوسة لا تحجب عند ازدحامها. هذا خطأ عرض بصري في Flutter وليس قياسًا ميدانيًا على Android.
+- **الإصلاح:** `ChartAxisTicks.intervalsForHeight` يحدد فواصل رئيسية 2..12 وفق ارتفاع Canvas الحقيقي على أساس 22dp/تسمية، ثم `ChartAxisTicks.spacedByPixels` يرفض أي تسمية تقع خارج الحافة 9dp أو أقرب من 19dp للتسمية السابقة، في الوضع الخطي وLOG والمحور المعكوس. الرسم ينفّذ تسميات السعر وخطوط الشبكة من الفواصل المقبولة نفسها، فلا تظهر شبكة بلا تسمية. العمل O(عدد العلامات) ولا يقرأ OHLC إضافية، ولا يتأثر `ChartPriceScale` في المصدر أو الحساب أو Replay.
+- **الملفات:** `flutter_app/lib/chart/chart_axis_ticks.dart` [b823484](https://github.com/775878805Osamaha/TradeLab/commit/b823484bba8373c1c87a16759596882af4329f4f)، `flutter_app/lib/screens/chart_screen.dart` [d01ae5a](https://github.com/775878805Osamaha/TradeLab/commit/d01ae5a6496f07ebf6784d72f5927c1e7b36e406).
+- **اختبارات:** `flutter_app/test/chart_axis_mobile_density_test.dart` [c840b0b](https://github.com/775878805Osamaha/TradeLab/commit/c840b0bd1ac37d36f31b4dab1b8ac2d1c8cff674) واختبار توقعات التصادم الصحيح [b2f8c7f](https://github.com/775878805Osamaha/TradeLab/commit/b2f8c7f30bfea694512ba66f488b16f23237104d) للحالات 84/155/440dp، Linear/LOG، Standard/Inverted، مستطيل صغير، رفض NaN وخارج النافذة، Replay prefix لا يقرأ المستقبل؛ `verify-flutter-range.yml` [620303e](https://github.com/775878805Osamaha/TradeLab/commit/620303edcf5f5fc52024122a7db1bd26ca97d8ac) أضاف الاختبار.
+- **التحقق:** PR/CI **PENDING**؛ ملف Reference Golden المفقود ومقارنة Pixel وAndroid Profile/FPS وcTrader live **NOT RUN**. ليس قياس كثافة صور جهاز حقيقي ولا إعلان 100%.
+- **التالي:** PR واختبارات Flutter analyze/chart/Range/Replay/history/zone، إصلاح أي فشل قبل الدمج ثم تحديث SHA هنا وفي CHANGE_REPORTS.
+
 ## دفعة مطابقة قيد التحقق — عكس محور الأسعار Invert Scale في LOG/Linear (22 نوفمبر 2026)
 - **المشروع/الفرع:** `775878805Osamaha/TradeLab` / `feat/tradelab-invert-price-axis-20261122` من `test/flutter-all-fixes-20261116` بعد PR #602. لا `main`، لا APK/Release.
 - **المرجع الرسمي:** https://www.tradingview.com/support/solutions/43000475599-how-to-invert-reverse-the-chart-price-scale/ و https://www.tradingview.com/charting-library-docs/latest/ui_elements/Price-Scale/ — Invert scale من قائمة محور السعر؛ الأسعار الأكبر تُرسم أسفل الأصغر دون تعديل OHLC.
