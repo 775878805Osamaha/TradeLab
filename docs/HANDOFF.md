@@ -1,13 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## قيد التحقق — عدم خلط مقاسات Range في تحديثات BID الحية (21 نوفمبر 2026)
+## دفعة مكتملة — PR #589: منع خلط مقاسات Range الحية مع أرشيف آخر (21 نوفمبر 2026)
 - **المستودع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-range-distance-snapshot-integrity-20261121` من التطوير `test/flutter-all-fixes-20261116` عند SHA `7c1eb83f55fb52dcb673107f87ebee2bfb40e602` بعد PR #588.
 - **الخلل المثبت من المصدر:** `RangeBarTimeline` كانت تُخزن الشموع وأحداث BID والأوقات فقط، ولا تُخزن `priceDistance` الذي أنشأ الشموع. تتطابق أول/آخر أسعار BID، وعدد الأحداث والتوقيت حتى لو أعيد اختيار Range size مختلف. `appendVerifiedSuffixAsync` قبل الإصلاح كان يلصق شموع Range مختلفة المقاس ضمن Snapshot واحدة ويعيدها حتى في poll بلا أحداث جديدة، ويمكن أن يغيّر cutoff Replay.
 - **الإصلاح:** إضافة `final double priceDistance` لهوية اللقطة المنشورة، وربطه ببناء التاريخ `build/buildAsync/prepend` ونتيجة الإلحاق الحي. تفشل دالة `appendVerifiedSuffixAsync` مبكرًا عند `currentTimeline.priceDistance != priceDistance` قبل إعادة استخدامها في حالة no-op أو نقلها إلى isolate. الكلفة O(1)، ولا تغيير OHLC أو تواقيت BID، ولا اختلاق بيانات.
 - **اختبارا انحدار:** صفحة قديمة بمدى 1.0 وتحديث حقيقي مطلوب بمدى 0.5 (بداية ونهاية وأسعار/Timestamp موحدة) يجب رفضه، حتى عندما تكون الصفحة الحديثة فارغة، ويُتحقق من استمرار حساب المدى الصحيح ومطابقة إعادة بناء كامل المصدر وReplay. صفحة فيها forming فقط (صفر closed bars) تُرفض عند اختلاف المقاس رغم تطابق الحدود والـindices.
 - **كود/اختبار:** [a03b0ae](https://github.com/775878805Osamaha/TradeLab/commit/a03b0ae2e69633321b88960ca52fba5966c5eee1) `flutter_app/lib/data/range_bar_timeline.dart`؛ [0b05499](https://github.com/775878805Osamaha/TradeLab/commit/0b05499a33d9a5fee36cbb8828dd56b21a9e272a) `flutter_app/test/range_bar_timeline_test.dart`. ملفات الاستكمال: `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
-- **النتيجة:** Flutter CI **PENDING** حتى PR، Android Profile/FPS والجلسة الحية مع cTrader **NOT RUN**، لا APK/Release ولا تعديل `main` أو مشروع آخر.
-- **الخطوة التنفيذية التالية:** فتح PR على dev والتحقق من Flutter analyze واختبارات Range/Replay/الشارت وتوقيت اليمن ثم الدمج فقط عند PASS، وإلحاق SHA وCI النهائيين إلى هذا الملف.
+- **النتيجة النهائية المثبتة:** [PR #589](https://github.com/775878805Osamaha/TradeLab/pull/589) **MERGED/squash** إلى `test/flutter-all-fixes-20261116` عند [SHA d89567db](https://github.com/775878805Osamaha/TradeLab/commit/d89567db15fab88d0b0de05866bbd2a5adf02088). [Actions #44921079135](https://github.com/775878805Osamaha/TradeLab/actions/runs/44921079135) **completed/success** على PR HEAD `b63f1d7dcc185c482500dc13c34e5c6668789f23`، ونجح Flutter analyze واختبارات history/chart/Range/Replay وتوقيت اليمن، بما فيها اختبارا المقاس الجديد. جهاز Android Profile/FPS والجلسة الحية مع cTrader **NOT RUN**. لا APK/Release ولا تعديل main/المشاريع الأخرى.
+- **الخطوة التنفيذية التالية:** قياس pan/pinch/Range فعليًا في Android Profile بحساب cTrader موثّق وبيانات BID حية، واختيار الاختناق الأكبر بناءً على p50/p95/p99 قبل إجراء تغييرات أداء أخرى.
 
 ## دفعة مكتملة — PR #588: قياس إطارات السحب والتكبير المؤجلة بدقة (21 نوفمبر 2026)
 - **فرع العمل:** `fix/tradelab-frame-timing-batch-attribution-20261121` من فرع التطوير `test/flutter-all-fixes-20261116` عند `f66cc5812354adbaf8d1d902304bf11dd7e50fc3`، بعد دمج PR #587.
