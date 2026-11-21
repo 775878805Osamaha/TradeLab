@@ -373,6 +373,12 @@ void main() {
         reason: 'OHLC moves with painter notifier, not full chart rebuild');
       await touch.up();
       await tester.pumpAndSettle();
+      // TradingView Mobile retains tracking/OHLC after the finger lifts:
+      // a separate single tap is required to dismiss the inspection.
+      expect(find.byKey(const Key('chart-crosshair-ohlc-inspector')),
+          findsOneWidget);
+      await tester.tapAt(Offset(candleX - 40, rect.center.dy));
+      await tester.pump();
       expect(find.byKey(const Key('chart-crosshair-ohlc-inspector')),
           findsNothing);
       expect(tester.takeException(), isNull);
