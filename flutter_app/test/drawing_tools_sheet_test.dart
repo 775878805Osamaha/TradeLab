@@ -55,6 +55,12 @@ void main() {
     ]);
   });
 
+  test('risk/reward drawings support both real long and short tools', () {
+    expect(DrawingCatalogKind.shortPosition.implemented, isTrue);
+    expect(DrawingCatalogKind.longPosition.implemented, isTrue);
+    expect(DrawingCatalogKind.fixedVolumeProfile.implemented, isFalse);
+  });
+
   test('favorites codec preserves selection across process restart', () {
     final original = {
       DrawingCatalogKind.trendLine,
