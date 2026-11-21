@@ -471,7 +471,12 @@ class ChartTouchGesture {
     // historical boundary mid-gesture.
     final movedPixels =
         ((next.scrollBars - viewport.scrollBars) * viewport.barWidth).abs();
-    if (movedPixels.isFinite) horizontalTravel += movedPixels;
+    // A clamped floating-point bound can differ from a serialized viewport
+    // by only ~3.55e-14 display pixels; this is arithmetic noise, not a
+    // gesture or a visible source-candle move. Do not start a fling from it.
+    if (movedPixels.isFinite && movedPixels > 1e-9) {
+      horizontalTravel += movedPixels;
+    }
     return next;
   }
 }
