@@ -4,6 +4,14 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-22 — مقياس LOG فعلي لنطاق السعر بدل اختيار غير عامل
+- **Branch:** `feat/tradelab-real-logarithmic-price-scale-20261122` من `test/flutter-all-fixes-20261116` بعد PR #601.
+- **الفجوة:** `chart_scale_settings_page.dart` كانت تحصر الوضع في `تلقائي` دون onSelected، و`ChartPriceScale` خطي دائمًا؛ مرجع TradingView Log: https://www.tradingview.com/support/solutions/43000748166-how-to-configure-your-supercharts/.
+- **التنفيذ:** [3b3f1db](https://github.com/775878805Osamaha/TradeLab/commit/3b3f1db4ed9d2d77d9a33075f38f347309b0faf2) تحويلات السعر اللوغاريتمي في Auto/manual drag والتراجع الخطي للأرقام غير الموجبة؛ [34ef638](https://github.com/775878805Osamaha/TradeLab/commit/34ef638a524cd99f116407f0c17ca387fffc9b45) تدريج 1-2-5؛ [d277b9d](https://github.com/775878805Osamaha/TradeLab/commit/d277b9d66db5619668eeb34b8ba6988629f1603d) فصل cache؛ [8691473](https://github.com/775878805Osamaha/TradeLab/commit/8691473bbc5e615e8ef9756a2f2d931118b8335d) ضبط الوضع في الإعدادات؛ [b927963](https://github.com/775878805Osamaha/TradeLab/commit/b927963c5a1dc0cf72ccb56e04c6caf536ed4ae0) L/LOG مع إعدادات يدوية reset ومصدر حي دون إعادة تحميل.
+- **اختبارات:** [8cb3c45](https://github.com/775878805Osamaha/TradeLab/commit/8cb3c45916b3d2c5e6bfd01bd721169d776ba3e4) invariants/margins/Replay/NaN/cache، [e26f972](https://github.com/775878805Osamaha/TradeLab/commit/e26f97274b22df3f2a214a7e245c8e16924c2c67) Widget 320/390dp toggle L-LOG-L، [53c018f](https://github.com/775878805Osamaha/TradeLab/commit/53c018f11c3cba0f8a27306593236d3a0da2dffa) حفظ إعدادات GUI، [ff3aa90](https://github.com/775878805Osamaha/TradeLab/commit/ff3aa90f5bf919567d1385042375143916028d52) إضافة CI.
+- **الحالة:** PR/CI **PENDING**. لم يُجرَ قياس Android Profile/FPS أو مقارنة مرئية TradingView أو cTrader live. لا APK/Release ولا main/مشاريع أخرى.
+- **التالي:** اختبارات CI، إصلاح فشل حقيقي إن ظهر، دمج التطوير عند PASS فقط ثم توثيق SHA النهائي هنا وفي HANDOFF.
+
 ### 2026-11-22 — تفعيل Crossline المتقاطع بخطّي الزمن والسعر من أصل الشمعة
 - **فرع:** `feat/tradelab-crossline-drawing-20261122` من `test/flutter-all-fixes-20261116` بعد PR #600؛ `main` دون تعديل.
 - **دليل وظيفي:** https://www.tradingview.com/support/solutions/43000477747-crossline-drawing-tool/ — تقاطع أفقي ورأسي من مرساة واحدة مع وسوم سعر/وقت.
