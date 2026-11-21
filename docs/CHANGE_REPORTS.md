@@ -526,3 +526,12 @@
 - **الملفات:** `flutter_app/lib/chart/chart_viewport.dart`، `flutter_app/test/chart_viewport_test.dart`، `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
 - **القيود:** فحص Android real touch/Profile/FPS وcTrader حي **NOT RUN**؛ لا APK أو Release أو main/مشاريع أخرى. النجاح الآلي لا يثبت pixel-perfect أو FPS الفعلي.
 - **التالي:** مقارنة لقطات الشاشة وسلوك gesture/replay على Android Profile مع TradingView ومعالجة أول فرق موثق، دون تخمين.
+
+### 2026-11-21T16:11:40.441Z — إصلاح OHLC tracking على Android طبق سلوك TradingView الموثق (CI PENDING)
+- **الفرع:** 775878805Osamaha/TradeLab / fix/tradelab-mobile-crosshair-persistent-tracking-20261121 من dev SHA 592e6f7c307d96efb574de79d72863dedc5e13b9.
+- **الفجوة/المرجع:** TradingView Mobile https://www.tradingview.com/charting-library-docs/latest/mobile_specifics/ يثبت crosshair بالضغط المطول ويُنهيه بنقرة؛ TradeLab سابقًا أخفى crosshair فور onLongPressEnd، فجعل OHLC inspector غير مقروء بعد رفع الإصبع.
+- **التغيير:** [04bfeb0](https://github.com/775878805Osamaha/TradeLab/commit/04bfeb018fa19afd5e52c4e6059f919ddff3732c) في flutter_app/lib/screens/chart_screen.dart يجعل عرض OHLC مستمرًا بعد الرفع، ويغلق التتبع بنقرة واحدة دون تسريبها لتعديل الرسومات أو تحديد Replay، ويمنع فتحه من محوري الوقت/السعر، أو في Replay selecting/بدون candles.
+- **اختبارات:** [6051d3d](https://github.com/775878805Osamaha/TradeLab/commit/6051d3dd33e5709ab55198ff30f899bec04fd41a) في flutter_app/test/chart_ohlc_inspector_test.dart اختبارات widget عند 320dp و390dp بمصدر بيانات test fixture فقط: long press ثم lift ثم OHLC persists ثم single tap dismiss، وlongpress axis not active.
+- **التقارير:** docs/HANDOFF.md, docs/CHANGE_REPORTS.md؛ تغييرات أخرى خارج TradeLab **NONE**.
+- **التحقق:** GitHub CI **PENDING**، Android real device Profile/FPS وcTrader live **NOT RUN**، ولا APK أو Release أو main.
+- **التالي:** افتح PR، راجع CI وأصلح FAIL ثم ادمج إلى dev فقط بعد PASS واحفظ الحالة الحقيقية.
