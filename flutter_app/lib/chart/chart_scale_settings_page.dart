@@ -143,7 +143,8 @@ class _ChartScaleSettingsPageState extends State<ChartScaleSettingsPage> {
                     _checkRow('عكس مقياس السعر',
                       _draft.inverted,
                       (v) => setState(() => _draft =
-                          _draft.copyWith(inverted: v)), u, labelSize),
+                          _draft.copyWith(inverted: v)), u, labelSize,
+                      key: const Key('scale-inverted')),
                     SizedBox(height: 36 * u),
                     _title('ملصقات وخطوط الأسعار', u),
                     SizedBox(height: 31 * u),
