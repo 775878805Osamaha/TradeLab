@@ -84,6 +84,22 @@ void main() {
       expect(find.byKey(const Key('chart-crosshair-ohlc-inspector')),
           findsNothing);
 
+      // The price ruler has a direct entry to existing scale settings.
+      // Canceling preserves the real source and returns to the chart.
+      await tester.longPressAt(Offset(
+          bounds.right - 10, bounds.top + bounds.height * .5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(
+          const Key('chart-price-axis-menu-settings')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ChartScaleSettingsPage), findsOneWidget);
+      await tester.tap(find.byKey(const Key('scale-cancel')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('panel-cancel')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+      expect(find.byKey(const Key('chart-source-empty')), findsNothing);
+
       await tester.longPressAt(Offset(
           bounds.left + plotWidth * .5, bounds.bottom - 8));
       await tester.pumpAndSettle();
