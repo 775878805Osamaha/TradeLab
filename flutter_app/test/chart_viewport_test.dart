@@ -818,6 +818,85 @@ void main() {
       editingDrawing: false, reducedMotion: false), isFalse);
   });
 
+  test('blocked historical boundary swipes cannot trigger phantom fling',
+      () {
+    final gesture = ChartTouchGesture();
+    const atOldest = ChartViewport(barWidth: 10, scrollBars: 99);
+    final blocked = gesture.update(
+      viewport: atOldest, pointerCount: 1, focalX: 140,
+      scale: 1, deltaX: 600,
+      plotWidth: 300, candleCount: 100,
+    );
+    expect(blocked.scrollBars, 99);
+    expect(gesture.horizontalTravel, 0,
+        reason: 'Finger motion past loaded history is not chart travel');
+    expect(chartShouldFling(
+      horizontalVelocity: 2000,
+      horizontalTravel: gesture.horizontalTravel,
+      candleCount: 100,
+      multiTouch: gesture.hadMultiTouch,
+      editingDrawing: false,
+      reducedMotion: false,
+    ), isFalse,
+        reason: 'Avoid momentum work when nothing on the chart moved');
+
+    final clampedGesture = ChartTouchGesture();
+    const rightEdge = ChartViewport(barWidth: 10, scrollBars: -20.4);
+    final blockedRight = clampedGesture.update(
+      viewport: rightEdge, pointerCount: 1, focalX: 170,
+      scale: 1, deltaX: -600,
+      plotWidth: 300, candleCount: 100,
+    );
+    expect(blockedRight.scrollBars, closeTo(-20.4, 1e-10));
+    expect(clampedGesture.horizontalTravel, 0);
+  });
+
+  test('pan travel measures only visible displacement before clamping', () {
+    final gesture = ChartTouchGesture();
+    const nearOldest = ChartViewport(barWidth: 10, scrollBars: 98.5);
+    final clamped = gesture.update(
+      viewport: nearOldest, pointerCount: 1, focalX: 150,
+      scale: 1, deltaX: 200,
+      plotWidth: 300, candleCount: 100,
+    );
+    expect(clamped.scrollBars, 99);
+    expect(gesture.horizontalTravel, closeTo(5, 1e-9));
+    expect(chartShouldFling(
+      horizontalVelocity: 2000,
+      horizontalTravel: gesture.horizontalTravel,
+      candleCount: 100,
+      multiTouch: false,
+      editingDrawing: false,
+      reducedMotion: false,
+    ), isFalse,
+        reason: 'The full 200px finger swipe did not move 200px of bars');
+
+    final ordinary = ChartTouchGesture();
+    const centered = ChartViewport(barWidth: 10, scrollBars: 40);
+    final moved = ordinary.update(
+      viewport: centered, pointerCount: 1, focalX: 150,
+      scale: 1, deltaX: 40,
+      plotWidth: 300, candleCount: 100,
+    );
+    expect(moved.scrollBars, 44);
+    expect(ordinary.horizontalTravel, closeTo(40, 1e-9));
+    expect(chartShouldFling(
+      horizontalVelocity: 2000,
+      horizontalTravel: ordinary.horizontalTravel,
+      candleCount: 100,
+      multiTouch: ordinary.hadMultiTouch,
+      editingDrawing: false,
+      reducedMotion: false,
+    ), isTrue);
+    final invalidGeometry = ChartTouchGesture();
+    invalidGeometry.update(
+      viewport: centered, pointerCount: 1, focalX: 150,
+      scale: 1, deltaX: 40,
+      plotWidth: 0, candleCount: 100,
+    );
+    expect(invalidGeometry.horizontalTravel, 0);
+  });
+
   test('momentum is limited to deliberate one-finger chart pans', () {
     bool eligible(double speed, {int count = 100, bool pinch = false,
         bool draw = false, bool reduce = false,
