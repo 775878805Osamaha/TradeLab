@@ -446,3 +446,10 @@
 - **الاختبارات المكتوبة:** اختبار مسار oldest/right whitespace مع delta ±600 وغياب fling، واختبار 200px تحرك 5px فقط، والسحب الطبيعي 40px ورفض الهندسة غير الصالحة.
 - **التحقق:** **CI PENDING** إلى حين PR، Flutter محليًا/Android Profile/FPS/جهاز حقيقي **NOT RUN**. لا APK/Release أو main/مشاريع أخرى.
 - **التالي:** PR، قراءة حالة GitHub Actions النهائية، تصحيح أي فشل، دمج التطوير وتوثيق SHA ورابط Actions.
+
+### 2026-11-21 (UTC) — فشل CI #44916690008 وتحديد خطأ دقة حد الشارت وتصحيحه
+- **المشروع/الفرع:** `775878805Osamaha/TradeLab`، PR [#587](https://github.com/775878805Osamaha/TradeLab/pull/587) في `fix/tradelab-boundary-fling-gesture-20261121`.
+- **اختبار الفشل المؤكد:** [Actions #44916690008](https://github.com/775878805Osamaha/TradeLab/actions/runs/44916690008) **completed/failure**؛ سجل الوظيفة `Verify historical tick archive and chart interactions` = **649 PASS / 1 FAIL**. الاختبار `blocked historical boundary swipes cannot trigger phantom fling` في `chart_viewport_test.dart:851` كان يتوقع `horizontalTravel=0` وحصل على `3.552713678800501e-14` بكسل من الفرق العددي بين `-20.4` وحد `plotWidth/barWidth*0.68`. التحليل Flutter ناجح ولم يصل التشغيل إلى فحص Yemen timezone بعد فشل suite.
+- **التصحيح المرتبط بالدليل:** `flutter_app/lib/chart/chart_viewport.dart` commit [5aa2e56](https://github.com/775878805Osamaha/TradeLab/commit/5aa2e5630b48389f7c50f9a84b3bacfff7f42603) يتجاهل `movedPixels <= 1e-9` بكسل؛ لا يعتبر خطأ roundoff حركة مسموحة وزخمًا. يبقي 1px و5px و40px في الاختبارات سليمة.
+- **الحالة:** **CI PENDING** لنسخة الإصلاح الجديدة؛ لم يُدمج PR في التطوير، Android Profile/FPS **NOT RUN**، لا APK/Release/main/مشاريع أخرى.
+- **الخطوة التالية:** التحقق من نسخة CI الأحدث في PR #587 وإصلاح أي فشل جديد قبل دمج التطوير وكتابة SHA/نتيجة الاختبارات.
