@@ -10,9 +10,9 @@
 - **Commit 1:** [00c143c](https://github.com/775878805Osamaha/TradeLab/commit/00c143c4c9ab93ee41ba6de9dffdbcbd853c7f27) — `flutter_app/lib/chart/candle_prefix.dart`: cache خانة واحدة، source identity/count/bounded through، لا كشف للمستقبل.
 - **Commit 2:** [6c5dc97](https://github.com/775878805Osamaha/TradeLab/commit/6c5dc970518dfb507423d064e461c4d8c8fa3f32) — `flutter_app/lib/screens/chart_screen.dart`: الاستخدام في وضع Replay مع Candles/Range/Heikin-Ashi وتحرير cache في dispose.
 - **Commit 3:** [7d92c2e](https://github.com/775878805Osamaha/TradeLab/commit/7d92c2e68665bb873bffeb7d03c799c8bbc68794) — `flutter_app/test/candle_prefix_test.dart`: ثبات الهوية، تغير cutoff، استبدال المصدر، منع المستقبل، وهندسة مقياس السعر.
-- **التحقق الآن:** الملفات محفوظة في GitHub؛ Flutter/Android المحلي **NOT RUN**؛ CI **PENDING** قبل PR؛ لا APK/Release ولا بيانات سوق مصطنعة.
-- **المخاطر:** التسريع النظري بتقليل إعادة الغلاف ومسح مجال السعر لم يُقَس بالأرقام؛ يتطلب Flutter analyze واختبارات الانحدار على GitHub، ثم Android Profile، قبل نسبة أي تحسن بالمئة.
-- **التالي:** افتح PR إلى فرع التطوير ثم تعامل مع CI الحقيقي، وانقل رابط PR/نتيجة Actions/commit الدمج لهذا التقرير وHANDOFF.
+- **نتيجة التحقق:** [PR #595](https://github.com/775878805Osamaha/TradeLab/pull/595) **MERGED/squash** في `test/flutter-all-fixes-20261116`، SHA الدمج [b57bb7e](https://github.com/775878805Osamaha/TradeLab/commit/b57bb7e889565b82d0e1cee4144cc277671a0d47). [Actions #44937767094](https://github.com/775878805Osamaha/TradeLab/actions/runs/44937767094) **completed/success** على HEAD `23d7238129fb24b0df4e89a5461dd44f28eb641d`: Flutter analyze، chart/Range/Replay/history، Yemen timezone كلها ناجحة. تأكدنا من ظهور `CandlePrefixCache` في مصدر فرع التطوير بعد الدمج.
+- **القيود:** Flutter المحلي وAndroid Profile/FPS وcTrader حي واختبار TradingView البصري **NOT RUN**. لا نسبة أداء مقاسة؛ لا APK/Release ولا تغيير `main` أو مشروع آخر.
+- **التالي:** قياس السحب/التكبير وReplay على Android Profile فعلي ضمن بيانات المصدر الموثقة ومع حمل تاريخي كبير؛ معالجة فرق p50/p95/p99 المثبت فقط. دفعة توثيق ما بعد الدمج لا تغير شيفرة Flutter.
 
 ### 2026-11-20 — تمهيد سجل الاستكمال
 - الحدث: إنشاء بروتوكول التسليم الدائم لهذه النسخة من TradeLab (ملف الوكلاء + حالة الاستكمال + سجل الأحداث)؛ **توثيق فقط، دون تغيير شيفرة التطبيق أو تشغيل APK**.
