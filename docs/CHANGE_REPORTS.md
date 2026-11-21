@@ -542,3 +542,10 @@
 - **تحديث اختبار سابق:** [6a04286](https://github.com/775878805Osamaha/TradeLab/commit/6a0428669f621568f822d60c3b32240a3b2e66d1) في flutter_app/test/chart_paint_only_pan_test.dart: يتأكد من بقاء OHLC بعد up والإخفاء بعد tap واحد. الاختباران الجديدان في chart_ohlc_inspector_test.dart يبقيان.
 - **التوثيق:** docs/HANDOFF.md وdocs/CHANGE_REPORTS.md؛ branch fix/tradelab-mobile-crosshair-persistent-tracking-20261121، PR #592 إلى test/flutter-all-fixes-20261116. **CI revalidation PENDING**؛ Android real/Profile/FPS وcTrader live NOT RUN، لا APK/Release/main.
 - **الخطوة التالية:** التحقق من آخر GitHub Actions run بعد التصحيح ودمج PR فقط إذا completed/success.
+
+### 2026-11-21T16:19:56.911Z — تصحيح فشل CI الثاني لامتحان crosshair بسبب Flutter DoubleTap timer
+- **الفرع وPR:** 775878805Osamaha/TradeLab, fix/tradelab-mobile-crosshair-persistent-tracking-20261121, [PR #592](https://github.com/775878805Osamaha/TradeLab/pull/592).
+- **النتيجة المثبتة:** [Actions #44923687526](https://github.com/775878805Osamaha/TradeLab/actions/runs/44923687526) completed/failure؛ Flutter analyze PASS، كافة اختبارات crosshair الجديدة 320/390 PASS، باقي الشارت/Range/Replay لم تظهر فيها أخطاء سلوك؛ فشل اختبارا chart_paint_only_pan_test بسبب Pending timer (duration 40ms) من DoubleTapGestureRecognizer بعد محاكاة نقرة واحدة.
+- **التصحيح:** [43256e8](https://github.com/775878805Osamaha/TradeLab/commit/43256e8b7a6149092650026d2af325c7ad46fede) في flutter_app/test/chart_paint_only_pan_test.dart يستبدل pump() بـ pumpAndSettle() بعد نقرة إنهاء tracking، حتى تنتظر Flutter test timers ولن يخلّف مؤقتًا بعد انتهاء الاختبار. لم يغيّر الكود أي أسعار أو شموع أو Replay.
+- **الملفات:** flutter_app/test/chart_paint_only_pan_test.dart وdocs/HANDOFF.md وdocs/CHANGE_REPORTS.md. **CI PENDING** للتصحيح؛ Android Profile/FPS وcTrader live NOT RUN، لا APK/Release/main.
+- **التالي:** تحقق من CI الكامل، وصحح أي FAIL آخر ثم merge dev وتوثيق SHA الفعلي.
