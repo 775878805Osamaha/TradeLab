@@ -254,7 +254,11 @@ class ReplayMobileControls extends StatelessWidget {
               IconButton(
                 key: const Key('replay-play-pause'),
                 tooltip: playing ? 'إيقاف Replay' : 'تشغيل Replay',
-                onPressed: onPlayPause,
+                // The final confirmed bar has no next broker candle to
+                // reveal. Do not advertise playback and schedule a timer
+                // that immediately cancels with no visible chart movement.
+                onPressed: playing || visibleCount < totalBars
+                    ? onPlayPause : null,
                 icon: Icon(playing ? Icons.pause : Icons.play_arrow,
                     color: ink, size: 30),
                 constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
