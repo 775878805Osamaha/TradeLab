@@ -62,6 +62,18 @@ void main() {
     }
   }
 
+  test('thousands formatting stays unchanged across all price modes',
+      () {
+    final raw = ChartPriceScale.visible(source, viewport, 259, 440);
+    expect(raw.axisLabel(35000, 2), '35,000.00');
+    final percent = ChartPriceScale.visible(source, viewport, 259, 440,
+        referenceMode: ChartPriceReferenceMode.percent);
+    final indexed = ChartPriceScale.visible(source, viewport, 259, 440,
+        referenceMode: ChartPriceReferenceMode.indexed100);
+    expect(percent.axisLabel(2205, 2), '2,000.00%');
+    expect(indexed.axisLabel(2205, 2), '2,100.00');
+  });
+
   test('current visible historical candle reanchors Percent after pan',
       () {
     final candles = List<TradeCandle>.generate(600, (i) {
