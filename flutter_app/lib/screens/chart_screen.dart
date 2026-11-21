@@ -6457,7 +6457,8 @@ class _CandleChartPainter extends CustomPainter {
         for (final stroke in strokes) {
           canvas.drawLine(stroke.start, stroke.end, drawingPaint);
         }
-        if (drawing.tool == ChartDrawingTool.infoLine &&
+        if ((drawing.tool == ChartDrawingTool.infoLine ||
+                drawing.tool == ChartDrawingTool.trendAngle) &&
             drawing.showLabels && strokes.isNotEmpty &&
             timestamps.length >= candles.length) {
           // Label statistics are strictly from the two revealed source
@@ -6477,11 +6478,20 @@ class _CandleChartPainter extends CustomPainter {
               (mainStroke.start.dy + mainStroke.end.dy) / 2,
             );
             final maxLabelWidth = math.min(224.0, axis - 18);
+            final angleTool = drawing.tool == ChartDrawingTool.trendAngle;
+            // Trend Angle's primary label is the real on-canvas geometric
+            // angle. Info Line's primary label remains source price/percent.
+            final topLabel = angleTool
+                ? '${stats.angleDegrees.toStringAsFixed(1)}°'
+                : stats.valueLabel(decimals);
+            final bottomLabel = angleTool
+                ? '${stats.bars} شمعة · ${stats.valueLabel(decimals)}'
+                : stats.durationLabel;
             final topLine = textCache.layoutBoundedAxis(
-                stats.valueLabel(decimals), Colors.white, 10,
+                topLabel, Colors.white, 10,
                 maxWidth: maxLabelWidth, rtl: false);
             final bottomLine = textCache.layoutBoundedAxis(
-                stats.durationLabel, Colors.white, 10,
+                bottomLabel, Colors.white, 10,
                 maxWidth: maxLabelWidth, rtl: true);
             final boxWidth = math.min(axis - 8,
                 math.max(topLine.width, bottomLine.width) + 12);
