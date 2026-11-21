@@ -118,6 +118,9 @@ class _ChartScreenState extends State<ChartScreen>
   // Shared by candle paint, rectangles, Replay price levels and touch hits.
   // Exactly one immutable auto-scale per source/viewport/plot configuration.
   final ChartPriceScaleCache _autoPriceScaleCache = ChartPriceScaleCache();
+  // Stable Replay prefix identity lets auto-scale geometry survive pan/pinch
+  // rebuilds until verified source or visible cutoff actually changes.
+  final CandlePrefixCache _replayPrefixCache = CandlePrefixCache();
   // Chart snapshots replace timestamp lists rather than mutating them.
   // Validate the selected source once and make subsequent Replay seeks fast.
   final ReplayVerifiedTimeIndex _replayTimeIndex = ReplayVerifiedTimeIndex();
@@ -1896,6 +1899,7 @@ class _ChartScreenState extends State<ChartScreen>
     _frameProfiler.detach();
     _heikinCache.dispose();
     _autoPriceScaleCache.clear();
+    _replayPrefixCache.clear();
     _replayTimeIndex.clear();
     widget.controller.removeListener(_onMarketUpdate);
     _loadRevision++;
@@ -2763,11 +2767,13 @@ class _ChartScreenState extends State<ChartScreen>
     if (!_liveRequested) return const [];
     if (_mode == ChartMode.range) {
       return _replay
-          ? CandlePrefix(_actualRange, _visibleThrough) : _actualRange;
+          ? _replayPrefixCache.resolve(_actualRange, _visibleThrough)
+          : _actualRange;
     }
     final source = _actualCandles;
     if (_mode != ChartMode.heikinAshi) {
-      return _replay ? CandlePrefix(source, _visibleThrough) : source;
+      return _replay
+          ? _replayPrefixCache.resolve(source, _visibleThrough) : source;
     }
     // Recompute this display-only Heikin-Ashi view when the authentic
     // source list changes. Large histories are built off the Android touch
@@ -2789,7 +2795,8 @@ class _ChartScreenState extends State<ChartScreen>
       },
     );
     if (smoothed == null) return const <TradeCandle>[];
-    return _replay ? CandlePrefix(smoothed, _visibleThrough) : smoothed;
+    return _replay
+        ? _replayPrefixCache.resolve(smoothed, _visibleThrough) : smoothed;
   }
 
   void _changeSymbol(TradeSymbol item) {
