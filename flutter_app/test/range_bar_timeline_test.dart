@@ -58,7 +58,7 @@ void main() {
       MarketTick(102, 101.5),
     ];
     final direct = RangeBarTimeline.build(source, 1);
-    void assertReadOnly(RangeBarTimeline timeline) {
+    void assertReadOnly(RangeBarTimeline timeline, {required int closedAtOne}) {
       final first = timeline.bars.first;
       final firstEvent = timeline.endTickIndices.first;
       final firstUtc = timeline.endTimestamps.first;
@@ -75,9 +75,9 @@ void main() {
       expect(timeline.bars.first, first);
       expect(timeline.endTickIndices.first, firstEvent);
       expect(timeline.endTimestamps.first, firstUtc);
-      expect(timeline.visibleClosedBarsThroughTick(1), 2);
+      expect(timeline.visibleClosedBarsThroughTick(1), closedAtOne);
     }
-    assertReadOnly(direct);
+    assertReadOnly(direct, closedAtOne: 2);
     // Prepend has to use the identical protected publishing path, including
     // the actual source-event ordinal carried into Replay.
     final prepended = await RangeBarTimeline.prependAndBuildAsync(
@@ -85,7 +85,7 @@ void main() {
       currentTicks: source,
       priceDistance: 1,
     );
-    assertReadOnly(prepended.timeline);
+    assertReadOnly(prepended.timeline, closedAtOne: 1);
     expect(prepended.timeline.endTickIndices.first, 1);
     expect(direct.endTickIndices.first, 1);
     expect(source.length, 3);
