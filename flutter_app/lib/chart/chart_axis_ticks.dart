@@ -23,7 +23,18 @@ class ChartAxisTicks {
       {int desiredIntervals = 12}) sync* {
     final step = interval(minimum, maximum,
         desiredIntervals: desiredIntervals);
-    if (!minimum.isFinite || !maximum.isFinite || maximum <= minimum) return;
+    yield* ticksWithStep(minimum, maximum, step: step);
+  }
+
+  /// The candle canvas already computes [step] for tick importance and
+  /// decimal precision. Reuse that exact step for the visible labels instead
+  /// of performing the same log/pow/step search a second time each frame.
+  /// All tick coordinates, old rounding rules and the 100-label guard stay
+  /// identical to [ticks].
+  static Iterable<double> ticksWithStep(
+      double minimum, double maximum, {required double step}) sync* {
+    if (!minimum.isFinite || !maximum.isFinite || maximum <= minimum ||
+        !step.isFinite || step <= 0) return;
     final first = (minimum / step).ceil();
     final last = (maximum / step).floor();
     for (var i = first; i <= last && i < first + 100; i++) {
@@ -31,6 +42,29 @@ class ChartAxisTicks {
     }
   }
 
-  static int decimals(double interval) => interval >= 1 ? 2
-      : interval >= .01 ? 3 : interval >= .0001 ? 5 : 7;
+  /// Enough decimals to distinguish adjacent REAL major price ticks.
+  ///
+  /// A manual TradingView-style vertical ruler zoom can produce forex steps
+  /// below 0.0000001. The old hard seven-decimal limit made different price
+  /// labels render identically even though their candle y coordinates differed.
+  /// Do not round or alter the underlying broker prices; this is display only.
+  /// The historical default precision remains unchanged for ordinary ranges.
+  static int decimals(double interval) {
+    if (!interval.isFinite || interval <= 0) return 7;
+    if (interval >= 1) return 2;
+    if (interval >= .01) return 3;
+    if (interval >= .0001) return 5;
+    if (interval >= .000001) return 7;
+
+    // Preserve up to 12 decimal places at extreme zoom. Checking for an
+    // integer scaled step also handles non-power-of-ten multiples such as
+    // 0.00000025, which needs eight rather than seven digits.
+    var scaled = interval * 1e7;
+    if (scaled < 1e-7) return 12;
+    for (var digits = 7; digits <= 12; digits++) {
+      if ((scaled - scaled.roundToDouble()).abs() <= 1e-7) return digits;
+      scaled *= 10;
+    }
+    return 12;
+  }
 }

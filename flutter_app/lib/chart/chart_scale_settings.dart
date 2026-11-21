@@ -181,7 +181,10 @@ class ChartScaleSettings {
   static const weekdays = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس',
     'الجمعة', 'السبت', 'الأحد'];
 
-  /// The reference's weekday switch uses the phone's local trading-time axis.
-  static String localWeekday(DateTime timestamp) =>
-      weekdays[timestamp.toLocal().weekday - 1];
+  /// The chart has ALREADY converted the source UTC timestamp into the
+  /// chosen display zone (New York, UTC, or the phone's local time).
+  /// Calling toLocal() again shifts New York wall-clock dates a second time,
+  /// causing the weekday label to disagree with the displayed calendar day.
+  static String weekdayForDisplayedDate(DateTime displayedDate) =>
+      weekdays[displayedDate.weekday - 1];
 }

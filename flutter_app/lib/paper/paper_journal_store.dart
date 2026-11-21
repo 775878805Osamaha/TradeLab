@@ -14,13 +14,20 @@ abstract class PaperJournalStore {
 
 /// App-private SQLite: not the Kotlin app's Room file and not a broker sync.
 class SqlitePaperJournalStore implements PaperJournalStore {
+  /// Production always uses the app-private database. Tests may provide a
+  /// distinct path so their persistence checks never touch user records.
+  SqlitePaperJournalStore({String? databasePath})
+      : _databasePath = databasePath;
+
+  final String? _databasePath;
   Future<Database>? _opening;
 
   Future<Database> get _database => _opening ??= _open();
 
   Future<Database> _open() async {
     final directory = await getDatabasesPath();
-    return openDatabase(path.join(directory, 'tradelab_flutter_paper_v1.db'),
+    return openDatabase(
+      _databasePath ?? path.join(directory, 'tradelab_flutter_paper_v1.db'),
       version: 1,
       onCreate: (db, version) async {
         await db.execute('''

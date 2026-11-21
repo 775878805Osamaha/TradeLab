@@ -1,0 +1,154 @@
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
+
+import 'market_api.dart';
+import 'range_bid_page_verifier.dart';
+
+/// Immutable proof of the **last market millisecond only**, never a second
+/// copy of the entire 1,000,000-tick Range history.
+///
+/// A cTrader inclusive poll only needs the original ordered events from its
+/// overlap millisecond to distinguish new same-ms BID events from history.
+/// Source snapshots are already broker-verified and never mutated in place.
+/// The oldest tick is found by binary search; on a normal quiet market this
+/// transfers 1 or 2 events, not the 1m-source list, to the worker isolate.
+class RangeLiveBidBoundary {
+  RangeLiveBidBoundary._(this.timestampMs, this.events);
+
+  /// Match the hard cap enforced by RangeBarTimeline on Android and web.
+  /// Reject impossible archives before even touching an unmaterialized list.
+  static const maxVerifiedSourceTicks = 1000000;
+
+  final int timestampMs;
+  final List<MarketTick> events;
+
+  static RangeLiveBidBoundary fromVerified(List<MarketTick> ticks) {
+    if (ticks.length > maxVerifiedSourceTicks) {
+      throw const MarketDataException(
+          'تاريخ BID المحمّل تجاوز حد الذاكرة الآمن لتحديث Range.');
+    }
+    if (ticks.isEmpty) {
+      throw ArgumentError('Live BID update requires a verified Range source');
+    }
+    final timestamp = ticks.last.timestamp;
+    if (timestamp < 0 || !ticks.last.bid.isFinite ||
+        ticks.last.bid <= 0) {
+      throw const MarketDataException(
+          'آخر حدث BID المؤرّخ من المصدر غير صالح.');
+    }
+    var low = 0;
+    var high = ticks.length;
+    while (low < high) {
+      final mid = low + (high - low) ~/ 2;
+      if (ticks[mid].timestamp < timestamp) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    if (low == ticks.length) {
+      throw const MarketDataException('لا توجد أحداث BID في حد المصدر.');
+    }
+    final tail = <MarketTick>[];
+    for (var i = low; i < ticks.length; i++) {
+      final event = ticks[i];
+      if (event.timestamp != timestamp ||
+          !event.bid.isFinite || event.bid <= 0) {
+        throw const MarketDataException(
+            'ترتيب أحداث BID الأخيرة في الأرشيف غير صالح.');
+      }
+      tail.add(event);
+    }
+    return RangeLiveBidBoundary._(
+        timestamp, List<MarketTick>.unmodifiable(tail));
+  }
+}
+
+/// Authenticated inclusive cTrader BID update from [lastTickMs..nowMs].
+///
+/// The old same-millisecond events MUST appear as an exact, ordered prefix.
+/// Same-price duplicates are retained, source conflicts fail closed, and
+/// only the final-ms boundary (not the entire verified historical archive)
+/// is sent to the comparison worker for large broker pages.
+class RangeLiveBidDelta {
+  const RangeLiveBidDelta._();
+
+  static Future<List<MarketTick>> verifiedSuffixAsync({
+    required List<MarketTick> previouslyVerified,
+    required List<MarketTick> brokerPage,
+    required int toMs,
+  }) async {
+    // Capture only the final same-ms events on the UI isolate. The earlier
+    // implementation sent ALL previouslyVerified (up to 1m ticks) to the
+    // compute worker even though the comparison only reads the last ms.
+    final boundary = RangeLiveBidBoundary.fromVerified(previouslyVerified);
+    // A >=5000 BID page previously crossed TWO isolates in sequence:
+    // verification first, then same-ms ordinal comparison. The broker page
+    // was serialized/transferred twice, prolonging Android gesture latency.
+    // Perform BOTH checks in one worker, returning only the verified suffix.
+    // A short page stays synchronous without an isolate allocation.
+    final request =
+        (boundary.events, brokerPage, boundary.timestampMs, toMs);
+    if (!kIsWeb &&
+        brokerPage.length >= RangeBidPageVerifier.minOffloadTicks) {
+      return compute<
+          (List<MarketTick>, List<MarketTick>, int, int),
+          List<MarketTick>>(
+        _verifyAndExtractLiveSuffix, request,
+        debugLabel: 'tradelab-live-bid-verify-and-append',
+      );
+    }
+    return _verifyAndExtractLiveSuffix(request);
+  }
+
+  static List<MarketTick> _verifyAndExtractLiveSuffix(
+      (List<MarketTick>, List<MarketTick>, int, int) request) {
+    RangeBidPageVerifier.verify(
+      page: request.$2,
+      fromMs: request.$3,
+      toMs: request.$4,
+      errorMessage:
+          'صفحة التحديث الحي لتيكات BID غير مرتبة أو خارج فترة cTrader.',
+    );
+    if (request.$2.isEmpty) {
+      // Even a quiet INCLUSIVE interval must contain the original last
+      // millisecond. Missing broker coverage is not a no-change signal.
+      throw const MarketDataException(
+          'لم يتطابق آخر تيك BID موثق مع صفحة التحديث الحي.');
+    }
+    return _verifiedLiveSuffixWorker(
+        (request.$1, request.$2, request.$3));
+  }
+
+  static List<MarketTick> _verifiedLiveSuffixWorker(
+      (List<MarketTick>, List<MarketTick>, int) request) {
+    final previous = request.$1;
+    final fetched = request.$2;
+    final boundaryMs = request.$3;
+    // The input is now an isolated, immutable final-ms boundary captured
+    // with O(log N + same-ms-event-count) source reads before the async call.
+    // Every event (including identical price/timestamp duplicates) remains
+    // necessary to preserve the original provider ordinal for Replay.
+    final oldBoundaryCount = previous.length;
+    if (oldBoundaryCount > fetched.length) {
+      throw const MarketDataException(
+          'صفحة BID الجديدة لا تحتوي كل الأحداث القديمة من نفس المللي ثانية.');
+    }
+    for (var i = 0; i < oldBoundaryCount; i++) {
+      final earlier = previous[i];
+      final newer = fetched[i];
+      // The old archive and the inclusive broker page must agree on
+      // BOTH the original millisecond and price of each source event.
+      if (earlier.timestamp != boundaryMs ||
+          newer.timestamp != boundaryMs ||
+          earlier.bid != newer.bid) {
+        throw const MarketDataException(
+            'تعارض ترتيب أو سعر تيكات BID عند حد تحديث Range.');
+      }
+    }
+    if (oldBoundaryCount == fetched.length) {
+      return const <MarketTick>[];
+    }
+    return List<MarketTick>.unmodifiable(
+        fetched.skip(oldBoundaryCount));
+  }
+}

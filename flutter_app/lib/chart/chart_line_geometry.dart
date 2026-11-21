@@ -10,6 +10,44 @@ typedef ChartStroke = ({Offset start, Offset end});
 class ChartLineGeometry {
   const ChartLineGeometry._();
 
+  /// Conservative x-only rejection for UNSELECTED drawings before
+  /// constructing clipped strokes, Paint objects or Fibonacci labels on
+  /// each frame of Android pan/pinch momentum.
+  ///
+  /// Never reject extended lines, rays, or parallel channels based solely
+  /// on their two anchors: those shapes can enter the plot from far away.
+  /// The selected drawing is exempt, retaining handle circles at the edge.
+  static bool definitelyOffscreenHorizontally({
+    required ChartDrawingTool tool,
+    required double startX,
+    required double endX,
+    required double plotWidth,
+  }) {
+    if (!startX.isFinite || !endX.isFinite ||
+        !plotWidth.isFinite || plotWidth <= 0) return false;
+    switch (tool) {
+      case ChartDrawingTool.trendLine:
+      case ChartDrawingTool.horizontal:
+        // Finite segments cannot cross the plot if BOTH endpoints are on
+        // the same, wholly offscreen side.
+        return math.max(startX, endX) < 0 ||
+            math.min(startX, endX) > plotWidth;
+      case ChartDrawingTool.verticalLine:
+        return startX < 0 || startX > plotWidth;
+      case ChartDrawingTool.horizontalRay:
+        // The single-anchor source ray extends to the right.
+        return startX >= plotWidth;
+      case ChartDrawingTool.fibonacci:
+        // The current painter uses the LEFTMOST of both source anchors as
+        // the beginning of each extended level (supports reversed anchors).
+        return math.min(startX, endX) >= plotWidth;
+      case ChartDrawingTool.ray:
+      case ChartDrawingTool.extendedLine:
+      case ChartDrawingTool.parallelChannel:
+        return false;
+    }
+  }
+
   static List<ChartStroke> strokes({
     required ChartDrawingTool tool,
     required Offset start,
@@ -74,6 +112,100 @@ class ChartLineGeometry {
     }
     final stroke = segment(start, end);
     return stroke == null ? [] : [stroke];
+  }
+
+  /// Visible portion of a Fibonacci level. A first anchor can be far left
+  /// of the screen while its level still spans the current chart.
+  /// Geometry only: never manufacture future bars or modify broker prices.
+  static ChartStroke? fibonacciLevelStroke({
+    required double fromX,
+    required double levelY,
+    required Rect plot,
+  }) {
+    if (!fromX.isFinite || !levelY.isFinite ||
+        !plot.left.isFinite || !plot.right.isFinite ||
+        !plot.top.isFinite || !plot.bottom.isFinite ||
+        plot.width <= 0 || plot.height <= 0 ||
+        fromX >= plot.right ||
+        levelY < plot.top || levelY > plot.bottom) {
+      return null;
+    }
+    return (
+      start: Offset(math.max(fromX, plot.left), levelY),
+      end: Offset(plot.right, levelY),
+    );
+  }
+
+  /// Select only the Fibonacci levels the candle canvas actually paints.
+  /// An invisible ratio outside the current price range must not steal a
+  /// touch from candle pan or a neighboring drawing near the plot edge.
+  static bool hitFibonacciLevels({
+    required Offset point,
+    required double fromX,
+    required Iterable<double> levelYs,
+    required Rect plot,
+    double touchRadius = 17,
+  }) {
+    if (!point.dx.isFinite || !point.dy.isFinite ||
+        !touchRadius.isFinite || touchRadius < 0 ||
+        !plot.contains(point)) {
+      return false;
+    }
+    for (final levelY in levelYs) {
+      final visibleStroke = fibonacciLevelStroke(
+        fromX: fromX, levelY: levelY, plot: plot);
+      if (visibleStroke != null &&
+          distanceToStroke(point, visibleStroke) <= touchRadius) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Draw the TradingView-style dashed last-close guide with one Canvas
+  /// drawPath instead of dozens of individual drawLine calls per frame.
+  /// Keep the existing 6px interval and 2.2px dash length exactly, with
+  /// the final dash clipped to the candle plot (not the right price ruler).
+  /// This is paint-only geometry: the broker close is never changed.
+  static Path lastCloseDashPath({
+    required double y,
+    required double plotWidth,
+  }) {
+    final path = Path();
+    if (!y.isFinite || !plotWidth.isFinite || plotWidth <= 0) {
+      return path;
+    }
+    for (var x = 0.0; x < plotWidth; x += 6) {
+      path.moveTo(x, y);
+      path.lineTo(math.min(plotWidth, x + 2.2), y);
+    }
+    return path;
+  }
+
+  /// Preserve the existing 8px gap pattern (4px stroke + 4px gap) while
+  /// batching its Canvas drawLine calls into a single stroked drawPath.
+  /// Supports crosshair, vertical/horizontal grid guides and diagonal
+  /// strokes without changing the source market/viewport coordinates.
+  static Path configuredDashPath({
+    required Offset from,
+    required Offset to,
+  }) {
+    final path = Path();
+    if (!from.dx.isFinite || !from.dy.isFinite ||
+        !to.dx.isFinite || !to.dy.isFinite) {
+      return path;
+    }
+    final delta = to - from;
+    final distance = delta.distance;
+    if (!distance.isFinite || distance < .01) return path;
+    final direction = delta / distance;
+    for (var at = 0.0; at < distance; at += 8) {
+      final dashStart = from + direction * at;
+      final dashEnd = from + direction * math.min(at + 4, distance);
+      path.moveTo(dashStart.dx, dashStart.dy);
+      path.lineTo(dashEnd.dx, dashEnd.dy);
+    }
+    return path;
   }
 
   static double distanceToStroke(Offset point, ChartStroke stroke) {

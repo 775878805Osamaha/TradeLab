@@ -2,6 +2,12 @@ import 'dart:math' as math;
 
 import 'tradelab_data.dart';
 
+/// The caller must discard the unpublished partial worker state on this
+/// limit failure; confirmed chart snapshots are never changed.
+class RangeBarBudgetExceeded implements Exception {
+  const RangeBarBudgetExceeded();
+}
+
 /// Incremental price-distance bars for ordered BID ticks.
 ///
 /// Produces a completed bar only after an incoming tick has reached the exact
@@ -17,23 +23,69 @@ class RangeBarBuilder {
     }
   }
 
+  /// Continue EXACT same distance-defined, source-verified Range origin
+  /// after a published snapshot's final still-forming bar. This avoids
+  /// rebuilding up to one million earlier BID events at every live poll.
+  ///
+  /// The last forming bar contains all required state (open, extreme prices,
+  /// final BID close). The caller must use only an already source-verified
+  /// published timeline, never arbitrary user-entered OHLC or future ticks.
+  factory RangeBarBuilder.resumeFromVerifiedForming(
+      double priceDistance, TradeCandle forming) {
+    if (!forming.open.isFinite || !forming.high.isFinite ||
+        !forming.low.isFinite || !forming.close.isFinite ||
+        forming.low <= 0 || forming.high < forming.low ||
+        forming.open < forming.low || forming.open > forming.high ||
+        forming.close < forming.low || forming.close > forming.high) {
+      throw ArgumentError('Invalid previously verified forming Range candle');
+    }
+    final builder = RangeBarBuilder(priceDistance);
+    builder._open = forming.open;
+    builder._high = forming.high;
+    builder._low = forming.low;
+    builder._lastPrice = forming.close;
+    return builder;
+  }
+
   final double priceDistance;
+
+  // One broker tick may legitimately cross several Range prices. A single
+  // malformed distance or extreme price jump must not create an unbounded
+  // number of candles on the chart/UI isolate.
+  static const maxBarsPerSingleTick = 100000;
   final List<TradeCandle> _closed = [];
+  // The timeline worker can transfer ownership of this list exactly once.
+  // After transfer the builder must not mutate its published chart snapshot.
+  bool _sealed = false;
+  bool _sealedForming = false;
   double? _open;
   double? _high;
   double? _low;
   double? _lastPrice;
 
-  List<TradeCandle> get closed => List.unmodifiable(_closed);
+  List<TradeCandle> get closed => List.unmodifiable(
+      _sealedForming ? _closed.take(_closed.length - 1) : _closed);
 
   /// O(1) completion count for timestamp/tick-index tracking.
-  int get closedCount => _closed.length;
+  int get closedCount => _closed.length - (_sealedForming ? 1 : 0);
 
   TradeCandle? get forming => _open == null
       ? null
       : TradeCandle(_open!, _high!, _low!, _lastPrice!);
 
-  void appendBidTick(double price) {
+  /// [maxNewClosedBars] bounds how many bars this one authenticated BID
+  /// event may close in the current rebuild. The limit is checked BEFORE
+  /// allocating each bar, not after a 100k-bar price jump has been expanded.
+  /// A limit failure discards the unpublished worker result; do not resume
+  /// this builder after an exception.
+  void appendBidTick(double price, {int? maxNewClosedBars}) {
+    if (maxNewClosedBars != null && maxNewClosedBars < 0) {
+      throw ArgumentError.value(
+          maxNewClosedBars, 'maxNewClosedBars', 'Must be nonnegative');
+    }
+    if (_sealed) {
+      throw StateError('Sealed Range history cannot accept more BID ticks');
+    }
     if (!price.isFinite || price <= 0) {
       throw ArgumentError.value(price, 'price', 'BID price must be finite and positive');
     }
@@ -42,10 +94,33 @@ class RangeBarBuilder {
       return;
     }
 
+    final distanceToPrice = (price - _open!).abs();
+    final crossing = distanceToPrice / priceDistance;
+    if (!crossing.isFinite || crossing > maxBarsPerSingleTick) {
+      // Reject this one tick before mutating the existing confirmed bars.
+      // Do not emit a truncated history that Replay might treat as complete.
+      throw StateError('Range BID gap would create too many bars from one tick');
+    }
+    if (distanceToPrice >= priceDistance) {
+      final firstStep = _open! + (price > _open! ? priceDistance : -priceDistance);
+      if (firstStep == _open! || !firstStep.isFinite) {
+        throw StateError('Range distance is below the price precision');
+      }
+    }
+    final closedAtStart = _closed.length;
     _lastPrice = price;
     while ((price - _open!).abs() >= priceDistance) {
+      if (maxNewClosedBars != null &&
+          _closed.length - closedAtStart >= maxNewClosedBars) {
+        // Fail before adding any bar beyond the remaining chart budget.
+        // No partial list is ever published by RangeBarTimeline on failure.
+        throw const RangeBarBudgetExceeded();
+      }
       final direction = price > _open! ? 1.0 : -1.0;
       final close = _open! + direction * priceDistance;
+      if (!close.isFinite || close == _open!) {
+        throw StateError('Range price step cannot advance at this precision');
+      }
       _high = math.max(_high!, close);
       _low = math.min(_low!, close);
       _closed.add(TradeCandle(_open!, _high!, _low!, close));
@@ -55,8 +130,32 @@ class RangeBarBuilder {
     _low = math.min(_low!, price);
   }
 
+  /// Read-only-in-practice legacy snapshot: always returns an independent
+  /// list, so an incremental builder may safely accept more verified ticks.
   List<TradeCandle> snapshot({bool includeForming = true}) => [
-        ..._closed,
+        ...(_sealedForming
+            ? _closed.take(_closed.length - 1)
+            : _closed),
         if (includeForming && forming != null) forming!,
       ];
+
+  /// One-time finalization for a RangeBarTimeline worker. Reuse the already
+  /// allocated closed-bar array instead of copying all 100k+ candle references
+  /// into a second growable list at the end of every historical rebuild.
+  ///
+  /// The last forming bar remains visible on the live chart but is not a
+  /// closed/executable Replay bar. After transfer this builder is sealed:
+  /// neither further BID events nor another transfer can mutate published
+  /// chart history. Existing snapshot() remains independent for callers
+  /// that deliberately keep processing new ticks.
+  List<TradeCandle> sealSnapshot({bool includeForming = true}) {
+    if (_sealed) {
+      throw StateError('Range snapshot has already been transferred');
+    }
+    final unfinished = includeForming ? forming : null;
+    _sealed = true;
+    _sealedForming = unfinished != null;
+    if (unfinished != null) _closed.add(unfinished);
+    return _closed;
+  }
 }

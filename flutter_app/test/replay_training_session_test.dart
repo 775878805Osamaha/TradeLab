@@ -101,6 +101,71 @@ void main() {
     expect(session.realizedPricePnl, -5);
   });
 
+  test('large 120k Replay seek closes 24 practice brackets at first source bar',
+      () {
+    const count = 120000;
+    const safe = TradeCandle(100, 101, 99, 100);
+    final candles = List<TradeCandle>.filled(count, safe).toList();
+    // A single verified source candle gaps below the long SL AND rises
+    // past TP: stop wins; the adverse open 86 is the fill, not stop 90.
+    candles[110000] = const TradeCandle(86, 111, 85, 90);
+    final session = ReplayTrainingSession()..moveTo(candles, 1);
+    expect(ReplayTrainingSession.shouldUseIndexedExitSearch(
+        newlyRevealedBars: 110009, watchedTrades: 24), isTrue);
+    expect(ReplayTrainingSession.shouldUseIndexedExitSearch(
+        newlyRevealedBars: 1, watchedTrades: 24), isFalse);
+    expect(ReplayTrainingSession.shouldUseIndexedExitSearch(
+        newlyRevealedBars: 110009, watchedTrades: 1), isFalse);
+    for (var i = 0; i < 24; i++) {
+      session.enter(side: ReplaySide.buy, candles: candles,
+          quantity: 1, stopLoss: 90, takeProfit: 110);
+    }
+    session.moveTo(candles, 110010);
+    expect(session.visibleCount, 110010);
+    expect(session.openTradeCount, 0);
+    expect(session.trades, hasLength(24));
+    expect(session.trades.every((trade) =>
+        trade.entryIndex == 0 &&
+        trade.exitIndex == 110000 &&
+        trade.exitPrice == 86 &&
+        trade.exitReason == ReplayExitReason.stopLoss), isTrue);
+    expect(session.realizedPricePnl, -336); // (86 - 100) * 24
+
+    // Rewinding must erase future executions and discard their source index.
+    session.moveTo(candles, 110000);
+    expect(session.openTradeCount, 24);
+    expect(session.realizedPricePnl, 0);
+    session.moveTo(candles, 110001); // one-bar sequential fallback
+    expect(session.openTradeCount, 0);
+    expect(session.trades.every((trade) =>
+        trade.exitIndex == 110000 &&
+        trade.exitPrice == 86), isTrue);
+    expect(session.realizedPricePnl, -336);
+  });
+
+  test('indexed long seek observes entry close, then earliest future candle',
+      () {
+    const sourceCount = 25000;
+    final candles = List<TradeCandle>.filled(
+        sourceCount, const TradeCandle(100, 101, 99, 100)).toList();
+    // This is the ENTRY candle (index 1000): its high must not trigger
+    // a practice short stop entered at its close.
+    candles[1000] = const TradeCandle(100, 115, 99, 100);
+    candles[8000] = const TradeCandle(100, 104, 94, 98);
+    final session = ReplayTrainingSession()..moveTo(candles, 1001);
+    for (var i = 0; i < 16; i++) {
+      session.enter(side: ReplaySide.sell, candles: candles,
+          quantity: 1, stopLoss: 110, takeProfit: 95);
+    }
+    session.moveTo(candles, 20000);
+    expect(session.openTradeCount, 0);
+    expect(session.trades.every((t) =>
+        t.entryIndex == 1000 && t.entryPrice == 100 &&
+        t.exitIndex == 8000 && t.exitPrice == 95 &&
+        t.exitReason == ReplayExitReason.takeProfit), isTrue);
+    expect(session.realizedPricePnl, 80); // (100 - 95) * 16.
+  });
+
   test('large seek with no practice trades has no side effects', () {
     final candles = List<TradeCandle>.filled(
         100000, const TradeCandle(100, 101, 99, 100));

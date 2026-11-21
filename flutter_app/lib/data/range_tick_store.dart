@@ -1,12 +1,15 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
 
 import 'package:path/path.dart' as path;
 
 import 'package:sqflite/sqflite.dart';
 
 import 'market_api.dart';
+import 'range_bid_page_verifier.dart';
+import 'range_verified_bid_window_slice.dart';
 
 /// Collect a SHA-256 digest without assembling a giant JSON string of ticks.
 class _DigestCollector implements Sink<Digest> {
@@ -62,6 +65,16 @@ class RangeTickStore {
     final digest = collector.digest;
     if (digest == null) throw StateError('Unable to hash BID window');
     return digest.toString();
+  }
+
+  /// SHA-256 verification is CPU-bound. A large authenticated BID window can
+  /// contain hundreds of thousands of ticks; keep hashing off the UI isolate
+  /// so panning and pinching do not stall during archive writes or cache reads.
+  /// The exact digest format remains identical for older cache manifests.
+  static Future<String> _windowDigestAsync(List<MarketTick> ticks) async {
+    if (kIsWeb || ticks.length < 5000) return _windowDigest(ticks);
+    return compute<List<MarketTick>, String>(
+      _windowDigest, ticks, debugLabel: 'tradelab-range-bid-cache-sha256');
   }
 
   static Future<Database> _open() async {
@@ -225,14 +238,26 @@ class RangeTickStore {
     required int fromMs,
     required int toMs,
   }) async {
+    // This method must remain safe for direct callers, not only pages
+    // validated earlier by ChartScreen/RangeStartupLoader. The shared
+    // appendHistorical verifier below checks *every* ordered timestamp and
+    // positive finite BID on a worker for large pages. After that strict
+    // ordering check, the first and last timestamps prove all records are
+    // inside the exact inclusive manifest bounds. No 120k-event .any()
+    // scan is needed on Flutter's gesture/UI isolate.
     if (accountId.isEmpty || symbol.isEmpty || fromMs < 0 || toMs < fromMs ||
         toMs - fromMs > verifiedWindowDuration.inMilliseconds ||
-        ticks.any((tick) => tick.timestamp < fromMs || tick.timestamp > toMs)) {
+        (ticks.isNotEmpty &&
+            (ticks.first.timestamp < fromMs ||
+                ticks.last.timestamp > toMs))) {
       throw ArgumentError('Invalid verified BID window bounds');
     }
     // appendHistorical checks chronological ordering, exact overlap values
-    // and same-millisecond multiplicities, inside its own transaction.
+    // and same-millisecond multiplicities before committing to SQLite.
     await appendHistorical(accountId, symbol, ticks);
+    // Hash before entering the SQLite transaction. Never hold a database
+    // write lock while waiting on a large CPU-bound checksum.
+    final tickDigest = await _windowDigestAsync(ticks);
     final db = await _open();
     await db.transaction((txn) async {
       final counts = await txn.rawQuery('''
@@ -249,7 +274,7 @@ class RangeTickStore {
         'from_ms': fromMs,
         'to_ms': toMs,
         'tick_count': ticks.length,
-        'tick_digest': _windowDigest(ticks),
+        'tick_digest': tickDigest,
         'saved_at_ms': DateTime.now().toUtc().millisecondsSinceEpoch,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
@@ -291,7 +316,7 @@ class RangeTickStore {
       (row['timestamp_ms'] as num).toInt(),
       (row['bid'] as num).toDouble(),
     )).toList(growable: false);
-    return _windowDigest(ticks) == expectedDigest ? ticks : null;
+    return await _windowDigestAsync(ticks) == expectedDigest ? ticks : null;
   }
 
   /// Reads a requested historical interval from one or more individually
@@ -318,8 +343,16 @@ class RangeTickStore {
     final db = await _open();
     final result = <MarketTick>[];
     var cursor = fromMs;
-    var attempts = 0;
+    // Many short, complete cTrader windows can jointly cover a single
+    // older-history query. The previous shared 64-attempt budget counted
+    // SUCCESSFUL windows as failures and forced pointless broker downloads.
+    // Bound valid windows separately from corrupt-manifest fallback work.
+    const maxVerifiedWindows = 2048;
+    const maxRejectedCandidates = 64;
+    var windowsConsumed = 0;
+    var rejectedCandidates = 0;
     while (cursor <= toMs) {
+      if (++windowsConsumed > maxVerifiedWindows) return null;
       // Prefer the furthest-ending verified window, but try a few
       // alternatives if a migrated or corrupted manifest fails validation.
       final candidates = await db.query('range_tick_windows',
@@ -331,23 +364,34 @@ class RangeTickStore {
       List<MarketTick>? validTicks;
       int? coverageEnd;
       for (final row in candidates) {
-        if (++attempts > 64) return null;
         final windowFrom = (row['from_ms'] as num).toInt();
         final windowTo = (row['to_ms'] as num).toInt();
         final verified = await readVerifiedWindow(
           accountId, symbol, fromMs: windowFrom, toMs: windowTo);
-        if (verified == null) continue;
+        if (verified == null) {
+          if (++rejectedCandidates > maxRejectedCandidates) return null;
+          continue;
+        }
         validTicks = verified;
         coverageEnd = windowTo;
         break;
       }
       if (validTicks == null || coverageEnd == null) return null;
       final segmentEnd = coverageEnd < toMs ? coverageEnd : toMs;
-      for (final tick in validTicks) {
-        if (tick.timestamp < cursor) continue;
-        if (tick.timestamp > segmentEnd) break;
-        result.add(tick);
-        if (result.length > maxTicks) return null;
+      // The manifest SHA + source order were verified by
+      // readVerifiedWindow(). When a 120k-tick window overlaps only a few
+      // milliseconds of this requested interval, find its real source
+      // timestamps in O(log N) rather than scanning the entire cached
+      // window again on Flutter's gesture/UI isolate.
+      // Never partially copy an over-budget slice.
+      if (!RangeVerifiedBidWindowSlice.appendWithinLimit(
+        verified: validTicks,
+        fromMs: cursor,
+        toMs: segmentEnd,
+        output: result,
+        maxTicks: maxTicks,
+      )) {
+        return null;
       }
       cursor = segmentEnd + 1;
     }
@@ -402,15 +446,23 @@ class RangeTickStore {
     if (accountId.isEmpty || symbol.isEmpty) {
       throw ArgumentError('An account and symbol are required');
     }
-    var previous = -1;
-    for (final tick in ticks) {
-      if (tick.timestamp < 0 || tick.timestamp < previous ||
-          !tick.bid.isFinite || tick.bid <= 0) {
-        throw ArgumentError('Historical BID ticks must be ordered and valid');
-      }
-      previous = tick.timestamp;
-    }
     if (ticks.isEmpty) return 0;
+    // A complete broker window can have 100k+ BID events. Reuse the strict
+    // ordered/finite source validator off the UI isolate rather than
+    // walking every event synchronously during SQLite writes. The last
+    // timestamp is the inclusive upper bound only AFTER ordering is
+    // verified; an out-of-order interior value therefore fails closed.
+    // Retain the original ArgumentError API for callers.
+    try {
+      await RangeBidPageVerifier.verifyAsync(
+        page: ticks,
+        fromMs: 0,
+        toMs: ticks.last.timestamp,
+        errorMessage: 'Historical BID ticks must be ordered and valid',
+      );
+    } on MarketDataException {
+      throw ArgumentError('Historical BID ticks must be ordered and valid');
+    }
     final db = await _open();
     return db.transaction((txn) async {
       // total_changes() counts successful INSERTs, not ignored duplicates.
@@ -438,22 +490,32 @@ class RangeTickStore {
       }
       // A later page can overlap an existing millisecond with fewer ticks.
       // Reject partial groups rather than treating the page as complete.
-      final groupedCounts = <int, int>{};
-      for (final tick in ticks) {
-        groupedCounts.update(tick.timestamp, (count) => count + 1,
-            ifAbsent: () => 1);
-      }
+      // Both streams are chronological. Match existing millisecond counts
+      // against the incoming sorted BID page with one cursor instead of a
+      // potentially million-entry timestamp->count Dart hash map.
       final existingCounts = await txn.rawQuery('''
         SELECT timestamp_ms, COUNT(*) AS total
         FROM range_tick_archive
         WHERE account_id = ? AND symbol = ?
           AND timestamp_ms BETWEEN ? AND ?
         GROUP BY timestamp_ms
+        ORDER BY timestamp_ms ASC
       ''', [accountId, symbol, ticks.first.timestamp, ticks.last.timestamp]);
+      var incomingIndex = 0;
       for (final row in existingCounts) {
         final timestamp = (row['timestamp_ms'] as num).toInt();
         final count = (row['total'] as num).toInt();
-        if (groupedCounts[timestamp] != count) {
+        while (incomingIndex < ticks.length &&
+            ticks[incomingIndex].timestamp < timestamp) {
+          incomingIndex++;
+        }
+        var matchingCount = 0;
+        while (incomingIndex < ticks.length &&
+            ticks[incomingIndex].timestamp == timestamp) {
+          matchingCount++;
+          incomingIndex++;
+        }
+        if (matchingCount != count) {
           throw StateError(
               'Incomplete overlapping BID millisecond; archive unchanged');
         }
@@ -462,6 +524,12 @@ class RangeTickStore {
       // SQLite changes() distinguishes ignored duplicates from new rows.
       for (var offset = 0; offset < ticks.length; offset += 500) {
         final end = offset + 500 < ticks.length ? offset + 500 : ticks.length;
+        // Keep the exact inclusive primary-key bounds of this batch.
+        // One market millisecond can contain thousands of distinct BID
+        // events, so timestamps alone would query that group repeatedly.
+        final firstTimestamp = ticks[offset].timestamp;
+        final firstSequence =
+            firstTimestamp == lastTimestamp ? sequence + 1 : 0;
         final batch = txn.batch();
         for (var i = offset; i < end; i++) {
           final tick = ticks[i];
@@ -479,11 +547,19 @@ class RangeTickStore {
         }
         // Reject conflicting overlaps anywhere in this page, not just at
         // the first timestamp. The transaction rolls back on a mismatch.
+        final lastBatchTimestamp = ticks[end - 1].timestamp;
+        final lastBatchSequence = sequence;
         final existing = await txn.query('range_tick_archive',
             columns: ['timestamp_ms', 'sequence_no', 'bid'],
-            where: 'account_id = ? AND symbol = ? AND timestamp_ms BETWEEN ? AND ?',
-            whereArgs: [accountId, symbol, ticks[offset].timestamp,
-                ticks[end - 1].timestamp],
+            where: 'account_id = ? AND symbol = ? AND '
+                '(timestamp_ms > ? OR (timestamp_ms = ? AND sequence_no >= ?)) '
+                'AND (timestamp_ms < ? OR '
+                '(timestamp_ms = ? AND sequence_no <= ?))',
+            whereArgs: [
+              accountId, symbol,
+              firstTimestamp, firstTimestamp, firstSequence,
+              lastBatchTimestamp, lastBatchTimestamp, lastBatchSequence,
+            ],
             orderBy: 'timestamp_ms ASC, sequence_no ASC');
         final known = <(int, int), double>{
           for (final row in existing)
@@ -491,15 +567,12 @@ class RangeTickStore {
              (row['sequence_no'] as num).toInt()):
                 (row['bid'] as num).toDouble(),
         };
-        var checkTime = offset == 0 ? -1 : ticks[offset - 1].timestamp;
-        var checkOrdinal = offset == 0 ? -1 : 0;
-        if (offset > 0) {
-          var index = offset - 1;
-          while (index > 0 && ticks[index - 1].timestamp == checkTime) {
-            checkOrdinal++;
-            index--;
-          }
-        }
+        // The batch writer already computed the precise first ordinal.
+        // Starting a second check cursor from that boundary avoids scanning
+        // every earlier BID event with the same millisecond for each 500-row
+        // batch (quadratic work on dense real broker tick groups).
+        var checkTime = firstTimestamp;
+        var checkOrdinal = firstSequence - 1;
         for (var i = offset; i < end; i++) {
           final tick = ticks[i];
           if (tick.timestamp != checkTime) {

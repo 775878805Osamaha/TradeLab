@@ -209,6 +209,12 @@ void main() {
     await tester.tap(find.byKey(const Key('chart-kind-range')));
     await tester.pumpAndSettle();
     expect(find.text('إعدادات شموع المدى'), findsOneWidget);
+    expect(find.byKey(const Key('range-bid-source-status')), findsOneWidget);
+    expect(find.text('تيكات BID الموثقة في الشارت: 0'), findsOneWidget);
+    expect(find.text('شموع Range المكتملة: 0'), findsOneWidget);
+    expect(find.text('آخر تيك موثق (UTC): غير متاح'), findsOneWidget);
+    expect(find.byKey(const Key('range-load-older-action')), findsNothing,
+        reason: 'Unlinked cTrader cannot request or invent older BID pages');
     expect(find.text('1000'), findsOneWidget);
     await tester.tap(find.text('250'));
     await tester.pumpAndSettle();
@@ -322,11 +328,11 @@ void main() {
     await openAtPhoneSize(tester);
     await tester.tap(find.text('النتائج').last);
     await tester.pumpAndSettle();
-    expect(find.text('النتائج والتحليلات'), findsOneWidget);
-    expect(find.text('صافي الربح'), findsOneWidget);
+    expect(find.byKey(const Key('results-net-profit-hero')), findsOneWidget);
+    expect(find.text('صافي الربح المحقق'), findsOneWidget);
     await tester.tap(find.text('الحساب').last);
     await tester.pumpAndSettle();
-    expect(find.text('الحساب والإعدادات'), findsOneWidget);
+    expect(find.byKey(const Key('account-connection-hero')), findsOneWidget);
     await tester.scrollUntilVisible(find.byKey(const Key('dark-mode-switch')),
         180, scrollable: find.byType(Scrollable).last);
     await tester.pumpAndSettle();
@@ -366,7 +372,28 @@ void main() {
     expect(find.byKey(const Key('chart-source-empty')), findsNothing);
     await tester.tap(find.byTooltip('تشغيل Replay داخل الشارت'));
     await tester.pumpAndSettle();
+    // Replay first lets the user choose a verified source candle: no
+    // historical future data is hidden or training session opened until OK.
+    expect(find.byKey(const Key('replay-start-overlay')), findsOneWidget);
+    expect(find.byKey(const Key('replay-start-scissors')), findsOneWidget);
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
+    await tester.tap(find.byKey(const Key('replay-confirm-start')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-start-overlay')), findsNothing);
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+    // Clean Replay: only its compact 54dp control band occupies the bottom.
+    // No duplicated drawing toolbar, fixed drawing rail, or practice footer.
+    final replayBand = find.byKey(const Key('replay-controls'));
+    expect(replayBand, findsOneWidget);
+    expect(find.byKey(const Key('chart-reference-toolbar')), findsNothing);
+    expect(find.byKey(const Key('drawing-rail-cursor')), findsNothing);
+    expect(find.byKey(const Key('replay-trading-buttons')), findsNothing);
+    expect(find.byKey(const Key('replay-inline-trading')), findsNothing);
+    expect(find.byKey(const Key('replay-more-actions')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('chart-reference-header'))).height,
+        48);
+    expect(tester.getBottomLeft(replayBand).dy,
+        closeTo(tester.getTopLeft(find.byType(NavigationBar)).dy, 1));
     await tester.tap(find.byTooltip('إغلاق Replay'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('replay-play-pause')), findsNothing);
@@ -417,7 +444,28 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('analysis-action-replay')));
     await tester.tap(find.byKey(const Key('analysis-action-replay')));
     await tester.pumpAndSettle();
+    // Replay first lets the user choose a verified source candle: no
+    // historical future data is hidden or training session opened until OK.
+    expect(find.byKey(const Key('replay-start-overlay')), findsOneWidget);
+    expect(find.byKey(const Key('replay-start-scissors')), findsOneWidget);
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
+    await tester.tap(find.byKey(const Key('replay-confirm-start')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-start-overlay')), findsNothing);
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+    // Clean Replay: only its compact 54dp control band occupies the bottom.
+    // No duplicated drawing toolbar, fixed drawing rail, or practice footer.
+    final replayBand = find.byKey(const Key('replay-controls'));
+    expect(replayBand, findsOneWidget);
+    expect(find.byKey(const Key('chart-reference-toolbar')), findsNothing);
+    expect(find.byKey(const Key('drawing-rail-cursor')), findsNothing);
+    expect(find.byKey(const Key('replay-trading-buttons')), findsNothing);
+    expect(find.byKey(const Key('replay-inline-trading')), findsNothing);
+    expect(find.byKey(const Key('replay-more-actions')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('chart-reference-header'))).height,
+        48);
+    expect(tester.getBottomLeft(replayBand).dy,
+        closeTo(tester.getTopLeft(find.byType(NavigationBar)).dy, 1));
     expect(chart, findsOneWidget);
     expect(historyRequests, 1);
     await tester.tap(find.byTooltip('إغلاق Replay'));

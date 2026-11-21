@@ -3,7 +3,27 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'chart_viewport.dart';
+import 'chart_symbol_settings.dart';
+import 'chart_text_layout_cache.dart';
 import '../theme/tradelab_theme.dart';
+
+/// A selected rectangle's time tag must agree with the SAME display zone
+/// chosen for the chart candles. Source UTC timestamps remain untouched.
+abstract final class ChartRectangleTimeLabel {
+  static String fromSource(int timestampUtcMs, ChartTimeZone zone) {
+    final time = zone.displayDate(timestampUtcMs);
+    String two(int n) => n.toString().padLeft(2, '0');
+    final zoneText = switch (zone) {
+      ChartTimeZone.utc => 'UTC',
+      ChartTimeZone.device => 'LOCAL',
+      ChartTimeZone.newYork => 'NY UTC${ChartTimeZone.newYorkOffset(
+          DateTime.fromMillisecondsSinceEpoch(
+              timestampUtcMs, isUtc: true)).inHours}',
+    };
+    return '${two(time.day)}/${two(time.month)} '
+        '${two(time.hour)}:${two(time.minute)} $zoneText';
+  }
+}
 
 /// A price/time annotation, not an order or a synthetic market range.
 /// Both axes are anchored to actual candle indices and prices.
@@ -85,6 +105,44 @@ enum PriceRectangleHandle {
 }
 
 abstract final class PriceRectangleGeometry {
+  /// Exact clipping predicate for the independent rectangle painter.
+  /// A selected circular handle may extend 11.5 px past the vertical
+  /// plot edge; do not prematurely hide that visible section.
+  static bool visibleInPlot(Rect bounds, double width, double height,
+      {bool selected = false}) {
+    if (!width.isFinite || !height.isFinite ||
+        width <= 0 || height <= 0 ||
+        !bounds.left.isFinite || !bounds.right.isFinite ||
+        !bounds.top.isFinite || !bounds.bottom.isFinite) return false;
+    final bleed = selected ? 11.5 : 0.0;
+    return bounds.right >= 0 && bounds.left <= width &&
+        bounds.bottom >= -bleed && bounds.top <= height + bleed;
+  }
+
+  /// Screen-space x bounds for source-anchored rectangles that can reach the
+  /// current candle plot. Discard offscreen historical annotations BEFORE
+  /// calculating price y, allocating a Rect/Paint, or creating handles.
+  ///
+  /// This deliberately uses the exact same inclusive left/right clip as
+  /// [visibleInPlot]. At 3px candles an edge at x=0 is still a real selected
+  /// handle; future Replay anchors remain gated by [visibleAt].
+  static ({double left, double right})? visibleHorizontalSpan(
+    ChartPriceRectangle drawing, ChartViewport viewport,
+    int count, double plotWidth,
+  ) {
+    if (!drawing.visibleAt(count) || !plotWidth.isFinite ||
+        plotWidth <= 0 || !viewport.barWidth.isFinite ||
+        viewport.barWidth <= 0 || !viewport.scrollBars.isFinite ||
+        !viewport.rightMarginBars.isFinite) return null;
+    final left = viewport.chartX(index: drawing.startIndex,
+        candleCount: count, plotWidth: plotWidth);
+    final right = viewport.chartX(index: drawing.endIndex,
+        candleCount: count, plotWidth: plotWidth);
+    if (!left.isFinite || !right.isFinite ||
+        right < 0 || left > plotWidth) return null;
+    return (left: left, right: right);
+  }
+
   static Rect rect(ChartPriceRectangle drawing, ChartViewport viewport,
       ChartPriceScale scale, int count, double plotWidth) => Rect.fromLTRB(
         viewport.chartX(index: drawing.startIndex,
@@ -113,12 +171,40 @@ abstract final class PriceRectangleGeometry {
   static (int, PriceRectangleHandle?)? hitTest(Offset point,
       List<ChartPriceRectangle> drawings, ChartViewport viewport,
       ChartPriceScale scale, int count, double plotWidth) {
+    // A drawing tool must never steal touch events from the right price
+    // ruler, bottom time axis or an invalid Flutter gesture coordinate.
+    if (!point.dx.isFinite || !point.dy.isFinite ||
+        !plotWidth.isFinite || plotWidth <= 0 ||
+        !scale.height.isFinite || scale.height <= 0 ||
+        point.dx < 0 || point.dx >= plotWidth ||
+        point.dy < 0 || point.dy >= scale.height) return null;
     for (var i = drawings.length - 1; i >= 0; i--) {
       final drawing = drawings[i];
-      if (!drawing.visibleAt(count)) continue;
-      final area = rect(drawing, viewport, scale, count, plotWidth);
+      // Cheap horizontal rejection first: deep-history drawings should not
+      // compute price geometry or allocate eight handles during touch hit.
+      final visibleX = visibleHorizontalSpan(
+          drawing, viewport, count, plotWidth);
+      if (visibleX == null) continue;
+      final area = Rect.fromLTRB(
+          visibleX.left, scale.y(drawing.upper),
+          visibleX.right, scale.y(drawing.lower));
+      // Most historical drawings are beyond the visible candle viewport.
+      // Reject their bounds before creating all eight handle positions.
+      // The painter clips rectangles at the plot's left/right edges.
+      if (area.right < 0 || area.left > plotWidth ||
+          area.bottom < -11.5 ||
+          area.top > scale.height + 11.5 ||
+          !area.inflate(23).contains(point)) continue;
       for (final entry in handles(area).entries) {
-        if ((entry.value - point).distance <= 23) return (i, entry.key);
+        final center = entry.value;
+        // Hit radius is intentionally 23px for accessibility, but a handle
+        // wholly clipped from the plot (visual radius 11.5px) may not be
+        // selected invisibly after panning or extreme 3px-bar zoom.
+        if (center.dx < -11.5 || center.dx > plotWidth + 11.5 ||
+            center.dy < -11.5 || center.dy > scale.height + 11.5) {
+          continue;
+        }
+        if ((center - point).distance <= 23) return (i, entry.key);
       }
       if (area.inflate(4).contains(point)) return (i, null);
     }
@@ -132,27 +218,67 @@ class ChartPriceRectanglePainter extends CustomPainter {
   ChartPriceRectanglePainter({required this.drawings,
     required this.selectedIndex, required this.viewport, required this.scale,
     required this.candleCount, required this.plotWidth, required this.dark,
-    this.timestamps = const []});
+    this.timestamps = const [], this.textCache,
+    this.timeZone = ChartTimeZone.utc,
+    List<ChartPriceRectangle> Function()? drawingsProvider,
+    ChartViewport Function()? viewportProvider,
+    ChartPriceScale Function()? scaleProvider,
+    Listenable? repaint,
+  }) : _drawingsProvider = drawingsProvider,
+       _viewportProvider = viewportProvider,
+       _scaleProvider = scaleProvider,
+       super(repaint: repaint);
 
   final List<ChartPriceRectangle> drawings;
+  // A paint-only drag updates existing source-anchored rectangles. Read the
+  // current list at paint time rather than an obsolete widget-build snapshot.
+  // The optional provider is used only by the interactive chart; isolated
+  // painters retain immutable snapshot semantics.
+  final List<ChartPriceRectangle> Function()? _drawingsProvider;
+  List<ChartPriceRectangle> get currentDrawings =>
+      _drawingsProvider?.call() ?? drawings;
   final int? selectedIndex;
   final ChartViewport viewport;
   final ChartPriceScale scale;
+  // The chart's painter already reads a live viewport during touch updates.
+  // Use the same source for rectangle handles and time/price labels; a
+  // standalone painter can still use its immutable snapshots.
+  final ChartViewport Function()? _viewportProvider;
+  final ChartPriceScale Function()? _scaleProvider;
+  ChartViewport get currentViewport => _viewportProvider?.call() ?? viewport;
+  ChartPriceScale get currentScale => _scaleProvider?.call() ?? scale;
   final int candleCount;
   final double plotWidth;
   final bool dark;
   final List<int> timestamps;
+  final ChartTimeZone timeZone;
+  // ChartScreen owns the measured text cache across gesture repaints.
+  // Standalone renderers without a cache still dispose their paragraphs.
+  final ChartTextLayoutCache? textCache;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (candleCount == 0 || size.height < 30 || plotWidth <= 0) return;
+    final viewport = currentViewport;
+    final scale = currentScale;
     final chartHeight = scale.height;
-    for (var i = 0; i < drawings.length; i++) {
-      final drawing = drawings[i];
-      if (!drawing.visibleAt(candleCount)) continue;
-      final area = PriceRectangleGeometry.rect(
-          drawing, viewport, scale, candleCount, plotWidth);
-      if (area.right < 0 || area.left > plotWidth) continue;
+    final activeDrawings = currentDrawings;
+    for (var i = 0; i < activeDrawings.length; i++) {
+      final drawing = activeDrawings[i];
+      final visibleX = PriceRectangleGeometry.visibleHorizontalSpan(
+          drawing, viewport, candleCount, plotWidth);
+      if (visibleX == null) continue;
+      final area = Rect.fromLTRB(
+          visibleX.left, scale.y(drawing.upper),
+          visibleX.right, scale.y(drawing.lower));
+      // A source-anchored rectangle which is wholly beyond the viewport's
+      // price range needs no clipping, fill, border, or handle allocations
+      // on every pan/pinch frame. Selected handles may show 11.5px of bleed
+      // at the vertical edge, so retain that exact existing visible rim.
+      if (!PriceRectangleGeometry.visibleInPlot(
+          area, plotWidth, chartHeight, selected: selectedIndex == i)) {
+        continue;
+      }
       canvas.save();
       canvas.clipRect(Rect.fromLTWH(0, 0, plotWidth, chartHeight));
       canvas.drawRect(area, Paint()
@@ -185,36 +311,46 @@ class ChartPriceRectanglePainter extends CustomPainter {
       }
       canvas.restore();
       if (selectedIndex == i) {
-        _priceTag(canvas, drawing.upper, scale.y(drawing.upper), size);
-        _priceTag(canvas, drawing.lower, scale.y(drawing.lower), size);
+        _priceTag(canvas, drawing.upper, scale.y(drawing.upper), size, scale);
+        _priceTag(canvas, drawing.lower, scale.y(drawing.lower), size, scale);
         if (timestamps.length >= candleCount) {
-          _timeTag(canvas, drawing.endIndex, area.center.dx, size);
+          _timeTag(canvas, drawing.endIndex, area.center.dx, size, scale);
         }
       }
     }
   }
 
-  void _timeTag(Canvas canvas, int index, double atX, Size size) {
+  void _timeTag(Canvas canvas, int index, double atX, Size size,
+      ChartPriceScale scale) {
     if (index < 0 || index >= timestamps.length) return;
-    final time = DateTime.fromMillisecondsSinceEpoch(
-        timestamps[index], isUtc: true);
-    final label = '${time.day.toString().padLeft(2, '0')}/'
-        '${time.month.toString().padLeft(2, '0')} '
-        '${time.hour.toString().padLeft(2, '0')}:'
-        '${time.minute.toString().padLeft(2, '0')} UTC';
-    final painter = TextPainter(text: TextSpan(text: label,
-        style: const TextStyle(color: Colors.white, fontSize: 11.5)),
-        maxLines: 1, textDirection: TextDirection.ltr)..layout();
+    final label = ChartRectangleTimeLabel.fromSource(
+        timestamps[index], timeZone);
+    // Match the original normal-weight, LTR 11.5px time tag exactly.
+    final painter = textCache?.layout(
+          label, Colors.white, 11.5, fontWeight: FontWeight.normal) ??
+        (TextPainter(text: TextSpan(text: label,
+            style: const TextStyle(color: Colors.white, fontSize: 11.5)),
+            maxLines: 1, textDirection: TextDirection.ltr)..layout());
+    final badgeWidth = math.min(plotWidth, painter.width + 16);
     final left = (atX - painter.width / 2 - 8).clamp(0.0,
-        math.max(0.0, plotWidth - painter.width - 16)).toDouble();
+        math.max(0.0, plotWidth - badgeWidth)).toDouble();
+    final badgeHeight = math.min(21.0, size.height - scale.height);
     canvas.drawRRect(RRect.fromRectAndRadius(
       Rect.fromLTWH(left, scale.height + 1,
-          painter.width + 16, math.min(21.0, size.height - scale.height)),
+          badgeWidth, badgeHeight),
       const Radius.circular(2)), Paint()..color = TradeColors.rectangleAxisTag);
+    // A narrow Android plot may be smaller than the selected time label.
+    // Clip rather than allowing the text to cover the right price ruler.
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(
+        left, scale.height + 1, badgeWidth, badgeHeight));
     painter.paint(canvas, Offset(left + 8, scale.height + 3));
+    canvas.restore();
+    if (textCache == null) painter.dispose();
   }
 
-  void _priceTag(Canvas canvas, double value, double y, Size size) {
+  void _priceTag(Canvas canvas, double value, double y, Size size,
+      ChartPriceScale scale) {
     if (y < 0 || y > scale.height) return;
     final span = scale.maximum - scale.minimum;
     final decimals = span < .05 ? 5 : span < 1 ? 4 : span < 20 ? 2 : 1;
@@ -225,11 +361,15 @@ class ChartPriceRectanglePainter extends CustomPainter {
     canvas.drawRect(Rect.fromLTWH(plotWidth, top,
         math.max(0.0, size.width - plotWidth), height),
       Paint()..color = TradeColors.rectangleAxisTag);
-    final painter = TextPainter(text: TextSpan(text: label,
-      style: const TextStyle(fontSize: 10.5, color: Colors.white,
-        fontWeight: FontWeight.w500)),
-      textDirection: TextDirection.ltr, maxLines: 1)..layout();
+    // Label and font identity are unchanged; avoid relayout on every
+    // pinch/pan frame while the selected rectangle remains in view.
+    final painter = textCache?.layout(label, Colors.white, 10.5) ??
+        (TextPainter(text: TextSpan(text: label,
+          style: const TextStyle(fontSize: 10.5, color: Colors.white,
+            fontWeight: FontWeight.w500)),
+          textDirection: TextDirection.ltr, maxLines: 1)..layout());
     painter.paint(canvas, Offset(plotWidth + 3, top + 2));
+    if (textCache == null) painter.dispose();
   }
 
   static String _price(double number, int decimals) {
@@ -245,5 +385,6 @@ class ChartPriceRectanglePainter extends CustomPainter {
       old.viewport != viewport || old.scale.minimum != scale.minimum ||
       old.scale.maximum != scale.maximum || old.scale.height != scale.height ||
       old.candleCount != candleCount || old.plotWidth != plotWidth ||
-      old.dark != dark || old.timestamps != timestamps;
+      old.dark != dark || old.timestamps != timestamps ||
+      old.timeZone != timeZone;
 }

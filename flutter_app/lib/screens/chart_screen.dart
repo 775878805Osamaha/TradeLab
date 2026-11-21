@@ -8,13 +8,21 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../chart/chart_annotations.dart';
 import '../chart/chart_line_geometry.dart';
+import '../chart/chart_candle_wicks.dart';
 import '../chart/chart_short_position.dart';
 import '../chart/chart_price_rectangle.dart';
 import '../chart/chart_type_sheet.dart';
 import '../chart/analysis_hub_sheet.dart';
 import '../chart/drawing_tools_sheet.dart';
 import '../chart/chart_viewport.dart';
+import '../chart/chart_price_scale_cache.dart';
+import '../chart/chart_ohlc_inspector.dart';
+import '../chart/chart_crosshair_time_label.dart';
+import '../chart/chart_quick_actions.dart';
 import '../chart/chart_frame_profiler.dart';
+import '../chart/chart_load_profiler.dart';
+import '../chart/chart_text_layout_cache.dart';
+import '../chart/chart_feed_health.dart';
 import '../chart/chart_panel_settings.dart';
 import '../chart/chart_panel_settings_page.dart';
 import '../chart/chart_scale_settings.dart';
@@ -22,20 +30,36 @@ import '../chart/chart_scale_settings_page.dart';
 import '../chart/chart_symbol_settings.dart';
 import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
+import '../chart/chart_visible_sma.dart';
 import '../chart/chart_axis_ticks.dart';
+import '../chart/chart_price_text_formatter.dart';
+import '../chart/chart_time_axis_label_layout.dart';
+import '../chart/chart_historical_time_zone.dart';
 import '../chart/candle_prefix.dart';
+import '../chart/chart_heikin_ashi.dart';
 import '../replay/replay_playback_speed.dart';
+import '../replay/replay_mobile_controls.dart';
+import '../replay/replay_start_overlay.dart';
+import '../replay/replay_start_resolver.dart';
+import '../replay/replay_date_time_resolver.dart';
 import '../replay/replay_training_session.dart';
 import '../replay/replay_training_order_dialog.dart';
 import '../replay/replay_training_archive.dart';
+import '../replay/replay_trade_overlay.dart';
 import '../data/range_bar_timeline.dart';
+import '../data/range_live_bid_delta.dart';
 import '../data/range_startup_loader.dart';
+import '../data/ctrader_older_candle_pager.dart';
+import '../data/older_candle_prepend.dart';
+import '../data/verified_market_history_snapshot.dart';
+import '../data/range_history_fill_policy.dart';
 import '../data/range_older_page.dart';
+import '../data/range_older_page_scanner.dart';
 import '../data/range_tick_store.dart';
 import '../data/tradelab_data.dart';
 import '../data/market_api.dart';
+import '../data/chart_timeframe_catalog.dart';
 import '../data/market_candle_store.dart';
-import '../data/ctrader_candle_stitcher.dart';
 import '../data/market_controller.dart';
 import '../paper/paper_journal_controller.dart';
 import '../paper/paper_ledger.dart';
@@ -60,10 +84,20 @@ typedef _DrawingSnapshot = (List<double>, List<ChartPattern>,
 
 class ChartScreen extends StatefulWidget {
   const ChartScreen({required this.controller, this.journal,
-    this.onOpenAccount, super.key});
+    this.onOpenAccount, this.requestedSymbolCode = 'XAUUSD',
+    this.active = true, this.focusMode = false,
+    this.onToggleFocusMode, super.key});
   final MarketController controller;
   final PaperJournalController? journal;
   final VoidCallback? onOpenAccount;
+  /// Navigation from Markets requests this verified symbol; chart stays
+  /// mounted in IndexedStack and must invalidate the prior symbol's history.
+  final String requestedSymbolCode;
+  /// False while kept alive but hidden inside the bottom-tab IndexedStack.
+  final bool active;
+  /// Expand the same chart viewport, never remount or reload source history.
+  final bool focusMode;
+  final VoidCallback? onToggleFocusMode;
 
   @override
   State<ChartScreen> createState() => _ChartScreenState();
@@ -71,6 +105,24 @@ class ChartScreen extends StatefulWidget {
 
 class _ChartScreenState extends State<ChartScreen>
     with SingleTickerProviderStateMixin {
+  // Normal pan/fling and crosshair frames invalidate only the candle canvas.
+  final ValueNotifier<int> _chartRepaint = ValueNotifier<int>(0);
+  // Rectangle drags repaint an independent layer, not all candles and UI.
+  final ValueNotifier<int> _rectangleRepaint = ValueNotifier<int>(0);
+  late final Listenable _rectanglePaintSignals = Listenable.merge([
+    _chartRepaint, _rectangleRepaint,
+  ]);
+  final ChartTextLayoutCache _chartTextCache = ChartTextLayoutCache();
+  // Shared by candle paint, rectangles, Replay price levels and touch hits.
+  // Exactly one immutable auto-scale per source/viewport/plot configuration.
+  final ChartPriceScaleCache _autoPriceScaleCache = ChartPriceScaleCache();
+  // Chart snapshots replace timestamp lists rather than mutating them.
+  // Validate the selected source once and make subsequent Replay seeks fast.
+  final ReplayVerifiedTimeIndex _replayTimeIndex = ReplayVerifiedTimeIndex();
+  // Opt-in, privacy-safe load timings share TRADELAB_PROFILE_CHART with
+  // the frame profiler; normal Android releases never allocate a stopwatch.
+  final ChartLoadProfiler _historyLoadProfiler = const ChartLoadProfiler();
+
   // Session-only BID tick cache: switching Range size rebuilds locally.
   // Scoped by account and symbol; not a substitute for persistent history.
   final _rangeBidCache = <String, List<double>>{};
@@ -85,23 +137,39 @@ class _ChartScreenState extends State<ChartScreen>
   List<MarketTick> _rangeHistoryTicks = [];
   List<int> _rangeBarEndTickIndices = [];
   List<int> _rangeBarTimestamps = [];
+  RangeBarTimeline? _rangeTimeline;
+  bool _pollingLiveRange = false;
   int? _rangeOlderCursorMs;
   int _loadRevision = 0;
   bool _loading = false;
   bool _olderLoading = false;
+  final RangeAutoFillRevisionGate _rangeAutoFillRevisionGate =
+      RangeAutoFillRevisionGate();
+  bool get _rangeAutoFilling =>
+      _rangeAutoFillRevisionGate.isActiveFor(_loadRevision);
   bool _historyExhausted = false;
   int? _olderCursorMs;
   String? _olderLoadError;
   String? _loadError;
-  List<TradeCandle>? _heikinSource;
-  List<TradeCandle>? _heikinCache;
+  final ChartHeikinAshiCache _heikinCache = ChartHeikinAshiCache();
   bool _linkedBefore = false;
   String? _accountBefore;
   String _symbol = 'XAUUSD';
   String _timeframe = '1m';
   ChartMode _mode = ChartMode.candles;
-  int _rangeTicks = 1000;
+  // A 1000-point default often leaves only a single verified BID Range bar
+  // in the available tick window. Start at a visible, selectable 25 points;
+  // every larger/smaller cTrader preset remains available to the user.
+  int _rangeTicks = 25;
   bool _replay = false;
+  bool _replaySelectingStart = false;
+  bool _replayDraggingStart = false;
+  int _replayCandidateIndex = 0;
+  int _replayInitialCount = 1;
+  // Keep the candle area clear until the user explicitly requests tools.
+  bool _replayShowTradingButtons = false;
+  bool _replayShowDrawingTools = false;
+  bool _replayAutoStep = true;
   bool _drawing = false;
   bool _drawingsVisible = true;
   bool _drawingsLocked = false;
@@ -149,13 +217,30 @@ class _ChartScreenState extends State<ChartScreen>
   bool _showIndicators = false;
   bool _showShortLabels = true;
   int _visibleThrough = 60;
+  // Keep the newest verified bar close to the price scale on mobile.
+  // Default zoom is legible; pinch and pan remain fully user-controlled.
   ChartViewport _viewport = const ChartViewport(
-    barWidth: 5.5, scrollBars: -5, rightMarginBars: 10);
+    barWidth: 10, scrollBars: 0, rightMarginBars: 4);
+  // A manually scaled price ruler affects drawings and candles equally.
+  // Keep its scope per source, account, timeframe and Range configuration.
+  ChartPriceScale? _manualPriceScale;
+  String? _manualPriceScaleKey;
+  bool _draggingPriceAxis = false;
+  bool _draggingTimeAxis = false;
+  double _doubleTapChartX = 0;
+  String get _currentPriceScaleKey =>
+      '${widget.controller.accountId}|${_selectedSymbol.source.name}|'
+      '$_symbol|$_timeframe|${_mode.name}|$_rangeTicks|'
+      '${_replay ? 'replay' : _replaySelectingStart ? 'select' : 'live'}';
+  bool get _priceScaleManual =>
+      _manualPriceScale != null &&
+      _manualPriceScaleKey == _currentPriceScaleKey;
   ChartPanelSettings _panelSettings = const ChartPanelSettings();
   bool _panelSettingsOpen = false;
   bool _scaleSettingsOpen = false;
   ChartScaleSettings _scaleSettings = const ChartScaleSettings();
   bool _symbolSettingsOpen = false;
+  bool _symbolSettingsReturnToPanel = false;
   ChartSymbolSettings _symbolSettings = const ChartSymbolSettings();
   bool _panelChartTouched = false;
   static const _panelSettingsKey = 'tradelab-chart-panel-settings-v1';
@@ -163,6 +248,31 @@ class _ChartScreenState extends State<ChartScreen>
   static const _symbolSettingsKey = 'tradelab-chart-symbol-settings-v1';
   final _panelSettingsStorage = const FlutterSecureStorage();
   ChartTouchGesture _touchGesture = ChartTouchGesture();
+  // Flutter's scale recognizer starts only after the finger passes touch
+  // slop. Preserve where the user's FIRST finger actually landed so a guide
+  // with a 17/18dp hit target remains draggable after that delay.
+  int? _firstChartPointer;
+  Offset? _firstChartDown;
+
+  @visibleForTesting
+  ({bool draggingLine, bool draggingPattern, bool draggingRectangle,
+    int levels, int patterns, int? selectedLine, int? selectedPattern,
+    double? levelValue, ChartPattern? patternValue})
+      get debugGuideDragSelection => (
+        draggingLine: _draggingLine,
+        draggingPattern: _draggingPattern,
+        draggingRectangle: _draggingRectangle,
+        levels: _levels.length,
+        patterns: _patterns.length,
+        selectedLine: _selectedLine,
+        selectedPattern: _selectedPattern,
+        levelValue: _selectedLine != null &&
+            _selectedLine! >= 0 && _selectedLine! < _levels.length
+            ? _levels[_selectedLine!] : null,
+        patternValue: _selectedPattern != null &&
+            _selectedPattern! >= 0 && _selectedPattern! < _patterns.length
+            ? _patterns[_selectedPattern!] : null,
+      );
   late final AnimationController _momentum;
   double _previousMomentumX = 0;
   double _momentumPlotWidth = 1;
@@ -179,6 +289,11 @@ class _ChartScreenState extends State<ChartScreen>
   Future<void> _trainingSaveQueue = Future<void>.value();
   Timer? _closedCandleTimer;
   bool _refreshingClosedCandles = false;
+  MarketQuote? _lastObservedQuote;
+  bool _pollingSelectedQuote = false;
+  int _lastQuoteRequestAtMs = 0;
+  bool _retryingEmptyHistory = false;
+  int _lastEmptyHistoryAttemptMs = 0;
   bool _playing = false;
   final List<double> _levels = [];
   final List<ChartPattern> _patterns = [];
@@ -223,18 +338,29 @@ class _ChartScreenState extends State<ChartScreen>
   bool get _ctraderTimeCandlesStale {
     if (_selectedSymbol.source != TradeSource.ctrader ||
         _mode == ChartMode.range || _actualTimestamps.isEmpty) return false;
-    final last = _actualTimestamps.last;
-    final interval = switch (_timeframe) {
-      '1m' => 1, '2m' => 2, '3m' => 3, '5m' => 5,
-      '15m' => 15, '30m' => 30, '1h' => 60,
-      '4h' => 240, '1D' => 1440, '1W' => 10080,
-      '1M' => 43200, _ => 1,
-    };
-    final lag = DateTime.now().toUtc().millisecondsSinceEpoch - last;
-    return lag > math.max(interval * 3, 10) * 60000;
+    final quote = widget.controller.recentQuoteFor(_selectedSymbol);
+    return ChartFeedHealth.closedCandlesLagging(
+      latestClosedOpenMs: _actualTimestamps.last,
+      timeframe: _timeframe,
+      nowMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      freshQuoteTimestampMs: quote?.timestampMs,
+    );
   }
 
   String get _marketEvidenceLabel {
+    if (_replay) {
+      // This status must describe the last REVEALED source candle, not a
+      // contemporary live quote or an unrevealed future market timestamp.
+      final times = _replaySourceTimestamps;
+      if (_visibleThrough < 1 || _visibleThrough > times.length) {
+        return 'Replay تاريخي · لم تتوفر شمعة مكشوفة موثقة';
+      }
+      final source = _selectedSymbol.source == TradeSource.ctrader
+          ? 'cTrader' : 'Binance';
+      return 'Replay تاريخي · $source · $_symbol · آخر شمعة مكشوفة '
+          '${_utcMinuteLabel(times[_visibleThrough - 1])} · '
+          'أسعار السوق المباشر مخفية';
+    }
     if (!_liveRequested) return 'اربط حساب cTrader لعرض شموع الذهب والفوركس الحقيقية';
     if (_loading) return 'جار تحميل الأسعار من المصدر';
     if (_loadError != null) return 'تعذر التحقق من مصدر الأسعار';
@@ -248,9 +374,11 @@ class _ChartScreenState extends State<ChartScreen>
             '${_utcMinuteLabel(_rangeHistoryTicks.last.timestamp)}';
       }
       if (_actualTimestamps.isNotEmpty) {
-        return 'شموع cTrader · $broker ($mode) · آخر شمعة '
+        final quote = widget.controller.recentQuoteFor(_selectedSymbol);
+        return 'شموع cTrader · $broker ($mode) · آخر شمعة مغلقة '
             '${_utcMinuteLabel(_actualTimestamps.last)}'
-            '${_ctraderTimeCandlesStale ? ' · بيانات متأخرة' : ''}';
+            '${quote == null ? '' : ' · سعر BID/ASK عند ${_utcMinuteLabel(quote.timestampMs)}'}'
+            '${_ctraderTimeCandlesStale ? ' · الشموع متأخرة' : ''}';
       }
       return 'لم تصل شموع موثقة من cTrader لهذا الرمز';
     }
@@ -268,25 +396,73 @@ class _ChartScreenState extends State<ChartScreen>
   @override
   void initState() {
     super.initState();
+    if (tradeSymbols.any((item) => item.code == widget.requestedSymbolCode)) {
+      _symbol = widget.requestedSymbolCode;
+    }
     _frameProfiler.attach();
     unawaited(_loadDrawingFavorites());
     unawaited(_loadPanelSettings());
     unawaited(_loadScaleSettings());
     unawaited(_loadSymbolSettings());
     _momentum = AnimationController.unbounded(vsync: this)
-      ..addListener(_tickMomentum);
+      ..addListener(_tickMomentum)
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed ||
+            status == AnimationStatus.dismissed) {
+          // Natural friction finish is a real user-visible end. Never keep
+          // sampling idle toolbar frames after kinetic scrolling stops.
+          _frameProfiler.endInteraction();
+        }
+      });
     _linkedBefore = widget.controller.ctraderConnected;
     _accountBefore = widget.controller.accountId;
     widget.controller.addListener(_onMarketUpdate);
+    _lastObservedQuote = widget.controller.recentQuoteFor(_selectedSymbol);
     // Poll only broker-closed candles. Never update Replay or request
     // synthetic OHLC from non-cTrader sources.
     _closedCandleTimer = Timer.periodic(
       const Duration(seconds: 30),
-      (_) => unawaited(_refreshClosedCTraderCandles()),
+      (_) {
+        if (!widget.active) return;
+        unawaited(_refreshClosedCTraderCandles());
+        unawaited(_retryEmptyCTraderHistory());
+        unawaited(_refreshSelectedCTraderQuote());
+        unawaited(_refreshLiveRange());
+        // Quote labels must disappear after their 90-second validity
+        // expires, including when the chart is in Range mode.
+        _refreshDisplayedQuote();
+      },
     );
     // Binance does not require a cTrader session. Load its chart immediately
     // when selected, even on a device that has never linked a broker.
-    if (_liveRequested) Future.microtask(_loadRealHistory);
+    if (widget.active && _liveRequested) Future.microtask(_loadRealHistory);
+    if (widget.active && _selectedSymbol.source == TradeSource.ctrader) {
+      Future.microtask(_refreshSelectedCTraderQuote);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ChartScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.requestedSymbolCode != widget.requestedSymbolCode &&
+        widget.requestedSymbolCode != _symbol) {
+      final targets = tradeSymbols.where(
+          (item) => item.code == widget.requestedSymbolCode);
+      if (targets.isNotEmpty) {
+        _changeSymbol(targets.first);
+        return;
+      }
+    }
+    if (!oldWidget.active && widget.active) {
+      // The chart was hidden behind another tab. Refresh only the selected
+      // verified symbol, never fetch quote data while offscreen.
+      _lastObservedQuote = widget.controller.recentQuoteFor(_selectedSymbol);
+      if (_liveRequested && !_loading &&
+          _actualBars.isEmpty && _actualRange.isEmpty) {
+        Future.microtask(_loadRealHistory);
+      }
+      Future.microtask(_refreshSelectedCTraderQuote);
+    }
   }
 
   Future<void> _loadDrawingFavorites() async {
@@ -402,12 +578,21 @@ class _ChartScreenState extends State<ChartScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) _momentum.stop();
+    if (MediaQuery.disableAnimationsOf(context)) _stopMomentum();
+  }
+
+  void _stopMomentum() {
+    // A new touch, account change, Replay transition or modal action can
+    // cancel friction before its natural AnimationStatus.completed event.
+    // End that exact cohort first, so future idle frames cannot be
+    // mislabelled as kinetic chart motion.
+    _frameProfiler.endInteraction();
+    _momentum.stop();
   }
 
   void _tickMomentum() {
     if (!mounted || _loading) {
-      _momentum.stop();
+      _stopMomentum();
       return;
     }
     final deltaX = _momentum.value - _previousMomentumX;
@@ -415,7 +600,7 @@ class _ChartScreenState extends State<ChartScreen>
     if (deltaX.abs() < 0.000001) return;
     final count = _displayCandles.length;
     if (count < 2) {
-      _momentum.stop();
+      _stopMomentum();
       return;
     }
     final next = _viewport.pan(
@@ -424,15 +609,37 @@ class _ChartScreenState extends State<ChartScreen>
         candleCount: count);
     if (next == _viewport) {
       // The chart reached its historical or future-whitespace bound.
-      _momentum.stop();
+      _stopMomentum();
       return;
     }
-    setState(() => _viewport = next);
+    if (chartCanUsePaintOnlyViewportUpdate(
+      selectingReplayStart: _replaySelectingStart,
+      crosshairVisible: _crosshair != null,
+      movingDrawing: false,
+      visiblePriceRectangles: _drawingsVisible && _rectangles.isNotEmpty,
+      priceRectanglesFollowViewport: true,
+      replayTradeLevelsVisible: _replay && _training.trades.isNotEmpty,
+      replayTradeLevelsFollowViewport: true,
+    )) {
+      _viewport = next;
+      _chartRepaint.value++;
+    } else {
+      // Rebuild overlays with snapshot-based viewport positions as well.
+      setState(() => _viewport = next);
+    }
     _prefetchOlderAtEdge(_momentumPlotWidth, count);
   }
 
   void _startMomentum(double horizontalVelocity, double plotWidth) {
-    _momentum.stop();
+    _stopMomentum();
+    _frameProfiler.beginInteraction(
+      interaction: ChartFrameInteraction.momentum,
+      chartMode: _mode.name,
+      replay: _replay || _replaySelectingStart,
+      displayedCandles: _displayCandles.length,
+      rangeBidTicks:
+          _mode == ChartMode.range ? _rangeHistoryTicks.length : 0,
+    );
     _previousMomentumX = 0;
     _momentumPlotWidth = plotWidth;
     // Pixels/second, signed like the finger. The friction simulation is
@@ -442,7 +649,15 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   void _prefetchOlderAtEdge(double plotWidth, int count) {
-    if (!_liveRequested || _loading || _olderLoading || _historyExhausted ||
+    // Replay/selection are historical, deterministic views. A gesture must
+    // never launch a broker/SQLite history request in the background and
+    // shift the training cutoff or its chart/drawing indices. The Replay
+    // extras menu provides an EXPLICIT "load older" action when requested.
+    if (_replay || _replaySelectingStart) return;
+    if (!_liveRequested || _loading || _olderLoading ||
+        _rangeAutoFilling || _historyExhausted ||
+        (_mode == ChartMode.range &&
+            _rangeHistoryTicks.length >= RangeOlderPage.maxLoadedTicks) ||
         _olderLoadError != null || count <= 0 ||
         _viewport.scrollBars <= count - plotWidth / _viewport.barWidth - 25) {
       return;
@@ -459,26 +674,228 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  /// cTrader price refresh is read-only. No broker trades, artificial bars
+  /// or price interpolation are created. Inactive tabs issue no requests.
+  Future<void> _refreshSelectedCTraderQuote() async {
+    if (!mounted || !widget.active || _pollingSelectedQuote || _replay ||
+        _selectedSymbol.source != TradeSource.ctrader ||
+        !widget.controller.ctraderConnected) {
+      return;
+    }
+    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final cached = widget.controller.recentQuoteFor(_selectedSymbol);
+    if (!ChartFeedHealth.shouldRequestQuote(
+      nowMs: nowMs,
+      lastAttemptMs: _lastQuoteRequestAtMs,
+      freshQuoteTimestampMs: cached?.timestampMs,
+    )) {
+      return;
+    }
+    _pollingSelectedQuote = true;
+    _lastQuoteRequestAtMs = nowMs;
+    final symbol = _selectedSymbol;
+    try {
+      // paperQuote is a source-only BID/ASK GET; it neither places orders
+      // nor writes to the local trading journal.
+      await widget.controller.paperQuote(symbol);
+    } on MarketDataException {
+      // Keep the previous evidence/error state; never fabricate a price.
+    } catch (_) {
+      // Recheck on the next throttled interval after a transient failure.
+    } finally {
+      _pollingSelectedQuote = false;
+    }
+  }
+
+  /// cTrader BID Range must advance from authenticated ORDERED TICKS.
+  /// A current quote's BID/ASK price is not evidence of a completed Range
+  /// bar and cannot be spliced into historical Replay as a fabricated event.
+  /// Called at most once per 30-second chart timer; no overlapping polls.
+  Future<void> _refreshLiveRange() async {
+    if (!mounted || !widget.active || _pollingLiveRange ||
+        _loading || _olderLoading || _rangeAutoFilling ||
+        _replay || _replaySelectingStart ||
+        _mode != ChartMode.range || !_liveRequested ||
+        _selectedSymbol.source != TradeSource.ctrader ||
+        !widget.controller.ctraderConnected) return;
+
+    final account = widget.controller.accountId;
+    if (account == null) return;
+    final symbol = _selectedSymbol;
+    final previous = _rangeHistoryTicks;
+    final timeline = _rangeTimeline;
+    final point = _rangePointCache['$account:${symbol.code}'];
+    if (previous.isEmpty || timeline == null ||
+        point == null || !point.isFinite || point <= 0 ||
+        previous.length >= RangeBarTimeline.maxSourceTicks) return;
+    final size = _rangeTicks;
+    final distance = size * point;
+    if (!distance.isFinite || distance <= 0) return;
+    final fromMs = previous.last.timestamp;
+    final toMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    if (toMs <= fromMs) return;
+    if (toMs - fromMs > const Duration(days: 6).inMilliseconds) {
+      const message = 'تاريخ BID أقدم من ستة أيام. '
+          'أعد تحميل الشارت للحصول على فترة Range موثقة كاملة.';
+      if (_loadError != message && mounted) {
+        setState(() => _loadError = message);
+      }
+      return;
+    }
+    final revision = _loadRevision;
+    bool validSession() => mounted && widget.active &&
+        revision == _loadRevision &&
+        !_loading && !_olderLoading && !_rangeAutoFilling &&
+        !_replay && !_replaySelectingStart &&
+        _mode == ChartMode.range && _rangeTicks == size &&
+        widget.controller.accountId == account &&
+        _selectedSymbol.code == symbol.code &&
+        _selectedSymbol.source == symbol.source &&
+        // A live instrument-spec update can change the price-distance
+        // multiplier without changing symbol or history object identity.
+        // Discard the old asynchronous result instead of mixing Range sizes.
+        _rangePointCache['$account:${symbol.code}'] == point &&
+        identical(_rangeHistoryTicks, previous) &&
+        identical(_rangeTimeline, timeline);
+
+    _pollingLiveRange = true;
+    try {
+      final clock = _historyLoadProfiler.start();
+      // Report real broker wait separately from isolate verification and
+      // incremental Range generation, in Android Profile opt-in only.
+      final brokerClock = _historyLoadProfiler.start();
+      // Inclusive last-millisecond fetch. Every previously displayed event
+      // at that millisecond must be present as an exact ordered prefix.
+      final page = await widget.controller.rangeTicksBetween(
+          symbol, fromMs: fromMs, toMs: toMs);
+      if (!validSession()) return;
+      _historyLoadProfiler.finish(brokerClock,
+          phase: ChartLoadPhase.liveRangeBrokerFetch, mode: _mode.name,
+          displayedBars: timeline.bars.length, bidTicks: page.length);
+
+      final verifyClock = _historyLoadProfiler.start();
+      final suffix = await RangeLiveBidDelta.verifiedSuffixAsync(
+        previouslyVerified: previous,
+        brokerPage: page,
+        toMs: toMs,
+      );
+      if (!validSession()) return;
+      _historyLoadProfiler.finish(verifyClock,
+          phase: ChartLoadPhase.liveRangeVerify, mode: _mode.name,
+          displayedBars: timeline.bars.length, bidTicks: page.length);
+
+      if (suffix.isEmpty) {
+        // An authenticated poll with no new source events is still useful
+        // performance evidence: keep it OUT of actual append p95.
+        _historyLoadProfiler.finish(clock,
+            phase: ChartLoadPhase.liveRangeNoChange, mode: _mode.name,
+            displayedBars: timeline.bars.length, bidTicks: 0);
+        return;
+      }
+
+      final appendClock = _historyLoadProfiler.start();
+      final next = await RangeBarTimeline.appendVerifiedSuffixAsync(
+        currentTicks: previous,
+        currentTimeline: timeline,
+        verifiedSuffix: suffix,
+        priceDistance: distance,
+      );
+      if (!validSession()) return;
+      _historyLoadProfiler.finish(appendClock,
+          phase: ChartLoadPhase.liveRangeAppend, mode: _mode.name,
+          displayedBars: next.timeline.bars.length,
+          bidTicks: suffix.length);
+      // Whole successful live-update latency remains available separately.
+      _historyLoadProfiler.finish(clock,
+          phase: ChartLoadPhase.liveRangeUpdate, mode: _mode.name,
+          displayedBars: next.timeline.bars.length,
+          bidTicks: suffix.length);
+      final newlyClosed =
+          next.timeline.closedBarCount - timeline.closedBarCount;
+      setState(() {
+        if (newlyClosed > 0) {
+          _viewport = _viewport.afterAppending(newlyClosed);
+        }
+        // Publish BID ticks + OHLC + Replay event indices ATOMICALLY.
+        // Older candles keep exact ordinal IDs; no future tick is revealed
+        // in Replay because polling is disabled for that mode.
+        _rangeHistoryTicks = next.ticks;
+        _rangeTimeline = next.timeline;
+        _actualRange = next.timeline.bars;
+        _rangeBarEndTickIndices = next.timeline.endTickIndices;
+        _rangeBarTimestamps = next.timeline.endTimestamps;
+        if (_loadError?.startsWith('تعذر تحديث Range الحي:') == true) {
+          _loadError = null;
+        }
+      });
+    } on MarketDataException catch (error) {
+      if (validSession()) {
+        final message = 'تعذر تحديث Range الحي: ${error.message}';
+        if (_loadError != message) setState(() => _loadError = message);
+      }
+    } catch (_) {
+      if (validSession()) {
+        const message = 'تعذر تحديث Range الحي: تحقق من اتصال cTrader.';
+        if (_loadError != message) setState(() => _loadError = message);
+      }
+    } finally {
+      _pollingLiveRange = false;
+    }
+  }
+
+  void _refreshDisplayedQuote() {
+    final latest = widget.controller.recentQuoteFor(_selectedSymbol);
+    final previous = _lastObservedQuote;
+    if (!ChartFeedHealth.quoteChanged(previous, latest)) return;
+    _lastObservedQuote = latest;
+    if (!mounted || !widget.active || _replay) return;
+    // Verified BID/ASK movement normally requires a repaint only. Avoid
+    // rebuilding the chart controls, drawing tools and history on each tick.
+    _chartRepaint.value++;
+    if (_selectedSymbol.source == TradeSource.ctrader &&
+        _mode != ChartMode.range && _actualTimestamps.isNotEmpty &&
+        ChartFeedHealth.quoteHeaderEvidenceChanged(
+          previous: previous,
+          next: latest,
+          lastClosedOpenMs: _actualTimestamps.last,
+          timeframe: _timeframe,
+          nowMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+        )) {
+      // Update source minute and stale-candle warnings in the header.
+      setState(() {});
+    }
+  }
+
   void _onMarketUpdate() {
     final linked = widget.controller.ctraderConnected;
     final changedAccount = _accountBefore != widget.controller.accountId;
     if (_linkedBefore != linked || changedAccount) {
-      _momentum.stop();
+      _stopMomentum();
       _rangeBidCache.clear();
       _rangeBidCachedAt.clear();
       _rangePointCache.clear();
       _linkedBefore = linked;
       _accountBefore = widget.controller.accountId;
+      _lastQuoteRequestAtMs = 0;
       // Never carry another broker account's drawings into this account.
       _resetDrawingObjects();
-      if (linked && _selectedSymbol.source == TradeSource.ctrader) {
+      if (linked && widget.active &&
+          _selectedSymbol.source == TradeSource.ctrader) {
         _loadRealHistory();
+        unawaited(_refreshSelectedCTraderQuote());
       }
-      if (!linked && _selectedSymbol.source == TradeSource.ctrader) {
+      if ((!linked || !widget.active) &&
+          _selectedSymbol.source == TradeSource.ctrader) {
+        // The chart is retained in IndexedStack while hidden. An account
+        // change must invalidate old account candles and pending futures even
+        // if the new account remains connected. When the tab is reopened,
+        // didUpdateWidget() will fetch the new account's verified history.
         _loadRevision++;
         _recordTraining();
         _stopPlayback();
         _replay = false;
+        _replaySelectingStart = false;
+        _replayDraggingStart = false;
         _training.clear();
         _trainingEverTraded = false;
         _actualBars = [];
@@ -486,6 +903,7 @@ class _ChartScreenState extends State<ChartScreen>
         _actualTimestamps = [];
         _actualRange = [];
         _rangeHistoryTicks = [];
+        _rangeTimeline = null;
         _rangeBarEndTickIndices = [];
         _rangeBarTimestamps = [];
         _rangeOlderCursorMs = null;
@@ -498,17 +916,27 @@ class _ChartScreenState extends State<ChartScreen>
         if (mounted) setState(() {});
       }
     }
+    // MarketController can publish a new BID/ASK while the broker link and
+    // selected account stay unchanged. Redraw verified price labels then.
+    _refreshDisplayedQuote();
   }
 
   Future<void> _loadRealHistory() async {
     if (_replay) _recordTraining();
-    _momentum.stop();
+    _stopMomentum();
     final revision = ++_loadRevision;
     if (!mounted) return;
     final sourceSymbol = _selectedSymbol;
     final sourceTimeframe = _timeframe;
     final sourceAccount = sourceSymbol.source == TradeSource.ctrader
         ? widget.controller.accountId : null;
+    if (sourceSymbol.source == TradeSource.ctrader &&
+        _mode != ChartMode.range) {
+      // A failed *initial* fetch will be retried after two minutes, not on
+      // every 30-second timer or every chart rebuild.
+      _lastEmptyHistoryAttemptMs =
+          DateTime.now().toUtc().millisecondsSinceEpoch;
+    }
     setState(() {
       _stopPlayback();
       if (_replay) {
@@ -518,6 +946,8 @@ class _ChartScreenState extends State<ChartScreen>
         _rectangles..clear()..addAll(_analysisRectangles);
       }
       _replay = false;
+      _replaySelectingStart = false;
+      _replayDraggingStart = false;
       _training.clear();
       _trainingEverTraded = false;
       _loading = true;
@@ -533,6 +963,7 @@ class _ChartScreenState extends State<ChartScreen>
       _actualTimestamps = [];
       _actualRange = [];
       _rangeHistoryTicks = [];
+      _rangeTimeline = null;
       _rangeBarEndTickIndices = [];
       _rangeBarTimestamps = [];
       _rangeOlderCursorMs = null;
@@ -566,11 +997,19 @@ class _ChartScreenState extends State<ChartScreen>
           _rangePointCache[cacheKey] = point;
         }
         final windowEnd = DateTime.now().toUtc().millisecondsSinceEpoch;
+        final pendingArchivePages = <int>{};
+        bool isCurrentRange() => mounted && revision == _loadRevision &&
+            widget.controller.accountId == account &&
+            _selectedSymbol.code == symbol.code &&
+            _selectedSymbol.source == symbol.source &&
+            _mode == ChartMode.range;
+        final rangeLoadClock = _historyLoadProfiler.start();
         final snapshot = await RangeStartupLoader.load(
           endMs: windowEnd,
+          isCurrent: isCurrentRange,
           priceDistance: _rangeTicks * point,
           getTicks: (fromMs, toMs) async {
-            if (revision != _loadRevision || !mounted) {
+            if (!isCurrentRange()) {
               throw const MarketDataException('تغير الشارت أثناء تحميل تيكات المدى.');
             }
             List<MarketTick>? verified;
@@ -583,19 +1022,24 @@ class _ChartScreenState extends State<ChartScreen>
             if (verified != null) return verified;
             final fetched = await widget.controller.rangeTicksBetween(
               symbol, fromMs: fromMs, toMs: toMs);
-            if (revision != _loadRevision || !mounted) {
+            if (!isCurrentRange()) {
               throw const MarketDataException('تغير الحساب أثناء تحميل المدى.');
             }
-            // Every page is certified by the broker before recording its
-            // exact time coverage. Short windows must never claim six days.
-            unawaited(RangeTickStore.archiveVerifiedWindow(
-              account, symbol.code, fetched,
-              fromMs: fromMs, toMs: toMs,
-            ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+            // The loader must validate this exact inclusive window
+            // (including empty broker responses) before persistence.
+            pendingArchivePages.add(fromMs);
             return fetched;
           },
+          onVerifiedPage: (fromMs, toMs, page) {
+            if (!isCurrentRange() ||
+                !pendingArchivePages.remove(fromMs)) return;
+            unawaited(RangeTickStore.archiveVerifiedWindow(
+              account, symbol.code, page,
+              fromMs: fromMs, toMs: toMs,
+            ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+          },
           onSnapshot: (page) async {
-            if (revision != _loadRevision || !mounted) return;
+            if (!isCurrentRange()) return;
             // Display authentic BID Range bars as soon as a short interval
             // completes. Continue widening history only if too few bars
             // formed to make the chart useful.
@@ -603,6 +1047,7 @@ class _ChartScreenState extends State<ChartScreen>
               _rangeHistoryTicks = page.ticks;
               _rangeOlderCursorMs = page.fromMs - 1;
               _actualRange = page.timeline.bars;
+              _rangeTimeline = page.timeline;
               _rangeBarEndTickIndices = page.timeline.endTickIndices;
               _rangeBarTimestamps = page.timeline.endTimestamps;
             });
@@ -614,14 +1059,26 @@ class _ChartScreenState extends State<ChartScreen>
               'لم تصل تيكات BID موثقة من cTrader خلال آخر 6 أيام. '
               'تحقق من اتصال الحساب وتوفر تاريخ التيكات لدى الوسيط.');
         }
+        _historyLoadProfiler.finish(rangeLoadClock,
+          phase: ChartLoadPhase.rangeStartup, mode: _mode.name,
+          displayedBars: snapshot.timeline.bars.length,
+          bidTicks: snapshot.ticks.length);
       } else {
         // Render verified, account-scoped history immediately on a return to
         // this symbol. A recently synchronized cache needs no new OHLC call.
         List<MarketBar> cached = const [];
         var fresh = false;
         try {
+          final cacheClock = _historyLoadProfiler.start();
+          // Restore a bounded verified source page immediately, not a 200k
+          // chart archive on every tab opening. Older source bars remain
+          // available from SQLite when the user pans into history.
           cached = await MarketCandleStore.read(
-              sourceSymbol, sourceTimeframe, sourceAccount);
+              sourceSymbol, sourceTimeframe, sourceAccount,
+              limit: MarketCandleStore.initialChartPageSize);
+          _historyLoadProfiler.finish(cacheClock,
+              phase: ChartLoadPhase.initialCacheRead, mode: _mode.name,
+              displayedBars: cached.length, bidTicks: 0);
           fresh = cached.isNotEmpty && await MarketCandleStore.isFresh(
               sourceSymbol, sourceTimeframe, sourceAccount);
         } catch (_) {
@@ -630,81 +1087,222 @@ class _ChartScreenState extends State<ChartScreen>
         }
         if (revision != _loadRevision || !mounted) return;
         if (cached.isNotEmpty) {
+          // The source cache has already been SHA/SQLite validated by its
+          // reader. A large mapped candle/timestamp snapshot is built on an
+          // isolate, never synchronously in the chart's gesture event loop.
+          final snapshotClock = _historyLoadProfiler.start();
+          final cachedSnapshot =
+              await VerifiedMarketHistorySnapshot.fromVerifiedAsync(cached);
+          _historyLoadProfiler.finish(snapshotClock,
+              phase: ChartLoadPhase.initialCacheSnapshot, mode: _mode.name,
+              displayedBars: cachedSnapshot.bars.length, bidTicks: 0);
+          if (revision != _loadRevision || !mounted ||
+              _selectedSymbol.code != sourceSymbol.code ||
+              _timeframe != sourceTimeframe ||
+              (sourceSymbol.source == TradeSource.ctrader &&
+                  widget.controller.accountId != sourceAccount)) return;
           setState(() {
-            _actualBars = cached;
-            _actualCandles = cached.map((bar) => bar.candle).toList(growable: false);
-            _actualTimestamps = cached.map((bar) => bar.timestamp).toList(growable: false);
-            _olderCursorMs = cached.first.timestamp;
+            _actualBars = cachedSnapshot.bars;
+            _actualCandles = cachedSnapshot.candles;
+            _actualTimestamps = cachedSnapshot.timestamps;
+            _olderCursorMs = cachedSnapshot.bars.first.timestamp;
           });
         }
         if (fresh) return;
+        final brokerClock = _historyLoadProfiler.start();
         final bars = await widget.controller.history(sourceSymbol, sourceTimeframe);
+        _historyLoadProfiler.finish(brokerClock,
+            phase: ChartLoadPhase.initialBrokerFetch, mode: _mode.name,
+            displayedBars: bars.length, bidTicks: 0);
         if (revision != _loadRevision || !mounted) return;
-        // MarketApi already validated strictly ascending broker timestamps
-        // and OHLC. Do not sort or deduplicate again in the UI: doing so
-        // would conceal a source/protocol defect behind plausible candles.
-        final merged = MarketCandleStore.mergeVerified(cached, bars);
-        _actualBars = merged;
-        _actualCandles = merged.map((bar) => bar.candle).toList(growable: false);
-        _actualTimestamps =
-            merged.map((bar) => bar.timestamp).toList(growable: false);
-        if (merged.isNotEmpty) _olderCursorMs = merged.first.timestamp;
+        // Preserve the verified conflict-detecting merge, but move its
+        // large source/axis allocations off the UI isolate. Small pages
+        // remain synchronous to avoid unnecessary isolate setup overhead.
+        final mergeClock = _historyLoadProfiler.start();
+        final mergedSnapshot =
+            await VerifiedMarketHistorySnapshot.mergeVerifiedAsync(
+              cached: cached, fetched: bars);
+        _historyLoadProfiler.finish(mergeClock,
+            phase: ChartLoadPhase.initialBrokerMerge, mode: _mode.name,
+            displayedBars: mergedSnapshot.bars.length, bidTicks: 0);
+        if (revision != _loadRevision || !mounted ||
+            _selectedSymbol.code != sourceSymbol.code ||
+            _timeframe != sourceTimeframe ||
+            (sourceSymbol.source == TradeSource.ctrader &&
+                widget.controller.accountId != sourceAccount)) return;
+        _actualBars = mergedSnapshot.bars;
+        _actualCandles = mergedSnapshot.candles;
+        _actualTimestamps = mergedSnapshot.timestamps;
+        if (mergedSnapshot.bars.isNotEmpty) {
+          _olderCursorMs = mergedSnapshot.bars.first.timestamp;
+        }
         if (bars.isNotEmpty) {
           unawaited(MarketCandleStore.archive(sourceSymbol, sourceTimeframe,
               sourceAccount, bars, markFresh: true).catchError((Object _) {}));
         }
       }
       if (revision == _loadRevision && _totalBars == 0) {
-        _loadError = _mode == ChartMode.range && _actualRange.isNotEmpty
-            ? 'وصلت تيكات BID الحقيقية، لكن شمعة المدى الأخيرة ما زالت قيد التكوّن. اختر مدى أصغر أو حمّل تاريخًا أقدم.'
-            : 'لم يُرجع المصدر شموعًا مكتملة لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
+        // A forming Range bar with genuine BID ticks is not a terminal
+        // failure: older real ticks may close additional bars. Let the
+        // bounded background backfill search verified earlier intervals.
+        if (_mode != ChartMode.range || _rangeHistoryTicks.isEmpty) {
+          _loadError =
+              'لم يُرجع المصدر شموعًا مكتملة لهذه الفترة. جرّب تحديث البيانات أو اختيار إطار آخر.';
+        }
       }
     } on MarketDataException catch (e) {
       if (revision == _loadRevision) _loadError = e.message;
     } catch (_) {
       if (revision == _loadRevision) _loadError = 'تعذر تحميل بيانات السوق. أعد المحاولة.';
     } finally {
-      if (revision == _loadRevision && mounted) setState(() => _loading = false);
+      if (revision == _loadRevision && mounted) {
+        setState(() => _loading = false);
+        // First authentic ticks appear without waiting for deep history.
+        // Then fill the screen progressively instead of freezing after 12
+        // closed Range bars. This never changes prices or tick timestamps.
+        if (_mode == ChartMode.range && _rangeHistoryTicks.isNotEmpty &&
+            widget.active && !_replay && !_replaySelectingStart) {
+          unawaited(_autoFillRangeHistory(revision));
+        }
+      }
+    }
+  }
+
+  /// Recover a first-load cTrader OHLC failure WITHOUT clearing drawings,
+  /// Replay history, user panning/zoom, or replacing bars with fabricated
+  /// prices. Successful results are the same source-validated MarketBars used
+  /// by the original history request. Range BID ticks use a separate path.
+  Future<void> _retryEmptyCTraderHistory() async {
+    if (!mounted || !widget.active || !_liveRequested ||
+        _selectedSymbol.source != TradeSource.ctrader ||
+        _mode == ChartMode.range || _replay || _loading ||
+        _olderLoading || _refreshingClosedCandles ||
+        _retryingEmptyHistory || _actualBars.isNotEmpty ||
+        widget.controller.accountId == null) {
+      return;
+    }
+    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    if (!ChartFeedHealth.shouldRetryEmptyHistory(
+      nowMs: nowMs, lastAttemptMs: _lastEmptyHistoryAttemptMs,
+    )) {
+      return;
+    }
+
+    final revision = _loadRevision;
+    final symbol = _selectedSymbol;
+    final frame = _timeframe;
+    final account = widget.controller.accountId;
+    _retryingEmptyHistory = true;
+    _lastEmptyHistoryAttemptMs = nowMs;
+    try {
+      final bars = await widget.controller.history(symbol, frame);
+      if (!mounted || !widget.active || revision != _loadRevision ||
+          _replay || _mode == ChartMode.range ||
+          _selectedSymbol.code != symbol.code ||
+          _timeframe != frame ||
+          widget.controller.accountId != account ||
+          _actualBars.isNotEmpty) {
+        return;
+      }
+      if (bars.isEmpty) {
+        // A valid empty broker response does not justify a fabricated bar.
+        return;
+      }
+      // The provider already validated order, OHLC and closed-bar boundaries.
+      // Never sort or reconstruct the original broker data on this path.
+      setState(() {
+        _actualBars = bars;
+        _actualCandles = bars.map((bar) => bar.candle).toList(growable: false);
+        _actualTimestamps =
+            bars.map((bar) => bar.timestamp).toList(growable: false);
+        _olderCursorMs = bars.first.timestamp;
+        _loadError = null;
+      });
+      unawaited(MarketCandleStore.archive(symbol, frame, account, bars,
+          markFresh: true).catchError((Object _) {}));
+    } on MarketDataException {
+      // Retain the current error display. The next attempt is throttled.
+    } catch (_) {
+      // A transient provider/storage failure is not market evidence.
+    } finally {
+      _retryingEmptyHistory = false;
     }
   }
 
   Future<void> _refreshClosedCTraderCandles() async {
-    if (!mounted || _refreshingClosedCandles || _loading || _olderLoading ||
+    if (!mounted || !widget.active || _refreshingClosedCandles ||
+        _loading || _olderLoading ||
         _replay || _draggingLine || _draggingPattern ||
-        !_liveRequested || _loadError != null ||
+        !_liveRequested ||
         _selectedSymbol.source != TradeSource.ctrader ||
         _mode == ChartMode.range || _actualBars.isEmpty) return;
     final revision = _loadRevision;
     final symbol = _selectedSymbol;
     final timeframe = _timeframe;
+    final account = widget.controller.accountId;
     final lastTimestamp = _actualBars.last.timestamp;
     _refreshingClosedCandles = true;
     try {
+      final fetchClock = _historyLoadProfiler.start();
       final recent = await widget.controller.closedCandlesSince(
           symbol, timeframe, lastTimestamp);
+      _historyLoadProfiler.finish(fetchClock,
+          phase: ChartLoadPhase.closedCandleFetch, mode: _mode.name,
+          displayedBars: recent.length, bidTicks: 0);
       if (!mounted || revision != _loadRevision || _replay ||
-          _selectedSymbol.code != symbol.code || _timeframe != timeframe) {
+          _selectedSymbol.code != symbol.code || _timeframe != timeframe ||
+          widget.controller.accountId != account ||
+          _mode == ChartMode.range) {
         return;
       }
-      final combined = CTraderCandleStitcher.append(_actualBars, recent);
-      final appended = combined.length - _actualBars.length;
-      if (appended == 0) {
-        // Update the freshness label even when the broker has no new candle.
-        setState(() {});
+      final previousBars = _actualBars;
+      // The cTrader stitcher's exact overlap validation, 200k-bar memory cap
+      // and OHLC conflict policy stay in force, but for large archives run
+      // away from the chart's Android gesture/paint isolate.
+      final closedMergeClock = _historyLoadProfiler.start();
+      final refresh = await VerifiedClosedCandleRefresh.appendVerifiedAsync(
+        existing: previousBars, recent: recent);
+      _historyLoadProfiler.finish(closedMergeClock,
+          phase: ChartLoadPhase.closedCandleMerge, mode: _mode.name,
+          displayedBars: previousBars.length + refresh.appended,
+          bidTicks: 0);
+      if (!mounted || revision != _loadRevision || _replay ||
+          _selectedSymbol.code != symbol.code || _timeframe != timeframe ||
+          widget.controller.accountId != account ||
+          _mode == ChartMode.range ||
+          !identical(_actualBars, previousBars)) {
         return;
       }
+      if (refresh.appended == 0) {
+        // Overlap-only cTrader responses do not allocate or publish a new
+        // 100k+ chart snapshot and must not advance the Replay cursor.
+        // If no error is displayed, do not rebuild the toolbar or chart
+        // just because an unchanged broker-close poll finished.
+        if (_loadError != null) {
+          setState(() => _loadError = null);
+        }
+        return;
+      }
+      final snapshot = refresh.snapshot!;
       setState(() {
-        _actualBars = combined;
-        _actualCandles =
-            combined.map((bar) => bar.candle).toList(growable: false);
-        _actualTimestamps =
-            combined.map((bar) => bar.timestamp).toList(growable: false);
-        // Keep the visible candle anchored during historical inspection or
-        // deliberate right-side whitespace; follow new bars at the live edge.
-        _viewport = _viewport.afterAppending(appended);
+        _loadError = null;
+        // The cTrader stitcher has already verified an append-only broker
+        // response. Extend a prepared HA view causally from its last bar,
+        // instead of recalculating the full archive while drawing.
+        _heikinCache.adoptVerifiedAppend(
+          previousSource: _actualCandles,
+          nextSource: snapshot.candles,
+          appended: refresh.appended,
+        );
+        _actualBars = snapshot.bars;
+        _actualCandles = snapshot.candles;
+        _actualTimestamps = snapshot.timestamps;
+        // Keep historical pan/whitespace anchored as each real closed
+        // candle arrives; do not jump back to the latest bar.
+        _viewport = _viewport.afterAppending(refresh.appended);
       });
       unawaited(MarketCandleStore.archive(symbol, timeframe,
-          widget.controller.accountId, recent, markFresh: true)
+          account, recent, markFresh: true)
           .catchError((Object _) {}));
     } on MarketDataException catch (error) {
       if (mounted && revision == _loadRevision) {
@@ -720,6 +1318,54 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  void _profileTouchGesture(ChartFrameInteraction interaction,
+      List<TradeCandle> displayedCandles) {
+    // These are safe workload COUNTS, not source quotes, order history,
+    // broker names or account identifiers. Disabled in normal releases.
+    _frameProfiler.beginInteraction(
+      interaction: interaction,
+      chartMode: _mode.name,
+      replay: _replay || _replaySelectingStart,
+      displayedCandles: displayedCandles.length,
+      rangeBidTicks: _mode == ChartMode.range
+          ? _rangeHistoryTicks.length : 0,
+    );
+  }
+
+  Future<void> _autoFillRangeHistory(int revision) async {
+    if (!mounted || revision != _loadRevision ||
+        !_rangeAutoFillRevisionGate.start(revision)) return;
+    try {
+      final chartWidth = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
+      final target = RangeHistoryFillPolicy.targetClosedBars(
+        plotWidth: chartWidth,
+        candleWidth: _viewport.barWidth,
+      );
+      for (var page = 0;
+          RangeHistoryFillPolicy.shouldContinue(
+            completedPages: page,
+            closedBars: math.max(0, _actualRange.length - 1),
+            targetBars: target,
+            loadedTicks: _rangeHistoryTicks.length,
+            authenticatedSource: _rangeSourceSupported && _liveRequested,
+            chartActive: mounted && widget.active && revision == _loadRevision,
+            historicalReplay: _replay || _replaySelectingStart,
+            loading: _olderLoading || _loading,
+            historyExhausted: _historyExhausted,
+            sourceError: _olderLoadError != null || _loadError != null,
+          ); page++) {
+        final cursorBefore = _rangeOlderCursorMs;
+        await _loadOlderRangeHistory();
+        if (!mounted || revision != _loadRevision ||
+            cursorBefore == _rangeOlderCursorMs) break;
+      }
+    } finally {
+      // Never clear the newer chart's active load after a stale request
+      // from a prior symbol finishes.
+      _rangeAutoFillRevisionGate.finish(revision);
+    }
+  }
+
   Future<void> _loadOlderRangeHistory() async {
     if (_replay && _training.trades.isNotEmpty) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -728,7 +1374,8 @@ class _ChartScreenState extends State<ChartScreen>
     }
     if (_olderLoading || _loading || _historyExhausted ||
         !_liveRequested || _mode != ChartMode.range ||
-        _rangeHistoryTicks.isEmpty ||
+        (_rangeHistoryTicks.isEmpty ||
+            _rangeHistoryTicks.length >= RangeOlderPage.maxLoadedTicks) ||
         widget.controller.accountId == null) return;
     final revision = _loadRevision;
     final account = widget.controller.accountId!;
@@ -739,64 +1386,87 @@ class _ChartScreenState extends State<ChartScreen>
       _olderLoadError = null;
     });
     try {
-      // Reuse independently verified local windows when available.
-      // Older pages must cover exactly twelve hours, including every BID
-      // event at an interval boundary; no inferred continuity is allowed.
-      final endMs = _rangeOlderCursorMs ?? earliest - 1;
-      if (endMs < RangeOlderPage.lookback.inMilliseconds) {
-        _historyExhausted = true;
-        return;
-      }
-      final fromMs = RangeOlderPage.bounds(endMs).fromMs;
-      if (fromMs < 0) {
-        _historyExhausted = true;
-        return;
-      }
-      List<MarketTick>? older;
-      try {
-        older = await RangeTickStore.readCoveredInterval(
-          account, symbol.code, fromMs: fromMs, toMs: endMs);
-      } catch (_) {
-        // A damaged local cache can be recovered from cTrader.
-        older = null;
-      }
-      if (!mounted || revision != _loadRevision) return;
-      if (older == null) {
-        // IMPORTANT: rangeTicks() fetches SIX days; its result cannot be
-        // archived as a twelve-hour interval. Request only the exact
-        // uncovered inclusive page through the verified cTrader API.
-        older = await widget.controller.rangeTicksBetween(
-          symbol, fromMs: fromMs, toMs: endMs,
-        );
-        if (!mounted || revision != _loadRevision) return;
-        RangeOlderPage.verify(
-          page: older, fromMs: fromMs, toMs: endMs,
-          alreadyLoaded: _rangeHistoryTicks.length,
-        );
-        // Persist only this complete, broker-verified interval (even if
-        // quiet); never mark six-day coverage from a shorter response.
-        unawaited(RangeTickStore.archiveVerifiedWindow(
-          account, symbol.code, older, fromMs: fromMs, toMs: endMs,
-        ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-      } else {
-        RangeOlderPage.verify(
-          page: older, fromMs: fromMs, toMs: endMs,
-          alreadyLoaded: _rangeHistoryTicks.length,
-        );
-      }
-      // The cursor is exclusive, even when several ticks share a ms.
-      if (older.any((tick) => tick.timestamp >= earliest)) {
+      // Edge/manual browsing searches up to six successive authenticated
+      // twelve-hour BID windows when the market was closed. Automatic
+      // background fill still checks one per attempt to honor its 24-page
+      // network-work budget. Neither path synthesizes a candle.
+      final cursorMs = _rangeOlderCursorMs ?? earliest - 1;
+      final previouslyLoaded = _rangeHistoryTicks.length;
+      bool isCurrent() => mounted && revision == _loadRevision &&
+          widget.controller.accountId == account &&
+          _selectedSymbol.code == symbol.code &&
+          _mode == ChartMode.range;
+      // An unarchived provider page is registered only for this exact
+      // inclusive window. The scanner's off-isolate verification must
+      // succeed before *any* broker response (including a quiet one) may
+      // become a trusted local coverage manifest.
+      final pendingArchivePages = <int>{};
+      final scanClock = _historyLoadProfiler.start();
+      final scanned = await RangeOlderPageScanner.scan(
+        cursorMs: cursorMs,
+        alreadyLoaded: previouslyLoaded,
+        maxPages: _rangeAutoFilling
+            ? 1 : RangeOlderPageScanner.maxQuietWindowsPerAttempt,
+        isCurrent: isCurrent,
+        fetchVerified: (fromMs, toMs) async {
+          List<MarketTick>? cached;
+          try {
+            cached = await RangeTickStore.readCoveredInterval(
+              account, symbol.code, fromMs: fromMs, toMs: toMs,
+            );
+          } catch (_) {
+            // A damaged cache is not evidence of broker coverage.
+            cached = null;
+          }
+          if (!isCurrent()) return const <MarketTick>[];
+          if (cached != null) return cached;
+          // rangeTicks() fetches six days and cannot prove this short
+          // interval. Request only the exact missing inclusive BID page.
+          final fetched = await widget.controller.rangeTicksBetween(
+            symbol, fromMs: fromMs, toMs: toMs,
+          );
+          if (!isCurrent()) return const <MarketTick>[];
+          pendingArchivePages.add(fromMs);
+          return fetched;
+        },
+        onVerifiedPage: (fromMs, toMs, page) {
+          if (!isCurrent() || !pendingArchivePages.remove(fromMs)) return;
+          // Store only a COMPLETE window confirmed by the scanner, not
+          // unverified source ticks from an in-flight broker response.
+          unawaited(RangeTickStore.archiveVerifiedWindow(
+            account, symbol.code, page, fromMs: fromMs, toMs: toMs,
+          ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+        },
+      );
+      if (scanned == null || !isCurrent()) return;
+      _historyLoadProfiler.finish(scanClock,
+          phase: ChartLoadPhase.olderRangeScan, mode: _mode.name,
+          displayedBars: _actualRange.length, bidTicks: scanned.ticks.length);
+      final older = scanned.ticks;
+      // The scanner verified the entire original BID page (including
+      // same-ms ordering) off the UI isolate. Its last source timestamp
+      // alone proves the whole sorted page precedes the display boundary:
+      // don't scan all 120k+ authenticated ticks on the touch isolate.
+      if (RangeOlderPage.overlapsLoadedHistory(
+        sortedVerifiedOlder: older,
+        earliestLoadedMs: earliest,
+      )) {
         throw const MarketDataException(
           'تيكات الصفحة الأقدم تتداخل مع حد الشارت؛ تم إيقاف الدمج.');
       }
       if (older.isEmpty) {
-        _rangeOlderCursorMs = fromMs - 1;
-        _olderLoadError =
-            'لا توجد تيكات BID في آخر 12 ساعة من الفترة الأقدم. اضغط «أقدم» لمتابعة البحث.';
+        // Every skipped window was provider-verified empty. Preserve its
+        // exact cursor so the next request never overlaps or skips time.
+        _rangeOlderCursorMs = scanned.nextCursorMs;
+        if (scanned.nextCursorMs < RangeOlderPage.lookback.inMilliseconds) {
+          _historyExhausted = true;
+        }
         return;
       }
       final prefix = older;
-      final combined = [...prefix, ..._rangeHistoryTicks];
+      // Capture the previous verified source list before the async worker:
+      // canceled/superseded requests must never splice newer account data.
+      final previousTicks = _rangeHistoryTicks;
       final point = _rangePointCache['$account:${symbol.code}'];
       if (point == null || !point.isFinite || point <= 0) {
         throw StateError('Missing verified symbol point size');
@@ -809,8 +1479,53 @@ class _ChartScreenState extends State<ChartScreen>
               _visibleThrough <= _rangeBarEndTickIndices.length
           ? _rangeBarEndTickIndices[_visibleThrough - 1]
           : null;
-      final timeline = await RangeBarTimeline.buildAsync(combined, _rangeTicks * point);
+      // Large history prepends and their full Range rebuild share one
+      // background worker, instead of first copying up to 1m BID events
+      // synchronously on the gesture/UI isolate.
+      final rebuildClock = _historyLoadProfiler.start();
+      final rebuilt = await RangeBarTimeline.prependAndBuildAsync(
+        olderTicks: prefix,
+        currentTicks: previousTicks,
+        priceDistance: _rangeTicks * point,
+      );
       if (!mounted || revision != _loadRevision) return;
+      _historyLoadProfiler.finish(rebuildClock,
+          phase: ChartLoadPhase.olderRangeRebuild, mode: _mode.name,
+          displayedBars: rebuilt.timeline.bars.length,
+          bidTicks: rebuilt.ticks.length);
+      final combined = rebuilt.ticks;
+      final timeline = rebuilt.timeline;
+      // The start selection is not yet a playback cutoff, but it still owns
+      // one VERIFIED BID event. Prepending older ticks may shift every Range
+      // bar; never leave the cursor attached to a stale bar index.
+      final remappedStart = _replaySelectingStart
+          ? timeline.rebaseReplayStart(
+              oldEndTickIndices: _rangeBarEndTickIndices,
+              oldSelectedIndex: _replayCandidateIndex,
+              prependedTicks: prefix.length,
+            )
+          : null;
+      if (_replaySelectingStart && remappedStart == null) {
+        _olderLoadError =
+            'أحدث التاريخ الأقدم بداية جديدة لشموع المدى، ولا توجد '
+            'شمعة مغلقة عند تيك البداية المختار. أعد تحديد العمود '
+            'قبل متابعة Replay، ولم نعرض بيانات مستقبلية.';
+        return; // Retain the original source and original cursor.
+      }
+      // In an ACTIVE Range Replay, the saved initial candle and the current
+      // cutoff must both rebase by their original BID events. Rebasing only
+      // the current cutoff made Reset jump to an unrelated historical bar.
+      final remappedInitial = _replay
+          ? timeline.rebaseReplayStart(
+              oldEndTickIndices: _rangeBarEndTickIndices,
+              oldSelectedIndex: _replayInitialCount - 1,
+              prependedTicks: prefix.length)
+          : null;
+      if (_replay && remappedInitial == null) {
+        _olderLoadError = 'تعذر تثبيت شمعة بداية Replay الأصلية بعد '
+            'إعادة بناء شموع Range؛ لن نغيّر موضع التدريب.';
+        return;
+      }
       // Range bars are not time candles: after prepending BID events, a bar's
       // index can move non-uniformly. Rebase each drawing endpoint to its
       // original market event while keeping its real price unchanged.
@@ -885,7 +1600,8 @@ class _ChartScreenState extends State<ChartScreen>
           ? null
           : timeline.visibleClosedBarsThroughTick(
               prefix.length + replayCutoffTick);
-      if (_replay && (safeReplayBars == null || safeReplayBars == 0)) {
+      if (_replay && (safeReplayBars == null || safeReplayBars == 0 ||
+          remappedInitial == null || remappedInitial + 1 > safeReplayBars)) {
         _olderLoadError =
             'يغيّر التاريخ الأقدم بداية شموع المدى قبل موضع Replay؛ '
             'لن نعرض شمعة تحتاج تيكات مستقبلية. أوقف Replay لتحميلها.';
@@ -905,10 +1621,14 @@ class _ChartScreenState extends State<ChartScreen>
           );
         }
         _rangeHistoryTicks = combined;
-        _rangeOlderCursorMs = fromMs - 1;
+        _rangeOlderCursorMs = scanned.nextCursorMs;
         _actualRange = timeline.bars;
+        _rangeTimeline = timeline;
         _rangeBarEndTickIndices = timeline.endTickIndices;
         _rangeBarTimestamps = timeline.endTimestamps;
+        if (_replaySelectingStart && remappedStart != null) {
+          _replayCandidateIndex = remappedStart;
+        }
         _patterns..clear()..addAll(rebasedPatterns);
         _analysisPatterns = rebasedAnalysis;
         _shortPositions..clear()..addAll(rebasedShorts);
@@ -939,6 +1659,8 @@ class _ChartScreenState extends State<ChartScreen>
           // A non-null, closed-bar cutoff was already checked above.
           _training.moveTo(timeline.bars, safeReplayBars!);
           _visibleThrough = safeReplayBars;
+          // Rewind continues to target the same verified BID event.
+          _replayInitialCount = remappedInitial! + 1;
         }
       });
     } on MarketDataException catch (error) {
@@ -969,32 +1691,120 @@ class _ChartScreenState extends State<ChartScreen>
         if (mounted) setState(() => _historyExhausted = true);
         return;
       }
-      // The cursor is exclusive; never re-request the same broker minute.
-      final before = DateTime.fromMillisecondsSinceEpoch(
-          cursor - 1, isUtc: true);
-      final older = await widget.controller.history(
-          _selectedSymbol, _timeframe, before: before);
-      if (revision != _loadRevision || !mounted) return;
-      final earliest = _actualBars.first.timestamp;
-      // Providers can return pages out of order or with duplicate timestamps.
-      // Normalize before prepending so chart indices and Replay stay stable.
-      final byTimestamp = <int, MarketBar>{};
-      for (final bar in older) {
-        if (bar.timestamp < earliest) byTimestamp[bar.timestamp] = bar;
+      // Preserve the exclusive cursor on every broker request. A closed
+      // session can span multiple empty windows, especially M1 weekends.
+      // Search a bounded number of real cTrader windows automatically,
+      // without synthesizing or repeating any source candle.
+      final symbol = _selectedSymbol;
+      final timeframe = _timeframe;
+      final sourceAccount = widget.controller.accountId;
+      // A 200k on-screen limit is not the end of broker history; do
+      // not spend a network request when no additional bars fit in RAM.
+      final capacity =
+          MarketCandleStore.olderPageCapacity(_actualBars.length);
+      if (capacity == 0) {
+        throw const MarketDataException(
+            'وصل الشارت إلى حد 200 ألف شمعة في الذاكرة. '
+            'أعد فتحه بنافذة أحدث لعرض فترة أخرى.');
       }
-      final unique = byTimestamp.values.toList()
-        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      List<MarketBar> localPage = const <MarketBar>[];
+      try {
+        final olderCacheClock = _historyLoadProfiler.start();
+        localPage = await MarketCandleStore.readOlder(
+          symbol, timeframe,
+          symbol.source == TradeSource.ctrader ? sourceAccount : null,
+          beforeMs: cursor, limit: capacity,
+        );
+        // SQLite may contain two disconnected verified history islands.
+        // Only a tightly attached tail can be shown before its missing
+        // seam is checked against the original cTrader/Binance provider.
+        // This is conservative for weekends, broker holidays and months:
+        // never assume missing cached candles did not exist.
+        localPage = MarketCandleStore.contiguousOlderPage(
+          source: localPage, beforeMs: cursor, timeframe: timeframe);
+        _historyLoadProfiler.finish(olderCacheClock,
+            phase: ChartLoadPhase.olderCacheRead, mode: _mode.name,
+            displayedBars: localPage.length, bidTicks: 0);
+      } catch (_) {
+        // A broken cache is not a market feed: authenticate via the
+        // original broker fetch below instead of displaying bad rows.
+      }
+      if (!mounted || revision != _loadRevision ||
+          widget.controller.accountId != sourceAccount ||
+          _selectedSymbol.code != symbol.code ||
+          _timeframe != timeframe || _mode == ChartMode.range) return;
+
+      final List<MarketBar> older;
+      var quietCursor = cursor;
+      if (localPage.isNotEmpty) {
+        // SQL only returns account-scoped, strictly older verified bars.
+        // The existing prepend path handles Replay and drawing anchors.
+        older = localPage;
+      } else if (symbol.source == TradeSource.ctrader) {
+        final olderBrokerClock = _historyLoadProfiler.start();
+        final page = await CTraderOlderCandlePager.load(
+          cursorMs: cursor,
+          lookback: MarketApi.ctraderCandleLookback(timeframe),
+          fetch: (before) => widget.controller.history(
+              symbol, timeframe, before: before),
+          isCurrent: () => mounted && revision == _loadRevision &&
+              widget.controller.accountId == sourceAccount &&
+              _selectedSymbol.code == symbol.code &&
+              _timeframe == timeframe,
+        );
+        if (page == null) return;
+        older = page.bars;
+        quietCursor = page.nextCursorMs;
+        _historyLoadProfiler.finish(olderBrokerClock,
+            phase: ChartLoadPhase.olderBrokerFetch, mode: _mode.name,
+            displayedBars: older.length, bidTicks: 0);
+      } else {
+        final before = DateTime.fromMillisecondsSinceEpoch(
+            cursor - 1, isUtc: true);
+        final olderBrokerClock = _historyLoadProfiler.start();
+        older = await widget.controller.history(
+            symbol, timeframe, before: before);
+        _historyLoadProfiler.finish(olderBrokerClock,
+            phase: ChartLoadPhase.olderBrokerFetch, mode: _mode.name,
+            displayedBars: older.length, bidTicks: 0);
+      }
+      if (revision != _loadRevision || !mounted ||
+          _selectedSymbol.code != symbol.code || _timeframe != timeframe ||
+          widget.controller.accountId != sourceAccount ||
+          _mode == ChartMode.range) return;
+      // Keep the exact source snapshot used for this page. A large
+      // prepend/axis rebuild is done on a worker isolate so 100k+ locally
+      // verified candles do not pause the Android gesture/UI isolate.
+      final previousBars = _actualBars;
+      final prependClock = _historyLoadProfiler.start();
+      final prepared = await OlderCandlePrepend.prepareAsync(
+        existing: previousBars, older: older);
+      _historyLoadProfiler.finish(prependClock,
+          phase: ChartLoadPhase.olderCandlePrepend, mode: _mode.name,
+          displayedBars: prepared.bars.length, bidTicks: 0);
+      // A slow worker result must never overwrite a newer account, symbol,
+      // timeframe, feed or session. Preserve Replay's source candle indices.
+      if (revision != _loadRevision || !mounted ||
+          _selectedSymbol.code != symbol.code || _timeframe != timeframe ||
+          widget.controller.accountId != sourceAccount ||
+          _mode == ChartMode.range ||
+          !identical(_actualBars, previousBars)) return;
+      final unique = prepared.prefix;
       if (unique.isEmpty) {
         if (_selectedSymbol.source == TradeSource.binance) {
           _historyExhausted = true;
         } else {
-          // A quiet short-window M1 response is not the end of history.
-          // Continue immediately before the exact window queried, not
-          // 89 days earlier (which would silently skip archived candles).
-          _olderCursorMs = cursor -
-              MarketApi.ctraderCandleLookback(_timeframe).inMilliseconds;
-          _olderLoadError =
-              'لا توجد شموع في الفترة السابقة. اضغط «أقدم» للبحث قبلها.';
+          // The pager has already checked up to five disjoint, genuinely
+          // empty windows. Keep its exclusive cursor for the next request;
+          // stop this pass rather than looping indefinitely on holidays.
+          _olderCursorMs = quietCursor;
+          if (quietCursor < 1) {
+            _historyExhausted = true;
+          } else {
+            _olderLoadError =
+                'لم يجد cTrader شموعًا في الفترات السابقة التي فحصناها. '
+                'اضغط «أقدم» للبحث قبلها.';
+          }
         }
       } else {
         _olderCursorMs = unique.first.timestamp;
@@ -1003,9 +1813,9 @@ class _ChartScreenState extends State<ChartScreen>
                 ? widget.controller.accountId : null, unique)
             .catchError((Object _) {}));
         setState(() {
-        _actualBars = [...unique, ..._actualBars];
-        _actualCandles = _actualBars.map((bar) => bar.candle).toList(growable: false);
-        _actualTimestamps = _actualBars.map((bar) => bar.timestamp).toList(growable: false);
+        _actualBars = prepared.bars;
+        _actualCandles = prepared.candles;
+        _actualTimestamps = prepared.timestamps;
         for (var index = 0; index < _patterns.length; index++) {
           _patterns[index] = _patterns[index].shifted(unique.length);
         }
@@ -1048,8 +1858,17 @@ class _ChartScreenState extends State<ChartScreen>
         if (_replay) {
           _training.prepend(unique.length);
           _visibleThrough += unique.length;
+          _replayInitialCount += unique.length;
+        }
+        if (_replaySelectingStart) {
+          // Prepending older OHLC must keep the cursor on the same UTC bar.
+          _replayCandidateIndex += unique.length;
         }
         });
+      }
+    } on MarketDataException catch (error) {
+      if (revision == _loadRevision && mounted) {
+        _olderLoadError = error.message;
       }
     } catch (_) {
       if (revision == _loadRevision && mounted) {
@@ -1066,11 +1885,17 @@ class _ChartScreenState extends State<ChartScreen>
   void dispose() {
     _recordTraining();
     _frameProfiler.detach();
+    _heikinCache.dispose();
+    _autoPriceScaleCache.clear();
+    _replayTimeIndex.clear();
     widget.controller.removeListener(_onMarketUpdate);
     _loadRevision++;
     _replayTimer?.cancel();
     _closedCandleTimer?.cancel();
     _momentum.dispose();
+    _chartRepaint.dispose();
+    _rectangleRepaint.dispose();
+    _chartTextCache.clear();
     super.dispose();
   }
 
@@ -1136,7 +1961,9 @@ class _ChartScreenState extends State<ChartScreen>
     if (wasPlaying) _togglePlay();
   }
 
-  Future<void> _openTrainingOrderDialog() async {
+  Future<void> _openTrainingOrderDialog({
+    ReplaySide initialSide = ReplaySide.buy,
+  }) async {
     if (!_replay || _visibleThrough < 1 ||
         _visibleThrough > _replayMarketCandles.length) return;
 
@@ -1148,7 +1975,8 @@ class _ChartScreenState extends State<ChartScreen>
     final price = _replayMarketCandles[entryVisibleCount - 1].close;
     final order = await showDialog<ReplayPracticeOrder>(
       context: context,
-      builder: (_) => ReplayTrainingOrderDialog(entryPrice: price),
+      builder: (_) => ReplayTrainingOrderDialog(
+        entryPrice: price, initialSide: initialSide),
     );
     if (!mounted || !_replay || order == null) return;
 
@@ -1194,6 +2022,27 @@ class _ChartScreenState extends State<ChartScreen>
     } on StateError {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('تعذر إغلاق الصفقة: لم يعد السعر المكشوف صالحًا.')));
+    }
+  }
+
+  /// Flatten only local replay practice entries at the currently revealed
+  /// raw OHLC close; never contact a live broker, and never use future prices.
+  void _flattenReplayTrainingTrades() {
+    if (!_replay || _training.openTradeCount == 0) return;
+    final openIds = _training.trades.where((t) => t.isOpen)
+        .map((t) => t.id).toList(growable: false);
+    try {
+      setState(() {
+        _stopPlayback();
+        for (final id in openIds) {
+          _training.closeAtCurrent(id, _replayMarketCandles);
+        }
+      });
+      _recordTraining();
+      _replayMessage('تم تسطيح ${openIds.length} صفقة تدريب عند '
+          'آخر سعر تاريخي مكشوف. لم تُرسل أوامر حقيقية.');
+    } on StateError {
+      _replayMessage('تعذر إغلاق التدريب: السعر التاريخي غير صالح.');
     }
   }
 
@@ -1281,69 +2130,506 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
-  void _toggleReplay() {
-    _momentum.stop();
-    if (_totalBars < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('حمّل شمعتين مكتملتين على الأقل قبل بدء Replay.')));
+  List<int> get _replaySourceTimestamps =>
+      _mode == ChartMode.range ? _rangeBarTimestamps : _actualTimestamps;
+
+  void _replayMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message, textDirection: TextDirection.rtl)));
+  }
+
+  /// Replay is staged: show full verified historical candles with a draggable
+  /// timestamped start cursor. No future candle is hidden until confirmation.
+  void _enterReplayStartSelection() {
+    final times = _replaySourceTimestamps;
+    if (_totalBars < 2 ||
+        !_replayTimeIndex.hasVerifiedTimes(times, _totalBars)) {
+      _replayMessage('يتطلب تحديد بداية Replay شمعتين مغلقتين '
+          'بتوقيت موثق من مصدر السوق. حمّل بيانات الرمز أولًا.');
       return;
     }
-    if (_replay) _recordTraining();
+    _stopMomentum();
+    final plotWidth = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
+    final index = ReplayStartResolver.atX(
+      viewport: _viewport,
+      x: plotWidth * .5,
+      plotWidth: plotWidth,
+      candleCount: _replayMarketCandles.length,
+      completedCount: _totalBars,
+      fallbackIndex: math.max(0, _totalBars - 2));
     setState(() {
-        _stopPlayback();
-        if (!_replay) {
-          _training.clear();
-          _trainingEverTraded = false;
-          _trainingSessionId =
-              DateTime.now().toUtc().microsecondsSinceEpoch.toString();
-          _trainingSourceKey =
-              '${_selectedSymbol.source.name}:'
-              '${widget.controller.accountId ?? 'public'}:'
-              '$_symbol:$_timeframe:${_mode.name}';
-          // Drawings created after the Replay cutoff could expose future
-          // information. Keep analysis objects separately until Replay ends.
-          _analysisLevels = List<double>.of(_levels);
-          _analysisPatterns = List<ChartPattern>.of(_patterns);
-          _analysisShortPositions = List<ChartShortPosition>.of(_shortPositions);
-          _analysisRectangles = List<ChartPriceRectangle>.of(_rectangles);
-          _levels.clear();
-          _patterns.clear();
-          _shortPositions.clear();
-          _rectangles.clear();
-        } else {
-          _levels..clear()..addAll(_analysisLevels);
-          _patterns..clear()..addAll(_analysisPatterns);
-          _shortPositions..clear()..addAll(_analysisShortPositions);
-          _rectangles..clear()..addAll(_analysisRectangles);
+      _stopPlayback();
+      // Historical Replay may be at a very different price from the user's
+      // manually scaled live ruler. Restore genuine OHLC auto-range while
+      // retaining horizontal zoom and the chosen candle/time anchor.
+      _manualPriceScale = null;
+      _manualPriceScaleKey = null;
+      _draggingPriceAxis = false;
+      _replaySelectingStart = true;
+      _replayDraggingStart = false;
+      _replayShowTradingButtons = false;
+      _replayShowDrawingTools = false;
+      _replayCandidateIndex = index;
+      _crosshair = null;
+      // While selecting, the complete market history remains visible (muted
+      // to the right of the cursor). Avoid confusing drawing edit gestures.
+      _drawing = false;
+    });
+  }
+
+  void _confirmReplayStart() {
+    if (!_replaySelectingStart || _replay) return;
+    if (!_replayTimeIndex.hasVerifiedTimes(
+        _replaySourceTimestamps, _totalBars)) {
+      _replayMessage('تعذر التحقق من توقيت العمود التاريخي المحدد.');
+      return;
+    }
+    final oldCount = _replayMarketCandles.length;
+    final selected = _replayCandidateIndex.clamp(
+        0, ReplayStartResolver.maxStart(_totalBars)).toInt();
+    // Assert the selected bar belongs to actual broker/source timestamps.
+    _replayTimeIndex.timestampAt(
+        _replaySourceTimestamps, selected, _totalBars);
+    _stopMomentum();
+    setState(() {
+      _stopPlayback();
+      _training.clear();
+      _trainingEverTraded = false;
+      _trainingSessionId =
+          DateTime.now().toUtc().microsecondsSinceEpoch.toString();
+      _trainingSourceKey =
+          '${_selectedSymbol.source.name}:'
+          '${widget.controller.accountId ?? 'public'}:'
+          '$_symbol:$_timeframe:${_mode.name}';
+      // Analysis objects can refer to the future. Keep them separately and
+      // show only fresh drawings placed inside the actual Replay timeline.
+      _analysisLevels = List<double>.of(_levels);
+      _analysisPatterns = List<ChartPattern>.of(_patterns);
+      _analysisShortPositions = List<ChartShortPosition>.of(_shortPositions);
+      _analysisRectangles = List<ChartPriceRectangle>.of(_rectangles);
+      _levels.clear();
+      _patterns.clear();
+      _shortPositions.clear();
+      _rectangles.clear();
+      _replaySelectingStart = false;
+      _replayDraggingStart = false;
+      _replay = true;
+      _replayInitialCount = selected + 1;
+      _visibleThrough = _replayInitialCount;
+      _training.moveTo(_replayMarketCandles, _visibleThrough);
+      // Preserve the selected candle's visual x after switching the painter
+      // from full history to the strict (future-free) CandlePrefix.
+      final plotWidth = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
+      final minScroll = -plotWidth / _viewport.barWidth * .68;
+      final scroll = (_viewport.scrollBars + _visibleThrough - oldCount)
+          .clamp(minScroll, (_visibleThrough - 1).toDouble()).toDouble();
+      _viewport = ChartViewport(
+        barWidth: _viewport.barWidth,
+        scrollBars: scroll,
+        rightMarginBars: _viewport.rightMarginBars);
+      _crosshair = null;
+      _selectedLine = null;
+      _selectedPattern = null;
+      _selectedShort = null;
+      _selectedRectangle = null;
+      _lineUndo.clear();
+      _lineRedo.clear();
+    });
+  }
+
+  void _exitReplay() {
+    if (!_replay && !_replaySelectingStart) return;
+    if (_replay) _recordTraining();
+    _stopMomentum();
+    setState(() {
+      _stopPlayback();
+      // Do not carry a zoom anchored to a historical Replay candle into
+      // the live broker price range on exiting practice mode.
+      _manualPriceScale = null;
+      _manualPriceScaleKey = null;
+      _draggingPriceAxis = false;
+      if (_replay) {
+        _levels..clear()..addAll(_analysisLevels);
+        _patterns..clear()..addAll(_analysisPatterns);
+        _shortPositions..clear()..addAll(_analysisShortPositions);
+        _rectangles..clear()..addAll(_analysisRectangles);
+      }
+      _replay = false;
+      _replaySelectingStart = false;
+      _replayDraggingStart = false;
+      _training.clear();
+      _trainingEverTraded = false;
+      _trainingSessionId = '';
+      _trainingSourceKey = '';
+      _viewport = _viewport.jumpToLatest();
+      _crosshair = null;
+      _selectedLine = null;
+      _selectedPattern = null;
+      _selectedShort = null;
+      _selectedRectangle = null;
+      _placingShort = false;
+      _placingRectangle = false;
+      _rectangleFirstCorner = null;
+      _shortEntryAnchor = null;
+      _shortStopPrice = null;
+      _pendingAnchor = null;
+      _secondChannelAnchor = null;
+      _lineUndo.clear();
+      _lineRedo.clear();
+    });
+  }
+
+  void _toggleReplay() {
+    if (_replay || _replaySelectingStart) {
+      _exitReplay();
+    } else {
+      _enterReplayStartSelection();
+    }
+  }
+
+  Future<void> _chooseReplayStartAgain() async {
+    if (_replay && _training.trades.isNotEmpty) {
+      _stopPlayback();
+      final approve = await showDialog<bool>(context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('اختيار بداية جديدة'),
+          content: const Text('لديك صفقات تدريب في هذه الجلسة. '
+              'اختيار بداية جديدة سيبدأ جلسة مستقلة؛ '
+              'ستُحفظ الجلسة السابقة في الأرشيف المحلي.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('حفظ وبدء جلسة جديدة')),
+          ]));
+      if (approve != true || !mounted) return;
+    }
+    _exitReplay();
+    if (mounted) _enterReplayStartSelection();
+  }
+
+  /// Date / oldest / random actions must reveal their real candle in the
+  /// chart. Merely changing the selected timestamp leaves the blue line
+  /// offscreen when jumping to distant historical sessions.
+  void _revealReplayCandidate(int index) {
+    if (!_replaySelectingStart || index < 0 ||
+        index > ReplayStartResolver.maxStart(_totalBars)) return;
+    _stopMomentum();
+    final width = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
+    final viewport = _viewport.revealHistoricalBar(
+      index: index,
+      candleCount: _replayMarketCandles.length,
+      plotWidth: width,
+    );
+    setState(() {
+      _replayCandidateIndex = index;
+      _viewport = viewport;
+      _crosshair = null;
+    });
+  }
+
+  Future<void> _chooseReplayStartDate() async {
+    if (!_replaySelectingStart) {
+      await _chooseReplayStartAgain();
+    }
+    if (!mounted || !_replaySelectingStart) return;
+    final timestamps = _replaySourceTimestamps;
+    if (!_replayTimeIndex.hasVerifiedTimes(timestamps, _totalBars)) return;
+    final zone = _symbolSettings.timeZone;
+    // Replay date dialogs remain mounted across asynchronous source changes.
+    // A date belonging to an old account/history must NEVER select a bar in
+    // the next account or expose future bars after a session replacement.
+    final selectionGuard = ReplayDateSelectionGuard(
+      timestamps: timestamps, completedCount: _totalBars,
+      loadRevision: _loadRevision,
+      symbol: _selectedSymbol.code, timeframe: _timeframe,
+      provider: _selectedSymbol.source.name,
+      accountId: widget.controller.accountId,
+      zoneKey: zone.name,
+    );
+    bool sourceStillActive() => mounted && !_replay &&
+        selectionGuard.isCurrent(
+          timestamps: _replaySourceTimestamps,
+          completedCount: _totalBars,
+          loadRevision: _loadRevision,
+          symbol: _selectedSymbol.code, timeframe: _timeframe,
+          provider: _selectedSymbol.source.name,
+          accountId: widget.controller.accountId,
+          zoneKey: _symbolSettings.timeZone.name,
+          selectingStart: _replaySelectingStart,
+        );
+    final initialIndex = _replayCandidateIndex.clamp(
+        0, ReplayStartResolver.maxStart(_totalBars)).toInt();
+    final first = ReplayDateTimeResolver.displayWallTime(
+        zone, timestamps.first);
+    final last = ReplayDateTimeResolver.displayWallTime(
+        zone, timestamps[ReplayStartResolver.maxStart(_totalBars)]);
+    final initial = ReplayDateTimeResolver.displayWallTime(
+        zone, timestamps[initialIndex]);
+    // Date and time on the picker MUST use the chart's configured zone.
+    // The previous implementation used the device timezone even when chart
+    // axis was configured for New York (wrong at historical DST boundaries).
+    final date = await showDatePicker(
+      context: context,
+      helpText: 'اختر التاريخ بتوقيت ${zone.nameArabic}',
+      firstDate: DateTime(first.year, first.month, first.day),
+      lastDate: DateTime(last.year, last.month, last.day),
+      initialDate: DateTime(initial.year, initial.month, initial.day),
+    );
+    if (date == null || !sourceStillActive()) return;
+    final time = await showTimePicker(
+      context: context,
+      helpText: 'الساعة والدقيقة بتوقيت ${zone.nameArabic}',
+      initialTime: TimeOfDay.fromDateTime(initial),
+    );
+    if (time == null || !sourceStillActive()) return;
+    final candidates = ReplayDateTimeResolver.utcCandidates(
+      zone: zone, year: date.year, month: date.month, day: date.day,
+      hour: time.hour, minute: time.minute);
+    if (candidates.isEmpty) {
+      _replayMessage('هذا الوقت غير موجود في توقيت ${zone.nameArabic} '
+          'بسبب انتقال الساعة أو تاريخ غير صالح. اختر وقتًا آخر.');
+      return;
+    }
+    int? candidate;
+    if (candidates.length == 1) {
+      candidate = candidates.single;
+    } else {
+      // November DST fall-back repeats the same 01:xx clock time twice.
+      // A historical trade decision must not silently pick one of them.
+      candidate = await showDialog<int>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('وقت تاريخي مكرر'),
+          content: const Text('يحدث هذا الوقت مرتين عند تغيير '
+              'التوقيت الصيفي. اختر وقت السوق المقصود:'),
+          actions: [
+            for (final instant in candidates)
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, instant),
+                child: Text(
+                  '${zone.labelAt(DateTime.fromMillisecondsSinceEpoch(
+                      instant, isUtc: true))} · '
+                  '${DateTime.fromMillisecondsSinceEpoch(
+                      instant, isUtc: true).toIso8601String()
+                      .substring(0, 16)} UTC',
+                  textDirection: TextDirection.ltr),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء')),
+          ],
+        ),
+      );
+    }
+    if (candidate == null || !sourceStillActive()) return;
+    final index = _replayTimeIndex.atOrBefore(
+        timestamps, _totalBars, candidate);
+    if (index < 0) {
+      _replayMessage('لا توجد شمعة موثقة قبل هذا التاريخ ضمن البيانات المحمّلة.');
+      return;
+    }
+    _revealReplayCandidate(index);
+  }
+
+  void _handleReplayStartMenu(ReplayStartMenuAction action) {
+    if (action == ReplayStartMenuAction.toggleTrading) {
+      setState(() => _replayShowTradingButtons = !_replayShowTradingButtons);
+      return;
+    }
+    if (action == ReplayStartMenuAction.toggleDrawingTools) {
+      setState(() => _replayShowDrawingTools = !_replayShowDrawingTools);
+      return;
+    }
+    if (action == ReplayStartMenuAction.date) {
+      unawaited(_chooseReplayStartDate());
+      return;
+    }
+    if (_replay) {
+      // Choosing "random" or "earliest" during active Replay must REALLY
+      // apply that choice after the user approves replacing the session.
+      unawaited(_chooseReplayStartAgain().then((_) {
+        if (mounted && _replaySelectingStart) {
+          _applyReplayStartMenuChoice(action);
         }
-        _replay = !_replay;
-        _visibleThrough = math.max(1, _totalBars ~/ 2);
-        if (_replay) {
-          _training.moveTo(_replayMarketCandles, _visibleThrough);
-        } else {
-          // Snapshot is already queued above. Do not allow dispose() or a
-          // stale timer callback to replace it with an empty in-memory state.
-          _training.clear();
-          _trainingEverTraded = false;
-          _trainingSessionId = '';
-          _trainingSourceKey = '';
+      }));
+      return;
+    }
+    _applyReplayStartMenuChoice(action);
+  }
+
+  void _applyReplayStartMenuChoice(ReplayStartMenuAction action) {
+    if (!_replaySelectingStart) return;
+    switch (action) {
+      case ReplayStartMenuAction.column:
+        break; // The cursor can already be dragged or moved by tapping.
+      case ReplayStartMenuAction.earliest:
+        _revealReplayCandidate(0);
+        _replayMessage('تم اختيار أقدم شمعة موثقة محمّلة. '
+            'يمكن تحميل تاريخ أقدم إن أتاحه مصدر السوق.');
+        break;
+      case ReplayStartMenuAction.random:
+        final max = ReplayStartResolver.maxStart(_totalBars);
+        _revealReplayCandidate(math.Random().nextInt(max + 1));
+        break;
+      case ReplayStartMenuAction.date:
+      case ReplayStartMenuAction.toggleTrading:
+      case ReplayStartMenuAction.toggleDrawingTools:
+        break;
+    }
+  }
+
+  void _handleReplayExtras(ReplayExtrasAction action) {
+    switch (action) {
+      case ReplayExtrasAction.practiceOrder:
+        if (_replay) unawaited(_openTrainingOrderDialog());
+      case ReplayExtrasAction.practiceTrades:
+        if (_replay) unawaited(_showTrainingTrades());
+      case ReplayExtrasAction.practiceArchive:
+        unawaited(_showTrainingArchive());
+      case ReplayExtrasAction.loadOlder:
+        if (!_olderLoading && !_historyExhausted) {
+          setState(() => _olderLoadError = null);
+          unawaited(_mode == ChartMode.range
+              ? _loadOlderRangeHistory()
+              : _loadOlderHistory(manual: true));
         }
-        _viewport = _freshViewport();
-        _crosshair = null;
-        _selectedLine = null;
-        _selectedPattern = null;
-        _selectedShort = null;
-        _selectedRectangle = null;
-        _placingShort = false;
-        _placingRectangle = false;
-        _rectangleFirstCorner = null;
-        _shortEntryAnchor = null;
-        _shortStopPrice = null;
-        _pendingAnchor = null;
-        _secondChannelAnchor = null;
-        _lineUndo.clear();
-        _lineRedo.clear();
-      });
+      case ReplayExtrasAction.candleSettings:
+        _showCandleSettings();
+      case ReplayExtrasAction.drawingTools:
+        setState(() => _replayShowDrawingTools = true);
+        unawaited(_showDrawingTools());
+      case ReplayExtrasAction.chartType:
+        unawaited(_showChartTypePicker());
+    }
+  }
+
+  void _handleReplayIntervalMenu(ReplayStepMenuAction action) {
+    switch (action) {
+      case ReplayStepMenuAction.currentBar:
+        _replayMessage('التقدم يتم بشمعة مصدر واحدة مكتملة. '
+            'لا يتم اختراع تيكات أو حركة داخلية.');
+        break;
+      case ReplayStepMenuAction.auto:
+        setState(() => _replayAutoStep = !_replayAutoStep);
+        break;
+      case ReplayStepMenuAction.information:
+        _replayMessage('تقدم Replay الحالي يعتمد الشموع التاريخية المغلقة فقط. '
+            'تقدم التيك أو الثانية يحتاج إلى بيانات تاريخية أدق من المصدر.');
+        break;
+    }
+  }
+
+  Future<void> _resetReplayToStart() async {
+    if (!_replay) return;
+    // Freeze playback BEFORE asking permission. Otherwise the market cutoff
+    // could advance under the user's confirmation dialog.
+    if (_playing) setState(_stopPlayback);
+    final sourceKey = _trainingSourceKey;
+    final sessionId = _trainingSessionId;
+    final hasTrades = _training.trades.isNotEmpty;
+    final hasDrawings = _levels.isNotEmpty || _patterns.isNotEmpty ||
+        _shortPositions.isNotEmpty || _rectangles.isNotEmpty;
+    final hasPracticeHistory = _trainingEverTraded || hasTrades;
+    if (hasPracticeHistory || hasDrawings) {
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('العودة إلى بداية Replay'),
+          content: Text(
+            hasPracticeHistory
+              ? 'سيُحفظ سجل الصفقات في الأرشيف المحلي أولًا، '
+                'ثم تبدأ جلسة تدريب جديدة من شمعة البداية نفسها. '
+                'ستُمسح رسومات Replay الحالية، ولن تُرسل أي أوامر للوسيط.'
+              : 'سيتم مسح الرسومات التي أُنشئت خلال Replay '
+                'والرجوع إلى شمعة البداية. الرسومات الأصلية خارج '
+                'المحاكاة ستبقى محفوظة.',
+            textDirection: TextDirection.rtl,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              key: const Key('replay-confirm-reset'),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('حفظ والعودة للبداية'),
+            ),
+          ],
+        ),
+      );
+      if (approved != true || !mounted || !_replay ||
+          sessionId != _trainingSessionId ||
+          sourceKey != _trainingSourceKey) return;
+    }
+
+    // A pending historical page might have changed the valid source.
+    // Never seek to an incomplete, invalid or future market candle.
+    if (_replayInitialCount < 1 || _replayInitialCount > _totalBars) {
+      _replayMessage('تعذرت العودة: نقطة البداية لم تعد ضمن '
+          'الشموع التاريخية المكتملة المتاحة.');
+      return;
+    }
+    if (hasPracticeHistory) {
+      // A previously queued write can fail without throwing (the regular
+      // background saver intentionally catches SQLite errors). A reset must
+      // independently confirm DURABLE storage before clearing live trades.
+      _trainingSaveDebounce?.cancel();
+      _trainingSaveDebounce = null;
+      try {
+        await _trainingSaveQueue;
+        if (!mounted || !_replay || sessionId != _trainingSessionId ||
+            sourceKey != _trainingSourceKey) return;
+        await ReplayTrainingArchive.save(
+          sessionId: sessionId,
+          sourceKey: sourceKey,
+          visibleCount: _training.visibleCount,
+          trades: _training.trades,
+        );
+      } catch (_) {
+        _replayMessage('فشل حفظ صفقات Replay في الأرشيف. '
+            'تم الإبقاء على الجلسة والصفقات دون إعادة تعيين.');
+        return;
+      }
+      if (!mounted || !_replay || sessionId != _trainingSessionId ||
+          sourceKey != _trainingSourceKey) return;
+    }
+    _stopMomentum();
+    setState(() {
+      _stopPlayback();
+      _training.clear();
+      _training.moveTo(_replayMarketCandles, _replayInitialCount);
+      _visibleThrough = _replayInitialCount;
+      _trainingEverTraded = false;
+      // Fresh archive identity: a later save cannot overwrite the prior run.
+      _trainingSessionId =
+          DateTime.now().toUtc().microsecondsSinceEpoch.toString();
+      // Replay-added drawings may refer to candles no longer revealed.
+      // Original drawings are still held in _analysis* for normal mode.
+      _levels.clear();
+      _patterns.clear();
+      _shortPositions.clear();
+      _rectangles.clear();
+      _crosshair = null;
+      _selectedLine = null;
+      _selectedPattern = null;
+      _selectedShort = null;
+      _selectedRectangle = null;
+      _pendingAnchor = null;
+      _secondChannelAnchor = null;
+      _rectangleFirstCorner = null;
+      _shortEntryAnchor = null;
+      _shortStopPrice = null;
+      _placingShort = false;
+      _placingRectangle = false;
+      _lineUndo.clear();
+      _lineRedo.clear();
+      // The market now displays the short, strictly revealed source prefix.
+      // Place its last candle near the right edge, not in blank future space.
+      _viewport = _viewport.jumpToLatest();
+    });
   }
 
   void _togglePlay() {
@@ -1408,34 +2694,82 @@ class _ChartScreenState extends State<ChartScreen>
     if (_mode != ChartMode.heikinAshi) {
       return _replay ? CandlePrefix(source, _visibleThrough) : source;
     }
-    // A Heikin-Ashi candle depends only on past candles. Compute the full
-    // causal sequence once per source, then reveal a prefix in Replay.
-    if (!identical(source, _heikinSource)) {
-      _heikinSource = source;
-      _heikinCache = _buildHeikinAshi(source);
-    }
-    final smoothed = _heikinCache!;
+    // Recompute this display-only Heikin-Ashi view when the authentic
+    // source list changes. Large histories are built off the Android touch
+    // isolate; while pending, never display stale source or raw OHLC as HA.
+    final smoothed = _heikinCache.resolve(
+      source,
+      onReady: () {
+        if (mounted && _mode == ChartMode.heikinAshi &&
+            identical(_actualCandles, source)) {
+          setState(() {});
+        }
+      },
+      onError: () {
+        if (mounted && _mode == ChartMode.heikinAshi &&
+            identical(_actualCandles, source)) {
+          setState(() => _loadError =
+              'تعذّر تجهيز شموع هيكناشي من بيانات المصدر. اضغط إعادة المحاولة.');
+        }
+      },
+    );
+    if (smoothed == null) return const <TradeCandle>[];
     return _replay ? CandlePrefix(smoothed, _visibleThrough) : smoothed;
   }
 
-  static List<TradeCandle> _buildHeikinAshi(List<TradeCandle> raw) {
-    if (raw.isEmpty) return const [];
-    final result = <TradeCandle>[];
-    var previousOpen = (raw.first.open + raw.first.close) / 2;
-    var previousClose = (raw.first.open + raw.first.high + raw.first.low + raw.first.close) / 4;
-    for (final current in raw) {
-      final close = (current.open + current.high + current.low + current.close) / 4;
-      final open = result.isEmpty ? previousOpen : (previousOpen + previousClose) / 2;
-      result.add(TradeCandle(open, math.max(current.high, math.max(open, close)),
-          math.min(current.low, math.min(open, close)), close));
-      previousOpen = open;
-      previousClose = close;
+  void _changeSymbol(TradeSymbol item) {
+    if (item.code == _symbol) return;
+    _stopMomentum();
+    // Any in-flight response from the previous symbol is invalid from now on.
+    _loadRevision++;
+    if (_replay) _recordTraining();
+    setState(() {
+      _stopPlayback();
+      _replay = false;
+      _replaySelectingStart = false;
+      _replayDraggingStart = false;
+      _training.clear();
+      _trainingEverTraded = false;
+      _symbol = item.code;
+      // Never reuse an unsupported native provider interval when switching
+      // from cTrader to Binance or vice versa. No derived candles.
+      _timeframe = ChartTimeframeCatalog.compatibleOnSwitch(
+          item.source, _timeframe);
+      // Binance does not provide cTrader BID tick Range bars.
+      if (_mode == ChartMode.range &&
+          item.source != TradeSource.ctrader) {
+        _mode = ChartMode.candles;
+      }
+      _viewport = _freshViewport();
+      _resetDrawingObjects();
+      _lastObservedQuote = widget.controller.recentQuoteFor(item);
+      _lastQuoteRequestAtMs = 0;
+      _actualBars = [];
+      _actualCandles = [];
+      _actualTimestamps = [];
+      _actualRange = [];
+      _rangeHistoryTicks = [];
+      _rangeTimeline = null;
+      _rangeBarEndTickIndices = [];
+      _rangeBarTimestamps = [];
+      _rangeOlderCursorMs = null;
+      _olderCursorMs = null;
+      _olderLoading = false;
+      _historyExhausted = false;
+      _olderLoadError = null;
+      _loadError = null;
+      _loading = false;
+    });
+    if (widget.active && _liveRequested) {
+      unawaited(_loadRealHistory());
     }
-    return result;
+    if (widget.active && item.source == TradeSource.ctrader) {
+      unawaited(_refreshSelectedCTraderQuote());
+    }
   }
 
   Future<void> _showSymbolPicker() async {
-    _momentum.stop();
+    _stopMomentum();
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -1455,14 +2789,8 @@ class _ChartScreenState extends State<ChartScreen>
                       ? const Icon(Icons.check_circle, color: TradeColors.blue)
                       : const Icon(Icons.chevron_left),
                   onTap: () {
-                    setState(() {
-                      _stopPlayback();
-                      _symbol = item.code;
-                      _viewport = _freshViewport();
-                      _resetDrawingObjects();
-                    });
                     Navigator.pop(sheetContext);
-                    if (_liveRequested) _loadRealHistory();
+                    _changeSymbol(item);
                   },
                 )),
           ]),
@@ -1472,8 +2800,14 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showTimeframePicker() async {
-    _momentum.stop();
-    const frames = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1D', '1W', '1M'];
+    if (_replay || _replaySelectingStart) {
+      _replayMessage('تغيير فاصل الشارت أثناء Replay يتطلب إعادة بناء '
+          'السلسلة الزمنية بأمان. أغلق المحاكاة أولًا، ولن تُكشف '
+          'الشموع المستقبلية تلقائيًا.');
+      return;
+    }
+    _stopMomentum();
+    final frames = ChartTimeframeCatalog.forSource(_selectedSymbol.source);
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -1504,7 +2838,7 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showAnalysisHub() async {
-    _momentum.stop();
+    _stopMomentum();
     final action = await showModalBottomSheet<AnalysisHubAction>(
       context: context,
       isScrollControlled: true,
@@ -1598,10 +2932,42 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showChartAppearance() async {
-    // The reference settings page remains inside the chart tab so the chart,
-    // fetched market history, Replay cursor and parent navigation survive.
-    _momentum.stop();
+    // Chart display settings must not reset the candle cache or Replay cursor.
+    _stopMomentum();
     setState(() => _panelSettingsOpen = true);
+  }
+
+  void _showCandleSettings() {
+    _stopMomentum();
+    setState(() {
+      _symbolSettingsReturnToPanel = false;
+      _panelSettingsOpen = false;
+      _scaleSettingsOpen = false;
+      _symbolSettingsOpen = true;
+    });
+  }
+
+  /// A predictable one-tap exit from drawing/selection modes. Drawing objects
+  /// and their undo history remain untouched; finger drags return to pan.
+  void _enableMoveChart() {
+    _stopMomentum();
+    setState(() {
+      _drawing = false;
+      _eraserMode = false;
+      _rulerMode = false;
+      _placingShort = false;
+      _placingRectangle = false;
+      _pendingAnchor = null;
+      _secondChannelAnchor = null;
+      _rectangleFirstCorner = null;
+      _shortEntryAnchor = null;
+      _shortStopPrice = null;
+      _selectedLine = null;
+      _selectedPattern = null;
+      _selectedShort = null;
+      _selectedRectangle = null;
+      _crosshair = null;
+    });
   }
 
   Future<void> _showObjectTree() async {
@@ -1647,7 +3013,7 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showChartTypePicker() async {
-    _momentum.stop();
+    _stopMomentum();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1709,18 +3075,113 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showRangeSettings({bool reloadOnChange = true}) async {
+    // Count only cTrader BID events verified for this active chart; a forming
+    // Range bar is not a completed source-confirmed market bar.
+    final bidTickCount = _rangeHistoryTicks.length;
+    final closedRangeBars = math.max(0, _actualRange.length - 1);
+    final latestTickUtc = bidTickCount == 0
+        ? 'غير متاح'
+        : DateTime.fromMillisecondsSinceEpoch(
+            _rangeHistoryTicks.last.timestamp, isUtc: true).toIso8601String();
+    final canRequestOlder = RangeHistoryFillPolicy.canRequestOlderManually(
+      rangeMode: _mode == ChartMode.range,
+      connected: widget.controller.ctraderConnected && _rangeSourceSupported,
+      hasAccount: widget.controller.accountId != null,
+      hasVerifiedTicks: bidTickCount > 0,
+      loadedTicks: bidTickCount,
+      chartActive: widget.active,
+      initialLoading: _loading,
+      olderLoading: _olderLoading,
+      autoFilling: _rangeAutoFilling,
+      historyExhausted: _historyExhausted,
+      replayActive: _replay,
+      selectingReplayStart: _replaySelectingStart,
+    );
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      // The default 9/16-height modal clipped the wrapped 9-size Range picker
+      // on phones, causing a real 35px RenderFlex overflow at 390dp.
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
             const TradeSectionTitle('إعدادات شموع المدى'),
-            const Text('حجم المدى بالنقاط حسب دقة تسعير الرمز. الحساب الحقيقي يستخدم تيكات BID من cTrader فقط.'),
+            Container(
+              key: const Key('range-bid-source-status'),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(sheetContext).colorScheme.primary
+                    .withValues(alpha: .06),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('تيكات BID الموثقة في الشارت: $bidTickCount',
+                    textDirection: TextDirection.rtl),
+                  Text('شموع Range المكتملة: $closedRangeBars',
+                    textDirection: TextDirection.rtl),
+                  Text('آخر تيك موثق (UTC): $latestTickUtc',
+                    textDirection: TextDirection.rtl),
+                  if (bidTickCount == 0)
+                    const Text('لا توجد تيكات BID موثقة في الشارت حاليًا. '
+                      'لا تُعرض شموع بديلة أو أسعار مُفترضة.',
+                      textDirection: TextDirection.rtl),
+                  if (bidTickCount > 0 && closedRangeBars == 0)
+                    const Text('وصلت تيكات حقيقية، لكن لم تكتمل شمعة مدى '
+                      'بعد بهذه المسافة السعرية.',
+                      textDirection: TextDirection.rtl),
+                  if (_rangeAutoFilling)
+                    const Text('جارٍ البحث عن تاريخ BID أقدم ضمن حدود '
+                      'التحميل التلقائي الآمنة.',
+                      textDirection: TextDirection.rtl),
+                  if (bidTickCount >= RangeOlderPage.maxLoadedTicks)
+                    const Text('تم الوصول إلى الحد الآمن للتيكات '
+                      'المحمّلة في ذاكرة الشارت (مليون BID). '
+                      'هذا ليس نهاية التاريخ المتاح لدى الوسيط، '
+                      'لكن تحميل المزيد يحتاج إدارة ذاكرة مختلفة.',
+                      textDirection: TextDirection.rtl),
+                ],
+              ),
+            ),
+            if (canRequestOlder)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: SizedBox(width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const Key('range-load-older-action'),
+                    icon: const Icon(Icons.history_rounded),
+                    label: const Text('تحميل فترة BID موثقة أقدم'),
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      if (mounted) unawaited(_loadOlderRangeHistory());
+                    },
+                  ),
+                ),
+              ),
+            const SizedBox(height: 12),
+            const Text('البدء المقترح: 25 نقطة. تتفاوت كثافة الشموع حسب الرمز والوسيط.',
+              textDirection: TextDirection.rtl),
+            const Text(
+              'المقاس الأكبر قد ينتج شموعًا أقل. اختر مدى أصغر لعرض حركة '
+              'أكثر تفصيلًا من تيكات BID الموثقة؛ لا تُنشأ بيانات افتراضية.',
+              textDirection: TextDirection.rtl),
+            if (_rangePointCache[
+                '${widget.controller.accountId}:${_selectedSymbol.code}'] case final point?)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'المسافة السعرية الحالية: '
+                  '${(_rangeTicks * point).toStringAsFixed(5)} '
+                  '${_selectedSymbol.source == TradeSource.ctrader ? 'حسب سعر الوسيط' : ''}',
+                  textDirection: TextDirection.rtl),
+              ),
             const SizedBox(height: 16),
             Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final size in const [100, 250, 500, 1000, 2000, 5000])
+              for (final size in const [10, 25, 50, 100, 250, 500, 1000, 2000, 5000])
                 ChoiceChip(
                   label: Text('$size'),
                   selected: _rangeTicks == size,
@@ -1741,7 +3202,8 @@ class _ChartScreenState extends State<ChartScreen>
                 ),
             ]),
             const SizedBox(height: 16),
-          ]),
+            ]),
+          ),
         ),
       ),
     );
@@ -1769,7 +3231,7 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   Future<void> _showDrawingTools() async {
-    _momentum.stop();
+    _stopMomentum();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1961,7 +3423,7 @@ class _ChartScreenState extends State<ChartScreen>
       );
 
   void _zoomBy(double factor) {
-    _momentum.stop();
+    _stopMomentum();
     final width = math.max(80.0, MediaQuery.sizeOf(context).width - 61);
     final count = _displayCandles.length;
     setState(() => _viewport = _viewport.pinch(
@@ -2038,10 +3500,71 @@ class _ChartScreenState extends State<ChartScreen>
     _rectangleFirstCorner = null;
   }
 
-  ChartPriceScale _priceScale(List<TradeCandle> candles, double width, double height) =>
-      ChartPriceScale.visible(candles, _viewport, width, math.max(1, height - 24),
-        topMarginPercent: _panelSettings.topMarginPercent,
-        bottomMarginPercent: _panelSettings.bottomMarginPercent);
+  ChartPriceScale _priceScale(
+      List<TradeCandle> candles, double width, double height) {
+    final plotHeight = math.max(1.0, height - 24);
+    if (_priceScaleManual) return _manualPriceScale!.withHeight(plotHeight);
+    return _autoPriceScaleCache.resolve(
+      candles: candles,
+      viewport: _viewport,
+      plotWidth: width,
+      plotHeight: plotHeight,
+      topMarginPercent: _panelSettings.topMarginPercent,
+      bottomMarginPercent: _panelSettings.bottomMarginPercent,
+    );
+  }
+
+  void _resetPriceAxisToAuto() {
+    setState(() {
+      _manualPriceScale = null;
+      _manualPriceScaleKey = null;
+      _draggingPriceAxis = false;
+    });
+    // Force a live painter refresh even if its widget snapshot is unchanged.
+    _chartRepaint.value++;
+  }
+
+  /// Edit an existing, genuine price/bar anchored drawing on paint-only
+  /// frames. Its undo snapshot was captured once at finger-down.
+  bool _updateDraggedGuide(Offset local, ChartPriceScale scale,
+      double plotWidth, int candleCount) {
+    if (_draggingLine && _selectedLine != null &&
+        _selectedLine! >= 0 && _selectedLine! < _levels.length) {
+      final next = scale.price(local.dy.clamp(0, scale.height).toDouble());
+      if (!next.isFinite || next == _levels[_selectedLine!]) return false;
+      _levels[_selectedLine!] = next;
+      return true;
+    }
+    if (!_draggingPattern || _selectedPattern == null ||
+        _selectedPattern! < 0 || _selectedPattern! >= _patterns.length ||
+        _patternAtDragStart == null) return false;
+    final original = _patternAtDragStart!;
+    ChartPattern next;
+    if (_draggedEndpoint != null) {
+      final anchor = _anchorAt(local, scale, plotWidth, candleCount);
+      if (anchor == null) return false;
+      next = original.withEndpoint(_draggedEndpoint!, anchor);
+    } else {
+      final bars = ((local.dx - _gestureFocalX) /
+          _viewport.barWidth).round();
+      final anchors = [
+        original.start.index,
+        original.end.index,
+        if (original.offsetAnchor != null) original.offsetAnchor!.index,
+      ];
+      final first = anchors.reduce(math.min);
+      final last = anchors.reduce(math.max);
+      final deltaBars = bars.clamp(-first,
+          math.max(0, candleCount - 1 - last)).toInt();
+      final deltaPrice = scale.price(
+          local.dy.clamp(0, scale.height).toDouble()) -
+          scale.price(_gestureFocalY.clamp(0, scale.height).toDouble());
+      if (!deltaPrice.isFinite) return false;
+      next = original.moved(deltaBars, deltaPrice);
+    }
+    _patterns[_selectedPattern!] = next;
+    return true;
+  }
 
   int? _hitLine(double y, ChartPriceScale scale) {
     for (var index = _levels.length - 1; index >= 0; index--) {
@@ -2052,6 +3575,13 @@ class _ChartScreenState extends State<ChartScreen>
 
   int? _hitPattern(Offset position, ChartPriceScale scale,
       double width, int visibleCount) {
+    // Never select an offscreen drawing from a touch on the price ruler,
+    // time axis or outside the actual, visible candle plot.
+    if (!position.dx.isFinite || !position.dy.isFinite ||
+        !width.isFinite || width <= 0 ||
+        !scale.height.isFinite || scale.height <= 0 ||
+        position.dx < 0 || position.dx >= width ||
+        position.dy < 0 || position.dy >= scale.height) return null;
     for (var i = _patterns.length - 1; i >= 0; i--) {
       final pattern = _patterns[i];
       if (!pattern.visibleAt(visibleCount)) continue;
@@ -2062,12 +3592,16 @@ class _ChartScreenState extends State<ChartScreen>
       final y1 = scale.y(pattern.start.price);
       final y2 = scale.y(pattern.end.price);
       if (pattern.tool == ChartDrawingTool.fibonacci) {
-        final left = math.min(x1, x2) - 15;
-        if (position.dx < left || position.dx > width) continue;
-        if (ChartPattern.fibonacciRatios.any((ratio) =>
-            (scale.y(pattern.fibonacciPrice(ratio)) - position.dy).abs() < 17)) {
-          return i;
-        }
+        // Match the exact plot-clipped segments painted on the canvas.
+        // A ratio at y=-8 was previously selectable by a touch at y=0,
+        // despite having no visible line at all.
+        if (ChartLineGeometry.hitFibonacciLevels(
+          point: position,
+          fromX: math.min(x1, x2),
+          levelYs: ChartPattern.fibonacciRatios.map((ratio) =>
+              scale.y(pattern.fibonacciPrice(ratio))),
+          plot: Rect.fromLTWH(0, 0, width, scale.height),
+        )) return i;
       } else {
         final offset = pattern.offsetAnchor == null ? null : Offset(
           _viewport.chartX(index: pattern.offsetAnchor!.index,
@@ -2674,6 +4208,74 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
+  /// Clean Replay layout: a single 48dp source row replaces the live
+  /// two-row trading header; the actual plot remains the main surface.
+  Widget _compactReplayHeader(List<TradeCandle> candles) {
+    final scheme = Theme.of(context).colorScheme;
+    final source = _selectedSymbol.source == TradeSource.ctrader
+        ? 'cTrader' : 'Binance';
+    final warning = _olderLoadError ?? _loadError;
+    return Container(
+      key: Key(widget.focusMode ? 'chart-focus-header' : 'chart-reference-header'),
+      color: scheme.surface,
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Row(children: [
+        Flexible(
+          flex: 3,
+          child: Tooltip(
+            message: _replay ? _marketEvidenceLabel :
+                'اختر شمعة البداية من التاريخ المتاح',
+            child: Text(
+              _replay ? 'Replay تاريخي · $source' : 'حدد بداية Replay',
+              key: const Key('chart-provenance-header'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                color: scheme.primary),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(flex: 2, child: Text(_symbol,
+          textDirection: TextDirection.ltr, textAlign: TextAlign.end,
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800,
+            color: scheme.onSurface))),
+        const SizedBox(width: 6),
+        Text(_mode == ChartMode.range ? 'R$_rangeTicks' :
+          (ChartTimeframeCatalog.displayLabel(_timeframe)),
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+        if (warning != null)
+          IconButton(
+            key: const Key('replay-history-warning'),
+            tooltip: warning,
+            onPressed: () => _replayMessage(warning),
+            icon: const Icon(Icons.info_outline, size: 20),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 44),
+            padding: EdgeInsets.zero,
+          ),
+        IconButton(
+          key: const Key('chart-candle-settings-action'),
+          tooltip: 'إعدادات الشموع',
+          onPressed: _showCandleSettings,
+          icon: const Icon(Icons.tune, size: 21),
+          constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
+          padding: EdgeInsets.zero,
+        ),
+        IconButton(
+          key: const Key('symbol-picker'),
+          tooltip: 'اختيار رمز الشارت',
+          onPressed: _showSymbolPicker,
+          icon: const Icon(Icons.search, size: 21),
+          constraints: const BoxConstraints(minWidth: 38, minHeight: 44),
+          padding: EdgeInsets.zero,
+        ),
+      ]),
+    );
+  }
+
   Widget _referenceChartHeader(List<TradeCandle> candles) {
     final hasVerifiedPrices = candles.isNotEmpty;
     final fetchingRangeTicks = _mode == ChartMode.range &&
@@ -2684,9 +4286,11 @@ class _ChartScreenState extends State<ChartScreen>
         ? 'cTrader' : 'Binance';
     final quoteCurrency = _selectedSymbol.source == TradeSource.binance
         ? 'USDT' : 'USD';
-    return Container(
+    return LayoutBuilder(builder: (context, constraints) {
+      final compactWidth = constraints.maxWidth < 360;
+      return Container(
       key: const Key('chart-reference-header'),
-      height: 72,
+      height: compactWidth ? 104 : 84,
       color: Theme.of(context).colorScheme.surface,
       child: Stack(children: [
         Positioned(left: 8, top: 4, child: Row(children: [
@@ -2697,7 +4301,7 @@ class _ChartScreenState extends State<ChartScreen>
               borderRadius: BorderRadius.circular(12)),
             alignment: Alignment.center,
             child: Icon(Icons.circle, size: 10,
-                color: hasVerifiedPrices && !_ctraderTimeCandlesStale
+                color: hasVerifiedPrices && (_replay || !_ctraderTimeCandlesStale)
                     ? const Color(0xFF047660) : Colors.grey),
           ),
           Container(
@@ -2710,6 +4314,8 @@ class _ChartScreenState extends State<ChartScreen>
                 color: Color(0xFFAB2373), size: 19),
           ),
         ])),
+        if (compactWidth)
+          Positioned(left: 65, top: 2, child: _buildChartQuickActions()),
         Positioned(right: 5, top: 4, child: OutlinedButton.icon(
           onPressed: _showSymbolPicker,
           style: OutlinedButton.styleFrom(
@@ -2724,7 +4330,7 @@ class _ChartScreenState extends State<ChartScreen>
           label: Text(quoteCurrency, textDirection: TextDirection.ltr,
               style: const TextStyle(fontSize: 12)),
         )),
-        Positioned(left: 8, top: 27, right: 66,
+        Positioned(left: 8, top: compactWidth ? 47 : 27, right: 66,
           child: GestureDetector(
             onTap: !_liveRequested
                 ? (widget.onOpenAccount ?? _notifyUnconnected) : null,
@@ -2732,8 +4338,9 @@ class _ChartScreenState extends State<ChartScreen>
               message: _marketEvidenceLabel,
               child: Text(
                 hasVerifiedPrices
-                    ? (_ctraderTimeCandlesStale
-                        ? 'شموع $source · بيانات متأخرة' : 'شموع $source')
+                    ? (_replay ? 'Replay تاريخي · $source' : _ctraderTimeCandlesStale
+                        ? 'شموع $source · ${widget.controller.recentQuoteFor(_selectedSymbol) != null ? 'الشموع أقدم من السعر' : 'بيانات متأخرة'}'
+                        : 'شموع $source')
                     : fetchingRangeTicks
                         ? 'جارِ التحقق من تيكات BID · cTrader'
                         : 'لا توجد أسعار موثقة · $source',
@@ -2745,26 +4352,76 @@ class _ChartScreenState extends State<ChartScreen>
                 style: TextStyle(fontSize: 12,
                     color: fetchingRangeTicks
                         ? TradeColors.blue
-                        : hasVerifiedPrices && !_ctraderTimeCandlesStale
+                        : hasVerifiedPrices && (_replay || !_ctraderTimeCandlesStale)
                             ? const Color(0xFF047660) : TradeColors.negative),
               ),
             ),
           )),
-        Positioned(left: 8, top: 43, child: OutlinedButton.icon(
-          // The screenshot does not establish what the button labelled 3
-          // does. Keep it visibly disabled until its meaning is verified.
-          onPressed: null,
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(42, 28),
-            padding: const EdgeInsets.symmetric(horizontal: 5),
-            side: const BorderSide(color: Color(0xFFE4E4E4)),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(5))),
-          icon: Icon(Icons.keyboard_arrow_down, size: 18, color: ink),
-          label: Text('3', style: TextStyle(fontSize: 14, color: ink)),
-        )),
+        // The previous '3' button was an inert mock control. All actions in
+        // this compact row are functional and stay visible on small phones.
+        Positioned(left: 8, top: compactWidth ? 65 : 43, right: 6,
+          child: Row(children: [
+            OutlinedButton.icon(
+              key: const Key('chart-candle-settings-action'),
+              onPressed: _showCandleSettings,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: ink,
+                minimumSize: const Size(0, 37),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                side: BorderSide(color: Theme.of(context).dividerColor),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8))),
+              icon: const Icon(Icons.tune, size: 17),
+              label: const Text('الشموع',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(width: 3),
+            IconButton(
+              key: const Key('chart-move-mode'),
+              tooltip: 'تحريك الشارت',
+              onPressed: _enableMoveChart,
+              icon: Icon(Icons.pan_tool_alt_outlined,
+                size: 21, color: !_drawing ? TradeColors.blue : ink),
+              constraints: const BoxConstraints(
+                minWidth: 34, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
+            IconButton(
+              key: const Key('chart-zoom-in'),
+              tooltip: 'تكبير الشارت',
+              onPressed: () => _zoomBy(1.25),
+              icon: Icon(Icons.add_circle_outline, color: ink, size: 21),
+              constraints: const BoxConstraints(
+                minWidth: 34, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
+            IconButton(
+              key: const Key('chart-zoom-out'),
+              tooltip: 'تصغير الشارت',
+              onPressed: () => _zoomBy(.8),
+              icon: Icon(Icons.remove_circle_outline, color: ink, size: 21),
+              constraints: const BoxConstraints(
+                minWidth: 34, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
+            IconButton(
+              key: const Key('chart-back-to-live'),
+              tooltip: 'العودة إلى أحدث شمعة',
+              onPressed: () {
+                _stopMomentum();
+                setState(() => _viewport = _viewport.jumpToLatest());
+              },
+              icon: Icon(Icons.last_page_outlined, color: ink, size: 21),
+              constraints: const BoxConstraints(
+                minWidth: 34, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
+            if (!compactWidth) _buildChartQuickActions(),
+          ]),
+        ),
       ]),
-    );
+      );
+    });
   }
 
   bool get _hasSelectedDrawing => _drawing &&
@@ -2817,6 +4474,72 @@ class _ChartScreenState extends State<ChartScreen>
     return null;
   }
 
+  Widget _buildChartQuickActions() => ChartQuickActions(
+    onCandles: _showCandleSettings,
+    onChartType: _showChartTypePicker,
+    onReplay: _toggleReplay,
+    onDrawingTools: _showDrawingTools,
+    onAnalysis: _showAnalysisHub,
+    onAppearance: _showChartAppearance,
+    onIndicators: _showIndicatorCatalog,
+    onMove: _enableMoveChart,
+    onLatest: () {
+      _stopMomentum();
+      setState(() {
+        _viewport = _viewport.jumpToLatest();
+        _crosshair = null;
+      });
+    },
+    onRange: _showRangeSettings,
+    rangeMode: _mode == ChartMode.range,
+    onFocusMode: widget.onToggleFocusMode,
+    focusMode: widget.focusMode,
+  );
+
+  /// The chart keeps its controller, drawings, broker history and Replay
+  /// cursor when the shell hides navigation; only presentation changes.
+  Widget _focusedChartHeader(List<TradeCandle> candles) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      key: const Key('chart-focus-header'),
+      height: 48,
+      color: colors.surface,
+      child: Row(children: [
+        IconButton(
+          key: const Key('chart-focus-exit'),
+          tooltip: 'الخروج من وضع الشارت الموسع',
+          onPressed: widget.onToggleFocusMode,
+          icon: const Icon(Icons.fullscreen_exit, size: 24),
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          padding: EdgeInsets.zero,
+        ),
+        Expanded(
+          child: Text(_symbol, textDirection: TextDirection.ltr,
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontWeight: FontWeight.w800,
+              fontSize: 16, color: colors.onSurface)),
+        ),
+        if (candles.isNotEmpty)
+          Icon(Icons.verified_outlined, size: 17,
+            color: colors.primary),
+        TextButton(
+          key: const Key('chart-focus-timeframe'),
+          onPressed: _showTimeframePicker,
+          child: Text(ChartTimeframeCatalog.displayLabel(_timeframe)),
+        ),
+        IconButton(
+          key: const Key('symbol-picker'),
+          tooltip: 'اختيار رمز الشارت',
+          onPressed: _showSymbolPicker,
+          icon: const Icon(Icons.search, size: 22),
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          padding: EdgeInsets.zero,
+        ),
+        _buildChartQuickActions(),
+      ]),
+    );
+  }
+
   Widget _referenceChartToolbar(Color surface) => Container(
     key: const Key('chart-reference-toolbar'),
     color: surface,
@@ -2847,17 +4570,18 @@ class _ChartScreenState extends State<ChartScreen>
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             minimumSize: const Size(0, 48)),
-          child: Text(_timeframe == '1m' ? '1 دق' : _timeframe,
+          child: Text(ChartTimeframeCatalog.displayLabel(_timeframe),
             style: const TextStyle(fontSize: 17,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF333333))),
         ),
         // Most used controls remain in the first 390dp; extra tools scroll.
-        _iconAction(icon: Icons.more_horiz,
+        _iconAction(icon: Icons.bar_chart_outlined,
             label: 'نوع الشموع', onPressed: _showChartTypePicker),
-        _iconAction(icon: Icons.replay_circle_filled_outlined,
-            label: _replay ? 'إغلاق Replay' : 'تشغيل Replay داخل الشارت',
-            active: _replay, onPressed: _toggleReplay),
+        if (!_replay && !_replaySelectingStart)
+          _iconAction(icon: Icons.replay_circle_filled_outlined,
+              label: 'تشغيل Replay داخل الشارت',
+              onPressed: _toggleReplay),
         _iconAction(icon: Icons.edit_outlined,
             label: 'أدوات الرسم', active: _drawing,
             onPressed: _showDrawingTools),
@@ -2887,16 +4611,16 @@ class _ChartScreenState extends State<ChartScreen>
             (_panelSettings.paneButtons == ChartButtonVisibility.onTap &&
               _panelChartTouched)) ...[
           _iconAction(icon: Icons.zoom_in_outlined,
-              label: 'تكبير الشارت', onPressed: () => _zoomBy(1.25)),
+              label: 'تكبير الشارت من الشريط', onPressed: () => _zoomBy(1.25)),
           _iconAction(icon: Icons.zoom_out_outlined,
-              label: 'تصغير الشارت', onPressed: () => _zoomBy(.8)),
+              label: 'تصغير الشارت من الشريط', onPressed: () => _zoomBy(.8)),
         ],
         if (_panelSettings.navigationButtons == ChartButtonVisibility.always ||
             (_panelSettings.navigationButtons == ChartButtonVisibility.onTap &&
               _panelChartTouched))
-          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة',
+          _iconAction(icon: Icons.last_page, label: 'العودة إلى أحدث شمعة من الشريط',
               onPressed: () {
-                _momentum.stop();
+                _stopMomentum();
                 setState(() => _viewport = _viewport.jumpToLatest());
               }),
         if (widget.journal != null && !_replay)
@@ -2916,13 +4640,15 @@ class _ChartScreenState extends State<ChartScreen>
         initial: _symbolSettings,
         onCancel: () => setState(() {
           _symbolSettingsOpen = false;
-          _panelSettingsOpen = true;
+          _panelSettingsOpen = _symbolSettingsReturnToPanel;
+          _symbolSettingsReturnToPanel = false;
         }),
         onApply: (updated) {
           // Redraw the same cached bars; never issue a data request here.
           setState(() {
             _symbolSettings = updated;
             _symbolSettingsOpen = false;
+            _symbolSettingsReturnToPanel = false;
             _panelSettingsOpen = false;
           });
           unawaited(_saveSymbolSettings(updated));
@@ -2955,6 +4681,7 @@ class _ChartScreenState extends State<ChartScreen>
           _panelSettingsOpen = false;
         }),
         onOpenSymbol: () => setState(() {
+          _symbolSettingsReturnToPanel = true;
           _symbolSettingsOpen = true;
           _panelSettingsOpen = false;
         }),
@@ -2974,9 +4701,12 @@ class _ChartScreenState extends State<ChartScreen>
     final candles = _displayCandles;
     final surface = colors.surface;
     final chartHint = _activeChartHint;
+    final replayUi = _replay || _replaySelectingStart;
     return Column(children: [
-      _referenceChartHeader(candles),
-      if (_mode == ChartMode.range)
+      replayUi ? _compactReplayHeader(candles)
+        : widget.focusMode ? _focusedChartHeader(candles)
+        : _referenceChartHeader(candles),
+      if (_mode == ChartMode.range && !replayUi)
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -2987,12 +4717,15 @@ class _ChartScreenState extends State<ChartScreen>
               style: const TextStyle(fontSize: 11, color: TradeColors.blue)),
         ),
       if (_loading) const LinearProgressIndicator(minHeight: 2),
-      if (_loadError != null && _liveRequested)
+      if (_loadError != null && _liveRequested && !replayUi)
         MaterialBanner(content: Text(_loadError!), actions: [
           TextButton(onPressed: _loadRealHistory, child: const Text('إعادة المحاولة')),
         ]),
+      if (_mode == ChartMode.heikinAshi &&
+          _heikinCache.isPendingFor(_actualCandles))
+        const LinearProgressIndicator(minHeight: 2),
       if (_olderLoading) const LinearProgressIndicator(minHeight: 2),
-      if (_olderLoadError != null)
+      if (_olderLoadError != null && !replayUi)
         Container(
           color: TradeColors.blue.withValues(alpha: .06),
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -3010,19 +4743,77 @@ class _ChartScreenState extends State<ChartScreen>
         child: LayoutBuilder(builder: (context, constraints) {
           final plotWidth = math.max(1.0, constraints.maxWidth - 61);
           _momentumPlotWidth = plotWidth;
+          final selecting = _replaySelectingStart && candles.isNotEmpty &&
+              _replayCandidateIndex < candles.length &&
+              _replayCandidateIndex < _replaySourceTimestamps.length;
+          final replayLineX = selecting
+              ? _viewport.chartX(index: _replayCandidateIndex,
+                  candleCount: candles.length, plotWidth: plotWidth)
+              : 0.0;
+          final replayLineY = selecting
+              ? _priceScale(candles, plotWidth, constraints.maxHeight)
+                  .y(candles[_replayCandidateIndex].close)
+              : 0.0;
           return Stack(children: [
-          Positioned.fill(child: GestureDetector(
+          Positioned.fill(child: Listener(
+            onPointerDown: (event) {
+              if (_firstChartPointer == null) {
+                _firstChartPointer = event.pointer;
+                _firstChartDown = event.localPosition;
+              }
+            },
+            onPointerUp: (event) {
+              if (_firstChartPointer == event.pointer) {
+                _firstChartPointer = null;
+                _firstChartDown = null;
+              }
+            },
+            onPointerCancel: (event) {
+              if (_firstChartPointer == event.pointer) {
+                _firstChartPointer = null;
+                _firstChartDown = null;
+              }
+            },
+            child: GestureDetector(
             key: const Key('chart-gesture-area'),
             behavior: HitTestBehavior.opaque,
             onScaleStart: (details) {
-              _momentum.stop(); // A new gesture owns the chart immediately.
+              _stopMomentum(); // A new gesture owns the chart immediately.
               if (!_panelChartTouched) setState(() => _panelChartTouched = true);
               // Begin a fresh gesture, independent of any earlier fling.
               // A later second-finger touch rebases the pinch on the viewport
               // the first finger has already moved to.
               _touchGesture = ChartTouchGesture();
-              _gestureFocalX = details.localFocalPoint.dx;
-              _gestureFocalY = details.localFocalPoint.dy;
+              // Anchor ownership and drawing hit-tests to the real
+              // touch-down point, NOT the position after touch slop.
+              final hitStart = details.pointerCount == 1
+                  ? (_firstChartDown ?? details.localFocalPoint)
+                  : details.localFocalPoint;
+              _draggingPriceAxis = candles.isNotEmpty &&
+                  details.pointerCount == 1 &&
+                  hitStart.dx >= plotWidth &&
+                  !_replaySelectingStart && !_drawing &&
+                  !_placingShort && !_placingRectangle;
+              // Bottom 24dp is the drawn TIME axis, not the candle plot.
+              // Touch there owns an anchored horizontal scale gesture,
+              // while touches in the plot continue their usual drag/pinch.
+              _draggingTimeAxis = candles.isNotEmpty &&
+                  details.pointerCount == 1 &&
+                  hitStart.dx < plotWidth &&
+                  hitStart.dy >= constraints.maxHeight - 24 &&
+                  !_replaySelectingStart && !_drawing &&
+                  !_placingShort && !_placingRectangle;
+              _gestureFocalX = hitStart.dx;
+              _gestureFocalY = hitStart.dy;
+              // A touch on the blue Replay line edits the candidate. Touches
+              // elsewhere still pan the chart; a second finger still pinches.
+              final lineX = _viewport.chartX(
+                index: _replayCandidateIndex,
+                candleCount: candles.length,
+                plotWidth: plotWidth);
+              _replayDraggingStart = _replaySelectingStart &&
+                  details.pointerCount == 1 &&
+                  (hitStart.dx - lineX).abs() <= 28;
               _draggingShortHandle = null;
               _shortAtDragStart = null;
               _draggingRectangle = false;
@@ -3032,10 +4823,10 @@ class _ChartScreenState extends State<ChartScreen>
                   !_eraserMode && !_rulerMode && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 final rectangleHit = PriceRectangleGeometry.hitTest(
-                    details.localFocalPoint, _rectangles, _viewport,
+                    hitStart, _rectangles, _viewport,
                     scale, candles.length, plotWidth);
                 final shortHit = rectangleHit == null
-                    ? _hitShortPosition(details.localFocalPoint,
+                    ? _hitShortPosition(hitStart,
                         scale, plotWidth, candles.length) : null;
                 if (rectangleHit != null) {
                   _selectedRectangle = rectangleHit.$1;
@@ -3048,7 +4839,7 @@ class _ChartScreenState extends State<ChartScreen>
                   _saveDrawingUndo();
                 }
                 _draggedEndpoint = rectangleHit == null && shortHit == null
-                    ? _hitSelectedHandle(details.localFocalPoint,
+                    ? _hitSelectedHandle(hitStart,
                         scale, plotWidth, candles.length) : null;
                 if (shortHit != null) {
                   _selectedShort = shortHit.$1;
@@ -3060,14 +4851,14 @@ class _ChartScreenState extends State<ChartScreen>
                 }
                 _selectedLine = rectangleHit == null && shortHit == null &&
                     _draggedEndpoint == null
-                    ? _hitLine(details.localFocalPoint.dy, scale) : null;
+                    ? _hitLine(hitStart.dy, scale) : null;
                 _draggingLine = _selectedLine != null;
                 if (_draggedEndpoint != null) {
                   _draggingPattern = true;
                 } else {
                   _selectedPattern = rectangleHit != null || shortHit != null ||
                       _draggingLine ? null :
-                      _hitPattern(details.localFocalPoint, scale,
+                      _hitPattern(hitStart, scale,
                           plotWidth, candles.length);
                   _draggingPattern = _selectedPattern != null;
                 }
@@ -3079,8 +4870,98 @@ class _ChartScreenState extends State<ChartScreen>
                 _draggingPattern = false;
                 _draggedEndpoint = null;
               }
+              // Measure chart interactions separately in Android Profile
+              // mode: idle/menu frame timings must not pollute pan/pinch p95.
+              _profileTouchGesture(
+                _draggingPriceAxis ? ChartFrameInteraction.priceAxis :
+                _draggingTimeAxis ? ChartFrameInteraction.timeAxis :
+                details.pointerCount > 1 ? ChartFrameInteraction.pinch :
+                _replayDraggingStart ? ChartFrameInteraction.replaySelection :
+                (_draggingRectangle || _draggingShortHandle != null ||
+                    _draggingLine || _draggingPattern)
+                    ? ChartFrameInteraction.drawing
+                    : ChartFrameInteraction.pan,
+                candles,
+              );
+              // Reveal toolbar/handles once; touch updates avoid full rebuilds.
+              if (_draggingRectangle) setState(() {});
             },
             onScaleUpdate: (details) {
+              if (details.pointerCount > 1) {
+                // A second finger starts a distinct pinch cohort. The
+                // previous pan/ruler cohort ends before this switch.
+                _profileTouchGesture(ChartFrameInteraction.pinch, candles);
+              }
+              if (_draggingTimeAxis && details.pointerCount == 1) {
+                final next = _viewport.dragTimeAxis(
+                  deltaX: details.focalPointDelta.dx,
+                  anchorX: _gestureFocalX,
+                  plotWidth: plotWidth,
+                  candleCount: candles.length,
+                );
+                if (next != _viewport) {
+                  // Candle painter, time ticks, source price scale, drawing
+                  // overlays and Replay practice levels use this same live
+                  // viewport; avoid rebuilding the header every touch frame.
+                  _viewport = next;
+                  _chartRepaint.value++;
+                  _prefetchOlderAtEdge(plotWidth, candles.length);
+                }
+                return;
+              }
+              if (_draggingTimeAxis && details.pointerCount > 1) {
+                _draggingTimeAxis = false;
+                // A second finger takes over with the existing pinch
+                // rebase: no sudden jump from the pointer-centroid change.
+              }
+              if (_draggingPriceAxis && details.pointerCount == 1) {
+                final current = _priceScale(
+                    candles, plotWidth, constraints.maxHeight);
+                final changed = current.dragPriceAxis(
+                  deltaY: details.focalPointDelta.dy,
+                  focalY: details.localFocalPoint.dy,
+                );
+                if (!identical(current, changed)) {
+                  _manualPriceScale = changed;
+                  _manualPriceScaleKey = _currentPriceScaleKey;
+                  // Keep the price ruler, candles and drawing overlays on
+                  // one identical live price coordinate system.
+                  _chartRepaint.value++;
+                }
+                return;
+              }
+              if (_draggingPriceAxis && details.pointerCount > 1) {
+                _draggingPriceAxis = false;
+                // The second finger now belongs to the usual anchored pinch.
+              }
+              if (_replaySelectingStart && _replayDraggingStart) {
+                if (details.pointerCount == 1) {
+                  final candidate = ReplayStartResolver.atX(
+                    viewport: _viewport,
+                    x: details.localFocalPoint.dx,
+                    plotWidth: plotWidth,
+                    candleCount: candles.length,
+                    completedCount: _totalBars,
+                    fallbackIndex: _replayCandidateIndex,
+                  );
+                  if (candidate != _replayCandidateIndex) {
+                    setState(() => _replayCandidateIndex = candidate);
+                  }
+                  return;
+                }
+                // Let two-finger pinch take over, with the touch rebased.
+                _replayDraggingStart = false;
+              }
+              if (_draggingRectangle && details.pointerCount == 1) {
+                final scale = _priceScale(
+                    candles, plotWidth, constraints.maxHeight);
+                _updateRectangleDrag(details.localFocalPoint,
+                    scale, plotWidth, candles.length);
+                // Current coordinates are read from the live drawing list.
+                // Do not invalidate the candle canvas or header each frame.
+                _rectangleRepaint.value++;
+                return;
+              }
               final nextViewport = _touchGesture.update(
                 viewport: _viewport,
                 pointerCount: details.pointerCount,
@@ -3093,10 +4974,40 @@ class _ChartScreenState extends State<ChartScreen>
               // Adding/removing a finger shifts Flutter's gesture centroid.
               // Do not reinterpret that shift as a candle pan, zoom or edit.
               if (_touchGesture.ignoredPointerTransition) return;
+              // The retained candle painter observes these exact live
+              // source-anchor arrays. Updating guides via setState on each
+              // touch sample would rebuild toolbars and copy drawing lists.
+              if (details.pointerCount == 1 &&
+                  !_draggingRectangle && _draggingShortHandle == null &&
+                  (_draggingLine || _draggingPattern)) {
+                final scale = _priceScale(
+                    candles, plotWidth, constraints.maxHeight);
+                if (_updateDraggedGuide(details.localFocalPoint, scale,
+                    plotWidth, candles.length)) {
+                  _chartRepaint.value++;
+                }
+                return;
+              }
               final movingDrawing = _draggingRectangle ||
                   _draggingShortHandle != null || _draggingLine ||
                   _draggingPattern;
               if (!movingDrawing && nextViewport == _viewport) return;
+              // Regular one/two finger gestures only change candle geometry.
+              // Keep the header and expensive control tree out of each frame.
+              if (chartCanUsePaintOnlyViewportUpdate(
+                selectingReplayStart: _replaySelectingStart,
+                crosshairVisible: _crosshair != null,
+                movingDrawing: movingDrawing,
+                visiblePriceRectangles: _drawingsVisible && _rectangles.isNotEmpty,
+                priceRectanglesFollowViewport: true,
+                replayTradeLevelsVisible: _replay && _training.trades.isNotEmpty,
+                replayTradeLevelsFollowViewport: true,
+              )) {
+                _viewport = nextViewport;
+                _chartRepaint.value++;
+                _prefetchOlderAtEdge(plotWidth, candles.length);
+                return;
+              }
               setState(() {
               if (_draggingRectangle && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
@@ -3106,39 +5017,6 @@ class _ChartScreenState extends State<ChartScreen>
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 _updateShortDrag(details.localFocalPoint, scale,
                     plotWidth, candles.length);
-              } else if (_draggingLine && _selectedLine != null && details.pointerCount == 1) {
-                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
-                _levels[_selectedLine!] = scale.price(
-                    details.localFocalPoint.dy.clamp(0, scale.height).toDouble());
-              } else if (_draggingPattern && _selectedPattern != null &&
-                  _patternAtDragStart != null && details.pointerCount == 1) {
-                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
-                final original = _patternAtDragStart!;
-                if (_draggedEndpoint != null) {
-                  final anchor = _anchorAt(details.localFocalPoint,
-                      scale, plotWidth, candles.length);
-                  if (anchor != null) {
-                    _patterns[_selectedPattern!] = original.withEndpoint(
-                        _draggedEndpoint!, anchor);
-                  }
-                } else {
-                  final proposedBars = ((details.localFocalPoint.dx -
-                      _gestureFocalX) / _viewport.barWidth).round();
-                  final indices = [
-                    original.start.index,
-                    original.end.index,
-                    if (original.offsetAnchor != null)
-                      original.offsetAnchor!.index,
-                  ];
-                  final minIndex = indices.reduce(math.min);
-                  final maxIndex = indices.reduce(math.max);
-                  final barDelta = proposedBars.clamp(-minIndex,
-                      math.max(0, candles.length - 1 - maxIndex));
-                  final change = scale.price(
-                      details.localFocalPoint.dy.clamp(0, scale.height).toDouble()) -
-                      scale.price(_gestureFocalY.clamp(0, scale.height).toDouble());
-                  _patterns[_selectedPattern!] = original.moved(barDelta.toInt(), change);
-                }
               } else if (details.pointerCount > 1 || _crosshair == null) {
                 // Rebased, incremental touch transform; chart geometry and
                 // source OHLC remain untouched.
@@ -3152,8 +5030,27 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onScaleEnd: (details) {
-              final editing = _draggingLine || _draggingPattern ||
+              // Release flushes only measured touch frames. Subsequent
+              // toolbars/menus and idle refreshes belong to no gesture.
+              _frameProfiler.endInteraction();
+              if (_draggingTimeAxis) {
+                _draggingTimeAxis = false;
+                // Commit the latest scale to any snapshot-only UI once,
+                // after the finger leaves the ruler. Never fling the axis.
+                setState(() {});
+                return;
+              }
+              if (_draggingPriceAxis) {
+                _draggingPriceAxis = false;
+                // Only one widget refresh after the completed axis gesture.
+                setState(() {});
+                return;
+              }
+              final rectangleEdited = _draggingRectangle;
+              final guideEdited = _draggingLine || _draggingPattern;
+              final editing = _replayDraggingStart || guideEdited ||
                   _draggingShortHandle != null || _draggingRectangle;
+              _replayDraggingStart = false;
               _draggingLine = false;
               _draggingPattern = false;
               _patternAtDragStart = null;
@@ -3173,18 +5070,47 @@ class _ChartScreenState extends State<ChartScreen>
                   reducedMotion: MediaQuery.disableAnimationsOf(context))) {
                 _startMomentum(velocity, plotWidth);
               }
+              // Reconcile selection/undo actions only once at release.
+              // The candle painter already displayed each intermediate move.
+              if ((rectangleEdited || guideEdited) && mounted) {
+                setState(() {});
+              }
             },
+            onDoubleTapDown: (details) =>
+                _doubleTapChartX = details.localPosition.dx,
             onDoubleTap: () {
-              _momentum.stop();
-              setState(() { _viewport = _freshViewport(); _crosshair = null; });
+              _stopMomentum();
+              if (_doubleTapChartX >= plotWidth) {
+                _resetPriceAxisToAuto();
+              } else {
+                setState(() {
+                  _viewport = _freshViewport();
+                  _crosshair = null;
+                });
+              }
             },
             onLongPressStart: (details) {
-              _momentum.stop();
+              _stopMomentum();
               setState(() => _crosshair = details.localPosition);
             },
-            onLongPressMoveUpdate: (details) => setState(() => _crosshair = details.localPosition),
+            onLongPressMoveUpdate: (details) {
+              _crosshair = details.localPosition;
+              _chartRepaint.value++;
+            },
             onLongPressEnd: (_) => setState(() => _crosshair = null),
             onTapUp: (details) {
+              if (_replaySelectingStart &&
+                  details.localPosition.dx <= plotWidth) {
+                final candidate = ReplayStartResolver.atX(
+                  viewport: _viewport,
+                  x: details.localPosition.dx,
+                  plotWidth: plotWidth,
+                  candleCount: candles.length,
+                  completedCount: _totalBars,
+                  fallbackIndex: _replayCandidateIndex);
+                setState(() => _replayCandidateIndex = candidate);
+                return;
+              }
               if (!_drawing || _drawingsLocked ||
                   details.localPosition.dx > plotWidth) return;
               final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
@@ -3354,11 +5280,30 @@ class _ChartScreenState extends State<ChartScreen>
                 size: Size.infinite,
                 painter: _CandleChartPainter(
                   candles: candles,
+                  rangeMode: _mode == ChartMode.range,
                   timestamps: _mode == ChartMode.range
                       ? _rangeBarTimestamps : _actualTimestamps,
                   dark: Theme.of(context).brightness == Brightness.dark,
-                  viewport: _viewport,
-                  crosshair: _crosshair,
+                  viewportSnapshot: _viewport,
+                  crosshairSnapshot: _crosshair,
+                  viewportProvider: () => _viewport,
+                  crosshairProvider: () => _crosshair,
+                  priceScaleProvider: (axisWidth, height) =>
+                      _priceScale(candles, axisWidth, height),
+                  sourceQuoteProvider: () => _replay || !widget.active
+                      ? null : widget.controller.recentQuoteFor(_selectedSymbol),
+                  repaint: _chartRepaint,
+                  textCache: _chartTextCache,
+                  // Dynamic geometry for edits; immutable copies below remain
+                  // for shouldRepaint after genuine widget rebuilds.
+                  levelsProvider: () => _drawingsVisible
+                      ? _levels : const <double>[],
+                  patternsProvider: () => _drawingsVisible
+                      ? _patterns : const <ChartPattern>[],
+                  selectedLineProvider: () => _drawing && _drawingsVisible
+                      ? _selectedLine : null,
+                  selectedPatternProvider: () => _drawing && _drawingsVisible
+                      ? _selectedPattern : null,
                   levels: _drawingsVisible ? List<double>.unmodifiable(_levels) : const [],
                   patterns: _drawingsVisible ? List<ChartPattern>.unmodifiable(_patterns) : const [],
                   shortPositions: _drawingsVisible ? List<ChartShortPosition>.unmodifiable(_shortPositions) : const [],
@@ -3371,9 +5316,13 @@ class _ChartScreenState extends State<ChartScreen>
                   scaleSettings: _scaleSettings,
                   symbolSettings: _symbolSettings,
                   actualPriceCandles: _mode == ChartMode.range
-                    ? const [] : _replay
-                      ? CandlePrefix(_actualCandles, _visibleThrough)
-                      : _actualCandles,
+                    ? const [] : _mode == ChartMode.candles
+                      // Share exactly this verified Replay prefix with the
+                      // painter; keep original OHLC for HA source labels.
+                      ? candles
+                      : _replay
+                        ? CandlePrefix(_actualCandles, _visibleThrough)
+                        : _actualCandles,
                   previousSessionClose: _mode == ChartMode.range
                     ? null : ChartAxisSourceLabels.previousSessionClose(
                       _actualBars, candles.length),
@@ -3383,24 +5332,164 @@ class _ChartScreenState extends State<ChartScreen>
                 ),
               ),
             ),
-          )),
+          ))),
+          // Blue Replay cursor is a visual overlay over verified history;
+          // it cannot modify prices or reveal future bars after confirmation.
+          if (selecting)
+            Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
+              child: CustomPaint(
+                key: const Key('replay-start-overlay'),
+                size: Size.infinite,
+                painter: ReplayStartOverlayPainter(
+                  cursorX: replayLineX,
+                  plotWidth: plotWidth,
+                  dark: Theme.of(context).brightness == Brightness.dark),
+              ),
+            ))),
+          if (selecting && replayLineX >= 0 && replayLineX <= plotWidth)
+            Positioned(
+              left: (replayLineX - 15)
+                  .clamp(0.0, math.max(0.0, plotWidth - 30)).toDouble(),
+              top: (replayLineY - 15).clamp(35.0,
+                  math.max(35.0, constraints.maxHeight - 48)).toDouble(),
+              child: const IgnorePointer(child: Icon(
+                Icons.content_cut, key: Key('replay-start-scissors'),
+                color: Color(0xFF171717), size: 28)),
+            ),
+          if (selecting)
+            Positioned(
+              left: 6, top: 7,
+              child: IgnorePointer(child: Container(
+                key: const Key('replay-start-time'),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface
+                    .withValues(alpha: .92),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 5),
+                child: Text(
+                  'UTC ${DateTime.fromMillisecondsSinceEpoch(
+                    _replaySourceTimestamps[_replayCandidateIndex],
+                    isUtc: true).toIso8601String().substring(0, 16)
+                      .replaceFirst('T', ' ')}',
+                  textDirection: TextDirection.ltr,
+                  style: const TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.w600),
+                ),
+              )),
+            ),
           if (_drawingsVisible && candles.isNotEmpty && _rectangles.isNotEmpty)
             Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
               child: CustomPaint(
                 painter: ChartPriceRectanglePainter(
+                  textCache: _chartTextCache,
                   drawings: List<ChartPriceRectangle>.unmodifiable(_rectangles),
+                  drawingsProvider: () => _rectangles,
                   selectedIndex: _drawing ? _selectedRectangle : null,
                   viewport: _viewport,
                   scale: _priceScale(candles, plotWidth, constraints.maxHeight),
+                  // Keep selected handles, price tags and the selected
+                  // chart timezone on the SAME source candle and viewport.
+                  viewportProvider: () => _viewport,
+                  scaleProvider: () => _priceScale(
+                      candles, plotWidth, constraints.maxHeight),
+                  repaint: _rectanglePaintSignals,
                   candleCount: candles.length,
                   plotWidth: plotWidth,
                   dark: Theme.of(context).brightness == Brightness.dark,
+                  timeZone: _symbolSettings.timeZone,
                   timestamps: _mode == ChartMode.range
                       ? _rangeBarTimestamps : _actualTimestamps,
                 ),
                 size: Size.infinite,
               ),
             ))),
+          // Practice orders belong to the current Replay prefix only.
+          // A separate, non-interactive painter keeps drawing tools and
+          // gesture handling untouched. Each order owns distinct SL/TP
+          // segments, rather than connecting unrelated trade levels.
+          if (_replay && candles.isNotEmpty && _training.trades.isNotEmpty)
+            Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
+              child: CustomPaint(
+                key: const Key('replay-practice-levels-overlay'),
+                size: Size.infinite,
+                painter: ReplayTradeOverlayPainter(
+                  trades: _training.trades,
+                  viewport: _viewport,
+                  scale: _priceScale(candles, plotWidth, constraints.maxHeight),
+                  // Share live viewport and price auto-scale with candle painter.
+                  viewportProvider: () => _viewport,
+                  scaleProvider: () => _priceScale(
+                      candles, plotWidth, constraints.maxHeight),
+                  repaint: _chartRepaint,
+                  candleCount: candles.length,
+                  plotWidth: plotWidth,
+                ),
+              ),
+            ))),
+          // Quick replay trading follows the reference's floating
+          // buy/sell/flatten strip without squeezing the chart or time axis.
+          // Entries open the existing historical-only practice ticket.
+          if (_replay && _replayShowTradingButtons && candles.isNotEmpty)
+            Positioned(
+              left: 8, right: 65, bottom: 28,
+              child: Container(
+                key: const Key('replay-inline-trading'),
+                height: 46,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface
+                      .withValues(alpha: .94),
+                  borderRadius: BorderRadius.circular(11),
+                  boxShadow: [BoxShadow(
+                    color: Colors.black.withValues(alpha: .10),
+                    blurRadius: 7,
+                    offset: const Offset(0, 2),
+                  )],
+                ),
+                child: Row(children: [
+                  Expanded(child: OutlinedButton(
+                    key: const Key('replay-flatten-trades'),
+                    onPressed: _training.openTradeCount == 0
+                        ? null : _flattenReplayTrainingTrades,
+                    style: OutlinedButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 36),
+                    ),
+                    child: const Text('تسطيح',
+                      textDirection: TextDirection.rtl,
+                      style: TextStyle(fontSize: 12)),
+                  )),
+                  const SizedBox(width: 4),
+                  Expanded(child: FilledButton(
+                    key: const Key('replay-inline-buy'),
+                    onPressed: () => _openTrainingOrderDialog(
+                        initialSide: ReplaySide.buy),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF009778),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 36),
+                    ),
+                    child: const Text('شراء',
+                      style: TextStyle(fontSize: 13)),
+                  )),
+                  const SizedBox(width: 4),
+                  Expanded(child: FilledButton(
+                    key: const Key('replay-inline-sell'),
+                    onPressed: () => _openTrainingOrderDialog(
+                        initialSide: ReplaySide.sell),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFD94959),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 36),
+                    ),
+                    child: const Text('بيع',
+                      style: TextStyle(fontSize: 13)),
+                  )),
+                ]),
+              ),
+            ),
           if (candles.isEmpty)
             Positioned.fill(child: IgnorePointer(child: Center(
               child: Padding(
@@ -3419,7 +5508,19 @@ class _ChartScreenState extends State<ChartScreen>
                 ]),
               ),
             ))),
-          if (candles.isNotEmpty)
+          // Paint-only OHLC inspection of the exact snapped source candle.
+          if (_crosshair != null && !selecting && chartHint == null &&
+              candles.isNotEmpty)
+            _crosshairOhlcInspector(
+              candles: candles,
+              timestamps: _mode == ChartMode.range
+                  ? _rangeBarTimestamps : _actualTimestamps,
+              plotWidth: plotWidth,
+              chartHeight: constraints.maxHeight,
+              surface: surface,
+            ),
+          if (candles.isNotEmpty &&
+              (!replayUi || _replayShowDrawingTools))
             _buildDrawingRail(constraints.maxHeight),
           if (candles.isNotEmpty && chartHint != null)
             Positioned(
@@ -3449,6 +5550,27 @@ class _ChartScreenState extends State<ChartScreen>
                 ),
               ),
             ),
+          // TradingView-style one-tap return to the genuine OHLC autoscale.
+          // Show only after the owner manually adjusted the price ruler;
+          // unlike a constantly running overlay, this is not rebuilt on pan.
+          if (_priceScaleManual)
+            Positioned(
+              right: 3, top: 4,
+              child: SizedBox(
+                width: 54, height: 26,
+                child: TextButton(
+                  key: const Key('chart-price-axis-auto'),
+                  onPressed: _resetPriceAxisToAuto,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(44, 26),
+                  ),
+                  child: const Text('AUTO',
+                    style: TextStyle(fontSize: 10,
+                        fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ),
           if (_drawing && _selectedShort != null &&
               _selectedShort! < _shortPositions.length && candles.isNotEmpty)
             _buildShortFloatingToolbar(constraints.maxWidth),
@@ -3462,96 +5584,123 @@ class _ChartScreenState extends State<ChartScreen>
       // time axis, as in the supplied mobile reference.
       // No broker-info or drawing-hint footer: chart tools meet navigation.
       // Active drawing guidance now overlays the chart without using height.
-      _referenceChartToolbar(surface),
-      if (_replay) _replayControls(context),
+      // TradingView reference: Replay sits directly below the plot; drawing
+      // toolbar remains below Replay, adjacent to bottom navigation.
+      // Retain both bands so Replay never steals the existing drawing actions.
+      if (_replay || _replaySelectingStart) _replayControls(context),
+      if (!widget.focusMode && !replayUi)
+        _referenceChartToolbar(surface),
     ]);
   }
 
-  Widget _replayControls(BuildContext context) => Container(
-        color: Theme.of(context).colorScheme.surface,
-        padding: const EdgeInsets.fromLTRB(12, 2, 12, 10),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Row(children: [
-            const Text('Replay', style: TextStyle(fontWeight: FontWeight.w800)),
-            const Spacer(),
-            Text('$_visibleThrough / $_totalBars شمعة',
-                style: Theme.of(context).textTheme.labelSmall),
-          ]),
-          Wrap(spacing: 8, runSpacing: 2, children: [
-            OutlinedButton.icon(
-              key: const Key('replay-practice-order'),
-              onPressed: _openTrainingOrderDialog,
-              icon: const Icon(Icons.add_circle_outline, size: 17),
-              label: const Text('صفقة تدريب'),
+  Widget _crosshairOhlcInspector({
+    required List<TradeCandle> candles,
+    required List<int> timestamps,
+    required double plotWidth,
+    required double chartHeight,
+    required Color surface,
+  }) => Positioned(
+    left: 8, top: 8, right: 67,
+    child: IgnorePointer(
+      child: ValueListenableBuilder<int>(
+        valueListenable: _chartRepaint,
+        builder: (context, _, __) {
+          final cursor = _crosshair;
+          if (cursor == null) return const SizedBox.shrink();
+          final selected = ChartOhlcInspector.atCrosshair(
+            viewport: _viewport,
+            touchX: cursor.dx,
+            plotWidth: plotWidth,
+            candles: candles,
+            timestampsUtcMs: timestamps,
+          );
+          if (selected == null) return const SizedBox.shrink();
+          final scale = _priceScale(candles, plotWidth, chartHeight);
+          final digits = _symbolSettings.digitsForTickStep(
+            ChartAxisTicks.decimals(
+              ChartAxisTicks.interval(scale.minimum, scale.maximum)),
+          );
+          final ink = Theme.of(context).colorScheme.onSurface;
+          final trendColor = selected.rising
+              ? TradeColors.positive : TradeColors.negative;
+          final style = TextStyle(
+            color: ink, fontSize: 11, fontWeight: FontWeight.w600,
+          );
+          Widget field(String prefix, String key, double price) => Expanded(
+            child: Text(
+              '$prefix ${selected.formatPrice(price, digits)}',
+              key: Key(key),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textDirection: TextDirection.ltr,
+              style: style,
             ),
-            TextButton(
-              key: const Key('replay-practice-list'),
-              onPressed: _showTrainingTrades,
-              child: Text('صفقاتي (${_training.trades.length})'),
-            ),
-            TextButton(
-              key: const Key('replay-practice-archive'),
-              onPressed: _showTrainingArchive,
-              child: const Text('الأرشيف'),
-            ),
-          ]),
-          if (_liveRequested && (_mode == ChartMode.range
-              ? _rangeHistoryTicks.isNotEmpty : _actualBars.isNotEmpty))
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton.icon(
-                onPressed: _olderLoading || _historyExhausted ||
-                      (_mode == ChartMode.range && _training.trades.isNotEmpty)
-                    ? null : () => _mode == ChartMode.range
-                        ? _loadOlderRangeHistory()
-                        : _loadOlderHistory(manual: true),
-                icon: _olderLoading
-                    ? const SizedBox(width: 15, height: 15,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.history, size: 18),
-                label: Text(_historyExhausted ? 'لا تتوفر شموع أقدم'
-                    : _mode == ChartMode.range
-                        ? 'تحميل تيكات مدى أقدم' : 'تحميل شموع أقدم'),
+          );
+          return Semantics(
+            label: 'بيانات الشمعة المحددة رقم ${selected.index + 1}',
+            child: Container(
+              key: const Key('chart-crosshair-ohlc-inspector'),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: surface.withValues(alpha: .93),
+                border: Border(
+                  left: BorderSide(color: trendColor, width: 3)),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(children: [
+                    field('O', 'chart-ohlc-open', selected.candle.open),
+                    const SizedBox(width: 5),
+                    field('H', 'chart-ohlc-high', selected.candle.high),
+                  ]),
+                  const SizedBox(height: 2),
+                  Row(children: [
+                    field('L', 'chart-ohlc-low', selected.candle.low),
+                    const SizedBox(width: 5),
+                    field('C', 'chart-ohlc-close', selected.candle.close),
+                  ]),
+                ],
               ),
             ),
-          Row(children: [
-            IconButton(tooltip: 'رجوع شمعة',
-              onPressed: _visibleThrough <= 1
-                  ? null : () => _seekReplay(_visibleThrough - 1),
-              icon: const Icon(Icons.skip_previous)),
-            IconButton(key: const Key('replay-play-pause'),
-              tooltip: _playing ? 'إيقاف' : 'تشغيل',
-              onPressed: _togglePlay,
-              icon: Icon(_playing ? Icons.pause_circle : Icons.play_circle_fill,
-                  color: TradeColors.blue)),
-            DropdownButton<ReplayPlaybackSpeed>(
-              key: const Key('replay-speed-picker'),
-              value: _replaySpeed,
-              underline: const SizedBox.shrink(),
-              items: [
-                for (final speed in ReplayPlaybackSpeed.values)
-                  DropdownMenuItem(value: speed,
-                      child: Text(speed.label)),
-              ],
-              onChanged: (speed) {
-                if (speed != null) _setReplaySpeed(speed);
-              },
-            ),
-            IconButton(tooltip: 'تقدم شمعة',
-              onPressed: _visibleThrough >= _totalBars
-                  ? null : () => _seekReplay(_visibleThrough + 1),
-              icon: const Icon(Icons.skip_next)),
-            Expanded(child: Slider(
-              value: _visibleThrough.clamp(1, math.max(2, _totalBars)).toDouble(),
-              min: 1, max: math.max(2, _totalBars).toDouble(),
-              // Continuous thumb + rounded candle indices: do not ask the
-              // Slider to render tens of thousands of discrete tick marks.
-              label: '$_visibleThrough',
-              onChanged: (value) => _seekReplay(value.round()),
-            )),
-          ]),
-        ]),
-      );
+          );
+        },
+      ),
+    ),
+  );
+
+  Widget _replayControls(BuildContext context) => ReplayMobileControls(
+    selecting: _replaySelectingStart,
+    playing: _playing,
+    visibleCount: _visibleThrough,
+    totalBars: _totalBars,
+    chartFrame: _timeframe,
+    speed: _replaySpeed,
+    showTrading: _replayShowTradingButtons,
+    showDrawingTools: _replayShowDrawingTools,
+    canLoadOlder: _liveRequested &&
+        (_mode == ChartMode.range
+            ? _rangeHistoryTicks.isNotEmpty : _actualBars.isNotEmpty) &&
+        !_historyExhausted &&
+        !(_mode == ChartMode.range && _training.trades.isNotEmpty),
+    olderLoading: _olderLoading,
+    tradeCount: _training.trades.length,
+    autoStep: _replayAutoStep,
+    onClose: _exitReplay,
+    onConfirm: _confirmReplayStart,
+    onStartMenu: _handleReplayStartMenu,
+    onExtras: _handleReplayExtras,
+    onStepMenu: _handleReplayIntervalMenu,
+    onReset: () => unawaited(_resetReplayToStart()),
+    onStepBack: () => _seekReplay(_visibleThrough - 1),
+    onStepForward: () => _seekReplay(_visibleThrough + 1),
+    onPlayPause: _togglePlay,
+    onSpeed: _setReplaySpeed,
+    onChooseAgain: () => unawaited(_chooseReplayStartAgain()),
+  );
+
 }
 
 /// Line-only angle glyph; keeps the reference toolbar's outlined style.
@@ -3590,9 +5739,20 @@ class _CandleChartPainter extends CustomPainter {
   _CandleChartPainter({
     required this.candles,
     required this.timestamps,
+    required this.rangeMode,
     required this.dark,
-    required this.viewport,
-    required this.crosshair,
+    required this.viewportSnapshot,
+    required this.crosshairSnapshot,
+    required ChartViewport Function() viewportProvider,
+    required Offset? Function() crosshairProvider,
+    required ChartPriceScale Function(double, double) priceScaleProvider,
+    required MarketQuote? Function() sourceQuoteProvider,
+    required Listenable repaint,
+    required this.textCache,
+    required List<double> Function() levelsProvider,
+    required List<ChartPattern> Function() patternsProvider,
+    required int? Function() selectedLineProvider,
+    required int? Function() selectedPatternProvider,
     required this.levels,
     required this.patterns,
     required this.shortPositions,
@@ -3608,13 +5768,37 @@ class _CandleChartPainter extends CustomPainter {
     required this.previousSessionClose,
     required this.sourceQuote,
     required this.replayActive,
-  });
+  }) : _viewportProvider = viewportProvider,
+       _crosshairProvider = crosshairProvider,
+       _priceScaleProvider = priceScaleProvider,
+       _sourceQuoteProvider = sourceQuoteProvider,
+       _levelsProvider = levelsProvider,
+       _patternsProvider = patternsProvider,
+       _selectedLineProvider = selectedLineProvider,
+       _selectedPatternProvider = selectedPatternProvider,
+       super(repaint: repaint);
 
   final List<TradeCandle> candles;
   final List<int> timestamps;
+  final bool rangeMode;
+  final ChartTextLayoutCache textCache;
   final bool dark;
-  final ChartViewport viewport;
-  final Offset? crosshair;
+  // Stable build-time values are for shouldRepaint comparisons. The getters
+  // below follow motion between widget builds via the repaint notifier.
+  final ChartViewport viewportSnapshot;
+  final Offset? crosshairSnapshot;
+  final ChartViewport Function() _viewportProvider;
+  final Offset? Function() _crosshairProvider;
+  final ChartPriceScale Function(double, double) _priceScaleProvider;
+  final MarketQuote? Function() _sourceQuoteProvider;
+  // Live read-only-on-paint callbacks allow frequent pointer edits without
+  // rebuilding the toolbar or copying every existing drawing on each move.
+  final List<double> Function() _levelsProvider;
+  final List<ChartPattern> Function() _patternsProvider;
+  final int? Function() _selectedLineProvider;
+  final int? Function() _selectedPatternProvider;
+  ChartViewport get viewport => _viewportProvider();
+  Offset? get crosshair => _crosshairProvider();
   final List<double> levels;
   final List<ChartPattern> patterns;
   final List<ChartShortPosition> shortPositions;
@@ -3635,7 +5819,6 @@ class _CandleChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final background = dark && panel.backgroundColor == 0xFFFFFFFF
         ? const Color(0xFF000D16) : Color(panel.backgroundColor);
-    final text = dark ? const Color(0xFFC1C7D0) : const Color(0xFF101010);
     canvas.drawRect(Offset.zero & size, Paint()..color = background);
     final axis = size.width - 61;
     if (axis < 30 || size.height < 60 || candles.isEmpty) return;
@@ -3645,19 +5828,17 @@ class _CandleChartPainter extends CustomPainter {
       candleCount: candles.length,
     );
     if (start >= ending) return;
-    final scale = ChartPriceScale.visible(candles, viewport, axis, chartHeight,
-      topMarginPercent: panel.topMarginPercent,
-      bottomMarginPercent: panel.bottomMarginPercent);
+    final scale = _priceScaleProvider(axis, size.height);
     final maximum = scale.maximum;
     final minimum = scale.minimum;
-    final span = math.max(.00001, maximum - minimum);
     double y(double price) => scale.y(price);
     // Reference: no visible candle-area grid. Labels derive from the actual
     // visible price interval, never from screenshot numbers or fake candles.
     final step = ChartAxisTicks.interval(minimum, maximum);
     final decimals = symbolSettings.digitsForTickStep(
       ChartAxisTicks.decimals(step));
-    for (final tick in ChartAxisTicks.ticks(minimum, maximum)) {
+    for (final tick in ChartAxisTicks.ticksWithStep(
+        minimum, maximum, step: step)) {
       final py = y(tick);
       final important = (tick / (step * 5) -
           (tick / (step * 5)).round()).abs() < 0.000001;
@@ -3677,11 +5858,8 @@ class _CandleChartPainter extends CustomPainter {
           Color(panel.verticalGridColor), panel.verticalGridStroke, .55);
       }
     }
-    if (replayActive && panel.watermarkMode == ChartWatermarkMode.replay &&
-        Color(panel.watermarkColor).a > 0) {
-      _text(canvas, 'Replay', Offset(axis * .38, chartHeight * .40),
-        Color(panel.watermarkColor), 30, bold: true);
-    }
+    // Replay is already identified in the compact header. A large centered
+    // watermark obscures real candles and does not aid playback.
     if (panel.scaleLineColor != 0x00000000) {
       canvas.drawLine(Offset(axis, 0), Offset(axis, chartHeight), Paint()
         ..color = Color(panel.scaleLineColor)
@@ -3691,10 +5869,12 @@ class _CandleChartPainter extends CustomPainter {
     canvas.clipRect(Rect.fromLTWH(0, 0, axis, chartHeight));
     final positiveWick = Paint()
       ..color = Color(symbolSettings.wickBull)
-      ..strokeWidth = 1.0;
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
     final negativeWick = Paint()
       ..color = Color(symbolSettings.wickBear)
-      ..strokeWidth = 1.0;
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
     final positiveBody = Paint()..color = Color(symbolSettings.bodyBull);
     final negativeBody = Paint()..color = Color(symbolSettings.bodyBear);
     final positiveBorder = Paint()
@@ -3705,6 +5885,26 @@ class _CandleChartPainter extends CustomPainter {
       ..color = Color(symbolSettings.borderBear)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
+    // One stroke path per wick color instead of a drawLine per candle on
+    // every momentum/pinch frame. All wicks stay behind their own bodies;
+    // price, market-data order and bar-width geometry are unchanged.
+    if (symbolSettings.wickVisible) {
+      final wicks = ChartCandleWicks.visible(
+        candles: candles,
+        viewport: viewport,
+        start: start,
+        end: ending,
+        plotWidth: axis,
+        priceY: y,
+        colorByPreviousClose: symbolSettings.colorByPreviousClose,
+      );
+      canvas.drawPath(wicks.rising, positiveWick);
+      canvas.drawPath(wicks.falling, negativeWick);
+    }
+    // Keep the per-candle drawRect pipeline and its exact fill/border order.
+    // Raster QA (#541) found pixel differences from grouping the same
+    // rectangles into Paths at every tested bar width. Correct visual
+    // output takes precedence over reducing draw calls for candle bodies.
     for (var i = start; i < ending; i++) {
       final candle = candles[i];
       final rising = symbolSettings.colorByPreviousClose && i > 0
@@ -3712,10 +5912,6 @@ class _CandleChartPainter extends CustomPainter {
       final centerX = viewport.chartX(
         index: i, candleCount: candles.length, plotWidth: axis);
       if (centerX < -viewport.barWidth || centerX > axis + viewport.barWidth) continue;
-      if (symbolSettings.wickVisible) {
-        canvas.drawLine(Offset(centerX, y(candle.high)), Offset(centerX, y(candle.low)),
-          rising ? positiveWick : negativeWick);
-      }
       final openY = y(candle.open);
       final closeY = y(candle.close);
       final bodyRect = Rect.fromLTRB(
@@ -3746,14 +5942,18 @@ class _CandleChartPainter extends CustomPainter {
       canvas.drawPath(linePath, Paint()..color = TradeColors.blue..strokeWidth = 1.6
         ..style = PaintingStyle.stroke);
     }
-    for (var index = 0; index < levels.length; index++) {
-      final levelY = y(levels[index]);
+    final paintLevels = _levelsProvider();
+    final paintPatterns = _patternsProvider();
+    final activeLine = _selectedLineProvider();
+    final activePattern = _selectedPatternProvider();
+    for (var index = 0; index < paintLevels.length; index++) {
+      final levelY = y(paintLevels[index]);
       final marker = Paint()..color = TradeColors.blue.withValues(alpha: .8)
-        ..strokeWidth = selectedLine == index ? 2.4 : 1;
+        ..strokeWidth = activeLine == index ? 2.4 : 1;
       canvas.drawLine(Offset(0, levelY), Offset(axis, levelY), marker);
     }
-    for (var index = 0; index < patterns.length; index++) {
-      final drawing = patterns[index];
+    for (var index = 0; index < paintPatterns.length; index++) {
+      final drawing = paintPatterns[index];
       // Replay is strictly prefix-only: drawings ending in the future stay
       // invisible, even if their coordinates were created in analysis mode.
       if (!drawing.visibleAt(candles.length)) continue;
@@ -3761,24 +5961,43 @@ class _CandleChartPainter extends CustomPainter {
           candleCount: candles.length, plotWidth: axis);
       final x2 = viewport.chartX(index: drawing.end.index,
           candleCount: candles.length, plotWidth: axis);
+      final selected = activePattern == index;
+      // Skip only finite annotations whose source-anchor geometry proves
+      // they cannot touch this plot. The selected pattern keeps its handles;
+      // rays, infinite lines and parallel channels keep their long reach.
+      if (!selected && ChartLineGeometry.definitelyOffscreenHorizontally(
+          tool: drawing.tool, startX: x1, endX: x2, plotWidth: axis)) {
+        continue;
+      }
       final y1 = y(drawing.start.price);
       final y2 = y(drawing.end.price);
       final color = Color(drawing.colorValue);
-      final selected = selectedPattern == index;
       final drawingPaint = Paint()
         ..color = color
         ..strokeWidth = drawing.strokeWidth + (selected ? 1 : 0)
         ..style = PaintingStyle.stroke;
       if (drawing.tool == ChartDrawingTool.fibonacci) {
         final fromX = math.min(x1, x2);
+        final plot = Rect.fromLTWH(0, 0, axis, chartHeight);
         for (final ratio in ChartPattern.fibonacciRatios) {
           final price = drawing.fibonacciPrice(ratio);
-          final levelY = y(price);
-          canvas.drawLine(Offset(fromX, levelY),
-              Offset(axis, levelY), drawingPaint);
+          final stroke = ChartLineGeometry.fibonacciLevelStroke(
+            fromX: fromX,
+            levelY: y(price),
+            plot: plot,
+          );
+          if (stroke == null) continue;
+          canvas.drawLine(stroke.start, stroke.end, drawingPaint);
           if (drawing.showLabels) {
-            _text(canvas, '${(ratio * 100).toStringAsFixed(1)}% ${price.toStringAsFixed(decimals)}',
-                Offset(fromX + 5, levelY - 13), color, 10);
+            final label =
+                '${(ratio * 100).toStringAsFixed(1)}% ${price.toStringAsFixed(decimals)}';
+            final paragraph = textCache.layout(label, color, 10);
+            // Keep the label at its visible beginning and entirely before
+            // the right price ruler, even with an ancient off-screen anchor.
+            if (stroke.end.dx - stroke.start.dx >= paragraph.width + 10) {
+              paragraph.paint(canvas,
+                  Offset(stroke.start.dx + 5, stroke.start.dy - 13));
+            }
           }
         }
       } else {
@@ -3847,10 +6066,11 @@ class _CandleChartPainter extends CustomPainter {
           : Color(scaleSettings.symbolNegativeColor);
       if (scaleSettings.symbolLabel == ChartPriceLabelMode.valueAndLine) {
         final marker = Paint()..color = lastColor..strokeWidth = .9;
-        for (var x = 0.0; x < axis; x += 6) {
-          canvas.drawLine(Offset(x, lastY),
-              Offset(math.min(axis, x + 2.2), lastY), marker);
-        }
+        // Batch identical dash contours into one Canvas call per frame.
+        // Each dash remains 2.2px long with a 6px period, clipped to
+        // the source-candle plot rather than extending onto the price ruler.
+        canvas.drawPath(ChartLineGeometry.lastCloseDashPath(
+          y: lastY, plotWidth: axis), marker);
       }
       final tagY = (lastY - 14).clamp(0, chartHeight - 30).toDouble();
       canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 30),
@@ -3864,31 +6084,39 @@ class _CandleChartPainter extends CustomPainter {
         scaleSettings.previousClose);
     }
     if (scaleSettings.highLow != ChartPriceLabelMode.hidden) {
-      final extremes = ChartAxisSourceLabels.visibleHighLow(
-        actualPriceCandles, start, ending);
+      final extremes = ChartAxisSourceLabels.visibleHighLowForPaint(
+        source: actualPriceCandles,
+        displayed: candles,
+        scale: scale,
+        start: start,
+        end: ending,
+      );
       if (extremes != null) {
         annotate(extremes.$1, Color(scaleSettings.highColor), scaleSettings.highLow);
         annotate(extremes.$2, Color(scaleSettings.lowColor), scaleSettings.highLow);
       }
     }
-    if (indicator && scaleSettings.indicatorLabels != ChartPriceLabelMode.hidden &&
-        candles.isNotEmpty) {
-      // The label must equal the SMA12 actually painted above, including
-      // Heikin Ashi / Range presentations, never an unrelated raw series.
-      final count = math.min(12, candles.length);
-      var sum = 0.0;
-      for (var i = candles.length - count; i < candles.length; i++) {
-        sum += candles[i].close;
+    if (indicator &&
+        scaleSettings.indicatorLabels != ChartPriceLabelMode.hidden) {
+      // The rightmost PAINTED SMA12 point belongs to visible bar ending-1.
+      // The full broker archive can contain later candles while the user
+      // scrolls into history. Never label their unseen SMA as the currently
+      // plotted indicator, including in historical Replay or Range mode.
+      final visibleSma = ChartVisibleSma.atVisibleEnd(candles, ending);
+      if (visibleSma != null) {
+        annotate(visibleSma, TradeColors.blue,
+            scaleSettings.indicatorLabels);
       }
-      annotate(sum / count, TradeColors.blue, scaleSettings.indicatorLabels);
     }
-    // Only a fresh verified quote received by an existing market request.
-    // Replay does not display contemporary BID/ASK over historical candles.
-    if (!replayActive && sourceQuote != null &&
+    // Paint-time source quote freshness is necessary for retained painters:
+    // the most recent BID/ASK can change without reconstructing this widget.
+    // The live getter is disabled for Replay; no future price may leak in.
+    final verifiedQuote = replayActive ? null : _sourceQuoteProvider();
+    if (verifiedQuote != null &&
         scaleSettings.bidAsk != ChartPriceLabelMode.hidden) {
-      annotate(sourceQuote!.ask, Color(scaleSettings.askColor),
+      annotate(verifiedQuote.ask, Color(scaleSettings.askColor),
         scaleSettings.bidAsk);
-      annotate(sourceQuote!.bid, Color(scaleSettings.bidColor),
+      annotate(verifiedQuote.bid, Color(scaleSettings.bidColor),
         scaleSettings.bidAsk);
     }
     for (var i = 0; i < shortPositions.length; i++) {
@@ -3900,35 +6128,73 @@ class _CandleChartPainter extends CustomPainter {
           _price(item.target, decimals), TradeColors.shortLabelBlue);
     }
     if (timestamps.length >= candles.length) {
-      // Real UTC dates only. Range uses the time of the originating BID
-      // tick, NOT a guessed fixed-duration interval per Range bar.
+      // Label widths are measured using the same font/RTL direction as the
+      // painter. Never let overlapping text corrupt the mobile time axis.
+      // This affects presentation only; the underlying UTC times are intact.
+      final timeAxisLayout = ChartTimeAxisLabelLayout(plotWidth: axis);
+      final fontSize = math.max(9, panel.axisTextSize - 2).toDouble();
+      final labelColor = Color(panel.axisTextColor);
+      final zoneLabel = ChartHistoricalTimeZone.labelAtVisibleBar(
+          zone: symbolSettings.timeZone,
+          timestampsUtcMs: timestamps,
+          lastVisibleIndex: ending - 1);
+      final zoneWidth = math.min(120.0, axis * .30);
+      if (zoneWidth > 24) {
+        final zonePainter = textCache.layoutBoundedAxis(
+          zoneLabel, labelColor, 9, maxWidth: zoneWidth);
+        final zoneLeft = axis - zonePainter.width - 3;
+        // Place timezone at the right of the plot, away from the drawing
+        // rail overlay on the left, then reserve its measured width.
+        if (timeAxisLayout.reserve(
+            left: zoneLeft, right: zoneLeft + zonePainter.width)) {
+          zonePainter.paint(canvas, Offset(zoneLeft, chartHeight + 4));
+        }
+      }
+
+      // Real UTC dates only. Range uses the originating BID tick timestamp,
+      // never a fabricated equal-duration interval.
       DateTime? priorTick;
       for (var tick = 1; tick <= 4; tick++) {
         final x = axis * tick / 5;
-        final index = viewport.indexAt(x: x, plotWidth: axis,
-            candleCount: candles.length);
+        final index = viewport.indexAt(
+            x: x, plotWidth: axis, candleCount: candles.length);
         if (index == null) continue;
         final local = symbolSettings.timeZone.displayDate(timestamps[index]);
         final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
         final isDayBoundary = priorTick == null ||
-          priorTick.day != local.day || priorTick.month != local.month ||
-          priorTick.year != local.year;
+            priorTick.day != local.day || priorTick.month != local.month ||
+            priorTick.year != local.year;
         priorTick = local;
-        final label = scaleSettings.weekdayOnLabels && isDayBoundary
-          ? ChartScaleSettings.localWeekday(local)
-          : '${hour.toString().padLeft(2, '0')}:'
-            '${local.minute.toString().padLeft(2, '0')} '
-            '${local.hour < 12 ? 'AM' : 'PM'}';
-      _text(canvas, label, Offset(x - (isDayBoundary &&
-          scaleSettings.weekdayOnLabels ? 20 : 26), chartHeight + 4),
-          Color(panel.axisTextColor),
-          math.max(9, panel.axisTextSize - 2).toDouble(),
-          rtl: scaleSettings.weekdayOnLabels && isDayBoundary);
+        final isWeekdayLabel =
+            scaleSettings.weekdayOnLabels && isDayBoundary;
+        final label = isWeekdayLabel
+            ? ChartScaleSettings.weekdayForDisplayedDate(local)
+            : '${hour.toString().padLeft(2, '0')}:'
+              '${local.minute.toString().padLeft(2, '0')} '
+              '${local.hour < 12 ? 'AM' : 'PM'}';
+        // Reuse text shaping on ordinary pan, pinch and momentum frames.
+        // Width, RTL direction and the original 500 font weight are intact.
+        final labelPainter = textCache.layout(
+          label, labelColor, fontSize, rtl: isWeekdayLabel);
+        if (timeAxisLayout.reserveCentered(
+            centerX: x, width: labelPainter.width)) {
+          labelPainter.paint(
+              canvas, Offset(x - labelPainter.width / 2, chartHeight + 4));
+        }
       }
     }
     if (crosshair != null) {
+      // Resolve ONE candle index for both the vertical guide and its time
+      // tag. At 3px/bar the unsnapped guide could sit between two candles
+      // while the label claimed the time of a different source bar.
+      final selected = ChartCrosshairSnap.resolve(
+        viewport: viewport,
+        touchX: crosshair!.dx,
+        plotWidth: axis,
+        candleCount: candles.length,
+      );
       final location = Offset(
-        crosshair!.dx.clamp(0, axis).toDouble(),
+        selected.x,
         crosshair!.dy.clamp(0, chartHeight).toDouble(),
       );
       _configuredLine(canvas, Offset(location.dx, 0),
@@ -3937,23 +6203,42 @@ class _CandleChartPainter extends CustomPainter {
       _configuredLine(canvas, Offset(0, location.dy),
         Offset(axis, location.dy), Color(panel.crosshairColor),
         panel.crosshairStroke, 1);
-      final crossPrice = maximum - location.dy / chartHeight * span;
-      final markerY = (location.dy - 9).clamp(0, chartHeight - 18).toDouble();
-      canvas.drawRect(Rect.fromLTWH(axis, markerY, 61, 18),
-          Paint()..color = TradeColors.blue);
-      _text(canvas, crossPrice.toStringAsFixed(decimals),
-          Offset(axis + 3, markerY + 2), Colors.white, 10);
-      if (timestamps.length >= candles.length) {
-        final index = viewport.indexAt(
-            x: location.dx, plotWidth: axis, candleCount: candles.length);
-        if (index != null) {
-          final date = symbolSettings.timeZone.displayDate(timestamps[index]);
-          final startX = (location.dx - 37).clamp(0.0, axis - 75).toDouble();
-          canvas.drawRect(Rect.fromLTWH(startX, chartHeight, 75, 20),
+      // Match the exact canvas price transform, even at sub-pip forex zoom.
+      // A separate 0.00001 span floor used to put the cursor's numerical
+      // tag at a different price from its horizontal line.
+      final crossPrice = scale.crosshairPrice(location.dy);
+      if (crossPrice != null) {
+        final markerY = (location.dy - 9).clamp(
+            0, chartHeight - 18).toDouble();
+        canvas.drawRect(Rect.fromLTWH(axis, markerY, 61, 18),
+            Paint()..color = TradeColors.blue);
+        _text(canvas, _price(crossPrice, decimals),
+            Offset(axis + 3, markerY + 2), Colors.white, 10);
+      }
+      if (timestamps.length >= candles.length &&
+          selected.index != null) {
+          // This is the same REAL candle that owns the guide at selected.x.
+          // The Replay list is already limited to its confirmed prefix.
+          final label = ChartCrosshairTimeLabel.fromSource(
+            utcTimestampMs: timestamps[selected.index!],
+            zone: symbolSettings.timeZone,
+            rangeMode: rangeMode,
+          );
+          final painter = textCache.layout(label, Colors.white, 9);
+          final badgeWidth = ChartCrosshairTimeLabel.badgeWidth(
+            measuredTextWidth: painter.width, plotWidth: axis);
+          final startX = (location.dx - badgeWidth / 2).clamp(
+              0.0, math.max(0, axis - badgeWidth)).toDouble();
+          canvas.drawRect(Rect.fromLTWH(
+              startX, chartHeight, badgeWidth, 20),
               Paint()..color = TradeColors.blue);
-          _text(canvas, _formatUtc(date),
-              Offset(startX + 5, chartHeight + 4), Colors.white, 9);
-        }
+          // The measured width carries milliseconds for Range ticks, but
+          // the badge never paints into the right price scale.
+          canvas.save();
+          canvas.clipRect(Rect.fromLTWH(
+              startX, chartHeight, badgeWidth, 20));
+          painter.paint(canvas, Offset(startX + 5, chartHeight + 4));
+          canvas.restore();
       }
     }
     // A separate LTR price axis keeps digits and decimal points predictable in RTL.
@@ -3962,22 +6247,13 @@ class _CandleChartPainter extends CustomPainter {
           Offset(axis / 2 - 18, chartHeight + 3),
           Color(panel.axisTextColor),
           math.max(9, panel.axisTextSize - 2).toDouble());
-    } else {
-      _text(canvas, symbolSettings.timeZone.labelAt(DateTime.now().toUtc()),
-        Offset(3, chartHeight + 4), text, 9, rtl: true);
     }
   }
 
-  static void _text(Canvas canvas, String value, Offset offset, Color color,
+  void _text(Canvas canvas, String value, Offset offset, Color color,
       double size, {bool bold = false, bool rtl = false}) {
-    final painter = TextPainter(
-      text: TextSpan(text: value,
-          style: TextStyle(fontSize: size, color: color,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
-      textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
-      maxLines: 1,
-    )..layout();
-    painter.paint(canvas, offset);
+    textCache.paint(
+      canvas, value, offset, color, size, bold: bold, rtl: rtl);
   }
 
   void _paintShortPositions(Canvas canvas, ChartPriceScale scale,
@@ -4044,7 +6320,7 @@ class _CandleChartPainter extends CustomPainter {
     }
   }
 
-  static void _shortAxisTag(Canvas canvas, double axis, double height,
+  void _shortAxisTag(Canvas canvas, double axis, double height,
       double y, String value, Color color) {
     if (y < 0 || y > height) return;
     final top = (y - 9).clamp(0, height - 18).toDouble();
@@ -4052,15 +6328,13 @@ class _CandleChartPainter extends CustomPainter {
     _text(canvas, value, Offset(axis + 2, top + 2), Colors.white, 10);
   }
 
-  static void _shortPill(Canvas canvas, String value, Offset location,
+  void _shortPill(Canvas canvas, String value, Offset location,
       Color fill, double axis, double chartHeight, {bool twoLines = false}) {
-    final span = TextSpan(text: value, style: const TextStyle(
-      fontSize: 11, color: Colors.white, height: 1.18));
-    final painter = TextPainter(
-      text: span, textDirection: TextDirection.rtl,
-      textAlign: TextAlign.center,
-      maxLines: twoLines ? 2 : 1,
-    )..layout(maxWidth: math.max(40, axis - 16));
+    // These three selected-trade labels used to construct fresh paragraphs
+    // on every pinch, pan and animated repaint. Reuse their exact measured
+    // RTL layout via the chart-owned, capacity-bounded text cache.
+    final painter = textCache.layoutPill(value,
+        maxWidth: math.max(40, axis - 16), twoLines: twoLines);
     final rectWidth = painter.width + 12;
     final left = (location.dx - rectWidth + 10)
         .clamp(3.0, math.max(3.0, axis - rectWidth - 3)).toDouble();
@@ -4079,41 +6353,29 @@ class _CandleChartPainter extends CustomPainter {
       canvas.drawLine(from, to, paint);
       return;
     }
-    final delta = to - from;
-    final distance = delta.distance;
-    if (distance < .01) return;
-    final direction = delta / distance;
-    for (var at = 0.0; at < distance; at += 8) {
-      canvas.drawLine(from + direction * at,
-        from + direction * math.min(at + 4, distance), paint);
-    }
+    // Keep the original dash positions and lengths, but issue one canvas
+    // draw call instead of a drawLine for every 8px during pan/pinch.
+    canvas.drawPath(
+      ChartLineGeometry.configuredDashPath(from: from, to: to),
+      paint..style = PaintingStyle.stroke,
+    );
   }
 
-  static String _price(double value, int digits) {
-    final parts = value.toStringAsFixed(digits).split('.');
-    final integer = parts.first.replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
-    return digits == 0 ? integer : '$integer.${parts.last}';
-  }
-
-  static String _formatUtc(DateTime date) =>
-      '${date.day.toString().padLeft(2, '0')}/'
-      '${date.month.toString().padLeft(2, '0')} '
-      '${date.hour.toString().padLeft(2, '0')}:'
-      '${date.minute.toString().padLeft(2, '0')}';
+  static String _price(double value, int digits) =>
+      ChartPriceTextFormatter.price(value, digits);
 
   @override
   bool shouldRepaint(covariant _CandleChartPainter old) =>
       old.candles != candles || old.timestamps != timestamps ||
-      old.dark != dark || old.viewport != viewport ||
+      old.dark != dark || old.viewportSnapshot != viewportSnapshot ||
       old.panel != panel ||
       old.scaleSettings != scaleSettings ||
       old.symbolSettings != symbolSettings ||
       old.actualPriceCandles != actualPriceCandles ||
       old.previousSessionClose != previousSessionClose ||
       old.sourceQuote != sourceQuote ||
-      old.replayActive != replayActive ||
-      old.crosshair != crosshair || old.indicator != indicator ||
+      old.replayActive != replayActive || old.rangeMode != rangeMode ||
+      old.crosshairSnapshot != crosshairSnapshot || old.indicator != indicator ||
       !listEquals(old.levels, levels) ||
       !listEquals(old.patterns, patterns) ||
       !listEquals(old.shortPositions, shortPositions) ||

@@ -1,9 +1,68 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 
 import 'tradelab_data.dart';
 import 'ctrader_closed_bar_cutoff.dart';
+
+/// Selective off-main-isolate decoding of dense broker tick payloads.
+/// Small messages avoid isolate overhead; only verified cTrader BID pages
+/// can be large enough to interrupt gesture and frame scheduling.
+class MarketJsonDecodePolicy {
+  const MarketJsonDecodePolicy._();
+  static const minOffloadChars = 128 * 1024;
+
+  static bool shouldOffload({required String path, required int chars}) =>
+      path == '/v1/ticks' && chars >= minOffloadChars;
+}
+
+/// Accept broker milliseconds only when the source number is exact.
+/// Truncating 1700000000000.75 via toInt() would silently move an authentic
+/// BID event or candle open into a different millisecond, corrupting Replay.
+int? _exactBrokerMillisecond(Object? source) {
+  if (source is! num || !source.isFinite || source < 0 ||
+      source > 8640000000000000 || source % 1 != 0) {
+    return null;
+  }
+  return source.toInt();
+}
+
+dynamic _convertDenseBidRow(dynamic entry) {
+  if (entry is Map) {
+    final time = _exactBrokerMillisecond(entry['timestamp']);
+    final value = entry['price'];
+    if (time != null && value is num) {
+      return MarketTick(time, value.toDouble());
+    }
+  }
+  // Retain malformed records for the caller's strict validation to reject.
+  return entry;
+}
+
+Map<String, dynamic> _decodeBrokerObject(String payload) {
+  final decoded = jsonDecode(payload);
+  if (decoded is! Map<String, dynamic>) throw const FormatException();
+  return decoded;
+}
+
+/// Dense broker BID history is decoded AND converted to MarketTick on the
+/// worker isolate. The source/quote/account identity, order and exact range
+/// are still validated by the requesting page before a single tick is used.
+/// Preserve malformed records for the existing validation to reject; never
+/// silently omit a broker event or fabricate a replacement.
+Map<String, dynamic> _decodeDenseBrokerBidTicks(String payload) {
+  final decoded = _decodeBrokerObject(payload);
+  final rows = decoded['ticks'];
+  if (rows is List && rows.length <= 100000) {
+    decoded['ticks'] = <dynamic>[
+      for (final entry in rows) _convertDenseBidRow(entry),
+    ];
+  }
+  return decoded;
+}
 
 /// The only permitted providers: cTrader for forex/gold, Binance for crypto.
 /// No demo, fallback feed, or OHLC-derived ticks are permitted here.
@@ -94,9 +153,16 @@ class MarketApi {
           'فشل الاتصال بالمصدر (${response.statusCode}). أعد المحاولة.');
     }
     try {
-      final data = jsonDecode(response.body);
-      if (data is! Map<String, dynamic>) throw const FormatException();
-      return data;
+      // Both JSON decoding and MarketTick allocations of dense BID pages
+      // happen in the worker isolate; frame scheduling on the chart UI
+      // only needs the lightweight final chronology/price verification.
+      if (MarketJsonDecodePolicy.shouldOffload(
+          path: url.path, chars: response.body.length)) {
+        return await compute<String, Map<String, dynamic>>(
+          _decodeDenseBrokerBidTicks, response.body,
+          debugLabel: 'tradelab-ctrader-bid-json-and-ticks');
+      }
+      return _decodeBrokerObject(response.body);
     } catch (_) {
       throw const MarketDataException('أعاد مصدر السوق استجابة غير صالحة.');
     }
@@ -307,68 +373,138 @@ class MarketApi {
     const maxTicks = 1000000;
     const maxRequests = 4096;
     const maxPageTicks = 100000;
+
+    // Work-stealing two-lane interval queue. The previous algorithm only
+    // split the root in parallel; each half then ran depth-first in a single
+    // lane. When one half ended early, its lane stayed idle while the other
+    // had dozens of remaining truncated cTrader pages. Both lanes now draw
+    // from the SAME bounded queue until all authenticated intervals finish.
+    //
+    // A pending entry represents a *real inclusive broker interval*, never
+    // inferred market activity or a synthetic BID tick. Intervals split at
+    // exact millisecond boundaries; each original event is kept, even if
+    // multiple BID updates have identical timestamps.
+    final waiting = Queue<({int fromMs, int toMs})>()
+      ..add((fromMs: fromMs, toMs: toMs));
+    final pages = <int, List<MarketTick>>{};
+    var pending = 1; // Queued and currently in-flight source intervals.
     var requests = 0;
-    final results = <MarketTick>[];
+    var loadedTicks = 0;
+    Completer<void>? wakeup;
+    Object? failure;
+    StackTrace? failureTrace;
 
-    Future<void> loadInterval(int fromMs, int toMs) async {
-      requests++;
-      if (requests > maxRequests) {
-        throw const MarketDataException(
-            'تجاوز تاريخ cTrader عدد الطلبات الآمن؛ جرّب فترة أقصر.');
-      }
-      final data = await _json(_gateway('/v1/ticks', {
-        'accountId': accountId, 'symbolId': '$id',
-        'from': '$fromMs', 'to': '$toMs',
-      }), token: token);
-      if (data['source'] != 'ctrader' ||
-          data['quoteType'] != 'bid' ||
-          '${data['symbolId']}' != '$id' ||
-          data['hasMore'] is! bool) {
-        throw const MarketDataException(
-            'تعذر التحقق من مصدر تيكات BID أو حالة اكتمالها.');
-      }
+    void notifyWaitingWorkers() {
+      final waitingWorker = wakeup;
+      wakeup = null;
+      waitingWorker?.complete();
+    }
 
-      if (data['hasMore'] == true) {
-        if (fromMs == toMs) {
-          // The provider cannot disambiguate more ticks within a single
-          // millisecond. No fabricated ordering or partial Range candles.
-          throw const MarketDataException(
-              'cTrader أعاد تيكات غير مكتملة داخل مللي ثانية واحدة.');
+    Future<void> downloadWorker() async {
+      while (failure == null) {
+        if (waiting.isEmpty) {
+          if (pending == 0) return;
+          // Another lane is waiting on the broker and may enqueue children.
+          // Do not exit while authenticated history remains unfinished.
+          await (wakeup ??= Completer<void>()).future;
+          continue;
         }
-        final middle = fromMs + (toMs - fromMs) ~/ 2;
-        await loadInterval(fromMs, middle);
-        await loadInterval(middle + 1, toMs);
-        return;
-      }
+        final window = waiting.removeFirst();
+        final pageFrom = window.fromMs;
+        final pageTo = window.toMs;
+        try {
+          requests++;
+          if (requests > maxRequests) {
+            throw const MarketDataException(
+                'تجاوز تاريخ cTrader عدد الطلبات الآمن؛ جرّب فترة أقصر.');
+          }
+          final data = await _json(_gateway('/v1/ticks', {
+            'accountId': accountId, 'symbolId': '$id',
+            'from': '$pageFrom', 'to': '$pageTo',
+          }), token: token);
+          if (data['source'] != 'ctrader' ||
+              data['quoteType'] != 'bid' ||
+              '${data['symbolId']}' != '$id' ||
+              // Some gateway versions omit accountId in the signed response.
+              // If the broker does supply it, refuse to splice another
+              // authorized account's BID history into the current chart.
+              (data['accountId'] != null &&
+                  '${data['accountId']}' != accountId) ||
+              data['hasMore'] is! bool) {
+            throw const MarketDataException(
+                'تعذر التحقق من مصدر تيكات BID أو حالة اكتمالها.');
+          }
+          if (data['hasMore'] == true) {
+            if (pageFrom == pageTo) {
+              // Splitting below one millisecond would drop real same-ms
+              // events. Never label an incomplete page as verified.
+              throw const MarketDataException(
+                  'cTrader أعاد تيكات غير مكتملة داخل مللي ثانية واحدة.');
+            }
+            final middle = pageFrom + (pageTo - pageFrom) ~/ 2;
+            pending += 2;
+            waiting.add((fromMs: pageFrom, toMs: middle));
+            waiting.add((fromMs: middle + 1, toMs: pageTo));
+            continue;
+          }
 
-      final rows = data['ticks'];
-      if (rows is! List || rows.length > maxPageTicks ||
-          results.length + rows.length > maxTicks) {
-        throw const MarketDataException(
-            'تجاوزت تيكات cTrader الحد الآمن للذاكرة أو حجم الصفحة.');
-      }
-      var previous = fromMs;
-      for (final entry in rows) {
-        if (entry is! Map) {
-          throw const MarketDataException('تيكات cTrader غير صالحة.');
+          final rows = data['ticks'];
+          if (rows is! List || rows.length > maxPageTicks ||
+              loadedTicks + rows.length > maxTicks) {
+            throw const MarketDataException(
+                'تجاوزت تيكات cTrader الحد الآمن للذاكرة أو حجم الصفحة.');
+          }
+          final page = <MarketTick>[];
+          var previous = pageFrom;
+          for (final entry in rows) {
+            final int? time;
+            final double? price;
+            if (entry is MarketTick) {
+              time = entry.timestamp;
+              price = entry.bid;
+            } else if (entry is Map) {
+              time = _exactBrokerMillisecond(entry['timestamp']);
+              final rawPrice = entry['price'];
+              price = rawPrice is num ? rawPrice.toDouble() : null;
+            } else {
+              throw const MarketDataException('تيكات cTrader غير صالحة.');
+            }
+            if (time == null || time < pageFrom || time > pageTo ||
+                time < previous || price == null ||
+                !price.isFinite || price <= 0) {
+              throw const MarketDataException(
+                  'ترتيب تيكات cTrader أو أسعارها غير صالح.');
+            }
+            page.add(entry is MarketTick ? entry : MarketTick(time, price));
+            previous = time;
+          }
+          loadedTicks += page.length;
+          pages[pageFrom] = page;
+        } catch (error, stack) {
+          // Never return a partially downloaded archive after *any* failed
+          // leaf, malformed source, memory cap or request-budget error.
+          // An already running second request may finish, but cannot publish.
+          failure ??= error;
+          failureTrace ??= stack;
+        } finally {
+          pending--;
+          notifyWaitingWorkers();
         }
-        final time = (entry['timestamp'] as num?)?.toInt();
-        final price = (entry['price'] as num?)?.toDouble();
-        if (time == null || time < fromMs || time > toMs ||
-            time < previous || price == null ||
-            !price.isFinite || price <= 0) {
-          throw const MarketDataException(
-              'ترتيب تيكات cTrader أو أسعارها غير صالح.');
-        }
-        results.add(MarketTick(time, price));
-        previous = time;
       }
     }
 
-    // Left-to-right recursive loading preserves event order and all
-    // same-millisecond ticks; never deduplicate genuine broker events.
-    await loadInterval(fromMs, toMs);
-    return results;
+    await Future.wait<void>([downloadWorker(), downloadWorker()]);
+    if (failure != null) {
+      Error.throwWithStackTrace(failure!, failureTrace!);
+    }
+    // Stable chronological reassembly by VERIFIED, disjoint source bounds.
+    // Never reorder same-millisecond events inside a downloaded leaf.
+    final starts = pages.keys.toList()..sort();
+    final result = <MarketTick>[];
+    for (final firstMs in starts) {
+      result.addAll(pages[firstMs]!);
+    }
+    return result;
   }
 
   Future<double> ctraderPointSize({required String token, required String accountId,
@@ -397,7 +533,7 @@ class MarketApi {
     }), token: token);
     final bid = (data['bid'] as num?)?.toDouble();
     final ask = (data['ask'] as num?)?.toDouble();
-    final timestamp = (data['timestamp'] as num?)?.toInt();
+    final timestamp = _exactBrokerMillisecond(data['timestamp']);
     if (data['source'] != 'ctrader' || '${data['symbolId']}' != '$id' ||
         timestamp == null || timestamp <= 0 || bid == null || ask == null ||
         !bid.isFinite || !ask.isFinite || bid <= 0 || ask < bid) {
@@ -437,7 +573,7 @@ class MarketApi {
     }
     final interval = switch (timeframe) {
       '1m' => '1m', '3m' => '3m', '5m' => '5m', '15m' => '15m',
-      '30m' => '30m', '1h' => '1h', '4h' => '4h', '1D' => '1d',
+      '30m' => '30m', '1h' => '1h', '2h' => '2h', '4h' => '4h', '1D' => '1d',
       '1W' => '1w', '1M' => '1M', _ => throw const MarketDataException('إطار زمني غير مدعوم'),
     };
     final uri = Uri.https('api.binance.com', '/api/v3/klines', {
@@ -454,8 +590,13 @@ class MarketApi {
       final end = (before ?? DateTime.now().toUtc()).millisecondsSinceEpoch;
       final bars = rows.map((row) {
         if (row is! List || row.length < 7) throw const FormatException();
-        final ts = (row[0] as num).toInt();
-        final closeAt = (row[6] as num).toInt();
+        final ts = _exactBrokerMillisecond(row[0]);
+        final closeAt = _exactBrokerMillisecond(row[6]);
+        // Malformed times cannot silently move a Binance candle across
+        // Replay's cutoff, or turn an open candle into a completed one.
+        if (ts == null || closeAt == null || closeAt <= ts) {
+          throw const FormatException('Invalid Binance kline timestamps');
+        }
         // Exclude the current, unclosed candle to keep Replay look-ahead-free.
         if (closeAt >= end) return null;
         return MarketBar(ts, TradeCandle(double.parse('${row[1]}'), double.parse('${row[2]}'),
@@ -536,7 +677,7 @@ List<MarketBar> parseVerifiedBars(dynamic source, {required TradeSource sourceTy
   if (source is! List) throw const MarketDataException('الشموع المستلمة غير صالحة.');
   final bars = source.map((item) {
     if (item is! Map) throw const MarketDataException('الشموع المستلمة غير صالحة.');
-    final ts = (item['timestamp'] as num?)?.toInt();
+    final ts = _exactBrokerMillisecond(item['timestamp']);
     final o = (item['open'] as num?)?.toDouble();
     final h = (item['high'] as num?)?.toDouble();
     final l = (item['low'] as num?)?.toDouble();

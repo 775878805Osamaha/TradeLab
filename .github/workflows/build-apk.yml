@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 jobs:
   build:
+    # Disabled at the owner's request until every TradeLab feature is complete.
+    # Unlock only after the owner explicitly approves APK generation.
+    if: ${{ false }}
     name: Build & Test Android Debug APK
     runs-on: ubuntu-latest
 

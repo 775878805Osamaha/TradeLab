@@ -4,10 +4,26 @@ import '../data/tradelab_data.dart';
 /// Stable price coordinates shared by drawing gestures and chart painting.
 /// Drawings are anchored to market prices, not screen-height fractions.
 class ChartPriceScale {
-  const ChartPriceScale(this.minimum, this.maximum, this.height);
+  const ChartPriceScale(this.minimum, this.maximum, this.height, {
+    this.sourceCandles,
+    this.sourceMinimum,
+    this.sourceMaximum,
+    this.sourceVisibleStart,
+    this.sourceVisibleEnd,
+  });
   final double minimum;
   final double maximum;
   final double height;
+
+  // Verified unpadded extrema are calculated in the same visible-OHLC pass
+  // that constructs automatic price geometry. They are distinct from the
+  // padded minimum/maximum used for drawing coordinates. Null for a manual
+  // ruler scale, empty/offscreen source or free-standing scale.
+  final List<TradeCandle>? sourceCandles;
+  final double? sourceMinimum;
+  final double? sourceMaximum;
+  final int? sourceVisibleStart;
+  final int? sourceVisibleEnd;
 
   factory ChartPriceScale.visible(List<TradeCandle> candles, ChartViewport viewport,
       double width, double height, {
@@ -30,11 +46,76 @@ class ChartPriceScale {
     final fullSpan = span / visibleFraction;
     return ChartPriceScale(
       minPrice - fullSpan * bottomMarginPercent / 100,
-      maxPrice + fullSpan * topMarginPercent / 100, height);
+      maxPrice + fullSpan * topMarginPercent / 100, height,
+      sourceCandles: candles,
+      sourceMinimum: minPrice,
+      sourceMaximum: maxPrice,
+      sourceVisibleStart: start,
+      sourceVisibleEnd: end,
+    );
   }
 
   double y(double price) => (maximum - price) / (maximum - minimum) * height;
   double price(double y) => maximum - y / height * (maximum - minimum);
+
+  /// Read the price displayed by the crosshair from the *same* price scale
+  /// that paints candles, levels, SL/TP and the right axis. Applying a
+  /// separate minimum span (e.g. 0.00001) to only the crosshair label breaks
+  /// the on-screen price/line agreement at fine forex zoom levels.
+  ///
+  /// No broker data is transformed; an invalid scale is not advertised as
+  /// a tradable price. Vertical touches outside the plot use its nearest
+  /// visible edge.
+  double? crosshairPrice(double yPosition) {
+    final span = maximum - minimum;
+    if (!yPosition.isFinite || !height.isFinite || height <= 0 ||
+        !minimum.isFinite || !maximum.isFinite ||
+        !span.isFinite || span <= 0) {
+      return null;
+    }
+    return price(yPosition.clamp(0.0, height).toDouble());
+  }
+
+  /// A manually adjusted price interval retains its market-price anchors
+  /// when the Android chart canvas changes height (e.g. focus mode / Replay).
+  ChartPriceScale withHeight(double newHeight) =>
+      ChartPriceScale(minimum, maximum, newHeight,
+        sourceCandles: sourceCandles,
+        sourceMinimum: sourceMinimum,
+        sourceMaximum: sourceMaximum,
+        sourceVisibleStart: sourceVisibleStart,
+        sourceVisibleEnd: sourceVisibleEnd);
+
+  /// Vertical drag on the RIGHT price scale, independent of time-axis pan.
+  /// The price under the user's finger stays at the same y while zooming.
+  /// An upward drag magnifies price movement; downward reveals more range.
+  /// Pure geometry: no broker OHLC, Replay boundary or drawing is mutated.
+  ChartPriceScale dragPriceAxis({
+    required double deltaY,
+    required double focalY,
+  }) {
+    final span = maximum - minimum;
+    if (!deltaY.isFinite || !focalY.isFinite ||
+        !height.isFinite || height <= 0 ||
+        !minimum.isFinite || !maximum.isFinite ||
+        !span.isFinite || span <= 0 || deltaY == 0) {
+      return this;
+    }
+    final zoomFactor = math.exp(
+        (-deltaY.clamp(-120.0, 120.0).toDouble()) / 240.0);
+    final minSpan = math.max(1e-9, (maximum.abs() + minimum.abs()) * 1e-11);
+    final nextSpan = (span / zoomFactor).clamp(minSpan, 1e15).toDouble();
+    if (nextSpan == span) return this;
+    final anchorY = focalY.clamp(0.0, height).toDouble();
+    final anchorPrice = price(anchorY);
+    final aboveFraction = anchorY / height;
+    final nextMax = anchorPrice + aboveFraction * nextSpan;
+    final nextMin = anchorPrice - (1 - aboveFraction) * nextSpan;
+    if (!nextMin.isFinite || !nextMax.isFinite || nextMax <= nextMin) {
+      return this;
+    }
+    return ChartPriceScale(nextMin, nextMax, height);
+  }
 }
 
 /// Price-chart horizontal viewport. Zero means the newest bar is at the right
@@ -54,8 +135,11 @@ class ChartViewport {
   ChartViewport withRightMarginBars(double bars) => ChartViewport(
     barWidth: barWidth, scrollBars: scrollBars, rightMarginBars: bars);
 
-  static const minBarWidth = 5.0;
-  static const maxBarWidth = 30.0;
+  // Allow a wider continuous zoom than the original 5–30px envelope:
+  // users can inspect individual candle structures or a much longer
+  // session without artificial tick interpolation. Default stays 10px.
+  static const minBarWidth = 3.0;
+  static const maxBarWidth = 60.0;
 
   double chartX({
     required int index,
@@ -68,9 +152,16 @@ class ChartViewport {
   /// future whitespace to the last candle (important for Replay correctness).
   int? indexAt({required double x, required double plotWidth,
       required int candleCount}) {
-    if (candleCount <= 0 || x < 0 || x > plotWidth) return null;
-    final index = ((x - plotWidth) / barWidth +
-        candleCount - scrollBars - .5 + rightMarginBars).round();
+    // A transient Android multi-pointer centroid must never be rounded
+    // from NaN/Infinity into a candle index or a fake Replay timestamp.
+    if (candleCount <= 0 || !x.isFinite || !plotWidth.isFinite ||
+        plotWidth <= 0 || x < 0 || x > plotWidth ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite) return null;
+    final rawIndex = (x - plotWidth) / barWidth +
+        candleCount - scrollBars - .5 + rightMarginBars;
+    if (!rawIndex.isFinite) return null;
+    final index = rawIndex.round();
     return index < 0 || index >= candleCount ? null : index;
   }
 
@@ -87,12 +178,17 @@ class ChartViewport {
     required double deltaX,
     required double plotWidth,
     required int candleCount,
-  }) => ChartViewport(
-        barWidth: barWidth,
-        rightMarginBars: rightMarginBars,
-        scrollBars: _boundedScroll(
+  }) {
+    if (!deltaX.isFinite || !plotWidth.isFinite || plotWidth <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 || !scrollBars.isFinite ||
+        !rightMarginBars.isFinite || candleCount <= 0) return this;
+    return ChartViewport(
+      barWidth: barWidth,
+      rightMarginBars: rightMarginBars,
+      scrollBars: _boundedScroll(
           scrollBars + deltaX / barWidth, plotWidth, candleCount, barWidth),
-      );
+    );
+  }
 
   /// Keeps the sample under the initial pinch focal point anchored while
   /// zooming. Moving both fingers together also pans the chart naturally.
@@ -103,15 +199,56 @@ class ChartViewport {
     required double plotWidth,
     required int candleCount,
   }) {
+    if (!scale.isFinite || scale <= 0 ||
+        !initialFocalX.isFinite || !currentFocalX.isFinite ||
+        !plotWidth.isFinite || plotWidth <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite ||
+        candleCount <= 0) return this;
     final width = (barWidth * scale).clamp(minBarWidth, maxBarWidth).toDouble();
     final anchoredScroll = scrollBars +
         (plotWidth - initialFocalX) * (1 / barWidth - 1 / width) +
         (currentFocalX - initialFocalX) / width;
+    if (!anchoredScroll.isFinite) return this;
     return ChartViewport(
       barWidth: width,
       rightMarginBars: rightMarginBars,
       scrollBars: _boundedScroll(anchoredScroll, plotWidth, candleCount, width),
     );
+  }
+
+  /// Dragging the BOTTOM time ruler adjusts candle width independently
+  /// of ordinary one-finger plot panning. Use the EXISTING focal-anchored
+  /// pinch transform with identical start/end anchors, so the verified
+  /// historical candle under the initial touch stays at its x coordinate.
+  ///
+  /// Incremental deltas are capped to avoid sudden jumps from Android
+  /// pointer handoffs. No new timestamps, broker candles or Replay bars are
+  /// synthesized when exposing a wider or narrower source view.
+  ChartViewport dragTimeAxis({
+    required double deltaX,
+    required double anchorX,
+    required double plotWidth,
+    required int candleCount,
+  }) {
+    if (!deltaX.isFinite || !anchorX.isFinite ||
+        !plotWidth.isFinite || plotWidth <= 0 || candleCount <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite ||
+        deltaX == 0) {
+      return this;
+    }
+    final anchor = anchorX.clamp(0.0, plotWidth).toDouble();
+    final factor = math.exp(
+        deltaX.clamp(-120.0, 120.0).toDouble() / 180.0);
+    final next = pinch(
+      scale: factor,
+      initialFocalX: anchor,
+      currentFocalX: anchor,
+      plotWidth: plotWidth,
+      candleCount: candleCount,
+    );
+    return next == this ? this : next;
   }
 
   /// Keep the same historical candle under the same x-coordinate after
@@ -124,7 +261,9 @@ class ChartViewport {
     required int newCount,
     required int newIndex,
   }) {
-    if (scrollBars <= 0 || oldCount < 1 || newCount < 1 ||
+    if (!barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite ||
+        scrollBars <= 0 || oldCount < 1 || newCount < 1 ||
         oldIndex < 0 || oldIndex >= oldCount ||
         newIndex < 0 || newIndex >= newCount) {
       return this;
@@ -133,10 +272,41 @@ class ChartViewport {
     // Preserve that expression at the same bar width and plot width.
     final remapped = scrollBars +
         (newCount - oldCount) - (newIndex - oldIndex);
+    if (!remapped.isFinite) return this;
     return ChartViewport(
       barWidth: barWidth,
       rightMarginBars: rightMarginBars,
       scrollBars: remapped.clamp(0.0, (newCount - 1).toDouble()).toDouble(),
+    );
+  }
+
+  /// Brings the REAL selected Replay candle into the plot without altering
+  /// its source index, UTC timestamp, zoom or right-margin preference.
+  ///
+  /// Very early candles cannot be centered without blank history to the
+  /// left, so use the bounded scroll limit to keep them visible at the edge.
+  ChartViewport revealHistoricalBar({
+    required int index,
+    required int candleCount,
+    required double plotWidth,
+  }) {
+    if (index < 0 || index >= candleCount ||
+        !plotWidth.isFinite || plotWidth <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite) {
+      return this;
+    }
+    final wantedX = plotWidth / 2;
+    final proposed = candleCount - index - .5 + rightMarginBars -
+        (plotWidth - wantedX) / barWidth;
+    // A malformed/restored ultra-small bar width must not produce Infinity
+    // and jump Replay to an unrelated historical candle.
+    if (!proposed.isFinite) return this;
+    return ChartViewport(
+      barWidth: barWidth,
+      rightMarginBars: rightMarginBars,
+      scrollBars: _boundedScroll(
+        proposed, plotWidth, candleCount, barWidth),
     );
   }
 
@@ -162,8 +332,11 @@ class ChartViewport {
     required double plotWidth,
     required int candleCount,
   }) {
-    if (candleCount <= 0) return (0, 0);
+    if (candleCount <= 0 || !plotWidth.isFinite || plotWidth <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite) return (0, 0);
     final edge = candleCount - scrollBars + rightMarginBars;
+    if (!edge.isFinite) return (0, 0);
     final from = (edge - plotWidth / barWidth - 2).floor().clamp(0, candleCount);
     final to = (edge + 2).ceil().clamp(0, candleCount);
     return (from, math.max(from, to));
@@ -176,6 +349,39 @@ class ChartViewport {
 
   @override
   int get hashCode => Object.hash(barWidth, scrollBars, rightMarginBars);
+}
+
+/// Resolves a crosshair position to one source candle and its exact x.
+/// The price/time markers must not claim a different candle than the vertical
+/// crosshair line when bars become as narrow as 3px on an Android phone.
+///
+/// Whitespace to the right of the last broker/Replay candle stays whitespace:
+/// no synthetic future index or timestamp is returned.
+class ChartCrosshairSnap {
+  const ChartCrosshairSnap._();
+
+  static ({double x, int? index}) resolve({
+    required ChartViewport viewport,
+    required double touchX,
+    required double plotWidth,
+    required int candleCount,
+  }) {
+    if (!touchX.isFinite || !plotWidth.isFinite || plotWidth <= 0) {
+      return (x: 0, index: null);
+    }
+    final x = touchX.clamp(0.0, plotWidth).toDouble();
+    final index = viewport.indexAt(
+      x: x, plotWidth: plotWidth, candleCount: candleCount);
+    if (index == null) return (x: x, index: null);
+    final centerX = viewport.chartX(
+      index: index, candleCount: candleCount, plotWidth: plotWidth);
+    if (!centerX.isFinite || centerX < 0 || centerX > plotWidth) {
+      // The closest candle center is beyond the visible clip. Do not pin a
+      // label to an off-screen source candle or invent a visible timestamp.
+      return (x: x, index: null);
+    }
+    return (x: centerX, index: index);
+  }
 }
 
 /// Tracks one continuous touch session independently from the chart's OHLC.
@@ -205,7 +411,28 @@ class ChartTouchGesture {
     ignoredPointerTransition = false;
     if (pointerCount > 1) {
       hadMultiTouch = true;
-      if (!_pinching) {
+      // Android can briefly report an invalid focal centroid while the
+      // second pointer joins/leaves. Drop that *sample*, not the chart:
+      // the first subsequent valid sample rebases pinch at today's viewport.
+      if (!focalX.isFinite || !scale.isFinite || scale <= 0) {
+        // An invalid sample can arrive *during* a valid Android pinch, not
+        // only when the second finger first joins. Flutter's subsequent
+        // centroid/scale may be rebased, so abandon the old gesture origin.
+        // The next valid two-pointer sample must anchor to the viewport
+        // visible now instead of jumping back to the stale origin.
+        // Keep the active-pinching flag until the pointer count actually
+        // drops. A direct two-to-one transition must still suppress its
+        // first synthetic centroid delta, even after an invalid sample.
+        _pinchOrigin = null;
+        // Even when the *first* two-finger sample is corrupted, remember
+        // that a multi-touch session began. Otherwise an immediate lift
+        // falls through to one-finger pan and applies its synthetic centroid
+        // delta as a real swipe, jumping the chart.
+        _pinching = true;
+        ignoredPointerTransition = true;
+        return viewport;
+      }
+      if (!_pinching || _pinchOrigin == null) {
         _pinching = true;
         _pinchOrigin = viewport;
         _pinchOriginFocalX = focalX;
@@ -252,3 +479,27 @@ bool chartShouldFling({
     horizontalVelocity.abs() >= 180 && horizontalTravel >= 14 &&
     candleCount > 1 &&
     !multiTouch && !editingDrawing && !reducedMotion;
+
+/// Only the candle painter reads the viewport dynamically during a repaint.
+/// Other viewport-dependent layers use immutable painter/position snapshots
+/// from build(), so they must be rebuilt when visible. In particular, Replay
+/// selection, price rectangles and practice trade levels cannot be left
+/// behind while the candles move underneath them.
+bool chartCanUsePaintOnlyViewportUpdate({
+  required bool selectingReplayStart,
+  required bool crosshairVisible,
+  required bool movingDrawing,
+  required bool visiblePriceRectangles,
+  // Enable only for rectangles bound to chart's shared repaint signal and
+  // dynamic viewport/auto-scale, never for an unbound snapshot painter.
+  bool priceRectanglesFollowViewport = false,
+  required bool replayTradeLevelsVisible,
+  // Opt in only when the practice overlay is wired to the SAME viewport
+  // notifier and live price scale as the chart painter.
+  bool replayTradeLevelsFollowViewport = false,
+}) =>
+    !selectingReplayStart &&
+    !crosshairVisible &&
+    !movingDrawing &&
+    (!visiblePriceRectangles || priceRectanglesFollowViewport) &&
+    (!replayTradeLevelsVisible || replayTradeLevelsFollowViewport);

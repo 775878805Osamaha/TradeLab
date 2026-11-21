@@ -1,7 +1,32 @@
+import 'dart:collection';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/range_tick_rollforward.dart';
 import 'package:tradelab_flutter/data/range_tick_store.dart';
+
+class _MeasuredBidWindow extends ListBase<MarketTick> {
+  _MeasuredBidWindow(this.source);
+  final List<MarketTick> source;
+  int reads = 0;
+
+  @override
+  int get length => source.length;
+
+  @override
+  set length(int value) =>
+      throw UnsupportedError('Cached BID events are source-verified');
+
+  @override
+  MarketTick operator [](int index) {
+    reads++;
+    return source[index];
+  }
+
+  @override
+  void operator []=(int index, MarketTick value) =>
+      throw UnsupportedError('Cached BID events are source-verified');
+}
 
 void main() {
   const sixDays = Duration(days: 6);
@@ -80,6 +105,47 @@ void main() {
       newTicks: const <MarketTick>[],
       newFromMs: toMs - sixDays.inMilliseconds, newToMs: toMs,
     ), throwsArgumentError);
+  });
+
+  test('120k BID window skips obsolete history in logarithmic source reads',
+      () {
+    const start = 1700000000000;
+    const sixDayMs = 6 * 24 * 60 * 60 * 1000;
+    final source = List<MarketTick>.generate(120000, (i) =>
+        MarketTick(start + i * 4320, 3900 + i * .0001),
+        growable: false);
+    final measured = _MeasuredBidWindow(source);
+    final window = VerifiedBidWindow(
+      fromMs: start, toMs: start + sixDayMs, ticks: measured);
+    final result = RangeTickRollforward.merge(
+      cached: window, newTicks: const <MarketTick>[],
+      newFromMs: window.toMs, newToMs: window.toMs + sixDayMs);
+    expect(result, isEmpty);
+    expect(measured.reads, lessThan(30),
+        reason: 'Skip 120k obsolete BID events without a linear scan');
+    expect(source, hasLength(120000));
+  });
+
+  test('rolling BID window retains all same-millisecond boundary events', () {
+    const start = 1700000000000;
+    const sixDayMs = 6 * 24 * 60 * 60 * 1000;
+    final source = <MarketTick>[
+      MarketTick(start, 100),
+      MarketTick(start + 1000, 101),
+      MarketTick(start + 1000, 102),
+      MarketTick(start + 1000, 103),
+      MarketTick(start + 3000, 104),
+    ];
+    final previous = VerifiedBidWindow(
+      fromMs: start, toMs: start + sixDayMs, ticks: source);
+    final nextToMs = previous.toMs + 1000;
+    final merged = RangeTickRollforward.merge(
+      cached: previous,
+      newTicks: [MarketTick(previous.toMs + 1, 105)],
+      newFromMs: nextToMs - sixDayMs, newToMs: nextToMs);
+    expect(merged.map((tick) => tick.bid), [101, 102, 103, 104, 105]);
+    expect(merged[0], same(source[1]));
+    expect(merged[2], same(source[3]));
   });
 
   test('does not alter input tick arrays', () {

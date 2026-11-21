@@ -5,7 +5,7 @@ name: Verify TradeLab Flutter Range History
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main]
+    branches: [main, test/flutter-all-fixes-20261116]
     paths:
       - 'flutter_app/**'
       - '.github/workflows/verify-flutter-range.yml'
@@ -39,22 +39,92 @@ jobs:
       - name: Verify historical tick archive and chart interactions
         run: |
           flutter test test/range_older_page_test.dart \
+            test/range_bid_page_verifier_test.dart \
+            test/range_older_page_scanner_test.dart \
             test/range_startup_loader_test.dart \
+            test/range_history_fill_policy_test.dart \
             test/range_tick_store_test.dart \
+            test/range_verified_bid_window_slice_test.dart \
             test/widget_test.dart \
+            test/candle_prefix_test.dart \
             test/range_tick_rollforward_test.dart \
             test/range_bar_timeline_test.dart \
+            test/range_live_bid_delta_test.dart \
+            test/range_drawing_rebase_search_test.dart \
             test/range_bar_builder_test.dart \
+            test/range_bar_validation_test.dart \
             test/chart_viewport_test.dart \
+            test/chart_120k_viewport_workload_test.dart \
+            test/chart_price_scale_cache_test.dart \
+            test/chart_axis_ticks_test.dart \
+            test/chart_price_text_formatter_test.dart \
+            test/chart_axis_source_labels_test.dart \
+            test/chart_visible_highlow_reuse_test.dart \
+            test/chart_ohlc_inspector_test.dart \
+            test/chart_crosshair_time_label_test.dart \
+            test/chart_visible_sma_test.dart \
+            test/chart_paint_only_pan_test.dart \
+            test/chart_frame_profiler_test.dart \
+            test/chart_load_profiler_test.dart \
+            test/chart_text_layout_cache_test.dart \
+            test/chart_rectangle_label_cache_test.dart \
+            test/chart_rectangle_visibility_timezone_test.dart \
+            test/chart_timeframe_catalog_test.dart \
+            test/chart_panel_settings_test.dart \
+            test/chart_symbol_settings_test.dart \
+            test/chart_mobile_controls_test.dart \
+            test/chart_range_initial_preset_test.dart \
+            test/chart_focus_mode_test.dart \
+            test/markets_chart_navigation_test.dart \
+            test/watchlist_favorites_sqlite_test.dart \
+            test/watchlist_favorites_widget_test.dart \
             test/chart_mode_transition_test.dart \
             test/chart_annotations_test.dart \
+            test/chart_line_geometry_test.dart \
+            test/chart_candle_wicks_test.dart \
+            test/chart_heikin_ashi_test.dart \
+            test/chart_wick_raster_parity_test.dart \
             test/ctrader_candle_stitcher_test.dart \
+            test/ctrader_older_candle_pager_test.dart \
+            test/older_candle_prepend_test.dart \
+            test/market_history_budget_test.dart \
+            test/verified_market_history_snapshot_test.dart \
             test/ctrader_account_selection_test.dart \
+            test/account_active_selection_widget_test.dart \
+            test/theme_preference_store_test.dart \
+            test/dark_mode_persistence_widget_test.dart \
             test/market_candle_store_test.dart \
             test/market_api_test.dart \
             test/ctrader_closed_bar_cutoff_test.dart \
+            test/replay_start_resolver_test.dart \
+            test/replay_revealed_exit_index_test.dart \
+            test/replay_mobile_controls_test.dart \
+            test/replay_playback_speed_test.dart \
+            test/chart_historical_time_zone_test.dart \
+            test/chart_scale_settings_test.dart \
+            test/replay_date_time_resolver_test.dart \
+            test/replay_viewport_focus_test.dart \
             test/replay_training_session_test.dart \
+            test/replay_sparse_seek_test.dart \
             test/replay_training_archive_test.dart \
             test/replay_training_widget_test.dart \
             test/replay_training_order_dialog_test.dart \
+            test/paper_ledger_test.dart \
+            test/paper_journal_controller_test.dart \
+            test/paper_journal_sqlite_test.dart \
+            test/paper_trade_service_test.dart \
+            test/results_connection_test.dart \
+            test/dashboard_ui_responsive_test.dart \
+            test/dashboard_compact_ui_test.dart \
+            test/ctrader_quote_ordering_test.dart \
+            test/chart_feed_health_test.dart \
+            test/chart_time_axis_label_layout_test.dart \
+            test/replay_trade_overlay_test.dart \
+            test/paper_results_flow_test.dart \
             test/chart_frame_profiler_test.dart
+      # The original bug appears on phones whose local timezone differs
+      # from the selected chart timezone (e.g. New York on a Yemen device).
+      - name: Verify chart weekdays under Yemen device timezone
+        env:
+          TZ: Asia/Aden
+        run: flutter test test/chart_scale_settings_test.dart

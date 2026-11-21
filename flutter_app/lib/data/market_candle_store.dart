@@ -1,8 +1,38 @@
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
 import 'market_api.dart';
+import 'chart_timeframe_catalog.dart';
+import 'market_history_budget.dart';
 import 'tradelab_data.dart';
+
+/// Parse a dense SQLite result and validate all stored OHLC in a worker.
+/// Database I/O happens before this function; no SQLite handles are sent
+/// between isolates. Keep identical strict source-integrity checks for both
+/// small and large cached histories.
+List<MarketBar> _decodeArchivedCandleRows(List<Map<String, Object?>> rows) {
+  final bars = rows.reversed.map((row) => MarketBar(
+    (row['timestamp_ms'] as num).toInt(),
+    TradeCandle(
+      (row['open'] as num).toDouble(),
+      (row['high'] as num).toDouble(),
+      (row['low'] as num).toDouble(),
+      (row['close'] as num).toDouble(),
+    ),
+  )).toList(growable: false);
+  validateBars(bars);
+  return bars;
+}
+
+/// Controls when the parse/validation cost warrants a worker isolate.
+class MarketCandleDecodePolicy {
+  const MarketCandleDecodePolicy._();
+  static const minOffloadBars = 5000;
+
+  static bool shouldOffload(int count) =>
+      !kIsWeb && count >= minOffloadBars;
+}
 
 /// Locally archived, source-validated time candles. A broker account is part
 /// of the identity: history from one account is never shown as another's.
@@ -12,6 +42,58 @@ class MarketCandleStore {
 
   static Database? _database;
   static Future<Database>? _opening;
+
+  // Start with enough recent source candles for a fluid Android chart.
+  // Deep SQLite history remains on disk until the user pans left.
+  static const initialChartPageSize = 4000;
+  static const olderChartPageSize = 2000;
+
+  static int olderPageCapacity(int loadedBars) {
+    if (loadedBars < 0 ||
+        loadedBars > MarketHistoryBudget.maxVisibleTimeCandles) {
+      throw ArgumentError.value(
+          loadedBars, 'loadedBars', 'Outside chart memory budget');
+    }
+    final remaining = MarketHistoryBudget.maxVisibleTimeCandles - loadedBars;
+    return remaining < olderChartPageSize ? remaining : olderChartPageSize;
+  }
+
+  /// Accept only a contiguous cached prefix that directly attaches to the
+  /// current oldest chart candle. Stored islands (e.g. bars 1..10 and
+  /// 50..100) cannot certify that unarchived bars 11..49 never existed.
+  /// For any uncertain gap, fetch the authenticated broker page instead.
+  ///
+  /// A genuine weekend/holiday may cause a gap as well: without a broker
+  /// coverage manifest the source must confirm it. Never synthesize bars.
+  static List<MarketBar> contiguousOlderPage({
+    required List<MarketBar> source,
+    required int beforeMs,
+    required String timeframe,
+  }) {
+    if (beforeMs < 1) {
+      throw ArgumentError.value(beforeMs, 'beforeMs',
+          'Expected a positive historical cursor');
+    }
+    if (source.isEmpty) return source;
+    validateBars(source);
+    if (source.last.timestamp >= beforeMs) {
+      throw const MarketDataException(
+          'شموع الأرشيف الأقدم تتجاوز حد الشارت الزمني.');
+    }
+    final step = ChartTimeframeCatalog.fixedOpenStepMs(timeframe);
+    if (step == null || source.last.timestamp != beforeMs - step) {
+      // An older disconnected archive island or calendar month cannot
+      // prove that intermediate broker candles have all been downloaded.
+      return const <MarketBar>[];
+    }
+    var begin = source.length - 1;
+    while (begin > 0 &&
+        source[begin].timestamp - source[begin - 1].timestamp == step) {
+      begin--;
+    }
+    // Avoid copying even a bounded 2000-bar page if it is all continuous.
+    return begin == 0 ? source : source.sublist(begin);
+  }
 
   static String key(TradeSymbol symbol, String timeframe, String? accountId) {
     if (symbol.source == TradeSource.ctrader &&
@@ -36,32 +118,53 @@ class MarketCandleStore {
   /// Replay must never inherit those revisions as if its past were unchanged.
   static List<MarketBar> mergeVerified(
       List<MarketBar> existing, List<MarketBar> fetched,
-      {int maxCount = 100000}) {
-    if (maxCount <= 0) {
+      {int maxCount = MarketHistoryBudget.maxVisibleTimeCandles}) {
+    if (maxCount <= 0 ||
+        maxCount > MarketHistoryBudget.maxVisibleTimeCandles) {
       throw ArgumentError.value(maxCount, 'maxCount', 'Must be positive');
     }
     validateBars(existing);
     validateBars(fetched);
-    final byTime = <int, MarketBar>{
-      for (final bar in existing) bar.timestamp: bar,
-    };
-    for (final bar in fetched) {
-      final archived = byTime[bar.timestamp];
-      if (archived != null &&
-          (archived.candle.open != bar.candle.open ||
-           archived.candle.high != bar.candle.high ||
-           archived.candle.low != bar.candle.low ||
-           archived.candle.close != bar.candle.close)) {
-        throw const MarketDataException(
-          'تعارض بين الشموع المحفوظة وبيانات المصدر. '
-          'أوقفنا تحديث الشارت لحماية Replay؛ تحقق من مصدر البيانات.');
+    // validateBars guarantees both inputs are strictly timestamp-ascending.
+    // The previous Map + key sort performed O(N log N) work on every refresh.
+    // A two-pointer stable merge is O(existing + fetched), using no inferred
+    // candles and no extra broker queries. Check conflicting historical
+    // overlaps even when a maxCount limit later clips the older prefix.
+    final merged = <MarketBar>[];
+    var archiveIndex = 0;
+    var incomingIndex = 0;
+    while (archiveIndex < existing.length && incomingIndex < fetched.length) {
+      final archived = existing[archiveIndex];
+      final incoming = fetched[incomingIndex];
+      if (archived.timestamp < incoming.timestamp) {
+        merged.add(archived);
+        archiveIndex++;
+      } else if (incoming.timestamp < archived.timestamp) {
+        merged.add(incoming);
+        incomingIndex++;
+      } else {
+        if (archived.candle.open != incoming.candle.open ||
+            archived.candle.high != incoming.candle.high ||
+            archived.candle.low != incoming.candle.low ||
+            archived.candle.close != incoming.candle.close) {
+          throw const MarketDataException(
+            'تعارض بين الشموع المحفوظة وبيانات المصدر. '
+            'أوقفنا تحديث الشارت لحماية Replay؛ تحقق من مصدر البيانات.');
+        }
+        // Equal timestamps have identical validated OHLC. Retain one bar.
+        merged.add(incoming);
+        archiveIndex++;
+        incomingIndex++;
       }
-      byTime[bar.timestamp] = bar;
     }
-    final timestamps = byTime.keys.toList()..sort();
-    final start = timestamps.length > maxCount ? timestamps.length - maxCount : 0;
-    return List<MarketBar>.unmodifiable(
-        timestamps.skip(start).map((ts) => byTime[ts]!));
+    while (archiveIndex < existing.length) {
+      merged.add(existing[archiveIndex++]);
+    }
+    while (incomingIndex < fetched.length) {
+      merged.add(fetched[incomingIndex++]);
+    }
+    final start = merged.length > maxCount ? merged.length - maxCount : 0;
+    return List<MarketBar>.unmodifiable(merged.getRange(start, merged.length));
   }
 
   static Future<Database> _open() async {
@@ -105,22 +208,51 @@ class MarketCandleStore {
   /// must additionally verify that the correct source is authenticated.
   static Future<List<MarketBar>> read(
       TradeSymbol symbol, String timeframe, String? accountId,
-      {int limit = 100000}) async {
+      {int limit = MarketHistoryBudget.maxVisibleTimeCandles}) async {
+    if (limit < 1 || limit > MarketHistoryBudget.maxVisibleTimeCandles) {
+      throw ArgumentError.value(limit, 'limit', 'Outside chart memory budget');
+    }
     final db = await _open();
     final rows = await db.query('candle_history',
         where: 'cache_key = ?', whereArgs: [key(symbol, timeframe, accountId)],
         orderBy: 'timestamp_ms DESC', limit: limit);
-    final bars = rows.reversed.map((row) => MarketBar(
-      row['timestamp_ms'] as int,
-      TradeCandle(
-        (row['open'] as num).toDouble(),
-        (row['high'] as num).toDouble(),
-        (row['low'] as num).toDouble(),
-        (row['close'] as num).toDouble(),
-      ),
-    )).toList(growable: false);
-    validateBars(bars);
-    return bars;
+    if (MarketCandleDecodePolicy.shouldOffload(rows.length)) {
+      // Large broker history can require thousands of OHLC allocations and
+      // integrity checks. Keep this CPU work off the chart's gesture isolate.
+      return compute<List<Map<String, Object?>>, List<MarketBar>>(
+        _decodeArchivedCandleRows, rows,
+        debugLabel: 'tradelab-verified-candle-sqlite-decode');
+    }
+    return _decodeArchivedCandleRows(rows);
+  }
+
+  /// An account-scoped source-verified page from the disk archive. The
+  /// exclusive UTC cursor is applied by SQLite BEFORE parsing/allocating
+  /// any bars, even when the disk retains far more than 200k candles.
+  /// Empty means cache miss, never proof that the broker has no history.
+  static Future<List<MarketBar>> readOlder(
+      TradeSymbol symbol, String timeframe, String? accountId, {
+      required int beforeMs,
+      int limit = olderChartPageSize,
+  }) async {
+    if (beforeMs < 1 || limit < 1 ||
+        limit > MarketHistoryBudget.maxVisibleTimeCandles) {
+      throw ArgumentError('Invalid bounded older candle cache request');
+    }
+    final db = await _open();
+    final rows = await db.query('candle_history',
+      where: 'cache_key = ? AND timestamp_ms < ?',
+      whereArgs: [key(symbol, timeframe, accountId), beforeMs],
+      orderBy: 'timestamp_ms DESC',
+      limit: limit,
+    );
+    if (MarketCandleDecodePolicy.shouldOffload(rows.length)) {
+      return compute<List<Map<String, Object?>>, List<MarketBar>>(
+        _decodeArchivedCandleRows, rows,
+        debugLabel: 'tradelab-older-candle-sqlite-page',
+      );
+    }
+    return _decodeArchivedCandleRows(rows);
   }
 
   static Future<bool> isFresh(
@@ -149,7 +281,11 @@ class MarketCandleStore {
       // Batched writes support long broker history without one transaction per
       // candle and without storing an enormous JSON blob in memory.
       for (var offset = 0; offset < bars.length; offset += 500) {
-        final page = bars.skip(offset).take(500).toList(growable: false);
+        // List.skip(offset) walks the prefix again on every page, creating
+        // quadratic traversal work when archiving tens of thousands of real
+        // broker bars. Index-based slices read each incoming candle once.
+        final end = offset + 500 < bars.length ? offset + 500 : bars.length;
+        final page = bars.getRange(offset, end).toList(growable: false);
         // Query existing rows in one bounded batch (501 bind parameters).
         // Even an older pagination request must not overwrite broker-closed
         // history behind Replay's back. SQLite serializes this transaction.
