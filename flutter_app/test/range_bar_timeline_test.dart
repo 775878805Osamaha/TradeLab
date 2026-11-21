@@ -50,6 +50,65 @@ void main() {
     expect(timeline.visibleClosedBarsThroughTick(1), 2);
   });
 
+  test('published historical Range timeline cannot be edited by consumers',
+      () async {
+    const source = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 102.5),
+      MarketTick(102, 101.5),
+    ];
+    final direct = RangeBarTimeline.build(source, 1);
+    void assertReadOnly(RangeBarTimeline timeline) {
+      final first = timeline.bars.first;
+      final firstEvent = timeline.endTickIndices.first;
+      final firstUtc = timeline.endTimestamps.first;
+      expect(() => timeline.bars.add(first), throwsUnsupportedError);
+      expect(() => timeline.bars[0] = first, throwsUnsupportedError);
+      expect(() => timeline.bars.clear(), throwsUnsupportedError);
+      expect(() => timeline.endTickIndices.add(100), throwsUnsupportedError);
+      expect(() => timeline.endTickIndices[0] = 999,
+          throwsUnsupportedError);
+      expect(() => timeline.endTimestamps.removeLast(),
+          throwsUnsupportedError);
+      expect(() => timeline.endTimestamps[0] = -1,
+          throwsUnsupportedError);
+      expect(timeline.bars.first, first);
+      expect(timeline.endTickIndices.first, firstEvent);
+      expect(timeline.endTimestamps.first, firstUtc);
+      expect(timeline.visibleClosedBarsThroughTick(1), 2);
+    }
+    assertReadOnly(direct);
+    // Prepend has to use the identical protected publishing path, including
+    // the actual source-event ordinal carried into Replay.
+    final prepended = await RangeBarTimeline.prependAndBuildAsync(
+      olderTicks: const [MarketTick(90, 99)],
+      currentTicks: source,
+      priceDistance: 1,
+    );
+    assertReadOnly(prepended.timeline);
+    expect(prepended.timeline.endTickIndices.first, 1);
+    expect(direct.endTickIndices.first, 1);
+    expect(source.length, 3);
+  });
+
+  test('background-built 6k BID Range snapshot is read-only after isolate',
+      () async {
+    final ticks = List<MarketTick>.generate(6001, (i) =>
+        MarketTick(1700000000000 + i, 100 + (i % 7) * .3));
+    final timeline = await RangeBarTimeline.buildAsync(ticks, 1);
+    expect(timeline.bars, isNotEmpty);
+    final baseline = timeline.closedBarCount;
+    expect(() => timeline.bars.add(timeline.bars.first),
+        throwsUnsupportedError);
+    expect(() => timeline.endTickIndices[0] = 777,
+        throwsUnsupportedError);
+    expect(() => timeline.endTimestamps[0] = 0,
+        throwsUnsupportedError);
+    expect(timeline.closedBarCount, baseline);
+    expect(timeline.endTickIndices.last, ticks.length - 1);
+    expect(timeline.endTimestamps.last, ticks.last.timestamp);
+  });
+
   test('Range timeline rejects reversed BID timestamps without Replay leak',
       () async {
     final reversed = <MarketTick>[
