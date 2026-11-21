@@ -31,7 +31,15 @@ class RangeLiveAppendBuildResult {
 /// them. Chart Replay can retain its last revealed *event* when older ticks
 /// are prepended, even though all Range bar indices are rebuilt.
 class RangeBarTimeline {
-  const RangeBarTimeline._(this.bars, this.endTickIndices, this.endTimestamps);
+  const RangeBarTimeline._(
+      this.bars, this.endTickIndices, this.endTimestamps, this.priceDistance);
+
+  /// The exact authenticated BID price distance used to build ALL of these
+  /// Range candles. A matching source boundary alone is insufficient: when
+  /// a user changes Range size, an old timeline may still have identical
+  /// first/last BID prices and indices. Never graft new-size candles onto
+  /// confirmed old-size bars (or reuse the wrong Replay event cutoffs).
+  final double priceDistance;
 
   // A six-day verified BID archive may contain up to a million source ticks,
   // but small Range sizes can create many more bars than ticks when prices
@@ -213,6 +221,9 @@ class RangeBarTimeline {
           'تيكات BID الحية تجاوزت حد الذاكرة الآمن لشارت المدى.');
     }
     if (currentTicks.isEmpty || currentTimeline.bars.isEmpty ||
+        // Reject a stale Range-size snapshot *before* even an empty
+        // verified suffix can return it to the chart as up-to-date.
+        currentTimeline.priceDistance != priceDistance ||
         currentTimeline.bars.length != currentTimeline.endTickIndices.length ||
         currentTimeline.bars.length != currentTimeline.endTimestamps.length ||
         currentTimeline.closedBarCount > closedBarLimit ||
@@ -308,7 +319,8 @@ class RangeBarTimeline {
       throw StateError('Incremental live Range timeline/source mismatch');
     }
     return RangeLiveAppendBuildResult(appendedTicks,
-        RangeBarTimeline._(combinedBars, endIndices, endTimes));
+        RangeBarTimeline._(
+            combinedBars, endIndices, endTimes, priceDistance));
   }
 
   static RangePrependBuildResult _prependAndBuildWorker(
@@ -384,6 +396,7 @@ class RangeBarTimeline {
       UnmodifiableListView<TradeCandle>(bars),
       UnmodifiableListView<int>(endTickIndices),
       UnmodifiableListView<int>(endTimestamps),
+      priceDistance,
     );
   }
 
