@@ -804,6 +804,95 @@ void main() {
     expect(resumed.scrollBars, lessThan(lifted.scrollBars));
   });
 
+  test('two-to-three-to-two Android pointers rebase without chart jumps',
+      () {
+    const plotWidth = 360.0;
+    const candles = 500;
+    const initial = ChartViewport(barWidth: 10, scrollBars: 100);
+    final gesture = ChartTouchGesture();
+
+    ChartViewport update(ChartViewport v, {
+      required int pointers, required double focal, required double scale,
+      double dx = 0,
+    }) => gesture.update(
+      viewport: v, pointerCount: pointers, focalX: focal,
+      scale: scale, deltaX: dx, plotWidth: plotWidth,
+      candleCount: candles,
+    );
+
+    final firstTwo = update(initial, pointers: 2, focal: 180, scale: 1);
+    expect(identical(firstTwo, initial), isTrue);
+    final twoZoom = update(firstTwo, pointers: 2, focal: 190, scale: 2);
+    expect(twoZoom.barWidth, closeTo(20, .000001));
+
+    // A third finger changes Flutter's centroid and potentially its scale,
+    // but cannot teleport candles or inherit the previous pointer group's
+    // origin, even if the transition reports a huge synthetic x-delta.
+    final thirdJoined = update(twoZoom, pointers: 3,
+        focal: 340, scale: 3.8, dx: 150);
+    expect(identical(thirdJoined, twoZoom), isTrue);
+    expect(gesture.ignoredPointerTransition, isTrue);
+    expect(gesture.horizontalTravel, 0);
+
+    final threeZoom = update(thirdJoined, pointers: 3,
+        focal: 190, scale: 4.56);
+    expect(threeZoom.barWidth, closeTo(24, .000001),
+        reason: 'New group scales 4.56/3.8 relative to CURRENT 20px width');
+    expect(threeZoom.scrollBars.isFinite, isTrue);
+
+    // Leaving a third finger still leaves a two-finger pinch, NOT a pan.
+    final thirdLifted = update(threeZoom, pointers: 2,
+        focal: 25, scale: 2.0, dx: -165);
+    expect(identical(thirdLifted, threeZoom), isTrue);
+    expect(gesture.ignoredPointerTransition, isTrue);
+    final twoResumed = update(thirdLifted, pointers: 2,
+        focal: 35, scale: 2.5);
+    expect(twoResumed.barWidth, closeTo(30, .000001));
+    expect(gesture.horizontalTravel, 0);
+
+    final oneLifted = update(twoResumed, pointers: 1,
+        focal: 220, scale: 1, dx: 185);
+    expect(identical(oneLifted, twoResumed), isTrue,
+        reason: 'The final centroid handoff must not turn into a pan');
+    final deliberatePan = update(oneLifted, pointers: 1,
+        focal: 225, scale: 1, dx: 15);
+    expect(deliberatePan.scrollBars,
+        closeTo(oneLifted.scrollBars + .5, .000001));
+    expect(gesture.horizontalTravel, closeTo(15, .000001));
+    expect(gesture.hadMultiTouch, isTrue,
+        reason: 'A previous pinch cannot produce a surprise fling on lift');
+  });
+
+  test('invalid three-finger transition resets the prior pinch origin', () {
+    final gesture = ChartTouchGesture();
+    const v = ChartViewport(barWidth: 12, scrollBars: 40);
+    ChartViewport update(ChartViewport from, int pointers, double focal,
+        double scale) => gesture.update(
+      viewport: from, pointerCount: pointers, focalX: focal,
+      scale: scale, deltaX: 120, plotWidth: 320, candleCount: 300,
+    );
+    final twoStart = update(v, 2, 150, 1);
+    final twoZoom = update(twoStart, 2, 151, 1.5);
+    expect(twoZoom.barWidth, closeTo(18, .000001));
+
+    final invalidThird = update(twoZoom, 3, double.nan, double.infinity);
+    expect(identical(invalidThird, twoZoom), isTrue);
+    expect(gesture.ignoredPointerTransition, isTrue);
+    final thirdValid = update(invalidThird, 3, 260, 4);
+    expect(identical(thirdValid, twoZoom), isTrue,
+        reason: 'First valid sample must establish a fresh 3-pointer anchor');
+    expect(gesture.ignoredPointerTransition, isTrue);
+    final resumed = update(thirdValid, 3, 265, 5);
+    expect(resumed.barWidth, closeTo(22.5, .000001));
+
+    final handoff = update(resumed, 2, 90, 1.2);
+    expect(identical(handoff, resumed), isTrue,
+        reason: '3-to-2 handoff resets even after invalid earlier samples');
+    final continued = update(handoff, 2, 95, 1.6);
+    expect(continued.barWidth, closeTo(30, .000001));
+    expect(gesture.horizontalTravel, 0);
+  });
+
   test('tiny one-finger jitter is not a valid inertial chart fling', () {
     final gesture = ChartTouchGesture();
     var viewport = const ChartViewport();
