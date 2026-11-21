@@ -1,13 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## دفعة تطوير قيد تحقق CI — وقف تضخم شموع Range قبل تخصيصها (21 نوفمبر 2026)
+## دفعة مكتملة — PR #582: حد ذاكرة الشموع أثناء بناء Range (21 نوفمبر 2026)
 - **الفرع:** `fix/tradelab-range-early-bar-budget-20261121` مشتق من فرع التطوير `test/flutter-all-fixes-20261116` عند `8596fdac966d38a73d3bb3e57704ce0c366af384` بعد دمج PR #581. آخر commit للاختبارات [a6e4486](https://github.com/775878805Osamaha/TradeLab/commit/a6e4486f46eb119165be2f0c6bb50d3314d43af0).
 - **سبب التعديل من مراجعة الشيفرة:** `RangeBarTimeline.build` و`_appendVerifiedRangeWorker` كانا يفحصان `closedBarLimit` **بعد** قيام `RangeBarBuilder.appendBidTick` بتوليد حتى 100,000 شمعة لقفزة BID واحدة. مع بقاء شمعة واحدة في حد الذاكرة كان يمكن إنشاء آلاف الشموع المؤقتة قبل رفض العملية.
 - **تنفيذ فعلي:** `RangeBarBuilder.appendBidTick(price, maxNewClosedBars: remaining)` يراجع الحد قبل إنشاء **كل شمعة**؛ `RangeBarBudgetExceeded` يُحوّل إلى `MarketDataException` برسالة Range التاريخية/الحية المعروفة؛ نتيجة العامل الجزئية تُرفض ولا تنشر بيانات ناقصة إلى الرسم أو Replay. هذا يحافظ على ترتيب تيكات BID الحقيقي ويتيح تحديث الشمعة المتكوّنة فقط عندما يكون حد الإغلاق ممتلئًا. `maxBarsPerSingleTick` السابق باقٍ.
 - **الاختبارات المضافة:** ثلاث حالات لمولد Range (قفزة 50k بميزانية صغيرة، صفر مساحة للشموع المغلقة، تطابق تسلسل الإغلاق)، وثلاث حالات للتاريخ وLive Range (رفض قفزة 40k، عدم تغيير snapshot القديمة، إلحاق تحديث للشّمعة المتكوّنة عند الحد).
 - **الملفات:** `flutter_app/lib/data/range_bar_builder.dart`, `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_builder_test.dart`, `flutter_app/test/range_bar_timeline_test.dart`, وملفا التسليم.
-- **التحقق:** Flutter SDK غير متاح محليًا؛ **CI PENDING** إلى حين فتح PR وتشغيل `verify-flutter-range`. لم يُقَس Android FPS، ولا أي وقت أداء على جهاز، ولا اتصال cTrader حي. لا APK، لا Release، لا تغيير `main` أو مشاريع أخرى.
-- **الخطوة التالية الواحدة:** فتح PR من هذا الفرع إلى التطوير، فحص `flutter analyze` واختبارات Range/Replay وتوقيت اليمن؛ معالجة أي FAIL قبل الدمج، ثم حفظ SHA الدمج/CI في GitHub.
+- **نتيجة مؤكدة:** [PR #582](https://github.com/775878805Osamaha/TradeLab/pull/582) **MERGED/squash** إلى فرع التطوير عند [SHA a18c6383](https://github.com/775878805Osamaha/TradeLab/commit/a18c6383e2cc88b882ca483b5bfcf6c32e92ff20). [Actions #44909751279](https://github.com/775878805Osamaha/TradeLab/actions/runs/44909751279) = **completed/success** للرأس `323e4d32e660453d9161d624beae85d708a93ba7`، وتضم تحليل Flutter واختبارات التاريخ/Range/Replay/chart وتوقيت اليمن. Android Profile/FPS وجلسة cTrader حية **NOT RUN**. لا APK أو Release أو تغيير `main`.
+- **الخطوة التالية الواحدة:** إجراء Android Profile حقيقي على حساب cTrader لقياس p50/p95/p99 من لمس الشارت وتحديث Range، ثم معالجة الاختناق المثبت مع الحفاظ على قيود المصدر/Replay. لا APK تلقائيًا.
 
 ## دفعة مكتملة — PR #581: حماية حدود مصدر BID وشمعة Range (21 نوفمبر 2026)
 - **الفرع:** `fix/tradelab-range-snapshot-boundary-20261121` من التطوير `test/flutter-all-fixes-20261116` عند `358f38532a7347fef92172935c2d465a85b7195b`؛ آخر commit للشيفرة والاختبار [6122183](https://github.com/775878805Osamaha/TradeLab/commit/6122183d0ae425582c21e36af6b527389b233657) قبل تحديث التوثيق.
