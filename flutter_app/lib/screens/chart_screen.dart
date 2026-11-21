@@ -165,6 +165,9 @@ class _ChartScreenState extends State<ChartScreen>
   bool _replaySelectingStart = false;
   bool _replayDraggingStart = false;
   int _replayCandidateIndex = 0;
+  // A date picker from an older start selection must not choose a bar after
+  // a new selection begins on the same immutable broker candle list.
+  int _replaySelectionEpoch = 0;
   int _replayInitialCount = 1;
   // Keep the candle area clear until the user explicitly requests tools.
   bool _replayShowTradingButtons = false;
@@ -2207,6 +2210,7 @@ class _ChartScreenState extends State<ChartScreen>
       _manualPriceScaleKey = null;
       _draggingPriceAxis = false;
       _replaySelectingStart = true;
+      _replaySelectionEpoch++;
       _replayDraggingStart = false;
       _replayShowTradingButtons = false;
       _replayShowDrawingTools = false;
@@ -2395,6 +2399,7 @@ class _ChartScreenState extends State<ChartScreen>
       provider: _selectedSymbol.source.name,
       accountId: widget.controller.accountId,
       zoneKey: zone.name,
+      selectionEpoch: _replaySelectionEpoch,
     );
     bool sourceStillActive() => mounted && !_replay &&
         selectionGuard.isCurrent(
@@ -2405,6 +2410,7 @@ class _ChartScreenState extends State<ChartScreen>
           provider: _selectedSymbol.source.name,
           accountId: widget.controller.accountId,
           zoneKey: _symbolSettings.timeZone.name,
+          selectionEpoch: _replaySelectionEpoch,
           selectingStart: _replaySelectingStart,
         );
     final initialIndex = _replayCandidateIndex.clamp(
