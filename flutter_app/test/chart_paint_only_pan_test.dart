@@ -378,7 +378,10 @@ void main() {
       expect(find.byKey(const Key('chart-crosshair-ohlc-inspector')),
           findsOneWidget);
       await tester.tapAt(Offset(candleX - 40, rect.center.dy));
-      await tester.pump();
+      // The chart also owns a double-tap recognizer. Let its 40ms
+      // recognizer countdown finish in fake async before this widget test
+      // ends; otherwise Flutter correctly flags a pending framework timer.
+      await tester.pumpAndSettle();
       expect(find.byKey(const Key('chart-crosshair-ohlc-inspector')),
           findsNothing);
       expect(tester.takeException(), isNull);
