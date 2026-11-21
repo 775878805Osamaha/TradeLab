@@ -42,6 +42,43 @@ class ChartAxisTicks {
     }
   }
 
+  /// Human-readable logarithmic major prices. True log rulers use 1-2-5
+  /// steps per decade (or fewer decades for a broad range); near-linear
+  /// zooms keep the familiar decimal tick precision from the linear axis.
+  /// These are LABEL values only and never generate market candles/quotes.
+  static Iterable<double> logarithmicTicks(
+      double minimum, double maximum) sync* {
+    if (!minimum.isFinite || !maximum.isFinite ||
+        minimum <= 0 || maximum <= minimum) return;
+    final firstLog = math.log(minimum) / math.ln10;
+    final lastLog = math.log(maximum) / math.ln10;
+    final decades = lastLog - firstLog;
+    if (!decades.isFinite || decades <= 0) return;
+    if (decades < .35) {
+      yield* ticks(minimum, maximum, desiredIntervals: 9);
+      return;
+    }
+    final firstExponent = firstLog.floor();
+    final lastExponent = lastLog.ceil();
+    final stride = math.max(1,
+        ((lastExponent - firstExponent + 1) / 12).ceil());
+    var count = 0;
+    for (var exponent = firstExponent;
+        exponent <= lastExponent && count < 60; exponent += stride) {
+      final base = math.pow(10, exponent).toDouble();
+      if (!base.isFinite || base <= 0) continue;
+      final multiples = stride == 1 ? const <double>[1, 2, 5] :
+          const <double>[1];
+      for (final multiplier in multiples) {
+        final tick = base * multiplier;
+        if (tick.isFinite && tick >= minimum && tick <= maximum) {
+          yield tick;
+          count++;
+        }
+      }
+    }
+  }
+
   /// Enough decimals to distinguish adjacent REAL major price ticks.
   ///
   /// A manual TradingView-style vertical ruler zoom can produce forex steps

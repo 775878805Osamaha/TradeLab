@@ -271,7 +271,8 @@ class _ChartScreenState extends State<ChartScreen>
   String get _currentPriceScaleKey =>
       '${widget.controller.accountId}|${_selectedSymbol.source.name}|'
       '$_symbol|$_timeframe|${_mode.name}|$_rangeTicks|'
-      '${_replay ? 'replay' : _replaySelectingStart ? 'select' : 'live'}';
+      '${_replay ? 'replay' : _replaySelectingStart ? 'select' : 'live'}|'
+      '${_scaleSettings.scaleMode}';
   bool get _priceScaleManual =>
       _manualPriceScale != null &&
       _manualPriceScaleKey == _currentPriceScaleKey;
@@ -3713,7 +3714,26 @@ class _ChartScreenState extends State<ChartScreen>
       plotHeight: plotHeight,
       topMarginPercent: _panelSettings.topMarginPercent,
       bottomMarginPercent: _panelSettings.bottomMarginPercent,
+      logarithmic: _scaleSettings.scaleMode == 'لوغاريتمي',
     );
+  }
+
+  void _togglePriceScaleLog() {
+    // Source OHLC, Replay cutoff and horizontal viewport remain untouched.
+    // A manual ruler in *linear price units* cannot be reused in LOG mode.
+    final updated = _scaleSettings.copyWith(scaleMode:
+        _scaleSettings.scaleMode == 'لوغاريتمي' ? 'تلقائي' : 'لوغاريتمي');
+    _stopMomentum();
+    _disarmDoubleTapGuide();
+    setState(() {
+      _scaleSettings = updated;
+      _manualPriceScale = null;
+      _manualPriceScaleKey = null;
+      _draggingPriceAxis = false;
+    });
+    _autoPriceScaleCache.clear();
+    _chartRepaint.value++;
+    unawaited(_saveScaleSettings(updated));
   }
 
   void _resetPriceAxisToAuto() {
@@ -4892,11 +4912,20 @@ class _ChartScreenState extends State<ChartScreen>
         }),
         onApply: (updated) {
           // Presentation only: keep downloaded OHLC, viewport and Replay.
+          // An existing manual scale is expressed in the previous mode.
+          final modeChanged = _scaleSettings.scaleMode != updated.scaleMode;
+          if (modeChanged) _disarmDoubleTapGuide();
           setState(() {
             _scaleSettings = updated;
             _scaleSettingsOpen = false;
             _panelSettingsOpen = false;
+            if (modeChanged) {
+              _manualPriceScale = null;
+              _manualPriceScaleKey = null;
+              _draggingPriceAxis = false;
+            }
           });
+          if (modeChanged) _autoPriceScaleCache.clear();
           unawaited(_saveScaleSettings(updated));
         },
       );
@@ -5876,6 +5905,30 @@ class _ChartScreenState extends State<ChartScreen>
           // TradingView-style one-tap return to the genuine OHLC autoscale.
           // Show only after the owner manually adjusted the price ruler;
           // unlike a constantly running overlay, this is not rebuilt on pan.
+          if (_scaleSettings.scaleButtons == ChartScaleVisibility.always ||
+              (_scaleSettings.scaleButtons == ChartScaleVisibility.onTap &&
+                  _panelChartTouched) ||
+              _scaleSettings.scaleMode == 'لوغاريتمي')
+            Positioned(
+              right: 3, bottom: 28,
+              child: SizedBox(
+                width: 54, height: 28,
+                child: TextButton(
+                  key: const Key('chart-price-axis-log'),
+                  onPressed: _togglePriceScaleLog,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(44, 26),
+                  ),
+                  child: Text(_scaleSettings.scaleMode == 'لوغاريتمي'
+                      ? 'LOG' : 'L',
+                    style: TextStyle(fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: _scaleSettings.scaleMode == 'لوغاريتمي'
+                            ? TradeColors.blue : colors.onSurfaceVariant)),
+                ),
+              ),
+            ),
           if (_priceScaleManual)
             Positioned(
               right: 3, top: 4,
@@ -6164,13 +6217,23 @@ class _CandleChartPainter extends CustomPainter {
     // Reference: no visible candle-area grid. Labels derive from the actual
     // visible price interval, never from screenshot numbers or fake candles.
     final step = ChartAxisTicks.interval(minimum, maximum);
+    final logAxis = scale.usesLogarithmic;
     final decimals = symbolSettings.digitsForTickStep(
-      ChartAxisTicks.decimals(step));
-    for (final tick in ChartAxisTicks.ticksWithStep(
-        minimum, maximum, step: step)) {
+      ChartAxisTicks.decimals(logAxis ? minimum * .1 : step));
+    final axisTicks = logAxis
+        ? ChartAxisTicks.logarithmicTicks(minimum, maximum)
+        : ChartAxisTicks.ticksWithStep(minimum, maximum, step: step);
+    var lastMajorY = double.negativeInfinity;
+    for (final tick in axisTicks) {
       final py = y(tick);
-      final important = (tick / (step * 5) -
-          (tick / (step * 5)).round()).abs() < 0.000001;
+      if (!py.isFinite || py < 0 || py > chartHeight ||
+          (logAxis && (py - lastMajorY).abs() < 19)) continue;
+      lastMajorY = py;
+      final important = logAxis
+          ? (math.log(tick) / math.ln10 -
+              (math.log(tick) / math.ln10).round()).abs() < 1e-8
+          : (tick / (step * 5) -
+              (tick / (step * 5)).round()).abs() < 0.000001;
       _text(canvas, _price(tick, decimals),
           Offset(axis + 6, py - 8), Color(panel.axisTextColor),
           panel.axisTextSize.toDouble(),
