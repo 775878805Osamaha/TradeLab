@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## قيد فحص CI — منع الزخم الوهمي عند حافة الشارت (21 نوفمبر 2026)
+- **فرع العمل:** `fix/tradelab-boundary-fling-gesture-20261121` من `test/flutter-all-fixes-20261116` عند `4d811ec8213ea82d162fe64d1de876b6b356c580` (بعد دمج PR #586).
+- **سبب الإصلاح من الكود:** `ChartTouchGesture.update` كان يزيد `horizontalTravel += deltaX.abs()` قبل حساب `ChartViewport.pan` وبعدها، رغم أن `pan` قد يمنع كامل الحركة عند أقدم شمعة أو أقصى مسافة بيضاء يمين الشارت. لاحقًا `chartShouldFling` يعدّ حركة الإصبع هذه سببًا لبدء الزخم، فتحدث تحديثات animation غير ضرورية بلا تحريك شموع.
+- **التغيير الفعلي:** حساب الحركة الأفقية المعتمدة من تغير `next.scrollBars - viewport.scrollBars` مضروبًا بعرض الشمعة؛ الحركة المحجوبة عند حدود التاريخ لا تُحتسب زخمًا. جزء الحركة الذي يصل إلى الحد يحتسب فقط بمسافته الفعلية، مع الحفاظ على الزخم الطبيعي للسحب المسموح. لا تغير في OHLC أو السعر أو التسلسل أو Replay.
+- **اختباران جديدان:** عند حافة أقدم التاريخ +600px ومكان البياض الأيمن -600px تبقى مسافة السحب 0 ولا تُسمح fling؛ عند الاقتراب من الحد 200px يتقدم المخطط 5px فقط فلا تنشط fling، والتمرير الطبيعي 40px يبقي inertia مؤهلة؛ التخطيط غير الصالح لا يكسب travel زائفًا.
+- **Commits:** [8420079](https://github.com/775878805Osamaha/TradeLab/commit/8420079fee2e0d84bc645bb52f3c19aa2c91e801) للمصدر و[342521c](https://github.com/775878805Osamaha/TradeLab/commit/342521c1c542569fc21f01acd048788e1b709b55) للاختبارات. الملفات `flutter_app/lib/chart/chart_viewport.dart`, `flutter_app/test/chart_viewport_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **نتيجة التحقق:** **CI PENDING** إلى حين PR. Android Profile/FPS وتجربة لمس جهاز فعلي **NOT RUN**؛ لا APK/Release ولا main أو مشاريع أخرى.
+- **الخطوة التالية:** فتح PR ضد التطوير، تحقّق `flutter analyze` وRange/Replay/chart/Yemen tests، إصلاح FAIL ثم دمج وتسجيل SHA الحقيقي.
+
 ## دفعة مكتملة — PR #586: نقل أول قفزة BID الكبيرة إلى عامل خلفي (21 نوفمبر 2026)
 - **المشروع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-live-range-first-gap-offload-20261121` من `test/flutter-all-fixes-20261116` عند رأس `dc0c324ce1cb8bde51e8fbea62b243a305831836`.
 - **الخلل المثبت بالشفرة:** `RangeBarTimeline.appendVerifiedSuffixAsync` يستدعي `shouldBuildInBackground(verifiedSuffix, priceDistance)` في تقدير عمل الشموع. في حالة صفحة تحتوي تيك BID موثّقًا جديدًا واحدًا مع قفزة مقارنة بآخر تيك محفوظ، لا يرى هذا التقدير نقطة المصدر السابقة؛ قد يختار البناء مباشرة على UI isolate وإن أغلقت القفزة آلاف شموع Range (طالما الأرشيف القديم أقل من 5001 تيك والشموع أقل من 4097).
