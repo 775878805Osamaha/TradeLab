@@ -494,3 +494,11 @@
 - **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_timeline_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
 - **الحدود:** لا اختبار جهاز Android Profile/FPS ولا جلسة cTrader حي **NOT RUN**؛ لا APK/Release/main أو أي مشروع آخر.
 - **الخطوة التالية:** قياس Android Profile على بيانات موثّقة كبيرة وتحليل p95/p99 للسحب/التكبير وعمليات Range ثم علاج أول اختناق مثبت.
+
+### 2026-11-21 (UTC) — حماية Replay من نتائج نوافذ قديمة عند تبديل السوق أو الجلسة (CI قيد التنفيذ)
+- **المشروع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-replay-async-session-guard-20261121` من dev SHA `c48821be5c716e5147a84ff4ea3f6605b7504b0c`.
+- **التغييرات المؤكدة بالشيفرة:** `ReplayAsyncSessionGuard` لهوية timestamps/source/account/timeframe/mode/session/revision في `replay_start_resolver.dart`; `chart_screen.dart` يتجاهل نتائج تأكيد إعادة بدء Replay وأوامر التداول الورقية إذا تغير المصدر أو الجلسة أثناء إظهار dialog، ولا يطبق random/earliest من نتائج تأكيد ملغى. إضافة `selectionEpoch` تمنع date-picker قديم من اختيار بداية جلسة لاحقة على نفس التاريخ المحمل.
+- **commits:** [497ec68](https://github.com/775878805Osamaha/TradeLab/commit/497ec68ec31d0dd0e1b2c8b0d534eb4dbca95c28), [9fd8ba5](https://github.com/775878805Osamaha/TradeLab/commit/9fd8ba5810de9b5331f2ff2fa4d307988aab94cc), [51b52a8](https://github.com/775878805Osamaha/TradeLab/commit/51b52a8cdcd119f28513f7211a5f3048fe85556c), [9927920](https://github.com/775878805Osamaha/TradeLab/commit/9927920fc2c9ff54115b28a792957f7501bac65f), [cd70135](https://github.com/775878805Osamaha/TradeLab/commit/cd7013583fb0faadb3cc2a738ba887ecf58a34f5), [19d861a](https://github.com/775878805Osamaha/TradeLab/commit/19d861ac64f122b6e466de770f23d8b489517118).
+- **الملفات:** `flutter_app/lib/replay/replay_start_resolver.dart`, `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/replay_start_resolver_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **الحالة:** **CI PENDING**، Android Profile/FPS وcTrader الحي وملف APK جديد **NOT RUN**. لا تغيير main/المشاريع الأخرى.
+- **الخطوة التالية:** PR إلى dev، فحص CI النهائي، إصلاح أي فشل، دمج إلى dev فقط مع SHA الحقيقي وتحديث التوثيق والتحقق من حفظه.

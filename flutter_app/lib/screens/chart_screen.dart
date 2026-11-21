@@ -165,6 +165,9 @@ class _ChartScreenState extends State<ChartScreen>
   bool _replaySelectingStart = false;
   bool _replayDraggingStart = false;
   int _replayCandidateIndex = 0;
+  // A date picker from an older start selection must not choose a bar after
+  // a new selection begins on the same immutable broker candle list.
+  int _replaySelectionEpoch = 0;
   int _replayInitialCount = 1;
   // Keep the candle area clear until the user explicitly requests tools.
   bool _replayShowTradingButtons = false;
@@ -1970,6 +1973,7 @@ class _ChartScreenState extends State<ChartScreen>
     // Freeze the revealed timeline while the ticket is on screen.
     // Otherwise the playback timer could move the cursor during editing.
     if (_playing) setState(_stopPlayback);
+    final entrySource = _captureReplayAsyncSession();
     final entryVisibleCount = _visibleThrough;
     // Execute at the known raw candle close, not Heikin-Ashi averages.
     final price = _replayMarketCandles[entryVisibleCount - 1].close;
@@ -1978,7 +1982,12 @@ class _ChartScreenState extends State<ChartScreen>
       builder: (_) => ReplayTrainingOrderDialog(
         entryPrice: price, initialSide: initialSide),
     );
-    if (!mounted || !_replay || order == null) return;
+    if (!mounted || order == null) return;
+    if (!_replayAsyncSessionStillCurrent(entrySource)) {
+      _replayMessage('تغير مصدر السوق أو جلسة Replay أثناء فتح الطلب. '
+          'لم تُنفذ أي صفقة تدريبية.');
+      return;
+    }
 
     // The history may have changed while the modal was open. Never place
     // an entry at a newly revealed or newly hidden market price.
@@ -2133,6 +2142,40 @@ class _ChartScreenState extends State<ChartScreen>
   List<int> get _replaySourceTimestamps =>
       _mode == ChartMode.range ? _rangeBarTimestamps : _actualTimestamps;
 
+  /// Async training tickets and replay-start confirmation dialogs may be
+  /// open while the chart switches broker account, symbol, history, or
+  /// session. Validate the *original source identity* before applying any
+  /// result; an equal last price or cursor index is not enough.
+  ReplayAsyncSessionGuard _captureReplayAsyncSession() =>
+      ReplayAsyncSessionGuard(
+        timestamps: _replaySourceTimestamps,
+        completedCount: _totalBars,
+        loadRevision: _loadRevision,
+        symbol: _selectedSymbol.code,
+        timeframe: _timeframe,
+        provider: _selectedSymbol.source.name,
+        accountId: widget.controller.accountId,
+        chartMode: _mode.name,
+        trainingSessionId: _trainingSessionId,
+        replayActive: _replay,
+        selectingStart: _replaySelectingStart,
+      );
+
+  bool _replayAsyncSessionStillCurrent(ReplayAsyncSessionGuard guard) =>
+      mounted && guard.isCurrent(
+        timestamps: _replaySourceTimestamps,
+        completedCount: _totalBars,
+        loadRevision: _loadRevision,
+        symbol: _selectedSymbol.code,
+        timeframe: _timeframe,
+        provider: _selectedSymbol.source.name,
+        accountId: widget.controller.accountId,
+        chartMode: _mode.name,
+        trainingSessionId: _trainingSessionId,
+        replayActive: _replay,
+        selectingStart: _replaySelectingStart,
+      );
+
   void _replayMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -2167,6 +2210,7 @@ class _ChartScreenState extends State<ChartScreen>
       _manualPriceScaleKey = null;
       _draggingPriceAxis = false;
       _replaySelectingStart = true;
+      _replaySelectionEpoch++;
       _replayDraggingStart = false;
       _replayShowTradingButtons = false;
       _replayShowDrawingTools = false;
@@ -2288,7 +2332,8 @@ class _ChartScreenState extends State<ChartScreen>
     }
   }
 
-  Future<void> _chooseReplayStartAgain() async {
+  Future<bool> _chooseReplayStartAgain() async {
+    final source = _captureReplayAsyncSession();
     if (_replay && _training.trades.isNotEmpty) {
       _stopPlayback();
       final approve = await showDialog<bool>(context: context,
@@ -2303,10 +2348,17 @@ class _ChartScreenState extends State<ChartScreen>
             FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
               child: const Text('حفظ وبدء جلسة جديدة')),
           ]));
-      if (approve != true || !mounted) return;
+      if (approve != true || !_replayAsyncSessionStillCurrent(source)) {
+        return false;
+      }
     }
+    // Source, account, Range mode, local Replay session or archive may have
+    // changed while the confirmation was open. Never reset the NEW session.
+    if (!_replayAsyncSessionStillCurrent(source)) return false;
     _exitReplay();
-    if (mounted) _enterReplayStartSelection();
+    if (!mounted) return false;
+    _enterReplayStartSelection();
+    return _replaySelectingStart;
   }
 
   /// Date / oldest / random actions must reveal their real candle in the
@@ -2347,6 +2399,7 @@ class _ChartScreenState extends State<ChartScreen>
       provider: _selectedSymbol.source.name,
       accountId: widget.controller.accountId,
       zoneKey: zone.name,
+      selectionEpoch: _replaySelectionEpoch,
     );
     bool sourceStillActive() => mounted && !_replay &&
         selectionGuard.isCurrent(
@@ -2357,6 +2410,7 @@ class _ChartScreenState extends State<ChartScreen>
           provider: _selectedSymbol.source.name,
           accountId: widget.controller.accountId,
           zoneKey: _symbolSettings.timeZone.name,
+          selectionEpoch: _replaySelectionEpoch,
           selectingStart: _replaySelectingStart,
         );
     final initialIndex = _replayCandidateIndex.clamp(
@@ -2449,8 +2503,8 @@ class _ChartScreenState extends State<ChartScreen>
     if (_replay) {
       // Choosing "random" or "earliest" during active Replay must REALLY
       // apply that choice after the user approves replacing the session.
-      unawaited(_chooseReplayStartAgain().then((_) {
-        if (mounted && _replaySelectingStart) {
+      unawaited(_chooseReplayStartAgain().then((started) {
+        if (started && mounted && _replaySelectingStart) {
           _applyReplayStartMenuChoice(action);
         }
       }));

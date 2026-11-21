@@ -117,6 +117,7 @@ void main() {
       timestamps: original, completedCount: 3,
       loadRevision: 11, symbol: 'XAUUSD', timeframe: '5m',
       provider: 'ctrader', accountId: 'account-a', zoneKey: 'newYork',
+      selectionEpoch: 6,
     );
     bool allowed({
       List<int>? timestamps,
@@ -127,13 +128,15 @@ void main() {
       String provider = 'ctrader',
       String? accountId = 'account-a',
       String zoneKey = 'newYork',
+      int epoch = 6,
       bool selecting = true,
     }) => guard.isCurrent(
       timestamps: timestamps ?? original,
       completedCount: count, loadRevision: revision,
       symbol: symbol, timeframe: timeframe,
       provider: provider, accountId: accountId,
-      zoneKey: zoneKey, selectingStart: selecting,
+      zoneKey: zoneKey, selectionEpoch: epoch,
+      selectingStart: selecting,
     );
     expect(allowed(), isTrue);
     expect(allowed(timestamps: [100, 200, 300]), isFalse,
@@ -145,7 +148,82 @@ void main() {
     expect(allowed(provider: 'binance'), isFalse);
     expect(allowed(accountId: 'account-b'), isFalse);
     expect(allowed(zoneKey: 'utc'), isFalse);
+    expect(allowed(epoch: 7), isFalse,
+        reason: 'A new selection on the SAME immutable BID source must '
+            'invalidate an old open date/time picker');
     expect(allowed(selecting: false), isFalse);
+  });
+
+  test('async Replay restart ignores changed account, source or session',
+      () {
+    final source = <int>[100000, 160000, 220000, 280000];
+    final guard = ReplayAsyncSessionGuard(
+      timestamps: source, completedCount: 4, loadRevision: 9,
+      symbol: 'XAUUSD', timeframe: '5m', provider: 'ctrader',
+      accountId: 'broker-1', chartMode: 'range',
+      trainingSessionId: 'local-replay-1',
+      replayActive: true, selectingStart: false,
+    );
+
+    bool stillSame({
+      List<int>? timestamps, int completed = 4, int revision = 9,
+      String symbol = 'XAUUSD', String timeframe = '5m',
+      String provider = 'ctrader', String? account = 'broker-1',
+      String mode = 'range', String session = 'local-replay-1',
+      bool replay = true, bool selecting = false,
+    }) => guard.isCurrent(
+      timestamps: timestamps ?? source,
+      completedCount: completed, loadRevision: revision,
+      symbol: symbol, timeframe: timeframe, provider: provider,
+      accountId: account, chartMode: mode,
+      trainingSessionId: session, replayActive: replay,
+      selectingStart: selecting,
+    );
+
+    expect(stillSame(), isTrue);
+    expect(stillSame(timestamps: [100000, 160000, 220000, 280000]),
+        isFalse, reason: 'Identical timestamps in a new archive are not '
+            'the source that opened the old async dialog');
+    expect(stillSame(completed: 3), isFalse);
+    expect(stillSame(revision: 10), isFalse);
+    expect(stillSame(symbol: 'EURUSD'), isFalse);
+    expect(stillSame(timeframe: '15m'), isFalse);
+    expect(stillSame(provider: 'binance'), isFalse);
+    expect(stillSame(account: 'broker-2'), isFalse);
+    expect(stillSame(mode: 'candles'), isFalse);
+    expect(stillSame(session: 'local-replay-2'), isFalse);
+    expect(stillSame(replay: false), isFalse);
+    expect(stillSame(selecting: true), isFalse);
+    expect(stillSame(), isTrue,
+        reason: 'The guard compares identity; it never changes source data');
+  });
+
+  test('async Replay start selection does not accept a later new session',
+      () {
+    final data = <int>[100, 200, 300, 400];
+    const oldSession = 'practice-session-a';
+    final pending = ReplayAsyncSessionGuard(
+      timestamps: data, completedCount: data.length, loadRevision: 4,
+      symbol: 'BTCUSDT', timeframe: '1m', provider: 'binance',
+      accountId: null, chartMode: 'candles',
+      trainingSessionId: oldSession,
+      replayActive: false, selectingStart: true,
+    );
+    bool allows({String session = oldSession,
+        bool selecting = true, bool replay = false}) =>
+        pending.isCurrent(
+          timestamps: data, completedCount: data.length, loadRevision: 4,
+          symbol: 'BTCUSDT', timeframe: '1m', provider: 'binance',
+          accountId: null, chartMode: 'candles',
+          trainingSessionId: session,
+          replayActive: replay, selectingStart: selecting,
+        );
+    expect(allows(), isTrue);
+    expect(allows(selecting: false), isFalse);
+    expect(allows(replay: true), isFalse);
+    expect(allows(session: 'practice-session-b'), isFalse,
+        reason: 'A late random/oldest action must not choose a bar in '
+            'an unrelated Replay session');
   });
 
   test('pixel selection never targets off-canvas future whitespace', () {

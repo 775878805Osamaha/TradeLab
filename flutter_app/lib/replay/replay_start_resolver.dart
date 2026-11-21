@@ -146,6 +146,7 @@ class ReplayDateSelectionGuard {
     required this.provider,
     required this.accountId,
     required this.zoneKey,
+    required this.selectionEpoch,
   });
 
   final List<int> timestamps;
@@ -156,6 +157,9 @@ class ReplayDateSelectionGuard {
   final String provider;
   final String? accountId;
   final String zoneKey;
+  // Each new in-chart start selection gets a distinct epoch even if the
+  // broker, symbol and immutable candle archive are unchanged.
+  final int selectionEpoch;
 
   bool isCurrent({
     required List<int> timestamps,
@@ -166,8 +170,10 @@ class ReplayDateSelectionGuard {
     required String provider,
     required String? accountId,
     required String zoneKey,
+    required int selectionEpoch,
     required bool selectingStart,
   }) => selectingStart &&
+      this.selectionEpoch == selectionEpoch &&
       identical(this.timestamps, timestamps) &&
       this.completedCount == completedCount &&
       this.loadRevision == loadRevision &&
@@ -176,4 +182,65 @@ class ReplayDateSelectionGuard {
       this.provider == provider &&
       this.accountId == accountId &&
       this.zoneKey == zoneKey;
+}
+
+
+/// Captures the complete identity of an in-chart Replay session while an
+/// asynchronous dialog is open. A modal may outlive an account switch,
+/// market reload, Range-size change or a new training session. The same
+/// last-revealed price/index is NOT proof that the old action is still valid.
+///
+/// Source data is compared by immutable list identity, not by scanning a
+/// 200k-bar timestamp archive on the Flutter UI isolate.
+class ReplayAsyncSessionGuard {
+  const ReplayAsyncSessionGuard({
+    required this.timestamps,
+    required this.completedCount,
+    required this.loadRevision,
+    required this.symbol,
+    required this.timeframe,
+    required this.provider,
+    required this.accountId,
+    required this.chartMode,
+    required this.trainingSessionId,
+    required this.replayActive,
+    required this.selectingStart,
+  });
+
+  final List<int> timestamps;
+  final int completedCount;
+  final int loadRevision;
+  final String symbol;
+  final String timeframe;
+  final String provider;
+  final String? accountId;
+  final String chartMode;
+  final String trainingSessionId;
+  final bool replayActive;
+  final bool selectingStart;
+
+  bool isCurrent({
+    required List<int> timestamps,
+    required int completedCount,
+    required int loadRevision,
+    required String symbol,
+    required String timeframe,
+    required String provider,
+    required String? accountId,
+    required String chartMode,
+    required String trainingSessionId,
+    required bool replayActive,
+    required bool selectingStart,
+  }) =>
+      identical(this.timestamps, timestamps) &&
+      this.completedCount == completedCount &&
+      this.loadRevision == loadRevision &&
+      this.symbol == symbol &&
+      this.timeframe == timeframe &&
+      this.provider == provider &&
+      this.accountId == accountId &&
+      this.chartMode == chartMode &&
+      this.trainingSessionId == trainingSessionId &&
+      this.replayActive == replayActive &&
+      this.selectingStart == selectingStart;
 }
