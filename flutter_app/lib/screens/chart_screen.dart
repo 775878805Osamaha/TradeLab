@@ -751,6 +751,10 @@ class _ChartScreenState extends State<ChartScreen>
         widget.controller.accountId == account &&
         _selectedSymbol.code == symbol.code &&
         _selectedSymbol.source == symbol.source &&
+        // A live instrument-spec update can change the price-distance
+        // multiplier without changing symbol or history object identity.
+        // Discard the old asynchronous result instead of mixing Range sizes.
+        _rangePointCache['$account:${symbol.code}'] == point &&
         identical(_rangeHistoryTicks, previous) &&
         identical(_rangeTimeline, timeline);
 
