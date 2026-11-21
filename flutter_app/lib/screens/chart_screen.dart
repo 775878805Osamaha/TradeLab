@@ -761,17 +761,39 @@ class _ChartScreenState extends State<ChartScreen>
     _pollingLiveRange = true;
     try {
       final clock = _historyLoadProfiler.start();
+      // Report real broker wait separately from isolate verification and
+      // incremental Range generation, in Android Profile opt-in only.
+      final brokerClock = _historyLoadProfiler.start();
       // Inclusive last-millisecond fetch. Every previously displayed event
       // at that millisecond must be present as an exact ordered prefix.
       final page = await widget.controller.rangeTicksBetween(
           symbol, fromMs: fromMs, toMs: toMs);
       if (!validSession()) return;
+      _historyLoadProfiler.finish(brokerClock,
+          phase: ChartLoadPhase.liveRangeBrokerFetch, mode: _mode.name,
+          displayedBars: timeline.bars.length, bidTicks: page.length);
+
+      final verifyClock = _historyLoadProfiler.start();
       final suffix = await RangeLiveBidDelta.verifiedSuffixAsync(
         previouslyVerified: previous,
         brokerPage: page,
         toMs: toMs,
       );
-      if (!validSession() || suffix.isEmpty) return;
+      if (!validSession()) return;
+      _historyLoadProfiler.finish(verifyClock,
+          phase: ChartLoadPhase.liveRangeVerify, mode: _mode.name,
+          displayedBars: timeline.bars.length, bidTicks: page.length);
+
+      if (suffix.isEmpty) {
+        // An authenticated poll with no new source events is still useful
+        // performance evidence: keep it OUT of actual append p95.
+        _historyLoadProfiler.finish(clock,
+            phase: ChartLoadPhase.liveRangeNoChange, mode: _mode.name,
+            displayedBars: timeline.bars.length, bidTicks: 0);
+        return;
+      }
+
+      final appendClock = _historyLoadProfiler.start();
       final next = await RangeBarTimeline.appendVerifiedSuffixAsync(
         currentTicks: previous,
         currentTimeline: timeline,
@@ -779,6 +801,11 @@ class _ChartScreenState extends State<ChartScreen>
         priceDistance: distance,
       );
       if (!validSession()) return;
+      _historyLoadProfiler.finish(appendClock,
+          phase: ChartLoadPhase.liveRangeAppend, mode: _mode.name,
+          displayedBars: next.timeline.bars.length,
+          bidTicks: suffix.length);
+      // Whole successful live-update latency remains available separately.
       _historyLoadProfiler.finish(clock,
           phase: ChartLoadPhase.liveRangeUpdate, mode: _mode.name,
           displayedBars: next.timeline.bars.length,
