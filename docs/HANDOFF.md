@@ -1,13 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## دفعة قيد اختبار CI — عامل واحد لفحص صفحة BID الحية ومطابقة المللي ثانية
-- **الفرع:** `perf/tradelab-single-pass-live-bid-verification-20261121` من رأس تطوير `8c1104faa8264212cb8a4a09a92bc8872d16447c`، لم يتغير `main` ولا APK/Release.
-- **الاختناق في التنفيذ:** حتى بعد PR #579، كانت صفحة cTrader BID التي تحوي 5000 تيك فأكثر تنتقل إلى عامل `compute` أول مرة في `RangeBidPageVerifier.verifyAsync` ثم مرة ثانية في `_verifiedLiveSuffixWorker`، مع انتظار عاملين منفصلين في التحديث الحي كل 30 ثانية. لا حاجة لتكرار عملية نقل صفحة الوسيط.
-- **الإصلاح:** `RangeLiveBidDelta._verifyAndExtractLiveSuffix` يجمع فحص كامل فترة المصدر (الترتيب/الوقت/السعر) مع مطابقة كل أحداث المللي ثانية الأخيرة، ثم يعيد suffix موثقة واحدة من **عامل واحد** للصفحات الكبيرة. الصفحات الصغيرة تنفذ الفحصين دون إنشاء عامل، مع الحفاظ على `RangeBidPageVerifier.verify` وسياسة الفشل المغلق.
-- **الاختبارات:** 4999/5000/6501 أحداث لضمان تطابق المسار الصغير والعامل، وفحص صفحة أكثر من 5000 بها تيك خارج الفترة أو ترتيب معكوس أو سعر BID سالب أو سعر مصدر متغير عند نفس المللي ثانية. يظل اختبار مليون تيك من PR #579 حاضرًا ضمن بوابة CI.
-- **الملفات:** `flutter_app/lib/data/range_live_bid_delta.dart`, `flutter_app/test/range_live_bid_delta_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
-- **الحالة:** Flutter CI `PENDING` حتى PR؛ لم يُقَس FPS أو أداء هاتف Android ولا cTrader الحقيقي.
-- **التالي:** PR إلى التطوير، اجتياز Flutter analyze واختبارات Range/Replay، ثم دمج وتحديث SHA/CI. لا APK دون طلب.
+## دفعة مكتملة — PR #580: عامل واحد للتحقق من صفحة BID الحية
+- **MERGED:** [PR #580](https://github.com/775878805Osamaha/TradeLab/pull/580) إلى `test/flutter-all-fixes-20261116` عند SHA [b2c323e](https://github.com/775878805Osamaha/TradeLab/commit/b2c323eeb2a4d110176bdb92a15371d859c0c53c).
+- **CI:** [GitHub Actions #44845266471](https://github.com/775878805Osamaha/TradeLab/actions/runs/44845266471) **PASS / completed / success**؛ Flutter analyze واختبارات Range/Replay/chart وتوقيت اليمن.
+- **التحسين:** صفحات cTrader BID الكبيرة (5000+ تيك) كانت تخضع لعمليتي `compute` متتاليتين، تنقلان نفس صفحة الوسيط لفحص ترتيبها/أسعارها أولًا ثم مقارنة أحداث المللي ثانية الأخيرة ثانيًا. الآن `RangeLiveBidDelta._verifyAndExtractLiveSuffix` يتحقق من ترتيب وتوقيت وسلامة الصفحة كاملة ويطابق حدود BID في **عامل واحد**، بينما الصفحات الأصغر تنفّذ دون عامل. يحتفظ بتحسين PR #579 بنقل ذيل الـBID فقط بدل مليون تيك.
+- **الاختبارات:** 4999، 5000، 6501 أحداث لتغطية كلا المسارين، و5000+ تيك بخطأ في ترتيب الزمن/تجاوز آخر زمن/سعر سالب/تغيير سعر حدث أصلي تُرفض كلها. لا بناء شموع وهمية ولا كشف بيانات Replay المستقبلية.
+- **الحالة:** `main` بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`، لا APK أو Release، ولا تطبيق اختبار Android حقيقي أو قياس FPS أو اتصال cTrader فعلي.
+- **التالي:** فحص تدفق Range في حساب cTrader وجهاز Android بوضع Profile (p50/p95/p99) لتحديد الاختناق الحقيقي التالي، ثم تعديل محدد بنتيجة قياس؛ لا APK إلا بإذن المستخدم.
 
 ## دفعة مكتملة — PR #579: نقل أحداث الحد الفاصل فقط بدل أرشيف مليون BID
 - **MERGED:** [PR #579](https://github.com/775878805Osamaha/TradeLab/pull/579) إلى `test/flutter-all-fixes-20261116`، SHA الفعلي [819da6f](https://github.com/775878805Osamaha/TradeLab/commit/819da6f63c5f1b01cbe4217d061a4b4305e7a813).

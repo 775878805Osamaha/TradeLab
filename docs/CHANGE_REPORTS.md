@@ -334,3 +334,12 @@
 - **الملفات:** `flutter_app/lib/data/range_live_bid_delta.dart`, `flutter_app/test/range_live_bid_delta_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
 - **التحقق الحالي:** GitHub Actions `PENDING` إلى حين فتح PR؛ لا قياسات زمنية Android ولا cTrader حي. التحسين حسابي/نقل بيانات وليس ادعاء بقياس FPS.
 - **الخطوة التالية الوحيدة:** PR ثم CI PASS ودمج إلى فرع التطوير، مع حفظ SHA الحقيقي ورابط التشغيل الناجح.
+
+### 2026-11-21T00:42:40.500Z — نجاح ودمج PR #580: توحيد تحقق صفحات cTrader BID الكبيرة
+- **الدمج الفعلي:** [PR #580](https://github.com/775878805Osamaha/TradeLab/pull/580) **MERGED/squash** إلى `test/flutter-all-fixes-20261116` عند SHA `b2c323eeb2a4d110176bdb92a15371d859c0c53c`؛ تم تأكيد حالة PR في GitHub.
+- **CI:** [Actions #44845266471](https://github.com/775878805Osamaha/TradeLab/actions/runs/44845266471) **completed/success** للـPR HEAD `4aa1ea3e780eba81314457b440e3cba35d6ca7ba`. نجح `flutter analyze --no-fatal-infos` واختبارات Range/Replay/chart وتوقيت Yemen.
+- **العمل:** إزالة ثاني `compute` وزمن نقل صفحة BID كبيرة ثانيةً: `_verifyAndExtractLiveSuffix` يتحقق من كافة التيكات (timestamp/price/order/bounds)، ثم يقارن ذيل أحداث المللي ثانية الأخيرة ويعيد فقط الأحداث الجديدة في نفس العامل. `RangeBidPageVerifier.verify` سياسة المصدر نفسها، دون إضعاف فحص أو اختلاق شموع. ما تزال معالجة الصفحة الصغيرة دون worker.
+- **الملفات:** `flutter_app/lib/data/range_live_bid_delta.dart` و`flutter_app/test/range_live_bid_delta_test.dart` و`docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`.
+- **الانحدار الجديد:** اختبارات حدود 4999/5000/6501 تيك تؤكد تطابق المسار، وأكثر من 5000 Tick مع ترتيب خاطئ/زمن أعلى من الحد/سعر سلبي/حدث BID منقّح تُرفض كلها؛ اختبارات المليون تيك السابقة محفوظة ونُفذت ضمن البوابة.
+- **القيود:** `main` لم يتغير، `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`، لا APK أو Release ولا مشاريع أخرى. Android Profile/FPS/CTrader broker الحقيقي `NOT RUN`.
+- **الخطوة التالية الوحيدة:** جمع ملف Android Profile مع حساب cTrader فعلي للشارت وRange/Replay، توثيق p50/p95/p99، ثم تحسين الاختناق الأعلى بالأدلة.
