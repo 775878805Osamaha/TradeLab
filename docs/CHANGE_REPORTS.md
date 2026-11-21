@@ -352,3 +352,10 @@
 - **التحقق:** **NOT RUN** محليًا (لا Flutter SDK)؛ **PENDING** CI حتى فتح PR. لم يُفحص Android Profile أو جلسة cTrader الحية. لا APK/Release ولا تغيير `main`.
 - **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`، `flutter_app/lib/screens/chart_screen.dart`، `flutter_app/test/range_bar_timeline_test.dart`، وملفا التسليم.
 - **الخطوة التالية:** فتح PR إلى التطوير، فحص CI الفعلي وإصلاح أي فشل، ثم الدمج والتقرير النهائي.
+
+### 2026-11-21 (UTC) — نجاح CI ودمج PR #581 مع استلام التغييرات في التطوير
+- **الإجراء والنتيجة:** [PR #581](https://github.com/775878805Osamaha/TradeLab/pull/581) **MERGED/squash** إلى `test/flutter-all-fixes-20261116`؛ commit الدمج الفعلي [`9a8997f92905e77ca28ea9acb371406e2f037de4`](https://github.com/775878805Osamaha/TradeLab/commit/9a8997f92905e77ca28ea9acb371406e2f037de4). رأس فرع التطوير تحقق مطابقًا له بعد الدمج.
+- **دليل اختبارات GitHub:** [Actions #44908442478](https://github.com/775878805Osamaha/TradeLab/actions/runs/44908442478) **completed/success** لرأس PR `d8a0438c5b1df9168ce2cc8616e5c8259ceba82d`، بما يشمل `flutter analyze --no-fatal-infos` واختبارات التاريخ/Range/Replay والشارت وYemen timezone. لا APK.
+- **ما تغير:** `flutter_app/lib/data/range_bar_timeline.dart` (تطابق حدود المصدر في O(1))؛ `flutter_app/lib/screens/chart_screen.dart` (إبطال تحديث إذا تغيّر point أثناء await)؛ `flutter_app/test/range_bar_timeline_test.dart` (ثلاث حالات فساد لقطة وحالة صحيحة)؛ `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md` (تقرير قابل للاستكمال).
+- **ما لم يُختبر:** Android Profile/FPS الحقيقي، تسجيل دخول cTrader أو وصول BID حي. لم يتغير `main`، لم ينشأ APK/Release ولا تغيرت مشاريع أخرى.
+- **الخطوة التالية الواحدة:** تسجيل p50/p95/p99 وتفاصيل سبب تأخر التحديث/اللمس في Android Profile حقيقي ثم استهداف أول اختناق موثق؛ لا دمج في `main` أو بناء APK تلقائيًا.
