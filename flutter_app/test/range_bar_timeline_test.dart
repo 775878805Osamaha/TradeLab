@@ -213,6 +213,62 @@ void main() {
     expect(appended.timeline.endTimestamps.last, 105);
   });
 
+  test('live Range rejects stale snapshots with identical count and last UTC',
+      () async {
+    const current = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 102),
+      MarketTick(101, 102.1),
+    ];
+    final published = RangeBarTimeline.build(current, 1);
+    const suffix = <MarketTick>[MarketTick(102, 102.3)];
+    Future<void> reject(List<MarketTick> source,
+        RangeBarTimeline timeline) async {
+      await expectLater(
+        RangeBarTimeline.appendVerifiedSuffixAsync(
+          currentTicks: source,
+          currentTimeline: timeline,
+          verifiedSuffix: suffix,
+          priceDistance: 1,
+        ),
+        throwsA(isA<MarketDataException>()),
+      );
+    }
+
+    // Same source length and final timestamp; first BID origin changed.
+    await reject(const <MarketTick>[
+      MarketTick(100, 100.5),
+      MarketTick(101, 102),
+      MarketTick(101, 102.1),
+    ], published);
+
+    // Same source length and final timestamp; last BID/unfinished close
+    // changed, which would otherwise invent an incorrect Range continuation.
+    await reject(const <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 102),
+      MarketTick(101, 102.2),
+    ], published);
+
+    // Identical endpoints and event count, but the FIRST close belongs to
+    // an earlier millisecond in the stale timeline.
+    final staleFirstClose = RangeBarTimeline.build(const <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(100, 102),
+      MarketTick(101, 102.1),
+    ], 1);
+    await reject(current, staleFirstClose);
+
+    // Unchanged authentic BID source must still append correctly.
+    final valid = await RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: current, currentTimeline: published,
+      verifiedSuffix: suffix, priceDistance: 1);
+    expect(valid.ticks, hasLength(4));
+    expect(valid.timeline.endTickIndices.last, 3);
+    expect(valid.timeline.bars.last.close, 102.3);
+    expect(published.endTickIndices.last, 2);
+  });
+
   test('live Range no-op keeps published immutable source list identity',
       () async {
     const old = <MarketTick>[

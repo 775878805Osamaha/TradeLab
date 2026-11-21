@@ -343,3 +343,12 @@
 - **الانحدار الجديد:** اختبارات حدود 4999/5000/6501 تيك تؤكد تطابق المسار، وأكثر من 5000 Tick مع ترتيب خاطئ/زمن أعلى من الحد/سعر سلبي/حدث BID منقّح تُرفض كلها؛ اختبارات المليون تيك السابقة محفوظة ونُفذت ضمن البوابة.
 - **القيود:** `main` لم يتغير، `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`، لا APK أو Release ولا مشاريع أخرى. Android Profile/FPS/CTrader broker الحقيقي `NOT RUN`.
 - **الخطوة التالية الوحيدة:** جمع ملف Android Profile مع حساب cTrader فعلي للشارت وRange/Replay، توثيق p50/p95/p99، ثم تحسين الاختناق الأعلى بالأدلة.
+
+### 2026-11-21 (UTC) — تصحيح تحقق المصدر/المسافة لـRange الحي (فتح PR قيد الإجراء)
+- **المستودع والفرع:** `775878805Osamaha/TradeLab`، `fix/tradelab-range-snapshot-boundary-20261121` مشتق من `358f38532a7347fef92172935c2d465a85b7195b`؛ فرع `main` دون تعديل.
+- **الحدث:** إنشاء فرع منفصل وتعديل ثلاثة ملفات؛ commits: [de5fbb5](https://github.com/775878805Osamaha/TradeLab/commit/de5fbb5e8997964cf223c5de4f7934d343fc57da)، [b1157e4](https://github.com/775878805Osamaha/TradeLab/commit/b1157e4878d884bbe557c6497fcb65e10d925807)، [6122183](https://github.com/775878805Osamaha/TradeLab/commit/6122183d0ae425582c21e36af6b527389b233657).
+- **التصرف الفعلي:** رفض وصل لقطة آخر BID غير المطابقة للسجل أو أول مصدر/إغلاق رغم تطابق عدد الأحداث وآخر UTC؛ منع نشر نتيجة تحديث Range إذا تغيّر `point` أثناء Await. لا تعديل مصدر cTrader/Binance أو Replay cutoff أو الحساب الورقي.
+- **الاختبارات المكتوبة:** ثلاث حالات mismatch للحدود وحالة append صحيحة؛ ملف `flutter_app/test/range_bar_timeline_test.dart` ضمن بوابة `verify-flutter-range` الموجودة.
+- **التحقق:** **NOT RUN** محليًا (لا Flutter SDK)؛ **PENDING** CI حتى فتح PR. لم يُفحص Android Profile أو جلسة cTrader الحية. لا APK/Release ولا تغيير `main`.
+- **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`، `flutter_app/lib/screens/chart_screen.dart`، `flutter_app/test/range_bar_timeline_test.dart`، وملفا التسليم.
+- **الخطوة التالية:** فتح PR إلى التطوير، فحص CI الفعلي وإصلاح أي فشل، ثم الدمج والتقرير النهائي.

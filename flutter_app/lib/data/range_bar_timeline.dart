@@ -190,7 +190,17 @@ class RangeBarTimeline {
         currentTimeline.bars.length != currentTimeline.endTimestamps.length ||
         currentTimeline.closedBarCount > closedBarLimit ||
         currentTimeline.endTickIndices.last != currentTicks.length - 1 ||
-        currentTimeline.endTimestamps.last != currentTicks.last.timestamp) {
+        currentTimeline.endTimestamps.last != currentTicks.last.timestamp ||
+        // Exact source boundary checks are O(1), even with 1m BID events.
+        // A stale archive can have the same count and last UTC timestamp
+        // while carrying DIFFERENT BID prices or an older first close.
+        // Never attach new candles to that unrelated Replay timeline.
+        currentTimeline.bars.first.open != currentTicks.first.bid ||
+        currentTimeline.bars.last.close != currentTicks.last.bid ||
+        currentTimeline.endTickIndices.first < 0 ||
+        currentTimeline.endTickIndices.first >= currentTicks.length ||
+        currentTimeline.endTimestamps.first !=
+            currentTicks[currentTimeline.endTickIndices.first].timestamp) {
       throw const MarketDataException(
           'تاريخ شموع Range لا يتطابق مع آخر مصدر BID موثق.');
     }
