@@ -1,5 +1,10 @@
 import 'dart:math' as math;
 import '../data/tradelab_data.dart';
+import 'chart_price_text_formatter.dart';
+
+/// Presentation of verified prices on the right ruler; market candle values,
+/// drawing anchors, and trading calculations remain in ORIGINAL price units.
+enum ChartPriceReferenceMode { price, percent, indexed100 }
 
 /// Stable price coordinates shared by drawing gestures and chart painting.
 /// Drawings are anchored to market prices, not screen-height fractions.
@@ -12,6 +17,8 @@ class ChartPriceScale {
     this.sourceVisibleEnd,
     this.logarithmic = false,
     this.inverted = false,
+    this.referenceMode = ChartPriceReferenceMode.price,
+    this.referencePrice,
   });
   final double minimum;
   final double maximum;
@@ -22,6 +29,40 @@ class ChartPriceScale {
   /// Inverted TradingView price ruler: higher source prices paint lower on
   /// screen; the underlying OHLC and source candle indices are unchanged.
   final bool inverted;
+  /// Relative ruler modes only normalize labels; all y(price)/price(y)
+  /// transforms still operate on real market prices. The base is the first
+  /// verified visible candle close (never an unrevealed Replay candle).
+  final ChartPriceReferenceMode referenceMode;
+  final double? referencePrice;
+  bool get usesRelativeScale => !logarithmic &&
+      referenceMode != ChartPriceReferenceMode.price &&
+      referencePrice != null && referencePrice!.isFinite &&
+      referencePrice! > 0;
+
+  double axisValue(double marketPrice) {
+    if (!usesRelativeScale) return marketPrice;
+    final indexed = marketPrice / referencePrice! * 100;
+    return referenceMode == ChartPriceReferenceMode.percent
+        ? indexed - 100 : indexed;
+  }
+
+  double marketPriceForAxisValue(double axisValue) {
+    if (!usesRelativeScale) return axisValue;
+    return referencePrice! * (referenceMode == ChartPriceReferenceMode.percent
+        ? 1 + axisValue / 100 : axisValue / 100);
+  }
+
+  String axisLabel(double marketPrice, int digits) {
+    final display = axisValue(marketPrice);
+    if (!display.isFinite) return '—';
+    // Reuse the existing thousands-separator and decimal presentation for
+    // Regular and LOG; adding relative modes must not regress older charts.
+    final value = ChartPriceTextFormatter.price(
+        display, digits.clamp(0, 12).toInt());
+    return usesRelativeScale && referenceMode == ChartPriceReferenceMode.percent
+        ? '$value%' : value;
+  }
+
   bool get usesLogarithmic => logarithmic &&
       minimum.isFinite && maximum.isFinite &&
       minimum > 0 && maximum > minimum && height.isFinite && height > 0;
@@ -39,7 +80,8 @@ class ChartPriceScale {
   factory ChartPriceScale.visible(List<TradeCandle> candles, ChartViewport viewport,
       double width, double height, {
       int topMarginPercent = 8, int bottomMarginPercent = 8,
-      bool logarithmic = false, bool inverted = false}) {
+      bool logarithmic = false, bool inverted = false,
+      ChartPriceReferenceMode referenceMode = ChartPriceReferenceMode.price}) {
     if (candles.isEmpty) {
       return ChartPriceScale(0, 1, height, inverted: inverted);
     }
@@ -54,6 +96,14 @@ class ChartPriceScale {
       minPrice = math.min(minPrice, candles[i].low);
       maxPrice = math.max(maxPrice, candles[i].high);
     }
+    // Percent/Indexed 100 use the FIRST VISIBLE SOURCE CANDLE CLOSE.
+    // It is already in the Replay prefix, and is updated when the user pans
+    // history or a genuine market-source list is replaced.
+    final baseClose = candles[start].close;
+    final safeReference = !logarithmic && baseClose.isFinite &&
+        baseClose > 0 ? baseClose : null;
+    final safeReferenceMode = safeReference == null
+        ? ChartPriceReferenceMode.price : referenceMode;
     // Margins are actual price-axis viewport space, not a decorative Padding
     // around the canvas. All drawing hit-tests use this same scale.
     final span = math.max(maxPrice - minPrice, maxPrice.abs() * .00001);
@@ -96,6 +146,8 @@ class ChartPriceScale {
       minPrice - fullSpan * lowerMarginPercent / 100,
       maxPrice + fullSpan * upperMarginPercent / 100, height,
       inverted: inverted,
+      referenceMode: safeReferenceMode,
+      referencePrice: safeReference,
       sourceCandles: candles,
       sourceMinimum: minPrice,
       sourceMaximum: maxPrice,
@@ -155,7 +207,9 @@ class ChartPriceScale {
         sourceVisibleStart: sourceVisibleStart,
         sourceVisibleEnd: sourceVisibleEnd,
         logarithmic: logarithmic,
-        inverted: inverted);
+        inverted: inverted,
+        referenceMode: referenceMode,
+        referencePrice: referencePrice);
 
   /// Vertical drag on the RIGHT price scale, independent of time-axis pan.
   /// The price under the user's finger stays at the same y while zooming.
@@ -196,7 +250,8 @@ class ChartPriceScale {
       return this;
     }
     return ChartPriceScale(nextMin, nextMax, height,
-        logarithmic: isLog, inverted: inverted);
+        logarithmic: isLog, inverted: inverted,
+        referenceMode: referenceMode, referencePrice: referencePrice);
   }
 }
 

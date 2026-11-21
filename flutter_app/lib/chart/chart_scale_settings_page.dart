@@ -136,7 +136,8 @@ class _ChartScaleSettingsPageState extends State<ChartScaleSettingsPage> {
                     _row('وضع المقاييس', _dropdown(
                       key: const Key('scale-mode'), u: u,
                       value: _draft.scaleMode,
-                      options: const ['تلقائي', 'لوغاريتمي'],
+                      options: const ['تلقائي', 'لوغاريتمي',
+                          'نسبة مئوية', 'مؤشر 100'],
                       onSelected: (v) => setState(() => _draft =
                           _draft.copyWith(scaleMode: v))), u, labelSize),
                     SizedBox(height: 28 * u),

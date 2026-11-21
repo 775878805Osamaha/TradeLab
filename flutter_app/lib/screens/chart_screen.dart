@@ -3725,6 +3725,11 @@ class _ChartScreenState extends State<ChartScreen>
       bottomMarginPercent: _panelSettings.bottomMarginPercent,
       logarithmic: _scaleSettings.scaleMode == 'لوغاريتمي',
       inverted: _scaleSettings.inverted,
+      referenceMode: switch (_scaleSettings.scaleMode) {
+        'نسبة مئوية' => ChartPriceReferenceMode.percent,
+        'مؤشر 100' => ChartPriceReferenceMode.indexed100,
+        _ => ChartPriceReferenceMode.price,
+      },
     );
   }
 
@@ -6245,26 +6250,34 @@ class _CandleChartPainter extends CustomPainter {
     double y(double price) => scale.y(price);
     // Reference: no visible candle-area grid. Labels derive from the actual
     // visible price interval, never from screenshot numbers or fake candles.
-    final step = ChartAxisTicks.interval(minimum, maximum,
+    final relativeAxis = scale.usesRelativeScale;
+    final displayMin = scale.axisValue(minimum);
+    final displayMax = scale.axisValue(maximum);
+    final step = ChartAxisTicks.interval(displayMin, displayMax,
       desiredIntervals: ChartAxisTicks.intervalsForHeight(chartHeight));
     final logAxis = scale.usesLogarithmic;
-    final decimals = symbolSettings.digitsForTickStep(
-      ChartAxisTicks.decimals(logAxis ? minimum * .1 : step));
+    final decimals = relativeAxis
+        ? ChartAxisTicks.decimals(step)
+        : symbolSettings.digitsForTickStep(
+            ChartAxisTicks.decimals(logAxis ? minimum * .1 : step));
     final axisTicks = logAxis
         ? ChartAxisTicks.logarithmicTicks(minimum, maximum)
-        : ChartAxisTicks.ticksWithStep(minimum, maximum, step: step);
-    // Ordinary, LOG and inverted axes share one collision-checked ruler.
-    // Small Replay panes must never overlap tick text or render extra grid
-    // lines for labels that were rejected by the visible-height layout.
+        : ChartAxisTicks.ticksWithStep(
+            displayMin, displayMax, step: step)
+            .map(scale.marketPriceForAxisValue);
+    // Percent/Indexed-to-100 grid ticks are converted BACK to authentic
+    // source prices before painting. Drawing anchors, candle bodies and all
+    // broker calculations retain unmodified source OHLC.
     for (final tick in ChartAxisTicks.spacedByPixels(axisTicks,
         y: y, plotHeight: chartHeight)) {
       final py = y(tick);
+      final displayTick = scale.axisValue(tick);
       final important = logAxis
           ? (math.log(tick) / math.ln10 -
               (math.log(tick) / math.ln10).round()).abs() < 1e-8
-          : (tick / (step * 5) -
-              (tick / (step * 5)).round()).abs() < 0.000001;
-      _text(canvas, _price(tick, decimals),
+          : (displayTick / (step * 5) -
+              (displayTick / (step * 5)).round()).abs() < 0.000001;
+      _text(canvas, scale.axisLabel(tick, decimals),
           Offset(axis + 6, py - 8), Color(panel.axisTextColor),
           panel.axisTextSize.toDouble(),
           bold: important);
@@ -6474,7 +6487,8 @@ class _CandleChartPainter extends CustomPainter {
       final top = (py - 11).clamp(0, chartHeight - 22).toDouble();
       canvas.drawRect(Rect.fromLTWH(axis, top, 61, 22),
         Paint()..color = color);
-      _text(canvas, _price(price, decimals), Offset(axis + 3, top + 4),
+      _text(canvas, scale.axisLabel(price, decimals),
+          Offset(axis + 3, top + 4),
         Colors.white, math.max(9, panel.axisTextSize - 2).toDouble());
     }
     // A source-derived last-close marker, not a simulated tick or countdown.
@@ -6497,7 +6511,7 @@ class _CandleChartPainter extends CustomPainter {
       final tagY = (lastY - 14).clamp(0, chartHeight - 30).toDouble();
       canvas.drawRect(Rect.fromLTWH(axis, tagY, 61, 30),
           Paint()..color = lastColor);
-      _text(canvas, _price(lastClose, decimals),
+      _text(canvas, scale.axisLabel(lastClose, decimals),
           Offset(axis + 3, tagY + 7), Colors.white,
           panel.axisTextSize.toDouble());
     }
@@ -6559,9 +6573,9 @@ class _CandleChartPainter extends CustomPainter {
           position: item, viewport: viewport,
           candleCount: candles.length, plotWidth: axis)) continue;
       _shortAxisTag(canvas, axis, chartHeight, scale.y(item.stop),
-          _price(item.stop, decimals), TradeColors.shortLabelRed);
+          scale.axisLabel(item.stop, decimals), TradeColors.shortLabelRed);
       _shortAxisTag(canvas, axis, chartHeight, scale.y(item.target),
-          _price(item.target, decimals), TradeColors.shortLabelBlue);
+          scale.axisLabel(item.target, decimals), TradeColors.shortLabelBlue);
     }
     if (timestamps.length >= candles.length) {
       // Label widths are measured using the same font/RTL direction as the
@@ -6679,7 +6693,7 @@ class _CandleChartPainter extends CustomPainter {
             0, chartHeight - 18).toDouble();
         canvas.drawRect(Rect.fromLTWH(axis, markerY, 61, 18),
             Paint()..color = TradeColors.blue);
-        _text(canvas, _price(crossPrice, decimals),
+        _text(canvas, scale.axisLabel(crossPrice, decimals),
             Offset(axis + 3, markerY + 2), Colors.white, 10);
       }
       if (timestamps.length >= candles.length &&
