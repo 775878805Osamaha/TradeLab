@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/market_controller.dart';
 import 'package:tradelab_flutter/screens/chart_screen.dart';
+import 'package:tradelab_flutter/chart/chart_symbol_settings_page.dart';
+import 'package:tradelab_flutter/chart/chart_scale_settings_page.dart';
 import 'package:tradelab_flutter/chart/chart_ohlc_inspector.dart';
 import 'package:tradelab_flutter/chart/chart_viewport.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
@@ -64,18 +66,55 @@ void main() {
           reason: 'A single chart tap must leave OHLC tracking mode');
       expect(tester.takeException(), isNull);
 
-      // Long-pressing the price ruler or the time axis is NOT inspecting a
-      // loaded candle. Leave the ordinary axes available for their controls.
+      // TradingView Mobile uses long-press on the price/time rulers for
+      // native scale menus, not OHLC tracking or the Replay blue cursor.
       await tester.longPressAt(Offset(
           bounds.right - 10, bounds.top + bounds.height * .5));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(inspector, findsNothing,
-          reason: 'The price-axis hit region cannot create a candle cursor');
+          reason: 'The price ruler cannot create a candle cursor');
+      expect(find.byKey(const Key('chart-price-axis-menu-auto')),
+          findsOneWidget);
+      expect(find.byKey(const Key('chart-price-axis-menu-settings')),
+          findsOneWidget);
+      await tester.tap(find.byKey(const Key('chart-price-axis-menu-auto')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('chart-price-axis-menu-auto')),
+          findsNothing);
+      expect(find.byKey(const Key('chart-crosshair-ohlc-inspector')),
+          findsNothing);
+
+      // The price ruler has a direct entry to existing scale settings.
+      // Canceling preserves the real source and returns to the chart.
+      await tester.longPressAt(Offset(
+          bounds.right - 10, bounds.top + bounds.height * .5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(
+          const Key('chart-price-axis-menu-settings')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ChartScaleSettingsPage), findsOneWidget);
+      await tester.tap(find.byKey(const Key('scale-cancel')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('panel-cancel')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
+      expect(find.byKey(const Key('chart-source-empty')), findsNothing);
+
       await tester.longPressAt(Offset(
           bounds.left + plotWidth * .5, bounds.bottom - 8));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(inspector, findsNothing,
-          reason: 'The time-axis hit region cannot create a candle cursor');
+          reason: 'Time ruler menu must not inspect a BID source candle');
+      expect(find.byKey(const Key('chart-time-axis-menu-settings')),
+          findsOneWidget);
+      expect(find.byKey(const Key('chart-time-axis-menu-timezone')),
+          findsOneWidget);
+      await tester.tap(find.byKey(
+          const Key('chart-time-axis-menu-timezone')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ChartSymbolSettingsPage), findsOneWidget,
+          reason: 'Time ruler opens the existing timezone/settings page '
+              'without loading a new source history');
       expect(tester.takeException(), isNull);
     });
   }

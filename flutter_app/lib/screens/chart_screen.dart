@@ -68,6 +68,8 @@ import '../paper/paper_trade_service.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
 
+enum _ChartAxisMenuAction { autoPrice, scaleSettings, timeZoneSettings }
+
 enum ChartMode {
   candles,
   heikinAshi,
@@ -2995,6 +2997,64 @@ class _ChartScreenState extends State<ChartScreen>
     setState(() => _panelSettingsOpen = true);
   }
 
+  /// A long press on the chart's price/time ruler opens a compact, native
+  /// Android context menu instead of the candle's OHLC tracking cursor.
+  /// The popup changes presentation settings only; broker data, Replay
+  /// source cutoffs and drawing coordinates are never regenerated.
+  Future<void> _openChartAxisMenu({
+    required Offset globalPosition,
+    required bool priceAxis,
+  }) async {
+    if (!mounted || _replaySelectingStart) return;
+    _stopMomentum();
+    final overlay = Overlay.of(context).context.findRenderObject();
+    if (overlay is! RenderBox || !overlay.hasSize) return;
+    final local = overlay.globalToLocal(globalPosition);
+    final menuPosition = RelativeRect.fromLTRB(
+      local.dx.clamp(0.0, overlay.size.width).toDouble(),
+      local.dy.clamp(0.0, overlay.size.height).toDouble(),
+      (overlay.size.width - local.dx).clamp(0.0, overlay.size.width).toDouble(),
+      (overlay.size.height - local.dy).clamp(0.0, overlay.size.height).toDouble(),
+    );
+    final action = await showMenu<_ChartAxisMenuAction>(
+      context: context,
+      position: menuPosition,
+      items: [
+        if (priceAxis)
+          const PopupMenuItem<_ChartAxisMenuAction>(
+            key: Key('chart-price-axis-menu-auto'),
+            value: _ChartAxisMenuAction.autoPrice,
+            child: Text('التحجيم التلقائي AUTO',
+                textDirection: TextDirection.rtl)),
+        PopupMenuItem<_ChartAxisMenuAction>(
+          key: Key(priceAxis ? 'chart-price-axis-menu-settings'
+              : 'chart-time-axis-menu-settings'),
+          value: _ChartAxisMenuAction.scaleSettings,
+          child: const Text('إعدادات المقاييس',
+              textDirection: TextDirection.rtl)),
+        if (!priceAxis)
+          const PopupMenuItem<_ChartAxisMenuAction>(
+            key: Key('chart-time-axis-menu-timezone'),
+            value: _ChartAxisMenuAction.timeZoneSettings,
+            child: Text('إعدادات المنطقة الزمنية',
+                textDirection: TextDirection.rtl)),
+      ],
+    );
+    if (!mounted || action == null || _replaySelectingStart) return;
+    switch (action) {
+      case _ChartAxisMenuAction.autoPrice:
+        _resetPriceAxisToAuto();
+      case _ChartAxisMenuAction.scaleSettings:
+        _stopMomentum();
+        setState(() {
+          _scaleSettingsOpen = true;
+          _panelSettingsOpen = false;
+        });
+      case _ChartAxisMenuAction.timeZoneSettings:
+        _showCandleSettings();
+    }
+  }
+
   void _showCandleSettings() {
     _stopMomentum();
     setState(() {
@@ -5156,15 +5216,22 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onLongPressStart: (details) {
-              // TradingView mobile keeps the OHLC tracking cursor visible
-              // after the long-press finger lifts. A subsequent single tap
-              // exits tracking. Price/time axes, Replay start selection and
-              // empty-source charts are not normal candle inspection areas.
+              // Long-pressing either scale opens its context menu, matching
+              // TradingView Mobile. Do not turn an axis touch into a candle
+              // crosshair, a Replay start edit, or a price/time scale drag.
               final point = details.localPosition;
               if (candles.isEmpty || _replaySelectingStart ||
-                  point.dx < 0 || point.dx >= plotWidth ||
-                  point.dy < 0 ||
-                  point.dy >= constraints.maxHeight - 24) return;
+                  point.dx < 0 || point.dy < 0 ||
+                  point.dx >= constraints.maxWidth ||
+                  point.dy >= constraints.maxHeight) return;
+              if (point.dx >= plotWidth ||
+                  point.dy >= constraints.maxHeight - 24) {
+                unawaited(_openChartAxisMenu(
+                  globalPosition: details.globalPosition,
+                  priceAxis: point.dx >= plotWidth,
+                ));
+                return;
+              }
               _stopMomentum();
               _chartTrackingDismissedOnDown = false;
               setState(() => _crosshair = point);
