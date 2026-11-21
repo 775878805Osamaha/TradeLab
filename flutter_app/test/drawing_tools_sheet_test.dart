@@ -49,6 +49,7 @@ void main() {
       DrawingCatalogKind.ray,
       DrawingCatalogKind.infoLine,
       DrawingCatalogKind.extendedLine,
+      DrawingCatalogKind.trendAngle,
       DrawingCatalogKind.horizontal,
       DrawingCatalogKind.horizontalRay,
       DrawingCatalogKind.verticalLine,
@@ -69,8 +70,17 @@ void main() {
     expect(DrawingCatalogKind.infoLine.implemented, isTrue);
     expect(DrawingCatalogKind.infoLine.category, DrawingCategory.trend);
     expect(DrawingCatalogKind.infoLine.label, 'خط معلومات');
-    expect(DrawingCatalogKind.trendAngle.implemented, isFalse,
-        reason: 'Info Line must not silently enable unrelated drawings');
+    expect(DrawingCatalogKind.trendAngle.implemented, isTrue);
+    expect(DrawingCatalogKind.regressionTrend.implemented, isFalse,
+        reason: 'Info Line and Trend Angle cannot enable unrelated drawings');
+  });
+
+  test('Trend Angle is selectable from the native two-anchor catalog',
+      () {
+    expect(DrawingCatalogKind.trendAngle.implemented, isTrue);
+    expect(DrawingCatalogKind.trendAngle.label, 'زاوية الاتجاه');
+    expect(DrawingCatalogKind.trendAngle.category, DrawingCategory.trend);
+    expect(DrawingCatalogKind.regressionTrend.implemented, isFalse);
   });
 
   test('risk/reward drawings support both real long and short tools', () {
