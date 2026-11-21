@@ -1,13 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## دفعة قيد فحص CI — تفصيل زمن تحميل Range الحي في Android Profile (21 نوفمبر 2026)
+## دفعة مكتملة — PR #583: تحليل تأخير Range الحي بمراحل منفصلة (21 نوفمبر 2026)
 - **فرع التنفيذ:** `feat/tradelab-live-range-phase-profile-20261121` من التطوير عند `356bc85fd1c1c529e457d26cf266149f9bcd45ba` (بعد دمج PR #582)، مع الشيفرة حتى [4de5ab8](https://github.com/775878805Osamaha/TradeLab/commit/4de5ab87227e7d951f0917549af1b6d08a4db82e).
 - **الخلل المعرفي من المصدر:** `ChartScreen._refreshLiveRange` كان يسجّل زمن كامل التحديث الناجح فقط في `liveRangeUpdate` ويستبعد جميع الصفحات التي لم تضف تيكات. بذلك لا يمكن تمييز انتظار cTrader عن تحقق BID وإعادة بناء Range في Profile، وتتجاهل القياسات العمليات الناجحة بلا تغيير.
 - **التحسين الفعلي:** أضفنا مراحل `liveRangeBrokerFetch`, `liveRangeVerify`, `liveRangeAppend`, `liveRangeNoChange` إلى مجمع الأوقات، مع إبقاء `liveRangeUpdate` لزمن التحديث الكامل الناجح. كل مرحلة مُقيّدة بهوية الشارت الصالحة بعد `await`، ولا تنشر أسعارًا أو رمزًا أو معرّف حساب أو زمن تيك. لا تنفذ أدوات Stopwatch/logging في البناء الطبيعي دون `TRADELAB_PROFILE_CHART=true`.
 - **الاختبار:** `chart_load_profiler_test.dart` يختبر عزل p95 لكل مرحلة والتحديث بلا تغيير، عدم إدخال network wait في append p95، وتجنب أسماء الرموز والحسابات في التقارير.
 - **الملفات:** `flutter_app/lib/chart/chart_load_profiler.dart`, `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/chart_load_profiler_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
-- **حالة الإثبات:** **CI PENDING** فتح PR وتنفيذ Flutter analyze/tests، **Android Profile/FPS وcTrader live NOT RUN**. لا APK/Release، لا تعديل `main`، ولا مشاريع أخرى.
-- **الخطوة التالية الواحدة:** PR إلى التطوير، التحقق من GitHub Actions، إصلاح فشل إن ظهر قبل الدمج ثم تدوين SHA/CI النهائي.
+- **نتيجة ثابتة:** [PR #583](https://github.com/775878805Osamaha/TradeLab/pull/583) **MERGED/squash** إلى التطوير عند [SHA b5b8271a](https://github.com/775878805Osamaha/TradeLab/commit/b5b8271a0b07ea9bc046c000e96dfbc428a29fe0). [Actions #44910151843](https://github.com/775878805Osamaha/TradeLab/actions/runs/44910151843) **completed/success** (Flutter analyze واختبارات التاريخ/Range/Replay/chart وتوقيت اليمن) على PR HEAD `e410978bcf08feac21038b59622062b925ed541a`. **Android Profile/FPS وcTrader live NOT RUN**. لا APK/Release أو تغيير `main`.
+- **الخطوة التالية الواحدة:** تشغيل Android Profile على جهاز فعلي بحساب cTrader لاستخراج p50/p95/p99 لمراحل network/verify/append وربطها بفترات بطء pan/pinch الفعلية قبل أي إصلاح أداء إضافي.
 
 ## دفعة مكتملة — PR #582: حد ذاكرة الشموع أثناء بناء Range (21 نوفمبر 2026)
 - **الفرع:** `fix/tradelab-range-early-bar-budget-20261121` مشتق من فرع التطوير `test/flutter-all-fixes-20261116` عند `8596fdac966d38a73d3bb3e57704ce0c366af384` بعد دمج PR #581. آخر commit للاختبارات [a6e4486](https://github.com/775878805Osamaha/TradeLab/commit/a6e4486f46eb119165be2f0c6bb50d3314d43af0).
