@@ -398,3 +398,11 @@
 - **الملفات:** `flutter_app/lib/chart/chart_viewport.dart`, `flutter_app/test/chart_viewport_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
 - **التحقق:** اختباران إضافيان يغطيان NaN/Infinity/scale=0 ثم lift وحركة طبيعية وتكبير جديد؛ **CI PENDING** حتى فتح PR، Android Profile/FPS وFlutter محلي **NOT RUN**. لا main/APK/Release/مشاريع أخرى.
 - **التالي:** إنشاء PR، متابعة فحص GitHub Actions إلى PASS، أو إصلاح الفشل إن وجد، ثم دمج فرع التطوير وتوثيق الـSHA والـCI.
+
+### 2026-11-21 (UTC) — نجاح GitHub Actions ودمج PR #584 لحماية الانتقال من إصبعين إلى واحد
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab` إلى `test/flutter-all-fixes-20261116`. [PR #584](https://github.com/775878805Osamaha/TradeLab/pull/584) **MERGED/squash**؛ commit الدمج الفعلي [`d88107c62dd461c72dc8051dcfbde130be3c4094`](https://github.com/775878805Osamaha/TradeLab/commit/d88107c62dd461c72dc8051dcfbde130be3c4094).
+- **التحقق الموثق:** [GitHub Actions #44914776406](https://github.com/775878805Osamaha/TradeLab/actions/runs/44914776406) **completed/success** على الرأس `9b23a72359e9ed060e4f3572ef85a4874d55ca9a`. ناجحة: `flutter analyze --no-fatal-infos`، اختبار chart_viewport مع الاختبارين الجديدين، واختبارات Range/Replay/history والشارت وYemen timezone.
+- **السلوك النهائي:** عينة two-pointer الأولى إذا كانت NaN/Infinity/scale 0 تُسجّل جلسة pinching قائمة دون اعتماد إحداثيات غير صحيحة، وتُهمل حركة single-pointer الأولى بعد الرفع بدل القفز بـdelta وهمي. ما زال السحب الطبيعي/تكبير الإصبعين الجديد مستمرًا بعد ذلك.
+- **الملفات:** `flutter_app/lib/chart/chart_viewport.dart`, `flutter_app/test/chart_viewport_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **حدود التحقق:** ليس Android Profile ولا FPS حقيقيًا، ولم يختبر مستخدم التطبيق على الهاتف بعد؛ لا APK/Release، ولا تعديل `main` أو مشاريع أخرى.
+- **الخطوة التالية الوحيدة:** قياس Android Profile على الشارت الفعلي لتقييم سلاسة اللمس والتكبير بأرقام p50/p95/p99 ثم معالجة الاختناق المثبت.
