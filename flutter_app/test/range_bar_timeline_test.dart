@@ -328,6 +328,96 @@ void main() {
     expect(published.endTickIndices.last, 2);
   });
 
+  test('live append rejects stale Range distance even with same BID bounds',
+      () async {
+    // Both Range sizes share the same source events, first open, final
+    // unfinished close, event indices and timestamps. The previous
+    // boundary-only snapshot guard accepted them as interchangeable.
+    const history = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 101),
+      MarketTick(102, 102.1),
+    ];
+    const suffix = <MarketTick>[
+      MarketTick(103, 102.3),
+      MarketTick(104, 103.2),
+    ];
+    final oldDistance = RangeBarTimeline.build(history, 1);
+    final newDistance = RangeBarTimeline.build(history, .5);
+    expect(oldDistance.priceDistance, 1);
+    expect(newDistance.priceDistance, .5);
+    expect(oldDistance.bars.first.open, newDistance.bars.first.open);
+    expect(oldDistance.bars.last.close, newDistance.bars.last.close);
+    expect(oldDistance.endTickIndices.last,
+        newDistance.endTickIndices.last);
+    expect(oldDistance.endTimestamps.last, newDistance.endTimestamps.last);
+    expect(oldDistance.closedBarCount, isNot(newDistance.closedBarCount),
+        reason: 'Different Range widths produce different confirmed bars');
+
+    await expectLater(
+      RangeBarTimeline.appendVerifiedSuffixAsync(
+        currentTicks: history,
+        currentTimeline: oldDistance,
+        verifiedSuffix: suffix,
+        priceDistance: .5,
+      ), throwsA(isA<MarketDataException>()),
+      reason: 'Never graft 0.5 Range closes onto older 1.0 Range bars');
+    await expectLater(
+      RangeBarTimeline.appendVerifiedSuffixAsync(
+        currentTicks: history,
+        currentTimeline: oldDistance,
+        verifiedSuffix: const <MarketTick>[],
+        priceDistance: .5,
+      ), throwsA(isA<MarketDataException>()),
+      reason: 'A no-change cTrader poll cannot mark a stale chart current');
+
+    final compatible = await RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: history,
+      currentTimeline: newDistance,
+      verifiedSuffix: suffix,
+      priceDistance: .5,
+    );
+    final complete = RangeBarTimeline.build([...history, ...suffix], .5);
+    expect(compatible.timeline.priceDistance, .5);
+    expect(compatible.timeline.endTickIndices, complete.endTickIndices);
+    expect(compatible.timeline.endTimestamps, complete.endTimestamps);
+    expect(compatible.timeline.bars.map((c) =>
+        (c.open, c.high, c.low, c.close)),
+        complete.bars.map((c) =>
+            (c.open, c.high, c.low, c.close)));
+    expect(compatible.timeline.visibleClosedBarsThroughTick(2),
+        newDistance.closedBarCount,
+        reason: 'The new BID events cannot leak into prior Replay');
+    expect(oldDistance.priceDistance, 1);
+  });
+
+  test('forming-only Range snapshots reject different widths on live poll',
+      () async {
+    const history = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 100.2),
+    ];
+    const suffix = <MarketTick>[MarketTick(102, 101.1)];
+    final old = RangeBarTimeline.build(history, 1);
+    final newSize = RangeBarTimeline.build(history, .5);
+    expect(old.closedBarCount, 0);
+    expect(newSize.closedBarCount, 0);
+    expect(old.endTickIndices, newSize.endTickIndices);
+    expect(old.endTimestamps, newSize.endTimestamps);
+
+    await expectLater(RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: history, currentTimeline: old,
+      verifiedSuffix: suffix, priceDistance: .5,
+    ), throwsA(isA<MarketDataException>()),
+        reason: 'Even indistinguishable forming candles carry Range size');
+    final matching = await RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: history, currentTimeline: old,
+      verifiedSuffix: suffix, priceDistance: 1);
+    expect(matching.timeline.priceDistance, 1);
+    expect(matching.timeline.endTickIndices,
+        RangeBarTimeline.build([...history, ...suffix], 1).endTickIndices);
+  });
+
   test('live Range no-op keeps published immutable source list identity',
       () async {
     const old = <MarketTick>[
