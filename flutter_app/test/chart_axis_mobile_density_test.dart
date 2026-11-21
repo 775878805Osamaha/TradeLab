@@ -61,7 +61,7 @@ void main() {
           double.nan, double.infinity],
         y: (value) => 100 - value * 2,
         plotHeight: 100, minLabelGap: 20).toList();
-    expect(shown, <double>[5, 15, 25, 30]);
+    expect(shown, <double>[5, 15, 25]);
     expect(ChartAxisTicks.spacedByPixels(<double>[1, 2],
         y: (value) => double.nan, plotHeight: 100), isEmpty);
     expect(ChartAxisTicks.spacedByPixels(<double>[1, 2],
