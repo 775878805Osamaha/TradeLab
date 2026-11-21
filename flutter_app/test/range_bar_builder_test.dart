@@ -95,6 +95,49 @@ void main() {
     expect(bars.forming!.close, 102);
   });
 
+  test('per-BID Range budget fails before generating surplus candles', () {
+    final builder = RangeBarBuilder(1);
+    builder.appendBidTick(100);
+    builder.appendBidTick(101.5, maxNewClosedBars: 1);
+    expect(builder.closedCount, 1);
+    expect(builder.closed.single.close, 101);
+
+    // A single broker jump crosses 50k genuine Range boundaries, but a
+    // two-bar budget can never expand the remaining 49,998 candles.
+    expect(() => builder.appendBidTick(50101, maxNewClosedBars: 2),
+        throwsA(isA<RangeBarBudgetExceeded>()));
+    expect(builder.closedCount, 3);
+    expect(builder.closed.last.close, 103);
+  });
+
+  test('zero remaining bar capacity permits a forming-only BID update', () {
+    final forming = RangeBarBuilder(1);
+    forming.appendBidTick(100);
+    forming.appendBidTick(100.5, maxNewClosedBars: 0);
+    expect(forming.closedCount, 0);
+    expect(forming.forming!.close, 100.5);
+    expect(() => forming.appendBidTick(101, maxNewClosedBars: 0),
+        throwsA(isA<RangeBarBudgetExceeded>()));
+    expect(forming.closedCount, 0);
+    expect(() => forming.appendBidTick(101, maxNewClosedBars: -1),
+        throwsArgumentError);
+  });
+
+  test('exact per-event bar allowance keeps authentic gap closure order', () {
+    final limited = RangeBarBuilder(1);
+    final regular = RangeBarBuilder(1);
+    for (final price in <double>[100, 102.6, 103.2, 101.8]) {
+      limited.appendBidTick(price, maxNewClosedBars: 3);
+      regular.appendBidTick(price);
+    }
+    expect(
+      limited.sealSnapshot()
+          .map((bar) => (bar.open, bar.high, bar.low, bar.close)),
+      regular.sealSnapshot()
+          .map((bar) => (bar.open, bar.high, bar.low, bar.close)),
+    );
+  });
+
   test('normal multi-candle broker gaps stay deterministic', () {
     final bars = RangeBarBuilder(.5);
     bars.appendBidTick(100);

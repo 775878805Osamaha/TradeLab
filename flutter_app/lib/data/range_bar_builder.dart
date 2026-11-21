@@ -2,6 +2,12 @@ import 'dart:math' as math;
 
 import 'tradelab_data.dart';
 
+/// The caller must discard the unpublished partial worker state on this
+/// limit failure; confirmed chart snapshots are never changed.
+class RangeBarBudgetExceeded implements Exception {
+  const RangeBarBudgetExceeded();
+}
+
 /// Incremental price-distance bars for ordered BID ticks.
 ///
 /// Produces a completed bar only after an incoming tick has reached the exact
@@ -67,7 +73,16 @@ class RangeBarBuilder {
       ? null
       : TradeCandle(_open!, _high!, _low!, _lastPrice!);
 
-  void appendBidTick(double price) {
+  /// [maxNewClosedBars] bounds how many bars this one authenticated BID
+  /// event may close in the current rebuild. The limit is checked BEFORE
+  /// allocating each bar, not after a 100k-bar price jump has been expanded.
+  /// A limit failure discards the unpublished worker result; do not resume
+  /// this builder after an exception.
+  void appendBidTick(double price, {int? maxNewClosedBars}) {
+    if (maxNewClosedBars != null && maxNewClosedBars < 0) {
+      throw ArgumentError.value(
+          maxNewClosedBars, 'maxNewClosedBars', 'Must be nonnegative');
+    }
     if (_sealed) {
       throw StateError('Sealed Range history cannot accept more BID ticks');
     }
@@ -92,8 +107,15 @@ class RangeBarBuilder {
         throw StateError('Range distance is below the price precision');
       }
     }
+    final closedAtStart = _closed.length;
     _lastPrice = price;
     while ((price - _open!).abs() >= priceDistance) {
+      if (maxNewClosedBars != null &&
+          _closed.length - closedAtStart >= maxNewClosedBars) {
+        // Fail before adding any bar beyond the remaining chart budget.
+        // No partial list is ever published by RangeBarTimeline on failure.
+        throw const RangeBarBudgetExceeded();
+      }
       final direction = price > _open! ? 1.0 : -1.0;
       final close = _open! + direction * priceDistance;
       if (!close.isFinite || close == _open!) {

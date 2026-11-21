@@ -310,6 +310,65 @@ void main() {
     expect(prior.bars.last.close, 101);
   });
 
+  test('historical Range rejects huge BID jumps at the exact bar budget',
+      () async {
+    const ticks = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 102),
+      MarketTick(102, 40102),
+    ];
+    final validPrefix = RangeBarTimeline.build(
+        ticks.take(2).toList(), 1, closedBarLimit: 2);
+    expect(validPrefix.closedBarCount, 2);
+    expect(validPrefix.endTickIndices.take(2), [1, 1]);
+
+    // A 40k-bar source jump cannot produce a partial public Replay timeline.
+    expect(() => RangeBarTimeline.build(ticks, 1, closedBarLimit: 3),
+        throwsA(isA<MarketDataException>()));
+    await expectLater(
+      RangeBarTimeline.buildAsync(ticks, 1, closedBarLimit: 3),
+      throwsA(isA<MarketDataException>()),
+    );
+    expect(validPrefix.closedBarCount, 2);
+    expect(validPrefix.bars.last.close, 102);
+    expect(ticks, hasLength(3));
+  });
+
+  test('live Range enforces remaining closed bars before huge BID expansion',
+      () async {
+    const old = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 102),
+    ];
+    final existing = RangeBarTimeline.build(old, 1);
+    const huge = <MarketTick>[MarketTick(102, 40102)];
+    await expectLater(RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: old, currentTimeline: existing,
+      verifiedSuffix: huge, priceDistance: 1, closedBarLimit: 3,
+    ), throwsA(isA<MarketDataException>()));
+    expect(existing.closedBarCount, 2);
+    expect(existing.endTickIndices, [1, 1, 1]);
+    expect(old.last.bid, 102);
+  });
+
+  test('live Range exact budget and forming-only update preserve source',
+      () async {
+    const old = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 102),
+    ];
+    final timeline = RangeBarTimeline.build(old, 1);
+    final appended = await RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: old, currentTimeline: timeline,
+      verifiedSuffix: const <MarketTick>[MarketTick(102, 102.5)],
+      priceDistance: 1, closedBarLimit: 2,
+    );
+    expect(appended.timeline.closedBarCount, 2);
+    expect(appended.timeline.bars.last.close, 102.5);
+    expect(appended.timeline.endTickIndices.last, 2);
+    expect(appended.timeline.visibleClosedBarsThroughTick(1), 2);
+  });
+
   test('one authentic tick produces a forming bar but zero Replay bars', () {
     final timeline = RangeBarTimeline.build([MarketTick(100, 102)], 1);
     expect(timeline.bars, hasLength(1));

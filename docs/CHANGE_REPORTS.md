@@ -359,3 +359,11 @@
 - **ما تغير:** `flutter_app/lib/data/range_bar_timeline.dart` (تطابق حدود المصدر في O(1))؛ `flutter_app/lib/screens/chart_screen.dart` (إبطال تحديث إذا تغيّر point أثناء await)؛ `flutter_app/test/range_bar_timeline_test.dart` (ثلاث حالات فساد لقطة وحالة صحيحة)؛ `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md` (تقرير قابل للاستكمال).
 - **ما لم يُختبر:** Android Profile/FPS الحقيقي، تسجيل دخول cTrader أو وصول BID حي. لم يتغير `main`، لم ينشأ APK/Release ولا تغيرت مشاريع أخرى.
 - **الخطوة التالية الواحدة:** تسجيل p50/p95/p99 وتفاصيل سبب تأخر التحديث/اللمس في Android Profile حقيقي ثم استهداف أول اختناق موثق؛ لا دمج في `main` أو بناء APK تلقائيًا.
+
+### 2026-11-21 (UTC) — حماية تخصيص شموع Range من تجاوز الحد، مرحلة PR قيد الفحص
+- **المشروع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-range-early-bar-budget-20261121` من `test/flutter-all-fixes-20261116` عند `8596fdac966d38a73d3bb3e57704ce0c366af384`.
+- **الأفعال الفعلية:** إنشاء فرع تعديل وحفظ 4 ملفات كود/اختبار في commits [88fb63a](https://github.com/775878805Osamaha/TradeLab/commit/88fb63a3bd2c9011f942f8d59d4ad0cba2369698)، [3426b46](https://github.com/775878805Osamaha/TradeLab/commit/3426b46b43bf29b3e2a01899a6fd647b75631890)، [84e54a1](https://github.com/775878805Osamaha/TradeLab/commit/84e54a101bf34a003f255a5f5283a736e316c918)، [a6e4486](https://github.com/775878805Osamaha/TradeLab/commit/a6e4486f46eb119165be2f0c6bb50d3314d43af0).
+- **تغيير الشيفرة:** تمرير سعة إغلاق متبقية لكل حدث BID إلى المولد، ومنع إنشاء شموع مغلقة أكثر من السقف قبل تخصيصها. ينطبق على التاريخ وبناء الإضافة الحية، ويبقي تحديث forming bar ممكنًا عند صفر سعة إغلاق. يحتفظ بخطأ عام ذي رسالة عربية في واجهة Range؛ لا كشف future Replay أو إلحاق بيانات من مصدر غير متحقق.
+- **ملفات العمل:** `flutter_app/lib/data/range_bar_builder.dart`، `flutter_app/lib/data/range_bar_timeline.dart`، `flutter_app/test/range_bar_builder_test.dart`، `flutter_app/test/range_bar_timeline_test.dart`، `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
+- **الاختبار:** 6 حالات انحدار جديدة أضيفت، **NOT RUN** محليًا (Flutter SDK غير متوفر)، **CI PENDING** حتى PR؛ Android Profile/FPS وcTrader LIVE **NOT RUN**. دون APK/Release/main/مشاريع أخرى.
+- **الخطوة التالية:** مراجعة GitHub Actions والتعامل مع PASS/FAIL، ثم الدمج فقط إلى التطوير مع تقرير SHA النهائي.

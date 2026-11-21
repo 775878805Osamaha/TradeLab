@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة تطوير قيد تحقق CI — وقف تضخم شموع Range قبل تخصيصها (21 نوفمبر 2026)
+- **الفرع:** `fix/tradelab-range-early-bar-budget-20261121` مشتق من فرع التطوير `test/flutter-all-fixes-20261116` عند `8596fdac966d38a73d3bb3e57704ce0c366af384` بعد دمج PR #581. آخر commit للاختبارات [a6e4486](https://github.com/775878805Osamaha/TradeLab/commit/a6e4486f46eb119165be2f0c6bb50d3314d43af0).
+- **سبب التعديل من مراجعة الشيفرة:** `RangeBarTimeline.build` و`_appendVerifiedRangeWorker` كانا يفحصان `closedBarLimit` **بعد** قيام `RangeBarBuilder.appendBidTick` بتوليد حتى 100,000 شمعة لقفزة BID واحدة. مع بقاء شمعة واحدة في حد الذاكرة كان يمكن إنشاء آلاف الشموع المؤقتة قبل رفض العملية.
+- **تنفيذ فعلي:** `RangeBarBuilder.appendBidTick(price, maxNewClosedBars: remaining)` يراجع الحد قبل إنشاء **كل شمعة**؛ `RangeBarBudgetExceeded` يُحوّل إلى `MarketDataException` برسالة Range التاريخية/الحية المعروفة؛ نتيجة العامل الجزئية تُرفض ولا تنشر بيانات ناقصة إلى الرسم أو Replay. هذا يحافظ على ترتيب تيكات BID الحقيقي ويتيح تحديث الشمعة المتكوّنة فقط عندما يكون حد الإغلاق ممتلئًا. `maxBarsPerSingleTick` السابق باقٍ.
+- **الاختبارات المضافة:** ثلاث حالات لمولد Range (قفزة 50k بميزانية صغيرة، صفر مساحة للشموع المغلقة، تطابق تسلسل الإغلاق)، وثلاث حالات للتاريخ وLive Range (رفض قفزة 40k، عدم تغيير snapshot القديمة، إلحاق تحديث للشّمعة المتكوّنة عند الحد).
+- **الملفات:** `flutter_app/lib/data/range_bar_builder.dart`, `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_builder_test.dart`, `flutter_app/test/range_bar_timeline_test.dart`, وملفا التسليم.
+- **التحقق:** Flutter SDK غير متاح محليًا؛ **CI PENDING** إلى حين فتح PR وتشغيل `verify-flutter-range`. لم يُقَس Android FPS، ولا أي وقت أداء على جهاز، ولا اتصال cTrader حي. لا APK، لا Release، لا تغيير `main` أو مشاريع أخرى.
+- **الخطوة التالية الواحدة:** فتح PR من هذا الفرع إلى التطوير، فحص `flutter analyze` واختبارات Range/Replay وتوقيت اليمن؛ معالجة أي FAIL قبل الدمج، ثم حفظ SHA الدمج/CI في GitHub.
+
 ## دفعة مكتملة — PR #581: حماية حدود مصدر BID وشمعة Range (21 نوفمبر 2026)
 - **الفرع:** `fix/tradelab-range-snapshot-boundary-20261121` من التطوير `test/flutter-all-fixes-20261116` عند `358f38532a7347fef92172935c2d465a85b7195b`؛ آخر commit للشيفرة والاختبار [6122183](https://github.com/775878805Osamaha/TradeLab/commit/6122183d0ae425582c21e36af6b527389b233657) قبل تحديث التوثيق.
 - **الإصلاح:** `RangeBarTimeline.appendVerifiedSuffixAsync` يرفض الآن اللقطة غير المطابقة عندما يختلف سعر BID الأول/الأخير أو تاريخ أول حدث إغلاق، حتى لو تطابق عدد تيكات المصدر وآخر طابع UTC؛ الفحص ثابت الزمن لا يمسح مليون تيك. `ChartScreen._refreshLiveRange` يسقط نتيجة polling قديمة إذا تغير مضاعف نقطة cTrader أثناء انتظار الشبكة أو عامل Range، منعًا لدمج شموع بمسافة سعرية مختلفة.
