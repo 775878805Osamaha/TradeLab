@@ -478,3 +478,11 @@
 - **التوثيق:** تحديث `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md` بعد الدمج مع SHA ورابط CI الصحيح.
 - **حدود الاختبار:** Android Profile/FPS/CTrader session فعلي **NOT RUN**، فلا ادعاء بتحسن سلاسة مقاس؛ لا APK أو Release أو main/مشاريع أخرى.
 - **التالي:** جهاز Android/حساب cTrader موثّق وقياس p50/p95/p99 لـ pan/pinch/momentum، ثم إصلاح الاختناق الذي يظهر بالبيانات.
+
+### 2026-11-21 (UTC) — فرع إصلاح هوية حجم شموع Range ورفض stale append
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-range-distance-snapshot-integrity-20261121` من dev SHA `7c1eb83f55fb52dcb673107f87ebee2bfb40e602`.
+- **المشكلة من الشفرة:** `RangeBarTimeline.appendVerifiedSuffixAsync` فحص سلامة BID الأول والأخير لكنه لم يفحص Range `priceDistance`. تغيير Range size مع وصول update متأخر يسمح بخلط شموع مؤكدة بمقاسين مختلفين وcutoff Replay غير متسق.
+- **الإصلاح والملفات:** `flutter_app/lib/data/range_bar_timeline.dart` commit [a03b0ae](https://github.com/775878805Osamaha/TradeLab/commit/a03b0ae2e69633321b88960ca52fba5966c5eee1) يخزن حجم Range المصدر داخل snapshot ويقارن قبل الإلحاق حتى لو suffix فارغة؛ `flutter_app/test/range_bar_timeline_test.dart` commit [0b05499](https://github.com/775878805Osamaha/TradeLab/commit/0b05499a33d9a5fee36cbb8828dd56b21a9e272a) فيه اختبار اختلاف مقاس مع closes موثقة واختبار forming-only (0 closes) واختبار استمرار التحديث الموافق ومطابقة إعادة بناء المصدر.
+- **الحالة:** **CI PENDING**، Android Profile/FPS والجهاز الحقيقي وحساب cTrader حي **NOT RUN**؛ لا APK/Release/main أو مشاريع أخرى.
+- **التوثيق:** `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md` محدّثان في فرع التغيير.
+- **التالي:** PR إلى dev، Flutter analyze + كامل الاختبارات، معالجة أي FAIL قبل الدمج ثم حفظ رابط CI وSHA الدمج النهائي.
