@@ -438,3 +438,11 @@
 - **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`، `flutter_app/test/range_bar_timeline_test.dart`، `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
 - **المتبقي:** Android Profile/FPS، جلسة cTrader حية غير مختبرين **NOT RUN**؛ لا APK/Release/main أو مشاريع أخرى.
 - **التالي:** إثبات كلفة كل مرحلة على Android حقيقي ببيانات cTrader موثقة ثم تحسين الاختناق الأكبر مع اختبارات.
+
+### 2026-11-21 (UTC) — ضبط أهلية inertial chart fling على الإزاحة المرئية (قبل الفحص)
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-boundary-fling-gesture-20261121` من `4d811ec8213ea82d162fe64d1de876b6b356c580`.
+- **التغييرات:** `flutter_app/lib/chart/chart_viewport.dart` commit [8420079](https://github.com/775878805Osamaha/TradeLab/commit/8420079fee2e0d84bc645bb52f3c19aa2c91e801)؛ `flutter_app/test/chart_viewport_test.dart` commit [342521c](https://github.com/775878805Osamaha/TradeLab/commit/342521c1c542569fc21f01acd048788e1b709b55)؛ تحديث ملفّي الاستكمال.
+- **السلوك:** زخم الشارت يُحتسب من الحركة المعتمدة لviewport بعد clamp، لا من سحب الإصبع خارج نطاق التاريخ؛ لا رسوم متحركة وهمية عند الحدود ولا تغيير أساسي في الشارت/Replay/الأسعار.
+- **الاختبارات المكتوبة:** اختبار مسار oldest/right whitespace مع delta ±600 وغياب fling، واختبار 200px تحرك 5px فقط، والسحب الطبيعي 40px ورفض الهندسة غير الصالحة.
+- **التحقق:** **CI PENDING** إلى حين PR، Flutter محليًا/Android Profile/FPS/جهاز حقيقي **NOT RUN**. لا APK/Release أو main/مشاريع أخرى.
+- **التالي:** PR، قراءة حالة GitHub Actions النهائية، تصحيح أي فشل، دمج التطوير وتوثيق SHA ورابط Actions.
