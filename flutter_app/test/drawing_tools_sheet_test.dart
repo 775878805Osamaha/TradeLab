@@ -47,6 +47,7 @@ void main() {
     expect(trend.where((tool) => tool.implemented).toList(), [
       DrawingCatalogKind.trendLine,
       DrawingCatalogKind.ray,
+      DrawingCatalogKind.infoLine,
       DrawingCatalogKind.extendedLine,
       DrawingCatalogKind.horizontal,
       DrawingCatalogKind.horizontalRay,
@@ -60,7 +61,16 @@ void main() {
     expect(DrawingCatalogKind.crossLine.implemented, isTrue);
     expect(DrawingCatalogKind.crossLine.category, DrawingCategory.trend);
     expect(DrawingCatalogKind.crossLine.label, 'خط عرضي');
-    expect(DrawingCatalogKind.infoLine.implemented, isFalse);
+    expect(DrawingCatalogKind.infoLine.implemented, isTrue);
+  });
+
+  test('Info Line is selectable and trend-only, without false Gann support',
+      () {
+    expect(DrawingCatalogKind.infoLine.implemented, isTrue);
+    expect(DrawingCatalogKind.infoLine.category, DrawingCategory.trend);
+    expect(DrawingCatalogKind.infoLine.label, 'خط معلومات');
+    expect(DrawingCatalogKind.trendAngle.implemented, isFalse,
+        reason: 'Info Line must not silently enable unrelated drawings');
   });
 
   test('risk/reward drawings support both real long and short tools', () {

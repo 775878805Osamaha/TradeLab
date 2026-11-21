@@ -4,6 +4,14 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-22 — Info Line مصدر أسعار وUTC حقيقي بدلاً من زر كتالوج معطل
+- **الفرع:** `feat/tradelab-info-line-source-stats-20261122` من `test/flutter-all-fixes-20261116` بعد PR #605 (MERGED).
+- **الفجوة المرجعية:** `infoLine('خط معلومات')` ظاهر في `drawing_tools_sheet.dart` مع `implemented=false` وبدون نمط رسم؛ TradingView: https://www.tradingview.com/blog/en/new-release-of-stable-charting-library-and-trading-terminal-v1-14-12097/ يشرح وظيفة الخط والإحصاءات.
+- **التنفيذ:** [011fd4c](https://github.com/775878805Osamaha/TradeLab/commit/011fd4c02618a529738d092c42cd7751cd37f9ac) `ChartDrawingTool.infoLine` مصدر مرساتين؛ [f8a0a67](https://github.com/775878805Osamaha/TradeLab/commit/f8a0a677c0872412b2b95dbcb61960b897af798a) تفعيل أداة الكتالوج؛ [6d61d23](https://github.com/775878805Osamaha/TradeLab/commit/6d61d2337eba096ef6b9dac3a3bbdb0ee4ee58da) رسم finite clipped؛ [fc088d3](https://github.com/775878805Osamaha/TradeLab/commit/fc088d3849c4e8fb005323ca24978e9a67c79e28) إحصاءات فرق السعر/% (فقط بمقام صالح)، بارز، زمن `abs(endUTC-startUTC)` والزاوية الهندسية، بنطاق Replay prefix؛ [42116af](https://github.com/775878805Osamaha/TradeLab/commit/42116af1a9e66aae07dde33d8d48d7ca8084c794) واجهة رسم عربية label ثنائي السطر من المصادر الحقيقية دون refetch/future.
+- **الاختبارات:** [75883cb](https://github.com/775878805Osamaha/TradeLab/commit/75883cb4acde9e79e68e0091f9ea43285f1d1a3f) إحصاءات + UTC gaps + 120k anchor + Replay guard؛ [5f7425c](https://github.com/775878805Osamaha/TradeLab/commit/5f7425cbf571ab2baf824a8aad183d090dc55829) Flutter widget 320/390dp، [d6e420f](https://github.com/775878805Osamaha/TradeLab/commit/d6e420fed557145fd7f25f9d61a54540617b80e0) clipping/culling، [50b6d90](https://github.com/775878805Osamaha/TradeLab/commit/50b6d9010f8bd9fade652bbb29d63e3197558e00) catalog smoke؛ CI [1826561](https://github.com/775878805Osamaha/TradeLab/commit/1826561b734b56e0b912229a70cacf7762453819).
+- **النتيجة الحالية:** PR/CI **PENDING**. Android screenshots/Profile FPS, official pixel parity, broker cTrader live **NOT RUN**. No APK, Release, or `main` edits. الصيانة فقط في TradeLab.
+- **التالي:** تنفيذ اختبارات CI ثم دمج للفرع التجريبي عند `completed/success`، توثيق SHA/PR/CI وفتح فجوة الرسم التالية.
+
 ### 2026-11-22 — Percent وIndexed to 100 على محور السعر بدلاً من الاقتصار على Regular/LOG
 - **الفرع/الأساس:** `feat/tradelab-percent-indexed-price-axis-20261122` من `test/flutter-all-fixes-20261116` بعد PR #604.
 - **المقارنة الرسمية:** https://www.tradingview.com/support/solutions/43000748166-how-to-configure-your-supercharts/ يذكر أربع وضعيات للمقياس، غاب وضعا Percent وIndexed100 عن TradeLab.

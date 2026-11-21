@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../chart/chart_annotations.dart';
 import '../chart/chart_line_geometry.dart';
+import '../chart/chart_info_line_stats.dart';
 import '../chart/chart_candle_wicks.dart';
 import '../chart/chart_short_position.dart';
 import '../chart/chart_position_viewport_visibility.dart';
@@ -3500,6 +3501,8 @@ class _ChartScreenState extends State<ChartScreen>
         _selectDrawingMode(tool: ChartDrawingTool.fibonacci);
       case DrawingCatalogKind.trendLine:
         _selectDrawingMode(tool: ChartDrawingTool.trendLine);
+      case DrawingCatalogKind.infoLine:
+        _selectDrawingMode(tool: ChartDrawingTool.infoLine);
       case DrawingCatalogKind.ray:
         _selectDrawingMode(tool: ChartDrawingTool.ray);
       case DrawingCatalogKind.extendedLine:
@@ -6451,6 +6454,52 @@ class _CandleChartPainter extends CustomPainter {
         );
         for (final stroke in strokes) {
           canvas.drawLine(stroke.start, stroke.end, drawingPaint);
+        }
+        if (drawing.tool == ChartDrawingTool.infoLine &&
+            drawing.showLabels && strokes.isNotEmpty &&
+            timestamps.length >= candles.length) {
+          // Label statistics are strictly from the two revealed source
+          // anchors and their actual UTC timestamps; never the full live
+          // series or fabricated evenly spaced Range-candle timestamps.
+          final stats = ChartInfoLineStats.fromVisible(
+            drawing: drawing,
+            revealedCount: candles.length,
+            timestampsUtcMs: timestamps,
+            startScreen: Offset(x1, y1),
+            endScreen: Offset(x2, y2),
+          );
+          if (stats != null && axis >= 65 && chartHeight >= 55) {
+            final mainStroke = strokes.first;
+            final point = Offset(
+              (mainStroke.start.dx + mainStroke.end.dx) / 2,
+              (mainStroke.start.dy + mainStroke.end.dy) / 2,
+            );
+            final maxLabelWidth = math.min(224.0, axis - 18);
+            final topLine = textCache.layoutBoundedAxis(
+                stats.valueLabel(decimals), Colors.white, 10,
+                maxWidth: maxLabelWidth, rtl: false);
+            final bottomLine = textCache.layoutBoundedAxis(
+                stats.durationLabel, Colors.white, 10,
+                maxWidth: maxLabelWidth, rtl: true);
+            final boxWidth = math.min(axis - 8,
+                math.max(topLine.width, bottomLine.width) + 12);
+            final boxHeight = topLine.height + bottomLine.height + 10;
+            final left = (point.dx - boxWidth / 2)
+                .clamp(4.0, axis - boxWidth - 4).toDouble();
+            final top = (point.dy - boxHeight - 7)
+                .clamp(3.0, chartHeight - boxHeight - 3).toDouble();
+            canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                  Rect.fromLTWH(left, top, boxWidth, boxHeight),
+                  const Radius.circular(5)),
+              Paint()..color = color.withValues(alpha: .93),
+            );
+            topLine.paint(canvas, Offset(
+                left + (boxWidth - topLine.width) / 2, top + 4));
+            bottomLine.paint(canvas, Offset(
+                left + (boxWidth - bottomLine.width) / 2,
+                top + 5 + topLine.height));
+          }
         }
       }
       if (selected) {

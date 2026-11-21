@@ -10,6 +10,41 @@ void main() {
   const start = Offset(20, 80);
   const end = Offset(60, 40);
 
+  test('Info Line finite source segment uses trend-line geometry, not an infinite ray',
+      () {
+    const realStart = Offset(20, 80);
+    const realEnd = Offset(60, 40);
+    final segments = ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.infoLine,
+      start: realStart,
+      end: realEnd,
+      bounds: bounds,
+    );
+    expect(segments, hasLength(1));
+    expect(segments.single.start, realStart);
+    expect(segments.single.end, realEnd);
+    expect(ChartLineGeometry.distanceToStroke(
+        const Offset(40, 60), segments.single), closeTo(0, 1e-8));
+    expect(ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.infoLine,
+      start: const Offset(-100, 10),
+      end: const Offset(200, 90),
+      bounds: bounds,
+    ).single.start.dx, closeTo(0, 1e-8));
+    expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+      tool: ChartDrawingTool.infoLine,
+      startX: -400, endX: -300, plotWidth: 259), isTrue);
+    expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+      tool: ChartDrawingTool.infoLine,
+      startX: -100, endX: 20, plotWidth: 259), isFalse);
+    expect(ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.infoLine,
+      start: const Offset(120, 120),
+      end: const Offset(150, 150),
+      bounds: bounds,
+    ), isEmpty);
+  });
+
   test('historical Fibonacci level and its label start inside viewport', () {
     // The original first anchor can be 4000px left after panning.
     // Its real ratio/price level still runs across today's visible chart.

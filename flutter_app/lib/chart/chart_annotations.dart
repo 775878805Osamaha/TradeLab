@@ -1,7 +1,7 @@
 /// Drawing objects use candle positions and real market prices, not pixel
 /// coordinates. Historical pagination shifts indices but never prices.
 enum ChartDrawingTool {
-  horizontal, trendLine, fibonacci,
+  horizontal, trendLine, infoLine, fibonacci,
   ray, extendedLine, horizontalRay, verticalLine, crossLine,
   parallelChannel;
 
