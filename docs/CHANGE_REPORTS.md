@@ -4,6 +4,15 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-22 — عكس محور السعر من قائمة Android مع إحداثيات حقيقية وصفر تسرب Replay
+- **الفرع:** `feat/tradelab-invert-price-axis-20261122` مبني على `test/flutter-all-fixes-20261116` بعد PR #602.
+- **المرجع:** https://www.tradingview.com/support/solutions/43000475599-how-to-invert-reverse-the-chart-price-scale/
+- **الفجوة المثبتة:** لم يكن عكس مقياس السعر متاحًا؛ كانت `ChartPriceScale` تفترض سعرًا أعلى عند y أصغر، وهذا يؤثر في الشموع والرسومات واللمس.
+- **التنفيذ:** [5c2912a](https://github.com/775878805Osamaha/TradeLab/commit/5c2912aca0c46f5bb8969473914ad7619d4dfc75) inverse y/price، margins معكوسة وdrag anchored في LOG وlinear؛ [f7d18b5](https://github.com/775878805Osamaha/TradeLab/commit/f7d18b51c7900c28cda7257c7c0a3deb03dcbbad) cache key؛ [476298b](https://github.com/775878805Osamaha/TradeLab/commit/476298b32b8c14dfd82c4eac8ded872790467a20) إعداد محفوظ backward compatible؛ [039f9d9](https://github.com/775878805Osamaha/TradeLab/commit/039f9d9ae2192f30a01367a203e39a9ee2e28f9e) اختيار من قائمة الضغط المطول ومحافظة على source/viewport/Replay، [383bae9](https://github.com/775878805Osamaha/TradeLab/commit/383bae9e6604227516e4645d8df1dffd5a754f7e) إعدادات Flutter.
+- **الاختبارات:** [3d0527f](https://github.com/775878805Osamaha/TradeLab/commit/3d0527fd9670c7553e196bb4160ff1daccc293e3) pure linear/LOG/invert/manual/Replay؛ [6cff05a](https://github.com/775878805Osamaha/TradeLab/commit/6cff05ae4331a5ce645afd724c071cefa288b50f) Android-width 320/390 context menu؛ [10c3d4c](https://github.com/775878805Osamaha/TradeLab/commit/10c3d4c82d2344d89cf36ae81b586d0d7bbb7193) settings persistence؛ [42a72ad](https://github.com/775878805Osamaha/TradeLab/commit/42a72ad7481c0f70ee2700d19f3997b078fbaf15) CI.
+- **التحقق:** PR/CI **PENDING**. Android Profile/FPS/Pixel screenshots/cTrader live **NOT RUN**. لا APK/Release ولا main أو أي مشروع آخر.
+- **التالي:** CI ثم دمج وتوثيق SHA ونتائج الاختبارات، عدم إدعاء 100%.
+
 ### 2026-11-22 — مقياس LOG فعلي لنطاق السعر بدل اختيار غير عامل
 - **Branch:** `feat/tradelab-real-logarithmic-price-scale-20261122` من `test/flutter-all-fixes-20261116` بعد PR #601.
 - **الفجوة:** `chart_scale_settings_page.dart` كانت تحصر الوضع في `تلقائي` دون onSelected، و`ChartPriceScale` خطي دائمًا؛ مرجع TradingView Log: https://www.tradingview.com/support/solutions/43000748166-how-to-configure-your-supercharts/.
