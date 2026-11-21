@@ -139,7 +139,12 @@ class _ChartScaleSettingsPageState extends State<ChartScaleSettingsPage> {
                       options: const ['تلقائي', 'لوغاريتمي'],
                       onSelected: (v) => setState(() => _draft =
                           _draft.copyWith(scaleMode: v))), u, labelSize),
-                    SizedBox(height: 64 * u),
+                    SizedBox(height: 28 * u),
+                    _checkRow('عكس مقياس السعر',
+                      _draft.inverted,
+                      (v) => setState(() => _draft =
+                          _draft.copyWith(inverted: v)), u, labelSize),
+                    SizedBox(height: 36 * u),
                     _title('ملصقات وخطوط الأسعار', u),
                     SizedBox(height: 31 * u),
                     _checkRow('بدون ملصقات متداخلة',
