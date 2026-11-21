@@ -66,6 +66,7 @@ void main() {
       () {
     final raw = ChartPriceScale.visible(source, viewport, 259, 440);
     expect(raw.axisLabel(35000, 2), '35,000.00');
+    expect(raw.axisLabel(0.00000025, 12), '0.000000250000');
     final percent = ChartPriceScale.visible(source, viewport, 259, 440,
         referenceMode: ChartPriceReferenceMode.percent);
     final indexed = ChartPriceScale.visible(source, viewport, 259, 440,
