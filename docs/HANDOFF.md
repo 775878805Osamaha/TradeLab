@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة قيد التحقق — إخفاء وسوم SL/TP للرسومات خارج الشارت (22 نوفمبر 2026)
+- **المشروع/الفرع:** `775878805Osamaha/TradeLab`، `fix/tradelab-offscreen-position-axis-tags-20261122` من `test/flutter-all-fixes-20261116` بعد PR #599. لا تغيير `main`.
+- **الفجوة المثبتة في الكود:** `_paintShortPositions` يحجب صندوق المخاطرة/العائد حين `right < 0 || left > axis`، لكن حلقة وسم محور السعر اللاحقة كانت تُظهر `_shortAxisTag` لكل مركز بمجرد أن `visibleAt(candles.length)` صحيح، **حتى لو كانت رسمة المركز خارج النطاق الأفقي تمامًا**؛ ينتج عنها وسوم وقف/هدف شبحية على السعر عند سحب المستخدم لتاريخ آخر، مع كلفة رسم غير ضرورية.
+- **التنفيذ:** helper نقي `ChartPositionViewportVisibility.overlapsPlot` يستخدم نفس `ChartViewport.chartX` وفهرس بداية/نهاية المركز وحجم الرسم، ويتحقق من حدود التاريخ المعروض وتناهي الأرقام دون المرور على شموع المصدر. يستعمله `_CandleChartPainter` في **كلٍ من** مربعات Long/Short ووسوم SL/TP على محور السعر، ويحافظ على العرض الجزئي عند حدود النافذة، ويمنع أي endpoint غير مكشوف في Replay. O(1) مع 120k+ شمعة.
+- **ملفات الكود:** `flutter_app/lib/chart/chart_position_viewport_visibility.dart` [a101c0f](https://github.com/775878805Osamaha/TradeLab/commit/a101c0f2d066fe57372284d2b7c3e7ffc2785e29)، `flutter_app/lib/screens/chart_screen.dart` [f72a137](https://github.com/775878805Osamaha/TradeLab/commit/f72a137863ee14f2916aed15d269c05f6020d51d).
+- **التحقق المُعد:** `flutter_app/test/chart_position_viewport_visibility_test.dart` [2510f1b](https://github.com/775878805Osamaha/TradeLab/commit/2510f1b39f6f5ab70d939080c6da0fc03e8ef35d): نطاق حديث/قديم على 259/329 plot dp في 120000 شمعة (مقابل شاشتين 320/390)، box جزئي، إخفاء العناصر ذات نقاط نهاية مستقبلية في Replay، فراغ يمين متعمد، وحماية NaN/Infinity/width0. `.github/workflows/verify-flutter-range.yml` [45bac91](https://github.com/775878805Osamaha/TradeLab/commit/45bac919c5a774509595c98b92329b0500efcfee) يشغل الاختبار مع بوابة التاريخ/Range/Replay.
+- **الحالة:** PR/CI **PENDING** قبل الدمج؛ Flutter محليًا/Android Profile/FPS/لقطات TradingView وcTrader live **NOT RUN**. لا APK أو Release.
+- **التالي:** PR إلى التطوير، CI analyze + الاختبار النقي + بقية chart/Range/Replay/tz، إصلاح أي إخفاق ثم دمج فقط عند PASS، توثيق SHA بعد الدمج.
+
 ## دفعة أداء قيد التحقق — سحب وقف/هدف مركز الشراء والبيع عبر repaint فقط (22 نوفمبر 2026)
 - **المستودع/الفرع:** `775878805Osamaha/TradeLab` / `perf/tradelab-position-drag-paint-only-20261122` من `test/flutter-all-fixes-20261116` بعد دمج PR #598. لا مساس بـ `main`.
 - **الخلل الموثق من الكود:** `ChartScreen.onScaleUpdate` كان ينفّذ `setState` في كل عينة لمس عند `_draggingShortHandle != null` لتغيير الوقف/الدخول/الهدف/جسم الرسم، بعكس خطوط الاتجاه والمستطيلات التي تتحدث عبر `_chartRepaint`. يعيد هذا بناء رأس الشارت/القوائم على كل عينة، وربما ينسخ قوائم الرسوم. ليس FPS مقاسًا على هاتف.

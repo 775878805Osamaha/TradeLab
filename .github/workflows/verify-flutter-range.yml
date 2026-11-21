@@ -64,6 +64,7 @@ jobs:
             test/chart_crosshair_time_label_test.dart \
             test/chart_visible_sma_test.dart \
             test/chart_short_position_test.dart \
+            test/chart_position_viewport_visibility_test.dart \
             test/chart_long_position_widget_test.dart \
             test/chart_position_paint_only_drag_test.dart \
             test/chart_double_tap_guide_test.dart \
