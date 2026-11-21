@@ -406,3 +406,11 @@
 - **الملفات:** `flutter_app/lib/chart/chart_viewport.dart`, `flutter_app/test/chart_viewport_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
 - **حدود التحقق:** ليس Android Profile ولا FPS حقيقيًا، ولم يختبر مستخدم التطبيق على الهاتف بعد؛ لا APK/Release، ولا تعديل `main` أو مشاريع أخرى.
 - **الخطوة التالية الوحيدة:** قياس Android Profile على الشارت الفعلي لتقييم سلاسة اللمس والتكبير بأرقام p50/p95/p99 ثم معالجة الاختناق المثبت.
+
+### 2026-11-21 (UTC) — جعل snapshot Range التاريخي غير قابل للتعديل (CI معلّق)
+- **الفرع/المصدر:** `775878805Osamaha/TradeLab`، `fix/tradelab-immutable-range-timeline-20261121` من رأس التطوير `c34eea43d5f51309ae6275a8f6e6f341e5f41db2`.
+- **التعديلات الفعلية:** `range_bar_timeline.dart` عند [c4abbc3](https://github.com/775878805Osamaha/TradeLab/commit/c4abbc36c8b60c4f8e9608ff63086b1fdbe7a181)؛ `range_bar_timeline_test.dart` عند [e2b8bca](https://github.com/775878805Osamaha/TradeLab/commit/e2b8bcac6a03baafed8acc25a0879785149d8608) و[تصحيح توقع حالة prepend](https://github.com/775878805Osamaha/TradeLab/commit/eceb6d0a7dbc60ecf7d95000976d6e4f1b4f91af). تقرير حفظ في `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`.
+- **الهدف الدقيق:** صيانة ثلاثة buffers historical Range كمشاهدات فقط دون نسخ كامل الأرشيف، منع mutation للشموع/أحداث Replay من أي consumer؛ لا تغير في أسعار BID، توقيت الحد، إغلاق الشموع أو تداول ورقي.
+- **الاختبارات المكتوبة:** بناء مباشر/older-prepend و6001 تيك عبر `buildAsync`، ومحاولات mutation لكل قائمة مع الحفاظ على source ordinal. **CI PENDING** حتى PR، Flutter محليًا **NOT RUN**، Android Profile/FPS **NOT RUN**.
+- **القيود:** لا main/APK/Release/مشاريع أخرى.
+- **الخطوة التالية:** PR إلى التطوير، CI PASS أو إصلاح الخطأ، ثم الدمج والتوثيق مع SHA الحقيقي.
