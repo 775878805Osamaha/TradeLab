@@ -11,6 +11,7 @@ class ChartPriceScale {
     this.sourceVisibleStart,
     this.sourceVisibleEnd,
     this.logarithmic = false,
+    this.inverted = false,
   });
   final double minimum;
   final double maximum;
@@ -18,6 +19,9 @@ class ChartPriceScale {
   /// Applies logarithmic coordinates to market prices without altering OHLC.
   /// The scale remains linear for nonpositive ranges (log is undefined).
   final bool logarithmic;
+  /// Inverted TradingView price ruler: higher source prices paint lower on
+  /// screen; the underlying OHLC and source candle indices are unchanged.
+  final bool inverted;
   bool get usesLogarithmic => logarithmic &&
       minimum.isFinite && maximum.isFinite &&
       minimum > 0 && maximum > minimum && height.isFinite && height > 0;
@@ -35,11 +39,15 @@ class ChartPriceScale {
   factory ChartPriceScale.visible(List<TradeCandle> candles, ChartViewport viewport,
       double width, double height, {
       int topMarginPercent = 8, int bottomMarginPercent = 8,
-      bool logarithmic = false}) {
-    if (candles.isEmpty) return ChartPriceScale(0, 1, height);
+      bool logarithmic = false, bool inverted = false}) {
+    if (candles.isEmpty) {
+      return ChartPriceScale(0, 1, height, inverted: inverted);
+    }
     final (start, end) = viewport.visibleIndices(
       plotWidth: width, candleCount: candles.length);
-    if (start >= end) return ChartPriceScale(0, 1, height);
+    if (start >= end) {
+      return ChartPriceScale(0, 1, height, inverted: inverted);
+    }
     var minPrice = double.infinity;
     var maxPrice = double.negativeInfinity;
     for (var i = start; i < end; i++) {
@@ -52,6 +60,12 @@ class ChartPriceScale {
     final visibleFraction = (1 - (topMarginPercent + bottomMarginPercent) / 100)
         .clamp(.2, 1.0);
     final fullSpan = span / visibleFraction;
+    // The physical TOP and BOTTOM margins swap when the ruler is inverted:
+    // the minimum price is at the top, not the maximum.
+    final lowerMarginPercent =
+        inverted ? topMarginPercent : bottomMarginPercent;
+    final upperMarginPercent =
+        inverted ? bottomMarginPercent : topMarginPercent;
     // A log axis allocates margins in logarithmic *price* coordinates. The
     // source low/high stays unchanged, and an all-nonpositive verified series
     // falls back to linear instead of painting NaN / synthetic market data.
@@ -61,14 +75,15 @@ class ChartPriceScale {
       final upper = math.log(maxPrice);
       final logSpan = math.max(upper - lower, 1e-5) / visibleFraction;
       final paddedMin = math.exp(lower -
-          logSpan * bottomMarginPercent / 100);
+          logSpan * lowerMarginPercent / 100);
       final paddedMax = math.exp(upper +
-          logSpan * topMarginPercent / 100);
+          logSpan * upperMarginPercent / 100);
       if (paddedMin.isFinite && paddedMax.isFinite &&
           paddedMin > 0 && paddedMax > paddedMin) {
         return ChartPriceScale(
           paddedMin, paddedMax, height,
           logarithmic: true,
+          inverted: inverted,
           sourceCandles: candles,
           sourceMinimum: minPrice,
           sourceMaximum: maxPrice,
@@ -78,8 +93,9 @@ class ChartPriceScale {
       }
     }
     return ChartPriceScale(
-      minPrice - fullSpan * bottomMarginPercent / 100,
-      maxPrice + fullSpan * topMarginPercent / 100, height,
+      minPrice - fullSpan * lowerMarginPercent / 100,
+      maxPrice + fullSpan * upperMarginPercent / 100, height,
+      inverted: inverted,
       sourceCandles: candles,
       sourceMinimum: minPrice,
       sourceMaximum: maxPrice,
@@ -89,23 +105,26 @@ class ChartPriceScale {
   }
 
   double y(double price) {
+    double standardY;
     if (!usesLogarithmic) {
-      return (maximum - price) / (maximum - minimum) * height;
+      standardY = (maximum - price) / (maximum - minimum) * height;
+    } else {
+      // A user-created drawing may have a negative level while genuine
+      // prices are positive; this cannot enter the visible log plot.
+      if (price <= 0) return inverted ? -height * 2 : height * 3;
+      standardY = (math.log(maximum) - math.log(price)) /
+          (math.log(maximum) - math.log(minimum)) * height;
     }
-    // Old user drawings may contain zero/negative levels even while the
-    // underlying market is positive. Keep them strictly outside the
-    // visible plot rather than producing NaN canvas coordinates.
-    if (price <= 0) return height * 3;
-    return (math.log(maximum) - math.log(price)) /
-        (math.log(maximum) - math.log(minimum)) * height;
+    return inverted ? height - standardY : standardY;
   }
 
   double price(double y) {
+    final actualY = inverted ? height - y : y;
     if (!usesLogarithmic) {
-      return maximum - y / height * (maximum - minimum);
+      return maximum - actualY / height * (maximum - minimum);
     }
     return math.exp(math.log(maximum) -
-        y / height * (math.log(maximum) - math.log(minimum)));
+        actualY / height * (math.log(maximum) - math.log(minimum)));
   }
 
   /// Read the price displayed by the crosshair from the *same* price scale
@@ -135,7 +154,8 @@ class ChartPriceScale {
         sourceMaximum: sourceMaximum,
         sourceVisibleStart: sourceVisibleStart,
         sourceVisibleEnd: sourceVisibleEnd,
-        logarithmic: logarithmic);
+        logarithmic: logarithmic,
+        inverted: inverted);
 
   /// Vertical drag on the RIGHT price scale, independent of time-axis pan.
   /// The price under the user's finger stays at the same y while zooming.
@@ -165,7 +185,8 @@ class ChartPriceScale {
     final anchorY = focalY.clamp(0.0, height).toDouble();
     final anchorPrice = price(anchorY);
     final coordinate = isLog ? math.log(anchorPrice) : anchorPrice;
-    final aboveFraction = anchorY / height;
+    final aboveFraction = inverted
+        ? 1 - anchorY / height : anchorY / height;
     final nextUpper = coordinate + aboveFraction * nextSpan;
     final nextLower = coordinate - (1 - aboveFraction) * nextSpan;
     final nextMax = isLog ? math.exp(nextUpper) : nextUpper;
@@ -175,7 +196,7 @@ class ChartPriceScale {
       return this;
     }
     return ChartPriceScale(nextMin, nextMax, height,
-        logarithmic: isLog);
+        logarithmic: isLog, inverted: inverted);
   }
 }
 

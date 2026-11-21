@@ -69,7 +69,7 @@ import '../paper/paper_trade_service.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
 
-enum _ChartAxisMenuAction { autoPrice, scaleSettings, timeZoneSettings }
+enum _ChartAxisMenuAction { autoPrice, invertPrice, scaleSettings, timeZoneSettings }
 
 enum ChartMode {
   candles,
@@ -272,7 +272,7 @@ class _ChartScreenState extends State<ChartScreen>
       '${widget.controller.accountId}|${_selectedSymbol.source.name}|'
       '$_symbol|$_timeframe|${_mode.name}|$_rangeTicks|'
       '${_replay ? 'replay' : _replaySelectingStart ? 'select' : 'live'}|'
-      '${_scaleSettings.scaleMode}';
+      '${_scaleSettings.scaleMode}|${_scaleSettings.inverted}';
   bool get _priceScaleManual =>
       _manualPriceScale != null &&
       _manualPriceScaleKey == _currentPriceScaleKey;
@@ -3103,6 +3103,13 @@ class _ChartScreenState extends State<ChartScreen>
             value: _ChartAxisMenuAction.autoPrice,
             child: Text('التحجيم التلقائي AUTO',
                 textDirection: TextDirection.rtl)),
+        if (priceAxis)
+          PopupMenuItem<_ChartAxisMenuAction>(
+            key: const Key('chart-price-axis-menu-invert'),
+            value: _ChartAxisMenuAction.invertPrice,
+            child: Text(_scaleSettings.inverted
+                ? 'إلغاء عكس مقياس السعر' : 'عكس مقياس السعر',
+                textDirection: TextDirection.rtl)),
         PopupMenuItem<_ChartAxisMenuAction>(
           key: Key(priceAxis ? 'chart-price-axis-menu-settings'
               : 'chart-time-axis-menu-settings'),
@@ -3121,6 +3128,8 @@ class _ChartScreenState extends State<ChartScreen>
     switch (action) {
       case _ChartAxisMenuAction.autoPrice:
         _resetPriceAxisToAuto();
+      case _ChartAxisMenuAction.invertPrice:
+        _togglePriceScaleInversion();
       case _ChartAxisMenuAction.scaleSettings:
         _stopMomentum();
         setState(() {
@@ -3715,7 +3724,26 @@ class _ChartScreenState extends State<ChartScreen>
       topMarginPercent: _panelSettings.topMarginPercent,
       bottomMarginPercent: _panelSettings.bottomMarginPercent,
       logarithmic: _scaleSettings.scaleMode == 'لوغاريتمي',
+      inverted: _scaleSettings.inverted,
     );
+  }
+
+  void _togglePriceScaleInversion() {
+    // Price-scale orientation only: no source candle/tick, time anchor or
+    // Replay boundary can change on this action.
+    final updated = _scaleSettings.copyWith(
+        inverted: !_scaleSettings.inverted);
+    _stopMomentum();
+    _disarmDoubleTapGuide();
+    setState(() {
+      _scaleSettings = updated;
+      _manualPriceScale = null;
+      _manualPriceScaleKey = null;
+      _draggingPriceAxis = false;
+    });
+    _autoPriceScaleCache.clear();
+    _chartRepaint.value++;
+    unawaited(_saveScaleSettings(updated));
   }
 
   void _togglePriceScaleLog() {
@@ -4913,7 +4941,8 @@ class _ChartScreenState extends State<ChartScreen>
         onApply: (updated) {
           // Presentation only: keep downloaded OHLC, viewport and Replay.
           // An existing manual scale is expressed in the previous mode.
-          final modeChanged = _scaleSettings.scaleMode != updated.scaleMode;
+          final modeChanged = _scaleSettings.scaleMode != updated.scaleMode ||
+              _scaleSettings.inverted != updated.inverted;
           if (modeChanged) _disarmDoubleTapGuide();
           setState(() {
             _scaleSettings = updated;

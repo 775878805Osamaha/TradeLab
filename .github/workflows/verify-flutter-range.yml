@@ -58,6 +58,8 @@ jobs:
             test/chart_price_scale_cache_test.dart \
             test/chart_logarithmic_price_scale_test.dart \
             test/chart_logarithmic_toggle_widget_test.dart \
+            test/chart_inverted_price_scale_test.dart \
+            test/chart_inverted_axis_menu_widget_test.dart \
             test/chart_axis_ticks_test.dart \
             test/chart_price_text_formatter_test.dart \
             test/chart_axis_source_labels_test.dart \
