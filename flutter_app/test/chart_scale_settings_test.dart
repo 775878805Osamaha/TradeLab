@@ -103,6 +103,28 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('real logarithmic price-scale mode is selectable and saved',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 872));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    ChartScaleSettings? applied;
+    await mount(tester, onApply: (value) => applied = value,
+        onCancel: () {});
+    final dropdown = find.byKey(const Key('scale-mode'));
+    await tester.ensureVisible(dropdown);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    expect(find.text('لوغاريتمي'), findsOneWidget);
+    await tester.tap(find.text('لوغاريتمي').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scale-apply')));
+    await tester.pumpAndSettle();
+    expect(applied, isNotNull);
+    expect(applied!.scaleMode, 'لوغاريتمي');
+    expect(ChartScaleSettings.decode(applied!.encode()).scaleMode,
+        'لوغاريتمي');
+  });
+
   testWidgets('footer stays fixed while the full lower reference is scrolled',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(393, 872));
