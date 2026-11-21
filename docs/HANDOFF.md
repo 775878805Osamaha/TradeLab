@@ -1,13 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## قيد فحص CI — سلاسة انتقال تكبير الشارت بين إصبعين وثلاثة (21 نوفمبر 2026)
+## دفعة مكتملة — PR #591: منع قفزات الشارت أثناء انتقال 2→3→2 أصابع (21 نوفمبر 2026)
 - **المستودع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-multi-pointer-pinch-rebase-20261121` من `test/flutter-all-fixes-20261116` عند رأس `fd90997ee46dd8479e3de79bb76cbfb280bf292a` بعد دمج PR #590.
 - **خلل المصدر:** `ChartTouchGesture.update` كان يحتفظ بنقطة بداية pinch الأولى إذا تغير Android `pointerCount` من 2 إلى 3 أو عاد إلى 2 مع استمرار اللمس المتعدد. Flutter قد يغيّر scale/focal centroid عند الإضافة/الرفع، لذا تستخدم الشيفرة origin قديمًا وتنقل/تكبّر الشارت فجأة.
 - **التعديل:** حفظ `_multiPointerCount` وإلغاء `_pinchOrigin` فور تغير عدد الأصابع المتعددة؛ أول عينة صحيحة من المجموعة الجديدة تُعيد تثبيت المصدر على viewport الظاهر، ويستمر التكبير الصحيح بالعينة التالية. العينات الفاسدة تظل مرفوضة ويُتجاهل انتقال multi→single الوهمي؛ لا تغيير للسحب الطبيعي أو OHLC/cTrader أو Replay.
 - **الاختباران الجديدان:** تسلسل 2→3→2→1 مع scale وcentroid صناعي كبير عند دخول/خروج إصبع ثالث يظل بدون قفزة ويستأنف التكبير 20→24→30px، ويلتزم أول حدث single تجاهل pan الوهمي؛ تسلسل multi sample فاسد NaN/Infinity ثم valid مع rebase حقيقي بلا استخدام origin القديم.
 - **المصدر والاختبار:** `flutter_app/lib/chart/chart_viewport.dart` [7b638b4](https://github.com/775878805Osamaha/TradeLab/commit/7b638b43b48ed4c9be40d32106d0bc51d50c8206) و`flutter_app/test/chart_viewport_test.dart` [87f999b](https://github.com/775878805Osamaha/TradeLab/commit/87f999b3d7dfc7af21c2bb954f81c1d36d0a059f). التوثيق `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
-- **الحالة:** Flutter CI **PENDING** حتى PR، Android real touch/Profile/FPS وcTrader حي **NOT RUN**. لا APK/Release/main/مشاريع أخرى.
-- **الخطوة التالية:** افتح PR إلى التطوير، تحقّق من جميع اختبارات Flutter/Range/Replay/chart/Yemen، عالج أي FAIL، ادمج فقط بعد PASS ثم احفظ SHA وActions URL الحقيقيين.
+- **النتيجة الموثقة:** [PR #591](https://github.com/775878805Osamaha/TradeLab/pull/591) **MERGED/squash** إلى `test/flutter-all-fixes-20261116` عند [SHA cef8dc5e](https://github.com/775878805Osamaha/TradeLab/commit/cef8dc5e66dc36952f6ccf8ad359ceb79d01dde2). [GitHub Actions #44922495795](https://github.com/775878805Osamaha/TradeLab/actions/runs/44922495795) **completed/success** على PR HEAD `f51041386980041784213f9ba6e75110ab1c9bd0`، بما يشمل Flutter analyze واختبارات التاريخ والشارت/Range/Replay وتوقيت اليمن، مع اختبارات انتقالات 2→3→2 وinvalid samples الجديدة. Android real touch/Profile/FPS وcTrader live **NOT RUN**؛ لا APK/Release ولا تغيير main أو مشاريع أخرى.
+- **الخطوة التالية:** تنفيذ اختبار Android Profile حقيقي لقياس pan/pinch/replay/crosshair على جهاز والاطلاع على لقطات مقارنة TradingView 320/390dp؛ إصلاح الخلل الأعلى بالأدلة، دون ادعاء اكتمال التطابق أو إنشاء APK تلقائيًا.
 
 ## دفعة مكتملة — PR #590: حماية Replay من نتائج النوافذ القديمة (21 نوفمبر 2026)
 - **المستودع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-replay-async-session-guard-20261121` من التطوير `test/flutter-all-fixes-20261116` عند `c48821be5c716e5147a84ff4ea3f6605b7504b0c` بعد دمج PR #589.
