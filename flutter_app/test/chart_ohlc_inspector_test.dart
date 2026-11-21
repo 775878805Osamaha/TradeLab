@@ -1,9 +1,85 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tradelab_flutter/data/market_api.dart';
+import 'package:tradelab_flutter/data/market_controller.dart';
+import 'package:tradelab_flutter/screens/chart_screen.dart';
 import 'package:tradelab_flutter/chart/chart_ohlc_inspector.dart';
 import 'package:tradelab_flutter/chart/chart_viewport.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 void main() {
+  for (final width in <double>[320, 390]) {
+    testWidgets('TradingView mobile tracking survives long-press lift and '
+        'exits on a single tap at ${width}dp', (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 780));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      // Deterministic test fixtures only, not fabricated live broker quotes.
+      // All chart OHLC selections resolve against the visible verified
+      // provider-shaped candle source, never a hidden Replay future.
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v3/klines') {
+          return http.Response(jsonEncode(List.generate(160, (index) {
+            final ms = 1700000000000 + index * 60000;
+            return [ms, '${35000 + index}', '${35010 + index}',
+              '${34990 + index}', '${35005 + index}',
+              '1', ms + 59999];
+          })), 200);
+        }
+        return http.Response('{"error":"offline"}', 503);
+      });
+      final market = MarketController(api: MarketApi(client: client));
+      addTearDown(market.dispose);
+      await tester.pumpWidget(MaterialApp(home: Scaffold(
+        body: ChartScreen(
+          controller: market, requestedSymbolCode: 'BTCUSDT'),
+      )));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('chart-source-empty')), findsNothing);
+
+      final chart = find.byKey(const Key('chart-gesture-area'));
+      final bounds = tester.getRect(chart);
+      final plotWidth = bounds.width - 61;
+      final inspected = Offset(
+          bounds.left + plotWidth * .65, bounds.top + bounds.height * .5);
+      final inspector = find.byKey(const Key('chart-crosshair-ohlc-inspector'));
+      expect(inspector, findsNothing);
+
+      // A long press opens OHLC inspection. The release of that same
+      // finger must NOT remove the values and source-verified time guide.
+      await tester.longPressAt(inspected);
+      await tester.pump();
+      expect(inspector, findsOneWidget,
+          reason: 'Tracking stays visible after the long-press finger lifts');
+      expect(find.byKey(const Key('chart-ohlc-open')), findsOneWidget);
+      expect(find.byKey(const Key('chart-ohlc-close')), findsOneWidget);
+
+      await tester.tapAt(Offset(
+          bounds.left + plotWidth * .3, bounds.top + bounds.height * .4));
+      await tester.pump();
+      expect(inspector, findsNothing,
+          reason: 'A single chart tap must leave OHLC tracking mode');
+      expect(tester.takeException(), isNull);
+
+      // Long-pressing the price ruler or the time axis is NOT inspecting a
+      // loaded candle. Leave the ordinary axes available for their controls.
+      await tester.longPressAt(Offset(
+          bounds.right - 10, bounds.top + bounds.height * .5));
+      await tester.pump();
+      expect(inspector, findsNothing,
+          reason: 'The price-axis hit region cannot create a candle cursor');
+      await tester.longPressAt(Offset(
+          bounds.left + plotWidth * .5, bounds.bottom - 8));
+      await tester.pump();
+      expect(inspector, findsNothing,
+          reason: 'The time-axis hit region cannot create a candle cursor');
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   test('3px historical crosshair OHLC matches time guide source index', () {
     final candles = List<TradeCandle>.generate(100, (i) =>
         TradeCandle(100 + i.toDouble(), 104 + i.toDouble(),
