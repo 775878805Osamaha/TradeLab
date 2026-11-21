@@ -117,6 +117,7 @@ void main() {
       timestamps: original, completedCount: 3,
       loadRevision: 11, symbol: 'XAUUSD', timeframe: '5m',
       provider: 'ctrader', accountId: 'account-a', zoneKey: 'newYork',
+      selectionEpoch: 6,
     );
     bool allowed({
       List<int>? timestamps,
@@ -127,13 +128,15 @@ void main() {
       String provider = 'ctrader',
       String? accountId = 'account-a',
       String zoneKey = 'newYork',
+      int epoch = 6,
       bool selecting = true,
     }) => guard.isCurrent(
       timestamps: timestamps ?? original,
       completedCount: count, loadRevision: revision,
       symbol: symbol, timeframe: timeframe,
       provider: provider, accountId: accountId,
-      zoneKey: zoneKey, selectingStart: selecting,
+      zoneKey: zoneKey, selectionEpoch: epoch,
+      selectingStart: selecting,
     );
     expect(allowed(), isTrue);
     expect(allowed(timestamps: [100, 200, 300]), isFalse,
@@ -145,6 +148,9 @@ void main() {
     expect(allowed(provider: 'binance'), isFalse);
     expect(allowed(accountId: 'account-b'), isFalse);
     expect(allowed(zoneKey: 'utc'), isFalse);
+    expect(allowed(epoch: 7), isFalse,
+        reason: 'A new selection on the SAME immutable BID source must '
+            'invalidate an old open date/time picker');
     expect(allowed(selecting: false), isFalse);
   });
 
