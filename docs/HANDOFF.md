@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة قيد اختبار CI — عامل واحد لفحص صفحة BID الحية ومطابقة المللي ثانية
+- **الفرع:** `perf/tradelab-single-pass-live-bid-verification-20261121` من رأس تطوير `8c1104faa8264212cb8a4a09a92bc8872d16447c`، لم يتغير `main` ولا APK/Release.
+- **الاختناق في التنفيذ:** حتى بعد PR #579، كانت صفحة cTrader BID التي تحوي 5000 تيك فأكثر تنتقل إلى عامل `compute` أول مرة في `RangeBidPageVerifier.verifyAsync` ثم مرة ثانية في `_verifiedLiveSuffixWorker`، مع انتظار عاملين منفصلين في التحديث الحي كل 30 ثانية. لا حاجة لتكرار عملية نقل صفحة الوسيط.
+- **الإصلاح:** `RangeLiveBidDelta._verifyAndExtractLiveSuffix` يجمع فحص كامل فترة المصدر (الترتيب/الوقت/السعر) مع مطابقة كل أحداث المللي ثانية الأخيرة، ثم يعيد suffix موثقة واحدة من **عامل واحد** للصفحات الكبيرة. الصفحات الصغيرة تنفذ الفحصين دون إنشاء عامل، مع الحفاظ على `RangeBidPageVerifier.verify` وسياسة الفشل المغلق.
+- **الاختبارات:** 4999/5000/6501 أحداث لضمان تطابق المسار الصغير والعامل، وفحص صفحة أكثر من 5000 بها تيك خارج الفترة أو ترتيب معكوس أو سعر BID سالب أو سعر مصدر متغير عند نفس المللي ثانية. يظل اختبار مليون تيك من PR #579 حاضرًا ضمن بوابة CI.
+- **الملفات:** `flutter_app/lib/data/range_live_bid_delta.dart`, `flutter_app/test/range_live_bid_delta_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **الحالة:** Flutter CI `PENDING` حتى PR؛ لم يُقَس FPS أو أداء هاتف Android ولا cTrader الحقيقي.
+- **التالي:** PR إلى التطوير، اجتياز Flutter analyze واختبارات Range/Replay، ثم دمج وتحديث SHA/CI. لا APK دون طلب.
+
 ## دفعة مكتملة — PR #579: نقل أحداث الحد الفاصل فقط بدل أرشيف مليون BID
 - **MERGED:** [PR #579](https://github.com/775878805Osamaha/TradeLab/pull/579) إلى `test/flutter-all-fixes-20261116`، SHA الفعلي [819da6f](https://github.com/775878805Osamaha/TradeLab/commit/819da6f63c5f1b01cbe4217d061a4b4305e7a813).
 - **CI النهائي:** [GitHub Actions #44844722298](https://github.com/775878805Osamaha/TradeLab/actions/runs/44844722298) **PASS / completed / success**؛ Flutter analyze واختبارات الشارت/Range/Replay والتوقيت. **التشغيل السابق #44844537479 FAILED** لتحذير `unused_local_variable boundaryMs` وتم تصحيحه بفحص زمني أقوى قبل الدمج.

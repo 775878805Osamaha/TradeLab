@@ -81,31 +81,42 @@ class RangeLiveBidDelta {
     // implementation sent ALL previouslyVerified (up to 1m ticks) to the
     // compute worker even though the comparison only reads the last ms.
     final boundary = RangeLiveBidBoundary.fromVerified(previouslyVerified);
-    final fromMs = boundary.timestampMs;
-    await RangeBidPageVerifier.verifyAsync(
-      page: brokerPage,
-      fromMs: fromMs,
-      toMs: toMs,
+    // A >=5000 BID page previously crossed TWO isolates in sequence:
+    // verification first, then same-ms ordinal comparison. The broker page
+    // was serialized/transferred twice, prolonging Android gesture latency.
+    // Perform BOTH checks in one worker, returning only the verified suffix.
+    // A short page stays synchronous without an isolate allocation.
+    final request =
+        (boundary.events, brokerPage, boundary.timestampMs, toMs);
+    if (!kIsWeb &&
+        brokerPage.length >= RangeBidPageVerifier.minOffloadTicks) {
+      return compute<
+          (List<MarketTick>, List<MarketTick>, int, int),
+          List<MarketTick>>(
+        _verifyAndExtractLiveSuffix, request,
+        debugLabel: 'tradelab-live-bid-verify-and-append',
+      );
+    }
+    return _verifyAndExtractLiveSuffix(request);
+  }
+
+  static List<MarketTick> _verifyAndExtractLiveSuffix(
+      (List<MarketTick>, List<MarketTick>, int, int) request) {
+    RangeBidPageVerifier.verify(
+      page: request.$2,
+      fromMs: request.$3,
+      toMs: request.$4,
       errorMessage:
           'صفحة التحديث الحي لتيكات BID غير مرتبة أو خارج فترة cTrader.',
     );
-    if (brokerPage.isEmpty) {
-      // Even an otherwise quiet interval must include the authenticated
-      // already-loaded last millisecond when fetched INCLUSIVELY.
+    if (request.$2.isEmpty) {
+      // Even a quiet INCLUSIVE interval must contain the original last
+      // millisecond. Missing broker coverage is not a no-change signal.
       throw const MarketDataException(
           'لم يتطابق آخر تيك BID موثق مع صفحة التحديث الحي.');
     }
-    // The large broker page still has to be verified in full, but the old
-    // account-scoped archive is no longer transferred to a second isolate.
-    final request = (boundary.events, brokerPage, fromMs);
-    if (!kIsWeb && brokerPage.length >= 5000) {
-      return compute<(List<MarketTick>, List<MarketTick>, int),
-          List<MarketTick>>(
-        _verifiedLiveSuffixWorker, request,
-        debugLabel: 'tradelab-live-bid-overlap',
-      );
-    }
-    return _verifiedLiveSuffixWorker(request);
+    return _verifiedLiveSuffixWorker(
+        (request.$1, request.$2, request.$3));
   }
 
   static List<MarketTick> _verifiedLiveSuffixWorker(

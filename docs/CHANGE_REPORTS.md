@@ -325,3 +325,12 @@
 - **التوثيق:** `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md` تم تحديثهما بهذا السجل بعد دمج PR والـSHA الحقيقي.
 - **الحدود:** لا FPS/وقت تشغيل مقاس على Android، ولا جلسة cTrader حقيقية؛ `main` بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`، لا APK/Release ولا مشاريع أخرى.
 - **الخطوة التالية الوحيدة:** إزالة التحقق المكرر/العامل الثاني عندما تكون صفحة BID كبيرة، مع اختبارات تحقق توقيت المصدر وترتيب الأحداث وCI قبل دمج التطوير.
+
+### 2026-11-21T00:38:49.342Z — توحيد فحص صفحة cTrader BID الكبيرة واستخراج التحديث الحي في worker واحد
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab`, `perf/tradelab-single-pass-live-bid-verification-20261121` مبني على `8c1104faa8264212cb8a4a09a92bc8872d16447c`؛ `main` دون تعديل، لا APK/Release ولا مشاريع أخرى.
+- **الاختناق المراجع من كود PR #579:** `RangeLiveBidDelta.verifiedSuffixAsync` كان يرسل `brokerPage` الكبيرة لعملية `RangeBidPageVerifier.verifyAsync` (عامل Flutter compute) ثم يعيد إرسال **نفس الصفحة** إلى `_verifiedLiveSuffixWorker` (عامل ثانٍ). PR #579 قلل نسخة الأرشيف القديم، لكن نسخة الصفحة الجديدة كانت لا تزال تتكرر.
+- **التحسين:** `_verifyAndExtractLiveSuffix` يجري `RangeBidPageVerifier.verify` من البداية للنهاية، ثم يرفض الصفحة الفارغة، ثم يفحص كل أحداث boundary الموثقة ويفصل suffix من نفس العامل. حد `RangeBidPageVerifier.minOffloadTicks` هو 5000؛ الملفات الأقل تُفحص محليًا دون worker. لا حذف لتكرار التيكات الأصلي ولا توليد سعر أو تغيير مصدر أو كشف future Replay.
+- **الاختبارات الجديدة:** إثبات تطابق النتائج عند 4999/5000/6501 Tick، رفض صفحات 5000+ بترتيب معكوس، تجاوز وقت `toMs`، سعر BID غير صالح، وتعارض السعر في مللي ثانية التداخل. يظل اختبار `_MillionBidHistory` (مليون مصدر + 6500 تيك) للتحقق من أن إرسال التاريخ الكامل قد توقف.
+- **الملفات:** `flutter_app/lib/data/range_live_bid_delta.dart`, `flutter_app/test/range_live_bid_delta_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **التحقق الحالي:** GitHub Actions `PENDING` إلى حين فتح PR؛ لا قياسات زمنية Android ولا cTrader حي. التحسين حسابي/نقل بيانات وليس ادعاء بقياس FPS.
+- **الخطوة التالية الوحيدة:** PR ثم CI PASS ودمج إلى فرع التطوير، مع حفظ SHA الحقيقي ورابط التشغيل الناجح.
