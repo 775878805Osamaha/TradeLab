@@ -564,3 +564,11 @@
 - **توثيق جديد:** [docs/TRADINGVIEW_PARITY_ACCEPTANCE.md](https://github.com/775878805Osamaha/TradeLab/blob/test/flutter-all-fixes-20261116/docs/TRADINGVIEW_PARITY_ACCEPTANCE.md)، commit [04924a7](https://github.com/775878805Osamaha/TradeLab/commit/04924a77168462ff0d3236f143b84e0e240d6143): مرجع رسمي ومعيار قبول للـUI/Replay/tooling/performance، مع حالة NOT COMPLETE حتى اختبار Android بصريًا وسلوكيًا.
 - **الحدود:** Android Profile/FPS والمقارنة البصرية real device والجلسة الحية مع cTrader **NOT RUN**؛ لا APK/Release ولا تعديل main/مشاريع أخرى. توثيق 2026-11-21T16:28:18.728Z.
 - **التالي:** إصلاح تجربة الضغط المطول على محور السعر/الوقت في chart_screen.dart مع widget tests، PR/CI/merge جديد إذا نجح.
+
+### 2026-11-21T16:32:10.391Z — إضافة قوائم ضغط مطوّل على محوري السعر والوقت في TradeLab
+- **المصدر المرجعي الرسمي:** https://www.tradingview.com/charting-library-docs/latest/mobile_specifics/ (Mobile long-press on price/time scales opens context menu).
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab` / `feat/tradelab-mobile-axis-longpress-context-menus-20261121`؛ base dev SHA `9b2977f2bbd47b938836e44e149d6648c5c4fef1`.
+- **التغييرات:** [f31fe4c](https://github.com/775878805Osamaha/TradeLab/commit/f31fe4c67b888e1e34895d2748ce5c312d7742ec) ChartScreen axis longpress -> native menu anchored to global touch: السعر AUTO + إعدادات المقاييس، الوقت إعدادات المقاييس + المنطقة الزمنية. يعود إلى صفحات Scale/Symbol الحالية ولا يمس BID/cTrader/Range/Replay أو الحسابات؛ الـcrosshair يبقى plot-only.
+- **الاختبارات:** [fbbbb7a](https://github.com/775878805Osamaha/TradeLab/commit/fbbbb7aaac120adf82c192d282c8d91b42536785) و[5984319](https://github.com/775878805Osamaha/TradeLab/commit/59843191c92f2040f31c5d98b037dd9d421911bd) في `flutter_app/test/chart_ohlc_inspector_test.dart` عند 320 و390dp: فحص المحتويات والتنقل وصفحات المقاييس والتوقيت وعدم ظهور OHLC على المحاور وعدم فقدان مصدر التاريخ عند cancel. اختبار mock offline فقط.
+- **التوثيق:** `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md` في نفس فرع الإصلاح. **CI PENDING**؛ real Android Profile/FPS, cTrader live, pixel parity NOT RUN؛ لا APK/Release/main/مشاريع أخرى.
+- **التالي:** فتح PR إلى dev، تحقق من CI، إصلاح أي فشل، merge squash فقط عند PASS ثم update/verify التقارير برابط run وSHA النهائي.
