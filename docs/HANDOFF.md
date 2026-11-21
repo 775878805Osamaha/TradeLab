@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة قيد التحقق — حماية النقر المزدوج من تبديل رمز السوق والتبويب (21 نوفمبر 2026)
+- **المستودع والفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-stale-doubletap-guide-session-20261121` من `test/flutter-all-fixes-20261116` بعد PR #596. لا تغيير `main` ولا APK.
+- **الخلل المثبت:** الوضع المؤقت `_doubleTapGuideArmed` الذي أضافه PR #596 لا يحمل هوية مصدر الشموع؛ `_changeSymbol` يستبدل القوائم ويعيد ضبط الرسومات لكن لا يلغي هذا العلم. كما كان `onScaleStart` يسمح ببدء تحرير رسم من منطقة محور السعر/الوقت عندما يكون العلم فعالًا، ويعيد `onScaleEnd` لمحور السعر مبكرًا دون إلغاء العلم.
+- **الإصلاح:** ربط التحريك المؤقت بهوية قائمة شموع مصدر السوق + مفتاح account/provider/symbol/timeframe/chart mode/Replay، والتحقق من نقطة لمس واحدة داخل الرسم (وليس المحاور أو زمن Replay) عند بداية السحب. أي تغير مصدر أو تبويب مخفي أو إعادة رسومات/تراجع/اختيار أداة أو بداية/خروج Replay يلغي الوضع فورًا. لا تغيّر الأسعار ومواضع الشموع، ويظل النقر المزدوج على الفراغ يعيد ضبط الشارت.
+- **كود:** [58a7bb3](https://github.com/775878805Osamaha/TradeLab/commit/58a7bb34b0599b3e3a124897d6b6cfaf2d6ab4c4) `flutter_app/lib/screens/chart_screen.dart`. **اختبار جديد:** [23b3ae2](https://github.com/775878805Osamaha/TradeLab/commit/23b3ae2680dc33f5a76ca6e7743e379c57fb6c46) `flutter_app/test/chart_double_tap_guide_test.dart` يبدأ برسمة موثقة ضمن fixture محلي، يجهز تحريرها، ينتقل BTCUSDT→ETHUSDT ويتأكد من إلغاء التحرير والرسم السابق، ثم يخفي تبويب الشارت ويتحقق من عدم بقاء تحرير معلق.
+- **التحقق:** GitHub CI **PENDING** عند إنشاء التقرير؛ Flutter محلي وAndroid Profile/FPS وcTrader live ولقطات المقارنة **NOT RUN**. لا ادعاء مطابقة 100%.
+- **الخطوة التالية:** افتح PR إلى فرع التطوير وشغّل بوابة Flutter analyze + chart/Range/Replay/history/Yemen timezone؛ عالج أي إخفاق قبل الدمج وتوثيق SHA والنتيجة.
+
 ## دفعة جديدة — تعديل خط الرسم بالنقر المزدوج بدل إعادة الشارت (21 نوفمبر 2026)
 - **المشروع والفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-mobile-doubletap-drawing-move-20261121`، مشتق من `test/flutter-all-fixes-20261116` بعد دمج PR #595. لا تعديل `main`.
 - **فارق رسمي موثق:** [TradingView Mobile gestures](https://www.tradingview.com/charting-library-docs/latest/mobile_specifics/) تنص على أن النقر المزدوج على خط رسم ينشّط تحريكه، بينما `ChartScreen.onDoubleTap` كان يعيد `_freshViewport()` لأي نقرة مزدوجة داخل منطقة الشموع حتى لو فوق خط أصلي.
