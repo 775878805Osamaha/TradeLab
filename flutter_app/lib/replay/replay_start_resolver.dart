@@ -146,6 +146,7 @@ class ReplayDateSelectionGuard {
     required this.provider,
     required this.accountId,
     required this.zoneKey,
+    required this.selectionEpoch,
   });
 
   final List<int> timestamps;
@@ -156,6 +157,9 @@ class ReplayDateSelectionGuard {
   final String provider;
   final String? accountId;
   final String zoneKey;
+  // Each new in-chart start selection gets a distinct epoch even if the
+  // broker, symbol and immutable candle archive are unchanged.
+  final int selectionEpoch;
 
   bool isCurrent({
     required List<int> timestamps,
@@ -166,8 +170,10 @@ class ReplayDateSelectionGuard {
     required String provider,
     required String? accountId,
     required String zoneKey,
+    required int selectionEpoch,
     required bool selectingStart,
   }) => selectingStart &&
+      this.selectionEpoch == selectionEpoch &&
       identical(this.timestamps, timestamps) &&
       this.completedCount == completedCount &&
       this.loadRevision == loadRevision &&
