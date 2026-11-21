@@ -580,3 +580,11 @@
 - **الملفات:** `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/chart_ohlc_inspector_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`, مع معيار القبول `docs/TRADINGVIEW_PARITY_ACCEPTANCE.md` المنشأ في الدفعة السابقة.
 - **الحدود:** Android Profile/FPS، الصور الحقيقية الجانبية، اتصال cTrader حي **NOT RUN**؛ لا APK/Release ولا تعديل `main` أو أي مشروع آخر. لا ادعاء بأن TradeLab أصبح مطابقًا بالكامل بمجرد نجاح CI.
 - **الخطوة التالية:** اختبار Android فعلي مقابل مرجع TradingView وتقرير اختلافات screenshot/gesture/latency حقيقية ثم إصلاحها حسب الأولوية.
+
+### 2026-11-21T18:23:24.554Z — PR قيد CI: منع انجراف الشارت أثناء Replay وإغلاق Play عند EOF
+- **الفرع:** `775878805Osamaha/TradeLab`/`fix/tradelab-replay-history-viewport-anchor-20261121` من dev SHA `5902a2a780efa3495e8765b2f304ed4df24ae77c`.
+- **الدليل من الكود:** Replay يغير `_visibleThrough` دون تعديل `_viewport`، مع أن معادلة `chartX` تعتمد على طول القائمة الظاهرة؛ لذلك يسير الرسم التاريخي يسارًا/يمينًا عمودًا أثناء Play أو seeks، ولو كان المستخدم عند شمعة قديمة. زر Play عند EOF كان ينشئ Timer غير مجدٍ.
+- **التنفيذ:** [1c16757](https://github.com/775878805Osamaha/TradeLab/commit/1c167577245f9323379dc7c415bcb4c0f272357f) `chart_viewport.dart` يضيف حساب تثبيت Replay؛ [b7481f9](https://github.com/775878805Osamaha/TradeLab/commit/b7481f964f7ab93465c08a4fa1ed53299e58bb8f) `chart_screen.dart` يطبقه أثناء Seek وAuto Play ويمنع EOF timer؛ [cbdf3e3](https://github.com/775878805Osamaha/TradeLab/commit/cbdf3e39606d6e89d6bcacf6c57ced428b32a7f9) `replay_mobile_controls.dart` يعطل التشغيل بلا شمعة مؤكدة جديدة.
+- **الاختبارات:** [67dcbc0](https://github.com/775878805Osamaha/TradeLab/commit/67dcbc0ae928cca2a3dd07f74aa4a513f091d694) `replay_viewport_focus_test.dart` حالات 260/320/390dp وآخر حافة/فراغ/rewind/تاريخ قديم؛ [11f7262](https://github.com/775878805Osamaha/TradeLab/commit/11f7262750d1c0e78c890674e63dad1fa284b473) `replay_mobile_controls_test.dart` disable عند EOF مع إبقاء pause ممكنًا.
+- **الحالة:** Flutter CI PENDING، Android device/Profile/FPS وcTrader live NOT RUN، لا APK/Release/main. لا تغييرات خارج TradeLab.
+- **التالي:** PR إلى `test/flutter-all-fixes-20261116`، فحص CI SUCCESS، دمج squash ثم حفظ SHA وCI الرابطين وتحديث handoff.

@@ -1958,6 +1958,15 @@ class _ChartScreenState extends State<ChartScreen>
     setState(() {
       _stopPlayback();
       _training.moveTo(_replayMarketCandles, next);
+      // The chart currently shows only the authenticated Replay prefix.
+      // When the user inspected older bars, preserve their exact x during
+      // step-forward, step-back and multi-bar seeking; the normal live edge
+      // continues following the newest revealed source bar.
+      _viewport = _viewport.afterReplayVisibleCountChange(
+        previousVisibleCount: _visibleThrough,
+        nextVisibleCount: next,
+        plotWidth: _momentumPlotWidth,
+      );
       _visibleThrough = next;
     });
     _scheduleTrainingSave();
@@ -2698,6 +2707,7 @@ class _ChartScreenState extends State<ChartScreen>
       _recordTraining(); // Commit the last revealed cursor on manual pause.
       return;
     }
+    if (!_replay || _visibleThrough >= _totalBars) return;
     setState(() => _playing = true);
     _replayTimer = Timer.periodic(_replaySpeed.interval, (timer) {
       if (!mounted || !_replay || _visibleThrough >= _totalBars) {
@@ -2711,6 +2721,11 @@ class _ChartScreenState extends State<ChartScreen>
       final openBefore = _training.openTradeCount;
       setState(() {
         _training.moveTo(_replayMarketCandles, _visibleThrough + 1);
+        _viewport = _viewport.afterReplayVisibleCountChange(
+          previousVisibleCount: _visibleThrough,
+          nextVisibleCount: _visibleThrough + 1,
+          plotWidth: _momentumPlotWidth,
+        );
         _visibleThrough++;
       });
       if (openBefore != _training.openTradeCount) _recordTraining();

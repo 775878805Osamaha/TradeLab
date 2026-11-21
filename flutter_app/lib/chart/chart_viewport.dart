@@ -251,6 +251,45 @@ class ChartViewport {
     return next == this ? this : next;
   }
 
+  /// Replay adds and removes confirmed source bars from its *displayed
+  /// prefix*, not from the immutable broker history. While inspecting older
+  /// bars, their screen x should not drift one column whenever playback
+  /// reveals a new bar or manual stepping rewinds. At the live edge
+  /// (scrollBars == 0) keep following the newest confirmed candle instead.
+  ///
+  /// The scroll count changes by exactly the visible-prefix count delta:
+  /// chartX(index) depends on (visibleCount - scrollBars - index).
+  /// A rewind that removes the user's historical anchor follows the last
+  /// still-revealed bar, never blank future or a hidden Replay candle.
+  /// This is O(1), including for 100k+ verified source candles.
+  ChartViewport afterReplayVisibleCountChange({
+    required int previousVisibleCount,
+    required int nextVisibleCount,
+    required double plotWidth,
+  }) {
+    if (previousVisibleCount <= 0 || nextVisibleCount <= 0 ||
+        previousVisibleCount == nextVisibleCount ||
+        !plotWidth.isFinite || plotWidth <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !scrollBars.isFinite || !rightMarginBars.isFinite ||
+        scrollBars == 0) return this;
+
+    final delta = nextVisibleCount - previousVisibleCount;
+    final proposed = scrollBars + delta;
+    if (!proposed.isFinite) return this;
+    // The old bar is no longer in the confirmed Replay prefix after a
+    // large backwards seek. Anchor to the newest remaining real bar.
+    if (scrollBars > 0 && proposed < 0) return jumpToLatest();
+    final bounded = _boundedScroll(
+        proposed, plotWidth, nextVisibleCount, barWidth);
+    if (bounded == scrollBars) return this;
+    return ChartViewport(
+      barWidth: barWidth,
+      scrollBars: bounded,
+      rightMarginBars: rightMarginBars,
+    );
+  }
+
   /// Keep the same historical candle under the same x-coordinate after
   /// Range bars are regenerated from newly prepended BID ticks. Range bar
   /// counts and indices can both change when the starting price changes.

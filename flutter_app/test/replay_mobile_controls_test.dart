@@ -237,6 +237,47 @@ void main() {
     });
   }
 
+  for (final width in <double>[320, 390]) {
+    testWidgets('Replay play button disables at last verified source candle '
+        'at ${width}dp', (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 780));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      var playRequests = 0;
+      Widget controls({required bool playing, required int visible}) =>
+          MaterialApp(home: Scaffold(body: Column(children: [
+            const Spacer(),
+            ReplayMobileControls(
+              selecting: false, playing: playing,
+              visibleCount: visible, totalBars: 5,
+              chartFrame: '5m', speed: ReplayPlaybackSpeed.normal,
+              showTrading: false, showDrawingTools: false,
+              canLoadOlder: false, olderLoading: false, tradeCount: 0,
+              autoStep: true,
+              onClose: () {}, onConfirm: () {}, onStartMenu: (_) {},
+              onExtras: (_) {}, onStepMenu: (_) {}, onReset: () {},
+              onStepBack: () {}, onStepForward: () {},
+              onPlayPause: () => playRequests++,
+              onSpeed: (_) {}, onChooseAgain: () {},
+            ),
+          ])));
+      await tester.pumpWidget(controls(playing: false, visible: 5));
+      final play = find.byKey(const Key('replay-play-pause'));
+      final forward = find.byKey(const Key('replay-step-forward'));
+      expect(tester.widget<IconButton>(play).onPressed, isNull);
+      expect(tester.widget<IconButton>(forward).onPressed, isNull);
+      await tester.pumpWidget(controls(playing: false, visible: 4));
+      expect(tester.widget<IconButton>(play).onPressed, isNotNull);
+      await tester.tap(play);
+      expect(playRequests, 1);
+      await tester.pumpWidget(controls(playing: true, visible: 5));
+      expect(tester.widget<IconButton>(play).onPressed, isNotNull,
+          reason: 'Pause must remain available while final tick settles');
+      await tester.tap(play);
+      expect(playRequests, 2);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final dark in <bool>[false, true]) {
     testWidgets('Replay controls honor ${dark ? 'dark' : 'light'} theme contrast',
         (tester) async {
