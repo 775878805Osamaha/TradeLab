@@ -4,6 +4,14 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-22 — تفعيل رسم Trend Angle مع زاوية حقيقية ودعم Replay/Invert
+- **المرجع:** https://www.tradingview.com/support/solutions/43000791602-trend-angle-drawing-tool/؛ **الفرع:** `feat/tradelab-trend-angle-source-20261122` بعد PR #606 (MERGED)، الأساس `test/flutter-all-fixes-20261116`.
+- **الفجوة:** `trendAngle` في كتالوج Flutter مع `implemented=false`؛ أداة الرسوم نفسها غير معرفة؛ لا يمكن وضع نقطتين أو رؤية زاوية محسوبة.
+- **التعديل:** [2a2f087](https://github.com/775878805Osamaha/TradeLab/commit/2a2f0871e68e57b1194f80c4c3d1f42294a47d79) enum source anchor tool؛ [02d534f](https://github.com/775878805Osamaha/TradeLab/commit/02d534ff8e566c3323cff03954cdcee846ef244d) catalog true؛ [7f1769c](https://github.com/775878805Osamaha/TradeLab/commit/7f1769c3d24f53c3f7557731e532d0d86082e828) finite clipping/culling؛ [1f641be](https://github.com/775878805Osamaha/TradeLab/commit/1f641be26ce36d275fce73e4b20bbe86923a1fa7) source-only `ChartInfoLineStats` تدعم Trend Angle وReplay guard، [491db69](https://github.com/775878805Osamaha/TradeLab/commit/491db69fe45af708944eebb49194cd39d8d939d5)/[a708db5](https://github.com/775878805Osamaha/TradeLab/commit/a708db569dd15c2871ccdbde10f8d8aceb29c1f4) تفعيل نقرتين ورسم ملصق الزاوية الأول والـbars/%/فرق السعر ثانياً، دون توليد أي candle أو quote.
+- **الاختبارات:** [622d429](https://github.com/775878805Osamaha/TradeLab/commit/622d42991b39d5a0fa3c8e0578d8ba92fc0a7ad9) two-tap widget 320/390، [182b24f](https://github.com/775878805Osamaha/TradeLab/commit/182b24f50a60a24d3196d0ff9fe30e206da907b1) ±45°/Invert/Replay editing، [443c02c](https://github.com/775878805Osamaha/TradeLab/commit/443c02c7fd31a35edd3db2945b9b60383fd5db24) geometry؛ [e0d8ed2](https://github.com/775878805Osamaha/TradeLab/commit/e0d8ed24ece426c559045ad98d1900250318ce77) catalog؛ CI [37f6d72](https://github.com/775878805Osamaha/TradeLab/commit/37f6d7214b0acfcfdc748d535b326baf32fa02dd).
+- **الحالة:** PR/CI **PENDING**، Pixel Golden/Android Profile FPS/cTrader live **NOT RUN**. لا APK/Release ولا `main` أو مشاريع أخرى.
+- **التالي:** PR، انتظار CI وتوثيق نتيجة SHA الفعلية؛ الاختبارات لا تثبت مطابقة 100% على جهاز Android.
+
 ### 2026-11-22 — Info Line مصدر أسعار وUTC حقيقي بدلاً من زر كتالوج معطل
 - **الفرع:** `feat/tradelab-info-line-source-stats-20261122` من `test/flutter-all-fixes-20261116` بعد PR #605 (MERGED).
 - **الفجوة المرجعية:** `infoLine('خط معلومات')` ظاهر في `drawing_tools_sheet.dart` مع `implemented=false` وبدون نمط رسم؛ TradingView: https://www.tradingview.com/blog/en/new-release-of-stable-charting-library-and-trading-terminal-v1-14-12097/ يشرح وظيفة الخط والإحصاءات.
