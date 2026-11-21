@@ -211,6 +211,65 @@ class ChartPriceScale {
         referenceMode: referenceMode,
         referencePrice: referencePrice);
 
+  /// Price-coordinate units per ONE full candle column. For a logarithmic
+  /// ruler, units are natural-log price, not fictitious quote prices.
+  /// Keeping this constant while [barWidth] changes locks the relative
+  /// vertical/horizontal geometry of TradingView-style chart drawings.
+  double? pricePerBarRatio(double barWidth) {
+    if (!barWidth.isFinite || barWidth <= 0 ||
+        !height.isFinite || height <= 0 ||
+        !minimum.isFinite || !maximum.isFinite ||
+        maximum <= minimum) return null;
+    final span = usesLogarithmic
+        ? math.log(maximum) - math.log(minimum)
+        : maximum - minimum;
+    final perBar = span * barWidth / height;
+    return perBar.isFinite && perBar > 0 ? perBar : null;
+  }
+
+  /// Apply a LOCKED price/bar aspect after time-axis pan, zoom or resize.
+  /// The visible source-price center stays fixed for this operation, while
+  /// the vertical range changes inversely with actual candle column width.
+  /// Source OHLC, historical indices, manual anchor price, and Replay cutoff
+  /// are never modified; this is presentation geometry only.
+  ChartPriceScale withLockedPricePerBar({
+    required double ratio,
+    required double barWidth,
+  }) {
+    if (!ratio.isFinite || ratio <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !height.isFinite || height <= 0 ||
+        !minimum.isFinite || !maximum.isFinite ||
+        maximum <= minimum) return this;
+    final coordinateSpan = ratio * height / barWidth;
+    if (!coordinateSpan.isFinite || coordinateSpan <= 0) return this;
+    final logarithmicCoordinates = usesLogarithmic;
+    final minCoordinate = logarithmicCoordinates
+        ? math.log(minimum) : minimum;
+    final maxCoordinate = logarithmicCoordinates
+        ? math.log(maximum) : maximum;
+    final center = minCoordinate + (maxCoordinate - minCoordinate) / 2;
+    final targetMin = center - coordinateSpan / 2;
+    final targetMax = center + coordinateSpan / 2;
+    final newMin = logarithmicCoordinates
+        ? math.exp(targetMin) : targetMin;
+    final newMax = logarithmicCoordinates
+        ? math.exp(targetMax) : targetMax;
+    if (!newMin.isFinite || !newMax.isFinite || newMax <= newMin ||
+        (logarithmicCoordinates && newMin <= 0)) return this;
+    return ChartPriceScale(newMin, newMax, height,
+      logarithmic: logarithmicCoordinates,
+      inverted: inverted,
+      referenceMode: referenceMode,
+      referencePrice: referencePrice,
+      sourceCandles: sourceCandles,
+      sourceMinimum: sourceMinimum,
+      sourceMaximum: sourceMaximum,
+      sourceVisibleStart: sourceVisibleStart,
+      sourceVisibleEnd: sourceVisibleEnd,
+    );
+  }
+
   /// Vertical drag on the RIGHT price scale, independent of time-axis pan.
   /// The price under the user's finger stays at the same y while zooming.
   /// An upward drag magnifies price movement; downward reveals more range.
