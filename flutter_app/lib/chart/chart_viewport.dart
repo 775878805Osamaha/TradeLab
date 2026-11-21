@@ -458,10 +458,21 @@ class ChartTouchGesture {
       return viewport;
     }
     if (pointerCount != 1 || !deltaX.isFinite) return viewport;
-    horizontalTravel += deltaX.abs();
-    return viewport.pan(
+    final next = viewport.pan(
       deltaX: deltaX, plotWidth: plotWidth, candleCount: candleCount,
     );
+    // The finger may keep moving while the chart is clamped at oldest
+    // history or the farthest permitted right whitespace. Counting its
+    // raw delta as deliberate pan travel could start a pointless fling and
+    // schedule animation frames even when NO source candle moved.
+    //
+    // Measure actual displacement of the viewport in screen pixels.
+    // This also counts only the unblocked portion of a drag that hits a
+    // historical boundary mid-gesture.
+    final movedPixels =
+        ((next.scrollBars - viewport.scrollBars) * viewport.barWidth).abs();
+    if (movedPixels.isFinite) horizontalTravel += movedPixels;
+    return next;
   }
 }
 
