@@ -486,3 +486,11 @@
 - **الحالة:** **CI PENDING**، Android Profile/FPS والجهاز الحقيقي وحساب cTrader حي **NOT RUN**؛ لا APK/Release/main أو مشاريع أخرى.
 - **التوثيق:** `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md` محدّثان في فرع التغيير.
 - **التالي:** PR إلى dev، Flutter analyze + كامل الاختبارات، معالجة أي FAIL قبل الدمج ثم حفظ رابط CI وSHA الدمج النهائي.
+
+### 2026-11-21 (UTC) — نجحت الاختبارات ودمج PR #589 لحماية هوية Range priceDistance
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab`، [PR #589](https://github.com/775878805Osamaha/TradeLab/pull/589) **MERGED/squash** إلى `test/flutter-all-fixes-20261116` عند commit [`d89567db15fab88d0b0de05866bbd2a5adf02088`](https://github.com/775878805Osamaha/TradeLab/commit/d89567db15fab88d0b0de05866bbd2a5adf02088).
+- **CI الفعلي:** [GitHub Actions #44921079135](https://github.com/775878805Osamaha/TradeLab/actions/runs/44921079135) **completed/success** على PR HEAD `b63f1d7dcc185c482500dc13c34e5c6668789f23`. اجتاز flutter analyze واختبارات التاريخ/Range/Replay/chart وتوقيت اليمن؛ لم يُدمج قبل انتهاء الاختبار.
+- **السلوك الفعلي:** حقل `RangeBarTimeline.priceDistance` immutable مرتبط بكل مسار البناء التاريخي والإلحاق؛ يرفض `appendVerifiedSuffixAsync` snapshot لمقاس مختلف قبل أي دمج أو no-op حتى لو طابقت أسعار وتواقيت حدود BID، فلا يُنشئ Replay cutoff مختلطًا. الاختبارات تثبت الحفاظ على OHLC وأحداث المصدر عند المقاس الموافق.
+- **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_timeline_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **الحدود:** لا اختبار جهاز Android Profile/FPS ولا جلسة cTrader حي **NOT RUN**؛ لا APK/Release/main أو أي مشروع آخر.
+- **الخطوة التالية:** قياس Android Profile على بيانات موثّقة كبيرة وتحليل p95/p99 للسحب/التكبير وعمليات Range ثم علاج أول اختناق مثبت.
