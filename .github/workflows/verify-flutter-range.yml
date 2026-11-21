@@ -77,6 +77,7 @@ jobs:
             test/chart_crossline_widget_test.dart \
             test/chart_info_line_stats_test.dart \
             test/chart_info_line_widget_test.dart \
+            test/chart_trend_angle_widget_test.dart \
             test/chart_double_tap_guide_test.dart \
             test/chart_paint_only_pan_test.dart \
             test/chart_frame_profiler_test.dart \
@@ -148,6 +149,8 @@ jobs:
         run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'crossline is enabled as a single-touch trend drawing'
       - name: Verify Info Line selectable without unrelated missing Golden files
         run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'Info Line is selectable and trend-only, without false Gann support'
+      - name: Verify Trend Angle is a selectable source drawing without missing Goldens
+        run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'Trend Angle is selectable from the native two-anchor catalog'
       # The original bug appears on phones whose local timezone differs
       # from the selected chart timezone (e.g. New York on a Yemen device).
       - name: Verify chart weekdays under Yemen device timezone
