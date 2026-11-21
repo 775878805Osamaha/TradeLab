@@ -22,6 +22,7 @@ class ChartPriceScaleCache {
   double? _plotWidth;
   double? _plotHeight;
   bool? _logarithmic;
+  bool? _inverted;
   int? _topMargin;
   int? _bottomMargin;
   ChartPriceScale? _scale;
@@ -32,6 +33,7 @@ class ChartPriceScaleCache {
     required double plotWidth,
     required double plotHeight,
     bool logarithmic = false,
+    bool inverted = false,
     required int topMarginPercent,
     required int bottomMarginPercent,
   }) {
@@ -43,6 +45,7 @@ class ChartPriceScaleCache {
         _plotWidth == plotWidth &&
         _plotHeight == plotHeight &&
         _logarithmic == logarithmic &&
+        _inverted == inverted &&
         _topMargin == topMarginPercent &&
         _bottomMargin == bottomMarginPercent) {
       return cached;
@@ -53,6 +56,7 @@ class ChartPriceScaleCache {
       topMarginPercent: topMarginPercent,
       bottomMarginPercent: bottomMarginPercent,
       logarithmic: logarithmic,
+      inverted: inverted,
     );
     _candles = candles;
     _viewport = viewport;
@@ -60,6 +64,7 @@ class ChartPriceScaleCache {
     _plotWidth = plotWidth;
     _plotHeight = plotHeight;
     _logarithmic = logarithmic;
+    _inverted = inverted;
     _topMargin = topMarginPercent;
     _bottomMargin = bottomMarginPercent;
     _scale = computed;
@@ -73,6 +78,7 @@ class ChartPriceScaleCache {
     _plotWidth = null;
     _plotHeight = null;
     _logarithmic = null;
+    _inverted = null;
     _topMargin = null;
     _bottomMargin = null;
     _scale = null;
