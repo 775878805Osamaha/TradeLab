@@ -9,8 +9,9 @@
 - **المصدر:** https://www.tradingview.com/charting-library-docs/latest/mobile_specifics/ — النقر المزدوج على خط رسم يفعّل تحريك الخط؛ TradeLab كان يعيد موضع الشارت بدل ذلك.
 - **تعديل الشيفرة:** [b048951](https://github.com/775878805Osamaha/TradeLab/commit/b048951af4893cc356ec6cbdf2847736c417a148) — hit-test لخط حقيقي على إحداثيات النقرة، تحرير لسحبة واحدة، منع خطوط مقفلة/مخفية/مستقبل Replay، وإبقاء إعادة الشارت بالنقر على الفراغ ومحور السعر AUTO.
 - **إضافة اختبار:** [fa57531](https://github.com/775878805Osamaha/TradeLab/commit/fa5753196c957743ca8d50d3e1cef0dd6c8d7356) — widget Android layouts 320/390dp، رسم أصلي بمصدر fixture اختبار فقط ثم سحبه بالنقر المزدوج، منع تكرار الرسم.
-- **التحقق وقت الحفظ:** CI **PENDING**؛ SDK محلي/Android Profile/FPS/لقطات مقارنة **NOT RUN**. لا أسعار حية وهمية، ولا APK/Release أو تغيير مشاريع أخرى.
-- **الخطوة التالية:** بوابة GitHub Flutter analyze وchart/Range/Replay/timezone ثم دمج فرع التطوير فقط إذا PASS، وتحديث هذا السجل برابط PR وSHA والنتيجة.
+- **التنفيذ النهائي:** أضيف `chart_double_tap_guide_test.dart` إلى workflow CI عبر [1c46219](https://github.com/775878805Osamaha/TradeLab/commit/1c46219daf37043e67815cd9d633fc288c1356cc). [PR #596](https://github.com/775878805Osamaha/TradeLab/pull/596) **MERGED/squash** في فرع التطوير عند [875073c](https://github.com/775878805Osamaha/TradeLab/commit/875073c64136ca2249aac2700feb9e8ae5e5be5a). [Actions #44938475089](https://github.com/775878805Osamaha/TradeLab/actions/runs/44938475089) **completed/success** على HEAD `1c46219daf37043e67815cd9d633fc288c1356cc`: Flutter analyze، اختبارات الشارت/Range/Replay/history مع test الجديد 320/390dp، واختبارات Yemen timezone ناجحة. التشغيل الأول 44938418454 ألغي تلقائيًا بعد تحديث workflow، وليس FAIL.
+- **ما لم ينفذ:** Android Profile/FPS، مقارنة بكسل TradingView، cTrader live **NOT RUN**؛ لا APK/Release أو تعديل main/مشاريع أخرى.
+- **التالي:** متابعة فروقات TradingView المثبتة من الكود أو القياس على Android حقيقي، ثم تحديث HANDOFF بعد كل رفع/دمج.
 
 ### 2026-11-21 — دفعة أداء Replay: إعادة استخدام CandlePrefix الموثق
 - **الحدث:** إنشاء `perf/tradelab-replay-prefix-stability-20261121` من `test/flutter-all-fixes-20261116`، بدون تعديل `main`.
