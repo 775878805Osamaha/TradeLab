@@ -430,3 +430,11 @@
 - **اختبارات مكتوبة:** قفزة تيك واحد 4100 شمعة صحيحة المصدر مع بقاء cutoff Replay، وفصل الحالات البسيطة عن الأرشيف/الشموع الكبيرة. **CI PENDING** حتى PR. Flutter SDK محليًا وAndroid Profile/FPS وحساب cTrader حي **NOT RUN**.
 - **القيود:** لا APK أو Release أو تغيير `main` أو مشاريع أخرى.
 - **الخطوة التالية:** PR إلى التطوير، فحص CI/اختبارات الشارت، معالجة أي إخفاق، ثم دمج وتوثيق SHA/رابط الاختبار الفعلي.
+
+### 2026-11-21 (UTC) — نجاح الاختبار ودمج PR #586 لاختيار خلفية Range الحي
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab`، [PR #586](https://github.com/775878805Osamaha/TradeLab/pull/586) **MERGED/squash** في `test/flutter-all-fixes-20261116` عند commit [`32c9efc46c5e9f2ec63da687043d0b4e828e5141`](https://github.com/775878805Osamaha/TradeLab/commit/32c9efc46c5e9f2ec63da687043d0b4e828e5141).
+- **نتيجة التحقق الرسمية:** [GitHub Actions #44916281496](https://github.com/775878805Osamaha/TradeLab/actions/runs/44916281496) **completed/success** لـPR HEAD `77ac5bb265861b48b5e4edea5878098acf6bb3ea`. نجح `flutter analyze`، اختبارات التاريخ/الشارت/Range/Replay وتوقيت اليمن، ومنها اختبارات قفزة 4100 شمعة من حدث BID واحد واختيار worker.
+- **التغيير الفعلي:** `RangeBarTimeline.shouldAppendInBackground` يضيف آخر حدث BID موثق كمرجع تقدير حمل أول تيك جديد، دون إعادة مسح أرشيف BID كله. الصفحات الصغيرة المعتادة تبقى مسارًا مباشرًا، والقفزات الكبيرة تفوّض `compute` قبل توليد الشموع. لا تغيير المصدر أو قواعد إغلاق شموع Range أو ordinal لحدث Replay ولا كشف المستقبل.
+- **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`، `flutter_app/test/range_bar_timeline_test.dart`، `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
+- **المتبقي:** Android Profile/FPS، جلسة cTrader حية غير مختبرين **NOT RUN**؛ لا APK/Release/main أو مشاريع أخرى.
+- **التالي:** إثبات كلفة كل مرحلة على Android حقيقي ببيانات cTrader موثقة ثم تحسين الاختناق الأكبر مع اختبارات.
