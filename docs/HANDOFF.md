@@ -1,5 +1,15 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة قيد فحص GitHub Actions — Range Live: عدم تجميد اللمس عند أول قفزة BID (21 نوفمبر 2026)
+- **المشروع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-live-range-first-gap-offload-20261121` من `test/flutter-all-fixes-20261116` عند رأس `dc0c324ce1cb8bde51e8fbea62b243a305831836`.
+- **الخلل المثبت بالشفرة:** `RangeBarTimeline.appendVerifiedSuffixAsync` يستدعي `shouldBuildInBackground(verifiedSuffix, priceDistance)` في تقدير عمل الشموع. في حالة صفحة تحتوي تيك BID موثّقًا جديدًا واحدًا مع قفزة مقارنة بآخر تيك محفوظ، لا يرى هذا التقدير نقطة المصدر السابقة؛ قد يختار البناء مباشرة على UI isolate وإن أغلقت القفزة آلاف شموع Range (طالما الأرشيف القديم أقل من 5001 تيك والشموع أقل من 4097).
+- **الإصلاح:** إضافة `shouldAppendInBackground` تستخدم `lastVerifiedTick` مع `verifiedSuffix` عبر iterable كسول (تكلفة إنشاء ثابتة، والتقدير يفحص على الأكثر نحو 5000 حدث). يُنقل بناء القفزة الكبيرة للخلفية من أول حدث حي؛ لا نسخ لمليون حدث في التقدير، ولا تغيير في ترتيب/BID/Replay أو قواعد cTrader.
+- **اختبارات انحدار:** قفزة واحدة `100.25→4200.25` تغلق 4100 شمعة: اختبار أن الصفحة الجديدة وحدها تخفي العمل ولكن helper يختار worker، وأن الناتج يطابق بناء المصدر الكامل، وكل 4100 إغلاق تلتصق بالحدث/الزمن الحقيقيين وأن Replay قبل الحد لا يكشفها. اختبار ثاني يبقي التغيير البسيط فوريًا وينقل الأرشيف أو الشارت الكبير للخلفية.
+- **Commits:** [5db6e40](https://github.com/775878805Osamaha/TradeLab/commit/5db6e4035a82b079b524a3a04ba7982d1ef1abd9) و[31c7e12](https://github.com/775878805Osamaha/TradeLab/commit/31c7e12afab937dd7f4709eb0eede83c54e90639).
+- **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_timeline_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **الحالة:** **CI PENDING**، اختبار Flutter على جهاز/Android Profile وFPS وcTrader live **NOT RUN**. لا APK/Release، لا تغيير `main` أو مشاريع أخرى.
+- **الخطوة التالية الواحدة:** افتح PR إلى التطوير وتحقق من Flutter analyze واختبارات Range/Replay، أصلح FAIL قبل الدمج ثم سجل رابط CI وSHA الدمج النهائي.
+
 ## دفعة مكتملة — PR #585: حماية لقطات Range التاريخية للقراءة فقط (21 نوفمبر 2026)
 - **الفرع:** `fix/tradelab-immutable-range-timeline-20261121` من رأس التطوير `c34eea43d5f51309ae6275a8f6e6f341e5f41db2` بعد PR #584.
 - **المشكلة المؤكدة من الكود:** `RangeBarTimeline.build` كان يعيد القوائم الداخلية التي أنتجها `RangeBarBuilder.sealSnapshot()` وقوائم `endTickIndices/endTimestamps` مباشرة، وهي `List` قابلة للتعديل من واجهة الشارت. أي تعديل عَرَضي خارج العامل يمكن أن يغيّر شموعًا مؤكدة أو يؤثر في حدود أحداث Replay على الرغم من كون builder نفسه مغلقًا.
