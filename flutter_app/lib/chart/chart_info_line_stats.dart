@@ -33,7 +33,8 @@ class ChartInfoLineStats {
     required Offset startScreen,
     required Offset endScreen,
   }) {
-    if (drawing.tool != ChartDrawingTool.infoLine ||
+    if ((drawing.tool != ChartDrawingTool.infoLine &&
+        drawing.tool != ChartDrawingTool.trendAngle) ||
         revealedCount < 1 || !drawing.visibleAt(revealedCount)) {
       return null;
     }
