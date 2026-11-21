@@ -56,6 +56,8 @@ jobs:
             test/chart_viewport_test.dart \
             test/chart_120k_viewport_workload_test.dart \
             test/chart_price_scale_cache_test.dart \
+            test/chart_logarithmic_price_scale_test.dart \
+            test/chart_logarithmic_toggle_widget_test.dart \
             test/chart_axis_ticks_test.dart \
             test/chart_price_text_formatter_test.dart \
             test/chart_axis_source_labels_test.dart \
