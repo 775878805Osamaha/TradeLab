@@ -4,6 +4,14 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-22 — تفعيل Crossline المتقاطع بخطّي الزمن والسعر من أصل الشمعة
+- **فرع:** `feat/tradelab-crossline-drawing-20261122` من `test/flutter-all-fixes-20261116` بعد PR #600؛ `main` دون تعديل.
+- **دليل وظيفي:** https://www.tradingview.com/support/solutions/43000477747-crossline-drawing-tool/ — تقاطع أفقي ورأسي من مرساة واحدة مع وسوم سعر/وقت.
+- **الخلل:** `DrawingCatalogKind.crossLine` مرئي لكنه غير مفعل/لا محرك رسم. **التغيير:** [363e48c](https://github.com/775878805Osamaha/TradeLab/commit/363e48c047a8166676c992fd501a2ba8967bf897) `ChartDrawingTool.crossLine`/oneAnchor؛ [a471435](https://github.com/775878805Osamaha/TradeLab/commit/a4714352364327b3d1389a0d285f2fb18248657a) تمكين الكتالوج؛ [6af64e3](https://github.com/775878805Osamaha/TradeLab/commit/6af64e3e739f4d4660aa43eea491ea9fd6e12342) تقاطع وخطوط مقيدة بالمحاور مع culling محافظ؛ [83808f1](https://github.com/775878805Osamaha/TradeLab/commit/83808f1ef6ef4832a04ec89e477cfd1fc2b3255d) وسم سعر وزمن بتوقيت الشمعة الحقيقي. لا أسعار/شموع مختلقة ولا أمر بيع/شراء.
+- **الفحوص المضافة:** [4532193](https://github.com/775878805Osamaha/TradeLab/commit/45321936d84b2297c7a7f4d6f9c199f60e97bf77) geometry؛ [1955bfc](https://github.com/775878805Osamaha/TradeLab/commit/1955bfc94cf5cc05d9832f7f5742ebdeb10a2530) Replay/one-anchor history؛ [861ec7a](https://github.com/775878805Osamaha/TradeLab/commit/861ec7a513a7fd37db0e47abb5c5b57620bd03a9) catalog؛ [8210218](https://github.com/775878805Osamaha/TradeLab/commit/82102181055601d39109982b8d86b0f0584565b2) widget 320/390dp؛ [bb91df7](https://github.com/775878805Osamaha/TradeLab/commit/bb91df7f1cdef8d3af100eda77879df4359d6a9f) أضافها CI.
+- **التحقق وقت الكتابة:** PR/CI **PENDING**؛ Android Profile/FPS/TradingView screenshot diff/cTrader live **NOT RUN**. لا APK/Release أو تغيير مشروع آخر.
+- **التالي:** فتح PR، تشغيل CI، تصحيح FAIL إن وُجد، دمج عند PASS فقط وتحديث هذا التقرير بنتيجة فعلية.
+
 ### 2026-11-22 — منع وسوم Stop/Target الشبحية لمراكز Long/Short خارج نافذة السعر
 - **فرع:** `fix/tradelab-offscreen-position-axis-tags-20261122` من `test/flutter-all-fixes-20261116` بعد PR #599.
 - **المشكلة المثبتة:** صندوق المركز كان يُحجب إذا خرج أفقيًا عن الشاشة، بينما وسوم SL/TP على محور السعر كانت تُرسم لكل مركز معلوم بالنطاق الزمني حتى عند الابتعاد عنه عشرات آلاف الشموع.
