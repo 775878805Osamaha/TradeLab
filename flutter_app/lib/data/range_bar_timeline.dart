@@ -1,3 +1,5 @@
+import 'dart:collection' show UnmodifiableListView;
+
 import 'package:flutter/foundation.dart';
 
 import 'market_api.dart';
@@ -342,7 +344,18 @@ class RangeBarTimeline {
         bars.length != endTimestamps.length) {
       throw StateError('Range bar/tick timeline mismatch');
     }
-    return RangeBarTimeline._(bars, endTickIndices, endTimestamps);
+    // sealSnapshot transfers ownership without copying its potentially
+    // 250k-bar backing array, but that List is still externally mutable.
+    // Publish O(1) read-only views over these three private, worker-owned
+    // buffers. A caller must not be able to rewrite confirmed OHLC or the
+    // exact BID event/time indices that Replay and drawing anchors trust.
+    // Avoid List.unmodifiable here: that would allocate/copy three arrays
+    // just to protect the historical snapshot.
+    return RangeBarTimeline._(
+      UnmodifiableListView<TradeCandle>(bars),
+      UnmodifiableListView<int>(endTickIndices),
+      UnmodifiableListView<int>(endTimestamps),
+    );
   }
 
   /// Rebase a still-selecting Replay start after a verified older BID page
