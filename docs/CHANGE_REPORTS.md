@@ -555,3 +555,12 @@
 - **اختلاف GitHub REST:** PR #592 head SHA afae3e2316ddd74a516783ade2214d067facd8a0، لكن branch fix/tradelab-mobile-crosshair-persistent-tracking-20261121 ref هو 049c2c97637837926b423551fe47dddcb784c8d7 (commit docs-only من parent afae3e). أول merge عبر GitHub returned 409 Head branch is out of date، لذا **PR NOT MERGED** ولا تعديل dev/main.
 - **الإجراء:** تحديث PR body لشرح ثلاث جولات CI (2 فشل ثم نجاح) والحالة التقنية، ومحاولة توثيق هذا الحدث في docs/HANDOFF.md وdocs/CHANGE_REPORTS.md؛ لا تعديل source أو الاختبارات بعد نجاح CI. Android Profile/cTrader live NOT RUN، لا APK.
 - **الخطوة التالية:** إعادة مزامنة HEAD بطريقة آمنة دون force، تحقّق من CI، ثم merge وتسجّل SHA الدمج الحقيقي.
+
+### 2026-11-21T16:28:18.728Z — دمج PR #592 مع نتائج CI وإنشاء معيار مطابقة TradingView قابل للقياس
+- **الفرع والمستودع:** 775878805Osamaha/TradeLab / test/flutter-all-fixes-20261116.
+- **الدمج:** [PR #592](https://github.com/775878805Osamaha/TradeLab/pull/592) **MERGED/squash** SHA [c1bc4179e013f111239b4d2d5308dfb5832a51b1](https://github.com/775878805Osamaha/TradeLab/commit/c1bc4179e013f111239b4d2d5308dfb5832a51b1) من head 017a1cf4996f46af36c739c26de6978f49941810.
+- **CI النهائي:** [Actions #44924414254](https://github.com/775878805Osamaha/TradeLab/actions/runs/44924414254) completed/success على HEAD نفسه: Flutter analyze، 320/390dp OHLC/dismissal، كامل chart/Range/Replay/history وتوقيت اليمن. Runs الفاشلة #44923242646 و#44923687526 وتصحيحها محفوظة في السجلات التاريخية، لا حذف.
+- **التغييرات:** ChartScreen crosshair sticky long press ثم tap dismissal آمن عبر raw Listener؛ chart_ohlc_inspector_test.dart وchart_paint_only_pan_test.dart يؤكدان السلوك من دون مؤقتات Flutter متبقية. لا تغيير مصدر BID/حساب/التداول الحقيقي.
+- **توثيق جديد:** [docs/TRADINGVIEW_PARITY_ACCEPTANCE.md](https://github.com/775878805Osamaha/TradeLab/blob/test/flutter-all-fixes-20261116/docs/TRADINGVIEW_PARITY_ACCEPTANCE.md)، commit [04924a7](https://github.com/775878805Osamaha/TradeLab/commit/04924a77168462ff0d3236f143b84e0e240d6143): مرجع رسمي ومعيار قبول للـUI/Replay/tooling/performance، مع حالة NOT COMPLETE حتى اختبار Android بصريًا وسلوكيًا.
+- **الحدود:** Android Profile/FPS والمقارنة البصرية real device والجلسة الحية مع cTrader **NOT RUN**؛ لا APK/Release ولا تعديل main/مشاريع أخرى. توثيق 2026-11-21T16:28:18.728Z.
+- **التالي:** إصلاح تجربة الضغط المطول على محور السعر/الوقت في chart_screen.dart مع widget tests، PR/CI/merge جديد إذا نجح.
