@@ -453,3 +453,12 @@
 - **التصحيح المرتبط بالدليل:** `flutter_app/lib/chart/chart_viewport.dart` commit [5aa2e56](https://github.com/775878805Osamaha/TradeLab/commit/5aa2e5630b48389f7c50f9a84b3bacfff7f42603) يتجاهل `movedPixels <= 1e-9` بكسل؛ لا يعتبر خطأ roundoff حركة مسموحة وزخمًا. يبقي 1px و5px و40px في الاختبارات سليمة.
 - **الحالة:** **CI PENDING** لنسخة الإصلاح الجديدة؛ لم يُدمج PR في التطوير، Android Profile/FPS **NOT RUN**، لا APK/Release/main/مشاريع أخرى.
 - **الخطوة التالية:** التحقق من نسخة CI الأحدث في PR #587 وإصلاح أي فشل جديد قبل دمج التطوير وكتابة SHA/نتيجة الاختبارات.
+
+### 2026-11-21 (UTC) — إعادة اختبار PR #587 PASS ودمج إصلاح الزخم بعد الفشل العددي
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab`، [PR #587](https://github.com/775878805Osamaha/TradeLab/pull/587) **MERGED/squash** إلى `test/flutter-all-fixes-20261116` عند commit [`2843d9ec6b56c5928249f3d50d9ade7854c22c5a`](https://github.com/775878805Osamaha/TradeLab/commit/2843d9ec6b56c5928249f3d50d9ade7854c22c5a).
+- **خط الاختبارات الأول:** [Actions #44916690008](https://github.com/775878805Osamaha/TradeLab/actions/runs/44916690008) **FAIL**: 649 حالة ناجحة وواحدة فاشلة بسبب `horizontalTravel=3.552713678800501e-14` بدل صفر عند حساب حد البياض الأيمن. ملاحظة: لم يُقبل الدمج حينها.
+- **التصحيح:** [commit 5aa2e56](https://github.com/775878805Osamaha/TradeLab/commit/5aa2e5630b48389f7c50f9a84b3bacfff7f42603) يستبعد خطأ roundoff تحت `1e-9` بكسل، ويبقي الحركة الطبيعية المؤثرة على candle viewport.
+- **نتيجة الاختبار النهائي:** [GitHub Actions #44917017347](https://github.com/775878805Osamaha/TradeLab/actions/runs/44917017347) **completed/success** على PR HEAD `2046dfbb4965fff560b9c5d5797e747f8066252d`: Flutter analyze وchart/Range/Replay/history وYemen timezone.
+- **الملفات:** `flutter_app/lib/chart/chart_viewport.dart`, `flutter_app/test/chart_viewport_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`. لا تغيير للمصدر الحقيقي أو أسعار BID أو كشف Replay المستقبلية.
+- **الحدود:** لا APK/Release، لا تغيير main أو المشاريع الأخرى، ولا اختبار FPS/Android Profile أو تفاعل لمس جهاز حقيقي **NOT RUN**.
+- **الخطوة التالية الواحدة:** قياس Android Profile الفعلي لسلاسة الإيماءات وRange/cTrader ثم استهداف أول تأخير بالأدلة.
