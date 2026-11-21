@@ -424,6 +424,11 @@ class ChartTouchGesture {
         // drops. A direct two-to-one transition must still suppress its
         // first synthetic centroid delta, even after an invalid sample.
         _pinchOrigin = null;
+        // Even when the *first* two-finger sample is corrupted, remember
+        // that a multi-touch session began. Otherwise an immediate lift
+        // falls through to one-finger pan and applies its synthetic centroid
+        // delta as a real swipe, jumping the chart.
+        _pinching = true;
         ignoredPointerTransition = true;
         return viewport;
       }

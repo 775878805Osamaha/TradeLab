@@ -391,3 +391,10 @@
 - **الاختبارات/الملفات:** `flutter_app/lib/chart/chart_load_profiler.dart`، `flutter_app/lib/screens/chart_screen.dart`، `flutter_app/test/chart_load_profiler_test.dart`، `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`. اختبار p95 مستقل لكل مرحلة ومنع حقول حساب/سعر.
 - **الحدود:** لا APK/Release، لا تغيير `main` ولا مشاريع أخرى. Android Profile وتسجيل cTrader الحقيقي/FPS **NOT RUN**؛ تحقق CI ليس قياس FPS.
 - **الخطوة التالية الواحدة:** Android Profile على جهاز حقيقي بحساب cTrader واستخراج أرقام p50/p95/p99 وتحديد سبب البطء الفعلي، دون التخمين.
+
+### 2026-11-21 (UTC) — إصلاح أول انتقال إصبع بعد pinch فاسد قبل الاختبارات
+- **الإجراء:** إنشاء `fix/tradelab-first-invalid-pinch-lift-20261121` من `8d9cb0141f2431bd310555eb2b870fdf68c86dd6` في `775878805Osamaha/TradeLab`، وتعديل ملفات المصدر والاختبار. Commits [f6b0ac9](https://github.com/775878805Osamaha/TradeLab/commit/f6b0ac9219916fd6ba4fe3bb69dfad4b08ea4d34) و[712a06d](https://github.com/775878805Osamaha/TradeLab/commit/712a06d8f015ee1e083e7a4de043a6a634246ba8).
+- **التغيير:** حفظ حالة وجود إصبعين عندما تكون أول عينة مركز اللمس غير صالحة؛ يمنع اعتبار العينة الأولى بعد رفع الإصبع الثاني سحبًا فعليًا. إعادة anchoring سليمة للعينات التالية. لا تعديل لبيانات broker أو رسومات Replay أو أوامر ورقية.
+- **الملفات:** `flutter_app/lib/chart/chart_viewport.dart`, `flutter_app/test/chart_viewport_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **التحقق:** اختباران إضافيان يغطيان NaN/Infinity/scale=0 ثم lift وحركة طبيعية وتكبير جديد؛ **CI PENDING** حتى فتح PR، Android Profile/FPS وFlutter محلي **NOT RUN**. لا main/APK/Release/مشاريع أخرى.
+- **التالي:** إنشاء PR، متابعة فحص GitHub Actions إلى PASS، أو إصلاح الفشل إن وجد، ثم دمج فرع التطوير وتوثيق الـSHA والـCI.

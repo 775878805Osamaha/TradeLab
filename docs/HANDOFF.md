@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## قيد الاختبار — حماية الشارت عند رفع إصبع بعد أول عينة pinch فاسدة (21 نوفمبر 2026)
+- **المستودع والفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-first-invalid-pinch-lift-20261121` من رأس فرع التطوير `8d9cb0141f2431bd310555eb2b870fdf68c86dd6` بعد دمج PR #583. كود [f6b0ac9](https://github.com/775878805Osamaha/TradeLab/commit/f6b0ac9219916fd6ba4fe3bb69dfad4b08ea4d34)، اختبار [712a06d](https://github.com/775878805Osamaha/TradeLab/commit/712a06d8f015ee1e083e7a4de043a6a634246ba8).
+- **الخلل المثبت من الكود:** `ChartTouchGesture.update` عندما تصل أول عينة pointerCount>1 بمركز NaN أو scale غير صالح، كانت تتجاهلها ولكن تبقي `_pinching=false`. إذا سحب المستخدم الإصبع الثاني فورًا تأتي أول عينة بإصبع واحد و`deltaX` ناتج عن تحول مركز الإصبعين؛ تُعامل خطأً كسحب فعلي، ويمكن قفز viewport.
+- **الإصلاح:** على أول عينة متعددة الأصابع غير صالحة نعيّن `_pinching=true` رغم إلغاء `_pinchOrigin`؛ يعيد أول قياس صحيح للإصبعين ضبط المصدر الحالي، بينما تُتجاهل أول حركة بعد الرفع حتى لو لم تصل أي عينة pinch صحيحة. لا تعديل حساب المصدر أو الأسعار أو Replay.
+- **اختبارات الانحدار:** `flutter_app/test/chart_viewport_test.dart` يغطي invalid initial NaN/Infinity/zero scale ثم الرفع مع `deltaX=175px`، والتأكد من ثبات scroll/zoom ومنع حساب travel الوهمي، واستعادة السحب الطبيعي؛ ويختبر إعادة دخول pinch وتثبيت focal جديد وعدم استخدام origin قديم.
+- **الملفات:** `flutter_app/lib/chart/chart_viewport.dart`, `flutter_app/test/chart_viewport_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **التحقق:** **CI PENDING** حتى PR على فرع التطوير، Flutter محليًا **NOT RUN**، Android Profile وقياس FPS **NOT RUN**. لا APK/Release أو تغيير main/المشاريع الأخرى.
+- **الخطوة التالية:** PR إلى `test/flutter-all-fixes-20261116`، التحقق من `verify-flutter-range` وتحليل Flutter/اختبارات الشارت وReplay وتوقيت اليمن؛ إصلاح أي FAIL قبل الدمج وحفظ SHA النهائي.
+
 ## دفعة مكتملة — PR #583: تحليل تأخير Range الحي بمراحل منفصلة (21 نوفمبر 2026)
 - **فرع التنفيذ:** `feat/tradelab-live-range-phase-profile-20261121` من التطوير عند `356bc85fd1c1c529e457d26cf266149f9bcd45ba` (بعد دمج PR #582)، مع الشيفرة حتى [4de5ab8](https://github.com/775878805Osamaha/TradeLab/commit/4de5ab87227e7d951f0917549af1b6d08a4db82e).
 - **الخلل المعرفي من المصدر:** `ChartScreen._refreshLiveRange` كان يسجّل زمن كامل التحديث الناجح فقط في `liveRangeUpdate` ويستبعد جميع الصفحات التي لم تضف تيكات. بذلك لا يمكن تمييز انتظار cTrader عن تحقق BID وإعادة بناء Range في Profile، وتتجاهل القياسات العمليات الناجحة بلا تغيير.
