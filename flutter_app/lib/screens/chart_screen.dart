@@ -3500,6 +3500,8 @@ class _ChartScreenState extends State<ChartScreen>
         _selectDrawingMode(tool: ChartDrawingTool.horizontalRay);
       case DrawingCatalogKind.verticalLine:
         _selectDrawingMode(tool: ChartDrawingTool.verticalLine);
+      case DrawingCatalogKind.crossLine:
+        _selectDrawingMode(tool: ChartDrawingTool.crossLine);
       case DrawingCatalogKind.parallelChannel:
         _selectDrawingMode(tool: ChartDrawingTool.parallelChannel);
       case DrawingCatalogKind.shortPosition:
