@@ -79,6 +79,40 @@ class ChartAxisTicks {
     }
   }
 
+  /// Pixel-aware target count for a narrow Android price ruler. A fixed
+  /// twelve labels over a compact 90dp Replay pane makes 14dp text overlap.
+  /// Never request more labels than 22dp vertical spacing can support.
+  static int intervalsForHeight(double plotHeight) {
+    if (!plotHeight.isFinite || plotHeight <= 0) return 2;
+    return (plotHeight / 22).floor().clamp(2, 12).toInt();
+  }
+
+  /// One geometry pass for regular, inverted and logarithmic ruler ticks.
+  /// Used *before* painting both text and grid; hidden ticks cannot leave
+  /// unpaired lines on the source-price scale. The transform always comes
+  /// from the same ChartPriceScale that draws real candles and annotations.
+  static Iterable<double> spacedByPixels(
+      Iterable<double> ticks, {
+      required double Function(double) y,
+      required double plotHeight,
+      double minLabelGap = 19,
+    }) sync* {
+    if (!plotHeight.isFinite || plotHeight <= 0 ||
+        !minLabelGap.isFinite || minLabelGap < 0) return;
+    double? previousY;
+    for (final value in ticks) {
+      if (!value.isFinite) continue;
+      final pixel = y(value);
+      if (!pixel.isFinite || pixel < 9 || pixel > plotHeight - 9) {
+        continue;
+      }
+      if (previousY != null &&
+          (pixel - previousY).abs() < minLabelGap) continue;
+      previousY = pixel;
+      yield value;
+    }
+  }
+
   /// Enough decimals to distinguish adjacent REAL major price ticks.
   ///
   /// A manual TradingView-style vertical ruler zoom can produce forex steps
