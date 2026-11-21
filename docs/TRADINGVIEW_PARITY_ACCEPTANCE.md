@@ -1,6 +1,6 @@
 # TradeLab ↔ TradingView Android — معيار قبول المطابقة الكاملة
 
-**آخر مراجعة:** 2026-11-21 (UTC). **الحكم الحالي:** المطابقة الكاملة غير مثبتة / NOT COMPLETE. نجاح اختبارات Flutter لا يعادل اختبار هاتف فعلي أو مطابقة البكسل.
+**آخر مراجعة:** 2026-11-22 بتوقيت اليمن / 2026-11-21 UTC. **الحكم الحالي:** المطابقة الكاملة غير مثبتة / NOT COMPLETE. نجاح اختبارات Flutter لا يعادل اختبار هاتف فعلي أو مطابقة البكسل.
 
 ## المرجع الوظيفي الرسمي
 
@@ -16,13 +16,13 @@
 | المجال | دليل الشفرة/الاختبارات المتاح | المتبقي للتحقق قبل إعلان «طبق الأصل» |
 | --- | --- | --- |
 | شارت شموع يملأ الشاشة، السعر يمينًا والوقت أسفل | Flutter chart وchart_viewport/widget tests | تصوير Android عند 320/390dp في الثيمين ومقارنة حقيقية للمسافات والخطوط والرموز والطبقات مع مرجع ثابت |
-| السحب والتكبير والإفلات والقصور الذاتي | PR #587 لمنع phantom fling؛ PR #591 لحالات 2→3→2 أصابع؛ فحوص CI ناجحة | Android Profile حقيقي مع لمس متعدد، pan/pinch/inertia وتاريخ كثيف، إطارات p50/p95/p99 |
+| السحب والتكبير والإفلات والقصور الذاتي | PR #587 لمنع phantom fling؛ PR #591 لحالات 2→3→2 أصابع؛ PR #599 أعطى سحب مقابض Long/Short مسار paint-only مع 4 widget tests ناجحة (Actions #44958411202) | Android Profile حقيقي مع لمس متعدد، pan/pinch/inertia وتاريخ كثيف، إطارات p50/p95/p99؛ تحسين المصدر لا يساوي قياس FPS |
 | تتبع OHLC وcrosshair على Android | PR #592 وActions #44924414254 PASS: long press ثم lift ثم single-tap exit مع widget test 320/390dp | اختبار بصري/لمسي حقيقي مقابل TradingView، دقة خط السعر وUTC-label |
 | تحجيم محور السعر وAUTO ومحور الوقت | ChartViewport/scale widget regression tests؛ AUTO متاح بالشفرة | مقارنة مواقع العلامات والنقر المطول على المقياس؛ قائمة إعدادات مطابقة للمرجع على الهاتف |
 | Replay داخل الشارت بخط البداية والأدوات المصغرة | ReplayMobileControls, ReplayStartResolver, ReplayDateSelectionGuard؛ PR #590 لحماية الجلسات، وPR #594 لتثبيت مواضع الشموع عند Play/Seek/Rewind ومنع Play عند EOF (CI #44935284854 PASS) | تطابق كامل لقائمة البداية، المقص الأزرق، تحكم السرعة، موضع الأدوات والـscroll مع المرجع على Android؛ قياس حقيقي لم يكتمل |
 | عزل مستقبل Replay والتداول الورقي | CandlePrefix وReplay training/source guards؛ اختبارات replay وPR #590 | اختبار جهاز حقيقي للتنقل/الخروج/إعادة الدخول، ضمان عدم إظهار شموع لاحقة في أي overlay |
 | Replay interval مستقل (tick / 1s / 1m / 3m) | القائمة موجودة، بعض الخيارات معطلة حين يفتقر المصدر إلى البيانات الدقيقة | تنفيذ فواصل زمنية فقط عند توافر تيكات/شموع أصلية موثقة بمستوى الدقة المطلوب؛ ممنوع تعويضها ببيانات مُختلقة |
-| أدوات الرسم والاختيار والتراجع والتعديل | اختبارات horizontal/trendline/rectangles/short positions وبعض أدوات الشارت | جرد كل أداة مطلوبة مقابل تجربة TradingView واختبار hit-testing/drag/anchor والتراكب والألوان في أحجام 320/390dp |
+| أدوات الرسم والاختيار والتراجع والتعديل | PR #596 double-tap خط، #597 يحمي حالات تبديل المصدر؛ PR #598 يفعّل Long Position مع Short وتحقق 320/390dp؛ PR #599 سحب Stop paint-only؛ PR #600 يحجب SL/TP للرسم خارج الـviewport والشموع المستقبلية؛ جميع هذه الـPRs MERGED واجتازت CI | ما زالت أدوات كتالوج أخرى غير منفذة؛ جردها مقابل TradingView واختبار hit-testing/drag/anchor واللون على Android 320/390dp، مع ملفات Golden الأصلية |
 | التاريخ وRange المتصل ببيانات السوق | Forex/Gold: cTrader BID فقط؛ Crypto: Binance؛ اختبارات Range/history في CI | قياس التحميل على جهاز Android مع بيانات حقيقية تتجاوز 100k bars، معرفة حدود ذاكرة الجهاز وزمن الاستجابة |
 | نتائج الحساب والتداول التجريبي | وحدات paper/results موجودة ولها اختبارات | قياس مطابقة الصفحات والأرصدة والتصفية على الجهاز ومراجعة كامل التدفقات |
 
@@ -40,5 +40,5 @@
 
 - ملف .github/workflows/chart-screenshot.yml يحتوي شرطًا معطلاً عمدًا لتجنب APK/emulator المدفوع. لا تُفعِّله ولا تبنِ APK أو Release دون إذن المستخدم الصريح.
 - لا تعدل main، ولا تنسخ أي بيانات حقيقية من حساب التداول إلى تقارير GitHub، ولا تُدخل أسعارًا وهمية إلى التطبيق. سجل الأدلة وSHA ونتائج CI في HANDOFF/CHANGE_REPORTS.
-- **الحالة الحالية:** PR #592 (crosshair) MERGED CI #44924414254 PASS؛ PR #593 (قوائم الضغط المطول للمحاور) MERGED CI #44925136335 PASS؛ PR #594 (تثبيت مواضع Replay في playback/seek والـEOF) MERGED عند b7826311823884245ddf44bd4b74f1c6fb1f1278، CI #44935284854 completed/success. **مطابقة الصورة والسلاسة على Android وcTrader live session NOT RUN؛ NOT COMPLETE.**
+- **الحالة الحالية:** PR #592 crosshair و#593 قوائم المحاور و#594 Replay anchor و#595 CandlePrefixCache و#596 double-tap guides و#597 حماية انتقال المصدر و#598 Long Position و#599 paint-only position drag و#600 offscreen SL/TP tags — جميعها **MERGED في فرع التطوير** بعد فحوص GitHub Actions (الأخيرة #44940022375، #44958411202، #44958775049 **completed/success**). تفاصيل كل SHA محفوظة في `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`. *الاختبارات البصرية Golden المرجعية المفقودة ليست مثبتة*، ولم تُجرَ مقارنة بكسل أو قياسات سلاسة Android Profile أو جلسة cTrader live. **NOT COMPLETE**.
 - **الخطوة التنفيذية التالية:** إجراء اختبار visual/gesture فعلي على Android عند 320 و390dp بنسخة اختبار يصرّح بها المالك، وقياس p50/p95/p99 مع بيانات BID موثقة، ثم إصلاح أكبر فرق مثبت؛ لا إنشاء APK تلقائيًا.
