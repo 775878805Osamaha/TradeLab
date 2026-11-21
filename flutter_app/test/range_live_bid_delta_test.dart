@@ -1,7 +1,55 @@
+import 'dart:collection';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/range_live_bid_delta.dart';
 import 'package:tradelab_flutter/data/range_bar_timeline.dart';
+
+
+
+class _OversizedBidHistory extends ListBase<MarketTick> {
+  @override
+  int get length => RangeLiveBidBoundary.maxVerifiedSourceTicks + 1;
+
+  @override
+  set length(int value) => throw UnsupportedError('Immutable source');
+
+  @override
+  MarketTick operator [](int index) =>
+      throw StateError('Oversized source must fail before any tick read');
+
+  @override
+  void operator []=(int index, MarketTick value) =>
+      throw UnsupportedError('Immutable source');
+}
+
+class _MillionBidHistory extends ListBase<MarketTick> {
+  static const total = 1000000;
+  static const boundaryCount = 5;
+  static const boundaryMs = total - boundaryCount;
+
+  int reads = 0;
+
+  @override
+  int get length => total;
+
+  @override
+  set length(int value) =>
+      throw UnsupportedError('Source verified history is immutable');
+
+  @override
+  MarketTick operator [](int index) {
+    if (index < 0 || index >= length) throw RangeError.index(index, this);
+    reads++;
+    return MarketTick(
+        index < boundaryMs ? index : boundaryMs,
+        100.0 + (index % 13));
+  }
+
+  @override
+  void operator []=(int index, MarketTick value) =>
+      throw UnsupportedError('Source verified history is immutable');
+}
 
 void main() {
   test('inclusive cTrader page verifies same-ms ordinal then appends only new BID',
@@ -119,6 +167,78 @@ void main() {
     expect(suffix.first.timestamp, 1002);
     expect(suffix.last.timestamp, 7501);
     expect(old, hasLength(2));
+  });
+
+
+  test('boundary guard rejects oversized historical archive before tick access',
+      () {
+    expect(() => RangeLiveBidBoundary.fromVerified(
+        _OversizedBidHistory()), throwsA(isA<MarketDataException>()));
+  });
+
+  test('1m verified BID archive contributes ONLY last-ms events to the worker',
+      () async {
+    final source = _MillionBidHistory();
+    final boundary = RangeLiveBidBoundary.fromVerified(source);
+    expect(boundary.timestampMs, _MillionBidHistory.boundaryMs);
+    expect(boundary.events.length, _MillionBidHistory.boundaryCount);
+    expect(boundary.events.map((tick) => tick.bid), [
+      for (var i = _MillionBidHistory.boundaryMs;
+          i < _MillionBidHistory.total; i++)
+        100.0 + (i % 13),
+    ]);
+    expect(source.reads, lessThan(50),
+        reason: 'No full archived history scan or copy on chart UI isolate');
+    expect(() => boundary.events.add(const MarketTick(100, 100)),
+        throwsUnsupportedError);
+    final page = <MarketTick>[
+      ...boundary.events,
+      for (var i = 0; i < 6500; i++)
+        MarketTick(_MillionBidHistory.boundaryMs + 1 + i,
+            200.0 + (i % 17)),
+    ];
+    source.reads = 0;
+    final suffix = await RangeLiveBidDelta.verifiedSuffixAsync(
+      previouslyVerified: source,
+      brokerPage: page,
+      toMs: _MillionBidHistory.boundaryMs + 6501,
+    );
+    expect(suffix.length, 6500);
+    expect(suffix.first.timestamp, _MillionBidHistory.boundaryMs + 1);
+    expect(suffix.last.timestamp, _MillionBidHistory.boundaryMs + 6500);
+    expect(source.reads, lessThan(50),
+        reason: 'A 6500-tick isolate poll must transfer only the final '
+                '5 same-ms events, never the 1m-tick historical list');
+  });
+
+  test('same-ms duplicate multiplicity and invalid boundary fail closed',
+      () async {
+    const original = <MarketTick>[
+      MarketTick(80, 100), MarketTick(81, 101),
+      MarketTick(81, 101), MarketTick(81, 101),
+    ];
+    final boundary = RangeLiveBidBoundary.fromVerified(original);
+    expect(boundary.events.map((e) => e.bid), [101, 101, 101]);
+    final fine = await RangeLiveBidDelta.verifiedSuffixAsync(
+      previouslyVerified: original,
+      brokerPage: const [
+        MarketTick(81, 101), MarketTick(81, 101), MarketTick(81, 101),
+        MarketTick(81, 101), MarketTick(82, 102),
+      ],
+      toMs: 82);
+    expect(fine.map((t) => t.timestamp), [81, 82]);
+    await expectLater(RangeLiveBidDelta.verifiedSuffixAsync(
+      previouslyVerified: original,
+      brokerPage: const [
+        MarketTick(81, 101), MarketTick(81, 101),
+        MarketTick(82, 102),
+      ],
+      toMs: 82), throwsA(isA<MarketDataException>()));
+    expect(() => RangeLiveBidBoundary.fromVerified(
+      const <MarketTick>[MarketTick(12, -1)]),
+      throwsA(isA<MarketDataException>()));
+    expect(() => RangeLiveBidBoundary.fromVerified(
+      const <MarketTick>[]), throwsArgumentError);
   });
 
   test('no old archive cannot be mistaken for verified live boundary',

@@ -300,3 +300,20 @@
 - **التنفيذ الفعلي:** BID حقيقي مصدره cTrader، فحص مصدر live inclusive لنفس المللي ثانية، ردّ أي نقص أو اختلاف، تحديث الشمعة Range المتكوّنة والشموع المغلقة الجديدة تدريجيًا، snapshot ذرية وشروط حماية revision والحساب والرمز، تعطيل التحديث أثناء Replay. لا صفقات حقيقية أو أسعار مخترعة، ولا تجاوز ميزانية مليون BID/250k Range مغلقة.
 - **القيود:** `main` غير مُعدل `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`. لا APK/Release ولا مشاريع أخرى. Android Profile/اختبار حساب وسيط حي/قياس FPS `NOT RUN`؛ لا ادّعاء ببيانات تداول فعلية في بيئة CI.
 - **الخطوة التالية الواحدة:** تحقق من تحديث live Range على جهاز Android وحساب cTrader حقيقي وجمع أدلة/قياسات، ثم علاج أي اختلاف موثق دون تغيير `main`.
+
+### 2026-11-21T00:32:19.881Z — تخفيف نقل تاريخ BID المليون تيك في عامل تحقق تحديث Range الحي
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab` → `perf/tradelab-live-bid-boundary-only-20261121`، من تطوير `c2534af76b39f76bc8aa2962cd2c8cd9088c96af`. لا تعديل لفرع `main`، لا APK أو Release، ولا أي مشروع آخر.
+- **المشكلة المؤكدة من المصدر:** `RangeLiveBidDelta.verifiedSuffixAsync` مع صفحة cTrader من 5000+ أحداث تنقل record مكونًا من `(previouslyVerified, brokerPage, lastTimestamp)` إلى `compute`، وتحتفظ `previouslyVerified` حتى مليون تيك. بينما `_verifiedLiveSuffixWorker` يفحص فقط ذيل الأحداث التي تشترك في آخر مللي ثانية. هذا عمل/نقل ذاكرة زائد عند كل فترة تحديث وليس اختبار FPS مقاسًا على جهاز.
+- **الإصلاح:** استخراج `RangeLiveBidBoundary.fromVerified` ببحث ثنائي من دون نسخ الأرشيف، مع قائمة immutable لأحداث المللي ثانية الأخيرة فقط؛ worker يقارن `(boundary.events, brokerPage, boundaryMs)`. لا فقد للأحداث المتطابقة ولا ترتيب مصطنع؛ فشل مغلق عند أي تعارض، ورفض تاريخ أكبر من مليون تيك قبل الوصول إلى مصدره.
+- **الاختبارات:** `_MillionBidHistory` يحاكي مليون BID عبر `ListBase`؛ يثبت أقل من 50 قراءة لحصر مللي ثانية المصدر وإجراء polling بصفحة 6500 تيك، ويحافظ على أحداث مشتركة متكررة. `_OversizedBidHistory` يرفض طول مليون+1 دون طلب أي عنصر. اختبار نقص تيك أو تغير ترتيبه يفشل.
+- **الملفات:** `flutter_app/lib/data/range_live_bid_delta.dart`, `flutter_app/test/range_live_bid_delta_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **التحقق الحالي:** CI `PENDING` حتى PR. لا اختبارات Android Profile/FPS أو حساب cTrader حقيقي؛ التحسين نظري في تكلفة نسخ الذاكرة وثبت بعداد قراءات وحدة عند اجتياز CI.
+- **الخطوة التنفيذية التالية:** PR ونجاح GitHub Actions الفعلي ثم دمج فرع التطوير فقط، تحديث ملفات التسليم مع commit وCI النهائي.
+
+### 2026-11-21T00:34:06.866Z — تصحيح فشل Flutter analyze في PR #579 دون إخفاء فشل CI
+- **التشغيل الفاشل:** [GitHub Actions #44844537479](https://github.com/775878805Osamaha/TradeLab/actions/runs/44844537479) **completed/failure**؛ التحليل حدد `unused_local_variable` في `flutter_app/lib/data/range_live_bid_delta.dart:115` بعد نقل مقارنة أحداث BID من التاريخ الكامل إلى قائمة حدود المللي ثانية. اختبارات Range/Replay SKIPPED بهذا الفشل؛ لم يُدمج PR.
+- **الإصلاح:** استخدم `boundaryMs` فعليًا في مقارنة كل زوج أحداث مصدرية (`earlier.timestamp == boundaryMs` و`newer.timestamp == boundaryMs` وكذلك السعر المطابق) بدلاً من مجرد مقارنة تاريخين قد يختلفان معًا عن حد المصدر؛ أكثر صرامة ويحمي ترتيب cTrader/Replay.
+- **الملفات:** `flutter_app/lib/data/range_live_bid_delta.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **المستودع والفرع:** `775878805Osamaha/TradeLab` / `perf/tradelab-live-bid-boundary-only-20261121`؛ `main` دون تعديل، لا APK/Release.
+- **التحقق:** Flutter CI التصحيحي `PENDING` حتى إعادة تشغيل PR #579. لا قياسات Android Profile أو cTrader حي.
+- **الخطوة التالية:** إعادة فحص GitHub Actions، إصلاح أي FAIL إضافي؛ لا دمج إلا بعد PASS.
