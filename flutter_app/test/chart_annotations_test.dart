@@ -141,6 +141,31 @@ void main() {
     expect(rebased.offsetAnchor!.price, 4070);
   });
 
+  test('one-tap Crossline stays at one source-time price through Replay',
+      () {
+    expect(ChartDrawingTool.crossLine.oneAnchor, isTrue);
+    const crossing = ChartPattern(
+      tool: ChartDrawingTool.crossLine,
+      start: ChartAnchor(80, 4025),
+      end: ChartAnchor(80, 4025),
+    );
+    expect(crossing.visibleAt(80), isFalse,
+        reason: 'Replay cannot reveal a future line or its time label');
+    expect(crossing.visibleAt(81), isTrue);
+    final shifted = crossing.shifted(20000);
+    expect(shifted.start.index, 20080);
+    expect(shifted.end.index, 20080);
+    expect(shifted.start.price, 4025);
+    final moved = shifted.withEndpoint(
+        ChartAnchorEndpoint.start, const ChartAnchor(20090, 4050));
+    expect(moved.start.index, 20090);
+    expect(moved.end.index, 20090);
+    expect(moved.start.price, 4050);
+    expect(moved.end.price, 4050);
+    expect(moved.visibleAt(20090), isFalse);
+    expect(moved.visibleAt(20091), isTrue);
+  });
+
   test('one-anchor vertical lines move their only handle as a unit', () {
     const vertical = ChartPattern(
       tool: ChartDrawingTool.verticalLine,
