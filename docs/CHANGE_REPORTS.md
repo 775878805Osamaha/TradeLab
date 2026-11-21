@@ -367,3 +367,11 @@
 - **ملفات العمل:** `flutter_app/lib/data/range_bar_builder.dart`، `flutter_app/lib/data/range_bar_timeline.dart`، `flutter_app/test/range_bar_builder_test.dart`، `flutter_app/test/range_bar_timeline_test.dart`، `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
 - **الاختبار:** 6 حالات انحدار جديدة أضيفت، **NOT RUN** محليًا (Flutter SDK غير متوفر)، **CI PENDING** حتى PR؛ Android Profile/FPS وcTrader LIVE **NOT RUN**. دون APK/Release/main/مشاريع أخرى.
 - **الخطوة التالية:** مراجعة GitHub Actions والتعامل مع PASS/FAIL، ثم الدمج فقط إلى التطوير مع تقرير SHA النهائي.
+
+### 2026-11-21 (UTC) — نجاح فحص CI ودمج PR #582 لحماية ميزانية Range مبكرًا
+- **المستودع:** `775878805Osamaha/TradeLab`؛ [PR #582](https://github.com/775878805Osamaha/TradeLab/pull/582) **MERGED/squash** إلى `test/flutter-all-fixes-20261116` مع SHA الدمج الفعلي [`a18c6383e2cc88b882ca483b5bfcf6c32e92ff20`](https://github.com/775878805Osamaha/TradeLab/commit/a18c6383e2cc88b882ca483b5bfcf6c32e92ff20).
+- **دليل الفحص:** [GitHub Actions #44909751279](https://github.com/775878805Osamaha/TradeLab/actions/runs/44909751279) **completed/success** على `323e4d32e660453d9161d624beae85d708a93ba7`: تحليل Flutter، اختبارات التاريخ/الشارت وRange/Replay، وفحص التوقيت في اليمن. الحالات الست الجديدة موجودة ضمن ملفات الاختبار التي أجريت.
+- **سلوك الإصلاح:** `maxNewClosedBars` يحمي الحد قبل كل إنشاء شمعة Range مغلقة في تحديث تاريخي/حي؛ معالجة الفشل لا تنشر كتلًا جزئية؛ تحديث forming bar عند سعة إغلاق 0 ما زال ممكنًا. لا مصادر أسعار وهمية أو أوامر تداول حقيقية أو كشف Replay للمستقبل.
+- **الملفات التي دخلت الدمج:** `flutter_app/lib/data/range_bar_builder.dart`, `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_builder_test.dart`, `flutter_app/test/range_bar_timeline_test.dart`، و`docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **المتبقي/الحدود:** Android Profile وFPS حقيقي/جلسة cTrader حية **NOT RUN**؛ لم تُنشأ APK أو Release، ولم يتغير `main` ولا أي مشروع آخر.
+- **الخطوة التنفيذية التالية الوحيدة:** قياس Android Profile الحقيقي ببيانات cTrader موثقة قبل وصف السلاسة، ثم تصحيح اختناق مدعوم بأرقام.
