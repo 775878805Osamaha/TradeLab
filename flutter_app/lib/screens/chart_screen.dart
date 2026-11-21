@@ -206,6 +206,7 @@ class _ChartScreenState extends State<ChartScreen>
   final _drawingFavoritesStorage = const FlutterSecureStorage();
   bool _showFavoriteShortcuts = true;
   bool _placingShort = false;
+  bool _placingLong = false;
   bool _placingRectangle = false;
   ChartAnchor? _rectangleFirstCorner;
   final List<ChartPriceRectangle> _rectangles = [];
@@ -2371,6 +2372,7 @@ class _ChartScreenState extends State<ChartScreen>
       _selectedShort = null;
       _selectedRectangle = null;
       _placingShort = false;
+      _placingLong = false;
       _placingRectangle = false;
       _rectangleFirstCorner = null;
       _shortEntryAnchor = null;
@@ -2735,6 +2737,7 @@ class _ChartScreenState extends State<ChartScreen>
       _shortEntryAnchor = null;
       _shortStopPrice = null;
       _placingShort = false;
+      _placingLong = false;
       _placingRectangle = false;
       _lineUndo.clear();
       _lineRedo.clear();
@@ -3135,6 +3138,7 @@ class _ChartScreenState extends State<ChartScreen>
       _eraserMode = false;
       _rulerMode = false;
       _placingShort = false;
+      _placingLong = false;
       _placingRectangle = false;
       _pendingAnchor = null;
       _secondChannelAnchor = null;
@@ -3154,7 +3158,7 @@ class _ChartScreenState extends State<ChartScreen>
       ('الخطوط الأفقية', _levels.length),
       ('رسومات الاتجاه وفيبوناتشي', _patterns.length),
       ('مناطق السعر', _rectangles.length),
-      ('مراكز البيع التجريبية', _shortPositions.length),
+      ('مراكز البيع والشراء التحليلية', _shortPositions.length),
     ];
     await showModalBottomSheet<void>(context: context,
       showDragHandle: true,
@@ -3488,6 +3492,8 @@ class _ChartScreenState extends State<ChartScreen>
         _selectDrawingMode(tool: ChartDrawingTool.parallelChannel);
       case DrawingCatalogKind.shortPosition:
         _selectDrawingMode(short: true);
+      case DrawingCatalogKind.longPosition:
+        _selectDrawingMode(long: true);
       case DrawingCatalogKind.priceRectangle:
         _selectDrawingMode(rectangle: true);
       case DrawingCatalogKind.magnet:
@@ -3848,12 +3854,14 @@ class _ChartScreenState extends State<ChartScreen>
           candleCount: count, plotWidth: plotWidth);
       final right = _viewport.chartX(index: item.endIndex,
           candleCount: count, plotWidth: plotWidth);
-      final top = scale.y(item.stop);
+      final stopY = scale.y(item.stop);
       final entry = scale.y(item.entry);
-      final bottom = scale.y(item.target);
+      final targetY = scale.y(item.target);
+      final top = math.min(stopY, targetY);
+      final bottom = math.max(stopY, targetY);
       final targets = <(ShortPositionHandle, Offset)>[
-        (ShortPositionHandle.stop, Offset(left, top)),
-        (ShortPositionHandle.target, Offset(left, bottom)),
+        (ShortPositionHandle.stop, Offset(left, stopY)),
+        (ShortPositionHandle.target, Offset(left, targetY)),
         (ShortPositionHandle.entry, Offset(left, entry)),
         (ShortPositionHandle.end, Offset(right, entry)),
       ];
@@ -3873,10 +3881,14 @@ class _ChartScreenState extends State<ChartScreen>
       _shortEntryAnchor = anchor;
       _shortStopPrice = null;
     } else if (_shortStopPrice == null) {
-      if (anchor.price <= _shortEntryAnchor!.price) return;
+      if (_placingLong
+          ? anchor.price >= _shortEntryAnchor!.price
+          : anchor.price <= _shortEntryAnchor!.price) return;
       _shortStopPrice = anchor.price;
     } else {
-      if (anchor.price >= _shortEntryAnchor!.price) return;
+      if (_placingLong
+          ? anchor.price <= _shortEntryAnchor!.price
+          : anchor.price >= _shortEntryAnchor!.price) return;
       _saveDrawingUndo();
       _shortPositions.add(ChartShortPosition(
         startIndex: math.min(_shortEntryAnchor!.index, anchor.index),
@@ -3884,9 +3896,12 @@ class _ChartScreenState extends State<ChartScreen>
         entry: _shortEntryAnchor!.price,
         stop: _shortStopPrice!,
         target: anchor.price,
+        direction: _placingLong
+            ? ChartPositionDirection.long : ChartPositionDirection.short,
       ));
       _selectedShort = _shortPositions.length - 1;
       _placingShort = false;
+      _placingLong = false;
       _shortEntryAnchor = null;
       _shortStopPrice = null;
     }
@@ -3972,21 +3987,24 @@ class _ChartScreenState extends State<ChartScreen>
         final bars = proposed.clamp(-original.startIndex,
             math.max(0, count - 1 - original.endIndex)).toInt();
         final moved = original.moved(bars, priceDelta);
-        if (moved.target > 0) updated = moved;
+        if (moved.stop > 0 && moved.entry > 0 && moved.target > 0) {
+          updated = moved;
+        }
         break;
     }
     if (updated != null) _shortPositions[index] = updated;
   }
 
   void _selectDrawingMode({ChartDrawingTool? tool, bool short = false,
-      bool rectangle = false}) {
+      bool long = false, bool rectangle = false}) {
     setState(() {
       _disarmDoubleTapGuide();
       _drawing = true;
       _eraserMode = false;
       _rulerMode = false;
       _measureStart = null;
-      _placingShort = short;
+      _placingShort = short || long;
+      _placingLong = long;
       _placingRectangle = rectangle;
       if (tool != null) _drawingTool = tool;
       _shortEntryAnchor = null;
@@ -4025,6 +4043,7 @@ class _ChartScreenState extends State<ChartScreen>
               _rulerMode = false;
               _measureStart = null;
               _placingShort = false;
+      _placingLong = false;
               _placingRectangle = false;
               _pendingAnchor = null;
               _secondChannelAnchor = null;
@@ -4207,7 +4226,8 @@ class _ChartScreenState extends State<ChartScreen>
       builder: (sheetContext) => SafeArea(child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const TradeSectionTitle('خصائص مركز البيع'),
+          TradeSectionTitle(_shortPositions[index].isLong
+              ? 'خصائص مركز الشراء' : 'خصائص مركز البيع'),
           const SizedBox(height: 8),
           Text('الدخول: ${_shortPositions[index].entry.toStringAsFixed(5)}',
             textDirection: TextDirection.ltr),
@@ -4218,7 +4238,7 @@ class _ChartScreenState extends State<ChartScreen>
           Text('العائد / المخاطرة: ${_shortPositions[index].rewardRisk.toStringAsFixed(2)}',
             textDirection: TextDirection.ltr),
           const SizedBox(height: 8),
-          const Text('هذه أداة رسم تحليلية، وليست أمر بيع أو نتيجة صفقة منفّذة.',
+          const Text('هذه أداة رسم تحليلية، وليست أمر تداول أو نتيجة صفقة منفّذة.',
             textAlign: TextAlign.center),
           TextButton.icon(onPressed: () {
             setState(() => _showShortLabels = !_showShortLabels);
@@ -4635,10 +4655,13 @@ class _ChartScreenState extends State<ChartScreen>
   String? get _activeChartHint {
     if (_placingShort) {
       return _shortEntryAnchor == null
-          ? 'مركز بيع: المس الشارت لتحديد سعر الدخول'
+          ? (_placingLong ? 'مركز شراء: حدد سعر الدخول'
+              : 'مركز بيع: المس الشارت لتحديد سعر الدخول')
           : _shortStopPrice == null
-              ? 'حدد وقف الخسارة فوق سعر الدخول'
-              : 'حدد الهدف أسفل سعر الدخول';
+              ? (_placingLong ? 'حدد وقف الخسارة أسفل سعر الدخول'
+                  : 'حدد وقف الخسارة فوق سعر الدخول')
+              : (_placingLong ? 'حدد الهدف أعلى سعر الدخول'
+                  : 'حدد الهدف أسفل سعر الدخول');
     }
     if (_placingRectangle) {
       return _rectangleFirstCorner == null
