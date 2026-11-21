@@ -414,3 +414,11 @@
 - **الاختبارات المكتوبة:** بناء مباشر/older-prepend و6001 تيك عبر `buildAsync`، ومحاولات mutation لكل قائمة مع الحفاظ على source ordinal. **CI PENDING** حتى PR، Flutter محليًا **NOT RUN**، Android Profile/FPS **NOT RUN**.
 - **القيود:** لا main/APK/Release/مشاريع أخرى.
 - **الخطوة التالية:** PR إلى التطوير، CI PASS أو إصلاح الخطأ، ثم الدمج والتوثيق مع SHA الحقيقي.
+
+### 2026-11-21 (UTC) — نجاح CI ودمج PR #585 لحماية قوائم تاريخ Range بلا نسخ إضافي
+- **المشروع/الفرع:** `775878805Osamaha/TradeLab`، [PR #585](https://github.com/775878805Osamaha/TradeLab/pull/585) **MERGED/squash** إلى `test/flutter-all-fixes-20261116` عند SHA [`bd41bc1f66e0fc49a908254baf5b163005671802`](https://github.com/775878805Osamaha/TradeLab/commit/bd41bc1f66e0fc49a908254baf5b163005671802).
+- **اختبارات فعلية على GitHub:** [Actions #44915200946](https://github.com/775878805Osamaha/TradeLab/actions/runs/44915200946) **completed/success** عند `75773a86a82ccf3b3b8eec045070b007993968af`؛ تحليل Flutter واختبارات التاريخ/Range/Replay/chart وتوقيت اليمن بما فيها اختبارات 6001 BID في worker ورفض محاولات mutation.
+- **السلوك الجديد:** `RangeBarTimeline.build` يعرض `UnmodifiableListView` فوق قوائم الشموع ومؤشرات إغلاق أحداث BID والتوقيت المأخوذة مباشرة من العامل؛ لا يستطيع consumer استخدام `add/[]=/clear/removeLast` لتغيير snapshot الموثقة، ولا تُضاف نسخ كاملة بحجم 250k صف للمجرد حماية القوائم. لا تغيير في الأسعار الأصلية أو رسم Replay.
+- **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_timeline_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **الحدود:** لم تقاس سلاسة Android الحقيقية/FPS ولم يتصل حساب cTrader حي، ولا APK/Release ولا تغيير `main` أو مشاريع أخرى.
+- **الخطوة التالية الوحيدة:** تسجيل Android Profile فعلي وتحليل pan/pinch وRange ببيانات موثقة، دون افتراض تحسن FPS من CI وحده.
