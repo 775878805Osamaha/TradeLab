@@ -19,7 +19,7 @@
 | السحب والتكبير والإفلات والقصور الذاتي | PR #587 لمنع phantom fling؛ PR #591 لحالات 2→3→2 أصابع؛ فحوص CI ناجحة | Android Profile حقيقي مع لمس متعدد، pan/pinch/inertia وتاريخ كثيف، إطارات p50/p95/p99 |
 | تتبع OHLC وcrosshair على Android | PR #592 وActions #44924414254 PASS: long press ثم lift ثم single-tap exit مع widget test 320/390dp | اختبار بصري/لمسي حقيقي مقابل TradingView، دقة خط السعر وUTC-label |
 | تحجيم محور السعر وAUTO ومحور الوقت | ChartViewport/scale widget regression tests؛ AUTO متاح بالشفرة | مقارنة مواقع العلامات والنقر المطول على المقياس؛ قائمة إعدادات مطابقة للمرجع على الهاتف |
-| Replay داخل الشارت بخط البداية والأدوات المصغرة | ReplayMobileControls, ReplayStartResolver, ReplayDateSelectionGuard؛ PR #590 وحالات Replay | تطابق كامل لقائمة البداية، المقص الأزرق، تحكم السرعة، موضع الأدوات والـscroll مع المرجع على Android |
+| Replay داخل الشارت بخط البداية والأدوات المصغرة | ReplayMobileControls, ReplayStartResolver, ReplayDateSelectionGuard؛ PR #590 لحماية الجلسات، وPR #594 لتثبيت مواضع الشموع عند Play/Seek/Rewind ومنع Play عند EOF (CI #44935284854 PASS) | تطابق كامل لقائمة البداية، المقص الأزرق، تحكم السرعة، موضع الأدوات والـscroll مع المرجع على Android؛ قياس حقيقي لم يكتمل |
 | عزل مستقبل Replay والتداول الورقي | CandlePrefix وReplay training/source guards؛ اختبارات replay وPR #590 | اختبار جهاز حقيقي للتنقل/الخروج/إعادة الدخول، ضمان عدم إظهار شموع لاحقة في أي overlay |
 | Replay interval مستقل (tick / 1s / 1m / 3m) | القائمة موجودة، بعض الخيارات معطلة حين يفتقر المصدر إلى البيانات الدقيقة | تنفيذ فواصل زمنية فقط عند توافر تيكات/شموع أصلية موثقة بمستوى الدقة المطلوب؛ ممنوع تعويضها ببيانات مُختلقة |
 | أدوات الرسم والاختيار والتراجع والتعديل | اختبارات horizontal/trendline/rectangles/short positions وبعض أدوات الشارت | جرد كل أداة مطلوبة مقابل تجربة TradingView واختبار hit-testing/drag/anchor والتراكب والألوان في أحجام 320/390dp |
@@ -40,5 +40,5 @@
 
 - ملف .github/workflows/chart-screenshot.yml يحتوي شرطًا معطلاً عمدًا لتجنب APK/emulator المدفوع. لا تُفعِّله ولا تبنِ APK أو Release دون إذن المستخدم الصريح.
 - لا تعدل main، ولا تنسخ أي بيانات حقيقية من حساب التداول إلى تقارير GitHub، ولا تُدخل أسعارًا وهمية إلى التطبيق. سجل الأدلة وSHA ونتائج CI في HANDOFF/CHANGE_REPORTS.
-- **الحالة الحالية:** PR #592 MERGED عند c1bc4179e013f111239b4d2d5308dfb5832a51b1، CI #44924414254 completed/success؛ Android Profile وpixel parity مع TradingView وcTrader live session NOT RUN.
-- **الخطوة التنفيذية التالية:** معالجة سلوك الضغط المطول على محور السعر/الوقت وفق مرجع TradingView الرسمي مع اختبارات widget، ثم عند تفويض اختبار نسخة على Android إجراء قياسات البكسل والسلاسة الفعلية.
+- **الحالة الحالية:** PR #592 (crosshair) MERGED CI #44924414254 PASS؛ PR #593 (قوائم الضغط المطول للمحاور) MERGED CI #44925136335 PASS؛ PR #594 (تثبيت مواضع Replay في playback/seek والـEOF) MERGED عند b7826311823884245ddf44bd4b74f1c6fb1f1278، CI #44935284854 completed/success. **مطابقة الصورة والسلاسة على Android وcTrader live session NOT RUN؛ NOT COMPLETE.**
+- **الخطوة التنفيذية التالية:** إجراء اختبار visual/gesture فعلي على Android عند 320 و390dp بنسخة اختبار يصرّح بها المالك، وقياس p50/p95/p99 مع بيانات BID موثقة، ثم إصلاح أكبر فرق مثبت؛ لا إنشاء APK تلقائيًا.
