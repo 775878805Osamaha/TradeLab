@@ -235,6 +235,7 @@ class ChartPriceScale {
   ChartPriceScale withLockedPricePerBar({
     required double ratio,
     required double barWidth,
+    double? centerPrice,
   }) {
     if (!ratio.isFinite || ratio <= 0 ||
         !barWidth.isFinite || barWidth <= 0 ||
@@ -251,10 +252,26 @@ class ChartPriceScale {
     final oldSpan = maxCoordinate - minCoordinate;
     // Most pan frames keep the same bar width and therefore require no
     // replacement scale object. Keep all verified candle metadata cached.
-    if ((coordinateSpan - oldSpan).abs() <= oldSpan.abs() * 1e-12) {
+    final supplied = centerPrice;
+    final requestedCenter = supplied == null ? null :
+        (logarithmicCoordinates ? (supplied > 0 ? math.log(supplied) :
+            double.nan) : supplied);
+    if ((coordinateSpan - oldSpan).abs() <= oldSpan.abs() * 1e-12 &&
+        (requestedCenter == null ||
+            (requestedCenter - (minCoordinate + oldSpan / 2)).abs() <=
+                oldSpan.abs() * 1e-12)) {
       return this;
     }
-    final center = minCoordinate + oldSpan / 2;
+    // A horizontal pan must not recenter the LOCKED ruler to the high/low
+    // of different historical candles. Use the original verified center
+    // captured on lock; only an intentional manual price drag changes it.
+    if (supplied != null &&
+        (!supplied.isFinite || (logarithmicCoordinates && supplied <= 0))) {
+      return this;
+    }
+    final center = supplied == null
+        ? minCoordinate + oldSpan / 2
+        : logarithmicCoordinates ? math.log(supplied) : supplied;
     final targetMin = center - coordinateSpan / 2;
     final targetMax = center + coordinateSpan / 2;
     final newMin = logarithmicCoordinates
