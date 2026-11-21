@@ -120,6 +120,28 @@ void main() {
     expect(ChartScaleSettings.decode(committed!.encode()).inverted, isTrue);
   });
 
+  for (final mode in <String>['نسبة مئوية', 'مؤشر 100']) {
+    testWidgets('percent/indexed scale $mode selects and saves a real mode',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(393, 872));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      ChartScaleSettings? committed;
+      await mount(tester, onApply: (v) => committed = v,
+          onCancel: () {});
+      final popup = find.byKey(const Key('scale-mode'));
+      await tester.ensureVisible(popup);
+      await tester.tap(popup);
+      await tester.pumpAndSettle();
+      expect(find.text(mode), findsOneWidget);
+      await tester.tap(find.text(mode).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('scale-apply')));
+      await tester.pumpAndSettle();
+      expect(committed?.scaleMode, mode);
+      expect(ChartScaleSettings.decode(committed!.encode()).scaleMode, mode);
+    });
+  }
+
   testWidgets('real logarithmic price-scale mode is selectable and saved',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(393, 872));
