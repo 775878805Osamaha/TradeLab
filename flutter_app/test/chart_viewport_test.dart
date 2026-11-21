@@ -143,6 +143,68 @@ void main() {
         reason: 'Valid one-finger panning still works after a bad pinch sample');
   });
 
+  test('first corrupted two-finger sample followed by lift cannot pan', () {
+    for (final (focal, scale) in <(double, double)>[
+      (double.nan, 1),
+      (140, double.infinity),
+      (140, 0),
+    ]) {
+      final gesture = ChartTouchGesture();
+      const initial = ChartViewport(
+          barWidth: 12, scrollBars: 40, rightMarginBars: 3);
+      ChartViewport sample(ChartViewport viewport, int pointers,
+          double dx, double sampleFocal, double sampleScale) =>
+          gesture.update(
+            viewport: viewport, pointerCount: pointers,
+            deltaX: dx, focalX: sampleFocal, scale: sampleScale,
+            plotWidth: 320, candleCount: 500,
+          );
+      final corrupted = sample(initial, 2, 0, focal, scale);
+      expect(identical(corrupted, initial), isTrue);
+      expect(gesture.hadMultiTouch, isTrue);
+      expect(gesture.ignoredPointerTransition, isTrue);
+      final lifted = sample(corrupted, 1, 175, 290, 1);
+      expect(identical(lifted, initial), isTrue,
+          reason: 'Pointer handoff must ignore its fake 175px delta');
+      expect(gesture.ignoredPointerTransition, isTrue);
+      expect(gesture.horizontalTravel, 0,
+          reason: 'Synthetic handoff must not qualify as a pan or fling');
+      final deliberatePan = sample(lifted, 1, 12, 291, 1);
+      expect(deliberatePan.scrollBars,
+          closeTo(initial.scrollBars + 1, .0000001));
+      expect(deliberatePan.barWidth, initial.barWidth);
+      expect(gesture.horizontalTravel, 12);
+    }
+  });
+
+  test('corrupt first pinch and reentry still zoom around the fresh anchor',
+      () {
+    final gesture = ChartTouchGesture();
+    const original = ChartViewport(barWidth: 10, scrollBars: 35);
+    ChartViewport sample(ChartViewport viewport, int pointers,
+        double focal, double scale, double dx) => gesture.update(
+          viewport: viewport, pointerCount: pointers,
+          focalX: focal, scale: scale, deltaX: dx,
+          plotWidth: 320, candleCount: 500,
+        );
+
+    final invalid = sample(original, 2, double.nan, 1, 0);
+    final firstValid = sample(invalid, 2, 150, 1.3, 0);
+    expect(identical(firstValid, original), isTrue);
+    final zoomed = sample(firstValid, 2, 155, 2.6, 0);
+    expect(zoomed.barWidth, 20);
+    final lifted = sample(zoomed, 0, 290, 1, 175);
+    expect(identical(lifted, zoomed), isTrue);
+    expect(gesture.ignoredPointerTransition, isTrue);
+    // A brand-new gesture after releasing all pointers re-anchors rather
+    // than using the previous session's scale or focal origin.
+    final restarted = sample(lifted, 2, 200, 5, 0);
+    expect(identical(restarted, lifted), isTrue);
+    final continued = sample(restarted, 2, 202, 5.5, 0);
+    expect(continued.barWidth, closeTo(22, 1e-10));
+    expect(continued.scrollBars.isFinite, isTrue);
+  });
+
   test('invalid Android centroid mid-pinch rebases at current candle viewport',
       () {
     final gesture = ChartTouchGesture();
