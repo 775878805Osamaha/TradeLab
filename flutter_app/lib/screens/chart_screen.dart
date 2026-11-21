@@ -235,6 +235,15 @@ class _ChartScreenState extends State<ChartScreen>
   // Keep its scope per source, account, timeframe and Range configuration.
   ChartPriceScale? _manualPriceScale;
   String? _manualPriceScaleKey;
+  // Price/bar ratio is a geometry aspect, scoped per real market/timeframe
+  // and Replay state. Never share it with another symbol's actual quotes.
+  double? _lockedPricePerBar;
+  String? _lockedPricePerBarScope;
+  @visibleForTesting
+  ({bool locked, double? ratio, double barWidth}) get debugPriceBarLock => (
+      locked: _scaleSettings.lockPriceToBar,
+      ratio: _lockedPricePerBar,
+      barWidth: _viewport.barWidth);
   bool _draggingPriceAxis = false;
   bool _draggingTimeAxis = false;
   Offset _doubleTapChartPosition = Offset.zero;
@@ -3715,8 +3724,7 @@ class _ChartScreenState extends State<ChartScreen>
   ChartPriceScale _priceScale(
       List<TradeCandle> candles, double width, double height) {
     final plotHeight = math.max(1.0, height - 24);
-    if (_priceScaleManual) return _manualPriceScale!.withHeight(plotHeight);
-    return _autoPriceScaleCache.resolve(
+    final auto = _autoPriceScaleCache.resolve(
       candles: candles,
       viewport: _viewport,
       plotWidth: width,
@@ -3731,6 +3739,17 @@ class _ChartScreenState extends State<ChartScreen>
         _ => ChartPriceReferenceMode.price,
       },
     );
+    final base = _priceScaleManual
+        ? _manualPriceScale!.withHeight(plotHeight) : auto;
+    if (!_scaleSettings.lockPriceToBar) return base;
+    final scope = _currentPriceScaleKey;
+    if (_lockedPricePerBarScope != scope || _lockedPricePerBar == null) {
+      _lockedPricePerBar = base.pricePerBarRatio(_viewport.barWidth);
+      _lockedPricePerBarScope = scope;
+    }
+    final ratio = _lockedPricePerBar;
+    return ratio == null ? base : base.withLockedPricePerBar(
+      ratio: ratio, barWidth: _viewport.barWidth);
   }
 
   void _togglePriceScaleInversion() {
@@ -3745,6 +3764,8 @@ class _ChartScreenState extends State<ChartScreen>
       _manualPriceScale = null;
       _manualPriceScaleKey = null;
       _draggingPriceAxis = false;
+      _lockedPricePerBar = null;
+      _lockedPricePerBarScope = null;
     });
     _autoPriceScaleCache.clear();
     _chartRepaint.value++;
@@ -3774,6 +3795,9 @@ class _ChartScreenState extends State<ChartScreen>
       _manualPriceScale = null;
       _manualPriceScaleKey = null;
       _draggingPriceAxis = false;
+      // AUTO with a locked ratio captures a fresh source-based aspect.
+      _lockedPricePerBar = null;
+      _lockedPricePerBarScope = null;
     });
     // Force a live painter refresh even if its widget snapshot is unchanged.
     _chartRepaint.value++;
@@ -4948,6 +4972,8 @@ class _ChartScreenState extends State<ChartScreen>
           // An existing manual scale is expressed in the previous mode.
           final modeChanged = _scaleSettings.scaleMode != updated.scaleMode ||
               _scaleSettings.inverted != updated.inverted;
+          final lockChanged =
+              _scaleSettings.lockPriceToBar != updated.lockPriceToBar;
           if (modeChanged) _disarmDoubleTapGuide();
           setState(() {
             _scaleSettings = updated;
@@ -4957,6 +4983,10 @@ class _ChartScreenState extends State<ChartScreen>
               _manualPriceScale = null;
               _manualPriceScaleKey = null;
               _draggingPriceAxis = false;
+            }
+            if (modeChanged || lockChanged) {
+              _lockedPricePerBar = null;
+              _lockedPricePerBarScope = null;
             }
           });
           if (modeChanged) _autoPriceScaleCache.clear();
@@ -5227,6 +5257,13 @@ class _ChartScreenState extends State<ChartScreen>
                 if (!identical(current, changed)) {
                   _manualPriceScale = changed;
                   _manualPriceScaleKey = _currentPriceScaleKey;
+                  // A deliberate manual price-ruler drag updates the locked
+                  // price/bar aspect, rather than reverting at next paint.
+                  if (_scaleSettings.lockPriceToBar) {
+                    _lockedPricePerBar =
+                        changed.pricePerBarRatio(_viewport.barWidth);
+                    _lockedPricePerBarScope = _currentPriceScaleKey;
+                  }
                   // Keep the price ruler, candles and drawing overlays on
                   // one identical live price coordinate system.
                   _chartRepaint.value++;
