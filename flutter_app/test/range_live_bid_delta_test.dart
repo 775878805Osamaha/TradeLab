@@ -241,6 +241,67 @@ void main() {
       const <MarketTick>[]), throwsArgumentError);
   });
 
+  test('single-pass live verifier preserves 4999/5000 event worker parity',
+      () async {
+    const source = <MarketTick>[
+      MarketTick(100, 100), MarketTick(101, 101),
+    ];
+    List<MarketTick> page(int count) => <MarketTick>[
+      const MarketTick(101, 101),
+      for (var i = 0; i < count - 1; i++)
+        MarketTick(102 + i, 100.0 + i * .01),
+    ];
+    for (final count in [4999, 5000, 6501]) {
+      final response = page(count);
+      final suffix = await RangeLiveBidDelta.verifiedSuffixAsync(
+        previouslyVerified: source,
+        brokerPage: response,
+        toMs: 10000,
+      );
+      expect(suffix.length, count - 1);
+      expect(suffix.first.timestamp, 102);
+      expect(suffix.last.timestamp, 100 + count);
+      expect(suffix.first.bid, 100);
+      expect(() => suffix.add(const MarketTick(0, 100)),
+          throwsUnsupportedError);
+    }
+    expect(source, hasLength(2));
+  });
+
+  test('large BID page validates full order, timestamps and prices in worker',
+      () async {
+    const source = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 101),
+      MarketTick(101, 101),
+    ];
+    List<MarketTick> valid() => <MarketTick>[
+      const MarketTick(101, 101),
+      const MarketTick(101, 101),
+      for (var i = 0; i < 5000; i++)
+        MarketTick(102 + i, 100.0 + i * .01),
+    ];
+    final reversed = valid()..[4500] = const MarketTick(101, 102);
+    final outsideRange = valid()
+      ..[5001] = const MarketTick(9000, 102);
+    final invalidBid = valid()..[4999] = const MarketTick(4999, -1);
+    final revisedOverlap = valid()
+      ..[1] = const MarketTick(101, 100.99);
+    for (final page in [reversed, outsideRange, invalidBid, revisedOverlap]) {
+      await expectLater(RangeLiveBidDelta.verifiedSuffixAsync(
+        previouslyVerified: source, brokerPage: page, toMs: 7000),
+        throwsA(isA<MarketDataException>()),
+        reason: 'A worker may not return a suffix from a broken source page');
+    }
+    // All same-ms events remain genuine, including exact-price repeats.
+    final verified = await RangeLiveBidDelta.verifiedSuffixAsync(
+      previouslyVerified: source,
+      brokerPage: valid(), toMs: 7000);
+    expect(verified, hasLength(5000));
+    expect(verified.first.timestamp, 102);
+    expect(verified.last.timestamp, 5101);
+  });
+
   test('no old archive cannot be mistaken for verified live boundary',
       () async {
     await expectLater(RangeLiveBidDelta.verifiedSuffixAsync(
