@@ -383,3 +383,11 @@
 - **الاختبارات:** اختبار انحدار جديد لعزل زمن/percentiles لكل مرحلة، التمييز بين poll بلا تحديث وappend فعلي، وغياب بيانات حساسة. **NOT RUN** محليًا لأن Flutter SDK غير متاح؛ **CI PENDING**؛ Android Profile الحقيقي/cTrader connected **NOT RUN**.
 - **القيود:** لا APK/Release، لا تغيير `main` أو المشاريع الأخرى.
 - **الخطوة التالية:** إنشاء PR وفحص GitHub Actions، تصحيح أي مشكلة مثبتة، ثم دمج في التطوير وتقرير رسمي بالروابط والـSHA.
+
+### 2026-11-21 (UTC) — نجاح CI ودمج PR #583 لتفصيل بيانات أداء Range
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab` إلى `test/flutter-all-fixes-20261116`؛ [PR #583](https://github.com/775878805Osamaha/TradeLab/pull/583) **MERGED/squash**. SHA الدمج الحقيقي [`b5b8271a0b07ea9bc046c000e96dfbc428a29fe0`](https://github.com/775878805Osamaha/TradeLab/commit/b5b8271a0b07ea9bc046c000e96dfbc428a29fe0).
+- **اختبار موثق:** [Actions #44910151843](https://github.com/775878805Osamaha/TradeLab/actions/runs/44910151843) **completed/success** عند PR HEAD `e410978bcf08feac21038b59622062b925ed541a`؛ `flutter analyze --no-fatal-infos`، اختبارات chart/Range/Replay/history وYemen timezone.
+- **العمل في الشيفرة:** `ChartLoadPhase` مراحل جديدة `liveRangeBrokerFetch`, `liveRangeVerify`, `liveRangeAppend`, `liveRangeNoChange`، مع الحفاظ على `liveRangeUpdate` الإجمالي. `ChartScreen._refreshLiveRange` يقيس مراحل النجاح والتحقق الفعلي فقط، ويعزل polls بلا أحداث جديدة عن زمن append. لا تسجيل لأي رمز/سعر/حساب، لا أثر للقياس في الوضع الافتراضي دون flag.
+- **الاختبارات/الملفات:** `flutter_app/lib/chart/chart_load_profiler.dart`، `flutter_app/lib/screens/chart_screen.dart`، `flutter_app/test/chart_load_profiler_test.dart`، `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`. اختبار p95 مستقل لكل مرحلة ومنع حقول حساب/سعر.
+- **الحدود:** لا APK/Release، لا تغيير `main` ولا مشاريع أخرى. Android Profile وتسجيل cTrader الحقيقي/FPS **NOT RUN**؛ تحقق CI ليس قياس FPS.
+- **الخطوة التالية الواحدة:** Android Profile على جهاز حقيقي بحساب cTrader واستخراج أرقام p50/p95/p99 وتحديد سبب البطء الفعلي، دون التخمين.
