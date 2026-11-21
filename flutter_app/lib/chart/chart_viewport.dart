@@ -58,7 +58,7 @@ class ChartPriceScale {
     // Reuse the existing thousands-separator and decimal presentation for
     // Regular and LOG; adding relative modes must not regress older charts.
     final value = ChartPriceTextFormatter.price(
-        display, digits.clamp(0, 8).toInt());
+        display, digits.clamp(0, 12).toInt());
     return usesRelativeScale && referenceMode == ChartPriceReferenceMode.percent
         ? '$value%' : value;
   }
