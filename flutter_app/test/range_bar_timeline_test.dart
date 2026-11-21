@@ -623,6 +623,80 @@ void main() {
     }
   });
 
+  test('one new BID event with a huge first gap offloads live Range work',
+      () async {
+    const historic = <MarketTick>[
+      MarketTick(100, 100),
+      MarketTick(101, 100.25),
+    ];
+    const suffix = <MarketTick>[MarketTick(102, 4200.25)];
+    final previous = RangeBarTimeline.build(historic, 1);
+    expect(previous.closedBarCount, 0);
+    expect(RangeBarTimeline.shouldBuildInBackground(suffix, 1), isFalse,
+        reason: 'One tick alone hides the 4100-bar cross-boundary jump');
+    expect(RangeBarTimeline.shouldAppendInBackground(
+      currentTickCount: historic.length,
+      currentBarCount: previous.bars.length,
+      lastVerifiedTick: historic.last,
+      verifiedSuffix: suffix, priceDistance: 1,
+    ), isTrue,
+        reason: 'The last verified BID price is the missing gap anchor');
+    final appended = await RangeBarTimeline.appendVerifiedSuffixAsync(
+      currentTicks: historic,
+      currentTimeline: previous,
+      verifiedSuffix: suffix,
+      priceDistance: 1,
+    );
+    final whole = RangeBarTimeline.build([...historic, ...suffix], 1);
+    expect(appended.timeline.closedBarCount, 4100);
+    expect(appended.timeline.endTickIndices, whole.endTickIndices);
+    expect(appended.timeline.endTimestamps, whole.endTimestamps);
+    expect(appended.timeline.endTickIndices.take(4100)
+        .every((index) => index == 2), isTrue,
+        reason: 'Every jump closure must remain on the real BID event');
+    expect(appended.timeline.endTimestamps.take(4100)
+        .every((ms) => ms == 102), isTrue);
+    expect(appended.timeline.visibleClosedBarsThroughTick(1), 0,
+        reason: 'Replay before the new broker event must see zero closes');
+    expect(appended.timeline.visibleClosedBarsThroughTick(2), 4100);
+    expect(previous.closedBarCount, 0);
+    expect(previous.bars.single.close, 100.25);
+  });
+
+  test('small live BID changes stay off the background worker', () {
+    const anchor = MarketTick(100, 100.25);
+    expect(RangeBarTimeline.shouldAppendInBackground(
+      currentTickCount: 2,
+      currentBarCount: 1,
+      lastVerifiedTick: anchor,
+      verifiedSuffix: const [MarketTick(101, 100.5)],
+      priceDistance: 1,
+    ), isFalse);
+    expect(RangeBarTimeline.shouldAppendInBackground(
+      currentTickCount: 2,
+      currentBarCount: 1,
+      lastVerifiedTick: anchor,
+      verifiedSuffix: const <MarketTick>[],
+      priceDistance: 1,
+    ), isFalse);
+    expect(RangeBarTimeline.shouldAppendInBackground(
+      currentTickCount: 5001,
+      currentBarCount: 1,
+      lastVerifiedTick: anchor,
+      verifiedSuffix: const [MarketTick(101, 100.5)],
+      priceDistance: 1,
+    ), isTrue,
+        reason: 'Copying a large authenticated source must stay off UI');
+    expect(RangeBarTimeline.shouldAppendInBackground(
+      currentTickCount: 2,
+      currentBarCount: 4097,
+      lastVerifiedTick: anchor,
+      verifiedSuffix: const [MarketTick(101, 100.5)],
+      priceDistance: 1,
+    ), isTrue,
+        reason: 'Publishing a large Range timeline must stay off UI');
+  });
+
   test('sparse older BID prepend uses same price-work offload policy',
       () async {
     final older = <MarketTick>[MarketTick(90, 100)];

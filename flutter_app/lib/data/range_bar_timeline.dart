@@ -100,6 +100,31 @@ class RangeBarTimeline {
     return false;
   }
 
+  /// Decide whether incremental LIVE Range appending needs a background
+  /// isolate. The first new BID event must be compared with the LAST
+  /// authenticated old event: a suffix containing only one tick has no
+  /// internal price jump for shouldBuildInBackground to measure. Without
+  /// this anchor an otherwise tiny archive may synchronously allocate
+  /// thousands of genuine Range bars on the chart's gesture isolate.
+  ///
+  /// Only one old tick enters this lazy iterable. We never rescan or copy
+  /// the full verified historical archive just to make this decision.
+  static bool shouldAppendInBackground({
+    required int currentTickCount,
+    required int currentBarCount,
+    required MarketTick lastVerifiedTick,
+    required List<MarketTick> verifiedSuffix,
+    required double priceDistance,
+  }) {
+    if (kIsWeb || verifiedSuffix.isEmpty) return false;
+    return currentTickCount > 5000 ||
+        currentBarCount > 4096 ||
+        shouldBuildInBackground(
+          <MarketTick>[lastVerifiedTick].followedBy(verifiedSuffix),
+          priceDistance,
+        );
+  }
+
   /// Small inexpensive pages build immediately. Large histories *or* sparse
   /// pages with a large authentic BID price jump are rebuilt off the UI
   /// isolate so touch, zoom and rendering can continue smoothly.
@@ -211,9 +236,13 @@ class RangeBarTimeline {
     }
     final request = (currentTicks, currentTimeline, verifiedSuffix,
         priceDistance, closedBarLimit);
-    if (!kIsWeb && (currentTicks.length > 5000 ||
-        currentTimeline.bars.length > 4096 ||
-        shouldBuildInBackground(verifiedSuffix, priceDistance))) {
+    if (shouldAppendInBackground(
+      currentTickCount: currentTicks.length,
+      currentBarCount: currentTimeline.bars.length,
+      lastVerifiedTick: currentTicks.last,
+      verifiedSuffix: verifiedSuffix,
+      priceDistance: priceDistance,
+    )) {
       return compute<
         (List<MarketTick>, RangeBarTimeline, List<MarketTick>, double, int),
         RangeLiveAppendBuildResult>(

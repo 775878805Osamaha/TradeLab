@@ -422,3 +422,11 @@
 - **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_timeline_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
 - **الحدود:** لم تقاس سلاسة Android الحقيقية/FPS ولم يتصل حساب cTrader حي، ولا APK/Release ولا تغيير `main` أو مشاريع أخرى.
 - **الخطوة التالية الوحيدة:** تسجيل Android Profile فعلي وتحليل pan/pinch وRange ببيانات موثقة، دون افتراض تحسن FPS من CI وحده.
+
+### 2026-11-21 (UTC) — بداية إصلاح اختيار العامل للقفزة الأولى في Range الحي
+- **المشروع والفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-live-range-first-gap-offload-20261121` من التطوير عند `dc0c324ce1cb8bde51e8fbea62b243a305831836`.
+- **التغيير الفعلي:** `RangeBarTimeline.shouldAppendInBackground` يمرّر آخر تيك BID محفوظ قبل الصفحة الحديثة إلى تقدير حمل الشموع، لتجنب نقل قفزة 4100+ شمعة إلى isolate الواجهة إذا احتوت الصفحة على حدث واحد. لا نقل كامل للأرشيف لأجل التقدير، ولا إعادة كتابة لأسعار حقيقية/Replay.
+- **الملفات وcommits:** `flutter_app/lib/data/range_bar_timeline.dart` [5db6e40](https://github.com/775878805Osamaha/TradeLab/commit/5db6e4035a82b079b524a3a04ba7982d1ef1abd9)؛ `flutter_app/test/range_bar_timeline_test.dart` [31c7e12](https://github.com/775878805Osamaha/TradeLab/commit/31c7e12afab937dd7f4709eb0eede83c54e90639)؛ تحديث `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`.
+- **اختبارات مكتوبة:** قفزة تيك واحد 4100 شمعة صحيحة المصدر مع بقاء cutoff Replay، وفصل الحالات البسيطة عن الأرشيف/الشموع الكبيرة. **CI PENDING** حتى PR. Flutter SDK محليًا وAndroid Profile/FPS وحساب cTrader حي **NOT RUN**.
+- **القيود:** لا APK أو Release أو تغيير `main` أو مشاريع أخرى.
+- **الخطوة التالية:** PR إلى التطوير، فحص CI/اختبارات الشارت، معالجة أي إخفاق، ثم دمج وتوثيق SHA/رابط الاختبار الفعلي.
