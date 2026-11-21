@@ -10,10 +10,17 @@ class ChartPriceScale {
     this.sourceMaximum,
     this.sourceVisibleStart,
     this.sourceVisibleEnd,
+    this.logarithmic = false,
   });
   final double minimum;
   final double maximum;
   final double height;
+  /// Applies logarithmic coordinates to market prices without altering OHLC.
+  /// The scale remains linear for nonpositive ranges (log is undefined).
+  final bool logarithmic;
+  bool get usesLogarithmic => logarithmic &&
+      minimum.isFinite && maximum.isFinite &&
+      minimum > 0 && maximum > minimum && height.isFinite && height > 0;
 
   // Verified unpadded extrema are calculated in the same visible-OHLC pass
   // that constructs automatic price geometry. They are distinct from the
@@ -27,7 +34,8 @@ class ChartPriceScale {
 
   factory ChartPriceScale.visible(List<TradeCandle> candles, ChartViewport viewport,
       double width, double height, {
-      int topMarginPercent = 8, int bottomMarginPercent = 8}) {
+      int topMarginPercent = 8, int bottomMarginPercent = 8,
+      bool logarithmic = false}) {
     if (candles.isEmpty) return ChartPriceScale(0, 1, height);
     final (start, end) = viewport.visibleIndices(
       plotWidth: width, candleCount: candles.length);
@@ -44,6 +52,31 @@ class ChartPriceScale {
     final visibleFraction = (1 - (topMarginPercent + bottomMarginPercent) / 100)
         .clamp(.2, 1.0);
     final fullSpan = span / visibleFraction;
+    // A log axis allocates margins in logarithmic *price* coordinates. The
+    // source low/high stays unchanged, and an all-nonpositive verified series
+    // falls back to linear instead of painting NaN / synthetic market data.
+    if (logarithmic && minPrice > 0 && maxPrice > 0 &&
+        minPrice.isFinite && maxPrice.isFinite) {
+      final lower = math.log(minPrice);
+      final upper = math.log(maxPrice);
+      final logSpan = math.max(upper - lower, 1e-5) / visibleFraction;
+      final paddedMin = math.exp(lower -
+          logSpan * bottomMarginPercent / 100);
+      final paddedMax = math.exp(upper +
+          logSpan * topMarginPercent / 100);
+      if (paddedMin.isFinite && paddedMax.isFinite &&
+          paddedMin > 0 && paddedMax > paddedMin) {
+        return ChartPriceScale(
+          paddedMin, paddedMax, height,
+          logarithmic: true,
+          sourceCandles: candles,
+          sourceMinimum: minPrice,
+          sourceMaximum: maxPrice,
+          sourceVisibleStart: start,
+          sourceVisibleEnd: end,
+        );
+      }
+    }
     return ChartPriceScale(
       minPrice - fullSpan * bottomMarginPercent / 100,
       maxPrice + fullSpan * topMarginPercent / 100, height,
@@ -55,8 +88,25 @@ class ChartPriceScale {
     );
   }
 
-  double y(double price) => (maximum - price) / (maximum - minimum) * height;
-  double price(double y) => maximum - y / height * (maximum - minimum);
+  double y(double price) {
+    if (!usesLogarithmic) {
+      return (maximum - price) / (maximum - minimum) * height;
+    }
+    // Old user drawings may contain zero/negative levels even while the
+    // underlying market is positive. Keep them strictly outside the
+    // visible plot rather than producing NaN canvas coordinates.
+    if (price <= 0) return height * 3;
+    return (math.log(maximum) - math.log(price)) /
+        (math.log(maximum) - math.log(minimum)) * height;
+  }
+
+  double price(double y) {
+    if (!usesLogarithmic) {
+      return maximum - y / height * (maximum - minimum);
+    }
+    return math.exp(math.log(maximum) -
+        y / height * (math.log(maximum) - math.log(minimum)));
+  }
 
   /// Read the price displayed by the crosshair from the *same* price scale
   /// that paints candles, levels, SL/TP and the right axis. Applying a
@@ -84,7 +134,8 @@ class ChartPriceScale {
         sourceMinimum: sourceMinimum,
         sourceMaximum: sourceMaximum,
         sourceVisibleStart: sourceVisibleStart,
-        sourceVisibleEnd: sourceVisibleEnd);
+        sourceVisibleEnd: sourceVisibleEnd,
+        logarithmic: logarithmic);
 
   /// Vertical drag on the RIGHT price scale, independent of time-axis pan.
   /// The price under the user's finger stays at the same y while zooming.
@@ -94,7 +145,10 @@ class ChartPriceScale {
     required double deltaY,
     required double focalY,
   }) {
-    final span = maximum - minimum;
+    final isLog = usesLogarithmic;
+    final lower = isLog ? math.log(minimum) : minimum;
+    final upper = isLog ? math.log(maximum) : maximum;
+    final span = upper - lower;
     if (!deltaY.isFinite || !focalY.isFinite ||
         !height.isFinite || height <= 0 ||
         !minimum.isFinite || !maximum.isFinite ||
@@ -103,18 +157,25 @@ class ChartPriceScale {
     }
     final zoomFactor = math.exp(
         (-deltaY.clamp(-120.0, 120.0).toDouble()) / 240.0);
-    final minSpan = math.max(1e-9, (maximum.abs() + minimum.abs()) * 1e-11);
-    final nextSpan = (span / zoomFactor).clamp(minSpan, 1e15).toDouble();
+    final minSpan = isLog ? 1e-8 :
+        math.max(1e-9, (maximum.abs() + minimum.abs()) * 1e-11);
+    final nextSpan = (span / zoomFactor).clamp(
+        minSpan, isLog ? 100 : 1e15).toDouble();
     if (nextSpan == span) return this;
     final anchorY = focalY.clamp(0.0, height).toDouble();
     final anchorPrice = price(anchorY);
+    final coordinate = isLog ? math.log(anchorPrice) : anchorPrice;
     final aboveFraction = anchorY / height;
-    final nextMax = anchorPrice + aboveFraction * nextSpan;
-    final nextMin = anchorPrice - (1 - aboveFraction) * nextSpan;
-    if (!nextMin.isFinite || !nextMax.isFinite || nextMax <= nextMin) {
+    final nextUpper = coordinate + aboveFraction * nextSpan;
+    final nextLower = coordinate - (1 - aboveFraction) * nextSpan;
+    final nextMax = isLog ? math.exp(nextUpper) : nextUpper;
+    final nextMin = isLog ? math.exp(nextLower) : nextLower;
+    if (!nextMin.isFinite || !nextMax.isFinite ||
+        nextMax <= nextMin || (isLog && nextMin <= 0)) {
       return this;
     }
-    return ChartPriceScale(nextMin, nextMax, height);
+    return ChartPriceScale(nextMin, nextMax, height,
+        logarithmic: isLog);
   }
 }
 
