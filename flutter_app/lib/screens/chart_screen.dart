@@ -3724,7 +3724,7 @@ class _ChartScreenState extends State<ChartScreen>
   ChartPriceScale _priceScale(
       List<TradeCandle> candles, double width, double height) {
     final plotHeight = math.max(1.0, height - 24);
-    final auto = _autoPriceScaleCache.resolve(
+    final auto = _priceScaleManual ? null : _autoPriceScaleCache.resolve(
       candles: candles,
       viewport: _viewport,
       plotWidth: width,
@@ -3740,7 +3740,7 @@ class _ChartScreenState extends State<ChartScreen>
       },
     );
     final base = _priceScaleManual
-        ? _manualPriceScale!.withHeight(plotHeight) : auto;
+        ? _manualPriceScale!.withHeight(plotHeight) : auto!;
     if (!_scaleSettings.lockPriceToBar) return base;
     final scope = _currentPriceScaleKey;
     if (_lockedPricePerBarScope != scope || _lockedPricePerBar == null) {
