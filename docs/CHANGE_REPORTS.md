@@ -9,8 +9,9 @@
 - **المشكلة المثبتة:** مسار `_draggingShortHandle` في `ChartScreen.onScaleUpdate` كان يحدث `setState` لكل حركة مما يعيد بناء الرأس/الأدوات والرسومات، في حين تستخدم خطوط الاتجاه painter retained. لم يُقَس زمن الإطارات فعليًا على Android.
 - **الكود:** [5a39fc4](https://github.com/775878805Osamaha/TradeLab/commit/5a39fc405f9927635adcadc204fcd1661d3ce762) يدعم callback live لرسومات الشراء/البيع وselection داخل painter، ويحوّل تحرير المقبض إلى `_chartRepaint` مع `setState` واحدة عند الإفلات؛ يمنع no-op refresh. هندسة السعر/الزمن والحسابات وReplay وcTrader/Binance غير متغيرة.
 - **الاختبار:** [b0253a9](https://github.com/775878805Osamaha/TradeLab/commit/b0253a9723a09216983b243d23bc504c434de8dd) Widget test لأربعة سيناريوهات Long/Short في 320/390dp، يتحقق من تطور stop وعدم إعادة بناء الشريط العلوي أثناء خمس عينات. [ae9c6f8](https://github.com/775878805Osamaha/TradeLab/commit/ae9c6f84706fea67588fec43f1d2ada9f50c499f) يضيف الاختبار إلى CI.
-- **حالة التحقق:** Flutter analyze/CI **PENDING** عند هذا التقرير، Android Profile/FPS وTradingView screenshot diff وcTrader live **NOT RUN**. لا تقدير أداء رقمي مفبرك.
-- **التالي:** PR ثم اختبارات GitHub؛ إصلاح أي إخفاق، دمج فرع التطوير فقط بعد PASS، وكتابة commit SHA وروابط النتائج الفعلية.
+- **نتيجة PR والاختبار النهائي:** [PR #599](https://github.com/775878805Osamaha/TradeLab/pull/599) **MERGED/squash** في `test/flutter-all-fixes-20261116` عند [SHA 1629424](https://github.com/775878805Osamaha/TradeLab/commit/1629424deb1413adc9691c5ca74d4fe043baa28a). [Actions #44958411202](https://github.com/775878805Osamaha/TradeLab/actions/runs/44958411202) **completed/success** على HEAD `4f3af579ea484d196a07f8d28b1b6377139c72cd`: Flutter analyze، اختبارات المصدر والشارت/Range/Replay/history، فحص Long/Short وYemen timezone ناجحة، شاملة 4 سيناريوهات ثبات Header خلال 5 تحركات وقف/هدف Long/Short على 320/390dp.
+- **القيود:** Android Profile/FPS وTradingView screenshot pixel-diff وcTrader live **NOT RUN**؛ لا تقدير أداء رقمي مفبرك ولا APK/Release أو تغيير main.
+- **التالي:** قياس أداء هاتف فعلي، معالجة أكبر فجوة ثابتة بالاختبارات، تسجيل نتيجة كل PR هنا وفي HANDOFF.
 
 ### 2026-11-21 — تفعيل أداة Long Position الفعلية في TradeLab Flutter
 - **الفرع:** `feat/tradelab-long-position-drawing-20261121` من فرع التطوير `test/flutter-all-fixes-20261116` بعد PR #597؛ `main` لا يتغير.
