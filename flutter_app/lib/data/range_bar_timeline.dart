@@ -245,8 +245,12 @@ class RangeBarTimeline {
       }
       lastTime = tick.timestamp;
       final before = builder.closedCount;
-      builder.appendBidTick(tick.bid);
-      if (priorClosed + builder.closedCount > closedBarLimit) {
+      try {
+        // Limit THIS tick before producing its candles, not after it may
+        // have allocated up to 100k temporary bars on a low-memory phone.
+        builder.appendBidTick(tick.bid,
+            maxNewClosedBars: closedBarLimit - priorClosed - before);
+      } on RangeBarBudgetExceeded {
         throw const MarketDataException(
             'المدى الحي تجاوز ميزانية شموع Range المغلقة للهاتف.');
       }
@@ -310,12 +314,12 @@ class RangeBarTimeline {
       }
       previousTimestamp = tick.timestamp;
       final closedBefore = builder.closedCount;
-      builder.appendBidTick(tick.bid);
-      if (builder.closedCount > closedBarLimit) {
-        // The current worker's partially built buffer is discarded; not a
-        // single speculative bar reaches the painter, paper-trade ledger or
-        // historical Replay. One tick itself is already capped separately
-        // by RangeBarBuilder.maxBarsPerSingleTick.
+      try {
+        builder.appendBidTick(tick.bid,
+            maxNewClosedBars: closedBarLimit - closedBefore);
+      } on RangeBarBudgetExceeded {
+        // Worker result is discarded, so no truncated Range history or
+        // Replay future candle can be published.
         throw const MarketDataException(
             'عدد شموع المدى يتجاوز الحد الآمن للهاتف. '
             'اختر مدى أكبر أو قلّص الفترة التاريخية.');
