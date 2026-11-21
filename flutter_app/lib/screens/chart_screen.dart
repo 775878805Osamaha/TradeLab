@@ -5144,15 +5144,32 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onLongPressStart: (details) {
+              // TradingView mobile keeps the OHLC tracking cursor visible
+              // after the long-press finger lifts. A subsequent single tap
+              // exits tracking. Price/time axes, Replay start selection and
+              // empty-source charts are not normal candle inspection areas.
+              final point = details.localPosition;
+              if (candles.isEmpty || _replaySelectingStart ||
+                  point.dx < 0 || point.dx >= plotWidth ||
+                  point.dy < 0 ||
+                  point.dy >= constraints.maxHeight - 24) return;
               _stopMomentum();
-              setState(() => _crosshair = details.localPosition);
+              setState(() => _crosshair = point);
             },
             onLongPressMoveUpdate: (details) {
+              if (_crosshair == null) return;
               _crosshair = details.localPosition;
               _chartRepaint.value++;
             },
-            onLongPressEnd: (_) => setState(() => _crosshair = null),
+            // Do not clear tracking on finger lift: its inspected OHLC and
+            // source-UTC label stay available until the user's next tap.
             onTapUp: (details) {
+              if (_crosshair != null) {
+                setState(() => _crosshair = null);
+                // This tap is solely for leaving inspection; never place a
+                // drawing or move the blue Replay selection line as well.
+                return;
+              }
               if (_replaySelectingStart &&
                   details.localPosition.dx <= plotWidth) {
                 final candidate = ReplayStartResolver.atX(
