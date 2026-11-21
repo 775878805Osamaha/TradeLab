@@ -518,3 +518,11 @@
 - **التوثيق:** `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md` في فرع الإصلاح.
 - **التحقق:** GitHub CI **PENDING**؛ Android real touch/FPS وcTrader **NOT RUN**. لا APK/Release/main ولا مشروع آخر.
 - **التالي:** PR إلى dev، انتظر CI PASS، ثم merge وتوثيق رابط الاختبار وSHA النهائي.
+
+### 2026-11-21 (UTC) — نجاح CI ودمج PR #591 لإزالة قفزات pinch عند 2→3→2 أصابع
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab` [PR #591](https://github.com/775878805Osamaha/TradeLab/pull/591) **MERGED/squash** في `test/flutter-all-fixes-20261116` عند SHA [`cef8dc5e66dc36952f6ccf8ad359ceb79d01dde2`](https://github.com/775878805Osamaha/TradeLab/commit/cef8dc5e66dc36952f6ccf8ad359ceb79d01dde2).
+- **CI الفعلي:** [GitHub Actions #44922495795](https://github.com/775878805Osamaha/TradeLab/actions/runs/44922495795) **completed/success** لرأس PR `f51041386980041784213f9ba6e75110ab1c9bd0`: Flutter analyze واختبارات chart/Range/Replay/history وYemen timezone.
+- **التغيير:** تحديث `ChartTouchGesture.update` لإلغاء pinch origin عند تغير عدد الأصابع المتعددة (2→3→2) وإعادة تثبيت origin على viewport الحالية عند أول عينة صالحة دون إسقاط إطار إضافي. تحافظ الشيفرة على تجاهل العينات NaN/Infinity ومنع الحركة الوهمية بعد الرفع النهائي. لا تغيير لشارت البيانات أو OHLC/Replay.
+- **الملفات:** `flutter_app/lib/chart/chart_viewport.dart`، `flutter_app/test/chart_viewport_test.dart`، `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
+- **القيود:** فحص Android real touch/Profile/FPS وcTrader حي **NOT RUN**؛ لا APK أو Release أو main/مشاريع أخرى. النجاح الآلي لا يثبت pixel-perfect أو FPS الفعلي.
+- **التالي:** مقارنة لقطات الشاشة وسلوك gesture/replay على Android Profile مع TradingView ومعالجة أول فرق موثق، دون تخمين.
