@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## قيد اختبار GitHub Actions — PR لاحق: إسناد إطارات Flutter المتأخرة لإيماءتها الحقيقية (21 نوفمبر 2026)
+- **فرع العمل:** `fix/tradelab-frame-timing-batch-attribution-20261121` من فرع التطوير `test/flutter-all-fixes-20261116` عند `f66cc5812354adbaf8d1d902304bf11dd7e50fc3`، بعد دمج PR #587.
+- **العطب المثبت من الكود ووثائق Flutter:** `SchedulerBinding.addTimingsCallback` يرسل `FrameTiming` في دفعات متأخرة (~100ms في profile). سابقًا `ChartFrameProfiler.endInteraction` يغلق ويمسح عينات السحب/التكبير عند رفع الإصبع، وتتجاهل `_collect` الإطارات القادمة متأخرًا أو تدرجها في جلسة اللمس التالية. هذا يُضعف صدق أرقام p50/p95/p99 التي نحتاجها لتشخيص سلاسة Android. مصدر رسمي: https://api.flutter.dev/flutter/scheduler/SchedulerBinding/addTimingsCallback.html
+- **الإصلاح:** `ChartFrameTimingAttribution` جديد يستخدم طابع بدء الإطار `FrameTiming.timestampInMicroseconds(FramePhase.buildStart)` مع `SchedulerBinding.currentFrameTimeStamp.inMicroseconds` على نفس ساعة Flutter، ويحتفظ بنوافذ إيماءات ذات حدود زمنية صريحة حتى تصل الدفعات المؤجلة. يُغلق window بعد ظهور إطار أحدث من نهاية الجلسة، ويستبعد الإطارات الخاملة والزمن السابق للجلسة. حد ثابت حتى 16 نافذة، بلا أسعار أو رموز أو حسابات، وقياس اختياري فقط عند `TRADELAB_PROFILE_CHART=true`. لا تشغيل Profiler داخل release العادي.
+- **الاختبارات:** 3 حالات جديدة في `flutter_app/test/chart_frame_profiler_test.dart`: 5 إطارات سحب بعد رفع الإصبع لا تختلط بإطار خامل أبطأ؛ سحب 4 إطارات وتكبير 6 إطارات في دفعة متأخرة مع احتفاظ كل جماعة بعددها ووضع Replay؛ وتقييد التخزين عند كثرة التابات بلا إطارات أو أرقام p95 مخترعة.
+- **Commits:** [6c1030c](https://github.com/775878805Osamaha/TradeLab/commit/6c1030c818dca091fa8df16b5384c4326886279c) للكود و[57404a7](https://github.com/775878805Osamaha/TradeLab/commit/57404a75dd947fc70348522a721c280979179e2c) للاختبارات. الملفات `flutter_app/lib/chart/chart_frame_profiler.dart`, `flutter_app/test/chart_frame_profiler_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **التحقق:** GitHub CI **PENDING**، Android Profile/FPS على جهاز فعلي وحساب cTrader حي **NOT RUN**. لا APK ولا Release ولا تغيير main أو المشاريع الأخرى.
+- **الخطوة التنفيذية التالية:** افتح PR إلى فرع التطوير وشغّل Flutter analyze واختبارات chart/Range/Replay والتوقيت. عالج أي فشل قبل الدمج، ثم سجل SHA ونتيجة Actions الحقيقية.
+
 ## دفعة مكتملة — PR #587: منع زخم الشارت الوهمي عند حواف التاريخ (21 نوفمبر 2026)
 - **فرع العمل:** `fix/tradelab-boundary-fling-gesture-20261121` من `test/flutter-all-fixes-20261116` عند `4d811ec8213ea82d162fe64d1de876b6b356c580` (بعد دمج PR #586).
 - **سبب الإصلاح من الكود:** `ChartTouchGesture.update` كان يزيد `horizontalTravel += deltaX.abs()` قبل حساب `ChartViewport.pan` وبعدها، رغم أن `pan` قد يمنع كامل الحركة عند أقدم شمعة أو أقصى مسافة بيضاء يمين الشارت. لاحقًا `chartShouldFling` يعدّ حركة الإصبع هذه سببًا لبدء الزخم، فتحدث تحديثات animation غير ضرورية بلا تحريك شموع.
