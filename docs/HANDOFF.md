@@ -1,13 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## قيد التحقق — حماية لقطة Range التاريخية بدون نسخ المصفوفات (21 نوفمبر 2026)
+## دفعة مكتملة — PR #585: حماية لقطات Range التاريخية للقراءة فقط (21 نوفمبر 2026)
 - **الفرع:** `fix/tradelab-immutable-range-timeline-20261121` من رأس التطوير `c34eea43d5f51309ae6275a8f6e6f341e5f41db2` بعد PR #584.
 - **المشكلة المؤكدة من الكود:** `RangeBarTimeline.build` كان يعيد القوائم الداخلية التي أنتجها `RangeBarBuilder.sealSnapshot()` وقوائم `endTickIndices/endTimestamps` مباشرة، وهي `List` قابلة للتعديل من واجهة الشارت. أي تعديل عَرَضي خارج العامل يمكن أن يغيّر شموعًا مؤكدة أو يؤثر في حدود أحداث Replay على الرغم من كون builder نفسه مغلقًا.
 - **التعديل:** استخدام `UnmodifiableListView` على قوائم الشموع ومؤشرات أحداث BID وأوقاتها عند نشر بناء Range التاريخي. غلاف قراءة فقط بزمن إنشاء O(1) بلا `List.unmodifiable` التي تعيد نسخ حتى 250 ألف شمعة؛ تبقى القوائم الداخلية التي أنتجها العامل غير متاحة للتغيير خارج كائن `RangeBarTimeline`.
 - **الاختبارات الجديدة:** 2 اختبار في `flutter_app/test/range_bar_timeline_test.dart`: رفض تعديل `bars/endTickIndices/endTimestamps` سواء عبر `add` أو `[]=` أو `clear/removeLast`، مع التحقق من source ordinal بعد إضافة تاريخ أقدم؛ واختبار بناء 6001 تيك في worker للتأكد من بقاء اللقطة للقراءة فقط عبر isolate.
 - **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_timeline_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
-- **التحقق:** **CI PENDING** حتى PR و`verify-flutter-range`؛ Android Profile/FPS وcTrader حي **NOT RUN**. لا APK/Release، لا تعديل `main` أو مشاريع أخرى.
-- **التالي:** فتح PR وفحص Flutter analyze واختبارات Range/Replay، تصحيح أي فشل قبل دمج التطوير فقط، ثم حفظ نتيجة CI وSHA الدمج.
+- **النتيجة:** [PR #585](https://github.com/775878805Osamaha/TradeLab/pull/585) **MERGED/squash** إلى فرع التطوير عند [SHA bd41bc1f](https://github.com/775878805Osamaha/TradeLab/commit/bd41bc1f66e0fc49a908254baf5b163005671802)، و[Actions #44915200946](https://github.com/775878805Osamaha/TradeLab/actions/runs/44915200946) **completed/success** على PR HEAD `75773a86a82ccf3b3b8eec045070b007993968af`. نجح Flutter analyze واختبارات التاريخ/الشارت وRange/Replay وYemen timezone. Android Profile/FPS وcTrader حي **NOT RUN**. لا APK/Release، لا تعديل `main` أو مشاريع أخرى.
+- **الخطوة التالية الوحيدة:** قياس Android Profile حقيقي للسحب/التكبير مع شارت 100k+ وRange/cTrader ومقارنة p50/p95/p99 ثم معالجة أول اختناق مثبت، دون APK تلقائيًا.
 
 ## دفعة مكتملة — PR #584: منع قفزة الشارت عند أول pinch فاسد (21 نوفمبر 2026)
 - **المستودع والفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-first-invalid-pinch-lift-20261121` من رأس فرع التطوير `8d9cb0141f2431bd310555eb2b870fdf68c86dd6` بعد دمج PR #583. كود [f6b0ac9](https://github.com/775878805Osamaha/TradeLab/commit/f6b0ac9219916fd6ba4fe3bb69dfad4b08ea4d34)، اختبار [712a06d](https://github.com/775878805Osamaha/TradeLab/commit/712a06d8f015ee1e083e7a4de043a6a634246ba8).
