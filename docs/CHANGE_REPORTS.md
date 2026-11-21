@@ -462,3 +462,11 @@
 - **الملفات:** `flutter_app/lib/chart/chart_viewport.dart`, `flutter_app/test/chart_viewport_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`. لا تغيير للمصدر الحقيقي أو أسعار BID أو كشف Replay المستقبلية.
 - **الحدود:** لا APK/Release، لا تغيير main أو المشاريع الأخرى، ولا اختبار FPS/Android Profile أو تفاعل لمس جهاز حقيقي **NOT RUN**.
 - **الخطوة التالية الواحدة:** قياس Android Profile الفعلي لسلاسة الإيماءات وRange/cTrader ثم استهداف أول تأخير بالأدلة.
+
+### 2026-11-21 (UTC) — إصلاح تسجيل زمن إطارات الشارت المتأخر (فحص CI قيد البدء)
+- **المستودع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-frame-timing-batch-attribution-20261121` تأسس من dev عند `f66cc5812354adbaf8d1d902304bf11dd7e50fc3`.
+- **سبب الإصلاح:** callback توقيت إطارات Flutter يصل متأخرًا على دفعات حسب وثائق SchedulerBinding، بينما جلسات اللمس السابقة تغلق قبل التسليم؛ الإطارات الراجعة قد تُفقد أو تُنسب خطأً إلى gesture أخرى. المصدر: https://api.flutter.dev/flutter/scheduler/SchedulerBinding/addTimingsCallback.html
+- **التعديل:** `ChartFrameTimingAttribution` في `flutter_app/lib/chart/chart_frame_profiler.dart` commit [6c1030c](https://github.com/775878805Osamaha/TradeLab/commit/6c1030c818dca091fa8df16b5384c4326886279c). إنفاذ نافذتي الزمن على ساعة الإطار، قوائم bounded، تجاهل idle بعد touch-up، الاحتفاظ بالأرقام المسلمة الصحيحة p50/p95/p99. لا سر أو OHLC أو تفعيل خارج Profile.
+- **اختبارات جديدة:** `flutter_app/test/chart_frame_profiler_test.dart` commit [57404a7](https://github.com/775878805Osamaha/TradeLab/commit/57404a75dd947fc70348522a721c280979179e2c) ثلاث حالات دفعات متأخرة، تداخل gestures دون خلط، وذاكرة محدودة/عينات غير مخترعة.
+- **التحقق:** GitHub Actions **PENDING**، جهاز Android حقيقي/FPS/cTrader حي **NOT RUN**. ملفات التوثيق: `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`. لا main ولا APK/Release.
+- **التالي:** فتح PR، التحقق من Flutter analyze وCI، إصلاح أي FAIL، دمج في التطوير فقط وحفظ CI URL وSHA النهائي.
