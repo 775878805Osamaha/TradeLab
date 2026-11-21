@@ -526,3 +526,32 @@
 - **الملفات:** `flutter_app/lib/chart/chart_viewport.dart`، `flutter_app/test/chart_viewport_test.dart`، `docs/HANDOFF.md`، `docs/CHANGE_REPORTS.md`.
 - **القيود:** فحص Android real touch/Profile/FPS وcTrader حي **NOT RUN**؛ لا APK أو Release أو main/مشاريع أخرى. النجاح الآلي لا يثبت pixel-perfect أو FPS الفعلي.
 - **التالي:** مقارنة لقطات الشاشة وسلوك gesture/replay على Android Profile مع TradingView ومعالجة أول فرق موثق، دون تخمين.
+
+### 2026-11-21T16:11:40.441Z — إصلاح OHLC tracking على Android طبق سلوك TradingView الموثق (CI PENDING)
+- **الفرع:** 775878805Osamaha/TradeLab / fix/tradelab-mobile-crosshair-persistent-tracking-20261121 من dev SHA 592e6f7c307d96efb574de79d72863dedc5e13b9.
+- **الفجوة/المرجع:** TradingView Mobile https://www.tradingview.com/charting-library-docs/latest/mobile_specifics/ يثبت crosshair بالضغط المطول ويُنهيه بنقرة؛ TradeLab سابقًا أخفى crosshair فور onLongPressEnd، فجعل OHLC inspector غير مقروء بعد رفع الإصبع.
+- **التغيير:** [04bfeb0](https://github.com/775878805Osamaha/TradeLab/commit/04bfeb018fa19afd5e52c4e6059f919ddff3732c) في flutter_app/lib/screens/chart_screen.dart يجعل عرض OHLC مستمرًا بعد الرفع، ويغلق التتبع بنقرة واحدة دون تسريبها لتعديل الرسومات أو تحديد Replay، ويمنع فتحه من محوري الوقت/السعر، أو في Replay selecting/بدون candles.
+- **اختبارات:** [6051d3d](https://github.com/775878805Osamaha/TradeLab/commit/6051d3dd33e5709ab55198ff30f899bec04fd41a) في flutter_app/test/chart_ohlc_inspector_test.dart اختبارات widget عند 320dp و390dp بمصدر بيانات test fixture فقط: long press ثم lift ثم OHLC persists ثم single tap dismiss، وlongpress axis not active.
+- **التقارير:** docs/HANDOFF.md, docs/CHANGE_REPORTS.md؛ تغييرات أخرى خارج TradeLab **NONE**.
+- **التحقق:** GitHub CI **PENDING**، Android real device Profile/FPS وcTrader live **NOT RUN**، ولا APK أو Release أو main.
+- **التالي:** افتح PR، راجع CI وأصلح FAIL ثم ادمج إلى dev فقط بعد PASS واحفظ الحالة الحقيقية.
+
+### 2026-11-21T16:16:32.499Z — PR #592: تحليل فشل CI وإصلاح تعارض Tap/Scale مع Crosshair الطويل
+- **CI الأول FAIL:** [Actions #44923242646](https://github.com/775878805Osamaha/TradeLab/actions/runs/44923242646) finished failure؛ Flutter analyze PASS، 4 failures فقط في widget cases 320/390dp لـ chart_ohlc_inspector_test.dart وchart_paint_only_pan_test.dart. تفصيل log: crosshair بقي ظاهرًا بعد tap جديد لأن Scale recognizer يملك اللمسة فلا يصل onTapUp؛ الاختبار القديم ينتظر اختفاء OHLC عند finger lift وهذا عكس السلوك الصحيح المستهدف.
+- **تصحيح السلوك:** [9e56e40](https://github.com/775878805Osamaha/TradeLab/commit/9e56e40ba3cd398eb63cb7a7b2f74195772fce78) في flutter_app/lib/screens/chart_screen.dart: Listener.onPointerDown يزيل crosshair فور لمس جديد حتى عندما يفشل onTapUp، مع حماية من تحرير رسم/تغيير Replay، ومع reset عند pointer cancel أو بدء long-press آخر.
+- **تحديث اختبار سابق:** [6a04286](https://github.com/775878805Osamaha/TradeLab/commit/6a0428669f621568f822d60c3b32240a3b2e66d1) في flutter_app/test/chart_paint_only_pan_test.dart: يتأكد من بقاء OHLC بعد up والإخفاء بعد tap واحد. الاختباران الجديدان في chart_ohlc_inspector_test.dart يبقيان.
+- **التوثيق:** docs/HANDOFF.md وdocs/CHANGE_REPORTS.md؛ branch fix/tradelab-mobile-crosshair-persistent-tracking-20261121، PR #592 إلى test/flutter-all-fixes-20261116. **CI revalidation PENDING**؛ Android real/Profile/FPS وcTrader live NOT RUN، لا APK/Release/main.
+- **الخطوة التالية:** التحقق من آخر GitHub Actions run بعد التصحيح ودمج PR فقط إذا completed/success.
+
+### 2026-11-21T16:19:56.911Z — تصحيح فشل CI الثاني لامتحان crosshair بسبب Flutter DoubleTap timer
+- **الفرع وPR:** 775878805Osamaha/TradeLab, fix/tradelab-mobile-crosshair-persistent-tracking-20261121, [PR #592](https://github.com/775878805Osamaha/TradeLab/pull/592).
+- **النتيجة المثبتة:** [Actions #44923687526](https://github.com/775878805Osamaha/TradeLab/actions/runs/44923687526) completed/failure؛ Flutter analyze PASS، كافة اختبارات crosshair الجديدة 320/390 PASS، باقي الشارت/Range/Replay لم تظهر فيها أخطاء سلوك؛ فشل اختبارا chart_paint_only_pan_test بسبب Pending timer (duration 40ms) من DoubleTapGestureRecognizer بعد محاكاة نقرة واحدة.
+- **التصحيح:** [43256e8](https://github.com/775878805Osamaha/TradeLab/commit/43256e8b7a6149092650026d2af325c7ad46fede) في flutter_app/test/chart_paint_only_pan_test.dart يستبدل pump() بـ pumpAndSettle() بعد نقرة إنهاء tracking، حتى تنتظر Flutter test timers ولن يخلّف مؤقتًا بعد انتهاء الاختبار. لم يغيّر الكود أي أسعار أو شموع أو Replay.
+- **الملفات:** flutter_app/test/chart_paint_only_pan_test.dart وdocs/HANDOFF.md وdocs/CHANGE_REPORTS.md. **CI PENDING** للتصحيح؛ Android Profile/FPS وcTrader live NOT RUN، لا APK/Release/main.
+- **التالي:** تحقق من CI الكامل، وصحح أي FAIL آخر ثم merge dev وتوثيق SHA الفعلي.
+
+### 2026-11-21T16:24:16.091Z — نجاح CI الثالث لـ PR #592 ورفض الدمج بسبب PR head غير متزامن
+- **اختبار ناجح:** [Actions #44923997988](https://github.com/775878805Osamaha/TradeLab/actions/runs/44923997988) completed/success على afae3e2316ddd74a516783ade2214d067facd8a0، بما فيه Flutter analyze، crosshair widget tests 320/390dp، gesture، Range، Replay، history، Yemen timezone.
+- **اختلاف GitHub REST:** PR #592 head SHA afae3e2316ddd74a516783ade2214d067facd8a0، لكن branch fix/tradelab-mobile-crosshair-persistent-tracking-20261121 ref هو 049c2c97637837926b423551fe47dddcb784c8d7 (commit docs-only من parent afae3e). أول merge عبر GitHub returned 409 Head branch is out of date، لذا **PR NOT MERGED** ولا تعديل dev/main.
+- **الإجراء:** تحديث PR body لشرح ثلاث جولات CI (2 فشل ثم نجاح) والحالة التقنية، ومحاولة توثيق هذا الحدث في docs/HANDOFF.md وdocs/CHANGE_REPORTS.md؛ لا تعديل source أو الاختبارات بعد نجاح CI. Android Profile/cTrader live NOT RUN، لا APK.
+- **الخطوة التالية:** إعادة مزامنة HEAD بطريقة آمنة دون force، تحقّق من CI، ثم merge وتسجّل SHA الدمج الحقيقي.

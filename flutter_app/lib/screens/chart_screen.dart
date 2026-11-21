@@ -281,6 +281,10 @@ class _ChartScreenState extends State<ChartScreen>
   double _momentumPlotWidth = 1;
   double _gestureFocalX = 0;
   Offset? _crosshair;
+  // A raw pointer down is the reliable mobile one-tap dismissal boundary:
+  // ScaleGestureRecognizer can win over the Tap recognizer on the chart.
+  // Consume that gesture's subsequent tap so it cannot also edit drawings.
+  bool _chartTrackingDismissedOnDown = false;
   Timer? _replayTimer;
   ReplayPlaybackSpeed _replaySpeed = ReplayPlaybackSpeed.normal;
   final ReplayTrainingSession _training = ReplayTrainingSession();
@@ -4812,6 +4816,13 @@ class _ChartScreenState extends State<ChartScreen>
           Positioned.fill(child: Listener(
             onPointerDown: (event) {
               if (_firstChartPointer == null) {
+                _chartTrackingDismissedOnDown = _crosshair != null;
+                if (_chartTrackingDismissedOnDown) {
+                  // A tap on the chart must exit persistent tracking even
+                  // when the scale recognizer wins the gesture arena and
+                  // GestureDetector.onTapUp is never dispatched.
+                  setState(() => _crosshair = null);
+                }
                 _firstChartPointer = event.pointer;
                 _firstChartDown = event.localPosition;
               }
@@ -4826,6 +4837,7 @@ class _ChartScreenState extends State<ChartScreen>
               if (_firstChartPointer == event.pointer) {
                 _firstChartPointer = null;
                 _firstChartDown = null;
+                _chartTrackingDismissedOnDown = false;
               }
             },
             child: GestureDetector(
@@ -5144,15 +5156,36 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onLongPressStart: (details) {
+              // TradingView mobile keeps the OHLC tracking cursor visible
+              // after the long-press finger lifts. A subsequent single tap
+              // exits tracking. Price/time axes, Replay start selection and
+              // empty-source charts are not normal candle inspection areas.
+              final point = details.localPosition;
+              if (candles.isEmpty || _replaySelectingStart ||
+                  point.dx < 0 || point.dx >= plotWidth ||
+                  point.dy < 0 ||
+                  point.dy >= constraints.maxHeight - 24) return;
               _stopMomentum();
-              setState(() => _crosshair = details.localPosition);
+              _chartTrackingDismissedOnDown = false;
+              setState(() => _crosshair = point);
             },
             onLongPressMoveUpdate: (details) {
+              if (_crosshair == null) return;
               _crosshair = details.localPosition;
               _chartRepaint.value++;
             },
-            onLongPressEnd: (_) => setState(() => _crosshair = null),
+            // Do not clear tracking on finger lift: its inspected OHLC and
+            // source-UTC label stay available until the user's next tap.
             onTapUp: (details) {
+              if (_chartTrackingDismissedOnDown) {
+                _chartTrackingDismissedOnDown = false;
+                // The gesture was already consumed on pointer down.
+                return;
+              }
+              if (_crosshair != null) {
+                setState(() => _crosshair = null);
+                return;
+              }
               if (_replaySelectingStart &&
                   details.localPosition.dx <= plotWidth) {
                 final candidate = ReplayStartResolver.atX(

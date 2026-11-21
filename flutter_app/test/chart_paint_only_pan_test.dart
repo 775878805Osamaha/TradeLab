@@ -373,6 +373,15 @@ void main() {
         reason: 'OHLC moves with painter notifier, not full chart rebuild');
       await touch.up();
       await tester.pumpAndSettle();
+      // TradingView Mobile retains tracking/OHLC after the finger lifts:
+      // a separate single tap is required to dismiss the inspection.
+      expect(find.byKey(const Key('chart-crosshair-ohlc-inspector')),
+          findsOneWidget);
+      await tester.tapAt(Offset(candleX - 40, rect.center.dy));
+      // The chart also owns a double-tap recognizer. Let its 40ms
+      // recognizer countdown finish in fake async before this widget test
+      // ends; otherwise Flutter correctly flags a pending framework timer.
+      await tester.pumpAndSettle();
       expect(find.byKey(const Key('chart-crosshair-ohlc-inspector')),
           findsNothing);
       expect(tester.takeException(), isNull);
