@@ -394,6 +394,7 @@ class ChartTouchGesture {
   double _pinchOriginFocalX = 0;
   double _pinchOriginScale = 1;
   bool _pinching = false;
+  int _multiPointerCount = 0;
 
   bool hadMultiTouch = false;
   bool ignoredPointerTransition = false;
@@ -411,6 +412,16 @@ class ChartTouchGesture {
     ignoredPointerTransition = false;
     if (pointerCount > 1) {
       hadMultiTouch = true;
+      // Flutter may reset its scale and move the centroid abruptly when a
+      // third finger joins a two-finger pinch, or when that finger leaves
+      // and TWO fingers remain. The old pinch origin belongs to a different
+      // pointer group and must never be reused after either transition.
+      // On a valid transition the current viewport becomes the new origin
+      // immediately, without swallowing an extra touch frame.
+      if (_multiPointerCount != pointerCount) {
+        _multiPointerCount = pointerCount;
+        _pinchOrigin = null;
+      }
       // Android can briefly report an invalid focal centroid while the
       // second pointer joins/leaves. Drop that *sample*, not the chart:
       // the first subsequent valid sample rebases pinch at today's viewport.
@@ -454,6 +465,7 @@ class ChartTouchGesture {
     if (_pinching) {
       _pinching = false;
       _pinchOrigin = null;
+      _multiPointerCount = 0;
       ignoredPointerTransition = true;
       return viewport;
     }
