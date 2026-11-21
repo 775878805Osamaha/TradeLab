@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## قيد CI — مطابقة وضع تتبع OHLC على Android مع TradingView (21 نوفمبر 2026)
+- **الفجوة المثبتة:** توثيق TradingView Mobile (https://www.tradingview.com/charting-library-docs/latest/mobile_specifics/) يؤكد أن الضغط المطول يفعل crosshair ويعرض OHLC، وأن نقرة واحدة على الشارت تنهي tracking. في TradeLab كان onLongPressEnd يمحو مؤشر crosshair فوريًا عند رفع الإصبع، فتختفي مستويات السعر/الوقت وتفاصيل الشمعة.
+- **التنفيذ:** ChartScreen يُبقي crosshair وقيم OHLC بعد رفع إصبع الضغط الطويل؛ onTapUp يغلق tracking أولًا ويستهلك النقرة حتى لا تختار بداية Replay أو تعدّل رسمًا بالخطأ. يُسمح ببدء inspection فقط على منطقة الشموع الموثقة، لا عند عدم وجود مصدر ولا عند اختيار بداية Replay، ولا في محوري الوقت/السعر. الإحداثيات وقيم الشمعة من بيانات المصدر المعروضة وحدها؛ لا اختلاق أسعار أو وقت.
+- **ملفات الكود والاختبار:** flutter_app/lib/screens/chart_screen.dart commit [04bfeb0](https://github.com/775878805Osamaha/TradeLab/commit/04bfeb018fa19afd5e52c4e6059f919ddff3732c), flutter_app/test/chart_ohlc_inspector_test.dart commit [6051d3d](https://github.com/775878805Osamaha/TradeLab/commit/6051d3dd33e5709ab55198ff30f899bec04fd41a). اختبار widget بتخطيط 320 و390dp لمطابقة الاحتفاظ بالـOHLC بعد رفع إصبع long-press، وإغلاقه بنقرة واحدة ومنع تفعيل التتبع من محوري الوقت والسعر. بيانات الاختبار fixtures تركيبية صريحة للاختبار فقط.
+- **المستودع/الفرع:** 775878805Osamaha/TradeLab / fix/tradelab-mobile-crosshair-persistent-tracking-20261121 بدأ من dev test/flutter-all-fixes-20261116 عند 592e6f7c307d96efb574de79d72863dedc5e13b9. كتابة التقرير 2026-11-21T16:11:40.441Z.
+- **نتيجة التحقق:** Flutter analyze/widget tests وhistory/Range/Replay **PENDING** قبل فتح PR؛ Android Profile/FPS ولقطات مقارنة فعلية وcTrader session حي **NOT RUN**. لا APK/Release ولا تعديل main أو مشروع آخر.
+- **الخطوة التالية:** فتح PR على dev وتشغيل فحص Flutter وتحليل وwidget tests كاملة؛ إصلاح أي فشل قبل الدمج وحفظ SHA وActions run النهائيين.
+
 ## دفعة مكتملة — PR #591: منع قفزات الشارت أثناء انتقال 2→3→2 أصابع (21 نوفمبر 2026)
 - **المستودع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-multi-pointer-pinch-rebase-20261121` من `test/flutter-all-fixes-20261116` عند رأس `fd90997ee46dd8479e3de79bb76cbfb280bf292a` بعد دمج PR #590.
 - **خلل المصدر:** `ChartTouchGesture.update` كان يحتفظ بنقطة بداية pinch الأولى إذا تغير Android `pointerCount` من 2 إلى 3 أو عاد إلى 2 مع استمرار اللمس المتعدد. Flutter قد يغيّر scale/focal centroid عند الإضافة/الرفع، لذا تستخدم الشيفرة origin قديمًا وتنقل/تكبّر الشارت فجأة.
