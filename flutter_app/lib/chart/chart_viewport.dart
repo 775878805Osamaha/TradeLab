@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import '../data/tradelab_data.dart';
+import 'chart_price_text_formatter.dart';
 
 /// Presentation of verified prices on the right ruler; market candle values,
 /// drawing anchors, and trading calculations remain in ORIGINAL price units.
@@ -54,7 +55,10 @@ class ChartPriceScale {
   String axisLabel(double marketPrice, int digits) {
     final display = axisValue(marketPrice);
     if (!display.isFinite) return '—';
-    final value = display.toStringAsFixed(digits.clamp(0, 8).toInt());
+    // Reuse the existing thousands-separator and decimal presentation for
+    // Regular and LOG; adding relative modes must not regress older charts.
+    final value = ChartPriceTextFormatter.price(
+        display, digits.clamp(0, 8).toInt());
     return usesRelativeScale && referenceMode == ChartPriceReferenceMode.percent
         ? '$value%' : value;
   }
