@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة جديدة — تعديل خط الرسم بالنقر المزدوج بدل إعادة الشارت (21 نوفمبر 2026)
+- **المشروع والفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-mobile-doubletap-drawing-move-20261121`، مشتق من `test/flutter-all-fixes-20261116` بعد دمج PR #595. لا تعديل `main`.
+- **فارق رسمي موثق:** [TradingView Mobile gestures](https://www.tradingview.com/charting-library-docs/latest/mobile_specifics/) تنص على أن النقر المزدوج على خط رسم ينشّط تحريكه، بينما `ChartScreen.onDoubleTap` كان يعيد `_freshViewport()` لأي نقرة مزدوجة داخل منطقة الشموع حتى لو فوق خط أصلي.
+- **الإصلاح:** تخزين موقع النقر المزدوج الدقيق `Offset`، فحص الخطوط الأفقية وأنماط الخطوط الظاهرة غير المقفلة بمقياس السعر ومواضع الشموع الموثقة، وتفعيل `_doubleTapGuideArmed` لسحبة واحدة فقط دون وضع خط جديد أو تغيير بيانات السوق. لمس منطقة خالية يبقي سلوك إعادة الشارت، ولمس محور السعر يبقي AUTO. عند انتهاء السحب أو النقر لإلغاء التحرير يعود التحكم العادي للسحب. منع كشف شموع Replay المخفية وبدء التحرير من مقياس الوقت/الشريط السفلي.
+- **الكود:** [b048951](https://github.com/775878805Osamaha/TradeLab/commit/b048951af4893cc356ec6cbdf2847736c417a148) `flutter_app/lib/screens/chart_screen.dart`. **اختبار widget:** [fa57531](https://github.com/775878805Osamaha/TradeLab/commit/fa5753196c957743ca8d50d3e1cef0dd6c8d7356) `flutter_app/test/chart_double_tap_guide_test.dart` لحجمي 320/390dp، إنشاء خط ثم تعطيل وضع الرسم، النقر المزدوج على الخط وتحريكه فعلًا، والتحقق من عدم إنشاء رسمة ثانية.
+- **حالة التحقق:** رفع GitHub فقط؛ Flutter المحلي وAndroid Profile **NOT RUN**؛ CI **PENDING** حتى نتيجة PR. الصور واللمس الفعلي وcTrader live لم تُختبر. لا APK/Release؛ لا مطابقة 100% مثبتة.
+- **التالي:** افتح PR إلى فرع التطوير، افحص Flutter analyze وwidget test الجديد ومجموعة chart/Range/Replay/timezone، أصلح أي فشل قبل الدمج، وسجّل SHA/CI الفعلي.
+
 ## دفعة تنفيذ جديدة — ثبات غلاف شموع Replay أثناء السحب والتكبير (21 نوفمبر 2026)
 - **المشروع/الفرع:** `775878805Osamaha/TradeLab` / `perf/tradelab-replay-prefix-stability-20261121`، مشتق من فرع التطوير `test/flutter-all-fixes-20261116` بعد PR #594. `main` دون تعديل.
 - **فجوة الأداء المؤكدة من الكود:** `ChartScreen._displayCandles` كان يُنشئ `CandlePrefix` جديدًا عند كل طلب عرض في Replay، رغم ثبات مصدر الشموع وحدّ `_visibleThrough`. وبما أن `ChartPriceScaleCache` يعتمد على هوية القائمة `identical`، كانت إعادة بناء الشارت بعد السحب/التكبير تفقد هندسة المقياس المخزنة وتُعيد مسح أقصى/أدنى الشموع المعروضة. **لم نقس فرق FPS على Android بعد**.

@@ -235,7 +235,10 @@ class _ChartScreenState extends State<ChartScreen>
   String? _manualPriceScaleKey;
   bool _draggingPriceAxis = false;
   bool _draggingTimeAxis = false;
-  double _doubleTapChartX = 0;
+  Offset _doubleTapChartPosition = Offset.zero;
+  // A double tap directly on a source-anchored drawing arms exactly one
+  // subsequent edit gesture; a double tap on empty chart still resets view.
+  bool _doubleTapGuideArmed = false;
   String get _currentPriceScaleKey =>
       '${widget.controller.accountId}|${_selectedSymbol.source.name}|'
       '$_symbol|$_timeframe|${_mode.name}|$_rangeTicks|'
@@ -264,12 +267,14 @@ class _ChartScreenState extends State<ChartScreen>
 
   @visibleForTesting
   ({bool draggingLine, bool draggingPattern, bool draggingRectangle,
+    bool doubleTapGuideArmed,
     int levels, int patterns, int? selectedLine, int? selectedPattern,
     double? levelValue, ChartPattern? patternValue})
       get debugGuideDragSelection => (
         draggingLine: _draggingLine,
         draggingPattern: _draggingPattern,
         draggingRectangle: _draggingRectangle,
+        doubleTapGuideArmed: _doubleTapGuideArmed,
         levels: _levels.length,
         patterns: _patterns.length,
         selectedLine: _selectedLine,
@@ -4967,7 +4972,8 @@ class _ChartScreenState extends State<ChartScreen>
               _draggingRectangle = false;
               _rectangleDragHandle = null;
               _rectangleAtDragStart = null;
-              if (_drawing && !_drawingsLocked && _drawingsVisible &&
+              if ((_drawing || _doubleTapGuideArmed) &&
+                  !_drawingsLocked && _drawingsVisible &&
                   !_eraserMode && !_rulerMode && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 final rectangleHit = PriceRectangleGeometry.hitTest(
@@ -5196,6 +5202,9 @@ class _ChartScreenState extends State<ChartScreen>
               }
               final rectangleEdited = _draggingRectangle;
               final guideEdited = _draggingLine || _draggingPattern;
+              // A double tap may arm the very next drag without leaving the
+              // drawing tool selected; subsequent swipes return to chart pan.
+              _doubleTapGuideArmed = false;
               final editing = _replayDraggingStart || guideEdited ||
                   _draggingShortHandle != null || _draggingRectangle;
               _replayDraggingStart = false;
@@ -5225,17 +5234,47 @@ class _ChartScreenState extends State<ChartScreen>
               }
             },
             onDoubleTapDown: (details) =>
-                _doubleTapChartX = details.localPosition.dx,
+                _doubleTapChartPosition = details.localPosition,
             onDoubleTap: () {
               _stopMomentum();
-              if (_doubleTapChartX >= plotWidth) {
+              final point = _doubleTapChartPosition;
+              if (point.dx >= plotWidth) {
+                _doubleTapGuideArmed = false;
                 _resetPriceAxisToAuto();
-              } else {
-                setState(() {
-                  _viewport = _freshViewport();
-                  _crosshair = null;
-                });
+                return;
               }
+              // TradingView Mobile gives a double-tapped line its next drag,
+              // instead of resetting the entire chart beneath the drawing.
+              // Only real, visible, unlocked, user-created guides qualify:
+              // never catch Replay's blue selector or hidden future bars.
+              if (candles.isNotEmpty && point.dx >= 0 && point.dy >= 0 &&
+                  point.dy < constraints.maxHeight - 24 &&
+                  _drawingsVisible && !_drawingsLocked &&
+                  !_replaySelectingStart && !_eraserMode && !_rulerMode) {
+                final scale = _priceScale(
+                    candles, plotWidth, constraints.maxHeight);
+                final line = _hitLine(point.dy, scale);
+                final pattern = line == null
+                    ? _hitPattern(point, scale, plotWidth, candles.length)
+                    : null;
+                if (line != null || pattern != null) {
+                  setState(() {
+                    _doubleTapGuideArmed = true;
+                    _selectedLine = line;
+                    _selectedPattern = pattern;
+                    _selectedRectangle = null;
+                    _selectedShort = null;
+                    _crosshair = null;
+                  });
+                  return;
+                }
+              }
+              // Preserve the established double-tap reset on EMPTY chart.
+              _doubleTapGuideArmed = false;
+              setState(() {
+                _viewport = _freshViewport();
+                _crosshair = null;
+              });
             },
             onLongPressStart: (details) {
               // Long-pressing either scale opens its context menu, matching
@@ -5266,6 +5305,12 @@ class _ChartScreenState extends State<ChartScreen>
             // Do not clear tracking on finger lift: its inspected OHLC and
             // source-UTC label stay available until the user's next tap.
             onTapUp: (details) {
+              if (_doubleTapGuideArmed) {
+                // Tap elsewhere cancels the one-drag edit without placing a
+                // fresh drawing or moving the Replay selector.
+                setState(() => _doubleTapGuideArmed = false);
+                return;
+              }
               if (_chartTrackingDismissedOnDown) {
                 _chartTrackingDismissedOnDown = false;
                 // The gesture was already consumed on pointer down.
