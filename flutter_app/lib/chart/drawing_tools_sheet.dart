@@ -54,7 +54,8 @@ enum DrawingCatalogKind {
 
   bool get implemented => switch (this) {
     fibonacciRetracement || trendLine || ray || extendedLine || horizontal ||
-      horizontalRay || verticalLine || parallelChannel || shortPosition ||
+      horizontalRay || verticalLine || crossLine || parallelChannel ||
+      shortPosition ||
       longPosition || priceRectangle || magnet => true,
     _ => false,
   };
