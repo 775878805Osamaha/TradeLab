@@ -1,12 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## دفعة قيد الفحص — BID حي: عزل المللي ثانية الأخيرة بدل مليون تيك
-- **الفرع:** `perf/tradelab-live-bid-boundary-only-20261121` انطلاقًا من رأس التطوير `c2534af76b39f76bc8aa2962cd2c8cd9088c96af`؛ `main` لم يُعدل، ولا APK أو Release.
-- **الاختناق المكتشف بالكود:** عند وصول صفحة cTrader BID تحوي 5000+ تيك، كان `RangeLiveBidDelta.verifiedSuffixAsync` يمرر كامل التاريخ السابق `previouslyVerified` (قد يصل **إلى مليون تيك**) إلى عامل `compute`، رغم أن المقارنة لا تحتاج إلا إلى أحداث المللي ثانية الأخيرة. تكرار نقل الأرشيف أثناء كل تحديث حي يثقل ذاكرة الهاتف ويزيد عمل serialization غير اللازم.
-- **الإصلاح:** `RangeLiveBidBoundary.fromVerified` يعثر بـlower-bound على أحداث المللي ثانية الأخيرة فقط في `O(log N)` ويأخذ نسخة immutable منها؛ عامل التحقق لم يعد يستلم التاريخ الكامل، بل هذه الأحداث والصفحة الموثقة الجديدة فقط. يحافظ على تكرار السعر/التوقيت الأصلي ويمنع نشر أي صفحة ناقصة أو معاد ترتيبها. حد المليون يُفحص **قبل** قراءة أي عنصر من مصدر متجاوز.
-- **الاختبارات:** مصدر افتراضي يحتوي مليون تيك مسجل عبر `ListBase` وعداد قراءات؛ التحقق من استعمال أقل من 50 قراءة للمصدر مقابل صفحة 6500 تيك، الحفاظ على الأحداث الخمسة المشتركة عند الحد، فشل المصدر إذا فقد تيكًا واحدًا، وتجاوز ميزانية المليون قبل لمس أي سعر.
-- **التغطية:** `flutter_app/lib/data/range_live_bid_delta.dart` و`flutter_app/test/range_live_bid_delta_test.dart`، توثيق الحدث في `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`. [CI #44844537479](https://github.com/775878805Osamaha/TradeLab/actions/runs/44844537479) **FAIL**: `unused_local_variable boundaryMs` (مُحلَّل من السجل)، ثم صُحح الشرط ليتحقق صراحة من الطابع الزمني للحد الفاصل؛ فحص التصحيح **PENDING**؛ Android Profile/حساب cTrader `NOT RUN`.
-- **الخطوة التالية:** افتح PR إلى `test/flutter-all-fixes-20261116`، اختبر Flutter analyze + Range/Replay والـYemen timezone، أصلح أي FAIL، ثم ادمج بعد PASS ووثّق SHA.
+## دفعة مكتملة — PR #579: نقل أحداث الحد الفاصل فقط بدل أرشيف مليون BID
+- **MERGED:** [PR #579](https://github.com/775878805Osamaha/TradeLab/pull/579) إلى `test/flutter-all-fixes-20261116`، SHA الفعلي [819da6f](https://github.com/775878805Osamaha/TradeLab/commit/819da6f63c5f1b01cbe4217d061a4b4305e7a813).
+- **CI النهائي:** [GitHub Actions #44844722298](https://github.com/775878805Osamaha/TradeLab/actions/runs/44844722298) **PASS / completed / success**؛ Flutter analyze واختبارات الشارت/Range/Replay والتوقيت. **التشغيل السابق #44844537479 FAILED** لتحذير `unused_local_variable boundaryMs` وتم تصحيحه بفحص زمني أقوى قبل الدمج.
+- **الإصلاح:** `RangeLiveBidBoundary.fromVerified` يعثر ببحث ثنائي على أحداث المللي ثانية الأخيرة في BID المحمّل، ويُرسل قائمة صغيرة غير قابلة للتعديل إلى عامل `compute` بدل كل أرشيف التيكات (حد المليون). مقارنة كل حدث تتم الآن بالطابع الزمني `boundaryMs` والسعر، مع الحفاظ على السعر/الترتيب والعدد الأصلي وفشل مغلق عند تعارض الصفحة. رفض المصادر الأكبر من الحد الآمن قبل لمس بياناتها.
+- **الاختبارات:** مصدر `ListBase` افتراضي لمليون تيك + صفحة 6500 تيك؛ أقل من 50 قراءة للمصدر في استخراج الحد الفاصل، وتأكيد عدم إرسال القائمة الكاملة، اختبار duplicate ordinal والرفض عند نقص حدث/جاوز ميزانية الذاكرة. **لا قياس حقيقي لزمن النقل أو FPS على Android**.
+- **الحالة:** `main` لم يُعدل، بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`. لم يُبنَ APK أو Release، والنسخة المنشورة أقدم من الإصلاح.
+- **الخطوة التالية:** تقليل عدد عمليات نسخ صفحات BID إلى عوامل المعالجة في تحديث Range الحي، مع الحفاظ على التحقق الكامل للمصدر، وCI قبل أي دمج؛ اختبار حي على Android/cTrader عند توفر جهاز/حساب.
 
 ## دفعة مكتملة — PR #578: تحديث Range المباشر من تيكات cTrader BID
 - **MERGED:** [PR #578](https://github.com/775878805Osamaha/TradeLab/pull/578) في `test/flutter-all-fixes-20261116`، SHA الفعلي [754f500](https://github.com/775878805Osamaha/TradeLab/commit/754f500bd7dde18d92764dc74b928d5ea765d6e4).

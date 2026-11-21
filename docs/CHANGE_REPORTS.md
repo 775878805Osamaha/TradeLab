@@ -317,3 +317,11 @@
 - **المستودع والفرع:** `775878805Osamaha/TradeLab` / `perf/tradelab-live-bid-boundary-only-20261121`؛ `main` دون تعديل، لا APK/Release.
 - **التحقق:** Flutter CI التصحيحي `PENDING` حتى إعادة تشغيل PR #579. لا قياسات Android Profile أو cTrader حي.
 - **الخطوة التالية:** إعادة فحص GitHub Actions، إصلاح أي FAIL إضافي؛ لا دمج إلا بعد PASS.
+
+### 2026-11-21T00:37:17.185Z — نجاح ودمج PR #579 وتقليل نقل أرشيف cTrader BID عند التحديث الحي
+- **النتيجة:** [PR #579](https://github.com/775878805Osamaha/TradeLab/pull/579) **MERGED** (squash) إلى `test/flutter-all-fixes-20261116`، SHA المدمج الفعلي `819da6f63c5f1b01cbe4217d061a4b4305e7a813`. تم التحقق من فرع التطوير و`main`.
+- **CI الناجح:** [Actions #44844722298](https://github.com/775878805Osamaha/TradeLab/actions/runs/44844722298) **completed/success** على PR HEAD `2946061af493c8bea28c63348039d91cf914c337`؛ Flutter analyze، اختبارات Range/Replay/chart والتوقيت في اليمن. الفشل السابق [#44844537479](https://github.com/775878805Osamaha/TradeLab/actions/runs/44844537479) **FAIL** بسبب unused boundaryMs، صُحح بفحص أصالة timestamp.
+- **ملفات الكود والاختبار:** `flutter_app/lib/data/range_live_bid_delta.dart` و`flutter_app/test/range_live_bid_delta_test.dart`؛ أُضيف `RangeLiveBidBoundary` ببحث ثنائي للـsame-ms tail وأصبح الإدخال إلى `compute` من التاريخ السابق هو tail فقط، لا المليون تيك كله. يظل تحقق brokerPage كاملاً دون إنقاص أو اختلاق حدث. احتوى الاختبار على مليون Tick افتراضي و6500 حدث جديد، مع ميزانية المصدر وduplicate ordinal.
+- **التوثيق:** `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md` تم تحديثهما بهذا السجل بعد دمج PR والـSHA الحقيقي.
+- **الحدود:** لا FPS/وقت تشغيل مقاس على Android، ولا جلسة cTrader حقيقية؛ `main` بقي `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`، لا APK/Release ولا مشاريع أخرى.
+- **الخطوة التالية الوحيدة:** إزالة التحقق المكرر/العامل الثاني عندما تكون صفحة BID كبيرة، مع اختبارات تحقق توقيت المصدر وترتيب الأحداث وCI قبل دمج التطوير.
