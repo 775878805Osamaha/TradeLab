@@ -4,6 +4,14 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-22 — Percent وIndexed to 100 على محور السعر بدلاً من الاقتصار على Regular/LOG
+- **الفرع/الأساس:** `feat/tradelab-percent-indexed-price-axis-20261122` من `test/flutter-all-fixes-20261116` بعد PR #604.
+- **المقارنة الرسمية:** https://www.tradingview.com/support/solutions/43000748166-how-to-configure-your-supercharts/ يذكر أربع وضعيات للمقياس، غاب وضعا Percent وIndexed100 عن TradeLab.
+- **التنفيذ:** [9335451](https://github.com/775878805Osamaha/TradeLab/commit/9335451534ececc42ccd4fa3e730ed2b7af4a9fc) `ChartPriceReferenceMode` يحدد أساسًا موثوقًا من إغلاق أول شمعة مرئية ضمن CandlePrefix؛ Percent=(price/ref−1)×100، Indexed=price/ref×100، inverse إلى السعر الأصلي. لا تحوير OHLC أو أرقام التداول/الرسومات؛ [4963949](https://github.com/775878805Osamaha/TradeLab/commit/496394995265dc423fc2e6a211bfaf6edc22e738) مفتاح auto scale cache؛ [05bfd45](https://github.com/775878805Osamaha/TradeLab/commit/05bfd4548eee64364ebc2de8d151543f63ef6453) اختيار الوضعين من Flutter؛ [f5a0eb3](https://github.com/775878805Osamaha/TradeLab/commit/f5a0eb3b4ba2ba5c01b0925a9fc0ce5aa17c812e) فواصل محور السعر وتسميات crosshair/last/SL/TP/BID/ASK المحوّلة للعرض باستخدام هندسة السعر الحقيقي. مرجع البداية المؤقت **أول شمعة مرئية close**، يحتاج مقارنة فعليّة لمعرفة إذا كان مطابقًا لاختيار TradingView، لا يُدعى ذلك الآن.
+- **اختبارات:** [5a78b3e](https://github.com/775878805Osamaha/TradeLab/commit/5a78b3e0673eb55623e6bf1eb58644847d4640a2) source price invariants/pan/Replay/cache/negative base؛ [8f669db](https://github.com/775878805Osamaha/TradeLab/commit/8f669db1e45d306bf3ca74346453d9caf85526d9) native settings selection؛ [d04e98f](https://github.com/775878805Osamaha/TradeLab/commit/d04e98f44e395d0af33576d7ad37f55d3db5ec94) full widget 320/390dp no refetch؛ [5a8a17d](https://github.com/775878805Osamaha/TradeLab/commit/5a8a17dd210b891240162183696b6e47c8d9e99b) CI.
+- **الحالة:** PR/CI **PENDING**؛ screenshot/pixel Android وProfile/FPS وcTrader live **NOT RUN**. لا APK ولا تعديل `main` أو مشاريع أخرى.
+- **التالي:** التحقق الآلي ثم دمج dev عند PASS فقط، توثيق النتيجة وSHA.
+
 ### 2026-11-22 — كثافة علامات محور السعر تتكيف مع ارتفاع شاشة Android
 - **الفرع:** `fix/tradelab-mobile-price-axis-label-density-20261122` من `test/flutter-all-fixes-20261116` بعد PR #603.
 - **المشكلة المثبتة:** 12 فاصل سعر ثابت في الشارت حتى لو صار plot بارتفاع 84dp أثناء Replay؛ تتراكب أرقام tick والتواريخ بصريًا. حجب التسميات المتقاربة كان ينفذ للـLOG فقط.
