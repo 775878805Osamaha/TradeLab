@@ -314,6 +314,17 @@ class _ChartScreenState extends State<ChartScreen>
             _selectedPattern! >= 0 && _selectedPattern! < _patterns.length
             ? _patterns[_selectedPattern!] : null,
       );
+  @visibleForTesting
+  ({int count, ChartPositionDirection? direction,
+    double? entry, double? stop, double? target}) get debugPositionDrawings {
+    final item = _selectedShort != null &&
+            _selectedShort! >= 0 && _selectedShort! < _shortPositions.length
+        ? _shortPositions[_selectedShort!] : null;
+    return (count: _shortPositions.length,
+      direction: item?.direction, entry: item?.entry,
+      stop: item?.stop, target: item?.target);
+  }
+
   late final AnimationController _momentum;
   double _previousMomentumX = 0;
   double _momentumPlotWidth = 1;
@@ -3664,6 +3675,7 @@ class _ChartScreenState extends State<ChartScreen>
 
   void _resetDrawingObjects() {
     _disarmDoubleTapGuide();
+    _placingLong = false;
     _levels.clear();
     _patterns.clear();
     _shortPositions.clear();
