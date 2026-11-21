@@ -309,3 +309,11 @@
 - **الملفات:** `flutter_app/lib/data/range_live_bid_delta.dart`, `flutter_app/test/range_live_bid_delta_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
 - **التحقق الحالي:** CI `PENDING` حتى PR. لا اختبارات Android Profile/FPS أو حساب cTrader حقيقي؛ التحسين نظري في تكلفة نسخ الذاكرة وثبت بعداد قراءات وحدة عند اجتياز CI.
 - **الخطوة التنفيذية التالية:** PR ونجاح GitHub Actions الفعلي ثم دمج فرع التطوير فقط، تحديث ملفات التسليم مع commit وCI النهائي.
+
+### 2026-11-21T00:34:06.866Z — تصحيح فشل Flutter analyze في PR #579 دون إخفاء فشل CI
+- **التشغيل الفاشل:** [GitHub Actions #44844537479](https://github.com/775878805Osamaha/TradeLab/actions/runs/44844537479) **completed/failure**؛ التحليل حدد `unused_local_variable` في `flutter_app/lib/data/range_live_bid_delta.dart:115` بعد نقل مقارنة أحداث BID من التاريخ الكامل إلى قائمة حدود المللي ثانية. اختبارات Range/Replay SKIPPED بهذا الفشل؛ لم يُدمج PR.
+- **الإصلاح:** استخدم `boundaryMs` فعليًا في مقارنة كل زوج أحداث مصدرية (`earlier.timestamp == boundaryMs` و`newer.timestamp == boundaryMs` وكذلك السعر المطابق) بدلاً من مجرد مقارنة تاريخين قد يختلفان معًا عن حد المصدر؛ أكثر صرامة ويحمي ترتيب cTrader/Replay.
+- **الملفات:** `flutter_app/lib/data/range_live_bid_delta.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **المستودع والفرع:** `775878805Osamaha/TradeLab` / `perf/tradelab-live-bid-boundary-only-20261121`؛ `main` دون تعديل، لا APK/Release.
+- **التحقق:** Flutter CI التصحيحي `PENDING` حتى إعادة تشغيل PR #579. لا قياسات Android Profile أو cTrader حي.
+- **الخطوة التالية:** إعادة فحص GitHub Actions، إصلاح أي FAIL إضافي؛ لا دمج إلا بعد PASS.

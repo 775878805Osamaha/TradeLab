@@ -125,7 +125,10 @@ class RangeLiveBidDelta {
     for (var i = 0; i < oldBoundaryCount; i++) {
       final earlier = previous[i];
       final newer = fetched[i];
-      if (earlier.timestamp != newer.timestamp ||
+      // The old archive and the inclusive broker page must agree on
+      // BOTH the original millisecond and price of each source event.
+      if (earlier.timestamp != boundaryMs ||
+          newer.timestamp != boundaryMs ||
           earlier.bid != newer.bid) {
         throw const MarketDataException(
             'تعارض ترتيب أو سعر تيكات BID عند حد تحديث Range.');
