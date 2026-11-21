@@ -3503,6 +3503,8 @@ class _ChartScreenState extends State<ChartScreen>
         _selectDrawingMode(tool: ChartDrawingTool.trendLine);
       case DrawingCatalogKind.infoLine:
         _selectDrawingMode(tool: ChartDrawingTool.infoLine);
+      case DrawingCatalogKind.trendAngle:
+        _selectDrawingMode(tool: ChartDrawingTool.trendAngle);
       case DrawingCatalogKind.ray:
         _selectDrawingMode(tool: ChartDrawingTool.ray);
       case DrawingCatalogKind.extendedLine:
