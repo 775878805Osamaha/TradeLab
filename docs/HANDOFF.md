@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة قيد الفحص — BID حي: عزل المللي ثانية الأخيرة بدل مليون تيك
+- **الفرع:** `perf/tradelab-live-bid-boundary-only-20261121` انطلاقًا من رأس التطوير `c2534af76b39f76bc8aa2962cd2c8cd9088c96af`؛ `main` لم يُعدل، ولا APK أو Release.
+- **الاختناق المكتشف بالكود:** عند وصول صفحة cTrader BID تحوي 5000+ تيك، كان `RangeLiveBidDelta.verifiedSuffixAsync` يمرر كامل التاريخ السابق `previouslyVerified` (قد يصل **إلى مليون تيك**) إلى عامل `compute`، رغم أن المقارنة لا تحتاج إلا إلى أحداث المللي ثانية الأخيرة. تكرار نقل الأرشيف أثناء كل تحديث حي يثقل ذاكرة الهاتف ويزيد عمل serialization غير اللازم.
+- **الإصلاح:** `RangeLiveBidBoundary.fromVerified` يعثر بـlower-bound على أحداث المللي ثانية الأخيرة فقط في `O(log N)` ويأخذ نسخة immutable منها؛ عامل التحقق لم يعد يستلم التاريخ الكامل، بل هذه الأحداث والصفحة الموثقة الجديدة فقط. يحافظ على تكرار السعر/التوقيت الأصلي ويمنع نشر أي صفحة ناقصة أو معاد ترتيبها. حد المليون يُفحص **قبل** قراءة أي عنصر من مصدر متجاوز.
+- **الاختبارات:** مصدر افتراضي يحتوي مليون تيك مسجل عبر `ListBase` وعداد قراءات؛ التحقق من استعمال أقل من 50 قراءة للمصدر مقابل صفحة 6500 تيك، الحفاظ على الأحداث الخمسة المشتركة عند الحد، فشل المصدر إذا فقد تيكًا واحدًا، وتجاوز ميزانية المليون قبل لمس أي سعر.
+- **التغطية:** `flutter_app/lib/data/range_live_bid_delta.dart` و`flutter_app/test/range_live_bid_delta_test.dart`، توثيق الحدث في `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`. الاختبارات المحلية `CI PENDING`؛ Android Profile/حساب cTrader `NOT RUN`.
+- **الخطوة التالية:** افتح PR إلى `test/flutter-all-fixes-20261116`، اختبر Flutter analyze + Range/Replay والـYemen timezone، أصلح أي FAIL، ثم ادمج بعد PASS ووثّق SHA.
+
 ## دفعة مكتملة — PR #578: تحديث Range المباشر من تيكات cTrader BID
 - **MERGED:** [PR #578](https://github.com/775878805Osamaha/TradeLab/pull/578) في `test/flutter-all-fixes-20261116`، SHA الفعلي [754f500](https://github.com/775878805Osamaha/TradeLab/commit/754f500bd7dde18d92764dc74b928d5ea765d6e4).
 - **CI النهائي:** [GitHub Actions #44836462583](https://github.com/775878805Osamaha/TradeLab/actions/runs/44836462583) **PASS / completed / success** على `a60d886f7037c2874685a8b1d3ccbf8dd808d561`، شامل Flutter analyze واختبارات الشارت/Range/Replay والتوقيت في اليمن. **محاولة CI السابقة #44836213938 FAIL** بسبب استيراد `TradeCandle` ناقص في اختبارين؛ صُححت وأعيد الفحص بنجاح.
