@@ -3964,13 +3964,13 @@ class _ChartScreenState extends State<ChartScreen>
     if (next != null) _rectangles[index] = next;
   }
 
-  void _updateShortDrag(Offset current, ChartPriceScale scale,
+  bool _updateShortDrag(Offset current, ChartPriceScale scale,
       double width, int count) {
     final index = _selectedShort;
     final handle = _draggingShortHandle;
     final original = _shortAtDragStart;
     if (index == null || handle == null || original == null ||
-        index >= _shortPositions.length) return;
+        index >= _shortPositions.length) return false;
     final price = scale.price(current.dy.clamp(0, scale.height).toDouble());
     final bar = _viewport.indexAt(x: current.dx.clamp(0, width).toDouble(),
         plotWidth: width, candleCount: count);
@@ -4004,7 +4004,15 @@ class _ChartScreenState extends State<ChartScreen>
         }
         break;
     }
-    if (updated != null) _shortPositions[index] = updated;
+    if (updated == null) return false;
+    final previous = _shortPositions[index];
+    if (updated.startIndex == previous.startIndex &&
+        updated.endIndex == previous.endIndex &&
+        updated.entry == previous.entry &&
+        updated.stop == previous.stop &&
+        updated.target == previous.target) return false;
+    _shortPositions[index] = updated;
+    return true;
   }
 
   void _selectDrawingMode({ChartDrawingTool? tool, bool short = false,
@@ -5217,6 +5225,18 @@ class _ChartScreenState extends State<ChartScreen>
                 }
                 return;
               }
+              // Position stop/entry/target/body drags mutate only the real
+              // chart annotation. No chart/header/sidebar rebuild per sample:
+              // the retained painter reads the updated position on paint.
+              if (_draggingShortHandle != null && details.pointerCount == 1) {
+                final scale = _priceScale(
+                    candles, plotWidth, constraints.maxHeight);
+                if (_updateShortDrag(details.localFocalPoint, scale,
+                    plotWidth, candles.length)) {
+                  _chartRepaint.value++;
+                }
+                return;
+              }
               final movingDrawing = _draggingRectangle ||
                   _draggingShortHandle != null || _draggingLine ||
                   _draggingPattern;
@@ -5241,10 +5261,6 @@ class _ChartScreenState extends State<ChartScreen>
               if (_draggingRectangle && details.pointerCount == 1) {
                 final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
                 _updateRectangleDrag(details.localFocalPoint, scale,
-                    plotWidth, candles.length);
-              } else if (_draggingShortHandle != null && details.pointerCount == 1) {
-                final scale = _priceScale(candles, plotWidth, constraints.maxHeight);
-                _updateShortDrag(details.localFocalPoint, scale,
                     plotWidth, candles.length);
               } else if (details.pointerCount > 1 || _crosshair == null) {
                 // Rebased, incremental touch transform; chart geometry and
@@ -5277,6 +5293,7 @@ class _ChartScreenState extends State<ChartScreen>
               }
               final rectangleEdited = _draggingRectangle;
               final guideEdited = _draggingLine || _draggingPattern;
+              final positionEdited = _draggingShortHandle != null;
               // A double tap may arm the very next drag without leaving the
               // drawing tool selected; subsequent swipes return to chart pan.
               _disarmDoubleTapGuide();
@@ -5304,7 +5321,8 @@ class _ChartScreenState extends State<ChartScreen>
               }
               // Reconcile selection/undo actions only once at release.
               // The candle painter already displayed each intermediate move.
-              if ((rectangleEdited || guideEdited) && mounted) {
+              if ((rectangleEdited || guideEdited ||
+                  positionEdited) && mounted) {
                 setState(() {});
               }
             },
@@ -5598,6 +5616,10 @@ class _ChartScreenState extends State<ChartScreen>
                       ? _levels : const <double>[],
                   patternsProvider: () => _drawingsVisible
                       ? _patterns : const <ChartPattern>[],
+                  shortPositionsProvider: () => _drawingsVisible
+                      ? _shortPositions : const <ChartShortPosition>[],
+                  selectedShortProvider: () => _drawing && _drawingsVisible
+                      ? _selectedShort : null,
                   selectedLineProvider: () => _drawing && _drawingsVisible
                       ? _selectedLine : null,
                   selectedPatternProvider: () => _drawing && _drawingsVisible
@@ -6049,6 +6071,8 @@ class _CandleChartPainter extends CustomPainter {
     required this.textCache,
     required List<double> Function() levelsProvider,
     required List<ChartPattern> Function() patternsProvider,
+    required List<ChartShortPosition> Function() shortPositionsProvider,
+    required int? Function() selectedShortProvider,
     required int? Function() selectedLineProvider,
     required int? Function() selectedPatternProvider,
     required this.levels,
@@ -6072,6 +6096,8 @@ class _CandleChartPainter extends CustomPainter {
        _sourceQuoteProvider = sourceQuoteProvider,
        _levelsProvider = levelsProvider,
        _patternsProvider = patternsProvider,
+       _shortPositionsProvider = shortPositionsProvider,
+       _selectedShortProvider = selectedShortProvider,
        _selectedLineProvider = selectedLineProvider,
        _selectedPatternProvider = selectedPatternProvider,
        super(repaint: repaint);
@@ -6093,6 +6119,8 @@ class _CandleChartPainter extends CustomPainter {
   // rebuilding the toolbar or copying every existing drawing on each move.
   final List<double> Function() _levelsProvider;
   final List<ChartPattern> Function() _patternsProvider;
+  final List<ChartShortPosition> Function() _shortPositionsProvider;
+  final int? Function() _selectedShortProvider;
   final int? Function() _selectedLineProvider;
   final int? Function() _selectedPatternProvider;
   ChartViewport get viewport => _viewportProvider();
@@ -6417,8 +6445,9 @@ class _CandleChartPainter extends CustomPainter {
       annotate(verifiedQuote.bid, Color(scaleSettings.bidColor),
         scaleSettings.bidAsk);
     }
-    for (var i = 0; i < shortPositions.length; i++) {
-      final item = shortPositions[i];
+    final visiblePositions = _shortPositionsProvider();
+    for (var i = 0; i < visiblePositions.length; i++) {
+      final item = visiblePositions[i];
       if (!item.visibleAt(candles.length)) continue;
       _shortAxisTag(canvas, axis, chartHeight, scale.y(item.stop),
           _price(item.stop, decimals), TradeColors.shortLabelRed);
@@ -6556,8 +6585,10 @@ class _CandleChartPainter extends CustomPainter {
 
   void _paintShortPositions(Canvas canvas, ChartPriceScale scale,
       double axis, int count, int decimals) {
-    for (var i = 0; i < shortPositions.length; i++) {
-      final item = shortPositions[i];
+    final livePositions = _shortPositionsProvider();
+    final activePosition = _selectedShortProvider();
+    for (var i = 0; i < livePositions.length; i++) {
+      final item = livePositions[i];
       if (!item.visibleAt(count)) continue;
       final x1 = viewport.chartX(index: item.startIndex,
           candleCount: count, plotWidth: axis);
@@ -6580,7 +6611,7 @@ class _CandleChartPainter extends CustomPainter {
         Paint()..color = TradeColors.shortTargetFill.withValues(alpha: .75));
       canvas.drawLine(Offset(left, yEntry), Offset(right, yEntry),
           Paint()..color = TradeColors.shortHandle..strokeWidth = 1.4);
-      if (selectedShort == i) {
+      if (activePosition == i) {
         final outline = Paint()
           ..color = TradeColors.shortHandle
           ..strokeWidth = 2
@@ -6604,7 +6635,7 @@ class _CandleChartPainter extends CustomPainter {
                 ..style = PaintingStyle.stroke..strokeWidth = 3);
         }
       }
-      if (selectedShort != i || !showShortLabels) continue;
+      if (activePosition != i || !showShortLabels) continue;
       final risk = _price(item.risk, decimals);
       final reward = _price(item.reward, decimals);
       _shortPill(canvas,
