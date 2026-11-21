@@ -63,6 +63,50 @@ void main() {
     expect(range['p95Us'], 950000);
   });
 
+  test('live Range fetch, verify, append, no-op latencies stay independent',
+      () {
+    final stats = ChartLoadStatsCollector(reportEvery: 2, maxSamples: 4);
+    final ops = <(ChartLoadPhase, int, int)>[
+      (ChartLoadPhase.liveRangeBrokerFetch, 100000, 8),
+      (ChartLoadPhase.liveRangeVerify, 2000, 8),
+      (ChartLoadPhase.liveRangeAppend, 5000, 2),
+      (ChartLoadPhase.liveRangeNoChange, 120000, 0),
+      (ChartLoadPhase.liveRangeUpdate, 107000, 2),
+    ];
+    for (final (phase, durationUs, tickCount) in ops) {
+      expect(stats.record(phase: phase, durationUs: durationUs,
+          mode: 'range', displayedBars: 200000, bidTicks: tickCount),
+          isNull);
+    }
+    for (final (phase, durationUs, tickCount) in ops) {
+      final report = stats.record(
+          phase: phase, durationUs: durationUs * 2,
+          mode: 'range', displayedBars: 200001, bidTicks: tickCount)!;
+      expect(report['phase'], phase.name);
+      expect(report['p95Us'], durationUs * 2);
+      expect(report['completedOperations'], 2);
+      expect(report['bidTickCount'], tickCount);
+      expect(report.containsKey('symbol'), isFalse);
+      expect(report.containsKey('accountId'), isFalse);
+      expect(report.containsKey('price'), isFalse);
+    }
+    // Four unchanged polls must not make a slow network look like
+    // a Range generation regression.
+    for (var i = 0; i < 4; i++) {
+      stats.record(phase: ChartLoadPhase.liveRangeNoChange,
+          durationUs: 900000, mode: 'range',
+          displayedBars: 200001, bidTicks: 0);
+    }
+    expect(stats.sampleCount(ChartLoadPhase.liveRangeNoChange, mode: 'range'),
+        4);
+    expect(stats.sampleCount(ChartLoadPhase.liveRangeAppend, mode: 'range'),
+        2);
+    expect(stats.sampleCount(ChartLoadPhase.liveRangeUpdate, mode: 'range'),
+        2);
+    expect(stats.sampleCount(ChartLoadPhase.liveRangeVerify, mode: 'candles'),
+        0);
+  });
+
   test('fixed capacity rolling window evicts old outlier load samples', () {
     final stats = ChartLoadStatsCollector(
         reportEvery: 2, maxSamples: 4);

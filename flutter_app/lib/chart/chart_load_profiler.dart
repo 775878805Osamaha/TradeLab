@@ -10,6 +10,12 @@ enum ChartLoadPhase {
   initialBrokerFetch,
   initialBrokerMerge,
   rangeStartup,
+  // Separate actual cTrader network, authenticated BID verification and
+  // Range append costs. No-change polls must NOT pollute append p95.
+  liveRangeBrokerFetch,
+  liveRangeVerify,
+  liveRangeAppend,
+  liveRangeNoChange,
   liveRangeUpdate,
   olderCacheRead,
   olderBrokerFetch,

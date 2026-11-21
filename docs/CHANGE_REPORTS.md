@@ -375,3 +375,11 @@
 - **الملفات التي دخلت الدمج:** `flutter_app/lib/data/range_bar_builder.dart`, `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_builder_test.dart`, `flutter_app/test/range_bar_timeline_test.dart`، و`docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
 - **المتبقي/الحدود:** Android Profile وFPS حقيقي/جلسة cTrader حية **NOT RUN**؛ لم تُنشأ APK أو Release، ولم يتغير `main` ولا أي مشروع آخر.
 - **الخطوة التنفيذية التالية الوحيدة:** قياس Android Profile الحقيقي ببيانات cTrader موثقة قبل وصف السلاسة، ثم تصحيح اختناق مدعوم بأرقام.
+
+### 2026-11-21 (UTC) — إضافة قياس أسباب التأخير في Range Live (التحقق قيد التنفيذ)
+- **العمل/الفرع:** `775878805Osamaha/TradeLab`، `feat/tradelab-live-range-phase-profile-20261121` يبدأ من رأس التطوير `356bc85fd1c1c529e457d26cf266149f9bcd45ba`.
+- **الملفات المحفوظة:** `flutter_app/lib/chart/chart_load_profiler.dart` commit [d2f8381](https://github.com/775878805Osamaha/TradeLab/commit/d2f83814adf503298ac901ab3441e1bbd452b577)؛ `flutter_app/lib/screens/chart_screen.dart` commit [a78a4ca](https://github.com/775878805Osamaha/TradeLab/commit/a78a4ca7506e45a3aae927e9566cbd7627d45363)؛ `flutter_app/test/chart_load_profiler_test.dart` commit [4de5ab8](https://github.com/775878805Osamaha/TradeLab/commit/4de5ab87227e7d951f0917549af1b6d08a4db82e)؛ وملفا التوثيق.
+- **تغير الإنتاج:** قياس منفصل للـauthenticated cTrader fetch وBID validation وRange append وno-change، مع الاحتفاظ بوقت end-to-end عند إلحاق حدث موثق. لم يتغير تكوين شموع Range أو cutoff Replay أو المنفذ/الحساب ولا أي API request جديد.
+- **الاختبارات:** اختبار انحدار جديد لعزل زمن/percentiles لكل مرحلة، التمييز بين poll بلا تحديث وappend فعلي، وغياب بيانات حساسة. **NOT RUN** محليًا لأن Flutter SDK غير متاح؛ **CI PENDING**؛ Android Profile الحقيقي/cTrader connected **NOT RUN**.
+- **القيود:** لا APK/Release، لا تغيير `main` أو المشاريع الأخرى.
+- **الخطوة التالية:** إنشاء PR وفحص GitHub Actions، تصحيح أي مشكلة مثبتة، ثم دمج في التطوير وتقرير رسمي بالروابط والـSHA.
