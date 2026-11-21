@@ -510,3 +510,11 @@
 - **الملفات:** `flutter_app/lib/replay/replay_start_resolver.dart`, `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/replay_start_resolver_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
 - **الحدود:** Android Profile/FPS والجلسة الحية مع cTrader **NOT RUN**. لا APK/Release أو تعديل main/مشاريع أخرى.
 - **التالي:** اختبار transitions 2→3→2 fingers على رسم الشارت مع rebase pinch، ثم CI/merge؛ ما زالت المطابقة البصرية البكسلية بحاجة إلى Screenshots حقيقية.
+
+### 2026-11-21 (UTC) — معالجة قفزة pinch عند تغير مجموعة أصابع Android
+- **الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-multi-pointer-pinch-rebase-20261121` من dev SHA `fd90997ee46dd8479e3de79bb76cbfb280bf292a`.
+- **التغيير:** `ChartTouchGesture` يميز انتقالات 2→3 و3→2، ويلغي pinch origin القديم ويُعيد تثبيته على الشارت الحالي عند أول عينة صحيحة؛ لا يفسر تغير المركز فجأة كتكبير أو سحب، ويحافظ على تصفية NaN/Infinity.
+- **الكود:** [7b638b4](https://github.com/775878805Osamaha/TradeLab/commit/7b638b43b48ed4c9be40d32106d0bc51d50c8206) في `flutter_app/lib/chart/chart_viewport.dart`. **الاختبارات:** [87f999b](https://github.com/775878805Osamaha/TradeLab/commit/87f999b3d7dfc7af21c2bb954f81c1d36d0a059f) في `flutter_app/test/chart_viewport_test.dart`: انتقالات 2→3→2→1، تكبير 20→24→30px، منع phantom pan والتعامل مع invalid 3-pointer sample.
+- **التوثيق:** `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md` في فرع الإصلاح.
+- **التحقق:** GitHub CI **PENDING**؛ Android real touch/FPS وcTrader **NOT RUN**. لا APK/Release/main ولا مشروع آخر.
+- **التالي:** PR إلى dev، انتظر CI PASS، ثم merge وتوثيق رابط الاختبار وSHA النهائي.
