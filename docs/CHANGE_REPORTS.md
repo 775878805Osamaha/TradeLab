@@ -4,6 +4,14 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-21 — إصلاح سلوك النقر المزدوج على خطوط الرسم في Android
+- **الفرع:** `fix/tradelab-mobile-doubletap-drawing-move-20261121` من فرع تطوير TradeLab بعد PR #595؛ `main` محفوظ.
+- **المصدر:** https://www.tradingview.com/charting-library-docs/latest/mobile_specifics/ — النقر المزدوج على خط رسم يفعّل تحريك الخط؛ TradeLab كان يعيد موضع الشارت بدل ذلك.
+- **تعديل الشيفرة:** [b048951](https://github.com/775878805Osamaha/TradeLab/commit/b048951af4893cc356ec6cbdf2847736c417a148) — hit-test لخط حقيقي على إحداثيات النقرة، تحرير لسحبة واحدة، منع خطوط مقفلة/مخفية/مستقبل Replay، وإبقاء إعادة الشارت بالنقر على الفراغ ومحور السعر AUTO.
+- **إضافة اختبار:** [fa57531](https://github.com/775878805Osamaha/TradeLab/commit/fa5753196c957743ca8d50d3e1cef0dd6c8d7356) — widget Android layouts 320/390dp، رسم أصلي بمصدر fixture اختبار فقط ثم سحبه بالنقر المزدوج، منع تكرار الرسم.
+- **التحقق وقت الحفظ:** CI **PENDING**؛ SDK محلي/Android Profile/FPS/لقطات مقارنة **NOT RUN**. لا أسعار حية وهمية، ولا APK/Release أو تغيير مشاريع أخرى.
+- **الخطوة التالية:** بوابة GitHub Flutter analyze وchart/Range/Replay/timezone ثم دمج فرع التطوير فقط إذا PASS، وتحديث هذا السجل برابط PR وSHA والنتيجة.
+
 ### 2026-11-21 — دفعة أداء Replay: إعادة استخدام CandlePrefix الموثق
 - **الحدث:** إنشاء `perf/tradelab-replay-prefix-stability-20261121` من `test/flutter-all-fixes-20261116`، بدون تعديل `main`.
 - **المشكلة المثبتة من الشيفرة:** `_displayCandles` كان يُنشئ قائمة Replay مغلفة جديدة عند إعادة بناء الواجهة مع نفس مصدر OHLC ونفس حد الكشف، فيُبطل `ChartPriceScaleCache` حتى لو لم تتحرك حدود الشموع. هذا مسار حساب إضافي؛ تأثيره الزمني على هاتف حقيقي **غير مقاس**.
