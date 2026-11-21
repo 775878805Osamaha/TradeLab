@@ -1,14 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
-## دفعة قيد فحص GitHub Actions — Range Live: عدم تجميد اللمس عند أول قفزة BID (21 نوفمبر 2026)
+## دفعة مكتملة — PR #586: نقل أول قفزة BID الكبيرة إلى عامل خلفي (21 نوفمبر 2026)
 - **المشروع/الفرع:** `775878805Osamaha/TradeLab` / `fix/tradelab-live-range-first-gap-offload-20261121` من `test/flutter-all-fixes-20261116` عند رأس `dc0c324ce1cb8bde51e8fbea62b243a305831836`.
 - **الخلل المثبت بالشفرة:** `RangeBarTimeline.appendVerifiedSuffixAsync` يستدعي `shouldBuildInBackground(verifiedSuffix, priceDistance)` في تقدير عمل الشموع. في حالة صفحة تحتوي تيك BID موثّقًا جديدًا واحدًا مع قفزة مقارنة بآخر تيك محفوظ، لا يرى هذا التقدير نقطة المصدر السابقة؛ قد يختار البناء مباشرة على UI isolate وإن أغلقت القفزة آلاف شموع Range (طالما الأرشيف القديم أقل من 5001 تيك والشموع أقل من 4097).
 - **الإصلاح:** إضافة `shouldAppendInBackground` تستخدم `lastVerifiedTick` مع `verifiedSuffix` عبر iterable كسول (تكلفة إنشاء ثابتة، والتقدير يفحص على الأكثر نحو 5000 حدث). يُنقل بناء القفزة الكبيرة للخلفية من أول حدث حي؛ لا نسخ لمليون حدث في التقدير، ولا تغيير في ترتيب/BID/Replay أو قواعد cTrader.
 - **اختبارات انحدار:** قفزة واحدة `100.25→4200.25` تغلق 4100 شمعة: اختبار أن الصفحة الجديدة وحدها تخفي العمل ولكن helper يختار worker، وأن الناتج يطابق بناء المصدر الكامل، وكل 4100 إغلاق تلتصق بالحدث/الزمن الحقيقيين وأن Replay قبل الحد لا يكشفها. اختبار ثاني يبقي التغيير البسيط فوريًا وينقل الأرشيف أو الشارت الكبير للخلفية.
 - **Commits:** [5db6e40](https://github.com/775878805Osamaha/TradeLab/commit/5db6e4035a82b079b524a3a04ba7982d1ef1abd9) و[31c7e12](https://github.com/775878805Osamaha/TradeLab/commit/31c7e12afab937dd7f4709eb0eede83c54e90639).
 - **الملفات:** `flutter_app/lib/data/range_bar_timeline.dart`, `flutter_app/test/range_bar_timeline_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
-- **الحالة:** **CI PENDING**، اختبار Flutter على جهاز/Android Profile وFPS وcTrader live **NOT RUN**. لا APK/Release، لا تغيير `main` أو مشاريع أخرى.
-- **الخطوة التالية الواحدة:** افتح PR إلى التطوير وتحقق من Flutter analyze واختبارات Range/Replay، أصلح FAIL قبل الدمج ثم سجل رابط CI وSHA الدمج النهائي.
+- **النتيجة المؤكدة:** [PR #586](https://github.com/775878805Osamaha/TradeLab/pull/586) **MERGED/squash** إلى `test/flutter-all-fixes-20261116` عند [SHA 32c9efc4](https://github.com/775878805Osamaha/TradeLab/commit/32c9efc46c5e9f2ec63da687043d0b4e828e5141). [GitHub Actions #44916281496](https://github.com/775878805Osamaha/TradeLab/actions/runs/44916281496) **completed/success** على رأس PR `77ac5bb265861b48b5e4edea5878098acf6bb3ea`، بما يشمل `flutter analyze` واختبارات التاريخ وRange وReplay والشارت وتوقيت اليمن. اختبار Android Profile/FPS وcTrader الحي **NOT RUN**، فلا ادعاء بتحسن FPS مقاس. لا APK أو Release أو تغيير `main`.
+- **الخطوة التالية الواحدة:** تشغيل Android Profile فعلي بحساب cTrader لقياس p50/p95/p99 من التحديثات الكبيرة في Range إلى جانب حركات pan/pinch ثم علاج أي اختناق مثبت دون APK تلقائيًا.
 
 ## دفعة مكتملة — PR #585: حماية لقطات Range التاريخية للقراءة فقط (21 نوفمبر 2026)
 - **الفرع:** `fix/tradelab-immutable-range-timeline-20261121` من رأس التطوير `c34eea43d5f51309ae6275a8f6e6f341e5f41db2` بعد PR #584.
