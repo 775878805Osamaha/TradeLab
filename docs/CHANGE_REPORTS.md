@@ -502,3 +502,11 @@
 - **الملفات:** `flutter_app/lib/replay/replay_start_resolver.dart`, `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/replay_start_resolver_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
 - **الحالة:** **CI PENDING**، Android Profile/FPS وcTrader الحي وملف APK جديد **NOT RUN**. لا تغيير main/المشاريع الأخرى.
 - **الخطوة التالية:** PR إلى dev، فحص CI النهائي، إصلاح أي فشل، دمج إلى dev فقط مع SHA الحقيقي وتحديث التوثيق والتحقق من حفظه.
+
+### 2026-11-21 (UTC) — نجاح CI ودمج PR #590 لإلغاء إجراءات Replay القديمة بعد تغير الحساب أو الجلسة
+- **المشروع/الفرع:** `775878805Osamaha/TradeLab` [PR #590](https://github.com/775878805Osamaha/TradeLab/pull/590) **MERGED/squash** في `test/flutter-all-fixes-20261116` عند [commit `032b99fc4d89bd633e97199d697ef4942a6c8780`](https://github.com/775878805Osamaha/TradeLab/commit/032b99fc4d89bd633e97199d697ef4942a6c8780).
+- **الاختبار الفعلي:** [GitHub Actions #44922062150](https://github.com/775878805Osamaha/TradeLab/actions/runs/44922062150) **completed/success** على PR HEAD `e898644c6cb1fb6ae04a05e8e600a2cfaf28ab1e`. اجتاز Flutter Analyze واختبارات Replay/Range/history/chart وYemen timezone، ومن ضمنها session/source guard وReplay date selection epoch.
+- **السلوك المنفذ:** يرفض نتائج confirmation/history/order المتأخرة إذا تغير source timestamp identity أو market/provider/account/timeframe/chartMode/replay session/revision، وتحمي selection epoch من نافذة تاريخ قديمة حتى مع نفس بيانات السوق. لا يعود popup random/earliest يختار بداية لجلسة أخرى إذا ألغيت إعادة البداية. التداول تدريبي فقط ولا اتصال لتنفيذ أوامر حقيقية.
+- **الملفات:** `flutter_app/lib/replay/replay_start_resolver.dart`, `flutter_app/lib/screens/chart_screen.dart`, `flutter_app/test/replay_start_resolver_test.dart`, `docs/HANDOFF.md`, `docs/CHANGE_REPORTS.md`.
+- **الحدود:** Android Profile/FPS والجلسة الحية مع cTrader **NOT RUN**. لا APK/Release أو تعديل main/مشاريع أخرى.
+- **التالي:** اختبار transitions 2→3→2 fingers على رسم الشارت مع rebase pinch، ثم CI/merge؛ ما زالت المطابقة البصرية البكسلية بحاجة إلى Screenshots حقيقية.
