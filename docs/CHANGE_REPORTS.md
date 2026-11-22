@@ -1,5 +1,13 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — Source-index culling قبل الرسم وhit-testing (PENDING)
+- **الفرع/الأساس:** `perf/chart-source-window-early-cull-20261122` من `d6ec4302533870795ca01e678bae8b5510d06e73`. **PR وCI: قيد التحقق**.
+- **الخلل:** `ChartDrawingHitTest.hit` ورسام الشارت يحسبان `chartX` لآلاف الرسومات التاريخية المحدودة البعيدة رغم أن نافذة الفهارس الحقيقية المعروضة يمكنها استبعادها فوراً. `scale.y` كان مستبعداً سابقاً في PR #610، لكن عبء X ظل.
+- **التعديل:** مساعد `definitelyOffscreenBySourceWindow` محافظ على `ChartLineGeometry` يرفض الرسم المحدود المعزول بالكامل خارج نافذة `visibleIndices` المبطنة، دون مساس بأشكال Rays وCrossline والقنوات والمرساة المحددة؛ استدعاؤه في `ChartScreen._hitPattern` وفي `_CandleChartPainter` قبل حساب إحداثيات الرسم.
+- **الاختبارات:** 120k مصدر/6000 خط تاريخي، التحقق من 2 لا 12002 استدعاء `sourceX` في حالة اللمس؛ مصفوفة لـ 259/329px والزووم والتمرير و11 نوع رسم تُثبت أن استبعاد الفهرس يعني استبعاد البكسل الحقيقي؛ اختبار selected handles وReplay والحافة. هذا **دليل عدد عمليات** لا FPS Android.
+- **لا يُنفذ:** تغيير OHLC أو cTrader/Binance أو Replay cutoffs أو بناء APK أو main. لا دمج إذا فشل CI.
+
+
 ### 2026-11-22 UTC — إغلاق دفعات تحسين الأداء #610 و#612 و#613 بنجاح
 - **المستودع/فرع التطوير:** `775878805Osamaha/TradeLab` / `test/flutter-all-fixes-20261116`؛ من `0b82addd5063e7b6f6baaf3b1d0894d2090d04b8` عبر #610 إلى `974196e3c62ef67919c71031c235b57c3c245cad`. لا تعديل `main` أو APK/Release.
 - **PR #610:** https://github.com/775878805Osamaha/TradeLab/pull/610 **MERGED** إلى `37bc5d56f2a807d97be046ab49359789b4f81e90`، https://github.com/775878805Osamaha/TradeLab/actions/runs/45018066145 **success**. لمسات على 120k source و6000 offscreen patterns: مسار `ChartDrawingHitTest` يرفض الرسومات المحدودة قبل `scale.y` مع بقاء الرسومات الممتدة/Replay سليمة.

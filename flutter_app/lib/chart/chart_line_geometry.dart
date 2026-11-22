@@ -53,6 +53,48 @@ class ChartLineGeometry {
     }
   }
 
+  /// Guaranteed-offscreen test using only real candle indices.
+  ///
+  /// The viewport's [visibleStartIndex, visibleEndIndex) is already padded
+  /// by two candle columns on both sides. Any finite geometry wholly
+  /// outside that conservative interval is also outside the actual plot.
+  /// This is an O(1) index comparison before ANY chartX/LOG price transform
+  /// for thousands of historical drawings during Android pan, pinch and hit.
+  ///
+  /// The test intentionally keeps extra borderline shapes: it must never
+  /// remove a visible stroke, selected handle, ray, extended/crossline or
+  /// channel. Replay's real revealed-count check remains at the call site.
+  static bool definitelyOffscreenBySourceWindow({
+    required ChartDrawingTool tool,
+    required int startIndex,
+    required int endIndex,
+    required int visibleStartIndex,
+    required int visibleEndIndex,
+  }) {
+    if (visibleStartIndex < 0 ||
+        visibleEndIndex <= visibleStartIndex) return false;
+    switch (tool) {
+      case ChartDrawingTool.trendLine:
+      case ChartDrawingTool.infoLine:
+      case ChartDrawingTool.trendAngle:
+      case ChartDrawingTool.horizontal:
+        return math.max(startIndex, endIndex) < visibleStartIndex ||
+            math.min(startIndex, endIndex) >= visibleEndIndex;
+      case ChartDrawingTool.verticalLine:
+        return startIndex < visibleStartIndex ||
+            startIndex >= visibleEndIndex;
+      case ChartDrawingTool.horizontalRay:
+        return startIndex >= visibleEndIndex;
+      case ChartDrawingTool.fibonacci:
+        return math.min(startIndex, endIndex) >= visibleEndIndex;
+      case ChartDrawingTool.ray:
+      case ChartDrawingTool.extendedLine:
+      case ChartDrawingTool.crossLine:
+      case ChartDrawingTool.parallelChannel:
+        return false;
+    }
+  }
+
   static List<ChartStroke> strokes({
     required ChartDrawingTool tool,
     required Offset start,

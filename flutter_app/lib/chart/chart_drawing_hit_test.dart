@@ -25,6 +25,8 @@ class ChartDrawingHitTest {
     required double Function(int sourceIndex) sourceX,
     required double Function(double marketPrice) sourceY,
     int? selectedPatternIndex,
+    int? visibleStartIndex,
+    int? visibleEndIndex,
     double touchRadius = 17,
   }) {
     // A touch on the ruler, bottom time axis or invalid pointer centroid
@@ -44,6 +46,19 @@ class ChartDrawingHitTest {
     for (var i = patterns.length - 1; i >= 0; i--) {
       final pattern = patterns[i];
       if (!pattern.visibleAt(revealedCount)) continue;
+      // Most annotations are finite and far outside the current 100k+
+      // history window. Skip both chartX calls before expensive geometry.
+      // Optional for pure tests with custom (non-viewport) sourceX functions.
+      if (i != selectedPatternIndex &&
+          visibleStartIndex != null && visibleEndIndex != null &&
+          ChartLineGeometry.definitelyOffscreenBySourceWindow(
+            tool: pattern.tool,
+            startIndex: pattern.start.index,
+            endIndex: pattern.end.index,
+            visibleStartIndex: visibleStartIndex,
+            visibleEndIndex: visibleEndIndex)) {
+        continue;
+      }
 
       final x1 = sourceX(pattern.start.index);
       final x2 = sourceX(pattern.end.index);

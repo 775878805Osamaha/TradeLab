@@ -18,13 +18,20 @@ void main() {
     int? selected,
     double Function(double)? sourceY,
     double Function(int)? sourceXOverride,
-  }) => ChartDrawingHitTest.hit(
+    bool sourceIndexCull = false,
+  }) {
+    final (first, ending) = viewport.visibleIndices(
+      plotWidth: plotWidth, candleCount: revealed);
+    return ChartDrawingHitTest.hit(
     position: point, patterns: patterns, revealedCount: revealed,
     plotWidth: plotWidth, plotHeight: plotHeight,
     selectedPatternIndex: selected,
+    visibleStartIndex: sourceIndexCull ? first : null,
+    visibleEndIndex: sourceIndexCull ? ending : null,
     sourceX: sourceXOverride ?? (i) => sourceX(i, plotWidth),
     sourceY: sourceY ?? (price) => price,
-  );
+    );
+  }
 
   test('120k bars with 6000 old finite drawings skip offscreen price work',
       () {
@@ -47,6 +54,7 @@ void main() {
       final middleX = sourceX(119987, width);
       final selected = hit(Offset(middleX, 200), drawings,
         plotWidth: width,
+        sourceIndexCull: true,
         sourceY: (price) {
           priceTransformCalls++;
           return price;
@@ -59,8 +67,8 @@ void main() {
           reason: 'The older finite drawings must not steal a chart touch');
       expect(priceTransformCalls, 2,
           reason: 'Only two actually visible source prices need scaling');
-      expect(sourceXCalls, 12002,
-          reason: 'Source x culling remains constant-time per drawing');
+      expect(sourceXCalls, 2,
+          reason: '6000 invisible finite drawings must skip chartX too');
       expect(drawings.first.start.index, 119985);
     }
   });
@@ -169,4 +177,37 @@ void main() {
     expect(attempt(const Offset(100, 200), width: 0), isNull);
     expect(reads, 0);
   });
+  test('selected offscreen pattern still reaches source handles', () {
+    const old = ChartPattern(
+      tool: ChartDrawingTool.trendLine,
+      start: ChartAnchor(11, 200),
+      end: ChartAnchor(12, 200));
+    var xReads = 0;
+    expect(hit(const Offset(100, 200), const [old],
+      selected: 0, sourceIndexCull: true,
+      sourceXOverride: (i) {
+        xReads++;
+        return i == 11 ? 100 : 110;
+      },
+    ), 0);
+    expect(xReads, 2,
+      reason: 'A deliberately selected historical drawing must not be culled');
+  });
+
+  test('index cull keeps real visible trend and extended source strokes', () {
+    const current = ChartPattern(
+      tool: ChartDrawingTool.trendLine,
+      start: ChartAnchor(119985, 200),
+      end: ChartAnchor(119990, 200));
+    const farRay = ChartPattern(
+      tool: ChartDrawingTool.horizontalRay,
+      start: ChartAnchor(5, 180),
+      end: ChartAnchor(5, 180));
+    final at = sourceX(119987, 259);
+    expect(hit(Offset(at, 200), const [current],
+        sourceIndexCull: true), 0);
+    expect(hit(Offset(at, 180), const [farRay],
+        sourceIndexCull: true), 0);
+  });
+
 }
