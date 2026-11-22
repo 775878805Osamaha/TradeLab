@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — TradingView-style source-anchored time grid + labels (CI PENDING)
+- **الفرع:** `fix/chart-source-anchored-time-grid-20261122` من dev `f13a6d34d443ad31d43ca64ff4c6c10892e725d2`; المشروع الوحيد TradeLab Flutter. لا APK/main/Vercel Production.
+- **الفجوة المثبتة بالملفات:** `_CandleChartPainter.paint` كان يرسم 4 خطوط وقت عمودية و4 تسميات عند `x = plotWidth * tick / 5`، أي تُقفل الشبكة في أعمدة ثابتة على الشاشة. عند السحب/التكبير كان النص يقفز إلى شمعة أخرى بينما خطوط الشبكة لا تتحرك مع الشموع (اختلاف واضح عن خطوط الزمن المُثبتة بالمصدر في TradingView).
+- **الإصلاح الفعلي:** `ChartSourceTimeGrid.visible` يولّد مواضع خطوط زمنية من مؤشرات شموع أصلية (كل `1/2/5 × 10^n` أعمدة مع مسافة لا تقل عن 84 logical px)، ويحدّد `x` بواسطة نفس `ChartViewport.chartX` المستخدم لجسم الشمعة والـcrosshair. يستخدم الرسام **قائمة المواضع نفسها** للخطوط الرأسية وتسميات محور الوقت، فتتحركان مع الشمعة بالضبط عند pan/pinch/Replay. مُقيّد بـ16 علامة ويعمل على نافذة المصدر الظاهرة فقط، دون نسخ 100k شمعة أو إعادة بناء بيانات broker.
+- **سلامة المصدر:** لا يُخمن تاريخ الشمعة؛ النص يأخذ `timestamps[mark.index]` الأصلي بعد تحويل المنطقة الزمنية المختارة، وRange يستخدم توقيت BID الحقيقي غير المنتظم، وReplay لا يكشف أي شمعة بعد visible prefix. لا تختلق صفوف في فجوة نهاية الأسبوع أو وقت مستقبلي.
+- **المرجع الرسمي:** TradingView Advanced Charts mobile specifics وFeaturesets يصفان السحب والـpinch ومحوري السعر والوقت؛ استخدمناها مرجعًا وظيفيًا، ولم نستخدم مكتبة TradingView المملوكة أو شعارها. المطابقة البصرية التامة تحتاج لقطة TradingView من **الإصدار والجهاز والحجم نفسه** ومقارنة pixel/raster وفحص اللمس على هاتف Android؛ لا يمكن إثبات 100% من unit tests.
+- **الاختبار:** `chart_source_time_grid_test.dart` يغطي انتقال x=45px مع شمعة المصدر نفسها، touch-anchored pinch، 3px/120k memory-bounded grid، غياب مستقبل Replay، تيكات Range غير متساوية الزمن، إحداثيات Android غير صالحة. أُضيف إلى CI النشط وفحوص APK القائمة، دون إنتاج APK.
+
+
 ## 2026-11-22 — PR #628 MERGED: اختيار حساب cTrader محفوظ بالتسلسل، CI ناجح
 - **الدمج:** [PR #628](https://github.com/775878805Osamaha/TradeLab/pull/628) بنجاح عند squash `29cdfb48153e234e6f1ea0c0a9de29c701fab81c` داخل `test/flutter-all-fixes-20261116`.
 - **الاختبارات:** [GitHub Actions #45055981156 completed/success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45055981156)، على head `54568403a29b1ff5e98377728871797f4ed0f20b`: **831 tests passed** من حزمة source/Range/Replay/chart/account/Flutter؛ **11 tests passed** إضافية؛ analyze نجح، دون خطوات فاشلة.
