@@ -191,4 +191,20 @@ void main() {
         throwsArgumentError);
     expect(cache.axisLength, 0);
   });
+  test('chart time and price captions use the Android Roboto font family', () {
+    final cache = ChartTextLayoutCache();
+    addTearDown(cache.clear);
+    final axis = cache.layout('4,016.30', Colors.white, 12);
+    final timezone = cache.layoutBoundedAxis(
+      'اليوم 06:00', Colors.black, 11, maxWidth: 100);
+    final risk = cache.layoutPill(
+      'الإيقاف: 4,010.00', maxWidth: 155);
+    for (final painter in <TextPainter>[axis, timezone, risk]) {
+      final style = (painter.text as TextSpan).style;
+      expect(style?.fontFamily, 'Roboto',
+        reason: 'Chart CustomPaint does not inherit Theme typography; '
+          'explicit Android Roboto avoids test Ahem boxes and axis drift');
+    }
+  });
+
 }
