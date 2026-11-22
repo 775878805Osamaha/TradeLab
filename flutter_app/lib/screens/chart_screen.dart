@@ -3537,8 +3537,8 @@ class _ChartScreenState extends State<ChartScreen>
                           previousTimeline: timeline!,
                           previousSize: oldSize,
                           nextSize: size,
-                          pointSize: point!,
-                          account: account!,
+                          pointSize: point,
+                          account: account,
                           symbol: symbol,
                         ));
                       } else {
