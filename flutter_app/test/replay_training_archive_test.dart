@@ -27,6 +27,8 @@ void main() {
     expect(history.first['sessionId'], id);
     expect(history.first['tradeCount'], 1);
     expect(history.first['realizedPricePnl'], 5);
+    expect(history.first['openTradeCount'], 0);
+    expect(history.first['closedTradeCount'], 1);
 
     // An ended Replay session clears its in-memory model. The persisted
     // archive must remain unchanged when the screen/controller is disposed.
@@ -52,11 +54,14 @@ void main() {
     final rewound = history.firstWhere((entry) => entry['sessionId'] == id);
     expect(rewound['visibleCount'], 0);
     expect(rewound['tradeCount'], 0);
+    expect(rewound['openTradeCount'], 0);
+    expect(rewound['closedTradeCount'], 0);
     expect(rewound['realizedPricePnl'], 0);
     // Saving one session's empty rewind must not delete another archived
     // training session even when both were saved in the same millisecond.
     final completed = history.firstWhere(
         (entry) => entry['sessionId'] == endedSessionId);
     expect(completed['tradeCount'], 1);
+    expect(completed['closedTradeCount'], 1);
   });
 }

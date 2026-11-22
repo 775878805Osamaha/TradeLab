@@ -25,4 +25,67 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
   });
+  testWidgets('Replay archive shows opened and closed training upon tab return',
+      (tester) async {
+    final controller = _ConnectedReadOnlyController();
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var reads = 0;
+    Future<List<Map<String, Object?>>> load() async {
+      reads++;
+      return [<String, Object?>{
+        'sessionId': 'session-visible',
+        'sourceKey': 'never-show-account-id',
+        'savedAtMs': 1795262400000,
+        'tradeCount': 2,
+        'openTradeCount': 1,
+        'closedTradeCount': 1,
+        'realizedPricePnl': 17.5,
+      }];
+    }
+    Future<void> show(bool active) => tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: ResultsScreen(controller: controller,
+        active: active, replayArchiveReader: load)),
+    ));
+    await show(false);
+    expect(reads, 0);
+    await show(true);
+    await tester.pump();
+    expect(reads, 1);
+    await tester.ensureVisible(find.byKey(const Key('results-tab-5')));
+    await tester.tap(find.byKey(const Key('results-tab-5')));
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-session-0')), findsOneWidget);
+    expect(find.text('الصفقات: 2 · مفتوحة: 1 · مغلقة: 1'), findsOneWidget);
+    expect(find.textContaining('17.5000'), findsOneWidget);
+    expect(find.textContaining('ليست أرباحًا بالدولار'), findsOneWidget);
+    expect(find.textContaining('never-show-account-id'), findsNothing);
+    await show(false);
+    await show(true);
+    await tester.pump();
+    expect(reads, 2);
+  });
+
+  testWidgets('Replay archive read failure is not displayed as no trades',
+      (tester) async {
+    final controller = _ConnectedReadOnlyController();
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Future<List<Map<String, Object?>>> failed() async =>
+        throw StateError('SQLite unavailable');
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: ResultsScreen(controller: controller,
+        active: true, replayArchiveReader: failed)),
+    ));
+    await tester.pump();
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('results-tab-5')));
+    await tester.tap(find.byKey(const Key('results-tab-5')));
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-error')), findsOneWidget);
+    expect(find.textContaining('لا توجد جلسات Replay محفوظة بعد'), findsNothing);
+  });
+
 }

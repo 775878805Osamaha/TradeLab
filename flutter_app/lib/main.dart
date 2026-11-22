@@ -235,7 +235,8 @@ class _TradeLabShellState extends State<TradeLabShell> {
                       _chartFocusMode = false;
                       _selectedIndex = 3;
                     })),
-                  ResultsScreen(controller: _market, journal: _journal),
+                  ResultsScreen(controller: _market, journal: _journal,
+                    active: _selectedIndex == 2),
                   AccountScreen(
                     controller: _market,
                     darkMode: widget.darkMode,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,16 +8,23 @@ import '../paper/add_paper_entry_sheet.dart';
 import '../paper/paper_journal_controller.dart';
 import '../paper/paper_ledger.dart';
 import '../paper/paper_trade_service.dart';
+import '../replay/replay_training_archive.dart';
 import '../data/tradelab_data.dart';
 import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
 import '../widgets/tradelab_dashboard_widgets.dart';
 
 class ResultsScreen extends StatefulWidget {
-  const ResultsScreen({required this.controller, this.journal, super.key});
+  const ResultsScreen({
+    required this.controller, this.journal, this.active = false,
+    this.replayArchiveReader, super.key,
+  });
 
   final MarketController controller;
   final PaperJournalController? journal;
+  /// IndexedStack preserves this widget while the user trades on the chart.
+  final bool active;
+  final Future<List<Map<String, Object?>>> Function()? replayArchiveReader;
 
   @override
   State<ResultsScreen> createState() => _ResultsScreenState();
@@ -33,10 +41,14 @@ class _ResultsScreenState extends State<ResultsScreen> {
   int _visibleOpenPositions = _journalPageSize;
   final ScrollController _resultsScroll = ScrollController();
   String? _journalAccountKey;
+  List<Map<String, Object?>> _replaySessions = const [];
+  bool _readingReplay = false;
+  String? _replayReadError;
+  int _replayReadRevision = 0;
 
   static const _pages = [
     'نظرة عامة', 'المنحنيات البيانية', 'يوميات الصفقات',
-    'إحصائيات الصفقات', 'النتائج اليومية',
+    'إحصائيات الصفقات', 'النتائج اليومية', 'صفقات Replay',
   ];
   static const _periods = [
     'إجمالي', 'الكل', 'سنة', '6 أشهر', '3 أشهر', 'شهر', 'أسبوع', 'مخصص',
@@ -59,6 +71,37 @@ class _ResultsScreenState extends State<ResultsScreen> {
     widget.controller.addListener(_onAccountChange);
     widget.journal?.addListener(_onAccountChange);
     _journalAccountKey = widget.journal?.accountKey;
+    if (widget.active) _scheduleReplayRead();
+  }
+
+  void _scheduleReplayRead() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.active) unawaited(_readReplayArchive());
+    });
+  }
+
+  Future<void> _readReplayArchive() async {
+    if (!mounted || !widget.active) return;
+    final revision = ++_replayReadRevision;
+    setState(() {
+      _readingReplay = true;
+      _replayReadError = null;
+    });
+    try {
+      final reader = widget.replayArchiveReader ?? ReplayTrainingArchive.recent;
+      final sessions = await reader();
+      if (!mounted || !widget.active || revision != _replayReadRevision) return;
+      setState(() {
+        _replaySessions = sessions;
+        _readingReplay = false;
+      });
+    } catch (_) {
+      if (!mounted || !widget.active || revision != _replayReadRevision) return;
+      setState(() {
+        _replayReadError = 'تعذر قراءة صفقات Replay المحفوظة. حاول التحديث.';
+        _readingReplay = false;
+      });
+    }
   }
 
   @override
@@ -75,6 +118,12 @@ class _ResultsScreenState extends State<ResultsScreen> {
       _visibleJournalTrades = _journalPageSize;
       _visibleOpenPositions = _journalPageSize;
       _selectedCurvePoint = null;
+    }
+    if (!widget.active) {
+      _replayReadRevision++;
+    } else if (!oldWidget.active ||
+        oldWidget.replayArchiveReader != widget.replayArchiveReader) {
+      _scheduleReplayRead();
     }
   }
 
@@ -108,6 +157,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
 
   @override
   void dispose() {
+    _replayReadRevision++;
     widget.controller.removeListener(_onAccountChange);
     widget.journal?.removeListener(_onAccountChange);
     _resultsScroll.dispose();
@@ -225,7 +275,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
         key: const Key('results-dashboard-list'),
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 26),
         children: [
-          Row(children: [
+          if (_page != 5) Row(children: [
             const Expanded(child: TradeDashboardSection('الفترة الزمنية',
               caption: 'تصفية كل الرسوم والمقاييس حسب التاريخ')),
             PopupMenuButton<String>(
@@ -324,7 +374,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
             ]),
           ),
           const SizedBox(height: 18),
-          ] else ...[
+          ] else if (_page != 5) ...[
             const SizedBox(height: 12),
             Container(
               key: const Key('results-local-source-note'),
@@ -371,9 +421,75 @@ class _ResultsScreenState extends State<ResultsScreen> {
             _statistics(report),
             const SizedBox(height: 12),
             _emptyMessage('شارب غير محسوب دون عوائد دورية موثقة. التراجع للربح المحقق فقط.'),
-          ] else ...[
+          ] else if (_page == 4) ...[
             _dailyResults(report),
+          ] else if (_page == 5) ...[
+            _replayTrainingPanel(),
           ],
+        ],
+      )),
+    ]);
+  }
+
+
+  Widget _replayTrainingPanel() {
+    final colors = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        const Expanded(child: TradeSectionTitle('صفقات Replay التاريخية')),
+        IconButton(
+          key: const Key('results-refresh-replay'),
+          tooltip: 'تحديث نتائج Replay المحفوظة',
+          onPressed: _readingReplay ? null : () => unawaited(_readReplayArchive()),
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ]),
+      TradeDashboardPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('هذه نتائج التدريب التاريخي المحفوظة على الهاتف، '
+            'وليست صفقات cTrader الحقيقية أو دفتر التداول التجريبي.',
+            style: TextStyle(fontSize: 12)),
+          const SizedBox(height: 6),
+          const Text('النتيجة = فرق السعر × الكمية؛ ليست أرباحًا بالدولار.',
+            style: TextStyle(fontSize: 11)),
+          if (_readingReplay) const LinearProgressIndicator(
+            key: Key('results-replay-loading')),
+          if (_replayReadError != null)
+            Text(_replayReadError!, key: const Key('results-replay-error'),
+              style: TextStyle(color: colors.error)),
+          if (!_readingReplay && _replayReadError == null &&
+              _replaySessions.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('لا توجد جلسات Replay محفوظة بعد.'),
+            ),
+          if (_replayReadError == null)
+            for (var i = 0; i < math.min(5, _replaySessions.length); i++) ...[
+              const Divider(height: 16),
+              Builder(builder: (_) {
+                final session = _replaySessions[i];
+                final pnl = session['realizedPricePnl'] is num
+                    ? (session['realizedPricePnl'] as num).toDouble()
+                    : 0.0;
+                return Column(
+                  key: Key('results-replay-session-$i'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('جلسة Replay · ${_day(session['savedAtMs'] as int)}',
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text('الصفقات: ${session['tradeCount']} · '
+                      'مفتوحة: ${session['openTradeCount']} · '
+                      'مغلقة: ${session['closedTradeCount']}',
+                      key: Key('results-replay-counts-$i')),
+                    Text('النتيجة المحققة: ${pnl.toStringAsFixed(4)} '
+                      '(فرق السعر × الكمية)',
+                      key: Key('results-replay-pnl-$i'),
+                      textDirection: TextDirection.rtl),
+                  ],
+                );
+              }),
+            ],
         ],
       )),
     ]);
