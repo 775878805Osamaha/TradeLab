@@ -9,15 +9,15 @@
 class CTraderSerializedSecureValueWriteQueue {
   CTraderSerializedSecureValueWriteQueue(this._write);
 
-  final Future<void> Function(String? token) _write;
+  final Future<void> Function(String? value) _write;
   Future<void> _last = Future<void>.value();
 
-  Future<void> persist(String? token) {
+  Future<void> persist(String? value) {
     // A failed earlier platform write MUST NOT prevent the next logout from
     // deleting the obsolete token, or block a user-initiated OAuth recovery.
     final next = _last.then<void>(
-      (_) => _write(token),
-      onError: (Object _, StackTrace __) => _write(token),
+      (_) => _write(value),
+      onError: (Object _, StackTrace __) => _write(value),
     );
     _last = next;
     return next;
