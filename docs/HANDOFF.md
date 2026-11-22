@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-23 — PR #633 MERGED: all saved Replay sessions now reachable; Flutter CI green
+- [PR #633](https://github.com/775878805Osamaha/TradeLab/pull/633) merged by squash `d135db1762f13ccdc9d7faed8cccb25e31123acb` into `test/flutter-all-fixes-20261116`.
+- [GitHub Actions #45080738105](https://github.com/775878805Osamaha/TradeLab/actions/runs/45080738105) **completed/success**: Flutter analyze, complete selected Flutter Range/chart/Replay/paper/results regression suite, drawing catalog checks and Yemen timezone check succeeded.
+- Source-confirmed issue: Results previously displayed only first five local Replay sessions, with no route to older 6–20 or beyond. Now 5-card progressive reveal, 20-row authenticated local SQLite page fetch with one lookahead row, next-page fetch as needed, and safe reactivation/error handling.
+- Tests covered 25 saved sessions with SQL offset/order and a 23-session 390dp widget page progression. No claims of physical Android verification, cTrader live BID first-load success or exact TradingView parity. No APK or production/main changes. All change details in the next 2026-11-23 handoff entry.
+- **Next:** independently validate a real Android Replay entry/close -> Results persistence across restart; then source-authenticated Range first BID and measured chart touch/FPS on device.
+
+
 ## 2026-11-23 — Replay Results history pagination (CI PENDING)
 - **Branch:** `fix/replay-results-session-pagination-20261123`, based on `test/flutter-all-fixes-20261116` after verified #632 merge. Do not touch `main`, production gateways, or create an APK for this change.
 - **Source-confirmed gap:** `ReplayTrainingArchive.recent` queried up to 20 local SQLite sessions, but `ResultsScreen._replayTrainingPanel` rendered exactly `min(5, _replaySessions.length)` with no navigation to sessions 6–20. Older practice trades looked missing despite durable storage. Over 20 sessions were inaccessible.
