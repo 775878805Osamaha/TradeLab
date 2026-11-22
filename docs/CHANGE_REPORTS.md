@@ -1,5 +1,10 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+
+### 2026-11-22 — Replay discoverability في Overview (PENDING)
+- رابط صريح تحت USD Hero إلى `صفقات Replay` مع عداد open/closed في أحدث جلسات Replay المحفوظة. لا تعديل على USD Journal أو حساب broker.
+- Widget regression 320dp وخاصية onTap إلى تبويب Replay، مع تنبيه أنها صفقات تاريخية.
+- branch `fix/replay-overview-shortcut-20261122` من `64cf670b9b6c945386aa3b84b8f6695171d00eaf`، CI PENDING، no APK or main.
 ### 2026-11-22 — ضمان ظهور Replay في النتائج بعد آخر صفقة مباشرة (PENDING)
 - الـSQLite SELECT في نتائج Replay قد يسبق `_recordTraining` المؤجل حتى مع ظهور تبويب جديد؛ الحل يسجّل pending-write barrier ويُجبر flush عند تبديل chart active→inactive.
 - اختبارات Futures معلقة/فشل ثم تعافٍ وread-after-save قبل await، مع سلامة `PaperLedger` وReplay.
