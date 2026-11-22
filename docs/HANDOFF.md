@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — PR #628 MERGED: اختيار حساب cTrader محفوظ بالتسلسل، CI ناجح
+- **الدمج:** [PR #628](https://github.com/775878805Osamaha/TradeLab/pull/628) بنجاح عند squash `29cdfb48153e234e6f1ea0c0a9de29c701fab81c` داخل `test/flutter-all-fixes-20261116`.
+- **الاختبارات:** [GitHub Actions #45055981156 completed/success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45055981156)، على head `54568403a29b1ff5e98377728871797f4ed0f20b`: **831 tests passed** من حزمة source/Range/Replay/chart/account/Flutter؛ **11 tests passed** إضافية؛ analyze نجح، دون خطوات فاشلة.
+- **التغيير:** `CTraderSerializedSecureValueWriteQueue` يعمم ترتيب writes على `selectedAccountKey` بجانب queue token المدمج في #627. التبديلات السريعة 101→202→101 لا تعيد اختيار account قديم بعد restart، وحذف logout ينتظر الكتابات السابقة. OAuth re-link يحتفظ بالحساب الذي اختاره المستخدم طالما ضمن authorized accounts (حتى لو أول القائمة Demo)، وإلا يختار أول حساب مصرح ويحفظه صراحة. استمرار token auth عند تعذر حفظ تفضيل الاختيار مع رسالة واضحة.
+- **التغطية:** `ctrader_account_persistence_order_test.dart`: اختبار مؤجل لثلاث كتابات متتابعة، حذف بعد كتابة قيد الانتظار، restart مع accounts reordered، إعادة تفويض تبقي LIVE account ثم تعيد إلى authorized Demo فقط بعد فقد الصلاحية. باقي فحوص 827+ من #627 بقيت ناجحة.
+- **حدود الإثبات:** UI Flutter وفحص الكود نجحا؛ لا يوجد رصد حي cTrader BID على جهاز Android ولا قياس FPS أو مطابقة كاملة لـTradingView. لم يُبن APK ولم يتغير `main` أو Vercel Production. أولوية التحقق القادم: بيانات cTrader live بالأذونات الحقيقية وتحميل أول Range والشارت والجورنال على الهاتف، ثم مراجعة شاملة لمشكلة الفجوات غير المتصلة.
+
+
 ## 2026-11-22 — ترتيب حفظ اختيار حساب cTrader حتى بعد A→B→A وOAuth (CI PENDING)
 - **الفرع:** `fix/ctrader-persist-account-choice-order-20261122` من `dfb444b5945a64cecb3ee127bf845965ba243b3a` بعد دمج #627. لا APK، لا main، لا Vercel production.
 - **الخلل المثبت في الكود:** `MarketController.chooseAccount` كان ينفّذ `unawaited(_storage.write(selectedAccountKey, id))` لكل اختيار، بينما `disconnect` يحذف `selectedAccountKey` مباشرة. على Android إذا تأخرت كتابة account A ثم أكملت بعد B أو بعد delete الخاص بالخروج، فقد يُعاد اختيار حساب قديم عند فتح التطبيق لاحقًا. اختبار الاستمرار السابق لم يغطّ تغييرات A→B→A السريعة.
