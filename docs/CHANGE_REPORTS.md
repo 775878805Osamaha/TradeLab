@@ -1,5 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — تهيئة ثوابت LOG مرة واحدة لكل Canvas repaint (CI PENDING)
+- **أساس/فرع:** `d6ec4302533870795ca01e678bae8b5510d06e73` → `perf/chart-log-price-projection-20261122`. **PR/CI قيد التحقق**.
+- **تكرار مثبت:** `ChartPriceScale.y` ينفذ لوغاريتمي `maximum` و`minimum` لكل شمعة/فتيل/رسم في `_CandleChartPainter` حتى لو ظل مقياس الأسعار ثابتاً طوال الإطار؛ تقليل O(n) حسابات حدود المقياس إلى O(1) لكل frame، دون تعديل لوغاريتم سعر كل OHLC عند الحاجة.
+- **الملفات:** `chart_viewport.dart` و`screens/chart_screen.dart` واختبار `chart_logarithmic_price_scale_test.dart` وتقارير handoff.
+- **معايير القبول:** كل إحداثي y في LOG/inverted يساوي تحوّله الأصلي إلى تسامح 1e-10px، Linear/Percent/Indexed/negative fallback بلا تغيير. تشغيل flutter analyze وباقي اختبارات CI قبل الدمج، لا وعود FPS أو تغيير بيانات cTrader/Binance، لا APK.
+
+
 ### 2026-11-22 — Source-index culling قبل الرسم وhit-testing (PENDING)
 - **الفرع/الأساس:** `perf/chart-source-window-early-cull-20261122` من `d6ec4302533870795ca01e678bae8b5510d06e73`. **PR وCI: قيد التحقق**.
 - **الخلل:** `ChartDrawingHitTest.hit` ورسام الشارت يحسبان `chartX` لآلاف الرسومات التاريخية المحدودة البعيدة رغم أن نافذة الفهارس الحقيقية المعروضة يمكنها استبعادها فوراً. `scale.y` كان مستبعداً سابقاً في PR #610، لكن عبء X ظل.

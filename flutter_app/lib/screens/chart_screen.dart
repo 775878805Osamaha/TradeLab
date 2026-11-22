@@ -6236,7 +6236,9 @@ class _CandleChartPainter extends CustomPainter {
     final scale = _priceScaleProvider(axis, size.height);
     final maximum = scale.maximum;
     final minimum = scale.minimum;
-    double y(double price) => scale.y(price);
+    // Constant LOG bounds are prepared once, not logged again for each
+    // wick/body/annotation during Android pan/pinch repaint frames.
+    final y = scale.prepareYForFrame();
     // Reference: no visible candle-area grid. Labels derive from the actual
     // visible price interval, never from screenshot numbers or fake candles.
     final relativeAxis = scale.usesRelativeScale;

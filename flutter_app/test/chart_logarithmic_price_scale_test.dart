@@ -148,5 +148,60 @@ void main() {
     expect(ChartScaleSettings.decode(log.encode()).scaleMode, 'لوغاريتمي');
     expect(ChartScaleSettings.decode(normal.encode()).scaleMode, 'تلقائي');
     expect(normal.scaleMode, 'تلقائي');
+  });  test('prepared LOG painter projection matches authoritative source y pixels',
+      () {
+    for (final reversed in <bool>[false, true]) {
+      for (final chartHeight in <double>[320, 390, 640]) {
+        final scale = ChartPriceScale(1.0001, 120000, chartHeight,
+            logarithmic: true, inverted: reversed);
+        expect(scale.usesLogarithmic, isTrue);
+        final prepared = scale.prepareYForFrame();
+        for (final price in <double>[
+          -100, 0, 0.0001, 1.0001, 1.001, 24.5, 375, 4000, 120000,
+          240000, double.infinity,
+        ]) {
+          final actual = prepared(price);
+          final original = scale.y(price);
+          if (original.isInfinite) {
+            expect(actual, original);
+          } else {
+            expect(actual, closeTo(original, 1e-10),
+              reason: 'LOG/inverted candles, wicks, labels and drawings '
+                  'must retain the same true market-price Y geometry');
+          }
+        }
+        expect(prepared(double.nan).isNaN, isTrue);
+        // No new source prices: this is geometry over authentic inputs only.
+        expect(scale.price(prepared(4000)), closeTo(4000, 1e-8));
+      }
+    }
   });
+
+  test('prepared painter keeps linear, Percent, Indexed and LOG fallback',
+      () {
+    const modes = <ChartPriceReferenceMode>[
+      ChartPriceReferenceMode.price,
+      ChartPriceReferenceMode.percent,
+      ChartPriceReferenceMode.indexed100,
+    ];
+    for (final mode in modes) {
+      for (final inverted in <bool>[false, true]) {
+        final scale = ChartPriceScale(10, 1000, 320,
+          referenceMode: mode, referencePrice: 50, inverted: inverted);
+        final prepared = scale.prepareYForFrame();
+        for (final price in <double>[-1, 0, 10, 50, 100, 1000]) {
+          expect(prepared(price), scale.y(price));
+        }
+      }
+    }
+    // An invalid/nonpositive LOG viewport must not silently re-enable LOG.
+    const fallback = ChartPriceScale(-10, 100, 390, logarithmic: true);
+    expect(fallback.usesLogarithmic, isFalse);
+    expect(fallback.prepareYForFrame()(15), fallback.y(15));
+    const zeroHeight = ChartPriceScale(10, 100, 0, logarithmic: true);
+    expect(zeroHeight.prepareYForFrame()(30).isFinite,
+        zeroHeight.y(30).isFinite);
+  });
+
+
 }
