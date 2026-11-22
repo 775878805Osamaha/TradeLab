@@ -1,5 +1,15 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — حماية cTrader History/Range من ردود تفويض قديمة (CI PENDING)
+- **الفرع:** `fix/ctrader-auth-revision-market-history-20261122` من `16f4833d3c0766e69d9749b052f526912ab1afa3`. نطاق العمل TradeLab Flutter وحده؛ لا تغيير main/APK/Vercel production.
+- **خلل فعلي في المصدر:** `MarketController.paperQuote` كان يستخدم `_quoteAccountEpoch` لإسقاط أسعار A→B→A القديمة، لكن `history` و`rangeTicks` و`pointSize` لم تستخدمه، و`closedCandlesSince`/`rangeTicksBetween` كانت تتحقق من رقم الحساب وعدم فراغ `_token` فقط، فيمكن رد طلب قديم من جلسة تفويض مختلفة بنفس الحساب أن يصل إلى شارت جديد.
+- **الإصلاح:** كشف `ctraderAuthorizationRevision` للقراءة فقط؛ تحصين `history` و`closedCandlesSince` و`rangeTicks` و`rangeTicksBetween` و`pointSize` بالتحقق من رقم الحساب، اتصال cTrader، وrevision قبل أي نشر للشارت/التخزين، مع رفض استجابة قديمة برسالة تفويض. رقم revision يتغير عند اختيار الحساب ولو عاد إلى الرقم نفسه أو عند OAuth إعادة ربط، لكنه لا يتغير عند تحديث token الموثوق لنفس الجلسة.
+- **الواجهة:** `ChartScreen._onMarketUpdate` يراقب تغير revision فوق رقم الحساب، لإلغاء طلبات source السابقة والـBID cached وتحديث شموع الشارت، بما في ذلك ربط OAuth جديد بذات accountId. لم تعد إعادة الاتصال بذات الحساب تؤدي إلى بقاء التاريخ القديم دون إعادة فحص.
+- **حماية استمرار جلسة OAuth:** `MarketApi._json` يرسل refreshed token مع token الأصلي الذي خرج به HTTP، وبعد HTTP 2xx/نجاح JSON فقط؛ `MarketController._onRefreshedToken` يرفض أي header يرجع لطلب قديم بعد logout/new authorization. لا تقبل أخطاء 401/JSON فاسد تحديث جلسة، ولا تفصح عن headers أو tokens في التقارير.
+- **اختبارات:** `ctrader_history_auth_revision_test.dart` ينشئ 5 طلبات history/BID/point عالقة، ثم A→B→A ويثبت رفضها؛ يعيد تفويض OAuth لنفس الحساب ويتأكد أن header متأخر لا يستعيد التوكن القديم مع قبول rotation موثوق لاحق؛ يفحص إعادة تحميل واجهة الشارت عند إعادة اختيار الحساب نفسه. أُضيف إلى CI Flutter وworkflow القديم غير المفعل فقط. CI PENDING قبل الدمج.
+- **الحالة المعلقة:** إعادة اختبار BID في حساب cTrader الحقيقي من الهاتف، وأداء الشارت وموثوقية gateway production بعد النشر المُراجع لاحقًا. لا بيانات سوق مختلقة.
+
+
 ## 2026-11-22 — PR #626 MERGED: حماية شارت Range الموثق أثناء التحديث، CI ناجح
 - **الدمج:** [PR #626](https://github.com/775878805Osamaha/TradeLab/pull/626) squash commit `3de00b3003d073e388f0c80c20db2f7b79071ebf` في `test/flutter-all-fixes-20261116`، من head `e26daf7ddf104ead7ff6c2b7c8dae17d85597bb1`.
 - **الفحص:** [GitHub Actions #45051268783 completed/success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45051268783): Flutter analyze وRange/BID/Replay/widget tests وأدوات الشارت والتوقيت اليمني؛ منها `range_refresh_retention_test.dart` و`range_refresh_retention_widget_test.dart` مع فشل طلب broker بعد العرض الأول.
