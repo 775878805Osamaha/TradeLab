@@ -37,6 +37,22 @@ void main() {
             Uint8List.fromList(bytes))));
       await loader.load();
     }
+    // Unit tests do not automatically load the material icon typeface.
+    // Without this, every chart toolbar and drawing-rail icon becomes a
+    // square even when the real Android APK shows the proper vector glyph.
+    final sdkRoot = Platform.environment['FLUTTER_ROOT'];
+    if (sdkRoot == null || sdkRoot.isEmpty) {
+      throw StateError('FLUTTER_ROOT is required for visual QA icons');
+    }
+    final materialIcons = File(
+        '$sdkRoot/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf');
+    if (!materialIcons.existsSync()) {
+      throw StateError('Material Icons test font is missing at '
+          '${materialIcons.path}');
+    }
+    final iconBytes = await materialIcons.readAsBytes();
+    await (FontLoader('MaterialIcons')..addFont(
+        Future<ByteData>.value(ByteData.sublistView(iconBytes)))).load();
   });
   for (final caseConfig in <({double width, double height, bool dark, String label})>[
     (width: 360, height: 640, dark: true, label: 'dark-360x640'),
