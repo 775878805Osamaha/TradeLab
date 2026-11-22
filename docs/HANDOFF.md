@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة سلامة رسم وReplay — رفض الأسعار والإحداثيات غير الصالحة (2026-11-22)
+- **نطاق العمل:** `fix/tradelab-drawing-finite-replay-guards-20261122` انطلاقاً من `test/flutter-all-fixes-20261116` @ `863bc9b94da73f03ccc7e294a99634bcae078fd0`. لا APK ولا تغيير `main`.
+- **الفجوة المثبتة من الكود:** `ChartPattern.visibleAt` يقبل فهرس رسم سالب لأنه أصغر من `revealedCount`، حتى لو كان المصدر خارج [0, visibleCount). `snapDrawingPrice` يبدأ بأول عنصر OHLC دون تحقق NaN/Infinity. و`ChartLineGeometry.strokes` لا يفلتر إحداثيات Flutter غير المنتهية قبل القص/raster، و`distanceToStroke` يعيد مسافة قد تكون NaN.
+- **التعديل:** رفض مرساتَي الرسم (والثالثة في القناة) إذا كانت الفهارس خارج Replay prefix أو أسعارها غير منتهية، والإبقاء على سعر صفر أو سالب إذا كان حقيقياً ومنتهياً. تجاهل OHLC غير المنتهي في المغناطيس دون اختلاق سعر بديل. رفض هندسة القص غير المنتهية وإرجاع infinity لمسافة hit-test غير صالحة حتى لا تستحوذ الرسومات الفاسدة على لمس الشارت. لا تغيير API أو cTrader/Binance أو قيم P&L أو لمس الشموع الصحيحة.
+- **الاختبارات المضافة:** `flutter_app/test/chart_annotations_test.dart` (negative source index, 120k history, Replay cutoff, bad OHLC, weak/strong magnet)، `flutter_app/test/chart_line_geometry_test.dart` (NaN/Infinity، Info Line/Trend Angle/Crossline/channel، clipping/hit testing). الملفان موجودان مسبقاً في قائمة GitHub Actions `verify-flutter-range.yml`.
+- **حالة التحقق:** تعديل كود مع اختبارات؛ CI **PENDING** حتى ظهور تشغيل GitHub ناجح للفرع، ولم يتم تشغيل Android Profile أو مقارنة لقطات شاشة TradingView أو مصدر cTrader حي.
+- **التالي:** مراجعة PR ونتائج Flutter analyze+tests، ثم توثيق SHA والدمج داخل `docs/CHANGE_REPORTS.md`. وبعدها اختبار Android واقعي لأداء pan/pinch وReplay.
+
+
 ## دفعة قيد التحقق — Trend Angle بزاوية الشارت الفعلية (2026-11-22)
 - **المستودع/الفرع:** `775878805Osamaha/TradeLab` / `feat/tradelab-trend-angle-source-20261122` بعد دمج PR #606 إلى `test/flutter-all-fixes-20261116`. دون تعديل `main` أو APK/Release.
 - **المرجع:** https://www.tradingview.com/support/solutions/43000791602-trend-angle-drawing-tool/ يحدد Trend Angle بأول/ثاني نقطة على الشارت ويحسب الزاوية بينهما من خط العرض الأفقي، مع خيارات price labels وbars range، وإمكانية إظهار إحصائيات.

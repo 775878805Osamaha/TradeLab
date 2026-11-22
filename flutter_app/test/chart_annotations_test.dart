@@ -179,4 +179,65 @@ void main() {
     expect(moved.start.price, 4080);
     expect(moved.end.price, 4080);
   });
+  test('Replay hides negative-index, invisible and malformed drawing anchors', () {
+    for (final pattern in <ChartPattern>[
+      const ChartPattern(
+        tool: ChartDrawingTool.trendLine,
+        start: ChartAnchor(-1, 100),
+        end: ChartAnchor(8, 110)),
+      const ChartPattern(
+        tool: ChartDrawingTool.trendAngle,
+        start: ChartAnchor(1, double.nan),
+        end: ChartAnchor(8, 110)),
+      const ChartPattern(
+        tool: ChartDrawingTool.infoLine,
+        start: ChartAnchor(1, 100),
+        end: ChartAnchor(8, double.infinity)),
+      const ChartPattern(
+        tool: ChartDrawingTool.parallelChannel,
+        start: ChartAnchor(1, 100),
+        end: ChartAnchor(8, 110),
+        offsetAnchor: ChartAnchor(-2, 105)),
+      const ChartPattern(
+        tool: ChartDrawingTool.parallelChannel,
+        start: ChartAnchor(1, 100),
+        end: ChartAnchor(8, 110),
+        offsetAnchor: ChartAnchor(5, double.negativeInfinity)),
+    ]) {
+      expect(pattern.visibleAt(10), isFalse,
+          reason: 'No invalid source endpoint may enter Replay paint');
+    }
+    const valid = ChartPattern(
+      tool: ChartDrawingTool.infoLine,
+      start: ChartAnchor(0, 0),
+      end: ChartAnchor(9, -2.5),
+    );
+    expect(valid.visibleAt(0), isFalse);
+    expect(valid.visibleAt(9), isFalse);
+    expect(valid.visibleAt(10), isTrue,
+        reason: 'Zero and negative finite values are valid source geometry');
+    expect(valid.shifted(120000).visibleAt(120010), isTrue);
+  });
+
+  test('OHLC magnet ignores invalid data and bad weak tolerances', () {
+    double snap(double requested, List<double> ohlc,
+        ChartMagnetMode mode, double tolerance) => snapDrawingPrice(
+      requestedPrice: requested, ohlc: ohlc, mode: mode,
+      weakPriceTolerance: tolerance,
+    );
+    const mixed = <double>[double.nan, double.infinity,
+        double.negativeInfinity, 4010, 4020];
+    expect(snap(4011, mixed, ChartMagnetMode.strong, 0), 4010);
+    expect(snap(4011, mixed, ChartMagnetMode.weak, 2), 4010);
+    expect(snap(4011, mixed, ChartMagnetMode.weak, .5), 4011);
+    expect(snap(4011, mixed, ChartMagnetMode.weak, double.nan), 4011);
+    expect(snap(4011, mixed, ChartMagnetMode.weak, -1), 4011);
+    expect(snap(4011, mixed, ChartMagnetMode.strong,
+        double.infinity), 4010);
+    expect(snap(4011, const [double.nan, double.infinity],
+        ChartMagnetMode.strong, 5), 4011);
+    expect(snap(double.nan, mixed, ChartMagnetMode.strong, 5).isNaN, isTrue,
+        reason: 'Never manufacture a market price for an invalid touch');
+  });
+
 }

@@ -4,6 +4,14 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-22 — حراسة بيانات الرسم غير الصالحة في Replay وCanvas
+- **الأساس/الفرع:** `test/flutter-all-fixes-20261116` عند `863bc9b94da73f03ccc7e294a99634bcae078fd0` → `fix/tradelab-drawing-finite-replay-guards-20261122`. **PR/CI: PENDING**.
+- **الخلل:** قبول فهرس سالب في `visibleAt`، واختيار NaN من عناصر OHLC للمغناطيس، وعدم فحص قيم Offset/Rect غير المنتهية قبل رسم خطوط/تحديد لمسها.
+- **الكود:** `chart_annotations.dart` يرفض فهارس المصدر غير الصالحة وأسعار المرساة NaN/Infinity ويحافظ على أسعار السوق المنتهية؛ مغناطيس OHLC يتجاهل القيم غير المنتهية ويتعامل مع tolerance غير صالحة. `chart_line_geometry.dart` يرفض stroke/viewport غير المنتهي ويمنع hit-tests لقطع وهمية.
+- **التحقق المضاف:** حالات وحدة في `chart_annotations_test.dart` و`chart_line_geometry_test.dart` لReplay/المغناطيس/الملصقات/القص/اللمس. **لم ينجز بعد:** GitHub CI والاختبار الفعلي على Android والمطابقة البصرية/السرعة على هاتف. لا APK ولا تغيير `main`.
+- **الخطوة التالية:** فحص نتائج PR، لا دمج عند فشل `flutter analyze` أو الاختبارات؛ تدوين النتيجة وروابطها بعد التحقق.
+
+
 ### 2026-11-22 — تفعيل رسم Trend Angle مع زاوية حقيقية ودعم Replay/Invert
 - **المرجع:** https://www.tradingview.com/support/solutions/43000791602-trend-angle-drawing-tool/؛ **الفرع:** `feat/tradelab-trend-angle-source-20261122` بعد PR #606 (MERGED)، الأساس `test/flutter-all-fixes-20261116`.
 - **الفجوة:** `trendAngle` في كتالوج Flutter مع `implemented=false`؛ أداة الرسوم نفسها غير معرفة؛ لا يمكن وضع نقطتين أو رؤية زاوية محسوبة.

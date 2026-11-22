@@ -538,4 +538,49 @@ void main() {
     expect(definitelyInvisible, greaterThan(28000));
     expect(kept, greaterThan(0));
   });
+  test('invalid source geometry never reaches Canvas or drawing selection', () {
+    const realStroke = (start: Offset(10, 10), end: Offset(90, 90));
+    for (final bad in <double>[
+      double.nan, double.infinity, double.negativeInfinity
+    ]) {
+      expect(ChartLineGeometry.strokes(
+        tool: ChartDrawingTool.infoLine,
+        start: Offset(bad, 10), end: const Offset(80, 80),
+        bounds: bounds), isEmpty);
+      expect(ChartLineGeometry.strokes(
+        tool: ChartDrawingTool.trendAngle,
+        start: const Offset(10, 10), end: Offset(80, bad),
+        bounds: bounds), isEmpty);
+      expect(ChartLineGeometry.strokes(
+        tool: ChartDrawingTool.crossLine,
+        start: Offset(20, bad), end: const Offset(20, 20),
+        bounds: bounds), isEmpty);
+      expect(ChartLineGeometry.strokes(
+        tool: ChartDrawingTool.parallelChannel,
+        start: const Offset(10, 10), end: const Offset(80, 80),
+        offset: Offset(bad, 30), bounds: bounds), isEmpty);
+      expect(ChartLineGeometry.distanceToStroke(
+        Offset(bad, 20), realStroke), double.infinity);
+      expect(ChartLineGeometry.distanceToStroke(
+        const Offset(30, 30),
+        (start: Offset(bad, 10), end: const Offset(90, 90))),
+          double.infinity);
+    }
+    expect(ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.trendLine,
+      start: const Offset(10, 10), end: const Offset(80, 80),
+      bounds: Rect.fromLTWH(0, 0, double.infinity, 100)), isEmpty);
+    expect(ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.trendLine,
+      start: const Offset(10, 10), end: const Offset(80, 80),
+      bounds: const Rect.fromLTWH(0, 0, 100, 0)), isEmpty);
+    expect(ChartLineGeometry.strokes(
+      tool: ChartDrawingTool.infoLine,
+      start: const Offset(10, 10), end: const Offset(90, 90),
+      bounds: bounds), hasLength(1),
+        reason: 'Valid real source drawings still paint normally');
+    expect(ChartLineGeometry.distanceToStroke(
+      const Offset(50, 50), realStroke), closeTo(0, 1e-9));
+  });
+
 }
