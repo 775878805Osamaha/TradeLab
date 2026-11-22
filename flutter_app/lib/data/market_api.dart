@@ -72,11 +72,29 @@ bool _terminalBidGatewayFailure(String body) {
   try {
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) return false;
+    // The cTrader gateway signs REQUEST_FREQUENCY_EXCEEDED as a
+    // broker rejection, but the broker's history-rate limit is transient.
+    // Retry only that documented code, not incorrect boundaries, missing
+    // permission or malformed/unusable tick data.
+    if (decoded['error'] == 'ctrader_broker_rejected_request') {
+      return decoded['brokerCode'] != 'REQUEST_FREQUENCY_EXCEEDED';
+    }
     return const {
       'ctrader_tick_history_unusable',
-      'ctrader_broker_rejected_request',
       'invalid_request',
     }.contains(decoded['error']);
+  } catch (_) {
+    return false;
+  }
+}
+
+bool _rateLimitedBidGatewayFailure(String body) {
+  if (body.length > 4096) return false;
+  try {
+    final decoded = jsonDecode(body);
+    return decoded is Map<String, dynamic> &&
+        decoded['error'] == 'ctrader_broker_rejected_request' &&
+        decoded['brokerCode'] == 'REQUEST_FREQUENCY_EXCEEDED';
   } catch (_) {
     return false;
   }
@@ -130,8 +148,13 @@ class MarketApi {
           _terminalBidGatewayFailure(response.body)) {
         break;
       }
-      await Future<void>.delayed(
-          Duration(milliseconds: 250 * (attempt + 1)));
+      // The broker explicitly asks callers to slow down after exceeding
+      // its historical-query rate. A longer bounded wait avoids hammering
+      // the next connection while ordinary gateway 5xx keep short backoff.
+      final backoffMs = _rateLimitedBidGatewayFailure(response.body)
+          ? 750 * (attempt + 1)
+          : 250 * (attempt + 1);
+      await Future<void>.delayed(Duration(milliseconds: backoffMs));
     }
     final refreshed = response.headers['x-tradelab-session'];
     if (refreshed != null && refreshed.isNotEmpty) onSessionRefresh?.call(refreshed);
@@ -142,10 +165,14 @@ class MarketApi {
       // The backend returns bounded public reason codes only. Never
       // expose raw cTrader responses, private account identifiers or tokens.
       String? reason;
+      String? brokerCode;
       try {
         final data = jsonDecode(response.body);
         if (data is Map<String, dynamic> && data['error'] is String) {
           reason = data['error'] as String;
+          if (data['brokerCode'] is String) {
+            brokerCode = data['brokerCode'] as String;
+          }
         }
       } catch (_) {}
       if (url.path == '/v1/ticks') {
@@ -155,6 +182,11 @@ class MarketApi {
             'لم نعرض شموع مدى غير موثقة.');
         }
         if (reason == 'ctrader_broker_rejected_request') {
+          if (brokerCode == 'REQUEST_FREQUENCY_EXCEEDED') {
+            throw const MarketDataException(
+              'تجاوزت طلبات تاريخ BID حد وسيط cTrader المؤقت. '
+              'أعد المحاولة بعد قليل؛ لم نعرض بيانات غير مكتملة.');
+          }
           throw const MarketDataException(
             'رفض وسيط cTrader طلب تاريخ تيكات BID. '
             'تحقق من دعم الوسيط للرمز XAUUSD وتاريخ التيكات.');
