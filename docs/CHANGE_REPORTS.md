@@ -1,5 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — الاحتفاظ الآمن بشموع Range أثناء إعادة جلب cTrader (قيد CI)
+- سبب موثّق: `ChartScreen._loadRealHistory` كان يفرّغ الشموع الموثقة قبل رد BID، فيحوّل فشل تحديث عابر إلى شارت فارغ.
+- تمت إضافة `RangeRefreshRetention` وفحص source-account/symbol/priceDistance/timeline ورفض الاحتفاظ عند Replay أو مصدر غير موثوق؛ ترميز أصل snapshot عند نشره؛ تحديث الحالة المرئية وزر تحديث BID في شاشة الإعدادات.
+- اختبارات pure policy + Flutter widget مع حالة broker failure، في بوابة CI، مع منع إظهار مصدر حساب آخر أو شموع للمقاس الخطأ.
+- هذه العملية لا تصلح تلقائيًا غياب بيانات BID لدى الوسيط أو بوابة Vercel production القديمة؛ لا APK/main/prod، CI pending.
+
+
 ### 2026-11-22 — إغلاق PR #625 بنجاح بعد اختبار Range/Replay
 - **التسليم:** [PR #625 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/625) عند `40ff5f6468e7890dde316c93183b2ee3dfa160a8` في dev، و[GitHub Actions #45050329496 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45050329496). تحقق Flutter analyze واختبارات BID/Range/Replay وRTL/Yemen.
 - **الأثر البرمجي:** استعادة HTTP 429/502/503/504 للصفحة الحقيقية نفسها، بما فيها cTrader `REQUEST_FREQUENCY_EXCEEDED` فقط دون باقي أكواد الرفض؛ تغيير lookback 24–72h إلى 6h chunks مع استمرار سلامة جلب التاريخ والشموع المكتملة.
