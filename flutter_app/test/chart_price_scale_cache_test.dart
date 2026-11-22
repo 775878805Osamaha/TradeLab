@@ -234,9 +234,9 @@ void main() {
   test('fractional LOG/inverted and Percent reuse keeps source labels honest',
       () {
     const firstViewport = ChartViewport(
-      barWidth: 10, scrollBars: 6, rightMarginBars: 4);
+      barWidth: 10, scrollBars: 6.15, rightMarginBars: 4);
     const subBarPan = ChartViewport(
-      barWidth: 10, scrollBars: 6.02, rightMarginBars: 4);
+      barWidth: 10, scrollBars: 6.20, rightMarginBars: 4);
     const past = <TradeCandle>[
       TradeCandle(10, 11, 9, 10),
       TradeCandle(10, 13, 9, 12),
