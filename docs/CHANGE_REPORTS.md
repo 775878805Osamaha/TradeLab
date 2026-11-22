@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — Range الأحد: تقسيم نافذة 24–72 ساعة الكبيرة (CI PENDING)
+- تم التحقق من كود RangeStartupLoader: قفزة 24h→72h كانت تطلب نافذة 48h قد تضم تيكات XAUUSD كثيفة قبل ظهور أول Snapshot. عبر 12h cumulative slices حتى 6 أيام، يظل كل BID موثقاً وحقيقياً ولا يُختلق نشاط في عطلات السوق.
+- اختبارات range_startup_loader_test.dart أضيفت لأحد Nov 22 وتاريخ جمعة عمره 42 ساعة وللحد 12h وتجاور النوافذ/عدم التكرار. قياسات السرعة الحقيقية لدى cTrader لم تنفذ. لا يغير وحده API مصدر الوسيط أو صلاحيات الحساب.
+- PR/CI pending. لا APK ولا تعديل main.
+
+
 ### 2026-11-22 — تشخيص صفحة cTrader فارغة موسومة hasMore (CI PENDING)
 - User Android screenshot matches MarketApi guard empty `hasMore=true`; exact broker cause not measured.
 - Gateway retries bounded documented count-back once on empty truncated response, with provenance and upper cutoff kept; test weekend/empty fallback; Node CI on PR.
