@@ -42,6 +42,16 @@ void main() {
         'openTradeCount': 1,
         'closedTradeCount': 1,
         'realizedPricePnl': 17.5,
+        'trades': [
+          <String, Object?>{
+            'side': 'buy', 'entryPrice': 100.0, 'quantity': 1.0,
+            'exitPrice': null, 'isOpen': true, 'realizedPricePnl': 0.0,
+          },
+          <String, Object?>{
+            'side': 'sell', 'entryPrice': 110.0, 'quantity': 2.0,
+            'exitPrice': 101.25, 'isOpen': false, 'realizedPricePnl': 17.5,
+          },
+        ],
       }];
     }
     Future<void> show(bool active) => tester.pumpWidget(MaterialApp(
@@ -58,8 +68,14 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('results-replay-session-0')), findsOneWidget);
     expect(find.text('الصفقات: 2 · مفتوحة: 1 · مغلقة: 1'), findsOneWidget);
-    expect(find.textContaining('17.5000'), findsOneWidget);
+    expect(find.textContaining('17.5000'), findsWidgets);
     expect(find.textContaining('ليست أرباحًا بالدولار'), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-trade-0-1')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-trade-0-0')), findsOneWidget);
+    expect(find.textContaining('بيع · مغلقة'), findsOneWidget);
+    expect(find.textContaining('شراء · مفتوحة'), findsOneWidget);
+    expect(find.textContaining('دخول: 110.00000'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     expect(find.textContaining('never-show-account-id'), findsNothing);
     await show(false);
     await show(true);
@@ -122,6 +138,65 @@ void main() {
     expect(find.byKey(const Key('results-replay-session-0')), findsOneWidget);
     expect(find.textContaining('12.5000'), findsOneWidget);
     expect(find.textContaining('account-hidden'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Replay rows reveal older positions in bounded pages at 320dp',
+      (tester) async {
+    final controller = _ConnectedReadOnlyController();
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(320, 760));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Future<List<Map<String, Object?>>> read() async => [
+      <String, Object?>{
+        'sessionId': 'many-entries',
+        'savedAtMs': 1795262400000,
+        'tradeCount': 25,
+        'openTradeCount': 25,
+        'closedTradeCount': 0,
+        'realizedPricePnl': 0.0,
+        'trades': List<Map<String, Object?>>.generate(25, (index) => {
+          'side': 'buy',
+          'entryPrice': 100.0 + index,
+          'quantity': 1.0,
+          'exitPrice': null,
+          'isOpen': true,
+          'realizedPricePnl': 0.0,
+        }),
+      },
+    ];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: ResultsScreen(controller: controller,
+          active: true, replayArchiveReader: read),
+    )));
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('results-tab-5')));
+    await tester.tap(find.byKey(const Key('results-tab-5')));
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-trade-0-24')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-trade-0-21')), findsNothing);
+    final more = find.byKey(const Key('results-replay-more-trades-0'));
+    // The results tab has a sticky header; ensureVisible may put a
+    // TextButton center exactly on the bottom test-view boundary (y=760),
+    // where a pointer tap misses. Scroll a little farther before tapping.
+    await tester.ensureVisible(more);
+    await tester.pump();
+    await tester.drag(find.byKey(const Key('results-dashboard-list')),
+        const Offset(0, -90));
+    await tester.pump();
+    await tester.tap(more);
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-trade-0-21')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-trade-0-0')), findsNothing);
+    await tester.ensureVisible(more);
+    await tester.pump();
+    await tester.drag(find.byKey(const Key('results-dashboard-list')),
+        const Offset(0, -90));
+    await tester.pump();
+    await tester.tap(more);
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-trade-0-0')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-more-trades-0')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

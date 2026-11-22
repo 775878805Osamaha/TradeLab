@@ -45,6 +45,8 @@ class _ResultsScreenState extends State<ResultsScreen> {
   bool _readingReplay = false;
   String? _replayReadError;
   int _replayReadRevision = 0;
+  // Keep large historical practice journals bounded on small Android screens.
+  final Map<String, int> _visibleReplayRows = {};
 
   static const _pages = [
     'نظرة عامة', 'المنحنيات البيانية', 'يوميات الصفقات',
@@ -508,6 +510,12 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 final pnl = session['realizedPricePnl'] is num
                     ? (session['realizedPricePnl'] as num).toDouble()
                     : 0.0;
+                final rawDetails = session['trades'];
+                final details = rawDetails is List<Map<String, Object?>>
+                    ? rawDetails : const <Map<String, Object?>>[];
+                final sessionId = session['sessionId']?.toString() ?? '$i';
+                final visibleRows = math.min(
+                    details.length, _visibleReplayRows[sessionId] ?? 3);
                 return Column(
                   key: Key('results-replay-session-$i'),
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -522,6 +530,21 @@ class _ResultsScreenState extends State<ResultsScreen> {
                       '(فرق السعر × الكمية)',
                       key: Key('results-replay-pnl-$i'),
                       textDirection: TextDirection.rtl),
+                    // Surface the latest saved practice entry immediately.
+                    // No hidden account IDs or broker/PaperJournal USD totals.
+                    for (var tradeIndex = details.length - 1;
+                        tradeIndex >= details.length - visibleRows;
+                        tradeIndex--)
+                      _replayTradeRow(details[tradeIndex], i, tradeIndex),
+                    if (visibleRows < details.length)
+                      TextButton(
+                        key: Key('results-replay-more-trades-$i'),
+                        onPressed: () => setState(() {
+                          _visibleReplayRows[sessionId] = visibleRows + 20;
+                        }),
+                        child: Text('عرض المزيد من صفقات Replay '
+                            '(${details.length - visibleRows})'),
+                      ),
                   ],
                 );
               }),
@@ -529,6 +552,34 @@ class _ResultsScreenState extends State<ResultsScreen> {
         ],
       )),
     ]);
+  }
+
+  Widget _replayTradeRow(
+      Map<String, Object?> trade, int sessionIndex, int tradeIndex) {
+    final side = trade['side'] == 'sell' ? 'بيع' : 'شراء';
+    final open = trade['isOpen'] == true;
+    final entry = (trade['entryPrice'] as num).toDouble();
+    final quantity = (trade['quantity'] as num).toDouble();
+    final exit = (trade['exitPrice'] as num?)?.toDouble();
+    final result = (trade['realizedPricePnl'] as num).toDouble();
+    return Padding(
+      key: Key('results-replay-trade-$sessionIndex-$tradeIndex'),
+      padding: const EdgeInsets.only(top: 9),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('$side · ${open ? 'مفتوحة' : 'مغلقة'} · '
+            'الكمية: $quantity',
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+        Text('دخول: ${entry.toStringAsPrecision(8)}'
+            '${exit == null ? '' : ' · خروج: ${exit.toStringAsPrecision(8)}'}',
+          style: const TextStyle(fontSize: 12),
+          textDirection: TextDirection.rtl),
+        if (!open)
+          Text('نتيجة الصفقة: ${result.toStringAsFixed(4)} '
+              '(فرق السعر × الكمية)',
+            style: const TextStyle(fontSize: 11),
+            textDirection: TextDirection.rtl),
+      ]),
+    );
   }
 
   Widget _performanceHero(LedgerReport report) {
