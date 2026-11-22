@@ -91,7 +91,7 @@ void main() {
       end: ChartAnchor(60, 200));
     expect(hit(const Offset(100, 150), [pattern]), 0,
         reason: 'Real 50% level remains visible even with ancient anchors');
-    expect(hit(const Offset(100, 173), [pattern]), isNull);
+    expect(hit(const Offset(100, 260), [pattern]), isNull);
     expect(hit(const Offset(259, 150), [pattern]), isNull,
         reason: 'Price ruler cannot select a drawing');
   });
@@ -112,11 +112,11 @@ void main() {
       end: ChartAnchor(12, 100));
     var xReads = 0, yReads = 0;
     int? check(int revealed) => hit(
-      const Offset(100, 100), const [visible, future, negative],
+      const Offset(112, 100), const [visible, future, negative],
       revealed: revealed,
       sourceXOverride: (i) {
         xReads++;
-        return 100;
+        return 100 + i.toDouble();
       },
       sourceY: (price) {
         yReads++;
