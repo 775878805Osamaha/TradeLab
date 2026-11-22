@@ -35,6 +35,19 @@ class MarketController extends ChangeNotifier {
   // flight. Matching account IDs alone cannot validate that old response.
   int _quoteAccountEpoch = 0;
 
+  /// Changes whenever broker authorization or the selected account changes,
+  /// including A -> B -> A and OAuth re-link to the SAME account number.
+  /// Token rotation for an unchanged session does not invalidate history.
+  int get ctraderAuthorizationRevision => _quoteAccountEpoch;
+
+  void _assertCurrentCTraderRead(
+      String account, int revision, String errorMessage) {
+    if (!ctraderConnected || accountId != account ||
+        _quoteAccountEpoch != revision) {
+      throw MarketDataException(errorMessage);
+    }
+  }
+
   void _invalidateCTraderQuoteSession() {
     _quoteAccountEpoch++;
     forexPrices.clear();
@@ -217,7 +230,10 @@ class MarketController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _onRefreshedToken(String newToken) {
+  void _onRefreshedToken(String newToken, String requestToken) {
+    // A late old-session HTTP response must not restore a disconnected
+    // OAuth credential or replace a newly authorized session's token.
+    if (_token == null || _token != requestToken || newToken.isEmpty) return;
     _token = newToken;
     unawaited(_storage.write(key: _tokenKey, value: newToken));
   }
@@ -227,10 +243,20 @@ class MarketController extends ChangeNotifier {
     if (symbol.source == TradeSource.binance) {
       return _api.binanceCandles(symbol: symbol.code, timeframe: timeframe, before: before);
     }
-    if (!ctraderConnected) throw const MarketDataException('اربط حساب cTrader لعرض أسعار الذهب والفوركس.');
-    return _api.ctraderCandles(token: _token!, accountId: accountId!,
+    final account = accountId;
+    final token = _token;
+    final revision = _quoteAccountEpoch;
+    if (account == null || token == null) {
+      throw const MarketDataException(
+          'اربط حساب cTrader لعرض أسعار الذهب والفوركس.');
+    }
+    final bars = await _api.ctraderCandles(
+        token: token, accountId: account,
         symbol: symbol.code, timeframe: timeframe,
         before: before ?? DateTime.now().toUtc());
+    _assertCurrentCTraderRead(account, revision,
+        'تغيّر تفويض cTrader أثناء تحميل الشموع. أعد المحاولة.');
+    return bars;
   }
 
   /// Poll only closed broker Trendbars since the last displayed candle.
@@ -239,6 +265,7 @@ class MarketController extends ChangeNotifier {
       TradeSymbol symbol, String timeframe, int lastBarTimestampMs) async {
     final account = accountId;
     final token = _token;
+    final revision = _quoteAccountEpoch;
     if (symbol.source != TradeSource.ctrader ||
         account == null || token == null) {
       throw const MarketDataException(
@@ -252,19 +279,27 @@ class MarketController extends ChangeNotifier {
       before: DateTime.now().toUtc(),
       fromTimestampMs: lastBarTimestampMs,
     );
-    if (accountId != account || _token == null) {
-      throw const MarketDataException(
-          'تغيّر حساب cTrader أثناء تحديث الشموع. أعد المحاولة.');
-    }
+    _assertCurrentCTraderRead(account, revision,
+        'تغيّر تفويض cTrader أثناء تحديث الشموع. أعد المحاولة.');
     return bars;
   }
 
-  Future<List<MarketTick>> rangeTicks(TradeSymbol symbol, {DateTime? before}) async {
-    if (symbol.source != TradeSource.ctrader || !ctraderConnected) {
-      throw const MarketDataException('شموع المدى تتطلب تيكات BID حقيقية من cTrader.');
+  Future<List<MarketTick>> rangeTicks(
+      TradeSymbol symbol, {DateTime? before}) async {
+    final account = accountId;
+    final token = _token;
+    final revision = _quoteAccountEpoch;
+    if (symbol.source != TradeSource.ctrader ||
+        account == null || token == null) {
+      throw const MarketDataException(
+          'شموع المدى تتطلب تيكات BID حقيقية من cTrader.');
     }
-    return _api.ctraderBidTicks(token: _token!, accountId: accountId!,
+    final ticks = await _api.ctraderBidTicks(
+        token: token, accountId: account,
         symbol: symbol.code, before: before ?? DateTime.now().toUtc());
+    _assertCurrentCTraderRead(account, revision,
+        'تغيّر تفويض cTrader أثناء تحميل تاريخ BID. أعد المحاولة.');
+    return ticks;
   }
 
   /// Refresh just the uncovered interval after a cached six-day window.
@@ -277,6 +312,7 @@ class MarketController extends ChangeNotifier {
   }) async {
     final account = accountId;
     final token = _token;
+    final revision = _quoteAccountEpoch;
     if (symbol.source != TradeSource.ctrader ||
         account == null || token == null) {
       throw const MarketDataException(
@@ -289,18 +325,25 @@ class MarketController extends ChangeNotifier {
       fromMs: fromMs,
       toMs: toMs,
     );
-    if (accountId != account || _token == null) {
-      throw const MarketDataException(
-          'تغيّر حساب cTrader أثناء تحديث تيكات المدى. أعد المحاولة.');
-    }
+    _assertCurrentCTraderRead(account, revision,
+        'تغيّر تفويض cTrader أثناء تحديث تيكات المدى. أعد المحاولة.');
     return ticks;
   }
 
   Future<double> pointSize(TradeSymbol symbol) async {
-    if (!ctraderConnected || symbol.source != TradeSource.ctrader) {
-      throw const MarketDataException('يلزم ربط cTrader لدقة تسعير شموع المدى.');
+    final account = accountId;
+    final token = _token;
+    final revision = _quoteAccountEpoch;
+    if (account == null || token == null ||
+        symbol.source != TradeSource.ctrader) {
+      throw const MarketDataException(
+          'يلزم ربط cTrader لدقة تسعير شموع المدى.');
     }
-    return _api.ctraderPointSize(token: _token!, accountId: accountId!, symbol: symbol.code);
+    final point = await _api.ctraderPointSize(
+        token: token, accountId: account, symbol: symbol.code);
+    _assertCurrentCTraderRead(account, revision,
+        'تغيّر تفويض cTrader أثناء تحميل دقة الرمز. أعد المحاولة.');
+    return point;
   }
 
   /// Returns a fresh source quote on demand; never submits broker orders.
