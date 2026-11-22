@@ -197,6 +197,72 @@ void main() {
         'session-rotated');
   });
 
+  test('history completing DURING OAuth re-link cannot publish old source',
+      () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    const storage = FlutterSecureStorage();
+    await storage.write(
+        key: 'tradelab_flutter_ctrader_session', value: 'session-old');
+    final oldStarted = Completer<void>();
+    final oldResponse = Completer<http.Response>();
+    final newGrantStarted = Completer<void>();
+    final releaseNewGrant = Completer<http.Response>();
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/accounts') {
+        return http.Response(jsonEncode({'accounts': [
+          {'accountId': '101', 'broker': 'One', 'isLive': false},
+        ]}), 200);
+      }
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      if (request.url.path == '/v1/candles') {
+        oldStarted.complete();
+        return oldResponse.future;
+      }
+      if (request.url.path == '/auth/ctrader/redeem') {
+        newGrantStarted.complete();
+        return releaseNewGrant.future;
+      }
+      throw StateError('Unexpected broker route ${request.url.path}');
+    }));
+    final controller = MarketController(storage: storage, api: api);
+    addTearDown(controller.dispose);
+    addTearDown(api.close);
+    await controller.initialize(enableDeepLinks: false);
+    final oldRead = controller.history(
+        gold, '1m', before: DateTime.utc(2026, 11, 20));
+    await oldStarted.future.timeout(const Duration(seconds: 5));
+    await storage.write(key: 'tradelab_flutter_oauth_pending', value:
+      jsonEncode({'verifier': 'pending-verifier',
+        'created': DateTime.now().toUtc().millisecondsSinceEpoch}));
+    final linking = controller.completeOAuth(Uri.parse(
+        'tradelabflutter://oauth/ctrader?ticket=pending-grant'));
+    await newGrantStarted.future.timeout(const Duration(seconds: 5));
+
+    final oldRejected = expectLater(oldRead,
+        throwsA(isA<MarketDataException>().having(
+          (e) => e.message, 'superseded authorization',
+          contains('تفويض'))));
+    oldResponse.complete(responseFor(http.Request('GET',
+      Uri.parse('https://tradelab-vercel-gateway.vercel.app'
+          '/v1/candles?accountId=101&symbolId=42&period=M1')),
+      refreshedToken: 'old-replay-token'));
+    await oldRejected;
+    expect(await storage.read(key: 'tradelab_flutter_ctrader_session'),
+        'session-old',
+        reason: 'The pending OAuth grant must reject late old-session tokens');
+    releaseNewGrant.complete(http.Response(jsonEncode({
+      'permission': 'read_only', 'sessionToken': 'session-new',
+    }), 200));
+    await linking;
+    expect(controller.accountId, '101');
+    expect(await storage.read(key: 'tradelab_flutter_ctrader_session'),
+        'session-new');
+  });
+
   test('401 and malformed broker JSON cannot rotate OAuth credentials',
       () async {
     for (final invalid in <String>['unauthorized', 'malformed']) {
