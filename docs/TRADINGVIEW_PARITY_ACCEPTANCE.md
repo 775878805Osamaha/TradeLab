@@ -1,5 +1,11 @@
 # TradeLab ↔ TradingView Android — معيار قبول المطابقة الكاملة
 
+## تقدم التحقق 2026-11-22 — تحسين كلفة لمس الرسومات
+- [PR #610](https://github.com/775878805Osamaha/TradeLab/pull/610) **MERGED** في فرع التطوير عند `37bc5d56f2a807d97be046ab49359789b4f81e90`؛ [GitHub CI #45018066145](https://github.com/775878805Osamaha/TradeLab/actions/runs/45018066145) **SUCCESS**.
+- كلفة تحويل إحداثيات السعر في `ChartDrawingHitTest.hit` أصبحت مقصوصة للخطوط المحدودة غير المرئية. اختبار 120k index/6000 offscreen patterns على شاشتي 259/329dp نجح: `sourceY` استُدعي مرتين للرسم الظاهر بدل 12002 في المسار القديم، مع بقاء Rays/Fibonacci/Crossline/Parallel قابلة للتحديد ومنع ظهور المستقبل في Replay.
+- **لا يستوفي معيار 100% حتى الآن:** هذا قياس عمليات حسابية ضمن اختبارات وحدة وليس FPS أو صورة بكسل أو اختبار Android. ينبغي التقاط واجهات TradingView وTradeLab على جهاز حقيقي وقياس p50/p95/p99 قبل الحكم على السلاسة. لا APK ولا `main`.
+
+
 ## تحديث تحقق 2026-11-22: سلامة الرسومات ومغناطيس LOG
 - PR #608 ([الدمج](https://github.com/775878805Osamaha/TradeLab/pull/608)، [CI ناجح](https://github.com/775878805Osamaha/TradeLab/actions/runs/44964541908)) يعالج الفهارس السالبة لمرسات Replay والبيانات NaN/Infinity والرسم غير المحدود.
 - PR #609 ([الدمج](https://github.com/775878805Osamaha/TradeLab/pull/609)، [CI ناجح](https://github.com/775878805Osamaha/TradeLab/actions/runs/44965028176)) يحسب قرب OHLC للمغناطيس بالبكسلات الحقيقية في LOG/Inverted على نماذج شاشات 320/390dp. فشل analyzer سابق موثق في `CHANGE_REPORTS.md` وأعيد الفحص بعد إصلاحه بنجاح.

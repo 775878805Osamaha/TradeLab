@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## أحدث حالة مؤكدة — PR #610 تحسين لمس الرسومات التاريخية (2026-11-22)
+- **فرع التطوير:** `test/flutter-all-fixes-20261116`؛ **Code merge SHA:** `37bc5d56f2a807d97be046ab49359789b4f81e90`؛ **PR:** https://github.com/775878805Osamaha/TradeLab/pull/610 **MERGED**. `main` دون تعديل، ولا APK أو Release جديد.
+- **CI الحقيقي:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45018066145 **completed/success** على `fc945655c037d22c0c15abf4effbe820fddabc20`، بما في ذلك `flutter analyze` واختبارات chart/Range/history/Replay وLong/Short/Crossline/Info Line/Trend Angle وتوقيت اليمن.
+- **التنفيذ:** فصل `ChartDrawingHitTest.hit` عن `ChartScreen` وربطه بإحداثيات `ChartViewport` و`ChartPriceScale` المصدرية، مع تجاوز تحويلات السعر للأدوات المحدودة خارج الشاشة باستخدام نفس قواعد `ChartLineGeometry.definitelyOffscreenHorizontally` في المسار الرسومي. لم يغير أسعار السوق أو أوامر التداول أو اختيار الوسيط.
+- **دليل الاختبار الهندسي:** 120,000 مؤشر شمعة و6,000 خط تاريخي في `chart_drawing_hit_test_test.dart` على عرض 259/329dp: انخفضت استدعاءات `sourceY` من حالة قديمة تحوّل 12,002 نقطة إلى استدعاءين للنقطتين المرئيتين في حالة الاختبار. اختُبرت أيضًا Rays/Crossline/Fibonacci/Parallel، أسبقية الرسم الأحدث، عدم كشف مستقبل Replay، والاستبعاد من محوري الوقت/السعر.
+- **الحدود:** عدّ العمليات ليس FPS؛ لا اختبار Android Profile p50/p95/p99 ولا لقطات مطابقة TradingView، ولا cTrader حقيقي. لا يجوز إعلان أن التطبيق أصبح طبق الأصل أو جاهزًا لكل الاستخدامات.
+- **الخطوة التالية:** قياس سلاسة pan/pinch والحمل على Android الفعلي عند 320/390dp على نفس المصدر/الإطار/الثيم، ثم معالجة أكبر فرق مثبت بصور أو قياس؛ لا بناء APK تلقائياً دون طلب.
+
+
 ## 2026-11-22 — تحسين اختيار الرسومات باللمس أثناء التاريخ الكثيف (قيد CI)
 - **النطاق:** `perf/tradelab-drawing-touch-cull-source-20261122` من فرع التطوير `test/flutter-all-fixes-20261116` @ `0b82addd5063e7b6f6baaf3b1d0894d2090d04b8`؛ لا APK ولا تعديل `main`.
 - **الفجوة المؤكدة في الشفرة:** كود الرسّام يطبق `ChartLineGeometry.definitelyOffscreenHorizontally` قبل حساب إحداثيات السعر، بينما `ChartScreen._hitPattern` السابق يحوّل أسعار **كل** الرسومات التاريخية حتى لو كانت خطوطها المحدودة خارج الشاشة. يتكرر هذا العمل عند بداية لمسة السحب/تعديل الرسم.

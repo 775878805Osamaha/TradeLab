@@ -1,5 +1,15 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — PR #610 دمج بعد نجاح Flutter CI: تسريع اختيار رسومات تاريخية خارج الشاشة
+- **قبل:** `test/flutter-all-fixes-20261116` @ `0b82addd5063e7b6f6baaf3b1d0894d2090d04b8`؛ **بعد دمج الكود:** `37bc5d56f2a807d97be046ab49359789b4f81e90` على فرع التطوير فقط، لا `main` ولا APK.
+- **الملفات:** `flutter_app/lib/chart/chart_drawing_hit_test.dart` جديد، `flutter_app/lib/screens/chart_screen.dart` استخدام helper، `flutter_app/test/chart_drawing_hit_test_test.dart` جديد، `.github/workflows/verify-flutter-range.yml`، وتقارير docs.
+- **ما تم إثباته:** https://github.com/775878805Osamaha/TradeLab/pull/610 **MERGED**؛ https://github.com/775878805Osamaha/TradeLab/actions/runs/45018066145 **completed/success** على `fc945655c037d22c0c15abf4effbe820fddabc20`. Flutter analyze وchart/Range/Replay/history والأدوات/TZ جميعها نجحت.
+- **الأرقام الدقيقة:** اختبار مُصطنع ب120k فهرس شمعة و6000 رسم بعيد تحقق من استدعاءين لإسقاط Y للرسم المختار بدلاً من 12002 لمسار غير المقصوص؛ ليس مقياس FPS ولا p95 أو ضمان 6,000 رسم في تطبيق المستخدم.
+- **المحافظة:** rays/extended/crossline/fibonacci/parallel بلا استبعاد خاطئ، Replay source-prefix، حدود plot وselected handle، آخر رسم أولوية؛ لا تعديل أسعار بيانات الوسيط أو P&L.
+- **غير مُتحقق:** Android الحقيقي screenshot/pixel diff/gesture trace/Profile FPS أو cTrader/Binance live؛ لا إعلان اكتمال.
+- **التالي:** جمع قياس Android من جهاز حقيقي عند 320/390dp، ثم إصلاح الفرق الأكبر المثبت وتسجيله بنفس التوثيق.
+
+
 ### 2026-11-22 — تحسين كلفة hit-testing للرسومات خارج النافذة التاريخية
 - **فرع وSHA قبل:** `perf/tradelab-drawing-touch-cull-source-20261122` من `test/flutter-all-fixes-20261116` @ `0b82addd5063e7b6f6baaf3b1d0894d2090d04b8`. **بعد/PR/CI: PENDING** حتى توثيق الدمج.
 - **السبب من الكود:** `_hitPattern` كان يحسب أسعار Y لكل رسم غير مرئي، خلافاً لقواعد القص المستخدمة بالفعل في Paint. الضرر يتصاعد مع آلاف خطوط الاتجاه التاريخية والـ LOG.
