@@ -77,6 +77,7 @@ jobs:
             test/chart_offscreen_price_scale_test.dart \
             test/chart_viewport_test.dart \
             test/chart_axis_contrast_test.dart \
+            test/chart_dark_toolbar_labels_test.dart \
             test/ctrader_account_selection_test.dart \
             test/ctrader_account_persistence_order_test.dart \
             test/ctrader_history_auth_revision_test.dart \
