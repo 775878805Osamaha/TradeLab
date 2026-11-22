@@ -1,8 +1,13 @@
 name: Verify cTrader gateway for Flutter
 
-# Economic mode: manual runs only; no push or PR execution.
+# Lightweight authenticated-stub tests for gateway changes, no APK build.
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [test/flutter-all-fixes-20261116]
+    paths:
+      - 'vercel-gateway/**'
+      - '.github/workflows/verify-flutter-ctrader-gateway.yml'
 permissions:
   contents: read
 

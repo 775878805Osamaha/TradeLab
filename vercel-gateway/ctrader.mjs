@@ -249,7 +249,22 @@ class Channel {
       throw Error('invalid_trendbar_window');
     await this.account(accountId,accessToken);
     try {
-      return await this.trendbarSlice(accountId,symbolId,period,from,to,count);
+      const page=await this.trendbarSlice(
+        accountId,symbolId,period,from,to,count);
+      if(page.hasMore===true && page.candles.length===0) {
+        // The broker can return a dense/truncated response whose bars ALL
+        // precede the requested lower bound (e.g. Sunday/Monday around
+        // closed gold sessions). Filtering those out leaves hasMore=true
+        // but zero source candles, which Flutter correctly refuses.
+        //
+        // Retry ONCE using cTrader's documented (count,to) request. This
+        // keeps the real authenticated source, allows older market bars,
+        // and never invents a weekend candle or hides a second empty page.
+        const fallback=await this.trendbarSlice(
+          accountId,symbolId,period,from,to,count,{countBack:true});
+        return {...fallback,queryMode:'count_back'};
+      }
+      return page;
     } catch(error) {
       // cTrader's allowed timestamp span is broker- and timeframe-specific.
       // Its documented Trendbars request permits omitting fromTimestamp when
