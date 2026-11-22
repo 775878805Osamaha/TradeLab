@@ -52,6 +52,7 @@ import '../replay/replay_training_archive.dart';
 import '../replay/replay_trade_overlay.dart';
 import '../data/range_bar_timeline.dart';
 import '../data/range_size_reuse.dart';
+import '../data/range_refresh_retention.dart';
 import '../data/range_live_bid_delta.dart';
 import '../data/range_startup_loader.dart';
 import '../data/ctrader_older_candle_pager.dart';
@@ -148,6 +149,9 @@ class _ChartScreenState extends State<ChartScreen>
   List<int> _rangeBarEndTickIndices = [];
   List<int> _rangeBarTimestamps = [];
   RangeBarTimeline? _rangeTimeline;
+  // Range provenance is attached to each authenticated BID snapshot.
+  String? _verifiedRangeAccount;
+  String? _verifiedRangeSymbol;
   bool _pollingLiveRange = false;
   int? _rangeOlderCursorMs;
   int _loadRevision = 0;
@@ -989,6 +993,8 @@ class _ChartScreenState extends State<ChartScreen>
         _actualRange = [];
         _rangeHistoryTicks = [];
         _rangeTimeline = null;
+        _verifiedRangeAccount = null;
+        _verifiedRangeSymbol = null;
         _rangeBarEndTickIndices = [];
         _rangeBarTimestamps = [];
         _rangeOlderCursorMs = null;
@@ -1015,6 +1021,20 @@ class _ChartScreenState extends State<ChartScreen>
     final sourceTimeframe = _timeframe;
     final sourceAccount = sourceSymbol.source == TradeSource.ctrader
         ? widget.controller.accountId : null;
+    final retainedRange = RangeRefreshRetention.canKeep(
+      connectedAccount: sourceAccount,
+      snapshotAccount: _verifiedRangeAccount,
+      connectedSymbol: sourceSymbol.code,
+      snapshotSymbol: _verifiedRangeSymbol,
+      rangePoints: _rangeTicks,
+      pointSize: sourceAccount == null ? null :
+          _rangePointCache['$sourceAccount:${sourceSymbol.code}'],
+      verifiedTicks: _rangeHistoryTicks,
+      timeline: _rangeTimeline,
+      sourceReady: _mode == ChartMode.range && _rangeSourceSupported &&
+          _liveRequested && widget.controller.ctraderConnected,
+      replayActive: _replay || _replaySelectingStart,
+    );
     if (sourceSymbol.source == TradeSource.ctrader &&
         _mode != ChartMode.range) {
       // A failed *initial* fetch will be retried after two minutes, not on
@@ -1046,12 +1066,19 @@ class _ChartScreenState extends State<ChartScreen>
       _actualBars = [];
       _actualCandles = [];
       _actualTimestamps = [];
-      _actualRange = [];
-      _rangeHistoryTicks = [];
-      _rangeTimeline = null;
-      _rangeBarEndTickIndices = [];
-      _rangeBarTimestamps = [];
-      _rangeOlderCursorMs = null;
+      // Display authentic BID candles already verified for THIS source
+      // while its network refresh runs. Never preserve a changed account,
+      // symbol, Range point distance or a hidden Replay future.
+      if (!retainedRange) {
+        _actualRange = [];
+        _rangeHistoryTicks = [];
+        _rangeTimeline = null;
+        _verifiedRangeAccount = null;
+        _verifiedRangeSymbol = null;
+        _rangeBarEndTickIndices = [];
+        _rangeBarTimestamps = [];
+        _rangeOlderCursorMs = null;
+      }
       _patterns.clear();
       _analysisPatterns = [];
       _analysisLevels = [];
@@ -1131,6 +1158,8 @@ class _ChartScreenState extends State<ChartScreen>
             setState(() {
               _rangeHistoryTicks = page.ticks;
               _rangeOlderCursorMs = page.fromMs - 1;
+              _verifiedRangeAccount = account;
+              _verifiedRangeSymbol = symbol.code;
               _actualRange = page.timeline.bars;
               _rangeTimeline = page.timeline;
               _rangeBarEndTickIndices = page.timeline.endTickIndices;
@@ -5126,7 +5155,7 @@ class _ChartScreenState extends State<ChartScreen>
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           color: TradeColors.blue.withValues(alpha: .07),
           child: Text(_liveRequested
-              ? 'مدى $_rangeTicks نقطة · ${!_rangeSourceSupported ? 'غير مدعوم لهذا المصدر' : _loading && _actualRange.isEmpty ? 'تحميل صفحات BID الموثقة' : _actualRange.isEmpty ? 'لا توجد تيكات BID موثقة' : _actualRange.length == 1 ? 'شمعة قيد التكوين من BID؛ جرّب مدى أصغر' : 'شموع محسوبة من تيكات BID لـ cTrader'}'
+              ? 'مدى $_rangeTicks نقطة · ${!_rangeSourceSupported ? 'غير مدعوم لهذا المصدر' : _loading && _actualRange.isEmpty ? 'تحميل صفحات BID الموثقة' : _loading && _actualRange.isNotEmpty ? 'تحديث BID جارٍ · عرض آخر شموع موثقة' : _actualRange.isEmpty ? 'لا توجد تيكات BID موثقة' : _actualRange.length == 1 ? 'شمعة قيد التكوين من BID؛ جرّب مدى أصغر' : 'شموع محسوبة من تيكات BID لـ cTrader'}'
               : 'مدى $_rangeTicks · اربط حساب cTrader للحصول على تيكات BID الحقيقية',
               style: const TextStyle(fontSize: 11, color: TradeColors.blue)),
         ),
