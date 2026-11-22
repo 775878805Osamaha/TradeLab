@@ -920,9 +920,18 @@ class _ChartScreenState extends State<ChartScreen>
     if (!ChartFeedHealth.quoteChanged(previous, latest)) return;
     _lastObservedQuote = latest;
     if (!mounted || !widget.active || _replay) return;
-    // Verified BID/ASK movement normally requires a repaint only. Avoid
-    // rebuilding the chart controls, drawing tools and history on each tick.
-    _chartRepaint.value++;
+    // The default BID/ASK mode is hidden: changing a source quote must
+    // not repaint the entire candle canvas when the quote has no visible
+    // pixel contribution. Even with labels enabled, a timestamp-only
+    // refresh redraws nothing; the header evidence check below still runs.
+    if (ChartFeedHealth.quoteAffectsChartCanvas(
+      previous: previous,
+      next: latest,
+      bidAskLabelsVisible:
+          _scaleSettings.bidAsk != ChartPriceLabelMode.hidden,
+    )) {
+      _chartRepaint.value++;
+    }
     if (_selectedSymbol.source == TradeSource.ctrader &&
         _mode != ChartMode.range && _actualTimestamps.isNotEmpty &&
         ChartFeedHealth.quoteHeaderEvidenceChanged(

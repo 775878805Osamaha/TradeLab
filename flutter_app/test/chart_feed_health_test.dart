@@ -189,4 +189,78 @@ void main() {
     expect(ChartFeedHealth.closedCandlesLagging(
       latestClosedOpenMs: 200000, timeframe: '1m', nowMs: 1000), isFalse);
   });
+  test('hidden BID/ASK quotes do not repaint 120k-candle canvas on updates',
+      () {
+    const first = MarketQuote(
+      symbol: 'XAUUSD', source: TradeSource.ctrader,
+      bid: 3900, ask: 3900.2, timestampMs: 1000000);
+    var repaintCount = 0;
+    var previous = first;
+    for (var i = 1; i <= 240; i++) {
+      final latest = MarketQuote(
+        symbol: 'XAUUSD', source: TradeSource.ctrader,
+        bid: 3900 + i * .01, ask: 3900.2 + i * .01,
+        timestampMs: 1000000 + i * 100);
+      expect(ChartFeedHealth.quoteChanged(previous, latest), isTrue,
+        reason: 'Real broker revisions remain recognized and archived');
+      if (ChartFeedHealth.quoteAffectsChartCanvas(
+          previous: previous, next: latest, bidAskLabelsVisible: false)) {
+        repaintCount++;
+      }
+      previous = latest;
+    }
+    expect(repaintCount, 0,
+        reason: 'A hidden quote must never invalidate candle raster on ticks');
+    expect(previous.bid, closeTo(3902.4, 1e-9));
+    expect(previous.timestampMs, 1024000);
+  });
+
+  test('visible BID/ASK redraws on real price/visibility, not timestamp',
+      () {
+    const first = MarketQuote(
+      symbol: 'EURUSD', source: TradeSource.ctrader,
+      bid: 1.1000, ask: 1.1002, timestampMs: 500000);
+    const timestampOnly = MarketQuote(
+      symbol: 'EURUSD', source: TradeSource.ctrader,
+      bid: 1.1000, ask: 1.1002, timestampMs: 510000);
+    const changed = MarketQuote(
+      symbol: 'EURUSD', source: TradeSource.ctrader,
+      bid: 1.1001, ask: 1.1003, timestampMs: 520000);
+    bool paint(MarketQuote? old, MarketQuote? next, bool visible) =>
+        ChartFeedHealth.quoteAffectsChartCanvas(
+          previous: old, next: next, bidAskLabelsVisible: visible);
+    expect(ChartFeedHealth.quoteChanged(first, timestampOnly), isTrue);
+    expect(paint(first, timestampOnly, true), isFalse,
+        reason: 'Quote timestamps are not painted as axis labels');
+    expect(paint(first, changed, true), isTrue);
+    expect(paint(first, changed, false), isFalse);
+    expect(paint(null, first, true), isTrue);
+    expect(paint(first, null, true), isTrue,
+        reason: 'Source expiry must remove a stale visible BID/ASK label');
+    expect(paint(null, null, true), isFalse);
+  });
+
+  test('hidden quote still updates candle-lag header and source minute',
+      () {
+    final start = DateTime.utc(2026, 11, 22, 15).millisecondsSinceEpoch;
+    MarketQuote sample(int ms, double bid) => MarketQuote(
+      symbol: 'XAUUSD', source: TradeSource.ctrader,
+      bid: bid, ask: bid + .2, timestampMs: ms);
+    final early = sample(start + 10000, 3900);
+    final newMinute = sample(start + 62000, 3901);
+    expect(ChartFeedHealth.quoteAffectsChartCanvas(
+      previous: early, next: newMinute,
+      bidAskLabelsVisible: false), isFalse);
+    expect(ChartFeedHealth.quoteHeaderEvidenceChanged(
+      previous: early, next: newMinute,
+      lastClosedOpenMs: start, timeframe: '1m',
+      nowMs: start + 62000), isTrue,
+      reason: 'The separate source-evidence header must still be rebuilt');
+    expect(ChartFeedHealth.quoteHeaderEvidenceChanged(
+      previous: early, next: null,
+      lastClosedOpenMs: start, timeframe: '1m',
+      nowMs: start + 62000), isTrue,
+      reason: 'Expired cTrader quote evidence must still be reported');
+  });
+
 }

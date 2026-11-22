@@ -32,6 +32,25 @@ abstract final class ChartFeedHealth {
       previous?.bid != next?.bid ||
       previous?.ask != next?.ask;
 
+  /// The live BID/ASK tag is optional and HIDDEN by default. Changes in
+  /// quote timestamp alone are not new visible pixels; when the quote tags
+  /// are hidden, no quote-only update should repaint the entire 120k-source
+  /// chart canvas. The header's separate evidence rule still handles stale
+  /// closed candles, source minute changes and reconnects.
+  ///
+  /// This is a presentation-only decision. The broker quote cache and the
+  /// latest source revision are still consumed and never synthesized.
+  static bool quoteAffectsChartCanvas({
+    required MarketQuote? previous,
+    required MarketQuote? next,
+    required bool bidAskLabelsVisible,
+  }) =>
+      bidAskLabelsVisible &&
+      (previous?.bid != next?.bid ||
+       previous?.ask != next?.ask ||
+       previous?.symbol != next?.symbol ||
+       previous?.source != next?.source);
+
   /// The full chart header needs a rebuild only if source evidence shown in
   /// its tooltip/indicator changes. BID/ASK price movement *inside* the same
   /// minute belongs to the chart painter, not to every header/control widget.

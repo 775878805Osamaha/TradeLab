@@ -1,5 +1,20 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 UTC — PR #616: الفشل الأول في اختبار واجهة قديم وتصحيح معيار القبول
+- **CI الأولى:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45027351182 **failed** في `Verify historical tick archive and chart interactions` مع **794 tests passed, 1 failed**. `flutter analyze` نجح، وجميع اختبارات `chart_feed_health_test.dart` الجديدة نجحت.
+- **السبب المثبت حرفياً من سجل GitHub:** الاختبار `chart_paint_only_pan_test.dart: streaming price changes repaint chart, not entire controls` توقع زيادة `market.reads` مع كل تحديث مصدر حتى لو كان `ChartScaleSettings.bidAsk = hidden`. الإصلاح يعمد إلى **عدم إعادة الرسم في هذا الوضع الافتراضي**؛ لذلك توقع الاختبار القديم يناقض السلوك المطلوب، لا يوجد دليل أن فشلًا في بيانات السوق حدث.
+- **التصحيح:** تحديث عنوان الاختبار والتوقع: `market.reads` يجب أن يظل كما هو خلال 20 source revisions مخفية. يظل التحقق من ثبات header ومن خلو أخطاء Flutter كما هو. اختبارات `chart_feed_health_test.dart` تغطي إعادة الرسم عند ظهور أسعار BID/ASK وتغيرها وانتهاء صلاحيتها، وتحديث تحذير التأخر حتى حين يكون السعر مخفياً.
+- **الحالة:** commit تصحيح الاختبار، CI النهائي **PENDING**؛ يمنع الدمج حتى تؤكد GitHub Actions جميع اختبارات الشارت وRange وReplay. لا Android FPS حقيقي ولا APK.
+
+
+### 2026-11-22 — تقليل quote-only redraw عندما BID/ASK مخفي (CI PENDING)
+- **المصدر/الفرع:** `test/flutter-all-fixes-20261116` عند `0f3c0cd231ee9dfd5c1f7c8ff941b23b5fc9fba5` → `perf/tradelab-quote-no-candle-repaint-20261122`، لا `main` أو APK.
+- **الخلل:** عند كل `ChartFeedHealth.quoteChanged` يدفع `_refreshDisplayedQuote` رسم الشارت كاملًا رغم إخفاء BID/ASK افتراضياً؛ كما أن تغير `timestampMs` وحده لا يغير أي بكسل في هذه التسميات.
+- **الإصلاح:** إضافة قرار واضح `quoteAffectsChartCanvas(previous,next,bidAskLabelsVisible)` وتطبيقه حول `_chartRepaint.value++` فقط؛ الاحتفاظ باستدعاء `quoteHeaderEvidenceChanged` منفصلاً حتى لا تتوقف تحذيرات تأخر OHLC وتجدد دقيقة/اتصال cTrader. بيانات المصدر والخادم وReplay لا تتغير.
+- **الاختبار:** 240 revisions لسعر مخفي بلا repaint decision، مع ظهور واختفاء سعر مرئي/تحديث timestamp ومخاطر header؛ اختبار `chart_feed_health_test.dart` مسجّل أصلاً ببوابة CI.
+- **الحالة:** PR/CI قيد الفحص؛ لا قياسات Android FPS ولا نسبة زمنية مثبَتة.
+
+
 ### 2026-11-22 UTC — إغلاق #614: رفض الرسومات التاريخية قبل تحويل X بنجاح
 - **قبل:** `test/flutter-all-fixes-20261116` @ `d6ec4302533870795ca01e678bae8b5510d06e73`؛ **الدمج:** `7f3f2f0653f7c5982f604ffeab068828c8a881e0`؛ **رأس الفرع وقت المراجعة:** `3f87046910627475190347c098fde8671d3e2034`؛ لا تعديل `main` ولا APK.
 - **PR/CI:** https://github.com/775878805Osamaha/TradeLab/pull/614 **MERGED**، https://github.com/775878805Osamaha/TradeLab/actions/runs/45024043207 **completed/success** عند `8cc0dd71de5e9be5e5ca811a3b1df7f8480e8e22`، بما فيها `flutter analyze` وRange/Replay والشارت وأدوات الرسم وتوقيت اليمن.
