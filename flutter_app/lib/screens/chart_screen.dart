@@ -6478,7 +6478,7 @@ class _CandleChartPainter extends CustomPainter {
       _text(canvas, scale.axisLabel(tick, decimals),
           Offset(axis + 6, py - 8), axisTextColor,
           panel.axisTextSize.toDouble(),
-          bold: important);
+          bold: important, maxWidth: 52);
       if (panel.horizontalGridVisible && py >= 0 && py < chartHeight) {
         _configuredLine(canvas, Offset(0, py), Offset(axis, py),
           Color(panel.horizontalGridColor), panel.horizontalGridStroke, .55);
@@ -6764,7 +6764,8 @@ class _CandleChartPainter extends CustomPainter {
         Paint()..color = color);
       _text(canvas, scale.axisLabel(price, decimals),
           Offset(axis + 3, top + 4),
-        Colors.white, math.max(9, panel.axisTextSize - 2).toDouble());
+        Colors.white, math.max(9, panel.axisTextSize - 2).toDouble(),
+        maxWidth: 55);
     }
     // A source-derived last-close marker, not a simulated tick or countdown.
     final lastClose = candles.last.close;
@@ -6788,7 +6789,7 @@ class _CandleChartPainter extends CustomPainter {
           Paint()..color = lastColor);
       _text(canvas, scale.axisLabel(lastClose, decimals),
           Offset(axis + 3, tagY + 7), Colors.white,
-          panel.axisTextSize.toDouble());
+          panel.axisTextSize.toDouble(), maxWidth: 55);
     }
     if (previousSessionClose != null) {
       annotate(previousSessionClose!, Color(scaleSettings.previousCloseColor),
@@ -6971,7 +6972,8 @@ class _CandleChartPainter extends CustomPainter {
         canvas.drawRect(Rect.fromLTWH(axis, markerY, 61, 18),
             Paint()..color = TradeColors.blue);
         _text(canvas, scale.axisLabel(crossPrice, decimals),
-            Offset(axis + 3, markerY + 2), Colors.white, 10);
+            Offset(axis + 3, markerY + 2), Colors.white, 10,
+            maxWidth: 55);
       }
       if (timestamps.length >= candles.length &&
           selected.index != null) {
@@ -7009,9 +7011,37 @@ class _CandleChartPainter extends CustomPainter {
   }
 
   void _text(Canvas canvas, String value, Offset offset, Color color,
-      double size, {bool bold = false, bool rtl = false}) {
-    textCache.paint(
-      canvas, value, offset, color, size, bold: bold, rtl: rtl);
+      double size, {bool bold = false, bool rtl = false,
+      double? maxWidth}) {
+    if (maxWidth == null || !maxWidth.isFinite || maxWidth <= 0) {
+      textCache.paint(
+        canvas, value, offset, color, size, bold: bold, rtl: rtl);
+      return;
+    }
+    // Long BTC / index / fractional forex prices must NEVER lose the last
+    // digit because the right-side ruler is 61 logical px wide. Fit the
+    // complete measured text rather than ellipsizing an authentic price.
+    // Cache all measured typefaces, and use a horizontal fit ONLY when
+    // reducing typography to 8sp is still insufficient.
+    var readableSize = size;
+    var paragraph = textCache.layout(
+        value, color, readableSize, bold: bold, rtl: rtl);
+    while (paragraph.width > maxWidth && readableSize > 8) {
+      readableSize = math.max(8, readableSize - 1);
+      paragraph = textCache.layout(
+          value, color, readableSize, bold: bold, rtl: rtl);
+    }
+    if (paragraph.width <= maxWidth) {
+      paragraph.paint(canvas, offset);
+      return;
+    }
+    final ratio = maxWidth / paragraph.width;
+    if (!ratio.isFinite || ratio <= 0) return;
+    canvas.save();
+    canvas.translate(offset.dx, offset.dy);
+    canvas.scale(ratio, 1);
+    paragraph.paint(canvas, Offset.zero);
+    canvas.restore();
   }
 
   void _paintShortPositions(Canvas canvas, ChartPriceScale scale,
@@ -7094,7 +7124,8 @@ class _CandleChartPainter extends CustomPainter {
     if (y < 0 || y > height) return;
     final top = (y - 9).clamp(0, height - 18).toDouble();
     canvas.drawRect(Rect.fromLTWH(axis, top, 61, 18), Paint()..color = color);
-    _text(canvas, value, Offset(axis + 2, top + 2), Colors.white, 10);
+    _text(canvas, value, Offset(axis + 2, top + 2), Colors.white, 10,
+        maxWidth: 56);
   }
 
   void _shortPill(Canvas canvas, String value, Offset location,
