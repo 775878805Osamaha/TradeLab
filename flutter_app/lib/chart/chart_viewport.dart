@@ -156,6 +156,33 @@ class ChartPriceScale {
     );
   }
 
+  /// Prepare the price-to-pixel projection once per Canvas paint frame.
+  ///
+  /// The LOG scale's minimum/maximum do NOT change between candle strokes.
+  /// Calling y() for each body, wick, axis guide and source drawing would
+  /// evaluate log(maximum) and log(minimum) repeatedly. Capture those two
+  /// constants once and preserve the exact y() evaluation order per price.
+  /// Linear, relative/Indexed, invalid and nonpositive axis fallbacks reuse
+  /// the existing authoritative y() transform without any approximation.
+  ///
+  /// Paint-only: no market price, Replay cutoff or source OHLC is mutated.
+  double Function(double) prepareYForFrame() {
+    if (!usesLogarithmic) return y;
+    final logMaximum = math.log(maximum);
+    final logSpan = logMaximum - math.log(minimum);
+    final frameHeight = height;
+    final frameInverted = inverted;
+    return (double marketPrice) {
+      // Match y()'s deterministic nonpositive LOG fallback exactly.
+      if (marketPrice <= 0) {
+        return frameInverted ? -frameHeight * 2 : frameHeight * 3;
+      }
+      final standardY =
+          (logMaximum - math.log(marketPrice)) / logSpan * frameHeight;
+      return frameInverted ? frameHeight - standardY : standardY;
+    };
+  }
+
   double y(double price) {
     double standardY;
     if (!usesLogarithmic) {

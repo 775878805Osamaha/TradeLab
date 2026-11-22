@@ -1,5 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — تقليل حسابات لوغاريتم محور السعر في الإطارات (CI PENDING)
+- **الفرع:** `perf/chart-log-price-projection-20261122` مبني من `test/flutter-all-fixes-20261116` عند `d6ec4302533870795ca01e678bae8b5510d06e73`؛ لا APK ولا main.
+- **الفجوة من الكود:** `ChartPriceScale.y` يعيد حساب `log(maximum)` و`log(minimum)` عند كل استدعاء في محور LOG. يستخدم Canvas هذه الدالة لكل جسم/فتيل شمعة، علامات المحور والرسومات أثناء السحب والتكبير.
+- **التحسين:** `ChartPriceScale.prepareYForFrame` يلتقط الثوابت `log(maximum)` و`log(maximum)-log(minimum)` مرة واحدة لكل frame؛ `_CandleChartPainter.paint` يستخدم الدالة المجهّزة؛ وضع Linear وPercent/Indexed يواصل حسابه الأصلي، والسعر غير الموجب LOG يحتفظ بموضعه غير القابل للرسم نفسه. لا تغيير لقيم OHLC أو Replay.
+- **الاختبارات:** `chart_logarithmic_price_scale_test.dart` يقارن دالة الرسم الجديدة والأصلية على ارتفاعات 320/390/640، LOG/Inverted، أسعار غير موجبة ولانهاية، وLinear/Relative fallback. النتيجة الفعلية في GitHub CI **لم تُثبت** بعد؛ المطابقة الهندسية شرط قبل الدمج. لا قياس FPS على Android.
+
+
 ## 2026-11-22 — اختصار تحويل الإحداثيات لآلاف الرسومات التاريخية (قيد CI)
 - **الفرع:** `perf/chart-source-window-early-cull-20261122` من `test/flutter-all-fixes-20261116` عند `d6ec4302533870795ca01e678bae8b5510d06e73`، دون APK أو تغيير main.
 - **السبب المثبت في المصدر:** PR #610 وفّر `ChartDrawingHitTest` لتجنب السعر Y للرسومات المحدودة خارج الشاشة، لكنه ما زال يحسب `ChartViewport.chartX` مرتين لكل رسم غير مرئي خلال اللمس؛ المسار الرسومي نفسه يحسب إحداثيات X لكل رسم قبل قصّه. النموذج الموجود لديه 6,000 رسمة تاريخية و120k شمعة، أي 12,002 تحويل X سابقاً للضغط على رسم واحد مرئي.
