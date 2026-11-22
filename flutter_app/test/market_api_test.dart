@@ -428,6 +428,102 @@ void main() {
     }
   });
 
+
+  test('BID 429/502/503/504 retries the SAME genuine broker interval',
+      () async {
+    for (final status in const [429, 502, 503, 504]) {
+      var calls = 0;
+      const fromMs = 1700000000000;
+      const toMs = fromMs + 3600000;
+      final api = MarketApi(client: MockClient((request) async {
+        if (request.url.path == '/v1/symbols') {
+          return http.Response(jsonEncode({'symbols': [
+            {'symbolName': 'XAUUSD', 'symbolId': 42},
+          ]}), 200);
+        }
+        expect(request.url.path, '/v1/ticks');
+        expect(request.url.queryParameters['from'], '$fromMs');
+        expect(request.url.queryParameters['to'], '$toMs');
+        expect(request.headers['Authorization'], 'Bearer token');
+        calls++;
+        if (calls == 1) {
+          return http.Response(jsonEncode({'error': 'temporary_gateway'}), status);
+        }
+        return http.Response(jsonEncode({
+          'source': 'ctrader', 'quoteType': 'bid', 'symbolId': '42',
+          'accountId': '7', 'hasMore': false, 'ticks': [
+            {'timestamp': fromMs + 1, 'price': 3900.1},
+            {'timestamp': fromMs + 1, 'price': 3900.2},
+            {'timestamp': toMs, 'price': 3900.8},
+          ],
+        }), 200);
+      }));
+      final ticks = await api.ctraderBidTicksRange(
+        token: 'token', accountId: '7', symbol: 'XAUUSD',
+        fromMs: fromMs, toMs: toMs,
+      );
+      expect(calls, 2,
+          reason: 'Transient HTTP status $status must not widen the window');
+      expect(ticks.map((x) => x.timestamp),
+          [fromMs + 1, fromMs + 1, toMs]);
+      expect(ticks.map((x) => x.bid), [3900.1, 3900.2, 3900.8]);
+      api.close();
+    }
+  });
+
+  test('BID source corruption, hard rejection and 401 are never retried',
+      () async {
+    for (final failure in const [
+      (503, 'ctrader_tick_history_unusable'),
+      (503, 'ctrader_broker_rejected_request'),
+      (400, 'invalid_request'),
+      (401, 'session_expired'),
+    ]) {
+      var calls = 0;
+      final api = MarketApi(client: MockClient((request) async {
+        if (request.url.path == '/v1/symbols') {
+          return http.Response(jsonEncode({'symbols': [
+            {'symbolName': 'XAUUSD', 'symbolId': 42},
+          ]}), 200);
+        }
+        calls++;
+        return http.Response(jsonEncode({'error': failure.$2}), failure.$1);
+      }));
+      await expectLater(
+        api.ctraderBidTicksRange(
+          token: 'token', accountId: '7', symbol: 'XAUUSD',
+          fromMs: 1700000000000, toMs: 1700000001000,
+        ),
+        throwsA(isA<MarketDataException>()),
+      );
+      expect(calls, 1,
+          reason: 'Do not hide source rejection or auth expiry by retrying');
+      api.close();
+    }
+  });
+
+  test('BID transient errors are bounded to three total HTTP attempts',
+      () async {
+    var calls = 0;
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      calls++;
+      return http.Response(jsonEncode({'error': 'temporary_gateway'}), 503);
+    }));
+    await expectLater(
+      api.ctraderBidTicksRange(token: 'token', accountId: '7',
+        symbol: 'XAUUSD', fromMs: 1700000000000, toMs: 1700000001000),
+      throwsA(isA<MarketDataException>()),
+    );
+    expect(calls, 3,
+        reason: 'A persistent outage must not trigger infinite BID queries');
+    api.close();
+  });
+
   test('cTrader fills truncated tick pages by splitting exact milliseconds',
       () async {
     final end = DateTime.utc(2026, 11, 8).millisecondsSinceEpoch;
