@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'market_api.dart';
 import 'tradelab_data.dart';
+import 'ctrader_session_token_write_queue.dart';
 
 /// Owns authentication and explicit source states; never fabricates a quote.
 class MarketController extends ChangeNotifier {
@@ -25,6 +26,11 @@ class MarketController extends ChangeNotifier {
   late final MarketApi _api;
   final FlutterSecureStorage _storage;
   static const _tokenKey = 'tradelab_flutter_ctrader_session';
+  late final CTraderSessionTokenWriteQueue _sessionWrites =
+      CTraderSessionTokenWriteQueue((token) => token == null
+          ? _storage.delete(key: _tokenKey)
+          : _storage.write(key: _tokenKey, value: token));
+  bool _replacingOAuthAuthorization = false;
   static const _selectedAccountKey = 'tradelab_flutter_ctrader_selected_account';
   static const _pendingKey = 'tradelab_flutter_oauth_pending';
   String? _token;
@@ -145,6 +151,7 @@ class MarketController extends ChangeNotifier {
     final ticket = uri.queryParameters['ticket'];
     if (ticket == null || ticket.isEmpty) return;
     busy = true;
+    _replacingOAuthAuthorization = true;
     error = null;
     notifyListeners();
     try {
@@ -164,7 +171,10 @@ class MarketController extends ChangeNotifier {
       // A newly authorized session must never inherit BID/ASK from the old
       // token, including when the selected account number is unchanged.
       _invalidateCTraderQuoteSession();
-      await _storage.write(key: _tokenKey, value: issued);
+      // Complete earlier, possibly slow token-rotation writes BEFORE the
+      // new OAuth credential is persisted. Incoming old-session headers are
+      // ignored throughout re-authorization.
+      await _sessionWrites.persist(issued);
       _token = issued;
       accounts = authorized;
       accountId = authorized.first.id;
@@ -172,6 +182,7 @@ class MarketController extends ChangeNotifier {
       error = e is MarketDataException ? e.message : 'فشل تأكيد تسجيل الدخول. حاول مرة أخرى.';
     } finally {
       await _storage.delete(key: _pendingKey);
+      _replacingOAuthAuthorization = false;
       busy = false;
       notifyListeners();
     }
@@ -228,7 +239,9 @@ class MarketController extends ChangeNotifier {
     accounts = const [];
     _invalidateCTraderQuoteSession();
     _api.forgetCTraderSymbols();
-    await _storage.delete(key: _tokenKey);
+    // A queued refresh write cannot finish AFTER logout and restore the
+    // stale credential: deletion waits for all earlier secure writes.
+    await _sessionWrites.persist(null);
     await _storage.delete(key: _pendingKey);
     await _storage.delete(key: _selectedAccountKey);
     notifyListeners();
@@ -237,9 +250,16 @@ class MarketController extends ChangeNotifier {
   void _onRefreshedToken(String newToken, String requestToken) {
     // A late old-session HTTP response must not restore a disconnected
     // OAuth credential or replace a newly authorized session's token.
-    if (_token == null || _token != requestToken || newToken.isEmpty) return;
+    if (_replacingOAuthAuthorization ||
+        _token == null || _token != requestToken || newToken.isEmpty) {
+      return;
+    }
     _token = newToken;
-    unawaited(_storage.write(key: _tokenKey, value: newToken));
+    // A failed best-effort rotation write must not create an unhandled
+    // asynchronous error; the next logout/re-link operation still proceeds
+    // through the serialization barrier.
+    unawaited(_sessionWrites.persist(newToken).then<void>(
+      (_) {}, onError: (Object _, StackTrace __) {}));
   }
 
   Future<List<MarketBar>> history(TradeSymbol symbol, String timeframe,
