@@ -17,7 +17,7 @@ import '../widgets/tradelab_dashboard_widgets.dart';
 class ResultsScreen extends StatefulWidget {
   const ResultsScreen({
     required this.controller, this.journal, this.active = false,
-    this.replayArchiveReader, super.key,
+    this.replayArchiveReader, this.replayArchivePageReader, super.key,
   });
 
   final MarketController controller;
@@ -25,6 +25,11 @@ class ResultsScreen extends StatefulWidget {
   /// IndexedStack preserves this widget while the user trades on the chart.
   final bool active;
   final Future<List<Map<String, Object?>>> Function()? replayArchiveReader;
+  /// Optional paged source for deterministic widget regression tests.
+  /// Production uses ReplayTrainingArchive.recent with identical arguments.
+  final Future<List<Map<String, Object?>>> Function({
+    required int limit, required int offset,
+  })? replayArchivePageReader;
 
   @override
   State<ResultsScreen> createState() => _ResultsScreenState();
@@ -47,6 +52,12 @@ class _ResultsScreenState extends State<ResultsScreen> {
   int _replayReadRevision = 0;
   // Keep large historical practice journals bounded on small Android screens.
   final Map<String, int> _visibleReplayRows = {};
+  // Render only a small number of historical sessions on narrow Android
+  // screens, but never silently strand older durable Replay trades.
+  static const int _replayReadPageSize = 20;
+  static const int _replayRevealStep = 5;
+  int _visibleReplaySessions = _replayRevealStep;
+  bool _moreReplaySessionsAvailable = false;
 
   static const _pages = [
     'نظرة عامة', 'المنحنيات البيانية', 'يوميات الصفقات',
@@ -82,19 +93,49 @@ class _ResultsScreenState extends State<ResultsScreen> {
     });
   }
 
-  Future<void> _readReplayArchive() async {
+  Future<void> _readReplayArchive({bool append = false}) async {
     if (!mounted || !widget.active) return;
+    // A tab reactivation must supersede a stale read. Only block duplicate
+    // older-page clicks while another page request is already running.
+    if (append && (_readingReplay || !_moreReplaySessionsAvailable)) return;
     final revision = ++_replayReadRevision;
     setState(() {
       _readingReplay = true;
       _replayReadError = null;
     });
     try {
-      final reader = widget.replayArchiveReader ?? ReplayTrainingArchive.recent;
-      final sessions = await reader();
+      // Injected readers are complete in-memory test snapshots. Production
+      // requests one extra SQLite row to detect older pages without loading
+      // an unbounded training archive into the Android widget tree.
+      final customReader = widget.replayArchiveReader;
+      late final List<Map<String, Object?>> sessions;
+      if (customReader != null) {
+        sessions = await customReader();
+      } else {
+        final offset = append ? _replaySessions.length : 0;
+        final pagedReader = widget.replayArchivePageReader;
+        sessions = pagedReader == null
+            ? await ReplayTrainingArchive.recent(
+                limit: _replayReadPageSize + 1, offset: offset)
+            : await pagedReader(
+                limit: _replayReadPageSize + 1, offset: offset);
+      }
       if (!mounted || !widget.active || revision != _replayReadRevision) return;
+      final page = customReader == null &&
+              sessions.length > _replayReadPageSize
+          ? sessions.sublist(0, _replayReadPageSize)
+          : sessions;
       setState(() {
-        _replaySessions = sessions;
+        _replaySessions = append
+            ? [..._replaySessions, ...page]
+            : page;
+        _moreReplaySessionsAvailable = customReader == null &&
+            sessions.length > _replayReadPageSize;
+        _visibleReplaySessions = append
+            ? math.min(_replaySessions.length,
+                _visibleReplaySessions + _replayRevealStep)
+            : _replayRevealStep;
+        if (!append) _visibleReplayRows.clear();
         _readingReplay = false;
       });
     } catch (_) {
@@ -103,6 +144,17 @@ class _ResultsScreenState extends State<ResultsScreen> {
         _replayReadError = 'تعذر قراءة صفقات Replay المحفوظة. حاول التحديث.';
         _readingReplay = false;
       });
+    }
+  }
+
+  void _showMoreReplaySessions() {
+    if (_readingReplay || _replayReadError != null) return;
+    if (_visibleReplaySessions < _replaySessions.length) {
+      setState(() => _visibleReplaySessions = math.min(
+          _visibleReplaySessions + _replayRevealStep,
+          _replaySessions.length));
+    } else if (_moreReplaySessionsAvailable) {
+      unawaited(_readReplayArchive(append: true));
     }
   }
 
@@ -124,7 +176,8 @@ class _ResultsScreenState extends State<ResultsScreen> {
     if (!widget.active) {
       _replayReadRevision++;
     } else if (!oldWidget.active ||
-        oldWidget.replayArchiveReader != widget.replayArchiveReader) {
+        oldWidget.replayArchiveReader != widget.replayArchiveReader ||
+        oldWidget.replayArchivePageReader != widget.replayArchivePageReader) {
       _scheduleReplayRead();
     }
   }
@@ -502,8 +555,10 @@ class _ResultsScreenState extends State<ResultsScreen> {
               padding: EdgeInsets.only(top: 8),
               child: Text('لا توجد جلسات Replay محفوظة بعد.'),
             ),
-          if (_replayReadError == null)
-            for (var i = 0; i < math.min(5, _replaySessions.length); i++) ...[
+          if (_replayReadError == null || _replaySessions.isNotEmpty)
+            for (var i = 0;
+                i < math.min(_visibleReplaySessions, _replaySessions.length);
+                i++) ...[
               const Divider(height: 16),
               Builder(builder: (_) {
                 final session = _replaySessions[i];
@@ -549,6 +604,14 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 );
               }),
             ],
+          if (_replayReadError == null &&
+              (_visibleReplaySessions < _replaySessions.length ||
+                  _moreReplaySessionsAvailable))
+            TextButton(
+              key: const Key('results-replay-more-sessions'),
+              onPressed: _readingReplay ? null : _showMoreReplaySessions,
+              child: const Text('عرض جلسات Replay أقدم'),
+            ),
         ],
       )),
     ]);

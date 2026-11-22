@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-23 — Replay Results history pagination (CI PENDING)
+- **Branch:** `fix/replay-results-session-pagination-20261123`, based on `test/flutter-all-fixes-20261116` after verified #632 merge. Do not touch `main`, production gateways, or create an APK for this change.
+- **Source-confirmed gap:** `ReplayTrainingArchive.recent` queried up to 20 local SQLite sessions, but `ResultsScreen._replayTrainingPanel` rendered exactly `min(5, _replaySessions.length)` with no navigation to sessions 6–20. Older practice trades looked missing despite durable storage. Over 20 sessions were inaccessible.
+- **Implementation:** add `recent(limit, offset)` validated SQL paging; Results loads 21 rows, displays 20, uses the 21st only as a has-more sentinel. It renders five session cards at a time and offers Arabic `عرض جلسات Replay أقدم` to reveal cached cards or load the next 20 from SQLite. Retain saved trade-level pagination and source/account isolation; no simulated or broker money in the Replay P&L.
+- **Correctness:** reactivating the results tab supersedes a pending previous read, rather than blocking forever; a failed append shows an error while keeping already loaded sessions.
+- **Tests authored:** `replay_training_archive_test.dart` SQL paging across 25 saved sessions, invalid negative offset; `results_connection_test.dart` exercises 23 sessions over 20+3, four reveal clicks, no unnecessary SQLite queries, no exposure of internal account IDs. **CI results not yet confirmed at time of initial report.**
+- **Acceptance:** Flutter analyze + targeted and active regression tests green; inspect real Android Results after entering/closing at least 23 distinct Replay sessions. Broker BID Range startup and pixel parity remain separate unverified work. No release candidate or APK yet.
+
+
 ## 2026-11-22 — PR #632 MERGED: actual Flutter screenshot QA and readable price-axis UI; CI green
 - **Merged:** [PR #632](https://github.com/775878805Osamaha/TradeLab/pull/632), squash `87ec7238f420fec1141aa861b831c1d4da49241e` in `test/flutter-all-fixes-20261116` after [GitHub Actions #45059784238 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45059784238) on `2763947a029c471f4120bef0099ed2dd7e1c659a` (**849 main tests passed + 11 additional tests**, Flutter analyze success) and [actual widget screenshot runner #45059784282 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45059784282).
 - **Screenshots:** GitHub artifact `tradelab-flutter-chart-qa-5ca34d34441096d244da46a9918313158c4122ed`, artifact id `14769176444`, 4 genuine Flutter render PNGs: dark 360×640, dark 390×844, light 360×640, long-press crosshair dark 360×640. Artifact expires 2026-11-29 19:16:53 UTC; generated screenshots from MockClient synthetic BTC **TEST-ONLY** fixture on Linux, not broker values, Android images or release APK. Distinguish screenshots in user handoffs.

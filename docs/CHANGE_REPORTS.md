@@ -1,5 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Make all archived Replay sessions navigable (CI PENDING)
+- Fixed source-confirmed Results UI truncation to first five Replay sessions; old durable historical trades had no discovery path.
+- Implemented bounded SQL `limit/offset` archive pages (20 + 1 has-more marker), visible five-session increments, on-demand next page, stale-read supersession on tab activation, and partial-data preservation when a later read fails.
+- Added archive pagination and 23-session Flutter widget regression tests. Source cTrader/Binance candles, Replay execution policy, live trading, broker credentials and separate paper USD ledger are unchanged.
+- Branch `fix/replay-results-session-pagination-20261123`. No APK/main/prod. CI/analyzer/Android device tests pending.
+
+
 ### 2026-11-22 — PR #632 merged: visual chart parity QA and dark typography fixes
 - [PR #632 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/632) squash `87ec7238f420fec1141aa861b831c1d4da49241e`; [main Flutter verification #45059784238 green](https://github.com/775878805Osamaha/TradeLab/actions/runs/45059784238): **849 tests passed + 11 additional**, analyzer passed. [Visual QA #45059784282 green](https://github.com/775878805Osamaha/TradeLab/actions/runs/45059784282), 4 genuine widget PNGs exported to GitHub artifact `14769176444` with 7-day retention.
 - Repaired unreadable black price labels on dark chart, black symbol/timeframe text on dark bottom toolbar, clipped final digits in 61dp ruler, TextPainter inherited Ahem square font in widget tests, and absent MaterialIcons in screenshot runner. Price/time numbers now use explicit Roboto and measured width fitting, dark labels use `ChartAxisContrast`, tested at phone-width widget viewports. No cTrader/Binance/Replay source values changed.
