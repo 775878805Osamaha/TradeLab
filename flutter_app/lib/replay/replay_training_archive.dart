@@ -21,14 +21,13 @@ class ReplayTrainingArchive {
   static Future<bool> _pendingVisibleSave = Future<bool>.value(true);
 
   static void trackScheduledSave(Future<void> write) {
-    _pendingVisibleSave = _pendingVisibleSave.then((_) async {
-      try {
-        await write;
-        return true;
-      } catch (_) {
-        return false;
-      }
-    });
+    // Attach the error handler IMMEDIATELY, not in a later microtask after
+    // _pendingVisibleSave completes. A failed SQLite Future can complete
+    // synchronously before that microtask, yielding an unhandled-zone error.
+    // The original writer still receives its own failure notification.
+    final outcome = write.then<bool>(
+        (_) => true, onError: (Object _) => false);
+    _pendingVisibleSave = _pendingVisibleSave.then((_) => outcome);
   }
 
   static Future<Database> _open() =>
