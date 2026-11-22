@@ -1,5 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — تثبيت جيل التفويض في cTrader History/Range (قيد CI)
+- **السبب المثبت بالكود:** مقياس A→B→A يحمي BID/ASK فقط، بينما history وBID وpoint-size كانت ترجع البيانات القديمة من طلب بدأ قبل تبديل/إعادة تفويض حساب cTrader.
+- تحديث MarketController لحراسة كل ردود history/BID/metadata عبر `ctraderAuthorizationRevision`؛ تحديث ChartScreen لملاحظة نفس رقم الحساب مع تفويض جديد وإعادة تحميل المصدر؛ منع headers القديمة من إعادة كتابة token في MarketApi بعد logout/re-auth، وتأجيل refresh إلى ما بعد النجاح والتحليل الصحيح لرد HTTP.
+- اختبارات A→B→A لجميع مسارات candle/range/point، وإعادة OAuth لنفس الحساب وحالة update token المشروع، وإعادة تحميل واجهة Flutter. تمنع خلط broker history أو رسمه بعد تغير صلاحية الجلسة، دون اختراع شموع.
+- CI PENDING، لا main/APK/production.
+
+
 ### 2026-11-22 — إغلاق #626 بعد اختبار Android Flutter Range refresh
 - **الدمج:** [PR #626 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/626) SHA `3de00b3003d073e388f0c80c20db2f7b79071ebf`؛ [CI 45051268783 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45051268783) على commit `e26daf7ddf104ead7ff6c2b7c8dae17d85597bb1`، شاملاً widget عند فشل تحديث broker واختبارات سلامة حساب/رمز/point-size/Replay.
 - **النتيجة:** إبقاء Range BID الحقيقي الذي سبق التحقق منه مرئيًا خلال تحديث الحساب/الرمز/المقاس نفسه، مع حالة ظاهرة وزر تحديث، ومسح فوري عند اختلاف المصدر أو المقاس. فشل التحديث لا يختلق شموعًا ولا يحجب بيانات تاريخية موثوقة.
