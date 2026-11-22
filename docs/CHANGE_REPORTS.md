@@ -1,5 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — PR #632 merged: visual chart parity QA and dark typography fixes
+- [PR #632 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/632) squash `87ec7238f420fec1141aa861b831c1d4da49241e`; [main Flutter verification #45059784238 green](https://github.com/775878805Osamaha/TradeLab/actions/runs/45059784238): **849 tests passed + 11 additional**, analyzer passed. [Visual QA #45059784282 green](https://github.com/775878805Osamaha/TradeLab/actions/runs/45059784282), 4 genuine widget PNGs exported to GitHub artifact `14769176444` with 7-day retention.
+- Repaired unreadable black price labels on dark chart, black symbol/timeframe text on dark bottom toolbar, clipped final digits in 61dp ruler, TextPainter inherited Ahem square font in widget tests, and absent MaterialIcons in screenshot runner. Price/time numbers now use explicit Roboto and measured width fitting, dark labels use `ChartAxisContrast`, tested at phone-width widget viewports. No cTrader/Binance/Replay source values changed.
+- Earlier [PR #630 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/630) squash `fe7cd9b6ab1acce5aeecbbd1a54e2ab7243e35d3` via [CI #45057958160 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45057958160), **843 + 11 tests passed**: preserve verified source price-axis bounds in all-blank chart future/old-history viewport; Replay prefix cannot expose future extrema. Old screenshot PR #631 closed unmerged after clean forward port into #632.
+- QA screenshot market data is strictly a TEST fixture and Linux render, not an installed APK or Android hardware proof. Remaining true TradingView parity/fps, real cTrader BID production load and volume UI are open validation items; main/prod/APK untouched.
+
+
 ### 2026-11-22 — Flutter real screenshot QA + readable dark labels + full-width price digits (CI PENDING)
 - Captures actual Flutter `ChartScreen` widget snapshots with test-only offline BTC OHLC, dark/light 360/390dp and crosshair, via new path-scoped GitHub Actions artifact. Reference screenshot is already saved in repo; screenshots are inspectable unlike generated UI mockups.
 - Verified visual issues in screenshot: Ahem square glyphs/font in widget tests, dark default `axisTextColor=black` against nearly black canvas, long BTC price tags clipped by fixed 61dp ruler. Fix via scoped test fonts/MaterialIcons, explicit Roboto for Canvas TextPainter, conditional readable axis ink and measured fitting for every authentic digit.
