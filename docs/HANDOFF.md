@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — ترتيب حفظ اختيار حساب cTrader حتى بعد A→B→A وOAuth (CI PENDING)
+- **الفرع:** `fix/ctrader-persist-account-choice-order-20261122` من `dfb444b5945a64cecb3ee127bf845965ba243b3a` بعد دمج #627. لا APK، لا main، لا Vercel production.
+- **الخلل المثبت في الكود:** `MarketController.chooseAccount` كان ينفّذ `unawaited(_storage.write(selectedAccountKey, id))` لكل اختيار، بينما `disconnect` يحذف `selectedAccountKey` مباشرة. على Android إذا تأخرت كتابة account A ثم أكملت بعد B أو بعد delete الخاص بالخروج، فقد يُعاد اختيار حساب قديم عند فتح التطبيق لاحقًا. اختبار الاستمرار السابق لم يغطّ تغييرات A→B→A السريعة.
+- **الحل:** توسعة طابور الكتابة المتسلسل المجرب من #627 إلى `CTraderSerializedSecureValueWriteQueue` لكل مفتاح تخزين؛ يظل `CTraderSessionTokenWriteQueue` مخصصًا لرمز OAuth ويستخدم القاعدة نفسها. يقوم `chooseAccount` بطلبات account choice ضمن queue، و`disconnect` ينتظر الحذف بعد جميع الكتابات السابقة؛ إذا فشلت كتابة قديمة لا تُمنع عمليات الاختيار/الحذف الأحدث.
+- **OAuth re-link:** إذا ظل الحساب المختار مصرحًا في قائمة الحسابات الجديدة، احتفظ به بدل العودة عشوائيًا لأول حساب (قد يكون Demo). إذا فقد صلاحية الوصول، اختر أول حساب مصرح به، ثم احفظه في الطابور حتى لا يختاره التطبيق القديم لاحقًا. فشل حفظ التفضيل بعد ربط صحيح يُظهر رسالة ولا يزوّر نجاح حفظ الاختيار.
+- **اختبارات:** `ctrader_account_persistence_order_test.dart` اختبار serial writes مؤجلة (A→B→A), logout بعد تأخر كتابة, اختيار متسارع/إعادة التشغيل/الخروج, إعادة التفويض مع بقاء الحساب Live، ثم فقد الوصول إليه؛ أُدرج في CI النشط وفحوص البناء الاحتياطية. لا يوجد قياس Android حقيقي أو اتصال live broker.
+- **قيد التنفيذ:** التحليل الآلي والاختبارات في GitHub قبل الدمج. تقرير دمج #627 سابقًا باقٍ؛ لا يعاد إنشاء APK أثناء هذه الدفعة.
+
+
 ## 2026-11-22 — PR #627 MERGED: تاريخ cTrader وOAuth محميان بجيل التفويض، الاختبارات ناجحة
 - **الدمج:** [PR #627 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/627) squash commit `ae4a854cf33c96199d1087b0c6f641f8319dd906` في `test/flutter-all-fixes-20261116`.
 - **الفحص النهائي المؤكد:** [GitHub Actions #45055339815 completed/success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45055339815) على `c9654824647c3a4b2b10e031909f43d1c59bdf84`: 827 tests passed في اختبارات التاريخ/Range/Replay والشارت، و11 tests passed في فحوص إضافية؛ Flutter analyze نجح.

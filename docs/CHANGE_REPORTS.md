@@ -1,5 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — حماية اختيار حساب cTrader من سباق كتابة التخزين (قيد CI)
+- مصدر الخلل: `chooseAccount` يطلق writes دون await، و`disconnect` يحذف الحساب المختار دون انتظارها؛ قد ينتهي write A بعد اختيار B أو الخروج فيُستعاد حساب غير مطلوب بعد restart.
+- تعميم سياسة كتابة serial الآمنة نفسها المستخدمة في Token OAuth إلى `selectedAccountKey`؛ ضمان last selection wins بعد A→B→A، وdelete logout ينتظر كل writes.
+- أثناء OAuth جديد يُحتفظ بالحساب Live المختار فقط إذا ظل ضمن authorized accounts؛ في غير ذلك يُختار أول حساب مصرح له وتُحفظ النتيجة بدل التفضيل القديم. عرض خطأ واضح إن فشل حفظ التفضيل مع بقاء التفويض صالحًا.
+- اختبارات generic writer + MarketController restart/re-link، CI مطلوب. لا تعديل main/prod/APK.
+
+
 ### 2026-11-22 — PR #627 MERGED: ربط تاريخ الشموع بتفويض cTrader + طابور حفظ الجلسة
 - [PR #627 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/627) SHA `ae4a854cf33c96199d1087b0c6f641f8319dd906`، [Actions #45055339815 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45055339815) — 827 اختبارات حزمة الشارت/Range/Replay + 11 فحوص أخرى، Flutter analyze ناجح.
 - تم إغلاق تسرب ردود cTrader القديمة عند A→B→A وعند OAuth إعادة ربط بالحساب نفسه، ورفض انتحال session عبر headers القديمة أو ردود 401/JSON فاسدة، وتأمين حفظ/حذف credential من سباق عمليات التخزين. أصبح ChartScreen يعيد تحميل بياناته عند تبدّل جيل التفويض حتى لو لم يتغير accountId.

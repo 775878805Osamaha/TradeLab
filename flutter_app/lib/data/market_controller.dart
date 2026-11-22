@@ -32,6 +32,12 @@ class MarketController extends ChangeNotifier {
           : _storage.write(key: _tokenKey, value: token));
   bool _replacingOAuthAuthorization = false;
   static const _selectedAccountKey = 'tradelab_flutter_ctrader_selected_account';
+  // Account choices can be changed A -> B -> A very quickly on Android.
+  // Serialize preference writes so an earlier slow operation never wins.
+  late final CTraderSerializedSecureValueWriteQueue _accountSelectionWrites =
+      CTraderSerializedSecureValueWriteQueue((account) => account == null
+          ? _storage.delete(key: _selectedAccountKey)
+          : _storage.write(key: _selectedAccountKey, value: account));
   static const _pendingKey = 'tradelab_flutter_oauth_pending';
   String? _token;
   String? accountId;
@@ -168,6 +174,11 @@ class MarketController extends ChangeNotifier {
       // Verify account access before activating a token or claiming connection.
       final authorized = await _api.accounts(issued);
       if (authorized.isEmpty) throw const MarketDataException('لا توجد حسابات cTrader مصرح بها.');
+      // Keep the user's currently selected LIVE broker when the new OAuth
+      // grant still authorizes it. Otherwise choose the first permitted
+      // account rather than reviving an unapproved stored preference.
+      final chosenAccount = authorized.any((item) => item.id == accountId)
+          ? accountId! : authorized.first.id;
       _api.forgetCTraderSymbols();
       // A newly authorized session must never inherit BID/ASK from the old
       // token, including when the selected account number is unchanged.
@@ -178,7 +189,16 @@ class MarketController extends ChangeNotifier {
       await _sessionWrites.persist(issued);
       _token = issued;
       accounts = authorized;
-      accountId = authorized.first.id;
+      accountId = chosenAccount;
+      try {
+        // This preference write follows any still-pending A->B->A tap, so
+        // a stale choice cannot override the confirmed OAuth account.
+        await _accountSelectionWrites.persist(chosenAccount);
+      } catch (_) {
+        // Authentication succeeded, but a failure to save the preference
+        // must be clearly reported without falsely disconnecting the user.
+        error = 'تم ربط cTrader، لكن تعذر حفظ الحساب المختار على الجهاز.';
+      }
     } catch (e) {
       error = e is MarketDataException ? e.message : 'فشل تأكيد تسجيل الدخول. حاول مرة أخرى.';
     } finally {
@@ -233,9 +253,8 @@ class MarketController extends ChangeNotifier {
   void chooseAccount(String id) {
     if (accounts.any((a) => a.id == id)) {
       accountId = id;
-      unawaited(_storage.write(
-        key: _selectedAccountKey, value: id,
-      ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+      unawaited(_accountSelectionWrites.persist(id).then<void>(
+          (_) {}, onError: (Object _, StackTrace __) {}));
       _api.forgetCTraderSymbols();
       _invalidateCTraderQuoteSession();
       notifyListeners();
@@ -252,7 +271,9 @@ class MarketController extends ChangeNotifier {
     // stale credential: deletion waits for all earlier secure writes.
     await _sessionWrites.persist(null);
     await _storage.delete(key: _pendingKey);
-    await _storage.delete(key: _selectedAccountKey);
+    // The last selected-account write may still be in progress; logout
+    // must remove it AFTER all earlier account choices have finished.
+    await _accountSelectionWrites.persist(null);
     notifyListeners();
   }
 
