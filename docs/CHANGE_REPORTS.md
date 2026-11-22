@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — PR #628 MERGED: منع عودة حساب cTrader قديم بعد فتح التطبيق
+- [PR #628](https://github.com/775878805Osamaha/TradeLab/pull/628) squash `29cdfb48153e234e6f1ea0c0a9de29c701fab81c` في dev؛ [CI #45055981156 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45055981156): **831 tests passed** و**11 tests passed** إضافية، مع Flutter analyze وYemen timezone.
+- `chooseAccount` الآن يسلسل كتابة التفضيل، و`disconnect` يحذف الاختيار فقط بعد اكتمال الكتابات السابقة، فيبقى آخر حساب مختار هو المُعتمد. `completeOAuth` يحتفظ بالمحدد LIVE ما دام ضمن تصريح OAuth، وإلا ينتقل إلى حساب مصرح ويحفظ التفضيل الجديد؛ لا عودة خفية للحساب القديم بعد restart.
+- لا APK ولا main أو prod، ولا اختبار اتصال حقيقي بالوسيط أو إثبات مطابقة شاشة TradingView.
+
+
 ### 2026-11-22 — حماية اختيار حساب cTrader من سباق كتابة التخزين (قيد CI)
 - مصدر الخلل: `chooseAccount` يطلق writes دون await، و`disconnect` يحذف الحساب المختار دون انتظارها؛ قد ينتهي write A بعد اختيار B أو الخروج فيُستعاد حساب غير مطلوب بعد restart.
 - تعميم سياسة كتابة serial الآمنة نفسها المستخدمة في Token OAuth إلى `selectedAccountKey`؛ ضمان last selection wins بعد A→B→A، وdelete logout ينتظر كل writes.
