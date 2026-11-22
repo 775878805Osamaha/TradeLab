@@ -15,7 +15,11 @@ import 'tradelab_data.dart';
 class MarketController extends ChangeNotifier {
   MarketController({MarketApi? api, FlutterSecureStorage? storage})
       : _storage = storage ?? const FlutterSecureStorage() {
-    _api = api ?? MarketApi(onSessionRefresh: _onRefreshedToken);
+    _api = api ?? MarketApi();
+    // Keep authorization rotation wired for BOTH default and injected APIs.
+    // A custom MarketApi HTTP client must not silently disable the broker
+    // token refresh that the production controller is responsible for.
+    _api.onSessionRefresh = _onRefreshedToken;
   }
 
   late final MarketApi _api;
