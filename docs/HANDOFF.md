@@ -1,5 +1,16 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## أحدث حالة موثقة — دفعتا سلامة Replay ومغناطيس الرسم (22 نوفمبر 2026)
+
+**المستودع/فرع العمل:** `775878805Osamaha/TradeLab` → `test/flutter-all-fixes-20261116` عند `07e2edeef9a0dcf74631f1f5094b5b856d5d3df2`. هذا **فرع التطوير وليس `main`**؛ لم يُبن APK جديد.
+- **PR #608 [MERGED]:** https://github.com/775878805Osamaha/TradeLab/pull/608 — فحص فهارس وأسعار مصدر الرسم في Replay، تجاهل OHLC NaN/Infinity في المغناطيس، ومنع مسارات Canvas/hit-testing غير المنتهية. دمج squash: `afe0f48446606a31d084881f9f9d9d10482557e9`. تشغيل CI https://github.com/775878805Osamaha/TradeLab/actions/runs/44964541908 **completed/success** (تحليل Flutter، اختبارات الشارت/Range/Replay/كتالوج الرسم).
+- **PR #609 [MERGED]:** https://github.com/775878805Osamaha/TradeLab/pull/609 — تصحيح Weak/Strong OHLC Magnet ليستخدم المسافة الفعلية على شاشة `ChartPriceScale.y` مع حد Weak يبلغ 12px؛ يعمل على LOG وInverted ويحافظ على مصدر السعر وReplay prefix؛ اختبار 320/390dp. دمج squash: `07e2edeef9a0dcf74631f1f5094b5b856d5d3df2`. تشغيل CI النهائي https://github.com/775878805Osamaha/TradeLab/actions/runs/44965028176 **completed/success** (Flutter analyze، chart/Range/Replay/history، Long/Short/Crossline/Info Line/Trend Angle وتوقيت اليمن).
+- **سجل إخفاق تم تصحيحه:** https://github.com/775878805Osamaha/TradeLab/actions/runs/44964863568 **failure** في `flutter analyze` بسبب ثلاث تحذيرات `unnecessary_non_null_assertion` (لا عيب تداول/سعر مثبت من ذلك الإخفاق). تم تصحيح علامات `!` في `82beefdf`، ثم فحص HEAD النهائي `851b436f` نجح كاملاً قبل الدمج.
+- **ملفات المصدر:** `flutter_app/lib/chart/chart_annotations.dart`, `chart_line_geometry.dart`, `screens/chart_screen.dart`؛ اختبارات `flutter_app/test/chart_annotations_test.dart`, `chart_line_geometry_test.dart`. لا تغيير Binance/cTrader/الوسيط/أسعار OHLC أو P&L.
+- **لم يجرِ:** Android Profile FPS/p50/p95/p99 على جهاز فعلي، أو قياس تطابق بكسل/اللمس مع TradingView، أو cTrader live، أو APK/Release. **المطابقة الكاملة NOT COMPLETE**.
+- **الخطوة التالية:** مقارنة Android 320/390dp مع مرجع TradingView الحقيقي على نفس تهيئة الشارت، وقياس الإطارات واللمس، ثم تنفيذ أكبر فرق مثبت. لا تستبدل القياس بتخمين أو تدّعي المطابقة الكاملة.
+
+
 ## دفعة دقة مغناطيس الرسومات على LOG وInvert (2026-11-22)
 - **الفرع:** `fix/tradelab-log-magnet-pixel-tolerance-20261122` فوق دفعة Replay/Canvas safety. الحالة **PENDING CI**، لا APK ولا تغيير `main`.
 - **المصدر الرسمي:** https://www.tradingview.com/support/solutions/43000472715-drawing-points-don-t-snap-to-ohlc-values-correctly/ يوضح أن Weak Magnet يلتقط نقاط OHLC القريبة، بينما Strong يجبر الالتقاط حتى من بعيد.

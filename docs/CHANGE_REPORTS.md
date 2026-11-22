@@ -1,5 +1,15 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 UTC — إغلاق دفعتَي CI/PR بنجاح: #608 و#609
+- **قبل:** فرع التطوير `863bc9b94da73f03ccc7e294a99634bcae078fd0`؛ **بعد:** `07e2edeef9a0dcf74631f1f5094b5b856d5d3df2` على `test/flutter-all-fixes-20261116`، دون تغيير `main`.
+- **التعديل والملفات:** حماية مصدر رسم Replay/Canvas/مغناطيس OHLC من الفهارس السالبة وNaN/Infinity في `chart_annotations.dart`, `chart_line_geometry.dart`; قياس مسافة Weak/Strong magnet بالبكسل الحقيقي بدل فرق السعر على LOG/Inverted في `screens/chart_screen.dart`; اختبارات محددة في `chart_annotations_test.dart` و`chart_line_geometry_test.dart`; ملفات handoff والتقارير.
+- **PR #608:** https://github.com/775878805Osamaha/TradeLab/pull/608 **MERGED** عند `afe0f48446606a31d084881f9f9d9d10482557e9`؛ **CI https://github.com/775878805Osamaha/TradeLab/actions/runs/44964541908 completed/success**.
+- **PR #609:** https://github.com/775878805Osamaha/TradeLab/pull/609 **MERGED** عند `07e2edeef9a0dcf74631f1f5094b5b856d5d3df2`؛ **CI https://github.com/775878805Osamaha/TradeLab/actions/runs/44965028176 completed/success** على `851b436f2403a91c0fc500732b98fbbeaea1be92`، شامل Flutter analyze + chart/Range/Replay/history + أدوات الرسم وتوقيت اليمن.
+- **الإخفاق التاريخي والسبب:** https://github.com/775878805Osamaha/TradeLab/actions/runs/44964863568 failed في analyzer فقط، ثلاث `unnecessary_non_null_assertion`؛ أصلحه `82beefdf`؛ أعيد التحقق بنجاح. التشغيلات الملغاة أثناء تحديثات PR ليست نجاحاً مستقلاً.
+- **غير متحقق/مخاطر:** Android actual gesture/FPS p50/p95/p99؛ مقارنة pixel-perfect مع TradingView؛ live cTrader؛ إطلاق APK. لا ادعاء اكتمال ولا تغيير بيانات السوق أو الحسابات.
+- **التالي:** اختبار Android مرجعي ومراجعة الأداء الحقيقي، ثم توثيق فروقات الصورة واللمس وسببها قبل إصلاحها، دون توليد أسعار أو بناء APK تلقائيًا.
+
+
 > سجل تراكمي لا تُحذف منه الإدخالات القديمة. بعد كل تعديل/رفع/دمج/تشغيل فحص، اكتب حدثًا بالحقول الإلزامية، وحدّث [HANDOFF.md](HANDOFF.md). تبقى النتائج المعلقة موسومة PENDING حتى تثبت نتيجة GitHub.
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
