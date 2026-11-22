@@ -22,14 +22,22 @@ double snapDrawingPrice({
   required ChartMagnetMode mode,
   required double weakPriceTolerance,
 }) {
-  if (mode == ChartMagnetMode.off || ohlc.isEmpty) return requestedPrice;
-  var nearest = ohlc.first;
-  for (final value in ohlc.skip(1)) {
-    if ((value - requestedPrice).abs() <
-        (nearest - requestedPrice).abs()) nearest = value;
+  if (!requestedPrice.isFinite ||
+      mode == ChartMagnetMode.off || ohlc.isEmpty) return requestedPrice;
+  // Broker/page data may contain malformed entries. A NaN selected as the
+  // nearest source price would persist into the drawing and GPU paint path.
+  double? nearest;
+  for (final value in ohlc) {
+    if (!value.isFinite) continue;
+    if (nearest == null ||
+        (value - requestedPrice).abs() < (nearest - requestedPrice).abs()) {
+      nearest = value;
+    }
   }
+  if (nearest == null) return requestedPrice;
   if (mode == ChartMagnetMode.weak &&
-      (nearest - requestedPrice).abs() > weakPriceTolerance) {
+      (!weakPriceTolerance.isFinite || weakPriceTolerance < 0 ||
+       (nearest - requestedPrice).abs() > weakPriceTolerance)) {
     return requestedPrice;
   }
   return nearest;
@@ -136,6 +144,12 @@ class ChartPattern {
   /// A replayed historical series may show only a prefix. Never display an
   /// annotation whose endpoint refers to an as-yet-unrevealed candle.
   bool visibleAt(int revealedCount) =>
+      revealedCount > 0 &&
+      start.index >= 0 && end.index >= 0 &&
       start.index < revealedCount && end.index < revealedCount &&
-      (offsetAnchor == null || offsetAnchor!.index < revealedCount);
+      start.price.isFinite && end.price.isFinite &&
+      (offsetAnchor == null ||
+          (offsetAnchor!.index >= 0 &&
+           offsetAnchor!.index < revealedCount &&
+           offsetAnchor!.price.isFinite));
 }

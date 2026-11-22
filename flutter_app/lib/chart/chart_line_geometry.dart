@@ -60,10 +60,22 @@ class ChartLineGeometry {
     required Rect bounds,
     Offset? offset,
   }) {
+    // Skip invalid source/multitouch coordinates before they enter native
+    // Canvas paths or hit testing; these values are NOT valid market points.
+    if (!start.dx.isFinite || !start.dy.isFinite ||
+        !end.dx.isFinite || !end.dy.isFinite ||
+        (offset != null && (!offset.dx.isFinite || !offset.dy.isFinite)) ||
+        !bounds.left.isFinite || !bounds.right.isFinite ||
+        !bounds.top.isFinite || !bounds.bottom.isFinite ||
+        bounds.width <= 0 || bounds.height <= 0) {
+      return [];
+    }
+
     ChartStroke? segment(Offset a, Offset b,
         {double low = 0, double high = 1}) {
       final direction = b - a;
-      if (direction.distanceSquared < 1e-10) return null;
+      final distanceSquared = direction.distanceSquared;
+      if (!distanceSquared.isFinite || distanceSquared < 1e-10) return null;
       var minT = low;
       var maxT = high;
       bool clip(double p, double q) {
@@ -230,8 +242,14 @@ class ChartLineGeometry {
   }
 
   static double distanceToStroke(Offset point, ChartStroke stroke) {
+    if (!point.dx.isFinite || !point.dy.isFinite ||
+        !stroke.start.dx.isFinite || !stroke.start.dy.isFinite ||
+        !stroke.end.dx.isFinite || !stroke.end.dy.isFinite) {
+      return double.infinity;
+    }
     final d = stroke.end - stroke.start;
     final magnitude = d.distanceSquared;
+    if (!magnitude.isFinite) return double.infinity;
     if (magnitude < 1e-10) return (point - stroke.start).distance;
     final projection = ((point - stroke.start).dx * d.dx +
             (point - stroke.start).dy * d.dy) /
