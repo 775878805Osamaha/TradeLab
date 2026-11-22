@@ -182,10 +182,18 @@ class MarketController extends ChangeNotifier {
     } catch (e) {
       error = e is MarketDataException ? e.message : 'فشل تأكيد تسجيل الدخول. حاول مرة أخرى.';
     } finally {
-      await _storage.delete(key: _pendingKey);
-      _replacingOAuthAuthorization = false;
-      busy = false;
-      notifyListeners();
+      // A secure-storage failure while deleting the temporary PKCE challenge
+      // must not leave all market history permanently blocked behind a
+      // lingering "OAuth replacement in progress" gate.
+      try {
+        await _storage.delete(key: _pendingKey);
+      } catch (_) {
+        error ??= 'تعذر تنظيف محاولة تفويض cTrader المؤقتة من التخزين الآمن.';
+      } finally {
+        _replacingOAuthAuthorization = false;
+        busy = false;
+        notifyListeners();
+      }
     }
   }
 
