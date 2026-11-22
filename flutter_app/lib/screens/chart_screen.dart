@@ -24,6 +24,7 @@ import '../chart/chart_crosshair_time_label.dart';
 import '../chart/chart_quick_actions.dart';
 import '../chart/chart_frame_profiler.dart';
 import '../chart/chart_load_profiler.dart';
+import '../chart/chart_history_prefetch_policy.dart';
 import '../chart/chart_text_layout_cache.dart';
 import '../chart/chart_feed_health.dart';
 import '../chart/chart_panel_settings.dart';
@@ -724,7 +725,12 @@ class _ChartScreenState extends State<ChartScreen>
         (_mode == ChartMode.range &&
             _rangeHistoryTicks.length >= RangeOlderPage.maxLoadedTicks) ||
         _olderLoadError != null || count <= 0 ||
-        _viewport.scrollBars <= count - plotWidth / _viewport.barWidth - 25) {
+        !ChartHistoryPrefetchPolicy.shouldPrefetch(
+          scrollBars: _viewport.scrollBars,
+          loadedBars: count,
+          plotWidth: plotWidth,
+          barWidth: _viewport.barWidth,
+        )) {
       return;
     }
     if (_mode == ChartMode.range) {

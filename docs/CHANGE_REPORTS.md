@@ -1,5 +1,13 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — تقديم التحميل الاستباقي للشموع الأقدم أثناء السحب
+- **فرع وSHA:** `perf/tradelab-history-prefetch-earlier-20261122` من `75e6bf240799359d7dbf5e3cb89733819728eed3`، **PR/CI: PENDING**.
+- **الدليل:** `_prefetchOlderAtEdge` في `screens/chart_screen.dart` يستخدم مهلة 25 بار ثابتة حتى عند 3px/شمعة، ما يجعل طلبات التاريخ تبدأ متأخرة قبل وصول إصبع المستخدم إلى أول شمعة مثبتة.
+- **ملفات التنفيذ:** `chart_history_prefetch_policy.dart` + `test/chart_history_prefetch_policy_test.dart` و`screens/chart_screen.dart` و`verify-flutter-range.yml`؛ نافذة استباق 2× عرض الشارت تتراوح 25–256 شمعة وبلا طلب قبل حركة pan موجبة.
+- **حماية البيانات:** Replay لا يزال يرفض prefetch؛ حواجز _olderLoading و_source errors و_account source محفوظة؛ لا توليد بيانات ولا تعديل رسومات/حسابات/أسعار، ولا APK.
+- **اختبارات/حدود:** Widget/Unit CI قيد التحقق؛ لم تُقَس سرعة شبكة cTrader أو FPS حقيقي على Android؛ لا ادعاء تحسين محسوب بالمللي ثانية.
+
+
 ### 2026-11-22 — تقليل إعادة مسح OHLC خلال السحب الجزئي لشارت 120k
 - **الفرع:** `perf/tradelab-price-scale-visible-window-cache-20261122` من `75e6bf240799359d7dbf5e3cb89733819728eed3`. **PR/CI PENDING**.
 - **الخلل:** `_viewport == viewport` في `ChartPriceScaleCache.resolve` كان يبطل الكاش حتى إذا تغير موضع الرسم بالبيكسل فقط دون خروج/دخول أي شمعة حقيقية؛ حركة الإصبع المتتابعة تعيد حساب حدود السعر في نفس نافذة الشموع.

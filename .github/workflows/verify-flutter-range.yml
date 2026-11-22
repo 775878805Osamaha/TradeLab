@@ -54,6 +54,7 @@ jobs:
             test/range_bar_builder_test.dart \
             test/range_bar_validation_test.dart \
             test/chart_viewport_test.dart \
+            test/chart_history_prefetch_policy_test.dart \
             test/chart_120k_viewport_workload_test.dart \
             test/chart_price_scale_cache_test.dart \
             test/chart_logarithmic_price_scale_test.dart \
