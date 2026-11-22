@@ -200,4 +200,71 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+
+  testWidgets('Replay Results loads all 23 historical sessions in bounded pages',
+      (tester) async {
+    final controller = _ConnectedReadOnlyController();
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final requests = <(int, int)>[];
+    final stored = List<Map<String, Object?>>.generate(23, (index) => {
+      'sessionId': 'private-session-$index',
+      'sourceKey': 'private-ctrader-account',
+      'savedAtMs': 1795262400000 - index * 1000,
+      'tradeCount': 1,
+      'openTradeCount': 1,
+      'closedTradeCount': 0,
+      'realizedPricePnl': 0.0,
+      'trades': <Map<String, Object?>>[{
+        'side': 'buy', 'entryPrice': 100.0 + index, 'quantity': 1.0,
+        'exitPrice': null, 'isOpen': true, 'realizedPricePnl': 0.0,
+      }],
+    });
+    Future<List<Map<String, Object?>>> readPage({
+      required int limit,
+      required int offset,
+    }) async {
+      requests.add((limit, offset));
+      return stored.skip(offset).take(limit).toList(growable: false);
+    }
+
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: ResultsScreen(
+        controller: controller, active: true,
+        replayArchivePageReader: readPage,
+      ),
+    )));
+    await tester.pump();
+    expect(requests, [(21, 0)]);
+    await tester.ensureVisible(find.byKey(const Key('results-tab-5')));
+    await tester.tap(find.byKey(const Key('results-tab-5')));
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-session-4')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-session-5')), findsNothing);
+
+    final more = find.byKey(const Key('results-replay-more-sessions'));
+    for (var page = 1; page <= 4; page++) {
+      await tester.ensureVisible(more);
+      await tester.pump();
+      await tester.drag(find.byKey(const Key('results-dashboard-list')),
+          const Offset(0, -90));
+      await tester.pump();
+      await tester.tap(more);
+      await tester.pump();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      if (page < 4) {
+        expect(requests, [(21, 0)],
+            reason: 'Local reveal must not query SQLite on every five rows');
+      }
+    }
+    expect(requests, [(21, 0), (21, 20)]);
+    expect(find.byKey(const Key('results-replay-session-22')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-trade-22-0')), findsOneWidget);
+    expect(more, findsNothing,
+        reason: 'All 23 durable sessions can be reached after four taps');
+    expect(find.textContaining('private-ctrader-account'), findsNothing);
+    expect(find.textContaining('private-session-'), findsNothing);
+  });
 }
