@@ -1,6 +1,8 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
 ## 2026-11-22 — حماية cTrader History/Range من ردود تفويض قديمة (CI PENDING)
+- **إصلاح إضافي (نفس PR):** `CTraderSessionTokenWriteQueue` يحفظ تحديث token ثم OAuth الجديد أو logout بالتسلسل الصارم؛ أي عملية سابقة بطيئة لا يمكن أن تنتهي بعد `delete` وتعيد credential قديمًا في Android secure storage. فشل كتابة سابقة لا يمنع عملية حذف/استرداد لاحقة. `MarketController` يستخدم queue للـtoken refresh والربط والحذف، ويمنع callback الجلسة القديمة أثناء `completeOAuth`. `_assertCurrentCTraderRead` يرفض شموعًا تنتهي أثناء reauth حتى قبل صدور token الجديد. الاختبارات: `ctrader_session_token_write_queue_test.dart` لاختبار serialization/logout/recovery و`ctrader_history_auth_revision_test.dart` لحالة HTTP قديم ينتهي أثناء OAuth. **فحص CI الجديد مطلوب؛ التشغيل المتوسط السابق قد يُلغى بعد push أحدث.**
+
 - **نتيجة فحص CI الأول:** [#45054416987 failed](https://github.com/775878805Osamaha/TradeLab/actions/runs/45054416987): نجح Flutter analyze و821 اختبارًا، وفشل اختبار واحد لأن `MarketController` لم يكن يربط `onSessionRefresh` عند تمرير `MarketApi` مخصص، فبقي token على `session-new` بدل `session-rotated`. إصلاح السبب في `MarketController` بربط callback دائمًا، وجعل حقل `MarketApi.onSessionRefresh` قابلاً للتعيين، وإضافة اختبار 401/JSON فاسد يثبت عدم دوران جلسة من استجابة مرفوضة. **CI جديد مطلوب.**
 
 - **الفرع:** `fix/ctrader-auth-revision-market-history-20261122` من `16f4833d3c0766e69d9749b052f526912ab1afa3`. نطاق العمل TradeLab Flutter وحده؛ لا تغيير main/APK/Vercel production.
