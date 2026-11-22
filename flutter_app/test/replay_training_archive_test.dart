@@ -163,4 +163,39 @@ void main() {
     await write;
   });
 
+
+  test('Replay archive SQL pagination returns distinct ordered sessions',
+      () async {
+    const candles = [TradeCandle(98, 102, 97, 100)];
+    final session = ReplayTrainingSession()..moveTo(candles, 1);
+    session.enter(side: ReplaySide.buy, candles: candles, quantity: 1);
+    final prefix = 'page-${DateTime.now().microsecondsSinceEpoch}';
+    // Persist enough distinct sessions to cross the phone's first page.
+    for (var index = 0; index < 25; index++) {
+      await ReplayTrainingArchive.save(
+        sessionId: '$prefix-$index',
+        sourceKey: 'binance:public:BTCUSDT:1m:candles',
+        visibleCount: 1,
+        trades: session.trades,
+      );
+    }
+    final all = await ReplayTrainingArchive.recent(limit: 50);
+    final first = await ReplayTrainingArchive.recent(limit: 20);
+    final second = await ReplayTrainingArchive.recent(limit: 20, offset: 20);
+    expect(first.length, 20);
+    expect(second, isNotEmpty);
+    final joined = [...first, ...second];
+    expect(
+      joined.map((row) => row['sessionId']).toList(),
+      all.take(joined.length).map((row) => row['sessionId']).toList(),
+      reason: 'Next page must not repeat the newest five sessions or '
+          'drop saved trades when timestamps tie',
+    );
+    expect(
+      first.every((row) => row['tradeCount'] == 1),
+      isTrue,
+    );
+    await expectLater(
+        ReplayTrainingArchive.recent(offset: -1), throwsRangeError);
+  });
 }
