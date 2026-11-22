@@ -174,6 +174,11 @@ class MarketController extends ChangeNotifier {
       // Verify account access before activating a token or claiming connection.
       final authorized = await _api.accounts(issued);
       if (authorized.isEmpty) throw const MarketDataException('لا توجد حسابات cTrader مصرح بها.');
+      // Keep the user's currently selected LIVE broker when the new OAuth
+      // grant still authorizes it. Otherwise choose the first permitted
+      // account rather than reviving an unapproved stored preference.
+      final chosenAccount = authorized.any((item) => item.id == accountId)
+          ? accountId! : authorized.first.id;
       _api.forgetCTraderSymbols();
       // A newly authorized session must never inherit BID/ASK from the old
       // token, including when the selected account number is unchanged.
@@ -184,7 +189,16 @@ class MarketController extends ChangeNotifier {
       await _sessionWrites.persist(issued);
       _token = issued;
       accounts = authorized;
-      accountId = authorized.first.id;
+      accountId = chosenAccount;
+      try {
+        // This preference write follows any still-pending A->B->A tap, so
+        // a stale choice cannot override the confirmed OAuth account.
+        await _accountSelectionWrites.persist(chosenAccount);
+      } catch (_) {
+        // Authentication succeeded, but a failure to save the preference
+        // must be clearly reported without falsely disconnecting the user.
+        error = 'تم ربط cTrader، لكن تعذر حفظ الحساب المختار على الجهاز.';
+      }
     } catch (e) {
       error = e is MarketDataException ? e.message : 'فشل تأكيد تسجيل الدخول. حاول مرة أخرى.';
     } finally {
