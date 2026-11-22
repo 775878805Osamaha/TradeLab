@@ -75,6 +75,7 @@ jobs:
             test/chart_time_axis_label_layout_test.dart \
             test/chart_viewport_test.dart \
             test/ctrader_account_selection_test.dart \
+            test/ctrader_account_persistence_order_test.dart \
             test/ctrader_history_auth_revision_test.dart \
             test/ctrader_session_token_write_queue_test.dart \
             test/ctrader_candle_stitcher_test.dart \
