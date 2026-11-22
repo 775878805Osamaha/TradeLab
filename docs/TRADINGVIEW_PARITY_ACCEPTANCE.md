@@ -1,5 +1,12 @@
 # TradeLab ↔ TradingView Android — معيار قبول المطابقة الكاملة
 
+## 2026-11-22 — تحديث قبول الأداء بعد #614 و#615
+- [#614](https://github.com/775878805Osamaha/TradeLab/pull/614) (دمج `7f3f2f0`، [CI ناجح](https://github.com/775878805Osamaha/TradeLab/actions/runs/45024043207)): استبعاد X/Y للرسومات التاريخية المحدودة غير المرئية عبر فهارس المصدر، بشرط المحافظة على ray/extended/crossline/fibonacci/parallel والرسومات المختارة وحدود Replay. اختبار الوحدة 120k مصدر/6000 رسمة: 2 إسقاط X للحالة المعروفة، وليس معدل إطارات.
+- [#615](https://github.com/775878805Osamaha/TradeLab/pull/615) (دمج `8707e6c`، [CI ناجح](https://github.com/775878805Osamaha/TradeLab/actions/runs/45024347884)): حساب حدود LOG مرة في frame؛ اختبارات تحوّل السعر إلى y متطابقة عدديًا ضمن 1e-10 على ثلاث ارتفاعات شاشة، مع Inverted وFallback modes. المصدر وReplay unchanged.
+- **حالة معيار القبول:** نجاح التحليل/الوحدة والتكامل عبر CI، **لكن لم تُجرب الدفعتان على Android الفعلي ولا قورنت لقطات TradeLab/TradingView**. لا إثبات تطابق 100% أو FPS/latency. فرع التطوير `test/flutter-all-fixes-20261116`، لا APK جديد، و`main` دون تغيير.
+- **المتبقي:** اختبار فعلي عند 320/390dp و3/10/60px لكل شمعة، تحميل 120k verified candles وRange BID مع إغلاق السوق، قياس Flutter Engine `frameP95Us/frameP99Us` ووقت SQLite/cTrader منفصلين، ثم Pixel comparison مع TradingView في المصدر/الوقت/الزووم نفسه.
+
+
 ## تحديث 2026-11-22 — تقدم أداء الكود لا يعادل جاهزية Android
 - [PR #610](https://github.com/775878805Osamaha/TradeLab/pull/610) حسّن لمس آلاف الرسومات خارج plot، [CI ناجح #45018066145](https://github.com/775878805Osamaha/TradeLab/actions/runs/45018066145). اختبار 120k bar/6000 drawings يحصي عمليتين `sourceY` للرسم المرئي بدلاً من آلاف التحويلات، دون قياس FPS على هاتف.
 - [PR #612](https://github.com/775878805Osamaha/TradeLab/pull/612) يثبت كاش نطاق محور السعر للـpan الكسري داخل نفس شموع المصدر، [CI ناجح #45022185183](https://github.com/775878805Osamaha/TradeLab/actions/runs/45022185183)؛ اختبار 240 حركة pan لنفس نافذة 120k لا يقرأ OHLC مجددًا.

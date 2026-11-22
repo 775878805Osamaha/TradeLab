@@ -1,5 +1,14 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — إغلاق نتائج #614 و#615 بعد نجاح CI والدمج
+- **فرع التنفيذ:** `test/flutter-all-fixes-20261116`. **PR #614** https://github.com/775878805Osamaha/TradeLab/pull/614 → merge `7f3f2f0653f7c5982f604ffeab068828c8a881e0`، CI `45024043207` https://github.com/775878805Osamaha/TradeLab/actions/runs/45024043207 **completed/success** على `8cc0dd71de5e9be5e5ca811a3b1df7f8480e8e22`.
+- **PR #615** https://github.com/775878805Osamaha/TradeLab/pull/615 → merge `8707e6c5fc08a555f82285b61b591380f4971c84`، CI `45024347884` https://github.com/775878805Osamaha/TradeLab/actions/runs/45024347884 **completed/success** على `de5ee27e56cc31896b852b31392962ae3a25c2c5`.
+- **التغييرات:** قص رسومات تاريخية محدودة قبل `chartX` و`scale.y` في الرسم/اللمس؛ LOG محور السعر يحسب لوغاريتم حدوده مرة واحدة لكل إعادة رسم، لا عند كل شمعة/فتيل. ملفات: `chart_line_geometry.dart`, `chart_drawing_hit_test.dart`, `screens/chart_screen.dart`, `chart_viewport.dart` واختبارات `chart_line_geometry_test.dart`, `chart_drawing_hit_test_test.dart`, `chart_logarithmic_price_scale_test.dart`.
+- **ما تحقق فعليًا:** نجاح Flutter analyze وجميع مراحل اختبار chart/Range/Replay/history/Long/Short/Info Line/Trend Angle/TZ؛ regression 120k شمعة/6000 رسم يقيس sourceX 2 بدل 12002 لحالة اللمس المفردة؛ مطابقة Y حسابية ضمن 1e-10px على 320/390/640 مع LOG/Inverted/Linear. **لا نتائج FPS هاتف**.
+- **ما لم يحدث:** لم يُبْن APK، لم يُعدّل `main`، لم تُغيّر أسعار cTrader/Binance ولا مصادر BID ولا حدود Replay؛ لم يجرِ Live cTrader أو A/B Android screenshot/raster profiling. آخر APK منشور 2026-11-20 يسبق التغييرات.
+- **الخطوة التالية:** ملف `docs/PERFORMANCE_FOLLOWUP_2026-11-22.md` لخطة فصل تحميل البيانات عن تكلفة paint/touch؛ التعديلات القادمة يجب أن تستند إلى قياسات فعلية متى أمكن.
+
+
 ### 2026-11-22 — تهيئة ثوابت LOG مرة واحدة لكل Canvas repaint (CI PENDING)
 - **أساس/فرع:** `d6ec4302533870795ca01e678bae8b5510d06e73` → `perf/chart-log-price-projection-20261122`. **PR/CI قيد التحقق**.
 - **تكرار مثبت:** `ChartPriceScale.y` ينفذ لوغاريتمي `maximum` و`minimum` لكل شمعة/فتيل/رسم في `_CandleChartPainter` حتى لو ظل مقياس الأسعار ثابتاً طوال الإطار؛ تقليل O(n) حسابات حدود المقياس إلى O(1) لكل frame، دون تعديل لوغاريتم سعر كل OHLC عند الحاجة.

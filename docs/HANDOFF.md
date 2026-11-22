@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 22 نوفمبر 2026 — إغلاق موثق لأحدث تحسينين للأداء (#614 و#615)
+- **المشروع الوحيد:** TradeLab، **فرع التطوير:** `test/flutter-all-fixes-20261116`، آخر دمج للكود `8707e6c5fc08a555f82285b61b591380f4971c84`. لم يتغير `main` ولم يُنشأ APK/Release.
+- **[PR #614](https://github.com/775878805Osamaha/TradeLab/pull/614) MERGED:** `7f3f2f0653f7c5982f604ffeab068828c8a881e0`؛ **[Flutter CI #45024043207](https://github.com/775878805Osamaha/TradeLab/actions/runs/45024043207) SUCCESS** على `8cc0dd71de5e9be5e5ca811a3b1df7f8480e8e22`. `ChartLineGeometry.definitelyOffscreenBySourceWindow` يستخدم فهارس `visibleIndices` المبطّنة ليمنع هندسة X/Y لآلاف الرسومات المحدودة غير المرئية في **Canvas paint وhit-test**. اختبارات 120k تاريخ/6000 رسم تثبت تحوّل sourceX من 12002 إلى 2 لنفس اللمسة المصطنعة مع الاستمرار في عرض rays/Fibonacci/القنوات وخطوط Replay الحقيقية. النتائج **عداد حسابات فقط** وليست FPS.
+- **[PR #615](https://github.com/775878805Osamaha/TradeLab/pull/615) MERGED:** `8707e6c5fc08a555f82285b61b591380f4971c84`؛ **[Flutter CI #45024347884](https://github.com/775878805Osamaha/TradeLab/actions/runs/45024347884) SUCCESS** على `de5ee27e56cc31896b852b31392962ae3a25c2c5`. `ChartPriceScale.prepareYForFrame()` يحسب `log(maximum)` و`log(maximum)-log(minimum)` مرة واحدة لكل Canvas frame بدل تكرارهما لكل سعر OHLC، مع اختبار Pixel-Y parity على 320/390/640px وLOG/Inverted/Linear/Percent/Indexed والبيانات غير الموجبة. مصدر السعر لا يتغير.
+- **الاختبارات:** Flutter analyze والاختبارات الشاملة الموجودة للـchart/Range/Replay/history وcatalog/date/timezone ناجحة لكل PR. النتيجة الرسمية هي success لكل تشغيل أعلاه؛ أي عبارات PENDING بالمدخلات التاريخية أدناه تخص لحظة فتح PR قبل نجاحه.
+- **الحدود غير المنفذة:** لا قياس فعلي Android `frameP95Us/frameP99Us` أو وقت تحميل broker/SQLite/Range الحقيقي، ولا مقارنة بكسلات كاملة مع TradingView، ولا APK يتضمن الدفعتين. لا تُعلن جاهزية الشارت أو تحسينًا رقميًا في FPS دون اختبار الهاتف.
+- **ملف مراجعة قابل للنقل:** `docs/PERFORMANCE_FOLLOWUP_2026-11-22.md` يتضمن المخاطر وخطة قياس واضحة. **التالي:** تشغيل Device Profile على نسخة اختبار مأذون بها مستقبلًا فقط، وضبط `TRADELAB_PROFILE_CHART`، ثم قياس نسبة إطارات >16.7ms و>8.3ms وP95/P99 لكل pan/pinch/momentum مع عزل زمن cTrader وBID/Range قبل أي تعديل إضافي كبير.
+
+
 ## 2026-11-22 — تقليل حسابات لوغاريتم محور السعر في الإطارات (CI PENDING)
 - **الفرع:** `perf/chart-log-price-projection-20261122` مبني من `test/flutter-all-fixes-20261116` عند `d6ec4302533870795ca01e678bae8b5510d06e73`؛ لا APK ولا main.
 - **الفجوة من الكود:** `ChartPriceScale.y` يعيد حساب `log(maximum)` و`log(minimum)` عند كل استدعاء في محور LOG. يستخدم Canvas هذه الدالة لكل جسم/فتيل شمعة، علامات المحور والرسومات أثناء السحب والتكبير.
