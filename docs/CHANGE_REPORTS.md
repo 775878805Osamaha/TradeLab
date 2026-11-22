@@ -1,6 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
 
+### 2026-11-22 — Range size reuse BID الحقيقي محليًا (CI PENDING)
+- الفجوة المثبتة: تبديل مدى 1000→25 يعيد طلب ودمج نفس BID الموّثق لكل النوافذ عند وجود المصدر على الهاتف، ويزيد انتظار الشمعة الأولى.
+- إصلاح: RangeSizeReuse يتحقق من timeline/source boundaries and account-ready guard ويعيد بناء Range من نفس source في isolate عند الحاجة، دون network. فشل rebuild يرجع للمقاس والشموع الصحيحة السابقة، لا أسعار وهمية أو كشف future.
+- اختبارات source invariants, same-price alternative size, original source immutable, forming bar excluded from Replay.
+- branch `perf/range-rebuild-verified-ticks-on-size-change-20261122` من `bfde66f7373334f428b32befa79c2d4541fcef8e`، CI pending، no APK/main/prod.
+
 ### 2026-11-22 — Replay discoverability في Overview (PENDING)
 - رابط صريح تحت USD Hero إلى `صفقات Replay` مع عداد open/closed في أحدث جلسات Replay المحفوظة. لا تعديل على USD Journal أو حساب broker.
 - Widget regression 320dp وخاصية onTap إلى تبويب Replay، مع تنبيه أنها صفقات تاريخية.
