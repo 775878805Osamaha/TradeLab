@@ -1,5 +1,15 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — تحقق دمج #620–#623 بعد صور اختبار Android (CI ناجح للكود)
+- **رأس فرع التطوير قبل هذا التقرير:** `ddc4248c9b476c45c6acb145e2a706e8a0ac4c9d`. لم يُعدّل `main`، ولم يُنشأ APK جديد.
+- **#620 [PR](https://github.com/775878805Osamaha/TradeLab/pull/620) MERGED** `64cf670b9b6c945386aa3b84b8f6695171d00eaf`: تم تصحيح المساحة الأفقية الواسعة الخالية بعد تأكيد تاريخ Replay، بإعادة تثبيت آخر شمعة مكشوفة بمحور السعر مع هامش 20% مأمون. [Flutter CI ناجح](https://github.com/775878805Osamaha/TradeLab/actions/runs/45042568943).
+- **#621 [PR](https://github.com/775878805Osamaha/TradeLab/pull/621) MERGED** `bfde66f7373334f428b32befa79c2d4541fcef8e`: إضافة حاجز انتظار لنهاية كتابة بيانات Replay إلى SQLite عند انتقال الشارت إلى تبويب النتائج؛ اختبار race/write failure/recovery. [CI ناجح على الرأس النهائي](https://github.com/775878805Osamaha/TradeLab/actions/runs/45043404745).
+- **#622 [PR](https://github.com/775878805Osamaha/TradeLab/pull/622) MERGED** `b436b94cd16770ae33c94c5c3c9d78141d18e73b`: عرض مدخل لعدد صفقات Replay المفتوحة والمغلقة تحت Hero الدولار في نظرة عامة. الرابط يفتح قسم Replay التاريخي المنفصل؛ لا خلط ربح السعر×الكمية في USD. [CI ناجح](https://github.com/775878805Osamaha/TradeLab/actions/runs/45043777734).
+- **#623 [PR](https://github.com/775878805Osamaha/TradeLab/pull/623) MERGED** `ddc4248c9b476c45c6acb145e2a706e8a0ac4c9d`: تغيير مقاس Range بعد وجود تيكات BID موثقة يعيد بناء الشموع عبر `RangeSizeReuse` محليًا مع فحص حدود source/timeline/account/Replay وحفظ cursor، بدلاً من تنزيل التاريخ من cTrader لكل اختيار. مسار عدم وجود BID موثوق لا يزال يعتمد على الوسيط. CI الأول والثاني **FAILED** بسبب `unnecessary_non_null_assertion` في `chart_screen.dart`؛ أزيلت علامتا !، وأعيد فحص الـCommit النهائي `90c0ff9321bba7e1104ac21c783cdb477cbcde30`: [GitHub Actions #45044435487 **completed/success**](https://github.com/775878805Osamaha/TradeLab/actions/runs/45044435487). جميع اختبارات التاريخ وRange وReplay وأدوات الرسم ويمن نجحت. لا ادعاء قياس FPS هاتف.
+- **بوابة cTrader الفعلية:** فحص موثّق في Vercel للمشروع `tradelab-vercel-gateway` أظهر الإنتاج على `main` @ `b4ddfa6846418d30b4ba444cb6ccba210a9a1ebc`، بينما إصلاح #618 للـOHLC عند `hasMore=true, empty` و#619 لحجم نوافذ BID موجودان في dev/Preview، **ليسا منشورين للإنتاج**. أخطاء سجل production في `/v1/spot` مصنفة `unclassified`، بلا بينة كافية عن `/v1/ticks`. **لا نشر أو ترقية Production من دون صلاحية/اعتماد مسار الإنتاج المناسب وفحصه.**
+- **مطلوب للتحقق النهائي:** بناء APK بموافقة المستخدم إن أراد تجربة نسخة الإصلاحات الجديدة، وقياس Android فعلي للشارت وReplay/Range؛ تجربة BID حقيقية عبر Production بعد اعتماد ونشر بوابة cTrader، وإبقاء الشموع الوهمية ممنوعة.
+
+
 
 ## 2026-11-22 — تغيير مقاس شموع Range من BID المحفوظ بدون إعادة تحميل (CI PENDING)
 - **مشكلة مثبتة في التطبيق:** `_showRangeSettings` كان يستدعي `_loadRealHistory` عند كل اختيار مقاس مختلف، ما يُفرغ المصدر ويعيد تحميل كل صفحات cTrader حتى حين `_rangeHistoryTicks` و`_rangeTimeline` يحملان نفس المصدر الموثق.

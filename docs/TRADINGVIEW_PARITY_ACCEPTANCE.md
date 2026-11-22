@@ -1,5 +1,11 @@
 # TradeLab ↔ TradingView Android — معيار قبول المطابقة الكاملة
 
+## 2026-11-22 — قبول تقني لإصلاحات Android بعد صور المستخدم
+- [#620](https://github.com/775878805Osamaha/TradeLab/pull/620) صلح Replay blank viewport، [#621](https://github.com/775878805Osamaha/TradeLab/pull/621) تسلسل SQLite write-before-Results-read، [#622](https://github.com/775878805Osamaha/TradeLab/pull/622) رابط واضح لحساب صفقات Replay في overview، [#623](https://github.com/775878805Osamaha/TradeLab/pull/623) إعادة استخدام BID الموثق عند تغيير مقاس Range.
+- جميع **CI النهائية ناجحة** (الأخيرة [45044435487](https://github.com/775878805Osamaha/TradeLab/actions/runs/45044435487))، ولم يتم إثبات سلاسة Android أو نجاح جلب تيكات BID الأصلية من cTrader live. cTrader production gateway يحمل إصدار `main` أقدم من إصلاحات gateway في dev، لذلك لا يجوز الادعاء بأن مصدر Range أصبح يعمل على هاتف المستخدم.
+- يجب تجربة APK **أحدث من 22 نوفمبر الاختباري** بعد طلب المستخدم وبناء موقعية الإصدار، ثم مقارنة 320/390dp وRange 25/1000 وReplay ونتائج التدريب على هاتف Android.
+
+
 ## تحديث 2026-11-22 — منع إعادة الرسم بلا تغير بصري بسبب أسعار BID/ASK
 - [PR #616](https://github.com/775878805Osamaha/TradeLab/pull/616) **MERGED**؛ [GitHub Actions #45027698225](https://github.com/775878805Osamaha/TradeLab/actions/runs/45027698225) **completed/success** بعد تصحيح [الإخفاق الأول الموثق #45027351182](https://github.com/775878805Osamaha/TradeLab/actions/runs/45027351182).
 - **سلوك موثّق باختبارات الكود:** عندما `bidAsk=hidden` (الإعداد الافتراضي)، لا تؤدي 240 revisions للسعر إلى استدعاء repaint للشارت. عند إظهار BID/ASK تعيد التغيرات المرئية الرسم، كما تبقى تحذيرات تأخر المصدر في رأس الشارت عاملة. لم تُغيّر شموع broker أو Future Replay.
