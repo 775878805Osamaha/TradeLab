@@ -30,7 +30,7 @@ double snapDrawingPrice({
   // market-price differences are not uniform in pixels on those scales.
   // Keep the original price-space API for clients without a chart scale.
   final projected = screenYForPrice != null && weakPixelTolerance != null;
-  final requestedY = projected ? screenYForPrice(requestedPrice) : null;
+  final requestedY = projected ? screenYForPrice!(requestedPrice) : null;
   if (projected && (requestedY == null || !requestedY.isFinite)) {
     return requestedPrice;
   }
@@ -38,7 +38,7 @@ double snapDrawingPrice({
   var smallestDistance = double.infinity;
   for (final value in ohlc) {
     if (!value.isFinite) continue;
-    final projectedY = projected ? screenYForPrice(value) : null;
+    final projectedY = projected ? screenYForPrice!(value) : null;
     if (projected && (projectedY == null || !projectedY.isFinite)) continue;
     final distance = projected
         ? (projectedY! - requestedY!).abs()
