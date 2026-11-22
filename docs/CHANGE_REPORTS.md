@@ -1,5 +1,13 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — تحسين كلفة hit-testing للرسومات خارج النافذة التاريخية
+- **فرع وSHA قبل:** `perf/tradelab-drawing-touch-cull-source-20261122` من `test/flutter-all-fixes-20261116` @ `0b82addd5063e7b6f6baaf3b1d0894d2090d04b8`. **بعد/PR/CI: PENDING** حتى توثيق الدمج.
+- **السبب من الكود:** `_hitPattern` كان يحسب أسعار Y لكل رسم غير مرئي، خلافاً لقواعد القص المستخدمة بالفعل في Paint. الضرر يتصاعد مع آلاف خطوط الاتجاه التاريخية والـ LOG.
+- **الملفات:** helper `chart_drawing_hit_test.dart` + اختبار `chart_drawing_hit_test_test.dart`؛ استبدال مسار اللمس بمحوّل مصدر تابع للشارت الحالي داخل `screens/chart_screen.dart`، إضافة اختبار Flutter CI، وإضافة handoff. تستمر هندسة hit وReplay وcTrader المصدرية دون تغيير.
+- **التحقق المطلوب:** تحليل Dart/Flutter ثم الاختبارات الشاملة قبل دمج أي PR؛ اختبار وحدة 6000 رسمة مع عدّ عمليات `sourceY`، وRay/Crossline/Fibonacci/Parallel، وReplay future، وشاشتَي 320/390dp (plot 259/329). **لا قياس FPS فعلي**.
+- **التالي:** متابعة GitHub Actions، إصلاح أي إخفاق مثبت من السجل، ثم حفظ رابط/sha النهائيين أو الإبقاء على PR غير مدمج عند الفشل.
+
+
 ### 2026-11-22 UTC — إغلاق دفعتَي CI/PR بنجاح: #608 و#609
 - **قبل:** فرع التطوير `863bc9b94da73f03ccc7e294a99634bcae078fd0`؛ **بعد:** `07e2edeef9a0dcf74631f1f5094b5b856d5d3df2` على `test/flutter-all-fixes-20261116`، دون تغيير `main`.
 - **التعديل والملفات:** حماية مصدر رسم Replay/Canvas/مغناطيس OHLC من الفهارس السالبة وNaN/Infinity في `chart_annotations.dart`, `chart_line_geometry.dart`; قياس مسافة Weak/Strong magnet بالبكسل الحقيقي بدل فرق السعر على LOG/Inverted في `screens/chart_screen.dart`; اختبارات محددة في `chart_annotations_test.dart` و`chart_line_geometry_test.dart`; ملفات handoff والتقارير.
