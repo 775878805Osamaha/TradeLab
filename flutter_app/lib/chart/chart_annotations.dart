@@ -21,24 +21,39 @@ double snapDrawingPrice({
   required List<double> ohlc,
   required ChartMagnetMode mode,
   required double weakPriceTolerance,
+  double Function(double)? screenYForPrice,
+  double? weakPixelTolerance,
 }) {
   if (!requestedPrice.isFinite ||
       mode == ChartMagnetMode.off || ohlc.isEmpty) return requestedPrice;
-  // Broker/page data may contain malformed entries. A NaN selected as the
-  // nearest source price would persist into the drawing and GPU paint path.
+  // Visual snapping must use on-screen distance on LOG and inverted charts;
+  // market-price differences are not uniform in pixels on those scales.
+  // Keep the original price-space API for clients without a chart scale.
+  final projected = screenYForPrice != null && weakPixelTolerance != null;
+  final requestedY = projected ? screenYForPrice(requestedPrice) : null;
+  if (projected && (requestedY == null || !requestedY.isFinite)) {
+    return requestedPrice;
+  }
   double? nearest;
+  var smallestDistance = double.infinity;
   for (final value in ohlc) {
     if (!value.isFinite) continue;
-    if (nearest == null ||
-        (value - requestedPrice).abs() < (nearest - requestedPrice).abs()) {
+    final projectedY = projected ? screenYForPrice(value) : null;
+    if (projected && (projectedY == null || !projectedY.isFinite)) continue;
+    final distance = projected
+        ? (projectedY! - requestedY!).abs()
+        : (value - requestedPrice).abs();
+    if (!distance.isFinite) continue;
+    if (nearest == null || distance < smallestDistance) {
       nearest = value;
+      smallestDistance = distance;
     }
   }
   if (nearest == null) return requestedPrice;
-  if (mode == ChartMagnetMode.weak &&
-      (!weakPriceTolerance.isFinite || weakPriceTolerance < 0 ||
-       (nearest - requestedPrice).abs() > weakPriceTolerance)) {
-    return requestedPrice;
+  if (mode == ChartMagnetMode.weak) {
+    final tolerance = projected ? weakPixelTolerance! : weakPriceTolerance;
+    if (!tolerance.isFinite || tolerance < 0 ||
+        smallestDistance > tolerance) return requestedPrice;
   }
   return nearest;
 }
