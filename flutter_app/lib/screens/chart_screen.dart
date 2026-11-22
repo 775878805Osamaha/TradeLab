@@ -168,6 +168,9 @@ class _ChartScreenState extends State<ChartScreen>
   final ChartHeikinAshiCache _heikinCache = ChartHeikinAshiCache();
   bool _linkedBefore = false;
   String? _accountBefore;
+  // Broker account number alone cannot detect an OAuth re-link to another
+  // session with the SAME ID. Tie the chart to its authorization generation.
+  int _authorizationRevisionBefore = 0;
   String _symbol = 'XAUUSD';
   String _timeframe = '1m';
   ChartMode _mode = ChartMode.candles;
@@ -482,6 +485,8 @@ class _ChartScreenState extends State<ChartScreen>
       });
     _linkedBefore = widget.controller.ctraderConnected;
     _accountBefore = widget.controller.accountId;
+    _authorizationRevisionBefore =
+        widget.controller.ctraderAuthorizationRevision;
     widget.controller.addListener(_onMarketUpdate);
     _lastObservedQuote = widget.controller.recentQuoteFor(_selectedSymbol);
     // Poll only broker-closed candles. Never update Replay or request
@@ -958,15 +963,21 @@ class _ChartScreenState extends State<ChartScreen>
   void _onMarketUpdate() {
     final linked = widget.controller.ctraderConnected;
     final changedAccount = _accountBefore != widget.controller.accountId;
-    if (_linkedBefore != linked || changedAccount) {
+    final changedAuthorization = _authorizationRevisionBefore !=
+        widget.controller.ctraderAuthorizationRevision;
+    if (_linkedBefore != linked || changedAccount || changedAuthorization) {
       _stopMomentum();
       _rangeBidCache.clear();
       _rangeBidCachedAt.clear();
       _rangePointCache.clear();
       _linkedBefore = linked;
       _accountBefore = widget.controller.accountId;
+      _authorizationRevisionBefore =
+          widget.controller.ctraderAuthorizationRevision;
       _lastQuoteRequestAtMs = 0;
-      // Never carry another broker account's drawings into this account.
+      // Treat a same-number OAuth re-link like any other source transition:
+      // all prior Range BID and Trendbars must be invalidated, and a hidden
+      // chart must not retain authenticated history after a session change.
       _resetDrawingObjects();
       if (linked && widget.active &&
           _selectedSymbol.source == TradeSource.ctrader) {
