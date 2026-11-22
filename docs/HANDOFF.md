@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — PR #624 MERGED: صفقات Replay الفردية في نتائج Flutter، CI ناجح
+- **الفرع:** `test/flutter-all-fixes-20261116`؛ دمج squash `6f9d40bcbb246c0504d19e378f54ec51bafb393f` من [PR #624](https://github.com/775878805Osamaha/TradeLab/pull/624).
+- **المشكلة المثبتة:** كان `ReplayTrainingArchive.recent()` يسترجع إجمالي جلسات Replay فقط، لذلك لم تُظهر صفحة النتائج صفوف BUY/SELL الفردية حتى بعد إصلاح التخزين المتزامن في #621 ورابط النتائج في #622.
+- **الإصلاح المدمج:** projection مُتحقق من نوع وسلامة entry/exit/quantity واتجاه الصفقة، مع إظهار صفقات Replay المفتوحة والمغلقة وسعر الدخول والخروج والنتيجة (فرق السعر × الكمية، ليست USD). تعرض أحدث 3 صفقات مباشرة وتكشف 20 إضافية حسب الطلب. لا تُعرض معرفات الحساب أو مصدر الوسيط ضمن صفوف الصفقات ولا تتغير بيانات PaperJournal أو أوامر broker.
+- **CI:** الفحص الأول [#45047956076](https://github.com/775878805Osamaha/TradeLab/actions/runs/45047956076) كان **808 ناجح/1 فاشل** بسبب test.tap على زر المزيد عند y=761 خارج ارتفاع Android الوهمي 760dp. أصلح اختبار سحب النتائج قبل الضغط دون تعديل منطق الإنتاج. الفحص النهائي [#45048285190](https://github.com/775878805Osamaha/TradeLab/actions/runs/45048285190) **completed/success** على رأس PR `3b00fd8b99086f700d3e363d8a53b4ddaa734e7a`، بما في ذلك تحليل Flutter واختبارات Replay/Range/viewport/timezone.
+- **الحدود:** لم يُبن APK جديد ولم يُعدّل `main` أو production Vercel. إصدار Android المنشور في الصباح يسبق PRs #617–#624؛ لا يمكن إثبات الحل على الهاتف قبل تثبيت إصدار جديد بموافقة المستخدم. Initial Range BID availability في بوابة production غير مثبتة، وكذلك FPS الفعلي ومطابقة TradingView.
+
+
 ## 2026-11-22 — إظهار كل صفقة Replay في النتائج (PR/CI pending)
 - **السبب المكتشف بعد مراجعة الكود:** `ReplayTrainingArchive.recent()` كان يرجع فقط عدد الصفقات المفتوحة/المغلقة وصافي فرق السعر للجلسة؛ `ResultsScreen._replayTrainingPanel()` يعرض ملخص الجلسة دون صفوف الصفقات الفردية. لذلك يصعب على المستخدم رؤية أمر Replay جديد حتى بعد إصلاح حفظ SQLite في #621 والمدخل في #622.
 - **التعديل المقترح على فرع مستقل:** Archive يقرأ ويفحص تفاصيل الصفقة من SQLite ويعرض side, entryPrice, quantity, exitPrice, isOpen, realizedPricePnl دون تسريب `sourceKey`/معرّف الحساب/معرّف الصفقة في الصفوف. حساب كل نتيجة سعر×كمية يبقى خاصًا بـReplay وغير محسوب بالدولار.
