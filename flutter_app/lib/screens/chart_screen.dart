@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../chart/chart_annotations.dart';
 import '../chart/chart_line_geometry.dart';
+import '../chart/chart_drawing_hit_test.dart';
 import '../chart/chart_info_line_stats.dart';
 import '../chart/chart_candle_wicks.dart';
 import '../chart/chart_short_position.dart';
@@ -3834,53 +3835,17 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   int? _hitPattern(Offset position, ChartPriceScale scale,
-      double width, int visibleCount) {
-    // Never select an offscreen drawing from a touch on the price ruler,
-    // time axis or outside the actual, visible candle plot.
-    if (!position.dx.isFinite || !position.dy.isFinite ||
-        !width.isFinite || width <= 0 ||
-        !scale.height.isFinite || scale.height <= 0 ||
-        position.dx < 0 || position.dx >= width ||
-        position.dy < 0 || position.dy >= scale.height) return null;
-    for (var i = _patterns.length - 1; i >= 0; i--) {
-      final pattern = _patterns[i];
-      if (!pattern.visibleAt(visibleCount)) continue;
-      final x1 = _viewport.chartX(index: pattern.start.index,
-          candleCount: visibleCount, plotWidth: width);
-      final x2 = _viewport.chartX(index: pattern.end.index,
-          candleCount: visibleCount, plotWidth: width);
-      final y1 = scale.y(pattern.start.price);
-      final y2 = scale.y(pattern.end.price);
-      if (pattern.tool == ChartDrawingTool.fibonacci) {
-        // Match the exact plot-clipped segments painted on the canvas.
-        // A ratio at y=-8 was previously selectable by a touch at y=0,
-        // despite having no visible line at all.
-        if (ChartLineGeometry.hitFibonacciLevels(
-          point: position,
-          fromX: math.min(x1, x2),
-          levelYs: ChartPattern.fibonacciRatios.map((ratio) =>
-              scale.y(pattern.fibonacciPrice(ratio))),
-          plot: Rect.fromLTWH(0, 0, width, scale.height),
-        )) return i;
-      } else {
-        final offset = pattern.offsetAnchor == null ? null : Offset(
-          _viewport.chartX(index: pattern.offsetAnchor!.index,
-              candleCount: visibleCount, plotWidth: width),
-          scale.y(pattern.offsetAnchor!.price));
-        final strokes = ChartLineGeometry.strokes(
-          tool: pattern.tool,
-          start: Offset(x1, y1),
-          end: Offset(x2, y2),
-          offset: offset,
-          bounds: Rect.fromLTWH(0, 0, width, scale.height),
-        );
-        if (strokes.any(
-            (stroke) => ChartLineGeometry.distanceToStroke(
-                position, stroke) <= 17)) return i;
-      }
-    }
-    return null;
-  }
+      double width, int visibleCount) => ChartDrawingHitTest.hit(
+    position: position,
+    patterns: _patterns,
+    revealedCount: visibleCount,
+    plotWidth: width,
+    plotHeight: scale.height,
+    selectedPatternIndex: _selectedPattern,
+    sourceX: (index) => _viewport.chartX(
+      index: index, candleCount: visibleCount, plotWidth: width),
+    sourceY: scale.y,
+  );
 
   ChartAnchorEndpoint? _hitSelectedHandle(Offset position,
       ChartPriceScale scale, double width, int visibleCount) {

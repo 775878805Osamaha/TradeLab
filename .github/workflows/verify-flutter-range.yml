@@ -97,6 +97,7 @@ jobs:
             test/chart_mode_transition_test.dart \
             test/chart_annotations_test.dart \
             test/chart_line_geometry_test.dart \
+            test/chart_drawing_hit_test_test.dart \
             test/chart_candle_wicks_test.dart \
             test/chart_heikin_ashi_test.dart \
             test/chart_wick_raster_parity_test.dart \
