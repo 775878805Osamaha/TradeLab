@@ -1,6 +1,8 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
 ### 2026-11-22 — تثبيت جيل التفويض في cTrader History/Range (قيد CI)
+- **تحصين تخزين الجلسة:** `CTraderSessionTokenWriteQueue` يضمن الترتيب عند secure-storage write/delete، وعدم استعادة التوكن القديم بعد خروج المستخدم، مع تمييز OAuth re-auth pending ومنع قبول history/headers القديمة أثناءه؛ اختبارات عقد التأخير والفشل/recover وin-flight request أثناء OAuth. لم تُعدّل أدوات الإنتاج أو APK. CI على أحدث head مطلوب.
+
 - **CI الأول #45054416987:** 821 passed / 1 failed (اختبار token rotation عند injected MarketApi). التحديد من سجلات الاختبار: تهيئة `MarketController(api: custom)` لم تُسجّل callback كما تفعل التهيئة الافتراضية. إصلاح root cause في constructor وMarketApi mutable callback، وإضافة 401/JSON safety test؛ انتظار إعادة الاختبار قبل merge.
 
 - **السبب المثبت بالكود:** مقياس A→B→A يحمي BID/ASK فقط، بينما history وBID وpoint-size كانت ترجع البيانات القديمة من طلب بدأ قبل تبديل/إعادة تفويض حساب cTrader.
