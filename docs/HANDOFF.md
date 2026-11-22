@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — وقف إعادة رسم الشموع عند تغيّر BID/ASK غير المرئي (CI PENDING)
+- **الفرع:** `perf/tradelab-quote-no-candle-repaint-20261122` انطلاقاً من `0f3c0cd231ee9dfd5c1f7c8ff941b23b5fc9fba5`، دون تغيير `main` أو إنشاء APK.
+- **السبب المثبت من كود الإنتاج:** `ChartScaleSettings.bidAsk` = `hidden` افتراضياً، و`_CandleChartPainter` يرسم BID/ASK فقط حين القيمة غير مخفية؛ مع ذلك `_refreshDisplayedQuote` كان يطلق `_chartRepaint.value++` عند كل revision للسعر، مؤدياً لإعادة رسم الشموع والخطوط حتى لو لم تتغير بكسلاتها.
+- **الإصلاح:** `ChartFeedHealth.quoteAffectsChartCanvas` يتحقق من ظهور تسميات BID/ASK ومن تغيّر السعر/المصدر/الظهور فعلاً؛ يمنع إعادة رسم الشارت عند تحديث السعر المخفي أو تغيّر timestamp وحده. لا يمس منطق `quoteChanged` أو التحقق من أسعار الوسيط. `quoteHeaderEvidenceChanged` يبقى مفصولاً ويحدّث تحذيرات تاريخ OHLC والدقيقة وانقطاع المصدر.
+- **اختبار الكود:** `test/chart_feed_health_test.dart` يحاكي 240 تحديث سعر مخفي تتطلب **0 إعادة رسم** على مستوى قرار التحديث، مع اختبارات تغير السعر المرئي وحذف التسميات وsource minute/header. لا ادعاء FPS؛ CI PENDING حتى اكتمال Flutter analyze+tests.
+- **المتبقي:** Android profile حقيقي وتمييز تكلفة raster عن زمن cTrader وRange. آخر APK في Releases أقدم من هذا التغيير.
+
+
 ## 2026-11-22 — آخر دمج مؤكد: #614 تسريع اختبار/رسم رسومات 120k (CI ناجح)
 - **حالة فرع TradeLab:** `test/flutter-all-fixes-20261116` عند `3f87046910627475190347c098fde8671d3e2034` قبل تحديث هذا التقرير. **PR #614 MERGED** عند `7f3f2f0653f7c5982f604ffeab068828c8a881e0` — https://github.com/775878805Osamaha/TradeLab/pull/614.
 - **نتيجة CI المحققة مباشرة:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45024043207 **completed/success** على `8cc0dd71de5e9be5e5ca811a3b1df7f8480e8e22`. نجح Dart/Flutter analyze، الاختبارات التاريخية وRange/Replay، الرسم/الأدوات وTimezone Yemen. نجح أيضاً CI لفرع التطوير السابق على `d6ec430`: https://github.com/775878805Osamaha/TradeLab/actions/runs/45022941774.

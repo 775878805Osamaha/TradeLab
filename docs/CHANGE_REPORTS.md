@@ -1,5 +1,13 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — تقليل quote-only redraw عندما BID/ASK مخفي (CI PENDING)
+- **المصدر/الفرع:** `test/flutter-all-fixes-20261116` عند `0f3c0cd231ee9dfd5c1f7c8ff941b23b5fc9fba5` → `perf/tradelab-quote-no-candle-repaint-20261122`، لا `main` أو APK.
+- **الخلل:** عند كل `ChartFeedHealth.quoteChanged` يدفع `_refreshDisplayedQuote` رسم الشارت كاملًا رغم إخفاء BID/ASK افتراضياً؛ كما أن تغير `timestampMs` وحده لا يغير أي بكسل في هذه التسميات.
+- **الإصلاح:** إضافة قرار واضح `quoteAffectsChartCanvas(previous,next,bidAskLabelsVisible)` وتطبيقه حول `_chartRepaint.value++` فقط؛ الاحتفاظ باستدعاء `quoteHeaderEvidenceChanged` منفصلاً حتى لا تتوقف تحذيرات تأخر OHLC وتجدد دقيقة/اتصال cTrader. بيانات المصدر والخادم وReplay لا تتغير.
+- **الاختبار:** 240 revisions لسعر مخفي بلا repaint decision، مع ظهور واختفاء سعر مرئي/تحديث timestamp ومخاطر header؛ اختبار `chart_feed_health_test.dart` مسجّل أصلاً ببوابة CI.
+- **الحالة:** PR/CI قيد الفحص؛ لا قياسات Android FPS ولا نسبة زمنية مثبَتة.
+
+
 ### 2026-11-22 UTC — إغلاق #614: رفض الرسومات التاريخية قبل تحويل X بنجاح
 - **قبل:** `test/flutter-all-fixes-20261116` @ `d6ec4302533870795ca01e678bae8b5510d06e73`؛ **الدمج:** `7f3f2f0653f7c5982f604ffeab068828c8a881e0`؛ **رأس الفرع وقت المراجعة:** `3f87046910627475190347c098fde8671d3e2034`؛ لا تعديل `main` ولا APK.
 - **PR/CI:** https://github.com/775878805Osamaha/TradeLab/pull/614 **MERGED**، https://github.com/775878805Osamaha/TradeLab/actions/runs/45024043207 **completed/success** عند `8cc0dd71de5e9be5e5ca811a3b1df7f8480e8e22`، بما فيها `flutter analyze` وRange/Replay والشارت وأدوات الرسم وتوقيت اليمن.
