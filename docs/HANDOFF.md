@@ -1,5 +1,15 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — دمج #616: تعطيل إعادة رسم الشموع بسبب BID/ASK المخفي، بعد CI ناجح
+- **الفرع النهائي قبل كتابة هذا السجل:** `test/flutter-all-fixes-20261116` عند `1811159410f4a499be9f03c06ff05e7e6e054ac1`؛ [PR #616 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/616).
+- **فحص نهائي مؤكد:** [GitHub Actions #45027698225](https://github.com/775878805Osamaha/TradeLab/actions/runs/45027698225) **completed/success** على HEAD `d7e4ce43cc9bfedfba09f1ec06b1ec93b22e7d6b`. نجح Flutter analyze واختبارات الشارت وRange وReplay والأدوات وتوقيت اليمن. دمج squash: `1811159410f4a499be9f03c06ff05e7e6e054ac1`.
+- **فشل أولي موثق ولم يُخفَ:** [#45027351182](https://github.com/775878805Osamaha/TradeLab/actions/runs/45027351182) **failed: 794 tests passed, 1 failed** لأن `chart_paint_only_pan_test.dart` القديم كان يفرض تحديث Canvas لكل سعر مباشر حتى في وضع `bidAsk=hidden` الافتراضي. عدّلنا الاختبار وفق المظهر الحقيقي المطلوب دون تعطيله؛ نجحت الاختبارات اللاحقة.
+- **التحسين البرمجي:** `ChartFeedHealth.quoteAffectsChartCanvas` يمنع إطلاق `_chartRepaint` بسبب revision غير مرئي أو timestamp-only؛ عندما تظهر تسميات BID/ASK، لا تزال قيم السعر المختلفة وانتهاء صلاحية quote تُعيد الرسم. `quoteHeaderEvidenceChanged` لا يزال يعمل لتحذيرات تأخر التاريخ وتغيير دقيقة/مصدر cTrader. لا تغيير في OHLC أو الحسابات أو Replay.
+- **الاختبارات:** `chart_feed_health_test.dart` ل240 revision مخفي بدون طلب إعادة رسم، وسعر مرئي/انتهاء صلاحيته، و`chart_paint_only_pan_test.dart` ل20 revision مع فحص أن painter/header لا يعاد بناؤهما من السعر المخفي. هذا **تقليل عدد invalidations/reads** وليس قياس FPS ولا مقياس زمن محسوب.
+- **حالة المنتج:** لا APK جديد ولا تعديل `main`. آخر ملف APK في Releases يسبق تحسينات 22 نوفمبر، ولا يمكن وصف الأداء الحقيقي عليه بأنه مُصلح. **المطابقة الكاملة TradingView على Android غير مثبتة**.
+- **الأولوية القادمة:** اختبار real Android Profile للـpan/pinch وp95/p99 (build/raster) ولجلب cTrader وRange BID على شبكة هاتف فعلية، باستخدام `TRADELAB_PROFILE_CHART` و`ChartFrameProfiler`/`ChartLoadProfiler` الموجودين؛ أصلح الفارق الأكبر المَقاس فقط، مع تسجيل كل PR وCI في هذا المستند.
+
+
 ## 2026-11-22 — توضيح إخفاق CI الأول في PR #616 (التصحيح قيد إعادة الاختبار)
 - **الرابط:** https://github.com/775878805Osamaha/TradeLab/pull/616. أول تشغيل https://github.com/775878805Osamaha/TradeLab/actions/runs/45027351182 فشل في `chart_paint_only_pan_test.dart` فقط (794 ناجحة/1 فشل؛ Flutter analyze ناجح).
 - **السبب:** اختبار واجهة قديم يشترط إعادة رسم الشارت عندما يتغير BID/ASK حتى مع كون تسميات السعر المباشر مخفية افتراضياً، بعكس تحسين الأداء المقصود. تغيير التوقع إلى **صفر قراءة painter إضافية عند تحديثات مخفية** مع بقاء header ثابتاً، دون تعطيل اختبارات تنشيط السعر الظاهر أو تنبيه المصدر.

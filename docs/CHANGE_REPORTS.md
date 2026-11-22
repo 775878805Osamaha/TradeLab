@@ -1,5 +1,15 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 UTC — إغلاق PR #616 بنجاح بعد تصحيح اختبار قديم
+- **فرع التطوير:** `test/flutter-all-fixes-20261116`. قبل `0f3c0cd231ee9dfd5c1f7c8ff941b23b5fc9fba5`؛ بعد الدمج `1811159410f4a499be9f03c06ff05e7e6e054ac1`. لا `main` أو APK/Release.
+- **المشكلة المثبتة:** `_refreshDisplayedQuote` كان يطلق `_chartRepaint.value++` لكل تغير BID/ASK أو timestamp حتى عندما `ChartScaleSettings.bidAsk` مخفي افتراضياً ولا توجد تسميات مرئية؛ يتسبب بعمل Canvas/شموع غير ضروري.
+- **الملفات:** `flutter_app/lib/chart/chart_feed_health.dart`، `lib/screens/chart_screen.dart`، اختبارات `test/chart_feed_health_test.dart`، `test/chart_paint_only_pan_test.dart`، وتقارير handoff. بقي تحديث source/header وإثباتات التأخر وReplay كما هي.
+- **CI تاريخي أول:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45027351182 **failure: 794 passed / 1 failed**. فشل اختبار widget قديم كان يطالب بإعادة الرسم عند السعر المخفي، بينما نجح analyzer وجميع اختبارات الصحة الجديدة. لا دليل لفشل سعر cTrader أو BINANCE.
+- **CI معتمد نهائي:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45027698225 **completed/success** على `d7e4ce43cc9bfedfba09f1ec06b1ec93b22e7d6b`. https://github.com/775878805Osamaha/TradeLab/pull/616 **MERGED** عند `1811159410f4a499be9f03c06ff05e7e6e054ac1`.
+- **عدد العمليات لا الزمن:** اختبار 240 تحديث سعر مخفي يمنع طلب canvas repaint، واختبار widget 20 تحديثًا يتأكد من عدم إعادة قراءة السعر أثناء paint واحتفاظ header بهويته. لا نقول تحسّن FPS أو live broker latency دون اختبار Android.
+- **التالي:** جمع real-world p95/p99 pan/pinch/raster وفصل broker/cache/Range latency، ثم تطوير أكبر bottleneck مثبت. امتنع عن APK حتى يُطلب أو تُعتمد مرحلة الاختبار.
+
+
 ### 2026-11-22 UTC — PR #616: الفشل الأول في اختبار واجهة قديم وتصحيح معيار القبول
 - **CI الأولى:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45027351182 **failed** في `Verify historical tick archive and chart interactions` مع **794 tests passed, 1 failed**. `flutter analyze` نجح، وجميع اختبارات `chart_feed_health_test.dart` الجديدة نجحت.
 - **السبب المثبت حرفياً من سجل GitHub:** الاختبار `chart_paint_only_pan_test.dart: streaming price changes repaint chart, not entire controls` توقع زيادة `market.reads` مع كل تحديث مصدر حتى لو كان `ChartScaleSettings.bidAsk = hidden`. الإصلاح يعمد إلى **عدم إعادة الرسم في هذا الوضع الافتراضي**؛ لذلك توقع الاختبار القديم يناقض السلوك المطلوب، لا يوجد دليل أن فشلًا في بيانات السوق حدث.
