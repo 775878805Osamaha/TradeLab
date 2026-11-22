@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -17,6 +20,24 @@ import 'package:tradelab_flutter/screens/chart_screen.dart';
 /// should be checked against the user's original reference screenshot, then
 /// independently confirmed on an actual Android phone at the SAME DPR.
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    // flutter_test defaults to Ahem: every Arabic letter and digit becomes
+    // a square. Ahem makes layout tests deterministic, but photographs of
+    // its squares are NOT a useful TradingView visual comparison.
+    //
+    // Load the Ubuntu's open-source Arabic-capable DejaVuSans *only into
+    // this screenshot test*. No font is committed or shipped in the APK.
+    final bytes = await File(
+      '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    ).readAsBytes();
+    for (final family in <String>['TradeLabVisualQA', 'Roboto', 'Ahem']) {
+      final loader = FontLoader(family)
+        ..addFont(Future<ByteData>.value(ByteData.sublistView(
+            Uint8List.fromList(bytes))));
+      await loader.load();
+    }
+  });
   for (final caseConfig in <({double width, double height, bool dark, String label})>[
     (width: 360, height: 640, dark: true, label: 'dark-360x640'),
     (width: 390, height: 844, dark: true, label: 'dark-390x844'),
@@ -57,7 +78,7 @@ void main() {
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           brightness: caseConfig.dark ? Brightness.dark : Brightness.light,
-          useMaterial3: true),
+          useMaterial3: true, fontFamily: 'TradeLabVisualQA'),
         home: Scaffold(body: ChartScreen(
           controller: market, requestedSymbolCode: 'BTCUSDT')),
       ));
