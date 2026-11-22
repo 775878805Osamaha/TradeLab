@@ -1,5 +1,13 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 UTC — إغلاق #614: رفض الرسومات التاريخية قبل تحويل X بنجاح
+- **قبل:** `test/flutter-all-fixes-20261116` @ `d6ec4302533870795ca01e678bae8b5510d06e73`؛ **الدمج:** `7f3f2f0653f7c5982f604ffeab068828c8a881e0`؛ **رأس الفرع وقت المراجعة:** `3f87046910627475190347c098fde8671d3e2034`؛ لا تعديل `main` ولا APK.
+- **PR/CI:** https://github.com/775878805Osamaha/TradeLab/pull/614 **MERGED**، https://github.com/775878805Osamaha/TradeLab/actions/runs/45024043207 **completed/success** عند `8cc0dd71de5e9be5e5ca811a3b1df7f8480e8e22`، بما فيها `flutter analyze` وRange/Replay والشارت وأدوات الرسم وتوقيت اليمن.
+- **الملفات الفنية:** `flutter_app/lib/chart/chart_line_geometry.dart` و`chart_drawing_hit_test.dart` و`screens/chart_screen.dart`؛ اختبارات `chart_line_geometry_test.dart`, `chart_drawing_hit_test_test.dart`. لم يتغير مصدر أسعار cTrader/Binance أو تاريخ UTC.
+- **الفائدة القابلة للقياس في الاختبار:** مع 120k فهرس شمعة و6000 رسمة تاريخية يصبح اختبار لمس الرسم المرئي بحاجة إلى 2 حساب `sourceX` بدلاً من 12002؛ تتحقق الاختبارات من أن قص الفهارس لا يخفي أي خط مرئي هندسياً في الأبعاد والتكبيرات المختبرة. الفائدة Runtime FPS لم تُقس على الهاتف.
+- **مخاطر/ما لم يتأكد:** عرض TradingView طبق الأصل، جودة اللمس الفعلية، Frame P95/P99، والوقت الحقيقي لتحميل cTrader/Range على Android كلها لم تُثبت؛ لا APK أحدث. الخطوة التالية اختبار Android Profile باستخدام مساري `ChartFrameProfiler` و`ChartLoadProfiler` الموجودين، والحفاظ على المصدر/Replay guard.
+
+
 ### 2026-11-22 — إغلاق نتائج #614 و#615 بعد نجاح CI والدمج
 - **فرع التنفيذ:** `test/flutter-all-fixes-20261116`. **PR #614** https://github.com/775878805Osamaha/TradeLab/pull/614 → merge `7f3f2f0653f7c5982f604ffeab068828c8a881e0`، CI `45024043207` https://github.com/775878805Osamaha/TradeLab/actions/runs/45024043207 **completed/success** على `8cc0dd71de5e9be5e5ca811a3b1df7f8480e8e22`.
 - **PR #615** https://github.com/775878805Osamaha/TradeLab/pull/615 → merge `8707e6c5fc08a555f82285b61b591380f4971c84`، CI `45024347884` https://github.com/775878805Osamaha/TradeLab/actions/runs/45024347884 **completed/success** على `de5ee27e56cc31896b852b31392962ae3a25c2c5`.

@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — آخر دمج مؤكد: #614 تسريع اختبار/رسم رسومات 120k (CI ناجح)
+- **حالة فرع TradeLab:** `test/flutter-all-fixes-20261116` عند `3f87046910627475190347c098fde8671d3e2034` قبل تحديث هذا التقرير. **PR #614 MERGED** عند `7f3f2f0653f7c5982f604ffeab068828c8a881e0` — https://github.com/775878805Osamaha/TradeLab/pull/614.
+- **نتيجة CI المحققة مباشرة:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45024043207 **completed/success** على `8cc0dd71de5e9be5e5ca811a3b1df7f8480e8e22`. نجح Dart/Flutter analyze، الاختبارات التاريخية وRange/Replay، الرسم/الأدوات وTimezone Yemen. نجح أيضاً CI لفرع التطوير السابق على `d6ec430`: https://github.com/775878805Osamaha/TradeLab/actions/runs/45022941774.
+- **عمل التعديل:** `ChartLineGeometry.definitelyOffscreenBySourceWindow` يرفض الرسومات المحدودة المعزولة تاريخيًا قبل حساب `ChartViewport.chartX`، في كل من رسم الشارت و`ChartDrawingHitTest`. اختبار مصدر 120,000 شمعة مع 6,000 خط تاريخي صار يحسب **2 إسقاط X بدل 12,002** حين يوجد خط واحد مرئي. اختبار آخر يقارن جميع حالات الرفض المبكر بالرفض الهندسي الفعلي على 259/329px، zoom 3/10/60 وتاريخ مختلف؛ ويحافظ على Fibonacci/extended rays/channels/Replay وselected handles.
+- **الحد الدقيق:** الأرقام هي عدد عمليات حساب هندسة، **ليست FPS أو اختبار Android**. لا نسب تحسن زمني مُثبتة ولا مطابقة كاملة TradingView. لم يتغير `main`، ولم يُنشأ APK أو Release؛ آخر APK منشور أقدم من إصلاحات 22 نوفمبر.
+- **متابعة تقنية موصى بها:** قياس `TRADELAB_CHART_FRAME_METRICS` (p95/p99 build/raster أثناء pan/pinch/momentum على Android Profile)، و`TRADELAB_CHART_LOAD_EVENT` (cache/broker/Range BID/merge) في جلسة مصرح بها على هاتف حقيقي. قارن شموع عادية وRange عند 3/10/60px للبار، ثم أصلح الاختناق المقاس، وليس فقط انطباع بطء.
+- **ملاحظة:** دخول محادثة جديدة يبدأ من **رأس الفرع الحالي** لا من SHA هذا التقرير؛ اقرأ أحدث `docs/CHANGE_REPORTS.md` وGitHub Actions قبل أي تعديل. سجّل كل PR/CI والدمج أو الإخفاق بوضوح.
+
+
 ## 22 نوفمبر 2026 — إغلاق موثق لأحدث تحسينين للأداء (#614 و#615)
 - **المشروع الوحيد:** TradeLab، **فرع التطوير:** `test/flutter-all-fixes-20261116`، آخر دمج للكود `8707e6c5fc08a555f82285b61b591380f4971c84`. لم يتغير `main` ولم يُنشأ APK/Release.
 - **[PR #614](https://github.com/775878805Osamaha/TradeLab/pull/614) MERGED:** `7f3f2f0653f7c5982f604ffeab068828c8a881e0`؛ **[Flutter CI #45024043207](https://github.com/775878805Osamaha/TradeLab/actions/runs/45024043207) SUCCESS** على `8cc0dd71de5e9be5e5ca811a3b1df7f8480e8e22`. `ChartLineGeometry.definitelyOffscreenBySourceWindow` يستخدم فهارس `visibleIndices` المبطّنة ليمنع هندسة X/Y لآلاف الرسومات المحدودة غير المرئية في **Canvas paint وhit-test**. اختبارات 120k تاريخ/6000 رسم تثبت تحوّل sourceX من 12002 إلى 2 لنفس اللمسة المصطنعة مع الاستمرار في عرض rays/Fibonacci/القنوات وخطوط Replay الحقيقية. النتائج **عداد حسابات فقط** وليست FPS.
