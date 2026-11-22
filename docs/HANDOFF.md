@@ -1,6 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
 
+## 2026-11-22 — تغيير مقاس شموع Range من BID المحفوظ بدون إعادة تحميل (CI PENDING)
+- **مشكلة مثبتة في التطبيق:** `_showRangeSettings` كان يستدعي `_loadRealHistory` عند كل اختيار مقاس مختلف، ما يُفرغ المصدر ويعيد تحميل كل صفحات cTrader حتى حين `_rangeHistoryTicks` و`_rangeTimeline` يحملان نفس المصدر الموثق.
+- **حل مقيّد بالسلامة:** `RangeSizeReuse.canRebuild` يتحقق من حدود وأول/آخر BID، العدد والفهارس/التواريخ وpointSize، مع `sourceReady` (لا Replay أو تحميل متزامن أو تبديل حساب). عند تحقق شروط المصدر، يحسب `RangeBarTimeline.buildAsync` شموع المقاس الجديد من نفس تيكات BID الأصلية محليًا (isolate عند الحاجة)، ويُبقي cursor التاريخ، دون أي طلب وسيط لتغيير المقاس نفسه. يرفض التحويل على مصدر غير صالح، ويعيد التحميل الموثق عند غياب المصدر، مع استعادة المقاس السابق إن تعذرت إعادة البناء الآمنة.
+- **تغطية:** test tick/timeline consistency across 25/50/100 points, preserving exact source/endTickIndices and excluding forming bar from Replay؛ regressing stale/mismatch/new point invalidity. لا تخلط شموع Range مع OHLC أو مصادر Binance.
+- **الحالة:** `perf/range-rebuild-verified-ticks-on-size-change-20261122` من `bfde66f7373334f428b32befa79c2d4541fcef8e`، CI pending، لا APK ولا production deploy، ولا ادعاء بأن أول تحميل Range صار يعمل دون تيكات cTrader حقيقية.
+
 ## 2026-11-22 — تبويب Replay واضح من «النظرة العامة» (CI PENDING)
 - **ملاحظة عرض حقيقية:** حتى بعد إضافة تبويب `صفقات Replay` المستقل في #617، يظل Hero صافي الربح و«عدد الصفقات: 0» في Overview يعرضان فقط `PaperJournal`. على 320dp تبويب Replay السادس خارج الجزء الأول من الشريط الأفقي ويحتاج التمرير.
 - **الحل:** زر تحت Hero صافي الربح بعبارة «صفقات Replay التاريخية» وعدد المفتوحة والمغلقة في آخر الجلسات المحلية المقروءة، ينتقل فورًا إلى تبويب Replay المستقل ويظل رصيد USD/صافي الربح منفصلين، بلا بيانات مالية مفترضة أو كشف لمعرف حساب.

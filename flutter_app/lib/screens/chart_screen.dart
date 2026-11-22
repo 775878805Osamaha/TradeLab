@@ -51,6 +51,7 @@ import '../replay/replay_training_order_dialog.dart';
 import '../replay/replay_training_archive.dart';
 import '../replay/replay_trade_overlay.dart';
 import '../data/range_bar_timeline.dart';
+import '../data/range_size_reuse.dart';
 import '../data/range_live_bid_delta.dart';
 import '../data/range_startup_loader.dart';
 import '../data/ctrader_older_candle_pager.dart';
@@ -3300,6 +3301,91 @@ class _ChartScreenState extends State<ChartScreen>
     );
   }
 
+
+  /// Rebuild a different Range *size* from this chart's already authenticated
+  /// BID event archive. Re-fetching the identical cTrader tick windows makes
+  /// size switching appear broken on phones and can repeat thousands of
+  /// historical-page requests for a dense symbol.
+  ///
+  /// This changes only the bar aggregation, not one source tick, its UTC
+  /// timestamp, the account/symbol scope, or the older-history cursor.
+  /// New Range candles are computed off the Android UI isolate as needed.
+  Future<void> _rebuildRangeSizeFromVerifiedTicks({
+    required List<MarketTick> verifiedTicks,
+    required RangeBarTimeline previousTimeline,
+    required int previousSize,
+    required int nextSize,
+    required double pointSize,
+    required String account,
+    required TradeSymbol symbol,
+  }) async {
+    final revision = ++_loadRevision;
+    bool current() => mounted && revision == _loadRevision &&
+        _mode == ChartMode.range && _rangeTicks == nextSize &&
+        !_replay && !_replaySelectingStart &&
+        widget.controller.accountId == account &&
+        _selectedSymbol.code == symbol.code &&
+        _selectedSymbol.source == symbol.source &&
+        identical(_rangeHistoryTicks, verifiedTicks) &&
+        _rangePointCache['$account:${symbol.code}'] == pointSize;
+    setState(() {
+      _loading = true;
+      _loadError = null;
+      _actualRange = [];
+      _rangeTimeline = null;
+      _rangeBarEndTickIndices = [];
+      _rangeBarTimestamps = [];
+    });
+    var rebuilt = false;
+    try {
+      final timeline = await RangeSizeReuse.rebuild(
+        verifiedTicks: verifiedTicks,
+        previousTimeline: previousTimeline,
+        pointSize: pointSize,
+        nextRangePoints: nextSize,
+      );
+      if (!current()) return;
+      setState(() {
+        _actualRange = timeline.bars;
+        _rangeTimeline = timeline;
+        _rangeBarEndTickIndices = timeline.endTickIndices;
+        _rangeBarTimestamps = timeline.endTimestamps;
+      });
+      rebuilt = true;
+    } on MarketDataException catch (error) {
+      if (!current()) return;
+      // If this source and this size cannot be built within the safe phone
+      // budget, restore the prior correctly labeled real BID aggregation.
+      setState(() {
+        _rangeTicks = previousSize;
+        _actualRange = previousTimeline.bars;
+        _rangeTimeline = previousTimeline;
+        _rangeBarEndTickIndices = previousTimeline.endTickIndices;
+        _rangeBarTimestamps = previousTimeline.endTimestamps;
+        _loadError = error.message;
+      });
+    } catch (_) {
+      if (!current()) return;
+      setState(() {
+        _rangeTicks = previousSize;
+        _actualRange = previousTimeline.bars;
+        _rangeTimeline = previousTimeline;
+        _rangeBarEndTickIndices = previousTimeline.endTickIndices;
+        _rangeBarTimestamps = previousTimeline.endTimestamps;
+        _loadError = 'تعذر إعادة بناء مدى BID المحلي؛ أعد المحاولة.';
+      });
+    } finally {
+      // A second size selection or broker-account switch owns its own loading
+      // state; an obsolete worker cannot hide its spinner or source errors.
+      if (mounted && revision == _loadRevision) {
+        setState(() => _loading = false);
+        if (rebuilt && widget.active && !_replay) {
+          unawaited(_autoFillRangeHistory(revision));
+        }
+      }
+    }
+  }
+
   Future<void> _showRangeSettings({bool reloadOnChange = true}) async {
     // Count only cTrader BID events verified for this active chart; a forming
     // Range bar is not a completed source-confirmed market bar.
@@ -3412,7 +3498,30 @@ class _ChartScreenState extends State<ChartScreen>
                   label: Text('$size'),
                   selected: _rangeTicks == size,
                   onSelected: (_) {
-                    final changed = _rangeTicks != size;
+                    final oldSize = _rangeTicks;
+                    final changed = oldSize != size;
+                    // Validate the source/timeline pair BEFORE changing the
+                    // requested price distance. Never reuse a stale account,
+                    // a partial BID page, or Replay's hidden future.
+                    final account = widget.controller.accountId;
+                    final symbol = _selectedSymbol;
+                    final ticks = _rangeHistoryTicks;
+                    final timeline = _rangeTimeline;
+                    final point = _rangePointCache[
+                        '$account:${symbol.code}'];
+                    final reuse = changed && reloadOnChange &&
+                        account != null && point != null &&
+                        RangeSizeReuse.canRebuild(
+                          verifiedTicks: ticks,
+                          previousTimeline: timeline,
+                          pointSize: point,
+                          nextRangePoints: size,
+                          sourceReady: mounted && _liveRequested &&
+                              _mode == ChartMode.range &&
+                              !_loading && !_olderLoading &&
+                              !_rangeAutoFilling &&
+                              !_replay && !_replaySelectingStart,
+                        );
                     if (changed) {
                       setState(() {
                         _rangeTicks = size;
@@ -3422,7 +3531,19 @@ class _ChartScreenState extends State<ChartScreen>
                     }
                     Navigator.pop(sheetContext);
                     if (changed && reloadOnChange && _liveRequested) {
-                      _loadRealHistory();
+                      if (reuse) {
+                        unawaited(_rebuildRangeSizeFromVerifiedTicks(
+                          verifiedTicks: ticks,
+                          previousTimeline: timeline!,
+                          previousSize: oldSize,
+                          nextSize: size,
+                          pointSize: point,
+                          account: account,
+                          symbol: symbol,
+                        ));
+                      } else {
+                        unawaited(_loadRealHistory());
+                      }
                     }
                   },
                 ),

@@ -87,6 +87,7 @@ jobs:
             test/paper_trade_service_test.dart \
             test/range_bar_builder_test.dart \
             test/range_bar_timeline_test.dart \
+            test/range_size_reuse_test.dart \
             test/range_older_page_test.dart \
             test/range_startup_loader_test.dart \
             test/range_history_fill_policy_test.dart \
