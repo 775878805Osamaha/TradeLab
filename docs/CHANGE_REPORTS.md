@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — إغلاق #629 بنجاح: إصلاح انزلاق خطوط زمن الشارت
+- [PR #629 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/629) عند `81f1c0284f924cbd10d8b2ae6f2c7b36a660d8e1`؛ [CI #45057243714 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45057243714): **837+11 tests passed** وFlutter analyze.
+- حركة خطوط وتواريخ المحور أصبحت مرتبطة بالشموع الحقيقية أثناء pan/pinch؛ اختبارات 45px anchor, pinch center, 120k/3px, Range source UTC, Replay no-future. عالجنا إخفاق اختبار أولي خاطئ اعتبر scrollBars=0 غير صالح؛ أعيد تشغيل CI ونجح.
+- دون لقطات Android مطابقة أو APK، لا يمكن الادعاء بأن مطابقة TradingView اكتملت أو مقياس الأداء مماثل.
+
+
 ### 2026-11-22 — TradingView parity: خطوط/علامات الوقت تتحرك مع شموع المصدر (قيد CI)
 - كان المحور الزمني يثبت خطوطه وتسمياته في 4 نقاط شاشة ثابتة، ما يجعل علاقة الشموع بالوقت تقفز أثناء pan/pinch. استبدلناه بعلامات مرتبطة بمؤشر شمعة أصلية وموضع `ChartViewport.chartX`، لا بإحداثي شاشة ثابت.
 - المسافة البصرية 84px على الأقل باستخدام معاملات 1/2/5/10، دون تعديل أسعار cTrader/Binance أو دمج شموع Replay/Range أو اختلاق timestamps. ترسم الشبكة والتسميات من المصدر الواحد نفسه.
