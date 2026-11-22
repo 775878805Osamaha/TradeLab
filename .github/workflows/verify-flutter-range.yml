@@ -60,6 +60,7 @@ jobs:
             test/chart_history_prefetch_policy_test.dart \
             test/chart_120k_viewport_workload_test.dart \
             test/chart_price_scale_cache_test.dart \
+            test/chart_offscreen_price_scale_test.dart \
             test/chart_logarithmic_price_scale_test.dart \
             test/chart_logarithmic_toggle_widget_test.dart \
             test/chart_inverted_price_scale_test.dart \
