@@ -3490,6 +3490,27 @@ class _ChartScreenState extends State<ChartScreen>
                 ],
               ),
             ),
+            // Refresh the same verified cTrader source without wiping the
+            // last known authentic Range candles during HTTP/SQLite work.
+            // The normal error banner still shows when new BID is unavailable.
+            if (_mode == ChartMode.range && _rangeSourceSupported &&
+                _liveRequested && widget.controller.accountId != null &&
+                bidTickCount > 0 && !_loading && !_olderLoading &&
+                !_replay && !_replaySelectingStart)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: SizedBox(width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const Key('range-refresh-verified-bid'),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('تحديث تيكات BID الموثقة'),
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      if (mounted) unawaited(_loadRealHistory());
+                    },
+                  ),
+                ),
+              ),
             if (canRequestOlder)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
