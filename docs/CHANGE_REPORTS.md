@@ -1,7 +1,7 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
 ### 2026-11-22 — TradeLab Range BID: retry مؤقت آمن + تقسيم 6h (قيد CI)
-- كود Flutter سابقًا لم يعالج transient HTTP 429/502/503/504 عند طلب BID؛ إضافة حد 3 محاولات للصفحة نفسها فقط مع backoff، دون retry لرفض الوسيط/فساد المصدر/401، ودون قبول صفحة ناقصة أو مختلطة.
+- كود Flutter سابقًا لم يعالج transient HTTP 429/502/503/504 عند طلب BID؛ إضافة حد 3 محاولات للصفحة نفسها فقط مع backoff. استثناء وحيد لرفض broker: `REQUEST_FREQUENCY_EXCEEDED` مُعرّف من البوابة ويدل على معدل طلبات مؤقت، فيعاد 2 مرات بعد 750/1500ms؛ بقية الرفض/فساد المصدر/401 بلا retry، ولا تُقبل صفحات ناقصة أو مختلطة.
 - Startup من 24h إلى 72h يستخدم 6h Verified BID pages، ثم 12h حتى 6 أيام، للحد من أحجام صفحات سوق الجمعة الكثيفة قبل أول عرض. التكاليف المقابلة: طلبات أكثر في عطلات السوق، مع بقاء قيم المصدر وتسلسل الأحداث ومؤشرات Replay ثابتة.
 - اختبارات مصدر لكل status وsafe-stop، واختبار الجمعة بعد سوق الأحد مع verify window contiguity. لا اختبار جهاز Android حقيقي، ولا إثبات نجاح بيانات cTrader الحية أو قياس FPS.
 - التعديل بفرع `fix/range-bid-retry-and-six-hour-first-source-20261122`، لا main/APK/Production. تحقق Vercel: آخر prod READY @ `b4ddfa6` أقدم من تطوير Flutter وgateway.
