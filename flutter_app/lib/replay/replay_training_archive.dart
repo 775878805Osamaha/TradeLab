@@ -83,9 +83,15 @@ class ReplayTrainingArchive {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  static Future<List<Map<String, Object?>>> recent({int limit = 20}) async {
+  static Future<List<Map<String, Object?>>> recent({
+    int limit = 20,
+    int offset = 0,
+  }) async {
     if (limit < 1 || limit > 100) {
       throw RangeError.range(limit, 1, 100);
+    }
+    if (offset < 0) {
+      throw RangeError.value(offset, 'offset', 'Must not be negative');
     }
     // Freeze the barrier at invocation time: this results view must include
     // every Replay save scheduled before its navigation began. Never display
@@ -97,7 +103,8 @@ class ReplayTrainingArchive {
     final db = await _open();
     final rows = await db.query('replay_sessions',
       columns: ['session_id', 'source_key', 'saved_at_ms', 'payload'],
-      orderBy: 'saved_at_ms DESC, session_id DESC', limit: limit);
+      orderBy: 'saved_at_ms DESC, session_id DESC',
+      limit: limit, offset: offset);
     return List<Map<String, Object?>>.unmodifiable(rows.map((row) {
       final payload = jsonDecode(row['payload'] as String);
       if (payload is! Map<String, dynamic> || payload['schema'] != 1) {
