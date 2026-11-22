@@ -6430,7 +6430,11 @@ class _CandleChartPainter extends CustomPainter {
       plotWidth: axis,
       candleCount: candles.length,
     );
-    if (start >= ending) return;
+    // An all-whitespace view is a valid deliberate TradingView-style pan.
+    // Still draw its genuine-source price ruler/grid/crosshair and any
+    // visible drawing coordinates; just skip candle and time-bar strokes.
+    // The previous early return blanked the entire axis, while the
+    // auto-scale separately fell back to fictitious 0..1 prices.
     final scale = _priceScaleProvider(axis, size.height);
     final maximum = scale.maximum;
     final minimum = scale.minimum;
@@ -6798,7 +6802,7 @@ class _CandleChartPainter extends CustomPainter {
         annotate(extremes.$2, Color(scaleSettings.lowColor), scaleSettings.highLow);
       }
     }
-    if (indicator &&
+    if (indicator && start < ending &&
         scaleSettings.indicatorLabels != ChartPriceLabelMode.hidden) {
       // The rightmost PAINTED SMA12 point belongs to visible bar ending-1.
       // The full broker archive can contain later candles while the user
@@ -6843,7 +6847,10 @@ class _CandleChartPainter extends CustomPainter {
       _shortAxisTag(canvas, axis, chartHeight, scale.y(item.target),
           scale.axisLabel(item.target, decimals), TradeColors.shortLabelBlue);
     }
-    if (timestamps.length >= candles.length) {
+    if (start < ending && timestamps.length >= candles.length) {
+      // The nearest broker price remains available while the viewport
+      // contains only whitespace. No candle is visible to own a timezone
+      // badge or day/time ruler label, so those remain absent (not guessed).
       // Label widths are measured using the same font/RTL direction as the
       // painter. Never let overlapping text corrupt the mobile time axis.
       // This affects presentation only; the underlying UTC times are intact.
