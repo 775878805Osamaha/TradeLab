@@ -1,5 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — PR #625 MERGED: استرداد BID المؤقت ونافذة الجمعة 6h، CI ناجح
+- **الدمج:** [PR #625](https://github.com/775878805Osamaha/TradeLab/pull/625) squash `40ff5f6468e7890dde316c93183b2ee3dfa160a8` في `test/flutter-all-fixes-20261116`، بعد [CI completed/success #45050329496](https://github.com/775878805Osamaha/TradeLab/actions/runs/45050329496) على head `b0b6fa4b11d6b37018a0a74ea297a59b10986eaf`.
+- **الإصلاح المدعوم بالكود:** Retry نفس [fromMs,toMs] لتيكات BID الحقيقية عند 429/502/503/504 مرتين كحد أقصى؛ عند `REQUEST_FREQUENCY_EXCEEDED` موثق من بوابة cTrader يستخدم 750/1500ms؛ بدون إعادة في 401/رفض دائم/فشل تحقق المصدر. يتحقق من بيانات الأسعار والأعداد والترتيب قبل نشر أي شمعة.
+- **Range startup:** 6h نوافذ disjoint من 24–72 ساعة؛ 12h بعدها وحتى 144h. اختبارات 6h الجمعة (Sunday 22-Nov) والحدود الزمنية/نفس المللي ثانية وHTTP/errors كلها اجتازت CI.
+- **حد الإثبات:** ليس هناك قياس اتصال cTrader حي من هاتف المستخدم؛ قد يظل السبب الحقيقي انقطاع شبكة/صلاحية BID/بوابة production قديمة `main` @ `b4ddfa6`. لا نعد بإزالة الفجوات الطبيعية لعطلات السوق أو إنتاج بيانات تاريخية وهمية. لا APK، ولا main، ولا Vercel production deploy.
+
+
 ## 2026-11-22 — إعادة محاولة BID المؤقتة + نوافذ 6 ساعات لظهور Range أسرع (CI PENDING)
 - **الفرع:** `fix/range-bid-retry-and-six-hour-first-source-20261122` انطلاقًا من `30c8171401f19aea447ae99d6a6beb0984d961d9`. النطاق TradeLab Flutter فقط؛ لا APK أو main أو production deployment.
 - **فجوة مثبتة من الكود:** `MarketApi._json` كان يسقط طلب `/v1/ticks` كاملًا لدى HTTP 429/502/503/504 العابر بلا أي retry؛ `ctraderBidTicksRange` لا ينشر النتائج الجزئية إذا فشلت ورقة واحدة، فيظهر Range فارغًا بعد الطلب. هذا مسار محتمل مدعوم بالكود، وليس إثباتًا أن المستخدم تعرض لهذه الأكواد في الإنتاج.
