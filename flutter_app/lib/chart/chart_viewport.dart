@@ -513,6 +513,36 @@ class ChartViewport {
     );
   }
 
+  /// After choosing an authentic Replay start, future candles disappear.
+  /// The selection viewport can preserve a large old-history offset which
+  /// places the revealed candles on the far left with blank future to the
+  /// right. Start playback beside the price axis instead of keeping that
+  /// selection-stage whitespace. Preserve pinch zoom and user right margin
+  /// unless it would itself hide the newest bar on a narrow phone at 60px.
+  ///
+  /// Presentation only: no changes to Replay's historical source candle,
+  /// cutoff, drawing anchors, prices or broker timeline. At scrollBars=0
+  /// subsequent verified Replay bars continue following the live edge.
+  ChartViewport afterConfirmingReplayStart({
+    required int revealedCount,
+    required double plotWidth,
+  }) {
+    if (revealedCount <= 0 || !plotWidth.isFinite || plotWidth <= 0 ||
+        !barWidth.isFinite || barWidth <= 0 ||
+        !rightMarginBars.isFinite) return this;
+    // The margin is measured in BAR widths. At maximum pinch zoom on 320dp
+    // screens a four-bar gap could exceed the WHOLE plot and hide all bars.
+    // Bound only the effective Replay margin to 20% of actual plot pixels.
+    final safeMargin = rightMarginBars < 0 ? rightMarginBars :
+        math.min(rightMarginBars,
+            math.max(0.0, (plotWidth * .20 / barWidth) - .5));
+    return ChartViewport(
+      barWidth: barWidth,
+      scrollBars: 0,
+      rightMarginBars: safeMargin,
+    );
+  }
+
   ChartViewport jumpToLatest() => ChartViewport(
     barWidth: barWidth, rightMarginBars: rightMarginBars);
 

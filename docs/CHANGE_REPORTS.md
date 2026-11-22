@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — Replay confirmation horizontal blank space (CI pending)
+- Identified negative scrollBars from chart_screen._confirmReplayStart retaining selection-source x after hiding future history; new afterConfirmingReplayStart puts last verified revealed candle near price ruler, with a max 20% right margin for tight/maximum zoom.
+- Tests for 259/329dp and 3/10/60px, autoplay stable, no future index reveal, invalid geometry; no OHLC or broker data changed.
+- Branch fix/replay-confirm-whitespace-20261122 base ef56ee11d2fb4d98ac18d393425f5e4ab747488b; CI pending and no APK.
+
+
 ### 2026-11-22 — Range الأحد: تقسيم نافذة 24–72 ساعة الكبيرة (CI PENDING)
 - تم التحقق من كود RangeStartupLoader: قفزة 24h→72h كانت تطلب نافذة 48h قد تضم تيكات XAUUSD كثيفة قبل ظهور أول Snapshot. عبر 12h cumulative slices حتى 6 أيام، يظل كل BID موثقاً وحقيقياً ولا يُختلق نشاط في عطلات السوق.
 - اختبارات range_startup_loader_test.dart أضيفت لأحد Nov 22 وتاريخ جمعة عمره 42 ساعة وللحد 12h وتجاور النوافذ/عدم التكرار. قياسات السرعة الحقيقية لدى cTrader لم تنفذ. لا يغير وحده API مصدر الوسيط أو صلاحيات الحساب.

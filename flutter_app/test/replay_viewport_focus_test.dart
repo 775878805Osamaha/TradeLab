@@ -141,4 +141,56 @@ void main() {
     expect(current.revealHistoricalBar(
       index: 0, candleCount: 20, plotWidth: double.nan), current);
   });
+  test('Replay confirmation keeps verified prefix visible by price ruler',
+      () {
+    for (final plotWidth in <double>[259, 329]) {
+      for (final barWidth in <double>[3, 10, 60]) {
+        const selected = 80000;
+        final selecting = ChartViewport(
+          barWidth: barWidth, scrollBars: -140,
+          rightMarginBars: 4);
+        final active = selecting.afterConfirmingReplayStart(
+          revealedCount: selected + 1, plotWidth: plotWidth);
+        expect(active.barWidth, barWidth,
+          reason: 'Pinch zoom remains unchanged on Replay entry');
+        expect(active.scrollBars, 0,
+          reason: 'Do not inherit far-left selection-stage blank future');
+        expect(active.rightMarginBars, lessThanOrEqualTo(4));
+        final x = active.chartX(index: selected,
+          candleCount: selected + 1, plotWidth: plotWidth);
+        expect(x, inInclusiveRange(plotWidth * .79, plotWidth),
+          reason: 'Last real revealed candle must be visible near ruler');
+        expect(active.indexAt(x: x, plotWidth: plotWidth,
+          candleCount: selected + 1), selected);
+        // Playback must follow the NEXT real bar without showing future
+        // source indices or bringing back the original white gap.
+        final advanced = active.afterReplayVisibleCountChange(
+          previousVisibleCount: selected + 1,
+          nextVisibleCount: selected + 2,
+          plotWidth: plotWidth);
+        expect(advanced.scrollBars, 0);
+        expect(advanced.chartX(index: selected + 1,
+          candleCount: selected + 2, plotWidth: plotWidth), closeTo(x, 1e-8));
+        expect(active.indexAt(x: plotWidth - 1,
+          plotWidth: plotWidth, candleCount: selected + 1), isNull);
+      }
+    }
+  });
+
+  test('Replay confirmation preserves authored margin when it fits plot',
+      () {
+    const viewport = ChartViewport(
+      barWidth: 10, scrollBars: 190, rightMarginBars: 4);
+    final active = viewport.afterConfirmingReplayStart(
+      revealedCount: 120, plotWidth: 329);
+    expect(active.scrollBars, 0);
+    expect(active.rightMarginBars, 4);
+    expect(active.barWidth, 10);
+    // Invalid layout/empty historical prefix cannot silently alter scroll.
+    expect(viewport.afterConfirmingReplayStart(
+      revealedCount: 0, plotWidth: 329), viewport);
+    expect(viewport.afterConfirmingReplayStart(
+      revealedCount: 120, plotWidth: double.nan), viewport);
+  });
+
 }
