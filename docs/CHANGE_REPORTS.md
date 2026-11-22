@@ -1,5 +1,13 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — دمج #624: إظهار صفقات Replay الفردية بنتائج Flutter
+- **الحالة:** [PR #624 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/624) عند `6f9d40bcbb246c0504d19e378f54ec51bafb393f`. 
+- **الملفات:** `flutter_app/lib/replay/replay_training_archive.dart`, `flutter_app/lib/screens/results_screen.dart`, `flutter_app/test/replay_training_archive_test.dart`, `flutter_app/test/results_connection_test.dart` إضافة إلى تقرير الترحيل هذا و`docs/HANDOFF.md`.
+- **المنجز:** بعد حفظ جلسة Replay، تُعرض تفاصيل كل صفقة مفتوحة ومغلقة وأرقام الدخول/الخروج والكمية، مع زر 20 صفًا إضافيًا عند الحاجة ودون تسريب معرّف الحساب أو خلط PnL فرق السعر بالأرباح بالدولار.
+- **الفحص:** أول CI 45047956076 فشل في اختبار زر pagination خارج شاشة 320×760dp (808 نجاح، فشل واحد). الاختبار صُحّح وعاد [CI 45048285190](https://github.com/775878805Osamaha/TradeLab/actions/runs/45048285190) ناجحًا بالكامل + Flutter analyze. لم يُجرَ اختبار جهاز حقيقي أو بناء APK جديد.
+- **معلّق منفصل:** أول تحميل BID لشموع Range والفجوات من بوابة cTrader production، مع ضرورة عدم اصطناع الأسعار. `main` والإنتاج لا تغيير.
+
+
 ### 2026-11-22 — تفاصيل صفقات Replay داخل النتائج (قيد CI)
 - التحقق المصدرّي: صفحة النتائج السابقة تُظهر **ملخص الجلسات** فقط، وليس أوامر Replay المفتوحة والمغلقة منفردة. هذا نقص عرض إضافي بعد إصلاحات #617/#621/#622.
 - تحديث سجل SQLite: projection منظّف لكل صفقة يحفظ جهة الدخول والسعر والكمية والخروج والنتيجة، مع التحقق من النوع وسلامة الأرقام ودون تمرير accountId أو sourceKey إلى صف الصفقة.
