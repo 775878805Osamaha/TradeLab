@@ -1,0 +1,47 @@
+name: Capture TradeLab Chart Visual QA (Flutter)
+
+# Dedicated test-only screenshot runner. It does NOT build/sign APKs and
+# never connects to a broker. Kept path-scoped to avoid unnecessary costs
+# on every other TradeLab feature PR.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [test/flutter-all-fixes-20261116]
+    paths:
+      - 'flutter_app/test/chart_visual_qa_capture_test.dart'
+      - '.github/workflows/capture-chart-visual-qa.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tradelab-chart-visual-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter-chart-visual-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: flutter_app
+    env:
+      TZ: Asia/Aden
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve Flutter test dependencies
+        run: flutter pub get
+      - name: Generate authentic Flutter widget screenshots
+        run: flutter test --update-goldens test/chart_visual_qa_capture_test.dart
+      - name: Publish chart QA fixture screenshots (not broker prices)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tradelab-flutter-chart-qa-${{ github.sha }}
+          path: flutter_app/test/goldens/chart-fixture-*.png
+          retention-days: 7
+          if-no-files-found: warn
