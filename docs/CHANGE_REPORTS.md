@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — Flutter real screenshot QA + readable dark labels + full-width price digits (CI PENDING)
+- Captures actual Flutter `ChartScreen` widget snapshots with test-only offline BTC OHLC, dark/light 360/390dp and crosshair, via new path-scoped GitHub Actions artifact. Reference screenshot is already saved in repo; screenshots are inspectable unlike generated UI mockups.
+- Verified visual issues in screenshot: Ahem square glyphs/font in widget tests, dark default `axisTextColor=black` against nearly black canvas, long BTC price tags clipped by fixed 61dp ruler. Fix via scoped test fonts/MaterialIcons, explicit Roboto for Canvas TextPainter, conditional readable axis ink and measured fitting for every authentic digit.
+- Regression tests for axis contrast and chart painter font family; no broker source or Replay data mutation. Android screenshot/raster/FPS parity still unverified; no APK/main/prod.
+
+
 ### 2026-11-22 — Offscreen price-axis chart parity (CI PENDING)
 - Repaired legitimate empty-time-viewport behavior: do not erase y-axis and show fake market price 0–1 while valid cTrader/Binance candles exist outside viewport. Retain last chart-specific authenticated source scale or use a bounded nearest-edge real-price fallback.
 - Time-axis dates remain absent when no source candle is visible; Replay only reads its revealed prefix and no synthetic BID/timestamps are emitted. Painter and scale cache covered by unit tests and CI.
