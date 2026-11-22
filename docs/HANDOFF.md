@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — استباق التحميل التاريخي قبل اصطدام pan بحافة الشموع (PENDING)
+- **النطاق:** فرع `perf/tradelab-history-prefetch-earlier-20261122` من `test/flutter-all-fixes-20261116` @ `75e6bf240799359d7dbf5e3cb89733819728eed3`. لا APK/Release ولا `main`.
+- **المشكلة في المصدر:** `_prefetchOlderAtEdge` يبدأ تحميل الأقدم عند `count-visibleBars-25` فقط. أثناء pan سريع وwidth صغير، الباقي 25 شمعة لا يكفي عادة لإخفاء زمن الشبكة/SQLite؛ الشارت يصل إلى الطرف فينتظر تحميل البيانات الموثقة.
+- **التغيير:** فصل شرط `ChartHistoryPrefetchPolicy.shouldPrefetch` ليبدأ بمهلة مقدارها شاشتان فعليتان، في نطاق 25–256 شمعة مع تأكيد بدء pan أولاً، ولا تغيير للـReplay أو حواجز in-flight/error/exhaustion. سياسة الطلب تقرر الموعد فقط: لا تكمل شموعًا وهمية ولا تتجاوز تحقق cTrader/Binance.
+- **اختبارات:** `chart_history_prefetch_policy_test.dart` على 320dp وbarWidth=3/10/60، الحد الأقصى للمهلة والشارت القليل واللمس NaN/Infinity؛ مضاف إلى `verify-flutter-range.yml`.
+- **الحالة:** GitHub CI لم يتأكد بعد؛ هذا تحسين لتوقيت بدء الطلب، **وليس تقليل latency المصدر نفسه أو إثبات Android FPS**. تحقق Flutter ثم merge، مع بقاء قياس Android Profile والمطابقة المرجعية مهمة لاحقة.
+
+
 ## دفعة أداء مستحدثة — تثبيت كاش Auto Price Scale داخل نافذة شموع واحدة (22 نوفمبر 2026)
 - **الأساس/الفرع:** `test/flutter-all-fixes-20261116` عند `75e6bf240799359d7dbf5e3cb89733819728eed3` إلى `perf/tradelab-price-scale-visible-window-cache-20261122`؛ لا تعديل `main` ولا APK.
 - **الفجوة المثبتة في الكود:** `ChartPriceScaleCache.resolve` يستخدم `_viewport == viewport`، فيفقد الكاش عند كل تغيّر كسري `scrollBars` خلال pan، حتى لو لم تتغير حدود `visibleIndices`. يستلزم ذلك إعادة مسح OHLC للنافذة نفسها عند كل frame.
