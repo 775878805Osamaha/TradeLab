@@ -583,4 +583,89 @@ void main() {
       const Offset(50, 50), realStroke), closeTo(0, 1e-9));
   });
 
+  test('source-index culling never exceeds real plotted-pixel rejection',
+      () {
+    const count = 2001;
+    var early = 0;
+    var kept = 0;
+    for (final plotWidth in <double>[259, 329]) {
+      for (final barWidth in <double>[3, 10, 60]) {
+        for (final scroll in <double>[0, 3.13, 17.5, 200, 1400]) {
+          final viewport = ChartViewport(
+            barWidth: barWidth, scrollBars: scroll, rightMarginBars: 4);
+          final (first, ending) = viewport.visibleIndices(
+            plotWidth: plotWidth, candleCount: count);
+          for (final tool in ChartDrawingTool.values) {
+            for (final a in <int>[0, 4, 99, 600, 1399, 1799, 2000]) {
+              for (final b in <int>[0, 100, 1100, 1850, 2000]) {
+                final indexCull =
+                    ChartLineGeometry.definitelyOffscreenBySourceWindow(
+                  tool: tool, startIndex: a, endIndex: b,
+                  visibleStartIndex: first, visibleEndIndex: ending);
+                if (!indexCull) {
+                  kept++;
+                  continue;
+                }
+                early++;
+                final x1 = viewport.chartX(
+                    index: a, candleCount: count, plotWidth: plotWidth);
+                final x2 = viewport.chartX(
+                    index: b, candleCount: count, plotWidth: plotWidth);
+                expect(ChartLineGeometry.definitelyOffscreenHorizontally(
+                  tool: tool, startX: x1, endX: x2,
+                  plotWidth: plotWidth), isTrue,
+                  reason: 'Culling a possibly visible source segment is '
+                      'forbidden at any zoom, x-anchor order or chart width');
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(early, greaterThan(500));
+    expect(kept, greaterThan(500));
+  });
+
+  test('index culling preserves rays, Fibonacci and Replay-scope handles',
+      () {
+    const tools = <ChartDrawingTool>[
+      ChartDrawingTool.ray,
+      ChartDrawingTool.extendedLine,
+      ChartDrawingTool.crossLine,
+      ChartDrawingTool.parallelChannel,
+    ];
+    for (final tool in tools) {
+      expect(ChartLineGeometry.definitelyOffscreenBySourceWindow(
+        tool: tool, startIndex: 0, endIndex: 1,
+        visibleStartIndex: 950, visibleEndIndex: 1001), isFalse);
+    }
+    // A Fibonacci level extends rightward from its earliest actual anchor.
+    expect(ChartLineGeometry.definitelyOffscreenBySourceWindow(
+      tool: ChartDrawingTool.fibonacci,
+      startIndex: 0, endIndex: 1,
+      visibleStartIndex: 950, visibleEndIndex: 1001), isFalse);
+    expect(ChartLineGeometry.definitelyOffscreenBySourceWindow(
+      tool: ChartDrawingTool.fibonacci,
+      startIndex: 1005, endIndex: 1008,
+      visibleStartIndex: 950, visibleEndIndex: 1001), isTrue);
+    expect(ChartLineGeometry.definitelyOffscreenBySourceWindow(
+      tool: ChartDrawingTool.verticalLine,
+      startIndex: 970, endIndex: 0,
+      visibleStartIndex: 950, visibleEndIndex: 1001), isFalse);
+    expect(ChartLineGeometry.definitelyOffscreenBySourceWindow(
+      tool: ChartDrawingTool.trendLine,
+      startIndex: 1, endIndex: 970,
+      visibleStartIndex: 950, visibleEndIndex: 1001), isFalse,
+      reason: 'An actual long finite trend segment may cross the visible plot');
+    expect(ChartLineGeometry.definitelyOffscreenBySourceWindow(
+      tool: ChartDrawingTool.trendLine,
+      startIndex: 1, endIndex: 2,
+      visibleStartIndex: 950, visibleEndIndex: 1001), isTrue);
+    expect(ChartLineGeometry.definitelyOffscreenBySourceWindow(
+      tool: ChartDrawingTool.infoLine,
+      startIndex: 1, endIndex: 2,
+      visibleStartIndex: 950, visibleEndIndex: 950), isFalse,
+      reason: 'Invalid viewport intervals cannot be used as culling proof');
+  });
+
 }

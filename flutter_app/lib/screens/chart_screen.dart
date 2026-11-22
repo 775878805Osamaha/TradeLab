@@ -3841,17 +3841,23 @@ class _ChartScreenState extends State<ChartScreen>
   }
 
   int? _hitPattern(Offset position, ChartPriceScale scale,
-      double width, int visibleCount) => ChartDrawingHitTest.hit(
-    position: position,
-    patterns: _patterns,
-    revealedCount: visibleCount,
-    plotWidth: width,
-    plotHeight: scale.height,
-    selectedPatternIndex: _selectedPattern,
-    sourceX: (index) => _viewport.chartX(
-      index: index, candleCount: visibleCount, plotWidth: width),
-    sourceY: scale.y,
-  );
+      double width, int visibleCount) {
+    final (first, ending) = _viewport.visibleIndices(
+        plotWidth: width, candleCount: visibleCount);
+    return ChartDrawingHitTest.hit(
+      position: position,
+      patterns: _patterns,
+      revealedCount: visibleCount,
+      plotWidth: width,
+      plotHeight: scale.height,
+      visibleStartIndex: first,
+      visibleEndIndex: ending,
+      selectedPatternIndex: _selectedPattern,
+      sourceX: (index) => _viewport.chartX(
+        index: index, candleCount: visibleCount, plotWidth: width),
+      sourceY: scale.y,
+    );
+  }
 
   ChartAnchorEndpoint? _hitSelectedHandle(Offset position,
       ChartPriceScale scale, double width, int visibleCount) {
@@ -6375,11 +6381,22 @@ class _CandleChartPainter extends CustomPainter {
       // Replay is strictly prefix-only: drawings ending in the future stay
       // invisible, even if their coordinates were created in analysis mode.
       if (!drawing.visibleAt(candles.length)) continue;
+      final selected = activePattern == index;
+      // The painter already calculated padded visible bar indices once.
+      // Reject known-invisible finite drawings before converting their
+      // anchors to screen x/y during EVERY gesture repaint.
+      if (!selected && ChartLineGeometry.definitelyOffscreenBySourceWindow(
+        tool: drawing.tool,
+        startIndex: drawing.start.index,
+        endIndex: drawing.end.index,
+        visibleStartIndex: start,
+        visibleEndIndex: ending)) {
+        continue;
+      }
       final x1 = viewport.chartX(index: drawing.start.index,
           candleCount: candles.length, plotWidth: axis);
       final x2 = viewport.chartX(index: drawing.end.index,
           candleCount: candles.length, plotWidth: axis);
-      final selected = activePattern == index;
       // Skip only finite annotations whose source-anchor geometry proves
       // they cannot touch this plot. The selected pattern keeps its handles;
       // rays, infinite lines and parallel channels keep their long reach.
