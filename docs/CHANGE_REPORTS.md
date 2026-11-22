@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — PR #633 merged, verified all Replay session pages
+- Squash `d135db1762f13ccdc9d7faed8cccb25e31123acb`: [PR #633](https://github.com/775878805Osamaha/TradeLab/pull/633) merged into Flutter development, never `main`.
+- [CI #45080738105](https://github.com/775878805Osamaha/TradeLab/actions/runs/45080738105) **success**: analyze and existing Flutter, Range, Replay, Results, timezone and drawing catalog tests. Archives now accessible beyond five sessions and beyond first SQL batch with bounded paginated reads.
+- Product constraints preserved: no APK, broker order submission, fabricated BID history, main deployment, or production gateway changes. Android-device validation remains pending.
+
+
 ### 2026-11-23 — Make all archived Replay sessions navigable (CI PENDING)
 - Fixed source-confirmed Results UI truncation to first five Replay sessions; old durable historical trades had no discovery path.
 - Implemented bounded SQL `limit/offset` archive pages (20 + 1 has-more marker), visible five-session increments, on-demand next page, stale-read supersession on tab activation, and partial-data preservation when a later read fails.
