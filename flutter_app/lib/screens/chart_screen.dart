@@ -2317,7 +2317,6 @@ class _ChartScreenState extends State<ChartScreen>
       _replayMessage('تعذر التحقق من توقيت العمود التاريخي المحدد.');
       return;
     }
-    final oldCount = _replayMarketCandles.length;
     final selected = _replayCandidateIndex.clamp(
         0, ReplayStartResolver.maxStart(_totalBars)).toInt();
     // Assert the selected bar belongs to actual broker/source timestamps.
@@ -2350,16 +2349,13 @@ class _ChartScreenState extends State<ChartScreen>
       _replayInitialCount = selected + 1;
       _visibleThrough = _replayInitialCount;
       _training.moveTo(_replayMarketCandles, _visibleThrough);
-      // Preserve the selected candle's visual x after switching the painter
-      // from full history to the strict (future-free) CandlePrefix.
+      // The selected candle and its original source time remain identical.
+      // Once future bars are hidden, discard the old selection-stage offset:
+      // it otherwise pins real candles to the far left beside large blank
+      // future space, especially at maximum pinch zoom on Android.
       final plotWidth = math.max(1.0, MediaQuery.sizeOf(context).width - 61);
-      final minScroll = -plotWidth / _viewport.barWidth * .68;
-      final scroll = (_viewport.scrollBars + _visibleThrough - oldCount)
-          .clamp(minScroll, (_visibleThrough - 1).toDouble()).toDouble();
-      _viewport = ChartViewport(
-        barWidth: _viewport.barWidth,
-        scrollBars: scroll,
-        rightMarginBars: _viewport.rightMarginBars);
+      _viewport = _viewport.afterConfirmingReplayStart(
+        revealedCount: _visibleThrough, plotWidth: plotWidth);
       _crosshair = null;
       _selectedLine = null;
       _selectedPattern = null;
