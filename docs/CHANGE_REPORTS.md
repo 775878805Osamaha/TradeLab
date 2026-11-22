@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — PR #627 MERGED: ربط تاريخ الشموع بتفويض cTrader + طابور حفظ الجلسة
+- [PR #627 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/627) SHA `ae4a854cf33c96199d1087b0c6f641f8319dd906`، [Actions #45055339815 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45055339815) — 827 اختبارات حزمة الشارت/Range/Replay + 11 فحوص أخرى، Flutter analyze ناجح.
+- تم إغلاق تسرب ردود cTrader القديمة عند A→B→A وعند OAuth إعادة ربط بالحساب نفسه، ورفض انتحال session عبر headers القديمة أو ردود 401/JSON فاسدة، وتأمين حفظ/حذف credential من سباق عمليات التخزين. أصبح ChartScreen يعيد تحميل بياناته عند تبدّل جيل التفويض حتى لو لم يتغير accountId.
+- لم يتم بناء APK أو تعديل main/prod، ولا يمكن اعتبار الوصول الحي لـBID أو FPS مثبتًا من unit/widget tests.
+
+
 ### 2026-11-22 — تثبيت جيل التفويض في cTrader History/Range (قيد CI)
 - **تحصين تخزين الجلسة:** `CTraderSessionTokenWriteQueue` يضمن الترتيب عند secure-storage write/delete، وعدم استعادة التوكن القديم بعد خروج المستخدم، مع تمييز OAuth re-auth pending ومنع قبول history/headers القديمة أثناءه؛ اختبارات عقد التأخير والفشل/recover وin-flight request أثناء OAuth. لم تُعدّل أدوات الإنتاج أو APK. CI على أحدث head مطلوب.
 
