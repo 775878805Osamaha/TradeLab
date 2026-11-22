@@ -26,6 +26,7 @@ import '../chart/chart_frame_profiler.dart';
 import '../chart/chart_load_profiler.dart';
 import '../chart/chart_history_prefetch_policy.dart';
 import '../chart/chart_text_layout_cache.dart';
+import '../chart/chart_axis_contrast.dart';
 import '../chart/chart_feed_health.dart';
 import '../chart/chart_panel_settings.dart';
 import '../chart/chart_panel_settings_page.dart';
@@ -5025,11 +5026,14 @@ class _ChartScreenState extends State<ChartScreen>
             Text(_selectedSymbol.kind == InstrumentKind.gold
                 ? 'GOLD' : _symbol,
                 textDirection: TextDirection.ltr,
-                style: const TextStyle(fontSize: 16,
-                    color: Color(0xFF101010), fontWeight: FontWeight.w800)),
+                style: TextStyle(fontSize: 16,
+                    color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFFF3F5F7) : const Color(0xFF101010),
+                    fontWeight: FontWeight.w800)),
             Text(_symbol, textDirection: TextDirection.ltr,
-                style: const TextStyle(fontSize: 10,
-                    color: Color(0xFF9B9B9B))),
+                style: TextStyle(fontSize: 10,
+                    color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFFAFB9C5) : const Color(0xFF9B9B9B))),
           ]),
         ),
         TextButton(
@@ -5039,9 +5043,10 @@ class _ChartScreenState extends State<ChartScreen>
             padding: const EdgeInsets.symmetric(horizontal: 4),
             minimumSize: const Size(0, 48)),
           child: Text(ChartTimeframeCatalog.displayLabel(_timeframe),
-            style: const TextStyle(fontSize: 17,
+            style: TextStyle(fontSize: 17,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF333333))),
+                color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFFF3F5F7) : const Color(0xFF333333))),
         ),
         // Most used controls remain in the first 390dp; extra tools scroll.
         _iconAction(icon: Icons.bar_chart_outlined,
@@ -6423,6 +6428,10 @@ class _CandleChartPainter extends CustomPainter {
     final background = dark && panel.backgroundColor == 0xFFFFFFFF
         ? const Color(0xFF000D16) : Color(panel.backgroundColor);
     canvas.drawRect(Offset.zero & size, Paint()..color = background);
+    // The legacy black ruler label preset becomes unreadable against the
+    // TradingView-style midnight canvas. This is display contrast only.
+    final axisTextColor = ChartAxisContrast.readableAxisLabel(
+        background: background, configuredArgb: panel.axisTextColor);
     final axis = size.width - 61;
     if (axis < 30 || size.height < 60 || candles.isEmpty) return;
     final chartHeight = size.height - 24;
@@ -6471,9 +6480,9 @@ class _CandleChartPainter extends CustomPainter {
           : (displayTick / (step * 5) -
               (displayTick / (step * 5)).round()).abs() < 0.000001;
       _text(canvas, scale.axisLabel(tick, decimals),
-          Offset(axis + 6, py - 8), Color(panel.axisTextColor),
+          Offset(axis + 6, py - 8), axisTextColor,
           panel.axisTextSize.toDouble(),
-          bold: important);
+          bold: important, maxWidth: 52);
       if (panel.horizontalGridVisible && py >= 0 && py < chartHeight) {
         _configuredLine(canvas, Offset(0, py), Offset(axis, py),
           Color(panel.horizontalGridColor), panel.horizontalGridStroke, .55);
@@ -6759,7 +6768,8 @@ class _CandleChartPainter extends CustomPainter {
         Paint()..color = color);
       _text(canvas, scale.axisLabel(price, decimals),
           Offset(axis + 3, top + 4),
-        Colors.white, math.max(9, panel.axisTextSize - 2).toDouble());
+        Colors.white, math.max(9, panel.axisTextSize - 2).toDouble(),
+        maxWidth: 55);
     }
     // A source-derived last-close marker, not a simulated tick or countdown.
     final lastClose = candles.last.close;
@@ -6783,7 +6793,7 @@ class _CandleChartPainter extends CustomPainter {
           Paint()..color = lastColor);
       _text(canvas, scale.axisLabel(lastClose, decimals),
           Offset(axis + 3, tagY + 7), Colors.white,
-          panel.axisTextSize.toDouble());
+          panel.axisTextSize.toDouble(), maxWidth: 55);
     }
     if (previousSessionClose != null) {
       annotate(previousSessionClose!, Color(scaleSettings.previousCloseColor),
@@ -6856,7 +6866,7 @@ class _CandleChartPainter extends CustomPainter {
       // This affects presentation only; the underlying UTC times are intact.
       final timeAxisLayout = ChartTimeAxisLabelLayout(plotWidth: axis);
       final fontSize = math.max(9, panel.axisTextSize - 2).toDouble();
-      final labelColor = Color(panel.axisTextColor);
+      final labelColor = axisTextColor;
       final zoneLabel = ChartHistoricalTimeZone.labelAtVisibleBar(
           zone: symbolSettings.timeZone,
           timestampsUtcMs: timestamps,
@@ -6966,7 +6976,8 @@ class _CandleChartPainter extends CustomPainter {
         canvas.drawRect(Rect.fromLTWH(axis, markerY, 61, 18),
             Paint()..color = TradeColors.blue);
         _text(canvas, scale.axisLabel(crossPrice, decimals),
-            Offset(axis + 3, markerY + 2), Colors.white, 10);
+            Offset(axis + 3, markerY + 2), Colors.white, 10,
+            maxWidth: 55);
       }
       if (timestamps.length >= candles.length &&
           selected.index != null) {
@@ -6998,15 +7009,43 @@ class _CandleChartPainter extends CustomPainter {
     if (timestamps.length < candles.length) {
       _text(canvas, 'شموع مدى',
           Offset(axis / 2 - 18, chartHeight + 3),
-          Color(panel.axisTextColor),
+          axisTextColor,
           math.max(9, panel.axisTextSize - 2).toDouble());
     }
   }
 
   void _text(Canvas canvas, String value, Offset offset, Color color,
-      double size, {bool bold = false, bool rtl = false}) {
-    textCache.paint(
-      canvas, value, offset, color, size, bold: bold, rtl: rtl);
+      double size, {bool bold = false, bool rtl = false,
+      double? maxWidth}) {
+    if (maxWidth == null || !maxWidth.isFinite || maxWidth <= 0) {
+      textCache.paint(
+        canvas, value, offset, color, size, bold: bold, rtl: rtl);
+      return;
+    }
+    // Long BTC / index / fractional forex prices must NEVER lose the last
+    // digit because the right-side ruler is 61 logical px wide. Fit the
+    // complete measured text rather than ellipsizing an authentic price.
+    // Cache all measured typefaces, and use a horizontal fit ONLY when
+    // reducing typography to 8sp is still insufficient.
+    var readableSize = size;
+    var paragraph = textCache.layout(
+        value, color, readableSize, bold: bold, rtl: rtl);
+    while (paragraph.width > maxWidth && readableSize > 8) {
+      readableSize = math.max(8, readableSize - 1);
+      paragraph = textCache.layout(
+          value, color, readableSize, bold: bold, rtl: rtl);
+    }
+    if (paragraph.width <= maxWidth) {
+      paragraph.paint(canvas, offset);
+      return;
+    }
+    final ratio = maxWidth / paragraph.width;
+    if (!ratio.isFinite || ratio <= 0) return;
+    canvas.save();
+    canvas.translate(offset.dx, offset.dy);
+    canvas.scale(ratio, 1);
+    paragraph.paint(canvas, Offset.zero);
+    canvas.restore();
   }
 
   void _paintShortPositions(Canvas canvas, ChartPriceScale scale,
@@ -7089,7 +7128,8 @@ class _CandleChartPainter extends CustomPainter {
     if (y < 0 || y > height) return;
     final top = (y - 9).clamp(0, height - 18).toDouble();
     canvas.drawRect(Rect.fromLTWH(axis, top, 61, 18), Paint()..color = color);
-    _text(canvas, value, Offset(axis + 2, top + 2), Colors.white, 10);
+    _text(canvas, value, Offset(axis + 2, top + 2), Colors.white, 10,
+        maxWidth: 56);
   }
 
   void _shortPill(Canvas canvas, String value, Offset location,
