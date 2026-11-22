@@ -21,7 +21,7 @@
 
 ## بروتوكول القياس المقترح قبل الادعاء بالمطابقة أو تحسين FPS
 - ابنِ **فقط عند تصريح المستخدم** نسخة Android Profile تحتوي على الدمجات؛ آخر APK Release من 20 نوفمبر 2026 أقدم من هذه الإصلاحات.
-- شغّل `TRADELAB_PROFILE_CHART=true` لاستعمال `ChartFrameProfiler` و`ChartLoadProfiler` الموجودين في الكود. لا تُنشئ تقديرات وهمية للفريمات.
+- عند بناء نسخة Android Profile مأذون بها، مرّر `--dart-define=TRADELAB_PROFILE_CHART=true` إلى أمر Flutter لتفعيل `ChartFrameProfiler` و`ChartLoadProfiler`؛ لأن `bool.fromEnvironment` يقرأ قيمة مُعرّفة وقت البناء، ولا يكفي متغير بيئة shell. لا تُنشئ تقديرات وهمية للفريمات.
 - شغّل نفس الرمز/الإطار/عدد شموع المصدر (مثل 120k) ووضعي Candles/Heikin Ashi/Range عند عرضَي plot 259/329 وbarWidth 3/10/60، ثم تحقق من pan/pinch/momentum/replaySelection/ruler.
 - سجّل frame build/raster/total P50/P95/P99، وعدد الإطارات >16.667ms و>8.333ms، مع نسبة العينة وعدد العينات. فارق بين أوقات `initialCacheRead`, `initialBrokerFetch`, `olderCacheRead`, `olderBrokerFetch`, `olderRangeRebuild`, `liveRangeVerify` وتجنب جمعها في رقم واحد مضلل.
 - قارن صور TradeLab مع TradingView في **نفس بيانات OHLC، الوقت، حالة LOG/Invert/الزووم، اتجاه المحور RTL وتكثيف الملصقات**؛ لا تعلن طبق الأصل من دون screenshot/pixel فحص حقيقي.
