@@ -52,7 +52,8 @@ class MarketController extends ChangeNotifier {
 
   void _assertCurrentCTraderRead(
       String account, int revision, String errorMessage) {
-    if (!ctraderConnected || accountId != account ||
+    if (_replacingOAuthAuthorization ||
+        !ctraderConnected || accountId != account ||
         _quoteAccountEpoch != revision) {
       throw MarketDataException(errorMessage);
     }
