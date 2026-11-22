@@ -197,6 +197,53 @@ void main() {
         'session-rotated');
   });
 
+  test('401 and malformed broker JSON cannot rotate OAuth credentials',
+      () async {
+    for (final invalid in <String>['unauthorized', 'malformed']) {
+      FlutterSecureStorage.setMockInitialValues({});
+      const storage = FlutterSecureStorage();
+      await storage.write(
+          key: 'tradelab_flutter_ctrader_session', value: 'session-safe');
+      final api = MarketApi(client: MockClient((request) async {
+        if (request.url.path == '/v1/accounts') {
+          return http.Response(jsonEncode({'accounts': [
+            {'accountId': '101', 'broker': 'A', 'isLive': false},
+          ]}), 200);
+        }
+        if (request.url.path == '/v1/symbols') {
+          return http.Response(jsonEncode({'symbols': [
+            {'symbolName': 'XAUUSD', 'symbolId': 42},
+          ]}), 200);
+        }
+        expect(request.url.path, '/v1/candles');
+        if (invalid == 'unauthorized') {
+          return http.Response(jsonEncode({'error': 'session_expired'}), 401,
+            headers: {'x-tradelab-session': 'forbidden-old-header'});
+        }
+        return http.Response('{broken-json', 200,
+          headers: {'x-tradelab-session': 'forbidden-broken-header'});
+      }));
+      final controller = MarketController(storage: storage, api: api);
+      try {
+        await controller.initialize(enableDeepLinks: false);
+        final revision = controller.ctraderAuthorizationRevision;
+        await expectLater(
+          controller.history(gold, '1m',
+              before: DateTime.utc(2026, 11, 20)),
+          throwsA(isA<MarketDataException>()),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(await storage.read(key: 'tradelab_flutter_ctrader_session'),
+            'session-safe');
+        expect(controller.ctraderAuthorizationRevision, revision,
+          reason: 'A rejected or corrupted response cannot change auth');
+      } finally {
+        controller.dispose();
+        api.close();
+      }
+    }
+  });
+
   testWidgets('reselecting same cTrader account invalidates chart generation',
       (tester) async {
     FlutterSecureStorage.setMockInitialValues({});
