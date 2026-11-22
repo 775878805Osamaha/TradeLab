@@ -1,5 +1,13 @@
 # TradeLab ↔ TradingView Android — معيار قبول المطابقة الكاملة
 
+## تحديث 2026-11-22 — تقدم أداء الكود لا يعادل جاهزية Android
+- [PR #610](https://github.com/775878805Osamaha/TradeLab/pull/610) حسّن لمس آلاف الرسومات خارج plot، [CI ناجح #45018066145](https://github.com/775878805Osamaha/TradeLab/actions/runs/45018066145). اختبار 120k bar/6000 drawings يحصي عمليتين `sourceY` للرسم المرئي بدلاً من آلاف التحويلات، دون قياس FPS على هاتف.
+- [PR #612](https://github.com/775878805Osamaha/TradeLab/pull/612) يثبت كاش نطاق محور السعر للـpan الكسري داخل نفس شموع المصدر، [CI ناجح #45022185183](https://github.com/775878805Osamaha/TradeLab/actions/runs/45022185183)؛ اختبار 240 حركة pan لنفس نافذة 120k لا يقرأ OHLC مجددًا.
+- [PR #613](https://github.com/775878805Osamaha/TradeLab/pull/613) يقدم تحميل الشموع الأقدم حتى مسافتَي شاشة، ضمن 25–256 بار، [CI ناجح #45022570244](https://github.com/775878805Osamaha/TradeLab/actions/runs/45022570244). لا تحميل Replay تلقائي، لا أسعار وهمية، ولا إثبات انخفاض latency للشبكة بعد.
+- **قبول الأداء المتبقي:** مقارنة أجهزة Android حقيقية عند 320/390dp وفواصل 3–60px شمعة، تسجيل عدد/زمن إطارات gesture وp95/p99 وفترات التوقف، وزمن تحميل cache وbroker وRange BID مع >100k المصدر. هدف 16.7ms لإطار 60Hz هو معيار مطلوب اختباره **وليس نتيجة مقاسة**.
+- آخر APK في Releases بتاريخ 2026-11-20 يسبق هذه التعديلات؛ **لا يمكن وصف النسخة المثبتة بأنها أسرع بمجرد دمج الكود**. التطوير الحالي `test/flutter-all-fixes-20261116` @ `974196e3c62ef67919c71031c235b57c3c245cad`، وليس `main`، وبدون APK جديد. حالة «طبق الأصل»: **NOT COMPLETE**.
+
+
 ## تقدم التحقق 2026-11-22 — تحسين كلفة لمس الرسومات
 - [PR #610](https://github.com/775878805Osamaha/TradeLab/pull/610) **MERGED** في فرع التطوير عند `37bc5d56f2a807d97be046ab49359789b4f81e90`؛ [GitHub CI #45018066145](https://github.com/775878805Osamaha/TradeLab/actions/runs/45018066145) **SUCCESS**.
 - كلفة تحويل إحداثيات السعر في `ChartDrawingHitTest.hit` أصبحت مقصوصة للخطوط المحدودة غير المرئية. اختبار 120k index/6000 offscreen patterns على شاشتي 259/329dp نجح: `sourceY` استُدعي مرتين للرسم الظاهر بدل 12002 في المسار القديم، مع بقاء Rays/Fibonacci/Crossline/Parallel قابلة للتحديد ومنع ظهور المستقبل في Replay.

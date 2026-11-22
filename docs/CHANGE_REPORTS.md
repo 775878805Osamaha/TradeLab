@@ -1,5 +1,16 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 UTC — إغلاق دفعات تحسين الأداء #610 و#612 و#613 بنجاح
+- **المستودع/فرع التطوير:** `775878805Osamaha/TradeLab` / `test/flutter-all-fixes-20261116`؛ من `0b82addd5063e7b6f6baaf3b1d0894d2090d04b8` عبر #610 إلى `974196e3c62ef67919c71031c235b57c3c245cad`. لا تعديل `main` أو APK/Release.
+- **PR #610:** https://github.com/775878805Osamaha/TradeLab/pull/610 **MERGED** إلى `37bc5d56f2a807d97be046ab49359789b4f81e90`، https://github.com/775878805Osamaha/TradeLab/actions/runs/45018066145 **success**. لمسات على 120k source و6000 offscreen patterns: مسار `ChartDrawingHitTest` يرفض الرسومات المحدودة قبل `scale.y` مع بقاء الرسومات الممتدة/Replay سليمة.
+- **PR #612:** https://github.com/775878805Osamaha/TradeLab/pull/612 **MERGED** إلى `736626ad92806e6ce8ad3ac151ff6f9b096edfa6`، https://github.com/775878805Osamaha/TradeLab/actions/runs/45022185183 **success** على `74514dca4463731c224b53d8471399f263cfdaef`. `chart_price_scale_cache.dart` يعتمد حدود `visibleIndices` الفعلية لا قيمة scroll كسريّة متغيرة عند كل frame. اختبار 120k/240 pan يحافظ على 0 قراءات OHLC إضافية لنفس نافذة المصدر؛ المصدر/Replay والأوضاع ما زالت تبطل الكاش.
+- **PR #613:** https://github.com/775878805Osamaha/TradeLab/pull/613 **MERGED** إلى `974196e3c62ef67919c71031c235b57c3c245cad`، https://github.com/775878805Osamaha/TradeLab/actions/runs/45022570244 **success** على `ebd85f310b2b270bc52f45facd51c4a8c66cb957`. `ChartHistoryPrefetchPolicy` يسبق حافة التاريخ بشاشتين ضمن 25–256 شمعة مع بقاء Replay guard/old-load guard وعدم اختلاق مصدر.
+- **إدارة التكرار:** PR #611 أغلق دون دمج بعد التحقق أنه يكرر نفس head والديف المدمج سابقاً عبر #610. لا إعادة حسابه كتقدم منفصل.
+- **نتائج الفحوص:** Dart/Flutter analyze وRange/history/chart/Replay وcatalog/timezone ناجحة؛ الأرقام أعلاه عدد عمليات/شروط بدء جلب، **وليست قياسات frame time أو سرعات شبكة فعليّة**.
+- **المتبقي:** Android Profile P50/P95/P99 على جهاز حقيقي، قياس cTrader/Binance/SQLite زمنياً في سيناريوهات التطبيق، ومقارنة مرئية مع TradingView. آخر APK منشور بتاريخ 2026-11-20 لا يشمل هذه التغييرات في فرع التطوير.
+- **الخطوة التالية:** تمكين جلسة Android اختبار مصرح بها مع سجل `TRADELAB_CHART_FRAME_METRICS` و`ChartLoadProfiler` لتحديد bottleneck؛ إصلاحه بناءً على القياسات، وليس تخمين قيمة FPS.
+
+
 ### 2026-11-22 — تقديم التحميل الاستباقي للشموع الأقدم أثناء السحب
 - **فرع وSHA:** `perf/tradelab-history-prefetch-earlier-20261122` من `75e6bf240799359d7dbf5e3cb89733819728eed3`، **PR/CI: PENDING**.
 - **الدليل:** `_prefetchOlderAtEdge` في `screens/chart_screen.dart` يستخدم مهلة 25 بار ثابتة حتى عند 3px/شمعة، ما يجعل طلبات التاريخ تبدأ متأخرة قبل وصول إصبع المستخدم إلى أول شمعة مثبتة.

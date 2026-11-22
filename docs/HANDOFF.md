@@ -1,5 +1,16 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## أحدث حالة تنفيذ مثبتة — أداء لمس الشارت/السحب/تحميل التاريخ (2026-11-22)
+**الفرع المعتمد للتطوير:** `test/flutter-all-fixes-20261116` عند `974196e3c62ef67919c71031c235b57c3c245cad`. ليس `main`؛ **لا APK جديد**، وآخر APK Release منشور 2026-11-20، لذلك الاختبار على النسخة المثبتة القديمة لا يقيس أثر هذه التعديلات.
+
+- **PR #610:** https://github.com/775878805Osamaha/TradeLab/pull/610 **MERGED** عند `37bc5d56f2a807d97be046ab49359789b4f81e90`؛ https://github.com/775878805Osamaha/TradeLab/actions/runs/45018066145 **success**. عند لمس الشارت، `ChartDrawingHitTest` لا يحوّل أسعار آلاف الرسومات المحدودة الواقعة كلياً خارج الشارت؛ الاختبار المصطنع **120k شمعة، 6000 رسم** يقيس تحول `sourceY` مرتين لرسم واحد مرئي بدل 12002 بالقيمة القديمة. الأرقام **عدد استدعاءات** وليست FPS.
+- **PR #612:** https://github.com/775878805Osamaha/TradeLab/pull/612 **MERGED** عند `736626ad92806e6ce8ad3ac151ff6f9b096edfa6`؛ https://github.com/775878805Osamaha/TradeLab/actions/runs/45022185183 **completed/success** على HEAD `74514dca4463731c224b53d8471399f263cfdaef`. `ChartPriceScaleCache` يعيد استخدام مقياس OHLC عند pan كسري يبقي نفس حدود `visibleIndices`. اختبار 120,000 بار × 240 حركة كسريّة يثبت **0 قراءات OHLC إضافية** خلال نفس النافذة؛ يعاد حسابه عند تغير حدود النافذة/المصدر/Replay أو إعدادات العرض.
+- **PR #613:** https://github.com/775878805Osamaha/TradeLab/pull/613 **MERGED** عند `974196e3c62ef67919c71031c235b57c3c245cad`؛ https://github.com/775878805Osamaha/TradeLab/actions/runs/45022570244 **completed/success** على HEAD `ebd85f310b2b270bc52f45facd51c4a8c66cb957`. سياسة `ChartHistoryPrefetchPolicy` تبدأ جلب الشموع الأقدم عند الاقتراب من حافة التاريخ بمقدار شاشتين (25–256 بار) بدل آخر 25 بار ثابتة؛ لا طلب قبل pan فعلي، ولا تحميل تلقائي أثناء Replay، ولا تغيير لأصالة بيانات cTrader/Binance.
+- **فحوص CI المؤكدة:** Flutter analyze، chart/Range/history/Replay، اختبارات 320/390dp وأدوات الرسم وتوقيت اليمن ناجحة للـPRs أعلاه. أي تقارير `PENDING` قديمة أدناه تاريخية وتجاوزها هذا التحقق.
+- **لم يُنجز:** قياس Android Profile `frameP95Us/frameP99Us` على جهاز المستخدم، أو latency الحقيقي لكل مرحلة cache/broker/Range، أو مقارنة TradingView بكسلاً/لمساً، أو اختبار live cTrader. **المطابقة الكاملة والسرعة الفعلية NOT VERIFIED**. لا دعوى أن نسخة APK الحالية أسرع.
+- **التالي:** اختبار Android حقيقي بنسخة مصرح بها عند إتاحتها: pan/pinch/momentum على 320 و390dp مع 120k، Range BID طويل/أوقات إغلاق سوق؛ قياس profiler الحالي (بخيار `TRADELAB_PROFILE_CHART`) وعزل broker latency عن raster jank. لا تغيّر مميزات أخرى أو `main` قبل دليل فني.
+
+
 ## 2026-11-22 — استباق التحميل التاريخي قبل اصطدام pan بحافة الشموع (PENDING)
 - **النطاق:** فرع `perf/tradelab-history-prefetch-earlier-20261122` من `test/flutter-all-fixes-20261116` @ `75e6bf240799359d7dbf5e3cb89733819728eed3`. لا APK/Release ولا `main`.
 - **المشكلة في المصدر:** `_prefetchOlderAtEdge` يبدأ تحميل الأقدم عند `count-visibleBars-25` فقط. أثناء pan سريع وwidth صغير، الباقي 25 شمعة لا يكفي عادة لإخفاء زمن الشبكة/SQLite؛ الشارت يصل إلى الطرف فينتظر تحميل البيانات الموثقة.
