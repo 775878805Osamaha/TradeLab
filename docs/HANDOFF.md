@@ -1,5 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — PR #626 MERGED: حماية شارت Range الموثق أثناء التحديث، CI ناجح
+- **الدمج:** [PR #626](https://github.com/775878805Osamaha/TradeLab/pull/626) squash commit `3de00b3003d073e388f0c80c20db2f7b79071ebf` في `test/flutter-all-fixes-20261116`، من head `e26daf7ddf104ead7ff6c2b7c8dae17d85597bb1`.
+- **الفحص:** [GitHub Actions #45051268783 completed/success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45051268783): Flutter analyze وRange/BID/Replay/widget tests وأدوات الشارت والتوقيت اليمني؛ منها `range_refresh_retention_test.dart` و`range_refresh_retention_widget_test.dart` مع فشل طلب broker بعد العرض الأول.
+- **إصلاح فعلي:** `ChartScreen._loadRealHistory` لم يعد يمسح شموع Range التي تم التحقق منها عند التحديث المتكرر للحساب/الرمز/المقاس نفسه، بشرط فحص source/timeline identity ودقة النقطة وكون Replay غير نشطة. تحفظ `_verifiedRangeAccount`/`_verifiedRangeSymbol` عند نشر snapshot وتُزال عند تبديل الحساب/الرمز. رسالة `تحديث BID جارٍ · عرض آخر شموع موثقة` وزر `تحديث تيكات BID الموثقة` يوضحان الحالة للمستخدم. فشل network لا يُحول الشارت القديم الموثق إلى فراغ.
+- **الحدود:** لا ادّعاء بأن أول طلب BID من cTrader وصل بنجاح أو أن الفجوات الطبيعية أثناء إغلاق السوق اختفت؛ بوابة production ما تزال بحاجة تحقق منفصل. لا يُستخدم tick مُنشأ من OHLC ولا أوامر حقيقية أو بيانات مستقبلية. لم يُبن APK ولم يتغير `main` أو Vercel production.
+
+
 ## 2026-11-22 — منع اختفاء شموع Range الموثقة أثناء التحديث (CI PENDING)
 - **فرع العمل:** `fix/retain-verified-range-during-refresh-20261122` من `a3cfe81660101c5c9e0bb7d25eea02b2a4f69e64`. لا تعديل main أو APK أو نشر إنتاج.
 - **الخلل المثبت من `ChartScreen._loadRealHistory`:** يبدأ تحديث تاريخ المدى بمسح `_actualRange` و`_rangeHistoryTicks` و`_rangeTimeline` قبل اكتمال HTTP. عند فشل أول صفحة من cTrader، يصبح الشارت فارغًا رغم وجود شموع BID سبق إثباتها. هذا خلل عرض مستقل عن مشكلة توفير BID أصلاً.
