@@ -50,6 +50,28 @@ class ChartPriceScaleCache {
     final (visibleStart, visibleEnd) = viewport.visibleIndices(
       plotWidth: plotWidth, candleCount: candles.length);
     final cached = _scale;
+    // Keep the last AUTO price interval when the user deliberately pans
+    // past all loaded candles. The viewport is blank, not the market:
+    // resetting its ruler to a synthetic 0..1 or jumping to unrelated
+    // history breaks the TradingView-style anchored axis.
+    //
+    // Safe only for the SAME immutable broker/Replay-prefix list and all
+    // same scale settings. A newly published candle list or revealed Replay
+    // prefix cannot inherit an earlier session's future extrema. If there
+    // is no cached source window, ChartPriceScale.visible derives a bounded
+    // fallback from its nearest verified edge, never fake prices.
+    if (visibleStart >= visibleEnd && cached != null &&
+        identical(_candles, candles) &&
+        _count == candles.length &&
+        candles.isNotEmpty &&
+        _logarithmic == logarithmic &&
+        _inverted == inverted &&
+        _referenceMode == referenceMode &&
+        _topMargin == topMarginPercent &&
+        _bottomMargin == bottomMarginPercent) {
+      return cached.height == plotHeight
+          ? cached : cached.withHeight(plotHeight);
+    }
     if (cached != null &&
         identical(_candles, candles) &&
         _count == candles.length &&
