@@ -90,7 +90,7 @@ void main() {
       endMs: now, priceDistance: 1, minimumClosedBars: 2,
       getTicks: (from, to) async {
         calls++;
-        if (calls < 8) return const <MarketTick>[];
+        if (calls < 10) return const <MarketTick>[];
         return [
           MarketTick(from + 1000, 2010),
           MarketTick(from + 2000, 2011.4),
@@ -99,7 +99,7 @@ void main() {
       },
       onSnapshot: (page) async => records.add(page),
     );
-    expect(calls, 8);
+    expect(calls, 10);
     expect(records, hasLength(1));
     expect(result!.closedBars, greaterThanOrEqualTo(2));
     expect(result.fromMs, now - 48 * hour);
@@ -412,7 +412,7 @@ void main() {
     );
     expect(certified, 0);
   });
-  test('Sunday cTrader BID startup reaches Friday with bounded 12h pages',
+  test('Sunday cTrader BID startup reaches Friday in a six-hour page',
       () async {
     // Nov 22, 2026 was Sunday. Friday's real BID ticks are now 42h old,
     // outside the first 36h of authenticated, genuinely empty broker data.
@@ -435,11 +435,19 @@ void main() {
     );
     expect(snapshot, isNotNull);
     expect(snapshot!.closedBars, greaterThanOrEqualTo(2));
-    expect(snapshot.fromMs, sunday - 48 * hour,
-      reason: 'A real Friday event must appear in the narrow 36-48h slice');
-    expect(requested, hasLength(8));
+    expect(snapshot.fromMs, sunday - 42 * hour,
+      reason: 'Friday BID is verified and published in the 36-42h slice');
+    expect(requested, hasLength(9));
     expect(requested.last, (
-      sunday - 48 * hour, sunday - 36 * hour - 1));
+      sunday - 42 * hour, sunday - 36 * hour - 1));
+    for (var index = 1; index < requested.length; index++) {
+      expect(requested[index].$2, requested[index - 1].$1 - 1,
+          reason: 'No real BID millisecond can be skipped on weekends');
+    }
+    for (final window in requested.skip(6)) {
+      expect(window.$2 - window.$1, lessThan(6 * hour),
+          reason: 'Dense first Friday BID pages must remain <= 6h');
+    }
     expect(snapshots, hasLength(1));
     expect(snapshot.ticks.map((tick) => tick.timestamp),
       [friday, friday + 1, friday + 2]);
