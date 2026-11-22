@@ -1,6 +1,8 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
 ## 2026-11-22 — حماية cTrader History/Range من ردود تفويض قديمة (CI PENDING)
+- **نتيجة فحص CI الأول:** [#45054416987 failed](https://github.com/775878805Osamaha/TradeLab/actions/runs/45054416987): نجح Flutter analyze و821 اختبارًا، وفشل اختبار واحد لأن `MarketController` لم يكن يربط `onSessionRefresh` عند تمرير `MarketApi` مخصص، فبقي token على `session-new` بدل `session-rotated`. إصلاح السبب في `MarketController` بربط callback دائمًا، وجعل حقل `MarketApi.onSessionRefresh` قابلاً للتعيين، وإضافة اختبار 401/JSON فاسد يثبت عدم دوران جلسة من استجابة مرفوضة. **CI جديد مطلوب.**
+
 - **الفرع:** `fix/ctrader-auth-revision-market-history-20261122` من `16f4833d3c0766e69d9749b052f526912ab1afa3`. نطاق العمل TradeLab Flutter وحده؛ لا تغيير main/APK/Vercel production.
 - **خلل فعلي في المصدر:** `MarketController.paperQuote` كان يستخدم `_quoteAccountEpoch` لإسقاط أسعار A→B→A القديمة، لكن `history` و`rangeTicks` و`pointSize` لم تستخدمه، و`closedCandlesSince`/`rangeTicksBetween` كانت تتحقق من رقم الحساب وعدم فراغ `_token` فقط، فيمكن رد طلب قديم من جلسة تفويض مختلفة بنفس الحساب أن يصل إلى شارت جديد.
 - **الإصلاح:** كشف `ctraderAuthorizationRevision` للقراءة فقط؛ تحصين `history` و`closedCandlesSince` و`rangeTicks` و`rangeTicksBetween` و`pointSize` بالتحقق من رقم الحساب، اتصال cTrader، وrevision قبل أي نشر للشارت/التخزين، مع رفض استجابة قديمة برسالة تفويض. رقم revision يتغير عند اختيار الحساب ولو عاد إلى الرقم نفسه أو عند OAuth إعادة ربط، لكنه لا يتغير عند تحديث token الموثوق لنفس الجلسة.
