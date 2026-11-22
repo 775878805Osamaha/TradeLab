@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — PR #627 MERGED: تاريخ cTrader وOAuth محميان بجيل التفويض، الاختبارات ناجحة
+- **الدمج:** [PR #627 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/627) squash commit `ae4a854cf33c96199d1087b0c6f641f8319dd906` في `test/flutter-all-fixes-20261116`.
+- **الفحص النهائي المؤكد:** [GitHub Actions #45055339815 completed/success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45055339815) على `c9654824647c3a4b2b10e031909f43d1c59bdf84`: 827 tests passed في اختبارات التاريخ/Range/Replay والشارت، و11 tests passed في فحوص إضافية؛ Flutter analyze نجح.
+- **التعديلات المدمجة:** `MarketController.ctraderAuthorizationRevision` يرفض ردود candles/trendbars/BID/rangeTicksBetween/pointSize عندما يتغير جيل حساب/تفويض OAuth ولو عاد إلى نفس accountId؛ `ChartScreen._onMarketUpdate` يكتشف تبدل التفويض ويعيد المصدر الصحيح؛ refresh header من `MarketApi` يرتبط بالـoutbound token ولا يُقبل بعد HTTP 401 أو JSON فاسد أو logout/relink؛ يدعم تطبيق callback على MarketApi المحقونة؛ `CTraderSessionTokenWriteQueue` يضمن ألا تكتب rotation القديمة فوق token تفويض جديد أو حذف logout؛ أثناء OAuth الجديد رفض source القديم؛ فشل تنظيف PKCE المؤقت لا يترك التحميل معلقًا.
+- **اختبارات جديدة:** A→B→A بخمس قراءات متزامنة، OAuth لنفس رقم الحساب، old response أثناء grant، token rotation الصحيح، header 401/JSON غير صالح، تسلسل secure writes/delete/failure recovery، إعادة تحميل chart عند إعادة اختيار نفس رقم الحساب.
+- **الحدود:** لا اختبار حقيقي لجلسة cTrader production على هاتف المستخدم بعد الدمج، ولا إثبات لمطابقة TradingView pixel-perfect أو تحميل Range الأول من الوسيط؛ لم يُبن APK، ولم يُغيّر `main` أو Vercel production. الدفعة القادمة يمكن أن تفحص تزامن حفظ اختيار الحساب في secure storage وموثوقية reconnect.
+
+
 ## 2026-11-22 — حماية cTrader History/Range من ردود تفويض قديمة (CI PENDING)
 - **إصلاح إضافي (نفس PR):** `CTraderSessionTokenWriteQueue` يحفظ تحديث token ثم OAuth الجديد أو logout بالتسلسل الصارم؛ أي عملية سابقة بطيئة لا يمكن أن تنتهي بعد `delete` وتعيد credential قديمًا في Android secure storage. فشل كتابة سابقة لا يمنع عملية حذف/استرداد لاحقة. `MarketController` يستخدم queue للـtoken refresh والربط والحذف، ويمنع callback الجلسة القديمة أثناء `completeOAuth`. `_assertCurrentCTraderRead` يرفض شموعًا تنتهي أثناء reauth حتى قبل صدور token الجديد. الاختبارات: `ctrader_session_token_write_queue_test.dart` لاختبار serialization/logout/recovery و`ctrader_history_auth_revision_test.dart` لحالة HTTP قديم ينتهي أثناء OAuth. **فحص CI الجديد مطلوب؛ التشغيل المتوسط السابق قد يُلغى بعد push أحدث.**
 
