@@ -471,6 +471,70 @@ void main() {
     }
   });
 
+
+  test('cTrader authenticated frequency-limit rejection is retryable, not fatal',
+      () async {
+    var requests = 0;
+    const fromMs = 1700000000000;
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      expect(request.url.path, '/v1/ticks');
+      expect(request.url.queryParameters['from'], '$fromMs');
+      expect(request.url.queryParameters['to'], '${fromMs + 1000}');
+      requests++;
+      if (requests == 1) {
+        return http.Response(jsonEncode({
+          'error': 'ctrader_broker_rejected_request',
+          'brokerCode': 'REQUEST_FREQUENCY_EXCEEDED',
+        }), 503);
+      }
+      return http.Response(jsonEncode({
+        'source': 'ctrader', 'accountId': '7',
+        'quoteType': 'bid', 'symbolId': '42', 'hasMore': false,
+        'ticks': [
+          {'timestamp': fromMs + 1, 'price': 3900.5},
+        ],
+      }), 200);
+    }));
+    final ticks = await api.ctraderBidTicksRange(
+      token: 'token', accountId: '7', symbol: 'XAUUSD',
+      fromMs: fromMs, toMs: fromMs + 1000,
+    );
+    expect(requests, 2);
+    expect(ticks, hasLength(1));
+    expect(ticks.single.bid, 3900.5);
+    api.close();
+  });
+
+  test('repeated broker frequency-limit response stops with actionable error',
+      () async {
+    var requests = 0;
+    final api = MarketApi(client: MockClient((request) async {
+      if (request.url.path == '/v1/symbols') {
+        return http.Response(jsonEncode({'symbols': [
+          {'symbolName': 'XAUUSD', 'symbolId': 42},
+        ]}), 200);
+      }
+      requests++;
+      return http.Response(jsonEncode({
+        'error': 'ctrader_broker_rejected_request',
+        'brokerCode': 'REQUEST_FREQUENCY_EXCEEDED',
+      }), 503);
+    }));
+    await expectLater(
+      api.ctraderBidTicksRange(token: 'token', accountId: '7',
+        symbol: 'XAUUSD', fromMs: 1700000000000, toMs: 1700000001000),
+      throwsA(isA<MarketDataException>().having(
+        (error) => error.message, 'rate-limit error', contains('حد وسيط'))),
+    );
+    expect(requests, 3);
+    api.close();
+  });
+
   test('BID source corruption, hard rejection and 401 are never retried',
       () async {
     for (final failure in const [
