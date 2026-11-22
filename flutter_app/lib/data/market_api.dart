@@ -64,6 +64,24 @@ Map<String, dynamic> _decodeDenseBrokerBidTicks(String payload) {
   return decoded;
 }
 
+/// Fail closed on source-integrity and broker-permission errors. They
+/// cannot be repaired by retrying the identical BID request, and silently
+/// retrying them would hide a real broker rejection from the user.
+bool _terminalBidGatewayFailure(String body) {
+  if (body.length > 4096) return false;
+  try {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map<String, dynamic>) return false;
+    return const {
+      'ctrader_tick_history_unusable',
+      'ctrader_broker_rejected_request',
+      'invalid_request',
+    }.contains(decoded['error']);
+  } catch (_) {
+    return false;
+  }
+}
+
 /// The only permitted providers: cTrader for forex/gold, Binance for crypto.
 /// No demo, fallback feed, or OHLC-derived ticks are permitted here.
 class MarketApi {
@@ -85,14 +103,35 @@ class MarketApi {
     final headers = <String, String>{'Accept': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
     if (body != null) headers['Content-Type'] = 'application/json';
-    final http.Response response;
-    try {
-      response = body == null
-          ? await _client.get(url, headers: headers).timeout(const Duration(seconds: 22))
-          : await _client.post(url, headers: headers, body: jsonEncode(body))
-              .timeout(const Duration(seconds: 22));
-    } catch (_) {
-      throw const MarketDataException('تعذر الوصول إلى مصدر السوق. تحقق من الإنترنت وأعد المحاولة.');
+    // The cTrader gateway can transiently reject dense BID history with
+    // 429/5xx (rate limit / cold-start / upstream unavailability). A single
+    // unverified failed leaf used to discard the entire split Range request,
+    // including successful sibling pages, and leave the chart empty.
+    //
+    // Retry the IDENTICAL inclusive BID interval at most twice with short
+    // backoff; neither widen bounds nor make a partial page authoritative.
+    // Do not retry auth, explicit broker rejection, invalid input or
+    // inconsistent source data. Other routes retain their existing policy.
+    late http.Response response;
+    for (var attempt = 0; ; attempt++) {
+      try {
+        response = body == null
+            ? await _client.get(url, headers: headers)
+                .timeout(const Duration(seconds: 22))
+            : await _client.post(url, headers: headers, body: jsonEncode(body))
+                .timeout(const Duration(seconds: 22));
+      } catch (_) {
+        throw const MarketDataException(
+            'تعذر الوصول إلى مصدر السوق. تحقق من الإنترنت وأعد المحاولة.');
+      }
+      if (url.path != '/v1/ticks' ||
+          attempt >= 2 ||
+          !const {429, 502, 503, 504}.contains(response.statusCode) ||
+          _terminalBidGatewayFailure(response.body)) {
+        break;
+      }
+      await Future<void>.delayed(
+          Duration(milliseconds: 250 * (attempt + 1)));
     }
     final refreshed = response.headers['x-tradelab-session'];
     if (refreshed != null && refreshed.isNotEmpty) onSessionRefresh?.call(refreshed);
