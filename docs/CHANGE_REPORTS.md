@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — TradingView parity: خطوط/علامات الوقت تتحرك مع شموع المصدر (قيد CI)
+- كان المحور الزمني يثبت خطوطه وتسمياته في 4 نقاط شاشة ثابتة، ما يجعل علاقة الشموع بالوقت تقفز أثناء pan/pinch. استبدلناه بعلامات مرتبطة بمؤشر شمعة أصلية وموضع `ChartViewport.chartX`، لا بإحداثي شاشة ثابت.
+- المسافة البصرية 84px على الأقل باستخدام معاملات 1/2/5/10، دون تعديل أسعار cTrader/Binance أو دمج شموع Replay/Range أو اختلاق timestamps. ترسم الشبكة والتسميات من المصدر الواحد نفسه.
+- اختبار 120k bars و3px/pinch/pan/future whitespace/irregular BID + إضافة للـCI. المطابقة 100% لا تُعلن قبل screenshots من الجهاز الحقيقي؛ CI PENDING.
+
+
 ### 2026-11-22 — PR #628 MERGED: منع عودة حساب cTrader قديم بعد فتح التطبيق
 - [PR #628](https://github.com/775878805Osamaha/TradeLab/pull/628) squash `29cdfb48153e234e6f1ea0c0a9de29c701fab81c` في dev؛ [CI #45055981156 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45055981156): **831 tests passed** و**11 tests passed** إضافية، مع Flutter analyze وYemen timezone.
 - `chooseAccount` الآن يسلسل كتابة التفضيل، و`disconnect` يحذف الاختيار فقط بعد اكتمال الكتابات السابقة، فيبقى آخر حساب مختار هو المُعتمد. `completeOAuth` يحتفظ بالمحدد LIVE ما دام ضمن تصريح OAuth، وإلا ينتقل إلى حساب مصرح ويحفظ التفضيل الجديد؛ لا عودة خفية للحساب القديم بعد restart.

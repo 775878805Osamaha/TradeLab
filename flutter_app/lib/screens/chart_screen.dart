@@ -38,6 +38,7 @@ import '../chart/chart_visible_sma.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/chart_price_text_formatter.dart';
 import '../chart/chart_time_axis_label_layout.dart';
+import '../chart/chart_source_time_grid.dart';
 import '../chart/chart_historical_time_zone.dart';
 import '../chart/candle_prefix.dart';
 import '../chart/chart_heikin_ashi.dart';
@@ -6474,10 +6475,20 @@ class _CandleChartPainter extends CustomPainter {
           Color(panel.horizontalGridColor), panel.horizontalGridStroke, .55);
       }
     }
+    // Source-anchored vertical guides MOVE with their real candle indices
+    // during pan/pinch. Previously four fixed screen x positions stayed put
+    // while the corresponding UTC labels jumped underneath the finger.
+    // Replay uses only its already-revealed prefix; irregular Range uses
+    // authentic BID tick timestamps. Never render invented time columns.
+    final sourceTimeMarks = timestamps.length >= candles.length
+        ? ChartSourceTimeGrid.visible(
+            viewport: viewport, plotWidth: axis,
+            candleCount: candles.length)
+        : <({int index, double x})>[];
     if (panel.verticalGridVisible) {
-      for (var tick = 1; tick < 5; tick++) {
-        final x = axis * tick / 5;
-        _configuredLine(canvas, Offset(x, 0), Offset(x, chartHeight),
+      for (final mark in sourceTimeMarks) {
+        _configuredLine(canvas,
+          Offset(mark.x, 0), Offset(mark.x, chartHeight),
           Color(panel.verticalGridColor), panel.verticalGridStroke, .55);
       }
     }
@@ -6887,14 +6898,13 @@ class _CandleChartPainter extends CustomPainter {
         }
       }
 
-      // Real UTC dates only. Range uses the originating BID tick timestamp,
-      // never a fabricated equal-duration interval.
+      // Time labels AND grid lines reference the exact same source candle
+      // and x pixel. Realtime pan moves them together; no snap-to-screen
+      // discontinuity, fabricated Range time or invisible Replay source.
       DateTime? priorTick;
-      for (var tick = 1; tick <= 4; tick++) {
-        final x = axis * tick / 5;
-        final index = viewport.indexAt(
-            x: x, plotWidth: axis, candleCount: candles.length);
-        if (index == null) continue;
+      for (final mark in sourceTimeMarks) {
+        final x = mark.x;
+        final index = mark.index;
         final local = symbolSettings.timeZone.displayDate(timestamps[index]);
         final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
         final isDayBoundary = priorTick == null ||
