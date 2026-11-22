@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — منع اختفاء شموع Range الموثقة أثناء التحديث (CI PENDING)
+- **فرع العمل:** `fix/retain-verified-range-during-refresh-20261122` من `a3cfe81660101c5c9e0bb7d25eea02b2a4f69e64`. لا تعديل main أو APK أو نشر إنتاج.
+- **الخلل المثبت من `ChartScreen._loadRealHistory`:** يبدأ تحديث تاريخ المدى بمسح `_actualRange` و`_rangeHistoryTicks` و`_rangeTimeline` قبل اكتمال HTTP. عند فشل أول صفحة من cTrader، يصبح الشارت فارغًا رغم وجود شموع BID سبق إثباتها. هذا خلل عرض مستقل عن مشكلة توفير BID أصلاً.
+- **الإصلاح:** تربط الواجهة كل Snapshot موثق بـ `_verifiedRangeAccount` و`_verifiedRangeSymbol` عند `onSnapshot`. يسمح `RangeRefreshRetention.canKeep` بإبقاء الشموع المعتمدة معروضة خلال تحديث `_loadRealHistory` فقط إذا تطابق الحساب والرمز والمسافة السعرية وفهارس/توقيت مصدر BID والتصريح الحالي، وكانت Replay غير نشطة. يظل المصدر القديم labeled كما هو أثناء انتظار الطلب، وتظهر رسالة فشل إذا لم تصل صفحة جديدة. عند حساب/رمز/point-size آخر تُمسح البيانات القديمة فورًا، ولا تُستخدم للحساب أو تنفيذ صفقات مستقبلية.
+- **الواجهة:** حالة `تحديث BID جارٍ · عرض آخر شموع موثقة` بدل الفراغ، وزر واضح `تحديث تيكات BID الموثقة` في إعدادات Range.
+- **اختبارات:** `range_refresh_retention_test.dart` يحجب الاحتفاظ عندما تختلف حساب/رمز/مقاس أو Replay/مصدر غير متسق؛ `range_refresh_retention_widget_test.dart` يعيد إنتاج تحديث معلّق ثم خطأ مصدر على شاشة Flutter. أُضيفت الاختبارات لبوابة CI النشطة وإلى سلسلة APK المعطلة للمراجعة فقط. **بانتظار نتيجة CI** قبل الدمج.
+- **الحدود:** لا تُختلق تيكات أو شموع مفقودة، وما زال ظهور أول BID من البوابة الإنتاجية غير مؤكد؛ آخر بوابة Production مثبتة قديمة في Vercel. لا يوجد FPS هاتف/مطابقة TradingView مثبتة. `main` غير متغير.
+
+
 ## 2026-11-22 — PR #625 MERGED: استرداد BID المؤقت ونافذة الجمعة 6h، CI ناجح
 - **الدمج:** [PR #625](https://github.com/775878805Osamaha/TradeLab/pull/625) squash `40ff5f6468e7890dde316c93183b2ee3dfa160a8` في `test/flutter-all-fixes-20261116`، بعد [CI completed/success #45050329496](https://github.com/775878805Osamaha/TradeLab/actions/runs/45050329496) على head `b0b6fa4b11d6b37018a0a74ea297a59b10986eaf`.
 - **الإصلاح المدعوم بالكود:** Retry نفس [fromMs,toMs] لتيكات BID الحقيقية عند 429/502/503/504 مرتين كحد أقصى؛ عند `REQUEST_FREQUENCY_EXCEEDED` موثق من بوابة cTrader يستخدم 750/1500ms؛ بدون إعادة في 401/رفض دائم/فشل تحقق المصدر. يتحقق من بيانات الأسعار والأعداد والترتيب قبل نشر أي شمعة.
