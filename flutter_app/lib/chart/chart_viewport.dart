@@ -88,7 +88,43 @@ class ChartPriceScale {
     final (start, end) = viewport.visibleIndices(
       plotWidth: width, candleCount: candles.length);
     if (start >= end) {
-      return ChartPriceScale(0, 1, height, inverted: inverted);
+      // The user can deliberately pan the whole confirmed candle prefix
+      // outside the plot (wide future/right margin or old-history edge).
+      // Those broker bars still exist. Advertising a fake 0..1 price ruler
+      // makes XAUUSD or EURUSD appear to have lost its source, and a fresh
+      // crosshair cannot identify a meaningful verified price.
+      //
+      // When no prior cached visible scale exists, derive the ruler ONLY
+      // from the nearest actual source-edge candles. Do not move the user's
+      // viewport, insert fake bars, read hidden Replay future or invent a
+      // timestamp for otherwise empty time-axis space.
+      if (!width.isFinite || width <= 0 ||
+          !viewport.barWidth.isFinite ||
+          viewport.barWidth < ChartViewport.minBarWidth ||
+          !viewport.scrollBars.isFinite ||
+          !viewport.rightMarginBars.isFinite) {
+        return ChartPriceScale(0, 1, height, inverted: inverted);
+      }
+      final edge = candles.length - viewport.scrollBars +
+          viewport.rightMarginBars;
+      final nearestIsLatest = edge >= candles.length;
+      final columns = math.min(candles.length,
+          math.max(1, (width / viewport.barWidth).ceil()));
+      final nearest = ChartViewport(
+        barWidth: viewport.barWidth,
+        // This substitute view is used ONLY to find a verified price span.
+        // Time, source and Replay candle positions remain untouched.
+        scrollBars: nearestIsLatest
+            ? 0 : (candles.length - columns).toDouble(),
+      );
+      return ChartPriceScale.visible(
+        candles, nearest, width, height,
+        topMarginPercent: topMarginPercent,
+        bottomMarginPercent: bottomMarginPercent,
+        logarithmic: logarithmic,
+        inverted: inverted,
+        referenceMode: referenceMode,
+      );
     }
     var minPrice = double.infinity;
     var maxPrice = double.negativeInfinity;
