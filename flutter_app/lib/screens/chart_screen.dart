@@ -2938,6 +2938,8 @@ class _ChartScreenState extends State<ChartScreen>
       _actualRange = [];
       _rangeHistoryTicks = [];
       _rangeTimeline = null;
+      _verifiedRangeAccount = null;
+      _verifiedRangeSymbol = null;
       _rangeBarEndTickIndices = [];
       _rangeBarTimestamps = [];
       _rangeOlderCursorMs = null;
