@@ -1,5 +1,13 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 UTC — بناء APK تجريبي مستقل ناجح من TradeLab HEAD b389bf6
+- **الطلب:** المستخدم يريد تثبيت أحدث تعديلات TradeLab على Android لاختبارها.
+- **مصدر البناء:** `test/flutter-all-fixes-20261116` @ `b389bf6cd19044d47ba9e350e19a5365fda5820e`؛ branch خاص `test/build-tradelab-phone-20261122` @ `545ae0cc0ba12f98b5256bdc9a3a7173e0b19790`؛ تغيير وحيد ملف `.github/workflows/build-tradelab-phone-test-20261122.yml` بنطاق push مرة أولى. تركنا workflows العادية الخاصة ببناء APK معطلة ولم نعدل `main`.
+- **التشغيل:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45030261658 **completed/success**؛ نجح `flutter analyze` والاختبارات المجمعة وفحص OAuth و`flutter build apk --release` و`unzip -t` و`apksigner verify` و`aapt dump badging` ورفع ملف APK ثم إصدار GitHub.
+- **الأثر:** https://github.com/775878805Osamaha/TradeLab/releases/tag/tradelab-phone-test-545ae0cc0ba1 ؛ ملف `TradeLab-Phone-20261122.apk` بحجم 59,358,487 بايت (APK مباشر: https://github.com/775878805Osamaha/TradeLab/releases/download/tradelab-phone-test-545ae0cc0ba1/TradeLab-Phone-20261122.apk) مع SHA256 منشور. حزمة منفصلة `com.example.tradelab_flutter.phone20261122`/اسم `TradeLab Phone Test` فلا تحذف بيانات التطبيقات القديمة.
+- **المخاطر:** شهادة التوقيع Debug مؤقتة لتجربة فقط، ولا دليل من CI على Android حقيقي أو نجاح cTrader OAuth أو مقارنة TradingView أو قياسات Frame P95. التغيير التالي يعتمد على ملاحظات تثبيت واختبار المستخدم، ولا إصدار مدفوع.
+
+
 ### 2026-11-22 UTC — إغلاق PR #616 بنجاح بعد تصحيح اختبار قديم
 - **فرع التطوير:** `test/flutter-all-fixes-20261116`. قبل `0f3c0cd231ee9dfd5c1f7c8ff941b23b5fc9fba5`؛ بعد الدمج `1811159410f4a499be9f03c06ff05e7e6e054ac1`. لا `main` أو APK/Release.
 - **المشكلة المثبتة:** `_refreshDisplayedQuote` كان يطلق `_chartRepaint.value++` لكل تغير BID/ASK أو timestamp حتى عندما `ChartScaleSettings.bidAsk` مخفي افتراضياً ولا توجد تسميات مرئية؛ يتسبب بعمل Canvas/شموع غير ضروري.

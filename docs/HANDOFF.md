@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — إصدار APK هاتف تجريبي جديد من أحدث Flutter/TradeLab (مؤكد)
+- **بناء GitHub Actions:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45030261658 **completed/success**. جميع مراحل التحليل/اختبارات Flutter المجمعة/اختبار OAuth handoff/تجميع Android release/التحقق من التوقيع ونشر Release نجحت.
+- **APK مباشر:** https://github.com/775878805Osamaha/TradeLab/releases/download/tradelab-phone-test-545ae0cc0ba1/TradeLab-Phone-20261122.apk ؛ **صفحة الإصدار:** https://github.com/775878805Osamaha/TradeLab/releases/tag/tradelab-phone-test-545ae0cc0ba1 ؛ SHA256: https://github.com/775878805Osamaha/TradeLab/releases/download/tradelab-phone-test-545ae0cc0ba1/TradeLab-Phone-20261122.apk.sha256 .
+- **المصدر المجمد:** `test/flutter-all-fixes-20261116` عند `b389bf6cd19044d47ba9e350e19a5365fda5820e`، يضم تغييرات الشارت وReplay وRange وتحسينات الأداء حتى هذا Commit. **Build commit:** `545ae0cc0ba12f98b5256bdc9a3a7173e0b19790` على فرع مستقل `test/build-tradelab-phone-20261122`؛ مقارنة Commit أثبتت أن التغيير الوحيد بالنسبة إلى المصدر هو إضافة ملف تشغيل CI واحد `.github/workflows/build-tradelab-phone-test-20261122.yml`. لم تتغير أي ملفات التطبيق خلال البناء.
+- **تفاصيل التثبيت:** الحزمة `com.example.tradelab_flutter.phone20261122` وعنوان `TradeLab Phone Test`؛ **59,358,487 بايت**، موقعة بتوقيع debug مؤقت ناتج من CI داخل بناء Flutter AOT release ومحفوظة APK بصيغة قابلة للتثبيت. الحزمة مستقلة وتبقي تطبيقات/حسابات/بيانات النسخ السابقة في مكانها؛ عدم تثبيت فوق نسخ أخرى بالتوقيع المختلف. تغيير توقيع CI في بناء لاحق قد يستلزم إزالة هذه النسخة التجريبية فقط قبل إعادة تثبيتها.
+- **تم التحقق آليًا:** وجود APK غير فارغ، سلامة ZIP، `apksigner verify`، و`aapt` لهوية الحزمة، ورفع APK وملف SHA256 ونشرهما على GitHub Releases. **لم يتم اختبار التثبيت/الأداء على هاتف المستخدم بعد**، ولا يوجد دليل سرعة FPS أو اكتمال مطابقة TradingView، أو نجاح تسجيل الدخول cTrader/تاريخ Range الحي.
+- **للمراجعة بعد اختبار المستخدم:** سجل بطء pan/pinch وإطارات الرسوم وتاريخ cTrader وRange على Android؛ المقارنة مع TradingView. لا تعلن «طبق الأصل» أو إطلاق نهائي قبل نتائج الجهاز الحقيقي. يظل `main` بدون تغيير.
+
+
 ## 2026-11-22 — دمج #616: تعطيل إعادة رسم الشموع بسبب BID/ASK المخفي، بعد CI ناجح
 - **الفرع النهائي قبل كتابة هذا السجل:** `test/flutter-all-fixes-20261116` عند `1811159410f4a499be9f03c06ff05e7e6e054ac1`؛ [PR #616 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/616).
 - **فحص نهائي مؤكد:** [GitHub Actions #45027698225](https://github.com/775878805Osamaha/TradeLab/actions/runs/45027698225) **completed/success** على HEAD `d7e4ce43cc9bfedfba09f1ec06b1ec93b22e7d6b`. نجح Flutter analyze واختبارات الشارت وRange وReplay والأدوات وتوقيت اليمن. دمج squash: `1811159410f4a499be9f03c06ff05e7e6e054ac1`.
