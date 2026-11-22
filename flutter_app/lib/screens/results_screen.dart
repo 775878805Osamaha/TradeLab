@@ -89,8 +89,10 @@ class _ResultsScreenState extends State<ResultsScreen> {
   }
 
   Future<void> _readReplayArchive({bool append = false}) async {
-    if (!mounted || !widget.active || _readingReplay) return;
-    if (append && !_moreReplaySessionsAvailable) return;
+    if (!mounted || !widget.active) return;
+    // A tab reactivation must supersede a stale read. Only block duplicate
+    // older-page clicks while another page request is already running.
+    if (append && (_readingReplay || !_moreReplaySessionsAvailable)) return;
     final revision = ++_replayReadRevision;
     setState(() {
       _readingReplay = true;
