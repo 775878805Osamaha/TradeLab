@@ -5026,11 +5026,14 @@ class _ChartScreenState extends State<ChartScreen>
             Text(_selectedSymbol.kind == InstrumentKind.gold
                 ? 'GOLD' : _symbol,
                 textDirection: TextDirection.ltr,
-                style: const TextStyle(fontSize: 16,
-                    color: Color(0xFF101010), fontWeight: FontWeight.w800)),
+                style: TextStyle(fontSize: 16,
+                    color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFFF3F5F7) : const Color(0xFF101010),
+                    fontWeight: FontWeight.w800)),
             Text(_symbol, textDirection: TextDirection.ltr,
-                style: const TextStyle(fontSize: 10,
-                    color: Color(0xFF9B9B9B))),
+                style: TextStyle(fontSize: 10,
+                    color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFFAFB9C5) : const Color(0xFF9B9B9B))),
           ]),
         ),
         TextButton(
@@ -5040,9 +5043,10 @@ class _ChartScreenState extends State<ChartScreen>
             padding: const EdgeInsets.symmetric(horizontal: 4),
             minimumSize: const Size(0, 48)),
           child: Text(ChartTimeframeCatalog.displayLabel(_timeframe),
-            style: const TextStyle(fontSize: 17,
+            style: TextStyle(fontSize: 17,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF333333))),
+                color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFFF3F5F7) : const Color(0xFF333333))),
         ),
         // Most used controls remain in the first 390dp; extra tools scroll.
         _iconAction(icon: Icons.bar_chart_outlined,
