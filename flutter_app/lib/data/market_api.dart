@@ -108,7 +108,9 @@ class MarketApi {
 
   final http.Client _client;
   final String gateway;
-  final void Function(String)? onSessionRefresh;
+  // (refreshedToken, tokenThatAuthorizedTheRequest). Prevent a late response
+  // from one authorization from replacing credentials for another account.
+  final void Function(String, String)? onSessionRefresh;
   // One broker symbol-list request per authorized account, including when
   // quote requests for several forex instruments arrive concurrently.
   final Map<String, Future<Map<String, int>>> _symbolLists = {};
@@ -156,8 +158,6 @@ class MarketApi {
           : 250 * (attempt + 1);
       await Future<void>.delayed(Duration(milliseconds: backoffMs));
     }
-    final refreshed = response.headers['x-tradelab-session'];
-    if (refreshed != null && refreshed.isNotEmpty) onSessionRefresh?.call(refreshed);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       if (response.statusCode == 401) {
         throw const MarketDataException('انتهت جلسة cTrader. أعد ربط الحساب.', sessionExpired: true);
@@ -227,13 +227,23 @@ class MarketApi {
       // Both JSON decoding and MarketTick allocations of dense BID pages
       // happen in the worker isolate; frame scheduling on the chart UI
       // only needs the lightweight final chronology/price verification.
+      final Map<String, dynamic> data;
       if (MarketJsonDecodePolicy.shouldOffload(
           path: url.path, chars: response.body.length)) {
-        return await compute<String, Map<String, dynamic>>(
+        data = await compute<String, Map<String, dynamic>>(
           _decodeDenseBrokerBidTicks, response.body,
           debugLabel: 'tradelab-ctrader-bid-json-and-ticks');
+      } else {
+        data = _decodeBrokerObject(response.body);
       }
-      return _decodeBrokerObject(response.body);
+      // A failed or malformed HTTP response may NEVER refresh a token.
+      // The controller also confirms that the originating credential is
+      // still active before accepting a signed header from the gateway.
+      final refreshed = response.headers['x-tradelab-session'];
+      if (token != null && refreshed != null && refreshed.isNotEmpty) {
+        onSessionRefresh?.call(refreshed, token);
+      }
+      return data;
     } catch (_) {
       throw const MarketDataException('أعاد مصدر السوق استجابة غير صالحة.');
     }
