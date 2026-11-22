@@ -15,7 +15,8 @@ enum ChartAnchorEndpoint { start, end, offset }
 enum ChartMagnetMode { off, weak, strong }
 
 /// Price-axis snapping is based on the *displayed* real candle, not a made-up
-/// price grid. Weak magnet uses [weakPixelTolerance] on projected charts,\n/// falling back to [weakPriceTolerance] without a screen transform.
+/// price grid. Weak magnet uses [weakPixelTolerance] on projected charts,
+/// falling back to [weakPriceTolerance] without a screen transform.
 double snapDrawingPrice({
   required double requestedPrice,
   required List<double> ohlc,
