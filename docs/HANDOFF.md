@@ -1,5 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — PR #629 MERGED: محور الوقت مرتبط بالشموع الموثقة، CI ناجح
+- **الدمج:** [PR #629](https://github.com/775878805Osamaha/TradeLab/pull/629) squash `81f1c0284f924cbd10d8b2ae6f2c7b36a660d8e1` في `test/flutter-all-fixes-20261116`. البنية `chart_source_time_grid.dart` مع `_CandleChartPainter` وتعريف tests في CI.
+- **الاختبار:** [GitHub Actions #45057243714 completed/success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45057243714) على `b52908f0e408722af0db21be41bb910e4c387fb7`: **837 tests passed** من Flutter source/Range/Replay/chart و**11 اختبارات إضافية ناجحة**. Flutter analyze ناجح. الفحص الأول [#45056986541](https://github.com/775878805Osamaha/TradeLab/actions/runs/45056986541) حقق 836 passed/1 failed لأن اختبارنا صنّف `scrollBars=0` (صحيح) بأنه invalid؛ صُحح شرط الاختبار ولم نغيّر سلوك المصدر حتى تحقق CI النهائي.
+- **التأثير:** جدول خطوط وأسماء محور الوقت لم يعد x ثابتًا عند 20/40/60/80% من الشاشة؛ يُشتق من مؤشرات source candle (1/2/5/10 spacing) ويُرسم عبر `ChartViewport.chartX` مثل الشموع والمؤشر المتقاطع؛ يستخدم UTC timestamps الحقيقية ويحترم Range irregular BID وReplay prefix. تكلفة O(viewport) و<=16 علامة لكل رسم.
+- **القيود:** لا لقطات مقارنة Pixel موثقة من Android، ولا ادعاء مطابقة TradingView بنسبة 100% أو فحص FPS هاتف. لا APK، لا main، لا Vercel prod.
+
+
 ## 2026-11-22 — TradingView-style source-anchored time grid + labels (CI PENDING)
 - **الفرع:** `fix/chart-source-anchored-time-grid-20261122` من dev `f13a6d34d443ad31d43ca64ff4c6c10892e725d2`; المشروع الوحيد TradeLab Flutter. لا APK/main/Vercel Production.
 - **الفجوة المثبتة بالملفات:** `_CandleChartPainter.paint` كان يرسم 4 خطوط وقت عمودية و4 تسميات عند `x = plotWidth * tick / 5`، أي تُقفل الشبكة في أعمدة ثابتة على الشاشة. عند السحب/التكبير كان النص يقفز إلى شمعة أخرى بينما خطوط الشبكة لا تتحرك مع الشموع (اختلاف واضح عن خطوط الزمن المُثبتة بالمصدر في TradingView).
