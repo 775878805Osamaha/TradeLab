@@ -26,6 +26,7 @@ import '../chart/chart_frame_profiler.dart';
 import '../chart/chart_load_profiler.dart';
 import '../chart/chart_history_prefetch_policy.dart';
 import '../chart/chart_text_layout_cache.dart';
+import '../chart/chart_axis_contrast.dart';
 import '../chart/chart_feed_health.dart';
 import '../chart/chart_panel_settings.dart';
 import '../chart/chart_panel_settings_page.dart';
@@ -6423,6 +6424,8 @@ class _CandleChartPainter extends CustomPainter {
     final background = dark && panel.backgroundColor == 0xFFFFFFFF
         ? const Color(0xFF000D16) : Color(panel.backgroundColor);
     canvas.drawRect(Offset.zero & size, Paint()..color = background);
+    final axisTextColor = ChartAxisContrast.readableAxisLabel(
+        background: background, configuredArgb: panel.axisTextColor);
     final axis = size.width - 61;
     if (axis < 30 || size.height < 60 || candles.isEmpty) return;
     final chartHeight = size.height - 24;
@@ -6467,7 +6470,7 @@ class _CandleChartPainter extends CustomPainter {
           : (displayTick / (step * 5) -
               (displayTick / (step * 5)).round()).abs() < 0.000001;
       _text(canvas, scale.axisLabel(tick, decimals),
-          Offset(axis + 6, py - 8), Color(panel.axisTextColor),
+          Offset(axis + 6, py - 8), axisTextColor,
           panel.axisTextSize.toDouble(),
           bold: important);
       if (panel.horizontalGridVisible && py >= 0 && py < chartHeight) {
@@ -6849,7 +6852,7 @@ class _CandleChartPainter extends CustomPainter {
       // This affects presentation only; the underlying UTC times are intact.
       final timeAxisLayout = ChartTimeAxisLabelLayout(plotWidth: axis);
       final fontSize = math.max(9, panel.axisTextSize - 2).toDouble();
-      final labelColor = Color(panel.axisTextColor);
+      final labelColor = axisTextColor;
       final zoneLabel = ChartHistoricalTimeZone.labelAtVisibleBar(
           zone: symbolSettings.timeZone,
           timestampsUtcMs: timestamps,
@@ -6991,7 +6994,7 @@ class _CandleChartPainter extends CustomPainter {
     if (timestamps.length < candles.length) {
       _text(canvas, 'شموع مدى',
           Offset(axis / 2 - 18, chartHeight + 3),
-          Color(panel.axisTextColor),
+          axisTextColor,
           math.max(9, panel.axisTextSize - 2).toDouble());
     }
   }
