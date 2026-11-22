@@ -1,6 +1,8 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
 ### 2026-11-22 — تثبيت جيل التفويض في cTrader History/Range (قيد CI)
+- **CI الأول #45054416987:** 821 passed / 1 failed (اختبار token rotation عند injected MarketApi). التحديد من سجلات الاختبار: تهيئة `MarketController(api: custom)` لم تُسجّل callback كما تفعل التهيئة الافتراضية. إصلاح root cause في constructor وMarketApi mutable callback، وإضافة 401/JSON safety test؛ انتظار إعادة الاختبار قبل merge.
+
 - **السبب المثبت بالكود:** مقياس A→B→A يحمي BID/ASK فقط، بينما history وBID وpoint-size كانت ترجع البيانات القديمة من طلب بدأ قبل تبديل/إعادة تفويض حساب cTrader.
 - تحديث MarketController لحراسة كل ردود history/BID/metadata عبر `ctraderAuthorizationRevision`؛ تحديث ChartScreen لملاحظة نفس رقم الحساب مع تفويض جديد وإعادة تحميل المصدر؛ منع headers القديمة من إعادة كتابة token في MarketApi بعد logout/re-auth، وتأجيل refresh إلى ما بعد النجاح والتحليل الصحيح لرد HTTP.
 - اختبارات A→B→A لجميع مسارات candle/range/point، وإعادة OAuth لنفس الحساب وحالة update token المشروع، وإعادة تحميل واجهة Flutter. تمنع خلط broker history أو رسمه بعد تغير صلاحية الجلسة، دون اختراع شموع.
