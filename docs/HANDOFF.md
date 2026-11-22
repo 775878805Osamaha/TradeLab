@@ -1,5 +1,11 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — توضيح إخفاق CI الأول في PR #616 (التصحيح قيد إعادة الاختبار)
+- **الرابط:** https://github.com/775878805Osamaha/TradeLab/pull/616. أول تشغيل https://github.com/775878805Osamaha/TradeLab/actions/runs/45027351182 فشل في `chart_paint_only_pan_test.dart` فقط (794 ناجحة/1 فشل؛ Flutter analyze ناجح).
+- **السبب:** اختبار واجهة قديم يشترط إعادة رسم الشارت عندما يتغير BID/ASK حتى مع كون تسميات السعر المباشر مخفية افتراضياً، بعكس تحسين الأداء المقصود. تغيير التوقع إلى **صفر قراءة painter إضافية عند تحديثات مخفية** مع بقاء header ثابتاً، دون تعطيل اختبارات تنشيط السعر الظاهر أو تنبيه المصدر.
+- **التحقق:** إعادة فحص GitHub بعد تصحيح الاختبار **PENDING**؛ لا تدمج عند الفشل ولا تدّعِ قياس FPS، لا APK/Release/main.
+
+
 ## 2026-11-22 — وقف إعادة رسم الشموع عند تغيّر BID/ASK غير المرئي (CI PENDING)
 - **الفرع:** `perf/tradelab-quote-no-candle-repaint-20261122` انطلاقاً من `0f3c0cd231ee9dfd5c1f7c8ff941b23b5fc9fba5`، دون تغيير `main` أو إنشاء APK.
 - **السبب المثبت من كود الإنتاج:** `ChartScaleSettings.bidAsk` = `hidden` افتراضياً، و`_CandleChartPainter` يرسم BID/ASK فقط حين القيمة غير مخفية؛ مع ذلك `_refreshDisplayedQuote` كان يطلق `_chartRepaint.value++` عند كل revision للسعر، مؤدياً لإعادة رسم الشموع والخطوط حتى لو لم تتغير بكسلاتها.

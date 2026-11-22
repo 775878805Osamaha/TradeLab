@@ -1,5 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 UTC — PR #616: الفشل الأول في اختبار واجهة قديم وتصحيح معيار القبول
+- **CI الأولى:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45027351182 **failed** في `Verify historical tick archive and chart interactions` مع **794 tests passed, 1 failed**. `flutter analyze` نجح، وجميع اختبارات `chart_feed_health_test.dart` الجديدة نجحت.
+- **السبب المثبت حرفياً من سجل GitHub:** الاختبار `chart_paint_only_pan_test.dart: streaming price changes repaint chart, not entire controls` توقع زيادة `market.reads` مع كل تحديث مصدر حتى لو كان `ChartScaleSettings.bidAsk = hidden`. الإصلاح يعمد إلى **عدم إعادة الرسم في هذا الوضع الافتراضي**؛ لذلك توقع الاختبار القديم يناقض السلوك المطلوب، لا يوجد دليل أن فشلًا في بيانات السوق حدث.
+- **التصحيح:** تحديث عنوان الاختبار والتوقع: `market.reads` يجب أن يظل كما هو خلال 20 source revisions مخفية. يظل التحقق من ثبات header ومن خلو أخطاء Flutter كما هو. اختبارات `chart_feed_health_test.dart` تغطي إعادة الرسم عند ظهور أسعار BID/ASK وتغيرها وانتهاء صلاحيتها، وتحديث تحذير التأخر حتى حين يكون السعر مخفياً.
+- **الحالة:** commit تصحيح الاختبار، CI النهائي **PENDING**؛ يمنع الدمج حتى تؤكد GitHub Actions جميع اختبارات الشارت وRange وReplay. لا Android FPS حقيقي ولا APK.
+
+
 ### 2026-11-22 — تقليل quote-only redraw عندما BID/ASK مخفي (CI PENDING)
 - **المصدر/الفرع:** `test/flutter-all-fixes-20261116` عند `0f3c0cd231ee9dfd5c1f7c8ff941b23b5fc9fba5` → `perf/tradelab-quote-no-candle-repaint-20261122`، لا `main` أو APK.
 - **الخلل:** عند كل `ChartFeedHealth.quoteChanged` يدفع `_refreshDisplayedQuote` رسم الشارت كاملًا رغم إخفاء BID/ASK افتراضياً؛ كما أن تغير `timestampMs` وحده لا يغير أي بكسل في هذه التسميات.

@@ -170,7 +170,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('streaming price changes repaint chart, not entire controls',
+  testWidgets('hidden BID/ASK streaming quotes do not repaint candles or rebuild controls',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -195,8 +195,9 @@ void main() {
     final original = tester.widget(header);
     final now = DateTime.now().toUtc().millisecondsSinceEpoch;
     final sameMinute = now ~/ 60000 * 60000;
-    // Repeated real-structure source BID/ASK revisions in one minute must
-    // update the painter, not rebuild TradeLab's expensive toolbar.
+    // Default chart scale settings hide BID/ASK labels. Real source quote
+    // revisions still reach the controller and its header-status guard, but
+    // have no visible quote pixels. Do not repaint 120k candles for these.
     for (var i = 0; i < 20; i++) {
       market.publishQuote(MarketQuote(
         symbol: 'BTCUSDT', source: TradeSource.binance,
@@ -205,8 +206,9 @@ void main() {
       ));
       final readsOnNotice = market.reads;
       await tester.pump();
-      expect(market.reads, greaterThan(readsOnNotice),
-        reason: 'Retained CustomPainter must read fresh source at paint time');
+      expect(market.reads, readsOnNotice,
+        reason: 'Hidden BID/ASK changes have no quote pixels, so the '
+            'retained candle CustomPainter must not be invoked');
       expect(identical(original, tester.widget(header)), isTrue,
         reason: 'BID/ASK changes should not rebuild header on each source tick');
       expect(tester.takeException(), isNull);
