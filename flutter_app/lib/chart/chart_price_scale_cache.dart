@@ -61,6 +61,11 @@ class ChartPriceScaleCache {
     // is no cached source window, ChartPriceScale.visible derives a bounded
     // fallback from its nearest verified edge, never fake prices.
     if (visibleStart >= visibleEnd && cached != null &&
+        plotWidth.isFinite && plotWidth > 0 &&
+        viewport.barWidth.isFinite &&
+        viewport.barWidth >= ChartViewport.minBarWidth &&
+        viewport.scrollBars.isFinite &&
+        viewport.rightMarginBars.isFinite &&
         identical(_candles, candles) &&
         _count == candles.length &&
         candles.isNotEmpty &&
