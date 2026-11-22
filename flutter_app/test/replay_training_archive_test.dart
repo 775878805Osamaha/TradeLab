@@ -31,6 +31,17 @@ void main() {
     expect(history.first['realizedPricePnl'], 5);
     expect(history.first['openTradeCount'], 0);
     expect(history.first['closedTradeCount'], 1);
+    final detail = (history.first['trades'] as List).single
+        as Map<String, Object?>;
+    expect(detail['side'], 'buy');
+    expect(detail['entryPrice'], 100);
+    expect(detail['exitPrice'], 105);
+    expect(detail['quantity'], 1);
+    expect(detail['isOpen'], isFalse);
+    expect(detail['realizedPricePnl'], 5);
+    expect(detail.containsKey('sourceKey'), isFalse,
+        reason: 'Individual Results rows must not contain broker account IDs');
+    expect(detail.containsKey('id'), isFalse);
 
     // An ended Replay session clears its in-memory model. The persisted
     // archive must remain unchanged when the screen/controller is disposed.
@@ -59,6 +70,8 @@ void main() {
     expect(rewound['openTradeCount'], 0);
     expect(rewound['closedTradeCount'], 0);
     expect(rewound['realizedPricePnl'], 0);
+    expect(rewound['trades'], isEmpty,
+        reason: 'Hidden future entries cannot remain in Results');
     // Saving one session's empty rewind must not delete another archived
     // training session even when both were saved in the same millisecond.
     final completed = history.firstWhere(
@@ -120,6 +133,33 @@ void main() {
     expect(saved['closedTradeCount'], 1);
     expect(saved['openTradeCount'], 0);
     expect(saved['realizedPricePnl'], 5);
+    await write;
+  });
+
+  test('An open Replay SELL order is visible in Results before closing', () async {
+    final id = 'open-${DateTime.now().microsecondsSinceEpoch}';
+    const candles = [TradeCandle(201, 204, 198, 200)];
+    final session = ReplayTrainingSession()..moveTo(candles, 1);
+    session.enter(side: ReplaySide.sell, candles: candles, quantity: 3);
+    final write = ReplayTrainingArchive.save(
+      sessionId: id,
+      sourceKey: 'ctrader:private-account:XAUUSD:1m:candles',
+      visibleCount: 1,
+      trades: session.trades,
+    );
+    ReplayTrainingArchive.trackScheduledSave(write);
+    final history = await ReplayTrainingArchive.recent();
+    final saved = history.firstWhere((item) => item['sessionId'] == id);
+    expect(saved['openTradeCount'], 1);
+    expect(saved['closedTradeCount'], 0);
+    final row = (saved['trades'] as List).single as Map<String, Object?>;
+    expect(row['side'], 'sell');
+    expect(row['entryPrice'], 200);
+    expect(row['quantity'], 3);
+    expect(row['isOpen'], isTrue);
+    expect(row['exitPrice'], isNull);
+    expect(row['realizedPricePnl'], 0);
+    expect(row.values.join(' '), isNot(contains('private-account')));
     await write;
   });
 
