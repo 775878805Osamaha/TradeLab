@@ -320,6 +320,8 @@ class _ResultsScreenState extends State<ResultsScreen> {
           if (_page == 0) ...[
           const SizedBox(height: 12),
           _performanceHero(report),
+          const SizedBox(height: 10),
+          _replayOverviewShortcut(),
           const SizedBox(height: 14),
           TradeDashboardPanel(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start,
@@ -431,6 +433,40 @@ class _ResultsScreenState extends State<ResultsScreen> {
     ]);
   }
 
+
+
+  Widget _replayOverviewShortcut() {
+    final open = _replaySessions.fold<int>(0,
+      (sum, entry) => sum + (entry['openTradeCount'] as int? ?? 0));
+    final closed = _replaySessions.fold<int>(0,
+      (sum, entry) => sum + (entry['closedTradeCount'] as int? ?? 0));
+    // The USD hero is a separate PaperJournal-only report. Replay trades
+    // always get their own clearly labeled price-delta history destination.
+    final subtitle = _readingReplay ? 'جارٍ قراءة سجل Replay المحلي…'
+        : _replayReadError != null ? 'تعذر قراءة الأرشيف · اضغط للتفاصيل'
+        : _replaySessions.isEmpty ? 'لا توجد جلسات محفوظة بعد'
+        : 'آخر الجلسات · مفتوحة: $open · مغلقة: $closed';
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        key: const Key('results-replay-overview-shortcut'),
+        onPressed: () => _selectPage(5),
+        icon: const Icon(Icons.history_rounded, size: 22),
+        label: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('صفقات Replay التاريخية',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+            Text(subtitle,
+              key: const Key('results-replay-overview-counts'),
+              maxLines: 2, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _replayTrainingPanel() {
     final colors = Theme.of(context).colorScheme;

@@ -88,4 +88,41 @@ void main() {
     expect(find.textContaining('لا توجد جلسات Replay محفوظة بعد'), findsNothing);
   });
 
+  testWidgets('Overview links to actual Replay open/closed counts at 320dp',
+      (tester) async {
+    final controller = _ConnectedReadOnlyController();
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(320, 760));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Future<List<Map<String, Object?>>> read() async => [
+      <String, Object?>{
+        'sessionId': 'internal-not-visible',
+        'sourceKey': 'account-hidden',
+        'savedAtMs': 1795262400000,
+        'tradeCount': 2,
+        'openTradeCount': 1,
+        'closedTradeCount': 1,
+        'realizedPricePnl': 12.5,
+      },
+    ];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: ResultsScreen(controller: controller,
+          active: true, replayArchiveReader: read)),
+    ));
+    await tester.pump();
+    final shortcut = find.byKey(
+        const Key('results-replay-overview-shortcut'));
+    expect(shortcut, findsOneWidget);
+    expect(find.textContaining('مفتوحة: 1 · مغلقة: 1'), findsOneWidget);
+    // The normal USD hero still reads only the separate paper ledger.
+    expect(find.byKey(const Key('results-net-profit-hero')), findsOneWidget);
+    await tester.ensureVisible(shortcut);
+    await tester.tap(shortcut);
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-session-0')), findsOneWidget);
+    expect(find.textContaining('12.5000'), findsOneWidget);
+    expect(find.textContaining('account-hidden'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
 }
