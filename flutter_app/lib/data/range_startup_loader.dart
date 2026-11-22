@@ -21,9 +21,10 @@ class RangeStartupLoader {
   // 24h -> 3d jump used to fetch an entire 48-hour BID interval in one
   // provider call. Gold/XAUUSD can have a dense Friday in that interval,
   // forcing hundreds of disjoint cTrader pages before the first Range
-  // candle is shown. Split older coverage into <=12h authenticated slices
-  // after the first day; publish the FIRST complete window containing
-  // actual BID ticks without downloading the whole weekend+Friday block.
+  // candle is shown. After the first day, inspect exact SIX-hour slices
+  // through 72h: a verified Friday window can publish genuine Range BID
+  // while later source history remains pending, instead of waiting for an
+  // entire dense 12-hour range. Beyond 72h retain bounded 12h windows.
   //
   // Every interval remains exact, inclusive, disjoint and verified. This is
   // not a market-hours calendar: closed-market intervals must be confirmed
@@ -35,9 +36,13 @@ class RangeStartupLoader {
     Duration(hours: 4),
     Duration(hours: 12),
     Duration(hours: 24),
+    Duration(hours: 30),
     Duration(hours: 36),
+    Duration(hours: 42),
     Duration(hours: 48),
+    Duration(hours: 54),
     Duration(hours: 60),
+    Duration(hours: 66),
     Duration(hours: 72),
     Duration(hours: 84),
     Duration(hours: 96),

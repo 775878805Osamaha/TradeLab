@@ -64,6 +64,42 @@ Map<String, dynamic> _decodeDenseBrokerBidTicks(String payload) {
   return decoded;
 }
 
+/// Fail closed on source-integrity and broker-permission errors. They
+/// cannot be repaired by retrying the identical BID request, and silently
+/// retrying them would hide a real broker rejection from the user.
+bool _terminalBidGatewayFailure(String body) {
+  if (body.length > 4096) return false;
+  try {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map<String, dynamic>) return false;
+    // The cTrader gateway signs REQUEST_FREQUENCY_EXCEEDED as a
+    // broker rejection, but the broker's history-rate limit is transient.
+    // Retry only that documented code, not incorrect boundaries, missing
+    // permission or malformed/unusable tick data.
+    if (decoded['error'] == 'ctrader_broker_rejected_request') {
+      return decoded['brokerCode'] != 'REQUEST_FREQUENCY_EXCEEDED';
+    }
+    return const {
+      'ctrader_tick_history_unusable',
+      'invalid_request',
+    }.contains(decoded['error']);
+  } catch (_) {
+    return false;
+  }
+}
+
+bool _rateLimitedBidGatewayFailure(String body) {
+  if (body.length > 4096) return false;
+  try {
+    final decoded = jsonDecode(body);
+    return decoded is Map<String, dynamic> &&
+        decoded['error'] == 'ctrader_broker_rejected_request' &&
+        decoded['brokerCode'] == 'REQUEST_FREQUENCY_EXCEEDED';
+  } catch (_) {
+    return false;
+  }
+}
+
 /// The only permitted providers: cTrader for forex/gold, Binance for crypto.
 /// No demo, fallback feed, or OHLC-derived ticks are permitted here.
 class MarketApi {
@@ -85,14 +121,40 @@ class MarketApi {
     final headers = <String, String>{'Accept': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
     if (body != null) headers['Content-Type'] = 'application/json';
-    final http.Response response;
-    try {
-      response = body == null
-          ? await _client.get(url, headers: headers).timeout(const Duration(seconds: 22))
-          : await _client.post(url, headers: headers, body: jsonEncode(body))
-              .timeout(const Duration(seconds: 22));
-    } catch (_) {
-      throw const MarketDataException('تعذر الوصول إلى مصدر السوق. تحقق من الإنترنت وأعد المحاولة.');
+    // The cTrader gateway can transiently reject dense BID history with
+    // 429/5xx (rate limit / cold-start / upstream unavailability). A single
+    // unverified failed leaf used to discard the entire split Range request,
+    // including successful sibling pages, and leave the chart empty.
+    //
+    // Retry the IDENTICAL inclusive BID interval at most twice with short
+    // backoff; neither widen bounds nor make a partial page authoritative.
+    // Do not retry auth, explicit broker rejection, invalid input or
+    // inconsistent source data. Other routes retain their existing policy.
+    late http.Response response;
+    for (var attempt = 0; ; attempt++) {
+      try {
+        response = body == null
+            ? await _client.get(url, headers: headers)
+                .timeout(const Duration(seconds: 22))
+            : await _client.post(url, headers: headers, body: jsonEncode(body))
+                .timeout(const Duration(seconds: 22));
+      } catch (_) {
+        throw const MarketDataException(
+            'تعذر الوصول إلى مصدر السوق. تحقق من الإنترنت وأعد المحاولة.');
+      }
+      if (url.path != '/v1/ticks' ||
+          attempt >= 2 ||
+          !const {429, 502, 503, 504}.contains(response.statusCode) ||
+          _terminalBidGatewayFailure(response.body)) {
+        break;
+      }
+      // The broker explicitly asks callers to slow down after exceeding
+      // its historical-query rate. A longer bounded wait avoids hammering
+      // the next connection while ordinary gateway 5xx keep short backoff.
+      final backoffMs = _rateLimitedBidGatewayFailure(response.body)
+          ? 750 * (attempt + 1)
+          : 250 * (attempt + 1);
+      await Future<void>.delayed(Duration(milliseconds: backoffMs));
     }
     final refreshed = response.headers['x-tradelab-session'];
     if (refreshed != null && refreshed.isNotEmpty) onSessionRefresh?.call(refreshed);
@@ -103,10 +165,14 @@ class MarketApi {
       // The backend returns bounded public reason codes only. Never
       // expose raw cTrader responses, private account identifiers or tokens.
       String? reason;
+      String? brokerCode;
       try {
         final data = jsonDecode(response.body);
         if (data is Map<String, dynamic> && data['error'] is String) {
           reason = data['error'] as String;
+          if (data['brokerCode'] is String) {
+            brokerCode = data['brokerCode'] as String;
+          }
         }
       } catch (_) {}
       if (url.path == '/v1/ticks') {
@@ -116,6 +182,11 @@ class MarketApi {
             'لم نعرض شموع مدى غير موثقة.');
         }
         if (reason == 'ctrader_broker_rejected_request') {
+          if (brokerCode == 'REQUEST_FREQUENCY_EXCEEDED') {
+            throw const MarketDataException(
+              'تجاوزت طلبات تاريخ BID حد وسيط cTrader المؤقت. '
+              'أعد المحاولة بعد قليل؛ لم نعرض بيانات غير مكتملة.');
+          }
           throw const MarketDataException(
             'رفض وسيط cTrader طلب تاريخ تيكات BID. '
             'تحقق من دعم الوسيط للرمز XAUUSD وتاريخ التيكات.');
