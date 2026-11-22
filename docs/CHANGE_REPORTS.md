@@ -1,18 +1,5 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
-### 2026-11-22 — Visual QA screenshots of real Flutter chart widget (CI PENDING)
-- Added dedicated Flutter screenshot test and economical path-scoped GitHub Actions workflow. Captures dark/light viewport variants and crosshair, using source-shaped deterministic test-only BTC fixture (not production price history).
-- Output is a GitHub Actions artifact for comparison with `docs/chart-reference/reference.png`. Never present synthetic test fixture as live broker data or claim Android pixel parity from Linux output.
-- No APK, main or Vercel production changes. Await CI upload validation.
-
-
-
-### 2026-11-22 — Offscreen price-axis chart parity (CI PENDING)
-- Repaired legitimate empty-time-viewport behavior: do not erase y-axis and show fake market price 0–1 while valid cTrader/Binance candles exist outside viewport. Retain last chart-specific authenticated source scale or use a bounded nearest-edge real-price fallback.
-- Time-axis dates remain absent when no source candle is visible; Replay only reads its revealed prefix and no synthetic BID/timestamps are emitted. Painter and scale cache covered by unit tests and CI.
-- This is TradingView-style functional parity, not verified 100% Android pixel equivalence. main/prod/APK unchanged.
-
-
 ### 2026-11-22 — إغلاق #629 بنجاح: إصلاح انزلاق خطوط زمن الشارت
 - [PR #629 MERGED](https://github.com/775878805Osamaha/TradeLab/pull/629) عند `81f1c0284f924cbd10d8b2ae6f2c7b36a660d8e1`؛ [CI #45057243714 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45057243714): **837+11 tests passed** وFlutter analyze.
 - حركة خطوط وتواريخ المحور أصبحت مرتبطة بالشموع الحقيقية أثناء pan/pinch؛ اختبارات 45px anchor, pinch center, 120k/3px, Range source UTC, Replay no-future. عالجنا إخفاق اختبار أولي خاطئ اعتبر scrollBars=0 غير صالح؛ أعيد تشغيل CI ونجح.
