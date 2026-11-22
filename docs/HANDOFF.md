@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة أداء مستحدثة — تثبيت كاش Auto Price Scale داخل نافذة شموع واحدة (22 نوفمبر 2026)
+- **الأساس/الفرع:** `test/flutter-all-fixes-20261116` عند `75e6bf240799359d7dbf5e3cb89733819728eed3` إلى `perf/tradelab-price-scale-visible-window-cache-20261122`؛ لا تعديل `main` ولا APK.
+- **الفجوة المثبتة في الكود:** `ChartPriceScaleCache.resolve` يستخدم `_viewport == viewport`، فيفقد الكاش عند كل تغيّر كسري `scrollBars` خلال pan، حتى لو لم تتغير حدود `visibleIndices`. يستلزم ذلك إعادة مسح OHLC للنافذة نفسها عند كل frame.
+- **التعديل:** كاش أحادي القيمة يستعمل هوية قائمة المصدر وعددها، وأول/آخر فهرس شمعة مرئي، وعرض الأعمدة/الهامش، وعرض/ارتفاع المحور ووضع LOG/Invert/Percent/Indexed والهوامش؛ لا إعادة استخدام بين مصدر جديد أو نافذة Replay أخرى. الفهرسان يحسبان O(1) ولا يُحفظ تاريخ كامل. إعادة استخدام سعر السوق الأصلي دون تعديلات أو شموع مصطنعة.
+- **التحقق المضاف:** `chart_price_scale_cache_test.dart` على 120k مصدر، و240 نقلًا كسريًا تتشارك نافذة الشموع يجب أن تسجل **صفر قراءة OHLC إضافية** بدل إعادة المسح، ثم تنتهي صلاحية الكاش عند انتقال حدود النافذة؛ وتغطية LOG/Invert/Percent/Indexed واستبدال المصدر. هذا عدّ عمليات فقط وليس قياس FPS.
+- **الحالة:** **CI PENDING**؛ لا إثبات Android Profile ولا مطابقة بكسل TradingView. لا دمج قبل نجاح Flutter analyze/tests.
+
+
 ## أحدث حالة مؤكدة — PR #610 تحسين لمس الرسومات التاريخية (2026-11-22)
 - **فرع التطوير:** `test/flutter-all-fixes-20261116`؛ **Code merge SHA:** `37bc5d56f2a807d97be046ab49359789b4f81e90`؛ **PR:** https://github.com/775878805Osamaha/TradeLab/pull/610 **MERGED**. `main` دون تعديل، ولا APK أو Release جديد.
 - **CI الحقيقي:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45018066145 **completed/success** على `fc945655c037d22c0c15abf4effbe820fddabc20`، بما في ذلك `flutter analyze` واختبارات chart/Range/history/Replay وLong/Short/Crossline/Info Line/Trend Angle وتوقيت اليمن.

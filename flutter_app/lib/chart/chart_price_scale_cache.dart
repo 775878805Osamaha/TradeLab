@@ -12,12 +12,17 @@ import 'chart_viewport.dart';
 ///
 /// Keep exactly one value: no growing LRU and no cached historical snapshots.
 /// Identity is intentional: two source lists with equal candle counts need
-/// independent price extrema. The value-equal ChartViewport key also includes
-/// scroll offset, zoom and right-margin preference, ensuring every source
-/// candle location used by the crosshair/axis/drawings stays identical.
+/// independent price extrema. Scale high/low and the relative price baseline
+/// depend on the actual *visible candle indices*, not fractional pan offsets.
+/// Reuse the same source scale while touch pan changes only pixels, but renew
+/// the scale whenever an index enters/exits, zoom changes or any display
+/// settings or verified source snapshot changes.
 class ChartPriceScaleCache {
   List<TradeCandle>? _candles;
-  ChartViewport? _viewport;
+  double? _barWidth;
+  double? _rightMarginBars;
+  int? _visibleStart;
+  int? _visibleEnd;
   int? _count;
   double? _plotWidth;
   double? _plotHeight;
@@ -39,11 +44,19 @@ class ChartPriceScaleCache {
     required int topMarginPercent,
     required int bottomMarginPercent,
   }) {
+    // This O(1) interval check avoids scanning every visible OHLC on each
+    // sub-candle pixel pan. The painter and source scale use the very same
+    // ChartViewport.visibleIndices; no historical future can enter the cache.
+    final (visibleStart, visibleEnd) = viewport.visibleIndices(
+      plotWidth: plotWidth, candleCount: candles.length);
     final cached = _scale;
     if (cached != null &&
         identical(_candles, candles) &&
         _count == candles.length &&
-        _viewport == viewport &&
+        _barWidth == viewport.barWidth &&
+        _rightMarginBars == viewport.rightMarginBars &&
+        _visibleStart == visibleStart &&
+        _visibleEnd == visibleEnd &&
         _plotWidth == plotWidth &&
         _plotHeight == plotHeight &&
         _logarithmic == logarithmic &&
@@ -63,7 +76,10 @@ class ChartPriceScaleCache {
       referenceMode: referenceMode,
     );
     _candles = candles;
-    _viewport = viewport;
+    _barWidth = viewport.barWidth;
+    _rightMarginBars = viewport.rightMarginBars;
+    _visibleStart = visibleStart;
+    _visibleEnd = visibleEnd;
     _count = candles.length;
     _plotWidth = plotWidth;
     _plotHeight = plotHeight;
@@ -78,7 +94,10 @@ class ChartPriceScaleCache {
 
   void clear() {
     _candles = null;
-    _viewport = null;
+    _barWidth = null;
+    _rightMarginBars = null;
+    _visibleStart = null;
+    _visibleEnd = null;
     _count = null;
     _plotWidth = null;
     _plotHeight = null;
