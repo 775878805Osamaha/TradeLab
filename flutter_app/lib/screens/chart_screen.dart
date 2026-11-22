@@ -518,6 +518,10 @@ class _ChartScreenState extends State<ChartScreen>
       // An edit gesture must not persist while this kept-alive chart is
       // hidden behind Markets, Results or Account.
       _disarmDoubleTapGuide();
+      // Results is an IndexedStack child and can start its archive SELECT on
+      // the very next frame. Register this final historical Replay snapshot
+      // NOW (not after the 300ms seek debounce or a later chart disposal).
+      if (_replay && _trainingEverTraded) _recordTraining();
     }
     if (!oldWidget.active && widget.active) {
       // The chart was hidden behind another tab. Refresh only the selected
@@ -2001,13 +2005,17 @@ class _ChartScreenState extends State<ChartScreen>
     final trades = _training.trades;
     // Serialize writes: a slower previous write must never overwrite a newer
     // replay cutoff, stop fill or manual close in SQLite.
-    _trainingSaveQueue = _trainingSaveQueue.then((_) =>
+    final write = _trainingSaveQueue.then((_) =>
         ReplayTrainingArchive.save(
           sessionId: sessionId,
           sourceKey: sourceKey,
           visibleCount: count,
           trades: trades,
-        )).catchError((Object error) {
+        ));
+    // Track this scheduled write before any await can interleave with a
+    // ResultsScreen archive read. Retain the writer's own error handling.
+    ReplayTrainingArchive.trackScheduledSave(write);
+    _trainingSaveQueue = write.catchError((Object error) {
       if (mounted && _replay) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('تعذر حفظ سجل Replay المحلي. تحقق من مساحة التخزين.')));

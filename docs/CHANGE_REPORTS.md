@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — ضمان ظهور Replay في النتائج بعد آخر صفقة مباشرة (PENDING)
+- الـSQLite SELECT في نتائج Replay قد يسبق `_recordTraining` المؤجل حتى مع ظهور تبويب جديد؛ الحل يسجّل pending-write barrier ويُجبر flush عند تبديل chart active→inactive.
+- اختبارات Futures معلقة/فشل ثم تعافٍ وread-after-save قبل await، مع سلامة `PaperLedger` وReplay.
+- Vercel production بقي عند main 20 نوفمبر؛ preview READY الجديدة لا تحل مشكلة التطبيق الذي يستعمل `tradelab-vercel-gateway.vercel.app` في الإنتاج. سجل /v1/spot فيه unclassified errors؛ لا دليل منه أن /v1/ticks فشل بسبب ذلك. لا نشر إنتاج بلا تحقق منفصل.
+- branch `fix/replay-results-write-read-barrier-20261122` من `64cf670b9b6c945386aa3b84b8f6695171d00eaf`، CI PENDING، لا APK/main.
+
 ### 2026-11-22 — Replay confirmation horizontal blank space (CI pending)
 - Identified negative scrollBars from chart_screen._confirmReplayStart retaining selection-source x after hiding future history; new afterConfirmingReplayStart puts last verified revealed candle near price ruler, with a max 20% right margin for tight/maximum zoom.
 - Tests for 259/329dp and 3/10/60px, autoplay stable, no future index reveal, invalid geometry; no OHLC or broker data changed.
