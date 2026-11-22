@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — cTrader «صفحة غير مكتملة بلا شموع» (gateway fallback قيد CI)
+- **من لقطة الهاتف:** رسالة `صفحة cTrader غير مكتملة ولا تحتوي شموعًا للتحقق منها` عند شموع XAUUSD الدقيقة؛ كود Flutter يرفض تمامًا `hasMore=true` مع 0 شموع. هذا دليل مسار فشل OHLC وليس إثبات سبب فشل تنزيل تيكات BID الخاص بـRange.
+- **السبب الممكن الموثق في البوابة:** `CTraderGateway.trendbarSlice` يستبعد الشموع الحقيقية التي تقع قبل lower timestamp في الرد العادي. عندما يعيد broker `hasMore=true` ونطاقًا خارج الفترة المطلوبة، تنتج صفحة خالية مرفوضة على الهاتف. `history` كان يستخدم count-back فقط عند `INCORRECT_BOUNDARIES`.
+- **الإصلاح المحدود:** إضافة retry **مرة واحدة** بنمط broker `count_back` عندما تكون الصفحة الأولى **خالية وموسومة hasMore**؛ يبقى account/symbol/period validated وmaxTime، ولا تقبل نتائج غير مكتملة أو سعر/شمعة وهمية. Flutter لديه parsing يحترم `queryMode=count_back`.
+- **اختبارات gateway:** شمعات سوق مغلق تعود من أقدم نافذة حقيقية بلا اختلاق، والرد الثاني الخالي يبقى خاليًا، وعدم تكرار الطلب لأكثر من 2. إضافة CI Node على PR gateway وليس APK. **CI pending**؛ ما لم تُنشر بوابة Vercel المحدثة لا يتغير التطبيق المثبت.
+- **Range BID:** يتطلب فحص `/v1/ticks` الفعلي وسجلات gateway على حساب الوسيط؛ تعديل OHLC هذا ليس برهان إصلاح Range. لا تُنشئ BID من candles.
+
+
 ## 2026-11-22 — إصدار APK هاتف تجريبي جديد من أحدث Flutter/TradeLab (مؤكد)
 - **بناء GitHub Actions:** https://github.com/775878805Osamaha/TradeLab/actions/runs/45030261658 **completed/success**. جميع مراحل التحليل/اختبارات Flutter المجمعة/اختبار OAuth handoff/تجميع Android release/التحقق من التوقيع ونشر Release نجحت.
 - **APK مباشر:** https://github.com/775878805Osamaha/TradeLab/releases/download/tradelab-phone-test-545ae0cc0ba1/TradeLab-Phone-20261122.apk ؛ **صفحة الإصدار:** https://github.com/775878805Osamaha/TradeLab/releases/tag/tradelab-phone-test-545ae0cc0ba1 ؛ SHA256: https://github.com/775878805Osamaha/TradeLab/releases/download/tradelab-phone-test-545ae0cc0ba1/TradeLab-Phone-20261122.apk.sha256 .

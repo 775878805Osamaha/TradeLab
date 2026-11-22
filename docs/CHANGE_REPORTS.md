@@ -1,5 +1,10 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — تشخيص صفحة cTrader فارغة موسومة hasMore (CI PENDING)
+- User Android screenshot matches MarketApi guard empty `hasMore=true`; exact broker cause not measured.
+- Gateway retries bounded documented count-back once on empty truncated response, with provenance and upper cutoff kept; test weekend/empty fallback; Node CI on PR.
+- Does NOT synthesize candles, does not repair BID tick source on its own, does not deploy live gateway, no APK or main.
+
 ### 2026-11-22 UTC — بناء APK تجريبي مستقل ناجح من TradeLab HEAD b389bf6
 - **الطلب:** المستخدم يريد تثبيت أحدث تعديلات TradeLab على Android لاختبارها.
 - **مصدر البناء:** `test/flutter-all-fixes-20261116` @ `b389bf6cd19044d47ba9e350e19a5365fda5820e`؛ branch خاص `test/build-tradelab-phone-20261122` @ `545ae0cc0ba12f98b5256bdc9a3a7173e0b19790`؛ تغيير وحيد ملف `.github/workflows/build-tradelab-phone-test-20261122.yml` بنطاق push مرة أولى. تركنا workflows العادية الخاصة ببناء APK معطلة ولم نعدل `main`.

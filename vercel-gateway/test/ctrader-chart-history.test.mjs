@@ -221,3 +221,47 @@ test('account authorization failure must not trigger a hidden history retry',asy
     assert.equal(requests.filter(p=>p.payloadType===2137).length,1);
   } finally {socket.close();}
 });
+
+
+test('empty truncated cTrader range retries one verified count-back page',async()=>{
+  // The first valid broker result is filtered out because its real market
+  // timestamp is before the requested closed-market lookback. It is still
+  // NOT allowed to turn into a synthetic candle or a complete empty page.
+  const center=30000000*60000;
+  const olderMinutes=30000000-2*24*60;
+  const {socket,requests}=socketForTrendbars({
+    adaptiveMode:'truncated',barMinutes:olderMinutes,
+  });
+  const gateway=new CTraderGateway('id','secret',{socketFactory:()=>socket});
+  try {
+    const page=await gateway.channel(false).history(
+      12345,'readonly',42,1,center-900000,center+60000,900);
+    assert.equal(page.queryMode,'count_back');
+    assert.equal(page.candles.length,1);
+    assert.equal(page.candles[0].timestamp,olderMinutes*60000);
+    assert.equal(page.candles[0].close,4110.5);
+    const calls=requests.filter(p=>p.payloadType===2137);
+    assert.equal(calls.length,2);
+    assert.equal(Object.hasOwn(calls[0].payload,'fromTimestamp'),true);
+    assert.equal(Object.hasOwn(calls[1].payload,'fromTimestamp'),false);
+    assert.equal(calls[1].payload.toTimestamp,center+60000);
+  } finally {socket.close();}
+});
+
+test('empty truncated count-back remains empty, never invents gold OHLC',async()=>{
+  const center=30000000*60000;
+  const {socket,requests}=socketForTrendbars({
+    adaptiveMode:'truncated',barMinutes:30000000+60,
+  });
+  const gateway=new CTraderGateway('id','secret',{socketFactory:()=>socket});
+  try {
+    const page=await gateway.channel(false).history(
+      12345,'readonly',42,1,center-900000,center+60000,900);
+    assert.equal(page.queryMode,'count_back');
+    assert.deepEqual(page.candles,[]);
+    assert.equal(page.hasMore,false,
+      'After the fallback, a broker-confirmed empty result is not a candle');
+    assert.equal(requests.filter(p=>p.payloadType===2137).length,2);
+  } finally {socket.close();}
+});
+
