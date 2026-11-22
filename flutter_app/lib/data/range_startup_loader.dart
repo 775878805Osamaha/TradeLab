@@ -17,9 +17,17 @@ class RangeStartupSnapshot {
 }
 
 class RangeStartupLoader {
-  // Cumulative lookback horizons. The former six-day, all-at-once request
-  // could require thousands of network pages before any candle appeared.
-  // This bounded startup makes the first verified tick slice visible early.
+  // Cumulative UTC lookback horizons. During weekends or holidays a
+  // 24h -> 3d jump used to fetch an entire 48-hour BID interval in one
+  // provider call. Gold/XAUUSD can have a dense Friday in that interval,
+  // forcing hundreds of disjoint cTrader pages before the first Range
+  // candle is shown. Split older coverage into <=12h authenticated slices
+  // after the first day; publish the FIRST complete window containing
+  // actual BID ticks without downloading the whole weekend+Friday block.
+  //
+  // Every interval remains exact, inclusive, disjoint and verified. This is
+  // not a market-hours calendar: closed-market intervals must be confirmed
+  // empty by the broker and NO missing or fictional ticks are inserted.
   static const horizons = <Duration>[
     Duration(minutes: 5),
     Duration(minutes: 15),
@@ -27,8 +35,16 @@ class RangeStartupLoader {
     Duration(hours: 4),
     Duration(hours: 12),
     Duration(hours: 24),
-    Duration(days: 3),
-    Duration(days: 6),
+    Duration(hours: 36),
+    Duration(hours: 48),
+    Duration(hours: 60),
+    Duration(hours: 72),
+    Duration(hours: 84),
+    Duration(hours: 96),
+    Duration(hours: 108),
+    Duration(hours: 120),
+    Duration(hours: 132),
+    Duration(hours: 144),
   ];
   static const maxStartupTicks = 1000000;
 

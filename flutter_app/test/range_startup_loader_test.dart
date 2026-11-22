@@ -72,8 +72,14 @@ void main() {
       onSnapshot: (_) async => fail('No broker data must not create candles'),
     );
     expect(snapshot, isNull);
-    expect(calls, hasLength(8));
-    expect(calls.last, (now - 6 * 24 * hour, now - 3 * 24 * hour - 1));
+    expect(calls, hasLength(RangeStartupLoader.horizons.length));
+    expect(calls.last, (now - 6 * 24 * hour, now - 132 * hour - 1));
+    for (var i = 1; i < calls.length; i++) {
+      expect(calls[i].$2, calls[i - 1].$1 - 1,
+        reason: 'Authentic BID windows remain fully adjacent');
+      expect(calls[i].$2 - calls[i].$1, lessThanOrEqualTo(12 * hour),
+        reason: 'Weekend lookback never requests a dense 48h chunk');
+    }
   });
 
   test('recovers Friday BID ticks after a closed weekend without fabrication',
@@ -96,9 +102,9 @@ void main() {
     expect(calls, 8);
     expect(records, hasLength(1));
     expect(result!.closedBars, greaterThanOrEqualTo(2));
-    expect(result.fromMs, now - 6 * 24 * hour);
+    expect(result.fromMs, now - 48 * hour);
     expect(result.ticks.every((tick) =>
-        tick.timestamp <= now - 3 * 24 * hour - 1), isTrue);
+        tick.timestamp <= now - 36 * hour - 1), isTrue);
   });
 
   test('rejects out-of-window and unordered provider ticks', () async {
@@ -276,7 +282,7 @@ void main() {
       },
       onSnapshot: (batch) async => observed.add(batch),
     );
-    expect(calls, 8);
+    expect(calls, RangeStartupLoader.horizons.length);
     expect(latest, isNotNull);
     expect(latest!.fromMs, now - 6 * 24 * hour);
     expect(latest.ticks, hasLength(1));
@@ -406,4 +412,41 @@ void main() {
     );
     expect(certified, 0);
   });
+  test('Sunday cTrader BID startup reaches Friday with bounded 12h pages',
+      () async {
+    // Nov 22, 2026 was Sunday. Friday's real BID ticks are now 42h old,
+    // outside the first 36h of authenticated, genuinely empty broker data.
+    final sunday = DateTime.utc(2026, 11, 22, 15).millisecondsSinceEpoch;
+    final friday = sunday - 42 * hour;
+    final requested = <(int, int)>[];
+    final snapshots = <RangeStartupSnapshot>[];
+    final snapshot = await RangeStartupLoader.load(
+      endMs: sunday, priceDistance: 1, minimumClosedBars: 2,
+      getTicks: (from, to) async {
+        requested.add((from, to));
+        if (friday < from || friday + 2 > to) return const <MarketTick>[];
+        return [
+          MarketTick(friday, 3900.0),
+          MarketTick(friday + 1, 3901.5),
+          MarketTick(friday + 2, 3902.5),
+        ];
+      },
+      onSnapshot: (page) async => snapshots.add(page),
+    );
+    expect(snapshot, isNotNull);
+    expect(snapshot!.closedBars, greaterThanOrEqualTo(2));
+    expect(snapshot.fromMs, sunday - 48 * hour,
+      reason: 'A real Friday event must appear in the narrow 36-48h slice');
+    expect(requested, hasLength(8));
+    expect(requested.last, (
+      sunday - 48 * hour, sunday - 36 * hour - 1));
+    expect(snapshots, hasLength(1));
+    expect(snapshot.ticks.map((tick) => tick.timestamp),
+      [friday, friday + 1, friday + 2]);
+    // No weekend tick, no OHLC-derived range input, no future event.
+    expect(snapshot.timeline.bars.first.open, 3900.0);
+    expect(snapshot.timeline.endTickIndices.last, 2);
+  });
+
+
 }
