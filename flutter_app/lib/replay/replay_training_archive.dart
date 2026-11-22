@@ -11,6 +11,24 @@ class ReplayTrainingArchive {
   ReplayTrainingArchive._();
 
   static Future<Database>? _opening;
+  // A Replay trade may be saved asynchronously while the user immediately
+  // switches from the chart to Results. A plain SQLite SELECT can otherwise
+  // overtake that pending write and show an incorrect empty history.
+  //
+  // ChartScreen registers each scheduled write SYNCHRONOUSLY, before its
+  // first SQLite await. We track its outcome without consuming or discarding
+  // the writer's own error. The latest completed snapshot is authoritative.
+  static Future<bool> _pendingVisibleSave = Future<bool>.value(true);
+
+  static void trackScheduledSave(Future<void> write) {
+    // Attach the error handler IMMEDIATELY, not in a later microtask after
+    // _pendingVisibleSave completes. A failed SQLite Future can complete
+    // synchronously before that microtask, yielding an unhandled-zone error.
+    // The original writer still receives its own failure notification.
+    final outcome = write.then<bool>(
+        (_) => true, onError: (Object _) => false);
+    _pendingVisibleSave = _pendingVisibleSave.then((_) => outcome);
+  }
 
   static Future<Database> _open() =>
       _opening ??= _openDatabase().catchError((Object error) {
@@ -68,6 +86,13 @@ class ReplayTrainingArchive {
   static Future<List<Map<String, Object?>>> recent({int limit = 20}) async {
     if (limit < 1 || limit > 100) {
       throw RangeError.range(limit, 1, 100);
+    }
+    // Freeze the barrier at invocation time: this results view must include
+    // every Replay save scheduled before its navigation began. Never display
+    // an old snapshot as if a failed trade write meant zero trades.
+    final pending = _pendingVisibleSave;
+    if (!await pending) {
+      throw StateError('A Replay training snapshot could not be saved.');
     }
     final db = await _open();
     final rows = await db.query('replay_sessions',
