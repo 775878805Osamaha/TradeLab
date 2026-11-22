@@ -122,10 +122,18 @@ void main() {
       expect(ChartSourceTimeGrid.visible(
         viewport: ChartViewport(barWidth: invalid),
         plotWidth: 320, candleCount: 100), isEmpty);
-      expect(ChartSourceTimeGrid.visible(
-        viewport: ChartViewport(scrollBars: invalid),
-        plotWidth: 320, candleCount: 100), isEmpty);
+      // Zero scrollBars is a VALID live chart position. Only nonfinite
+      // scroll offsets invalidate a source-time grid; negative finite
+      // offsets deliberately represent authentic right-side whitespace.
+      if (!invalid.isFinite) {
+        expect(ChartSourceTimeGrid.visible(
+          viewport: ChartViewport(scrollBars: invalid),
+          plotWidth: 320, candleCount: 100), isEmpty);
+      }
     }
+    expect(ChartSourceTimeGrid.visible(
+      viewport: const ChartViewport(scrollBars: 0),
+      plotWidth: 320, candleCount: 100), isNotEmpty);
     expect(ChartSourceTimeGrid.niceBarStep(1), 1);
     expect(ChartSourceTimeGrid.niceBarStep(2), 2);
     expect(ChartSourceTimeGrid.niceBarStep(3), 5);
