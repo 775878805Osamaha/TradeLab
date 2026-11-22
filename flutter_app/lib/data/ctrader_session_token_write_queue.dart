@@ -1,12 +1,13 @@
-/// Persists cTrader's *current* authorized session in strict operation
-/// order. An HTTP token rotation may still be writing to Android secure
-/// storage when the user disconnects or finishes a new OAuth flow.
+/// Persists cTrader authorization and selected-account preferences in strict
+/// operation order per secure-storage key. A slow write for account A or an
+/// OAuth token rotation must not finish AFTER the user switches to B or logs
+/// out, making a stale value the saved account on app restart.
 ///
-/// Awaiting every earlier write before the later delete/re-link prevents an
-/// old slow write from reviving a stale credential after logout. No secrets
-/// are logged, replayed or exposed in callback errors.
-class CTraderSessionTokenWriteQueue {
-  CTraderSessionTokenWriteQueue(this._write);
+/// Awaiting every earlier operation before the subsequent overwrite or
+/// delete makes the LAST deliberate action authoritative. No credentials,
+/// account numbers or writes are logged from this helper.
+class CTraderSerializedSecureValueWriteQueue {
+  CTraderSerializedSecureValueWriteQueue(this._write);
 
   final Future<void> Function(String? token) _write;
   Future<void> _last = Future<void>.value();
@@ -21,4 +22,14 @@ class CTraderSessionTokenWriteQueue {
     _last = next;
     return next;
   }
+}
+
+ 
+/// Retain the explicit token type used by existing caller/tests. Selected
+/// broker preferences use the same tested serialization policy via the
+/// generic class above, but store a different secure-storage key.
+class CTraderSessionTokenWriteQueue
+    extends CTraderSerializedSecureValueWriteQueue {
+  CTraderSessionTokenWriteQueue(
+      Future<void> Function(String? token) write) : super(write);
 }
