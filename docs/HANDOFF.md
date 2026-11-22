@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-22 — Flutter chart screenshot QA runner (CI PENDING)
+- **Branch:** `test/flutter-chart-visual-qa-20261122` from dev `ccf03826b04885297dde1386b6cb32c23ff5f16b`, independent of PR #630. No APK/main/Vercel prod changes.
+- **Actual reference:** `docs/chart-reference/reference.png` in TradeLab repo is a screenshot-style JPEG that shows TradingView UI at tall mobile ratio with Arabic RTL drawing rail, right price scale, dark candle canvas, bottom ticker/timeframe/market tabs. Original photo is a visual target, not proof of its active current version.
+- **Runner:** `flutter_app/test/chart_visual_qa_capture_test.dart` paints the existing `ChartScreen` with a scoped `MockClient` BTCUSDT *TEST-ONLY OHLC FIXTURE* and takes four real Flutter widget goldens: dark 360x640, dark 390x844, light 360x640, long-press crosshair dark 360x640. Fixture never goes into release APK or broker gateway. `.github/workflows/capture-chart-visual-qa.yml` runs `flutter test --update-goldens` on Linux with TZ=Asia/Aden and uploads `chart-fixture-*.png` as a GitHub Actions artifact retained for seven days. No PNG files are committed and no binary build is produced.
+- **QA rule:** Compare actual generated Flutter captures against the **supplied** TradingView reference on similar logical viewport/DPR/font; record misalignments for right ruler width, drawing rail density, header spacing, ticker/timeframe strip and bottom overlays. Linux test-raster screenshots are not equivalent to physical Android screenshots; 100% pixel parity and touch FPS remain unverified until Android run.
+- **CI status:** pending PR/tests; do not claim screenshots exist until Actions uploaded artifact successfully. This workflow is path-scoped to avoid expensive continuous snapshots.
+
+
 ## 2026-11-22 — PR #629 MERGED: محور الوقت مرتبط بالشموع الموثقة، CI ناجح
 - **الدمج:** [PR #629](https://github.com/775878805Osamaha/TradeLab/pull/629) squash `81f1c0284f924cbd10d8b2ae6f2c7b36a660d8e1` في `test/flutter-all-fixes-20261116`. البنية `chart_source_time_grid.dart` مع `_CandleChartPainter` وتعريف tests في CI.
 - **الاختبار:** [GitHub Actions #45057243714 completed/success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45057243714) على `b52908f0e408722af0db21be41bb910e4c387fb7`: **837 tests passed** من Flutter source/Range/Replay/chart و**11 اختبارات إضافية ناجحة**. Flutter analyze ناجح. الفحص الأول [#45056986541](https://github.com/775878805Osamaha/TradeLab/actions/runs/45056986541) حقق 836 passed/1 failed لأن اختبارنا صنّف `scrollBars=0` (صحيح) بأنه invalid؛ صُحح شرط الاختبار ولم نغيّر سلوك المصدر حتى تحقق CI النهائي.
