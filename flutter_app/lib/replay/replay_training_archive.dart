@@ -72,18 +72,29 @@ class ReplayTrainingArchive {
     final db = await _open();
     final rows = await db.query('replay_sessions',
       columns: ['session_id', 'source_key', 'saved_at_ms', 'payload'],
-      orderBy: 'saved_at_ms DESC', limit: limit);
+      orderBy: 'saved_at_ms DESC, session_id DESC', limit: limit);
     return List<Map<String, Object?>>.unmodifiable(rows.map((row) {
       final payload = jsonDecode(row['payload'] as String);
       if (payload is! Map<String, dynamic> || payload['schema'] != 1) {
         throw const FormatException('Invalid archived replay session');
       }
+      final trades = payload['trades'];
+      if (trades is! List ||
+          trades.any((entry) => entry is! Map ||
+              (entry['exitIndex'] == null) !=
+                  (entry['exitPrice'] == null))) {
+        throw const FormatException('Invalid archived Replay trade entries');
+      }
+      final closed = trades.where(
+          (entry) => (entry as Map)['exitIndex'] != null).length;
       return Map<String, Object?>.unmodifiable({
         'sessionId': row['session_id'],
         'sourceKey': row['source_key'],
         'savedAtMs': row['saved_at_ms'],
         'visibleCount': payload['visibleCount'],
-        'tradeCount': (payload['trades'] as List).length,
+        'tradeCount': trades.length,
+        'openTradeCount': trades.length - closed,
+        'closedTradeCount': closed,
         'realizedPricePnl': payload['realizedPricePnl'],
       });
     }));
