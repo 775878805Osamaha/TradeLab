@@ -110,7 +110,10 @@ class MarketApi {
   final String gateway;
   // (refreshedToken, tokenThatAuthorizedTheRequest). Prevent a late response
   // from one authorization from replacing credentials for another account.
-  final void Function(String, String)? onSessionRefresh;
+  // Bound by MarketController even when tests or another app entrypoint
+  // inject a custom HTTP client through MarketApi. The session controller
+  // remains the only authority to accept a refreshed OAuth credential.
+  void Function(String, String)? onSessionRefresh;
   // One broker symbol-list request per authorized account, including when
   // quote requests for several forex instruments arrive concurrently.
   final Map<String, Future<Map<String, int>>> _symbolLists = {};
