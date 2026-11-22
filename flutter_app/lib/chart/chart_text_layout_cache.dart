@@ -63,6 +63,7 @@ class ChartTextLayoutCache {
       text: TextSpan(
         text: value,
         style: TextStyle(
+          fontFamily: 'Roboto',
           fontSize: size,
           color: color,
           fontWeight: weight,
@@ -102,6 +103,7 @@ class ChartTextLayoutCache {
     }
     final painter = TextPainter(
       text: TextSpan(text: value, style: TextStyle(
+        fontFamily: 'Roboto',
         color: color, fontSize: size, fontWeight: FontWeight.w500,
       )),
       textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
@@ -136,6 +138,7 @@ class ChartTextLayoutCache {
     }
     final painter = TextPainter(
       text: TextSpan(text: value, style: const TextStyle(
+        fontFamily: 'Roboto',
         fontSize: 11, color: Colors.white, height: 1.18)),
       textDirection: TextDirection.rtl,
       textAlign: TextAlign.center,
