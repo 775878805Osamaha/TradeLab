@@ -17,7 +17,7 @@ import '../widgets/tradelab_dashboard_widgets.dart';
 class ResultsScreen extends StatefulWidget {
   const ResultsScreen({
     required this.controller, this.journal, this.active = false,
-    this.replayArchiveReader, super.key,
+    this.replayArchiveReader, this.replayArchivePageReader, super.key,
   });
 
   final MarketController controller;
@@ -25,6 +25,11 @@ class ResultsScreen extends StatefulWidget {
   /// IndexedStack preserves this widget while the user trades on the chart.
   final bool active;
   final Future<List<Map<String, Object?>>> Function()? replayArchiveReader;
+  /// Optional paged source for deterministic widget regression tests.
+  /// Production uses ReplayTrainingArchive.recent with identical arguments.
+  final Future<List<Map<String, Object?>>> Function({
+    required int limit, required int offset,
+  })? replayArchivePageReader;
 
   @override
   State<ResultsScreen> createState() => _ResultsScreenState();
@@ -103,11 +108,18 @@ class _ResultsScreenState extends State<ResultsScreen> {
       // requests one extra SQLite row to detect older pages without loading
       // an unbounded training archive into the Android widget tree.
       final customReader = widget.replayArchiveReader;
-      final sessions = customReader != null
-          ? await customReader()
-          : await ReplayTrainingArchive.recent(
-              limit: _replayReadPageSize + 1,
-              offset: append ? _replaySessions.length : 0);
+      late final List<Map<String, Object?>> sessions;
+      if (customReader != null) {
+        sessions = await customReader();
+      } else {
+        final offset = append ? _replaySessions.length : 0;
+        final pagedReader = widget.replayArchivePageReader;
+        sessions = pagedReader == null
+            ? await ReplayTrainingArchive.recent(
+                limit: _replayReadPageSize + 1, offset: offset)
+            : await pagedReader(
+                limit: _replayReadPageSize + 1, offset: offset);
+      }
       if (!mounted || !widget.active || revision != _replayReadRevision) return;
       final page = customReader == null &&
               sessions.length > _replayReadPageSize
@@ -164,7 +176,8 @@ class _ResultsScreenState extends State<ResultsScreen> {
     if (!widget.active) {
       _replayReadRevision++;
     } else if (!oldWidget.active ||
-        oldWidget.replayArchiveReader != widget.replayArchiveReader) {
+        oldWidget.replayArchiveReader != widget.replayArchiveReader ||
+        oldWidget.replayArchivePageReader != widget.replayArchivePageReader) {
       _scheduleReplayRead();
     }
   }
