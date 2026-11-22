@@ -110,8 +110,42 @@ class ReplayTrainingArchive {
                   (entry['exitPrice'] == null))) {
         throw const FormatException('Invalid archived Replay trade entries');
       }
-      final closed = trades.where(
-          (entry) => (entry as Map)['exitIndex'] != null).length;
+      // The Results page previously received counts only. Preserve a small,
+      // typed, account-agnostic projection of each real archived practice
+      // entry so an OPEN order is visible immediately, not just its count.
+      // Never pass sourceKey, sessionId or an internal trade identifier into
+      // individual result rows. Recompute price-delta P&L from the entry and
+      // exit values rather than trusting a separately stored display total.
+      final details = <Map<String, Object?>>[];
+      for (final rawTrade in trades) {
+        final trade = rawTrade as Map;
+        final side = trade['side'];
+        final entry = trade['entryPrice'];
+        final quantity = trade['quantity'];
+        final rawExit = trade['exitPrice'];
+        if ((side != 'buy' && side != 'sell') ||
+            entry is! num || quantity is! num ||
+            !entry.toDouble().isFinite || entry <= 0 ||
+            !quantity.toDouble().isFinite || quantity <= 0 ||
+            (rawExit != null &&
+                (rawExit is! num ||
+                    !rawExit.toDouble().isFinite || rawExit <= 0))) {
+          throw const FormatException('Invalid archived Replay trade prices');
+        }
+        final exit = rawExit is num ? rawExit.toDouble() : null;
+        final entryPrice = entry.toDouble();
+        final amount = quantity.toDouble();
+        details.add(Map<String, Object?>.unmodifiable({
+          'side': side,
+          'entryPrice': entryPrice,
+          'quantity': amount,
+          'exitPrice': exit,
+          'isOpen': exit == null,
+          'realizedPricePnl': exit == null ? 0.0 :
+              (exit - entryPrice) * (side == 'buy' ? 1 : -1) * amount,
+        }));
+      }
+      final closed = details.where((trade) => trade['isOpen'] == false).length;
       return Map<String, Object?>.unmodifiable({
         'sessionId': row['session_id'],
         'sourceKey': row['source_key'],
@@ -121,6 +155,7 @@ class ReplayTrainingArchive {
         'openTradeCount': trades.length - closed,
         'closedTradeCount': closed,
         'realizedPricePnl': payload['realizedPricePnl'],
+        'trades': List<Map<String, Object?>>.unmodifiable(details),
       });
     }));
   }
