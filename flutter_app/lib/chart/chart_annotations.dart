@@ -15,7 +15,7 @@ enum ChartAnchorEndpoint { start, end, offset }
 enum ChartMagnetMode { off, weak, strong }
 
 /// Price-axis snapping is based on the *displayed* real candle, not a made-up
-/// price grid. Weak magnet only engages within [weakPriceTolerance].
+/// price grid. Weak magnet uses [weakPixelTolerance] on projected charts,\n/// falling back to [weakPriceTolerance] without a screen transform.
 double snapDrawingPrice({
   required double requestedPrice,
   required List<double> ohlc,
@@ -30,7 +30,7 @@ double snapDrawingPrice({
   // market-price differences are not uniform in pixels on those scales.
   // Keep the original price-space API for clients without a chart scale.
   final projected = screenYForPrice != null && weakPixelTolerance != null;
-  final requestedY = projected ? screenYForPrice!(requestedPrice) : null;
+  final requestedY = projected ? screenYForPrice(requestedPrice) : null;
   if (projected && (requestedY == null || !requestedY.isFinite)) {
     return requestedPrice;
   }
@@ -38,7 +38,7 @@ double snapDrawingPrice({
   var smallestDistance = double.infinity;
   for (final value in ohlc) {
     if (!value.isFinite) continue;
-    final projectedY = projected ? screenYForPrice!(value) : null;
+    final projectedY = projected ? screenYForPrice(value) : null;
     if (projected && (projectedY == null || !projectedY.isFinite)) continue;
     final distance = projected
         ? (projectedY! - requestedY!).abs()
@@ -51,7 +51,7 @@ double snapDrawingPrice({
   }
   if (nearest == null) return requestedPrice;
   if (mode == ChartMagnetMode.weak) {
-    final tolerance = projected ? weakPixelTolerance! : weakPriceTolerance;
+    final tolerance = projected ? weakPixelTolerance : weakPriceTolerance;
     if (!tolerance.isFinite || tolerance < 0 ||
         smallestDistance > tolerance) return requestedPrice;
   }
