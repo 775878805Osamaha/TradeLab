@@ -112,6 +112,7 @@ jobs:
             test/verified_market_history_snapshot_test.dart \
             test/ctrader_account_selection_test.dart \
             test/ctrader_history_auth_revision_test.dart \
+            test/ctrader_session_token_write_queue_test.dart \
             test/account_active_selection_widget_test.dart \
             test/theme_preference_store_test.dart \
             test/dark_mode_persistence_widget_test.dart \
