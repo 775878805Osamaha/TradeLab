@@ -1,5 +1,13 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-22 — تقليل إعادة مسح OHLC خلال السحب الجزئي لشارت 120k
+- **الفرع:** `perf/tradelab-price-scale-visible-window-cache-20261122` من `75e6bf240799359d7dbf5e3cb89733819728eed3`. **PR/CI PENDING**.
+- **الخلل:** `_viewport == viewport` في `ChartPriceScaleCache.resolve` كان يبطل الكاش حتى إذا تغير موضع الرسم بالبيكسل فقط دون خروج/دخول أي شمعة حقيقية؛ حركة الإصبع المتتابعة تعيد حساب حدود السعر في نفس نافذة الشموع.
+- **الملفات:** `chart_price_scale_cache.dart`؛ `chart_price_scale_cache_test.dart`؛ `docs/HANDOFF.md` و`docs/CHANGE_REPORTS.md`.
+- **الاختبارات المقترحة:** 240 خطوة pan كسرية على مصدر 120,000 شمعة، وعدّ source reads؛ إبطال الكاش مع نافذة جديدة/بيانات جديدة/LOG/Percent/Indexed/Inverted. تظل أسعار cTrader/Binance وReplay الأصلية دون تغيير.
+- **القيود:** نتائج Android Profile ولقطات مطابقة TradingView غير متاحة؛ اختبار Flutter CI جاري/معلق حتى ظهوره، لا APK ولا تغيير `main`.
+
+
 ### 2026-11-22 — PR #610 دمج بعد نجاح Flutter CI: تسريع اختيار رسومات تاريخية خارج الشاشة
 - **قبل:** `test/flutter-all-fixes-20261116` @ `0b82addd5063e7b6f6baaf3b1d0894d2090d04b8`؛ **بعد دمج الكود:** `37bc5d56f2a807d97be046ab49359789b4f81e90` على فرع التطوير فقط، لا `main` ولا APK.
 - **الملفات:** `flutter_app/lib/chart/chart_drawing_hit_test.dart` جديد، `flutter_app/lib/screens/chart_screen.dart` استخدام helper، `flutter_app/test/chart_drawing_hit_test_test.dart` جديد، `.github/workflows/verify-flutter-range.yml`، وتقارير docs.

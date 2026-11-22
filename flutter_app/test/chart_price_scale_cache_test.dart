@@ -189,4 +189,91 @@ void main() {
       topMarginPercent: 8, bottomMarginPercent: 8);
     expect((zeroWidth.minimum, zeroWidth.maximum), (0, 1));
   });
+  test('fractional 120k pan reuses identical source price window in 240 frames',
+      () {
+    final counted = _ReadCountCandles(source);
+    final cache = ChartPriceScaleCache();
+    const initial = ChartViewport(
+      barWidth: 3, scrollBars: 20000, rightMarginBars: 4);
+    ChartPriceScale resolve(ChartViewport v) => cache.resolve(
+      candles: counted, viewport: v, plotWidth: plotWidth,
+      plotHeight: plotHeight,
+      topMarginPercent: 8, bottomMarginPercent: 8,
+    );
+    final original = resolve(initial);
+    final firstWindow = initial.visibleIndices(
+      plotWidth: plotWidth, candleCount: counted.length);
+    final readsAfterFirst = counted.reads;
+    expect(readsAfterFirst, inInclusiveRange(1, 260));
+    for (var frame = 0; frame < 240; frame++) {
+      // Real fractional scroll movement within a candle, not a mocked
+      // performance estimate or an untrusted broker market sample.
+      final fractional = (frame.isEven ? .01 : .02);
+      final shifted = ChartViewport(
+          barWidth: 3, scrollBars: 20000 + fractional,
+          rightMarginBars: 4);
+      expect(shifted.visibleIndices(
+          plotWidth: plotWidth, candleCount: counted.length), firstWindow);
+      expect(identical(resolve(shifted), original), isTrue);
+    }
+    expect(counted.reads, readsAfterFirst,
+        reason: '240 tiny Android touch frames must not re-read OHLC');
+
+    // A true new visible source bar must invalidate the cache.
+    const nextWindow = ChartViewport(
+      barWidth: 3, scrollBars: 20002, rightMarginBars: 4);
+    expect(nextWindow.visibleIndices(
+      plotWidth: plotWidth, candleCount: counted.length),
+        isNot(firstWindow));
+    final shiftedScale = resolve(nextWindow);
+    expect(identical(shiftedScale, original), isFalse);
+    expect(counted.reads, greaterThan(readsAfterFirst));
+    expect(shiftedScale.minimum, isNot(original.minimum));
+  });
+
+  test('fractional LOG/inverted and Percent reuse keeps source labels honest',
+      () {
+    const firstViewport = ChartViewport(
+      barWidth: 10, scrollBars: 6.15, rightMarginBars: 4);
+    const subBarPan = ChartViewport(
+      barWidth: 10, scrollBars: 6.20, rightMarginBars: 4);
+    const past = <TradeCandle>[
+      TradeCandle(10, 11, 9, 10),
+      TradeCandle(10, 13, 9, 12),
+      TradeCandle(12, 20, 10, 18),
+      TradeCandle(18, 22, 17, 20),
+    ];
+    final large = <TradeCandle>[
+      for (var i = 0; i < 40; i++) ...past,
+    ];
+    for (final mode in ChartPriceReferenceMode.values) {
+      for (final inverted in <bool>[false, true]) {
+        final cache = ChartPriceScaleCache();
+        ChartPriceScale resolve(ChartViewport v, List<TradeCandle> values) =>
+            cache.resolve(candles: values, viewport: v,
+              plotWidth: 180, plotHeight: 320,
+              topMarginPercent: 8, bottomMarginPercent: 8,
+              inverted: inverted,
+              logarithmic: mode == ChartPriceReferenceMode.price,
+              referenceMode: mode,
+            );
+        final baseline = resolve(firstViewport, large);
+        // Both viewports have identical candle index bounds, hence exact
+        // normal/LOG/Percent/Indexed axis labels and y(price) geometry.
+        expect(firstViewport.visibleIndices(plotWidth: 180,
+            candleCount: large.length),
+            subBarPan.visibleIndices(plotWidth: 180,
+            candleCount: large.length));
+        final reused = resolve(subBarPan, large);
+        expect(identical(reused, baseline), isTrue);
+        expect(reused.referencePrice, baseline.referencePrice);
+        expect(reused.y(18), baseline.y(18));
+        final copy = List<TradeCandle>.of(large);
+        expect(identical(resolve(subBarPan, copy), reused), isFalse,
+            reason: 'A new verified source list cannot reuse stale bounds');
+      }
+    }
+  });
+
+
 }
