@@ -109,7 +109,7 @@ void main() {
   test('Replay offscreen price scale reads revealed prefix, not live future', () {
     final all = <TradeCandle>[
       for (var i = 0; i < 20; i++)
-        TradeCandle(100 + i, 102 + i, 99 + i, 101 + i),
+        TradeCandle(100.0 + i, 102.0 + i, 99.0 + i, 101.0 + i),
       const TradeCandle(20000, 90000, 19000, 90000),
     ];
     final prefix = CandlePrefix(all, 20);
