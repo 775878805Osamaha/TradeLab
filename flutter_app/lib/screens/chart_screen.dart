@@ -4380,14 +4380,21 @@ class _ChartScreenState extends State<ChartScreen>
         x: point.dx, plotWidth: plotWidth, candleCount: count);
     if (index == null) return null;
     final rawPrice = scale.price(point.dy.clamp(0, scale.height).toDouble());
+    if (!rawPrice.isFinite) return null;
     final bar = _displayCandles[index];
-    return ChartAnchor(index, snapDrawingPrice(
+    final snapped = snapDrawingPrice(
       requestedPrice: rawPrice,
       ohlc: [bar.open, bar.high, bar.low, bar.close],
       mode: _magnetMode,
       weakPriceTolerance: (scale.maximum - scale.minimum) /
           scale.height * 12,
-    ));
+      // A 12px weak-magnet radius must stay 12px under LOG, invert,
+      // manual scale zoom, Replay and every Android screen height.
+      screenYForPrice: (price) =>
+          scale.usesLogarithmic && price <= 0 ? double.nan : scale.y(price),
+      weakPixelTolerance: 12,
+    );
+    return snapped.isFinite ? ChartAnchor(index, snapped) : null;
   }
 
   Future<void> _editSelectedDrawing() async {

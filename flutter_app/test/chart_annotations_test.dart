@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/chart_annotations.dart';
+import 'package:tradelab_flutter/chart/chart_viewport.dart';
 
 void main() {
   test('older pages preserve the same market-price drawing anchors', () {
@@ -238,6 +239,62 @@ void main() {
         ChartMagnetMode.strong, 5), 4011);
     expect(snap(double.nan, mixed, ChartMagnetMode.strong, 5).isNaN, isTrue,
         reason: 'Never manufacture a market price for an invalid touch');
+  });
+
+  test('weak magnet uses real pixel distance on LOG and inverted scale', () {
+    for (final height in <double>[320, 390]) {
+      final logScale = ChartPriceScale(100, 400, height,
+          logarithmic: true);
+      final invertedScale = ChartPriceScale(100, 400, height,
+          logarithmic: true, inverted: true);
+      final linearScale = ChartPriceScale(100, 400, height);
+      double snap(ChartPriceScale scale, ChartMagnetMode mode,
+          double pixelTolerance) => snapDrawingPrice(
+        requestedPrice: 200,
+        ohlc: const <double>[150, 260],
+        mode: mode,
+        weakPriceTolerance: 0,
+        screenYForPrice: scale.y,
+        weakPixelTolerance: pixelTolerance,
+      );
+      expect(snap(logScale, ChartMagnetMode.weak, 75), 260,
+          reason: 'LOG uses visual rather than linear price distance');
+      expect(snap(invertedScale, ChartMagnetMode.weak, 75), 260,
+          reason: 'Inverting the ruler cannot change the nearest bar');
+      expect(snap(linearScale, ChartMagnetMode.weak, 75), 150);
+      expect(snap(logScale, ChartMagnetMode.weak, 12), 200,
+          reason: 'A visually distant bar must not steal a weak snap');
+      expect(snap(logScale, ChartMagnetMode.strong, 0), 260,
+          reason: 'Strong magnet snaps to visually nearest valid OHLC');
+    }
+  });
+
+  test('pixel magnet excludes unpaintable or malformed projected prices', () {
+    final scale = ChartPriceScale(100, 400, 320, logarithmic: true);
+    double projection(double price) =>
+        price <= 0 ? double.nan : scale.y(price);
+    double snap(List<double> prices, double tolerance) => snapDrawingPrice(
+      requestedPrice: 200,
+      ohlc: prices,
+      mode: ChartMagnetMode.weak,
+      weakPriceTolerance: 200,
+      screenYForPrice: projection,
+      weakPixelTolerance: tolerance,
+    );
+    expect(snap(const [double.nan, -10, 260], 70), 260);
+    expect(snap(const [double.nan, -10, double.infinity], 70), 200);
+    expect(snap(const [260], double.nan), 200);
+    expect(snap(const [260], -1), 200);
+    expect(snapDrawingPrice(
+      requestedPrice: 200, ohlc: const [260],
+      mode: ChartMagnetMode.strong, weakPriceTolerance: 0,
+      screenYForPrice: (_) => double.nan, weakPixelTolerance: 12,
+    ), 200);
+    expect(snapDrawingPrice(
+      requestedPrice: 200, ohlc: const [260],
+      mode: ChartMagnetMode.off, weakPriceTolerance: 0,
+      screenYForPrice: (_) => double.nan, weakPixelTolerance: 12,
+    ), 200);
   });
 
 }

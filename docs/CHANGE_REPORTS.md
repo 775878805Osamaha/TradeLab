@@ -4,6 +4,14 @@
 
 **قالب الحدث:** تاريخ UTC | الحدث/النتيجة | الفرع وSHA قبل/بعد | PR/CI/روابط | الملفات المتغيرة | ما تحقق بالفعل | ما لم يتحقق/المخاطر | الخطوة التالية.
 
+### 2026-11-22 — مقارنة مغناطيس رسومات OHLC ببكسلات شاشة Android الحقيقية
+- **الفرع/الأساس:** `fix/tradelab-log-magnet-pixel-tolerance-20261122` مبني على الإصلاح السابق `8158c0445c01bb954ead4911e811d21d6e7fd792`. **PR/CI: PENDING**.
+- **المشكلة:** مسافة Weak Magnet السابقة كانت فرق السعر × `12/height`، وهي ليست مسافة 12px على LOG. Strong كان يختار أقل فرق سعري ولو لم يكن بصرياً الأقرب.
+- **الإصلاح:** الإسقاط ب`ChartPriceScale.y` للفروق الفعلية على شاشة الرسم، دعم Inverted، واستمرار المصدر نفسه `_displayCandles[index]` (Replay prefix فقط) وتجاهل أسعار غير قابلة للإسقاط. تبقى استدعاءات API القديمة متوافقة.
+- **إخفاق CI مصحّح قبل الدمج:** [Actions #44964863568](https://github.com/775878805Osamaha/TradeLab/actions/runs/44964863568) انتهى failure في `flutter analyze` عند `chart_annotations.dart:33,41,54` بسبب 3 تحذيرات `unnecessary_non_null_assertion`. لم تُشغَّل اختبارات Flutter بعده. حُذفت علامات `!` الزائدة مع إبقاء ضمانات Dart flow promotion نفسها؛ **إعادة فحص CI: PENDING**، ولا يُدّعى النجاح قبل النتيجة.\n- **الاختبارات المُعدّة:** `chart_annotations_test.dart` على ارتفاعي 320/390، linear/LOG/inverted، weak/strong/off، حدود 12px، ناN/Infinity؛ اختبار شامل مع باقي Flutter/Range/Replay عبر GitHub CI. **لا ادعاء نجاح قبل نتيجة CI**.
+- **الحدود:** لا Android profile/pixel parity ولا APK أو تعديل `main` أو مشاريع أخرى.
+
+
 ### 2026-11-22 — حراسة بيانات الرسم غير الصالحة في Replay وCanvas
 - **الأساس/الفرع:** `test/flutter-all-fixes-20261116` عند `863bc9b94da73f03ccc7e294a99634bcae078fd0` → `fix/tradelab-drawing-finite-replay-guards-20261122`. **PR/CI: PENDING**.
 - **الخلل:** قبول فهرس سالب في `visibleAt`، واختيار NaN من عناصر OHLC للمغناطيس، وعدم فحص قيم Offset/Rect غير المنتهية قبل رسم خطوط/تحديد لمسها.

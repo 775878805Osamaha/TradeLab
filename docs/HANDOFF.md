@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## دفعة دقة مغناطيس الرسومات على LOG وInvert (2026-11-22)
+- **الفرع:** `fix/tradelab-log-magnet-pixel-tolerance-20261122` فوق دفعة Replay/Canvas safety. الحالة **PENDING CI**، لا APK ولا تغيير `main`.
+- **المصدر الرسمي:** https://www.tradingview.com/support/solutions/43000472715-drawing-points-don-t-snap-to-ohlc-values-correctly/ يوضح أن Weak Magnet يلتقط نقاط OHLC القريبة، بينما Strong يجبر الالتقاط حتى من بعيد.
+- **الخلل المثبت:** في `_anchorAt` كانت المسافة 12 بكسل تقريبية بوحدات السعر عبر `(maximum-minimum)/height*12`. هذا يصح تقريباً في المحور الخطي، لكنه ليس ثابتاً في LOG ويتسبب في عدم اتساق الالتقاط المرئي، حتى لو كانت الإحداثيات الأصلية صحيحة.
+- **التعديل:** `snapDrawingPrice` يقبل اختيارياً إسقاط السعر الحقيقي إلى Y على نفس `ChartPriceScale` فيقارن الأسعار المرئية بوحدات بكسل فعلية لكل من Weak وStrong. `_anchorAt` يمرّر `scale.y` مع نصف قطر 12px، ويمنع أسعار طلب غير منتهية، ويتجنب المصدر غير القابل للرسم على LOG (السعر غير الموجب). API القديم بوحدة السعر محفوظ للتوافق؛ لا أسعار مركبة ولا شموع إضافية.
+- **الاختبارات:** `chart_annotations_test.dart` يختبر اختلاف أقرب OHLC بين linear/LOG، الانعكاس، ارتفاع 320/390dp، حدود 12px، الأسعار غير الصالحة، وStrong/off. فحص GitHub Actions `verify-flutter-range.yml` يحتوي الملف أصلاً.
+- **حدود الإنجاز:** الاختبارات الآلية قيد التحقق؛ لا Pixel/Android Profile فعلية أو live market feed. المطلوب قراءة CI ودمج PR بعد نجاحه ثم توثيق النتيجة.
+
+
 ## دفعة سلامة رسم وReplay — رفض الأسعار والإحداثيات غير الصالحة (2026-11-22)
 - **نطاق العمل:** `fix/tradelab-drawing-finite-replay-guards-20261122` انطلاقاً من `test/flutter-all-fixes-20261116` @ `863bc9b94da73f03ccc7e294a99634bcae078fd0`. لا APK ولا تغيير `main`.
 - **الفجوة المثبتة من الكود:** `ChartPattern.visibleAt` يقبل فهرس رسم سالب لأنه أصغر من `revealedCount`، حتى لو كان المصدر خارج [0, visibleCount). `snapDrawingPrice` يبدأ بأول عنصر OHLC دون تحقق NaN/Infinity. و`ChartLineGeometry.strokes` لا يفلتر إحداثيات Flutter غير المنتهية قبل القص/raster، و`distanceToStroke` يعيد مسافة قد تكون NaN.
