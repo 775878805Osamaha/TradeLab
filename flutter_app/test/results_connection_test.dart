@@ -176,12 +176,23 @@ void main() {
     expect(find.byKey(const Key('results-replay-trade-0-24')), findsOneWidget);
     expect(find.byKey(const Key('results-replay-trade-0-21')), findsNothing);
     final more = find.byKey(const Key('results-replay-more-trades-0'));
+    // The results tab has a sticky header; ensureVisible may put a
+    // TextButton center exactly on the bottom test-view boundary (y=760),
+    // where a pointer tap misses. Scroll a little farther before tapping.
     await tester.ensureVisible(more);
+    await tester.pump();
+    await tester.drag(find.byKey(const Key('results-dashboard-list')),
+        const Offset(0, -90));
+    await tester.pump();
     await tester.tap(more);
     await tester.pump();
     expect(find.byKey(const Key('results-replay-trade-0-21')), findsOneWidget);
     expect(find.byKey(const Key('results-replay-trade-0-0')), findsNothing);
     await tester.ensureVisible(more);
+    await tester.pump();
+    await tester.drag(find.byKey(const Key('results-dashboard-list')),
+        const Offset(0, -90));
+    await tester.pump();
     await tester.tap(more);
     await tester.pump();
     expect(find.byKey(const Key('results-replay-trade-0-0')), findsOneWidget);
