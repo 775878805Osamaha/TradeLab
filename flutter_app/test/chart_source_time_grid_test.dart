@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/chart_source_time_grid.dart';
+import 'package:tradelab_flutter/chart/chart_symbol_settings.dart';
 import 'package:tradelab_flutter/chart/chart_viewport.dart';
 
 void main() {
@@ -141,4 +142,85 @@ void main() {
     expect(ChartSourceTimeGrid.niceBarStep(11), 20);
     expect(ChartSourceTimeGrid.niceBarStep(82), 100);
   });
+  test('first visible intraday mark never turns into weekday on pan', () {
+    final times = List<int>.generate(200, (i) =>
+        DateTime.utc(2026, 11, 23, 9)
+          .add(Duration(minutes: i)).millisecondsSinceEpoch);
+    for (final offset in [0.0, 3.5, 5.0, 13.0, 20.0]) {
+      const width = 320.0;
+      final view = ChartViewport(barWidth: 10, scrollBars: offset);
+      final marks = ChartSourceTimeGrid.visible(
+          viewport: view, plotWidth: width, candleCount: times.length);
+      expect(marks, isNotEmpty);
+      for (final mark in marks) {
+        expect(ChartSourceTimeGrid.beginsDisplayedDay(
+          sourceIndex: mark.index, barWidth: view.barWidth,
+          timestampsUtcMs: times, zone: ChartTimeZone.utc,
+        ), isFalse, reason: 'First visible tick is not necessarily midnight');
+      }
+    }
+  });
+
+  test('UTC and New York date markers use the same verified grid phase', () {
+    final aroundUtcMidnight = List<int>.generate(60, (i) =>
+        DateTime.utc(2026, 11, 23, 23, 40)
+          .add(Duration(minutes: i)).millisecondsSinceEpoch);
+    bool isDay(List<int> source, int at, ChartTimeZone zone) =>
+        ChartSourceTimeGrid.beginsDisplayedDay(
+          sourceIndex: at, barWidth: 10,
+          timestampsUtcMs: source, zone: zone);
+    expect(ChartSourceTimeGrid.stepForBarWidth(10), 10);
+    expect(isDay(aroundUtcMidnight, 10, ChartTimeZone.utc), isFalse);
+    expect(isDay(aroundUtcMidnight, 20, ChartTimeZone.utc), isTrue);
+    expect(isDay(aroundUtcMidnight, 30, ChartTimeZone.utc), isFalse);
+    expect(isDay(aroundUtcMidnight, 20, ChartTimeZone.newYork), isFalse);
+    expect(isDay(aroundUtcMidnight, 0, ChartTimeZone.utc), isTrue);
+    final nyMidnight = List<int>.generate(60, (i) =>
+        DateTime.utc(2026, 11, 24, 4, 40)
+          .add(Duration(minutes: i)).millisecondsSinceEpoch);
+    expect(isDay(nyMidnight, 20, ChartTimeZone.utc), isFalse);
+    expect(isDay(nyMidnight, 20, ChartTimeZone.newYork), isTrue);
+    expect(isDay(nyMidnight, 30, ChartTimeZone.newYork), isFalse);
+    expect(nyMidnight[20], DateTime.utc(2026, 11, 24, 5)
+      .millisecondsSinceEpoch, reason: 'Do not rewrite broker UTC time');
+  });
+
+  test('Range weekend transition never creates market-closed candles', () {
+    final ms = <int>[
+      DateTime.utc(2026, 11, 20, 21).millisecondsSinceEpoch,
+      DateTime.utc(2026, 11, 20, 21, 0, 0, 1).millisecondsSinceEpoch,
+      DateTime.utc(2026, 11, 23, 1).millisecondsSinceEpoch,
+      DateTime.utc(2026, 11, 23, 1, 0, 0, 1).millisecondsSinceEpoch,
+      DateTime.utc(2026, 11, 23, 1, 1).millisecondsSinceEpoch,
+    ];
+    expect(ChartSourceTimeGrid.stepForBarWidth(60), 2);
+    bool isDay(int i) => ChartSourceTimeGrid.beginsDisplayedDay(
+      sourceIndex: i, barWidth: 60, timestampsUtcMs: ms,
+      zone: ChartTimeZone.utc);
+    expect(isDay(2), isTrue);
+    expect(isDay(4), isFalse);
+    expect(isDay(5), isFalse, reason: 'No future Replay source index');
+  });
+
+  test('invalid source/time geometry never manufactures day labels', () {
+    final times = [
+      DateTime.utc(2026, 11, 23).millisecondsSinceEpoch,
+      DateTime.utc(2026, 11, 24).millisecondsSinceEpoch,
+    ];
+    for (final invalid in [0.0, -10.0, double.nan, double.infinity]) {
+      expect(ChartSourceTimeGrid.beginsDisplayedDay(
+        sourceIndex: 1, barWidth: invalid,
+        timestampsUtcMs: times, zone: ChartTimeZone.utc), isFalse);
+    }
+    for (final i in [-1, 2]) {
+      expect(ChartSourceTimeGrid.beginsDisplayedDay(
+        sourceIndex: i, barWidth: 10,
+        timestampsUtcMs: times, zone: ChartTimeZone.utc), isFalse);
+    }
+    expect(ChartSourceTimeGrid.beginsDisplayedDay(
+      sourceIndex: 1, barWidth: 60,
+      timestampsUtcMs: [times[0], 0],
+      zone: ChartTimeZone.utc), isFalse);
+  });
+
 }
