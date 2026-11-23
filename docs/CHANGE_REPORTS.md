@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — PR #640 MERGED, bounded multi-series Pine interpreter and study controls
+- [PR #640](https://github.com/775878805Osamaha/TradeLab/pull/640) squash `01ddb4eee720f073b0cc1ff5c24eec0fd46189a5` after [CI #45206147704](https://github.com/775878805Osamaha/TradeLab/actions/runs/45206147704) **success**: Flutter analyzer, **930 full active regression tests + 11 catalog/drawing tests**, Yemen timezone. First CI #45205126997 flagged one stale built-in-kind test, corrected then all green.
+- `pine_subset_program.dart` is a bounded typed expression/series compiler, not full Pine. Multi-plot color/width/histogram to the same real source chart/Replay prefix, `na`-aware ta.sma, custom source key cache, 120k no-repeat paint and strict non-future, sandbox rejection for unimplemented syntax with line diagnostics.
+- Study manager now provides active overlay reorder, pane moves/resizes, remove-all without deleting locally saved source or favorite/period preferences. Pane auto-scale covers negative-only custom oscillators, histogram zero-line, and no-source cases. No APK, main or backend deployment; full Pine syntax and device/TradingView exact parity unverified.
+
+
 ### 2026-11-23 — General Pine AST series execution foundation (CI PENDING)
 - Added `pine_subset_program.dart` tokenization, strict typed expression AST, limited user inputs, variable assignments, historic source references, TA/math operators and multiple named colored plots. Safely rejects unsupported functions, loops, offset lookahead, dynamic periods and control syntax. Connected compiler to existing chart/Replay source cache and independent/overlay pane choice via script's `indicator(overlay=...)`. Test suite includes real multi-plot values, diagnostics, 120k bars cache, Replay prefix cutoff and invalid scripts.
 - Pine v6 full language **not implemented**. Active implementation is source-validated subset only. Further pane management work pending before final PR merge. Scope TradeLab only, no APK.
