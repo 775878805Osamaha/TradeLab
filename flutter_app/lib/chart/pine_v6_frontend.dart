@@ -74,6 +74,22 @@ class PineV6Frontend {
     final errors=<PineDiagnostic>[
       ...lexed.diagnostics,...parsed.diagnostics,...semantic.diagnostics,
     ];
+    // Pine code explicitly tagged for older/newer language versions must
+    // never be silently interpreted as v6. Untagged legacy scripts remain
+    // accepted for backwards compatibility with the existing numeric subset.
+    final directive=RegExp(
+      r'(?m)^[ \t]*//@version[ \t]*=[ \t]*([^\s/]+)')
+      .firstMatch(source);
+    if(directive!=null&&directive.group(1)!='6'){
+      final before=source.substring(0,directive.start);
+      final line='\n'.allMatches(before).length+1;
+      final column=before.length-before.lastIndexOf('\n');
+      errors.add(PineDiagnostic(
+        PineDiagnosticStage.semantic,'version_mismatch',
+        'Only Pine Script v6 is supported by this frontend',
+        PineSourceSpan(line,column),
+      ));
+    }
     final invalid=errors.any((d)=>d.severity==PineDiagnosticSeverity.error);
     PineSubsetProgram? legacy;
     if(!invalid)legacy=PineSubsetProgram.tryCompile(source);
