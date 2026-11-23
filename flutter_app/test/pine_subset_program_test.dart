@@ -207,7 +207,7 @@ plot(ta.sma(momentum, 2), "Signal")''';
     final nesting = '('.padRight(25, '(') + 'close' + ')'.padRight(25, ')');
     expect(PineSubsetProgram.tryCompile(
         'indicator("Depth", overlay=true)\nplot(' + nesting + ')'), isNull);
-    expect(PineSubsetProgram.tryCompile('a' * 15001), isNull);
+    expect(PineSubsetProgram.tryCompile(List<String>.filled(15001, 'a').join()), isNull);
   });
 
   test('120k source cache computes multi-plot once per revealed snapshot', () {
