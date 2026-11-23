@@ -1,3 +1,5 @@
+import '../data/tradelab_data.dart';
+import 'pine_runtime_core.dart';
 import 'pine_subset_program.dart';
 import 'pine_v6_ast.dart';
 import 'pine_v6_lexer.dart';
@@ -10,6 +12,12 @@ export 'pine_v6_parser.dart';
 export 'pine_v6_semantic.dart';
 
 enum PineFrontendStatus { executableSubset, parsedButNotExecutable, invalid }
+
+class PineFrontendExecutionException implements Exception {
+  const PineFrontendExecutionException(this.code,this.message);
+  final String code, message;
+  @override String toString() => 'Pine front-end: ' + code + ': ' + message;
+}
 
 class PineFrontendResult {
   const PineFrontendResult({
@@ -29,8 +37,15 @@ class PineFrontendResult {
       d.severity==PineDiagnosticSeverity.error);
   String? get message => diagnostics.isEmpty?null:diagnostics.first.toString();
 
-  List<PineSubsetPlot> evaluateSupported(List<dynamic> unused) {
-    throw UnsupportedError('Use the existing typed Pine subset evaluator');
+  List<PineSubsetPlot> evaluateSupported(
+      List<TradeCandle> candles, {
+      PineRuntimeLimits limits = const PineRuntimeLimits(),
+    }) {
+    if (!canExecute) {
+      throw PineFrontendExecutionException(
+        status.name, message ?? 'Pine runtime is not yet supported');
+    }
+    return legacyProgram!.evaluateIncrementally(candles, limits: limits);
   }
 }
 
