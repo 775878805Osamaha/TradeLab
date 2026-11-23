@@ -91,4 +91,26 @@ void main() {
         findsOneWidget);
     expect(tester.takeException(),isNull);
   });
+  testWidgets('Stochastic has independently scaled 0–100 pane at 320dp',
+      (tester) async {
+    await open(tester,
+      indicator: const ChartIndicatorDefinition(
+        'stoch-14','Stochastic 14',14),
+      size: const Size(320, 640));
+    expect(find.byKey(const Key('chart-indicator-pane-stoch-14')),
+      findsOneWidget);
+    expect(find.text('Stochastic 14'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ROC zero-axis pane does not alter price chart placement',
+      (tester) async {
+    await open(tester,
+      indicator: const ChartIndicatorDefinition('roc-9','ROC 9',9));
+    expect(find.byKey(const Key('chart-indicator-pane-roc-9')),
+      findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+
 }

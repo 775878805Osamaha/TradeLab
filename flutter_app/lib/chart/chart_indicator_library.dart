@@ -5,7 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
 
-enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr }
+enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc }
 
 /// An immutable description of a real, supported on-chart indicator.
 /// All plots are calculated from the CURRENT verified source-candle list.
@@ -27,11 +27,14 @@ class ChartIndicatorDefinition {
     if (id.startsWith('rsi-')) return ChartIndicatorKind.rsi;
     if (id == 'macd') return ChartIndicatorKind.macd;
     if (id.startsWith('atr-')) return ChartIndicatorKind.atr;
+    if (id.startsWith('stoch-')) return ChartIndicatorKind.stochastic;
+    if (id.startsWith('roc-')) return ChartIndicatorKind.roc;
     return ChartIndicatorKind.sma;
   }
 
   bool get separatePane => kind == ChartIndicatorKind.rsi ||
-      kind == ChartIndicatorKind.macd || kind == ChartIndicatorKind.atr;
+      kind == ChartIndicatorKind.macd || kind == ChartIndicatorKind.atr ||
+      kind == ChartIndicatorKind.stochastic || kind == ChartIndicatorKind.roc;
 
   @override
   bool operator ==(Object other) => other is ChartIndicatorDefinition &&
@@ -55,6 +58,10 @@ class ChartIndicatorDefinition {
     ChartIndicatorDefinition('rsi-14', 'RSI 14', 14),
     ChartIndicatorDefinition('macd', 'MACD (12, 26, 9)', 12),
     ChartIndicatorDefinition('atr-14', 'ATR 14', 14),
+    // Built-in STOCH is (periodK=14, smoothK=3, periodD=3).
+    // Length editing changes only the raw high/low lookback.
+    ChartIndicatorDefinition('stoch-14', 'Stochastic 14', 14),
+    ChartIndicatorDefinition('roc-9', 'ROC 9', 9),
   ];
 }
 

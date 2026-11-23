@@ -132,7 +132,8 @@ class ChartIndicatorPanePainter extends CustomPainter {
 
     var minimum = double.infinity;
     var maximum = double.negativeInfinity;
-    if (indicator.kind == ChartIndicatorKind.rsi) {
+    if (indicator.kind == ChartIndicatorKind.rsi ||
+        indicator.kind == ChartIndicatorKind.stochastic) {
       minimum = 0;
       maximum = 100;
     } else {
@@ -145,7 +146,8 @@ class ChartIndicatorPanePainter extends CustomPainter {
         }
       }
       if (!minimum.isFinite || !maximum.isFinite) return;
-      if (indicator.kind == ChartIndicatorKind.macd) {
+      if (indicator.kind == ChartIndicatorKind.macd ||
+          indicator.kind == ChartIndicatorKind.roc) {
         final extreme = math.max(minimum.abs(), maximum.abs());
         minimum = -math.max(1e-10, extreme * 1.12);
         maximum = math.max(1e-10, extreme * 1.12);
@@ -175,7 +177,12 @@ class ChartIndicatorPanePainter extends CustomPainter {
       guide(70, false);
       guide(50, true);
       guide(30, false);
-    } else if (indicator.kind == ChartIndicatorKind.macd) {
+    } else if (indicator.kind == ChartIndicatorKind.stochastic) {
+      guide(80, false);
+      guide(50, true);
+      guide(20, false);
+    } else if (indicator.kind == ChartIndicatorKind.macd ||
+        indicator.kind == ChartIndicatorKind.roc) {
       guide(0, true);
       guide(maximum, false);
       guide(minimum, false);

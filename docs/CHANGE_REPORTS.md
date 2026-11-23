@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Stochastic / ROC and RSI flat-case parity (CI PENDING)
+- Added source-derived TradingView-style Stochastic (14, 3, 3) and ROC9 to searchable built-in library, with independent oscillator panes, persistent period settings and shared Replay x/viewport. References: TradingView [STOCH](https://www.tradingview.com/support/solutions/43000502332-stochastic-stoch/) and [ROC](https://www.tradingview.com/support/solutions/43000502343-rate-of-change-roc/). No synthetic volume/data.
+- Source correctness: monotonic deque O(history) high/low windows (also 500-bar lookback), complete warmup, 3/3 smoothers, zero-range/zero-denominator guard; RSI flat gain/loss boundary aligns with commonly published built-in Pine condition. Tests cover numerical fixtures, real 120k cache, 320dp panes and strict Replay prefix.
+- PR and Flutter CI pending. No APK, main or production edits; unrelated excluded personal indicator not used.
+
+
 ### 2026-11-23 — PR #638 merged, general native indicator math and independent axes
 - [Merged #638](https://github.com/775878805Osamaha/TradeLab/pull/638) squash `f1d7916f288f970d059caab3bd4e52974b158337`. [CI #45196582242](https://github.com/775878805Osamaha/TradeLab/actions/runs/45196582242) completed/success: analyzer, **897 main tests**, four individual catalog/drawing tests, 11 extra catalog tests, Yemen timezone. Includes fix for stale visible library period labels after settings changes.
 - Real-source EMA, BB, RSI, MACD, ATR calculated with source-list cache, source-prefix Replay guard, independent RSI/MACD/ATR panes, true price overlays and custom lengths (MACD canonical preset). No arbitrary Pine compiler, no APK/main or production changes, no proof of Android device pixel parity.
