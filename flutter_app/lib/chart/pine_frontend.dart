@@ -83,7 +83,7 @@ class PineFrontend {
     if (legacy == null && errors.isEmpty) {
       errors.add(const PineDiagnostic(PineDiagnosticKind.unsupported,
           'runtime_unavailable',
-          'Pine AST validated; execution of this language feature is not supported yet',
+          'غير مدعوم بعد: تم تحليل Pine AST لكن التنفيذ يحتاج المرحلة 3',
           1, 1));
     }
     clock.stop();
