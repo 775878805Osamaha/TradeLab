@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "source": "TradingView actual export only",
+  "symbol": null,
+  "timeframe": null,
+  "exportedAtUtc": null,
+  "chartType": "standard candles",
+  "session": null,
+  "timezone": "UTC",
+  "historyStartUtc": null,
+  "historyAlignmentNote": null,
+  "length": 14,
+  "compareFromBarOneBased": null,
+  "absoluteTolerance": 0.000001,
+  "relativeTolerance": 1e-8,
+  "columns": [
+    "timeUtc",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "ema",
+    "rsi",
+    "atr",
+    "rma"
+  ],
+  "rows": []
+}

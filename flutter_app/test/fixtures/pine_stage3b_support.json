@@ -3,144 +3,192 @@
     "name": "ta.sma",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 2"
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   },
   {
     "name": "ta.ema",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 2"
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "seeded-360-ohlcv-v2 (pending CI)"
   },
   {
     "name": "ta.rma",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 2"
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "seeded-360-ohlcv-v2 (pending CI)"
   },
   {
     "name": "ta.wma",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 2"
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   },
   {
     "name": "ta.rsi",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 2"
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "seeded-360-ohlcv-v2 (pending CI)"
   },
   {
     "name": "ta.atr",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "2"
+    "call": "2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "seeded-360-ohlcv-v2 (pending CI)"
   },
   {
     "name": "ta.tr",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "true"
+    "call": "true",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   },
   {
     "name": "ta.macd",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "library-only",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "library prefix rebuild only",
-    "call": "close, 2, 3, 2"
+    "call": "close, 2, 3, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   },
   {
     "name": "ta.bb",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "library-only",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "library prefix rebuild only",
-    "call": "close, 2, 2"
+    "call": "close, 2, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   },
   {
     "name": "ta.stdev",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 2"
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   },
   {
     "name": "ta.highest",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 2"
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   },
   {
     "name": "ta.lowest",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 2"
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   },
   {
     "name": "ta.change",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 2"
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   },
   {
     "name": "ta.roc",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 2"
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   },
   {
     "name": "ta.crossover",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 13.5"
+    "call": "close, 13.5",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   },
   {
     "name": "ta.crossunder",
     "formulaReference": "manual-ohlcv-v1",
     "runtime": "closed-bar scalar",
-    "status": "manual-formula comparison required; no TradingView capture",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
     "na": "internal policy tests",
     "replay": "runtime guarded prefix rebuild",
-    "call": "close, 13.5"
+    "call": "close, 13.5",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
   }
 ]
