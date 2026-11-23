@@ -858,6 +858,10 @@ class PineBarExecutor {
 
   int get completedBars => _index + 1;
 
+  /// Read a computed named series without exposing mutable runtime storage.
+  PineValue seriesAt(String name, int barsAgo) =>
+      _variables[name]?.history(barsAgo) ?? PineValue.na;
+
   PineSeries _newSeries() {
     budget.reserveHistory(limits.maxHistory);
     return PineSeries(historyLimit: limits.maxHistory);
