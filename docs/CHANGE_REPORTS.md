@@ -1,5 +1,13 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Pine v6 Stage 2 frontend, stacked draft PR #643 — NO MERGE
+- تم تطبيق Lexer مع indentation/continuation/comments/colors/strings، AST متنوع، Parser for if/switch/for/while/functions/var/varip/assignment/named args/history، وتحليل دلالي للأنواع والنطاقات والمؤهلات مع خطأ سطر/عمود متعدد، ومسار رفض واضح not_yet_supported دون تشغيل الدوال غير المنفذة. المحرك العددي القديم بقي فعالًا.
+- Mutation proof قبل التطوير: [Replay future CI #45217673219](https://github.com/775878805Osamaha/TradeLab/actions/runs/45217673219) FAIL مقصود 7 PASS/1 FAIL؛ [shared instance CI #45217676913](https://github.com/775878805Osamaha/TradeLab/actions/runs/45217676913) FAIL مقصود 7 PASS/1 FAIL؛ في فرعين معزولين بلا PR.
+- CI النهائي للكود [#45222318255](https://github.com/775878805Osamaha/TradeLab/actions/runs/45222318255) completed/success على f74d1d529bc490b2211fb7e14da7ee3acf9940c7: سجل حقيقي **957 + 4 + 11 = 972 PASS, 0 FAIL** وFlutter Analyze PASS، منها 19 اختبار frontend جديدًا و8 اختبارات Stage 1. فشلت جولات سابقة (#45220150867 محلل، #45220388995 ست اختبارات، #45221079799 اختبار) ثم صُححت. Flutter محليًا غير متوفر؛ لا اختبار Android أو APK.
+- الملفات: flutter_app/lib/chart/pine_v6_{ast,lexer,parser,semantic,frontend}.dart، chart_indicator_library.dart، flutter_app/test/pine_v6_frontend_test.dart، workflow verify-flutter-range.yml وpine-v6-stage2-no-apk.yml، docs/PINE_V6_LANGUAGE_SUPPORT_STAGE2_2026-11-23.md وdocs/PINE_STAGE2_HANDOFF_2026-11-23.md. لم تُنفذ دلالات var/varip أو الحلقات أو دوال المستخدم في Runtime — المرحلة 3 لاحقًا.
+- فرع PR #643 مبني فوق PR #642 الذي لم يُدمج؛ لا رفع إلى main ولا دمج، ولا مشروع آخر. التالي: مراجعة المالك ثم Stage 3 بفرع مستقل مع اختبارات Replay وحدود الموارد.
+
+
 ### 2026-11-23 — Pine Stage 1 core runtime, draft PR #642 (NOT MERGED)
 - فرع feat/pine-stage1-instance-safe-runtime-20261123 مبني على test/flutter-all-fixes-20261116؛ ملفات الكود: flutter_app/lib/chart/pine_runtime_core.dart وpine_subset_program.dart وpine_indicator_instance.dart وchart_indicator_engine.dart؛ الاختبار الجديد flutter_app/test/pine_stage1_runtime_test.dart؛ إضافة إلى .github/workflows/verify-flutter-range.yml.
 - إنجاز مثبت: فصل التعريف المحفوظ عن نسخ التشغيل، إعدادات وحالة وسلاسل مستقلة، na/مقارنات v6 في النموذج، حساب AST شمعة بشمعة بميزانيات موارد، Replay prefix/rebuild بلا شموع مستقبلية. لم تُستبدل البنية القديمة. واجهة النسخ المتعددة وvar/varip لم تنفذ بعد.
