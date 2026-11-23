@@ -184,7 +184,7 @@ class _ChartIndicatorLibrarySheetState
             onPressed: () => _change(_library.moveActive(item.id, 1)),
             icon: const Icon(Icons.keyboard_arrow_down, size: 19)),
         ],
-        if (!item.custom && item.kind != ChartIndicatorKind.macd)
+        if (!managing && !item.custom && item.kind != ChartIndicatorKind.macd)
           IconButton(
             key: Key('indicator-settings-' + item.id),
             tooltip: 'تعديل طول المؤشر',
