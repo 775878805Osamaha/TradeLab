@@ -171,4 +171,143 @@ void main() {
        .plots.single.values.length,2);
     expect(actual.reads.every((i)=>i<2),isTrue);
   });
+  test('zero-loss TradingView RSI yields 100 even on flat close', () {
+    final values = ChartIndicatorEngine.compute(
+      candles(List<double>.filled(35, 100)),
+      definition('rsi-14', 14)).plots.single.values;
+    expect(values.take(14).every((value) => value == null), isTrue);
+    expect(values.skip(14).every((value) => value == 100.0), isTrue,
+      reason: 'Pine RSI checks average loss == 0 before average gain == 0');
+    final dropping = ChartIndicatorEngine.compute(
+      candles(List<double>.generate(35, (i) => 100 - i.toDouble())),
+      definition('rsi-14', 14)).plots.single.values;
+    expect(dropping[34], 0);
+  });
+
+  test('Stochastic 14/3/3 matches source-indexed highs/lows and warmup', () {
+    final bars = List<TradeCandle>.generate(40, (i) {
+      final close = 100 + i.toDouble();
+      return TradeCandle(close, close + 1, close - 1, close);
+    });
+    final result = ChartIndicatorEngine.compute(
+      bars, definition('stoch-14', 14));
+    expect(result.plots.map((p) => p.title), ['%K', '%D']);
+    final k = result.plots[0].values;
+    final d = result.plots[1].values;
+    expect(k.take(15).every((value) => value == null), isTrue);
+    expect(d.take(17).every((value) => value == null), isTrue);
+    final raw = 100 * 14 / 15;
+    for (var i = 15; i < bars.length; i++) {
+      expect(k[i], closeTo(raw, 1e-10), reason: 'smoothed %K at bar '+i.toString());
+      if (i >= 17) expect(d[i], closeTo(raw, 1e-10));
+    }
+  });
+
+  test('Stochastic monotonic deque equals independent rolling extrema', () {
+    final bars = List<TradeCandle>.generate(175, (i) {
+      final value = 100.0 + 17 * math.sin(i * .73);
+      return TradeCandle(
+        value - 1.2, value + 2 + (i % 3), value - 3 - (i % 2),
+        value + math.cos(i * .27),
+      );
+    });
+    final output = ChartIndicatorEngine.compute(
+      bars, definition('stoch-14', 19));
+    final raw = List<double?>.filled(bars.length, null);
+    final expectedK = List<double?>.filled(bars.length, null);
+    final expectedD = List<double?>.filled(bars.length, null);
+    for (var i = 18; i < bars.length; i++) {
+      final values = bars.sublist(i - 18, i + 1);
+      final hi = values.map((b) => b.high).reduce(math.max);
+      final lo = values.map((b) => b.low).reduce(math.min);
+      raw[i] = 100 * (bars[i].close - lo) / (hi - lo);
+      if (i >= 20) {
+        expectedK[i] = (raw[i]! + raw[i-1]! + raw[i-2]!) / 3;
+      }
+      if (i >= 22) {
+        expectedD[i] = (expectedK[i]! + expectedK[i-1]! +
+          expectedK[i-2]!) / 3;
+      }
+    }
+    for (var i = 0; i < bars.length; i++) {
+      if (expectedK[i] == null) {
+        expect(output.plots[0].values[i], isNull);
+      } else {
+        expect(output.plots[0].values[i], closeTo(expectedK[i]!, 1e-8));
+      }
+      if (expectedD[i] == null) {
+        expect(output.plots[1].values[i], isNull);
+      } else {
+        expect(output.plots[1].values[i], closeTo(expectedD[i]!, 1e-8));
+      }
+    }
+  });
+
+  test('Stochastic zero-range never invents an oscillator value', () {
+    final bars = List<TradeCandle>.filled(
+      45, const TradeCandle(100,100,100,100));
+    final result = ChartIndicatorEngine.compute(
+      bars, definition('stoch-14', 14));
+    expect(result.plots, hasLength(2));
+    expect(result.plots.every((p) =>
+      p.values.every((value) => value == null)), isTrue);
+  });
+
+  test('ROC 9 is a percent change over exactly nine source candles', () {
+    final bars = candles([
+      100, 101, 102, 103, 104, 105, 106, 107, 108, 120, 124,
+    ]);
+    final values = ChartIndicatorEngine.compute(
+      bars, definition('roc-9', 9)).plots.single.values;
+    expect(values.take(9).every((x) => x == null), isTrue);
+    expect(values[9], closeTo(20, 1e-12));
+    expect(values[10], closeTo(100 * 23 / 101, 1e-12));
+    final zeroBars = candles([0, 1, 2, 3, 4, 5, 6, 7, 8, 100]);
+    final zero = ChartIndicatorEngine.compute(
+      zeroBars, definition('roc-9', 9)).plots.single.values;
+    expect(zero[9], isNull,
+      reason: 'Zero real source denominator is not a synthetic quote');
+  });
+
+  test('Stochastic 500 across 120k actual bars is linear time', () {
+    final actual = _CountedCandles(List<TradeCandle>.generate(120000, (i) {
+      final close = 100 + math.sin(i / 11) * 50;
+      return TradeCandle(close, close + 4, close - 4, close);
+    }));
+    final cache = ChartIndicatorSeriesCache();
+    final study = definition('stoch-14', 500);
+    final original = cache.get(actual, study);
+    expect(original.plots[0].values, hasLength(120000));
+    expect(actual.reads.length, lessThan(120000 * 15),
+      reason: 'Monotonic deque visits each candle O(1), not O(period)');
+    actual.reads.clear();
+    for (var i = 0; i < 60; i++) {
+      expect(cache.get(actual, study), same(original));
+    }
+    expect(actual.reads, isEmpty,
+      reason: 'Repeated finger repaint uses cached verified-source series');
+  });
+
+  test('Stochastic and ROC cannot see the unrevealed Replay candle', () {
+    final actual = _CountedCandles(List<TradeCandle>.generate(70, (i) {
+      final close = i == 69 ? 999999.0 : 100 + i.toDouble();
+      return TradeCandle(close, close + 2, close - 2, close);
+    }));
+    final first = CandlePrefix(actual, 69);
+    final cache = ChartIndicatorSeriesCache();
+    for (final study in [
+      definition('stoch-14', 14), definition('roc-9', 9),
+    ]) {
+      final result = cache.get(first, study);
+      expect(result.plots.first.values.length, 69);
+    }
+    expect(actual.reads.every((index) => index < 69), isTrue);
+    actual.reads.clear();
+    final advanced = CandlePrefix(actual, 70);
+    final after = cache.get(advanced, definition('roc-9', 9));
+    expect(after.plots.single.values[69]!, greaterThan(100000),
+      reason: 'Only advancing verified Replay can expose this genuine bar');
+  });
+
+
 }
