@@ -216,6 +216,26 @@ plot(x)''');
       throwsA(isA<PineFrontendExecutionException>()));
   });
 
+  test('all three frontend passes enforce cooperative deadlines',(){
+    const source='''indicator("Budgets")
+plot(close)''';
+    final lex=const PineV6Lexer(maxDuration:Duration.zero).lex(source);
+    expect(lex.diagnostics.map((d)=>d.code),contains('lexer_timeout'));
+
+    final many='indicator("Many")\\n'+List.generate(
+      100,(i)=>'v'+i.toString()+' = '+i.toString()).join('\\n')+
+      '\\nplot(close)';
+    final tokens=const PineV6Lexer().lex(many).tokens;
+    final parsed=PineV6Parser(tokens,maxDuration:Duration.zero).parse();
+    expect(parsed.diagnostics.map((d)=>d.code),contains('parser_timeout'));
+
+    final complete=PineV6Parser(tokens).parse();
+    final semantic=PineV6SemanticAnalyzer(
+      maxDuration:Duration.zero).analyze(complete.ast);
+    expect(semantic.diagnostics.map((d)=>d.code),
+      contains('semantic_timeout'));
+  });
+
   test('source budget rejects large untrusted input without running it',(){
     final checked=front.prepare(List.filled(61000,'a').join());
     expect(checked.status,PineFrontendStatus.invalid);
@@ -254,6 +274,11 @@ prior = close[1]
 diff = (high + low + close)/3-prior
 plot(nz(diff,-1))
 plot(math.max(open,close))''',
+      '''indicator("Absolute and minima",overlay=true)
+distance = math.abs(close-open)
+support = math.min(low,open)
+plot(distance)
+plot(support)''',
     ];
     final candles=_bars();
     for(final source in sources) {
