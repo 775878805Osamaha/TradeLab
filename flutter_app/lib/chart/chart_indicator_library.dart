@@ -5,39 +5,62 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
 
+enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr }
+
 /// An immutable description of a real, supported on-chart indicator.
 /// All plots are calculated from the CURRENT verified source-candle list.
 /// A saved Pine strategy is NEVER silently substituted with a different line.
 class ChartIndicatorDefinition {
   const ChartIndicatorDefinition(this.id, this.title, this.period,
-      {this.custom = false});
+      {this.custom = false, this.kindOverride});
 
   final String id;
   final String title;
   final int period;
   final bool custom;
+  final ChartIndicatorKind? kindOverride;
+
+  ChartIndicatorKind get kind {
+    if (kindOverride != null) return kindOverride!;
+    if (id.startsWith('ema-')) return ChartIndicatorKind.ema;
+    if (id.startsWith('bb-')) return ChartIndicatorKind.bollinger;
+    if (id.startsWith('rsi-')) return ChartIndicatorKind.rsi;
+    if (id == 'macd') return ChartIndicatorKind.macd;
+    if (id.startsWith('atr-')) return ChartIndicatorKind.atr;
+    return ChartIndicatorKind.sma;
+  }
+
+  bool get separatePane => kind == ChartIndicatorKind.rsi ||
+      kind == ChartIndicatorKind.macd || kind == ChartIndicatorKind.atr;
 
   @override
   bool operator ==(Object other) => other is ChartIndicatorDefinition &&
       other.id == id && other.period == period &&
-      other.title == title && other.custom == custom;
+      other.title == title && other.custom == custom &&
+      other.kindOverride == kindOverride;
 
   @override
-  int get hashCode => Object.hash(id, title, period, custom);
+  int get hashCode => Object.hash(id, title, period, custom, kindOverride);
 
   static const builtIns = <ChartIndicatorDefinition>[
     ChartIndicatorDefinition('sma-12', 'SMA 12', 12),
     ChartIndicatorDefinition('sma-20', 'SMA 20', 20),
     ChartIndicatorDefinition('sma-50', 'SMA 50', 50),
     ChartIndicatorDefinition('sma-200', 'SMA 200', 200),
+    ChartIndicatorDefinition('ema-9', 'EMA 9', 9),
+    ChartIndicatorDefinition('ema-21', 'EMA 21', 21),
+    ChartIndicatorDefinition('ema-50', 'EMA 50', 50),
+    ChartIndicatorDefinition('ema-200', 'EMA 200', 200),
+    ChartIndicatorDefinition('bb-20', 'Bollinger Bands 20', 20),
+    ChartIndicatorDefinition('rsi-14', 'RSI 14', 14),
+    ChartIndicatorDefinition('macd', 'MACD (12, 26, 9)', 12),
+    ChartIndicatorDefinition('atr-14', 'ATR 14', 14),
   ];
 }
 
-/// Saved user-authored source. Full TradingView Pine is NOT interpreted.
-/// Only a standalone overlay indicator containing exactly one
-/// plot(ta.sma(close, N)) statement is supported in this first safe bridge.
-/// Strategies, strategies with orders, lookahead, request.security, drawings,
-/// multiple plots, and other Pine operations remain stored but unexecutable.
+/// Saved user-authored source. This is a strict source validation whitelist,
+/// not a generic Pine compiler. One ta.sma, ta.ema or ta.rsi single plot can
+/// run through native calculations. Other syntax is saved but not evaluated.
 class ChartSavedIndicatorScript {
   const ChartSavedIndicatorScript({
     required this.id,
@@ -51,23 +74,40 @@ class ChartSavedIndicatorScript {
 
   static const maxSourceLength = 15000;
   static const maxNameLength = 80;
-  static final RegExp _sma =
-      RegExp(r'^plot\s*\(\s*ta\.sma\s*\(\s*close\s*,\s*(\d{1,3})\s*\)\s*\)$');
+  static final RegExp _singlePlot = RegExp(
+    r'^plot\s*\(\s*ta\.(sma|ema|rsi)\s*\(\s*close\s*,\s*(\d{1,3})\s*\)\s*\)$');
 
-  int? get supportedSmaPeriod {
+  /// Safely supported subset; arbitrary source is stored but not executed.
+  /// Exactly one direct plot and one indicator declaration, no eval or I/O.
+  ChartIndicatorDefinition? supportedIndicator() {
     if (source.length > maxSourceLength) return null;
     final instructions = source.split('\n')
         .map((line) => line.trim())
         .where((line) => line.isNotEmpty && !line.startsWith('//'))
         .toList(growable: false);
-    if (instructions.length != 2 ||
-        !RegExp(r'''^indicator\(\s*["'][^"']{1,80}["']\s*,\s*overlay\s*=\s*true\s*\)$''')
-            .hasMatch(instructions.first)) return null;
-    final match = _sma.firstMatch(instructions.last);
-    if (match == null) return null;
-    final period = int.tryParse(match.group(1)!);
+    if (instructions.length != 2) return null;
+    final declaration = RegExp(
+      r'''^indicator\(\s*["'][^"']{1,80}["']\s*,\s*overlay\s*=\s*(true|false)\s*\)$''')
+        .firstMatch(instructions.first);
+    final plot = _singlePlot.firstMatch(instructions.last);
+    if (declaration == null || plot == null) return null;
+    final period = int.tryParse(plot.group(2)!);
     if (period == null || period < 1 || period > 500) return null;
-    return period;
+    final kind = switch (plot.group(1)!) {
+      'sma' => ChartIndicatorKind.sma,
+      'ema' => ChartIndicatorKind.ema,
+      _ => ChartIndicatorKind.rsi,
+    };
+    if (kind == ChartIndicatorKind.rsi && period < 2) return null;
+    if ((declaration.group(1) == 'false') !=
+        (kind == ChartIndicatorKind.rsi)) return null;
+    return ChartIndicatorDefinition(id, name, period,
+        custom: true, kindOverride: kind);
+  }
+
+  int? get supportedSmaPeriod {
+    final parsed = supportedIndicator();
+    return parsed?.kind == ChartIndicatorKind.sma ? parsed?.period : null;
   }
 
   Map<String, Object> toJson() =>
@@ -95,24 +135,33 @@ class ChartIndicatorLibraryState {
     this.activeIds = const <String>{},
     this.favoriteIds = const <String>{},
     this.scripts = const <ChartSavedIndicatorScript>[],
+    this.periodOverrides = const <String, int>{},
   });
 
   final Set<String> activeIds;
   final Set<String> favoriteIds;
   final List<ChartSavedIndicatorScript> scripts;
+  final Map<String, int> periodOverrides;
 
   static const maxScripts = 25;
   static const maxActive = 8;
 
   List<ChartIndicatorDefinition> get supported {
     final result = <ChartIndicatorDefinition>[
-      ...ChartIndicatorDefinition.builtIns,
+      for (final item in ChartIndicatorDefinition.builtIns)
+        ChartIndicatorDefinition(
+          item.id,
+          item.period == (periodOverrides[item.id] ?? item.period)
+              ? item.title
+              : item.title.replaceFirst(
+                  RegExp(r'\d+$'),
+                  (periodOverrides[item.id] ?? item.period).toString()),
+          periodOverrides[item.id] ?? item.period,
+        ),
     ];
     for (final script in scripts) {
-      final period = script.supportedSmaPeriod;
-      if (period == null) continue;
-      result.add(ChartIndicatorDefinition(
-          script.id, script.name, period, custom: true));
+      final parsed = script.supportedIndicator();
+      if (parsed != null) result.add(parsed);
     }
     return result;
   }
@@ -127,11 +176,14 @@ class ChartIndicatorLibraryState {
     Set<String>? activeIds,
     Set<String>? favoriteIds,
     List<ChartSavedIndicatorScript>? scripts,
+    Map<String, int>? periodOverrides,
   }) => ChartIndicatorLibraryState(
     activeIds: Set<String>.unmodifiable(activeIds ?? this.activeIds),
     favoriteIds: Set<String>.unmodifiable(favoriteIds ?? this.favoriteIds),
     scripts: List<ChartSavedIndicatorScript>.unmodifiable(
         scripts ?? this.scripts),
+    periodOverrides: Map<String, int>.unmodifiable(
+        periodOverrides ?? this.periodOverrides),
   );
 
   ChartIndicatorLibraryState toggleActive(String id) {
@@ -139,9 +191,29 @@ class ChartIndicatorLibraryState {
     final next = <String>{...activeIds};
     if (!next.remove(id)) {
       if (active.length >= maxActive) return this;
+      final proposed = supported.firstWhere((item) => item.id == id);
+      if (proposed.separatePane &&
+          active.where((item) => item.separatePane).length >= 2) return this;
       next.add(id);
     }
     return copyWith(activeIds: next);
+  }
+
+  ChartIndicatorLibraryState setPeriod(String id, int length) {
+    if (length < 1 || length > 500) return this;
+    final definitions = ChartIndicatorDefinition.builtIns
+        .where((item) => item.id == id);
+    if (definitions.isEmpty) return this;
+    final original = definitions.first;
+    if (original.kind == ChartIndicatorKind.macd ||
+        (original.kind == ChartIndicatorKind.rsi && length < 2)) return this;
+    final updated = <String, int>{...periodOverrides};
+    if (length == original.period) {
+      updated.remove(id);
+    } else {
+      updated[id] = length;
+    }
+    return copyWith(periodOverrides: updated);
   }
 
   ChartIndicatorLibraryState toggleFavorite(String id) {
@@ -172,6 +244,7 @@ class ChartIndicatorLibraryState {
     'activeIds': activeIds.toList(),
     'favoriteIds': favoriteIds.toList(),
     'scripts': scripts.map((item) => item.toJson()).toList(),
+    'periodOverrides': periodOverrides,
   });
 
   static ChartIndicatorLibraryState decode(String encoded) {
@@ -192,7 +265,25 @@ class ChartIndicatorLibraryState {
           }
         }
       }
-      final catalog = ChartIndicatorLibraryState(scripts: scripts);
+      final builtIns = <String, ChartIndicatorDefinition>{
+        for (final item in ChartIndicatorDefinition.builtIns) item.id: item,
+      };
+      final overrides = <String, int>{};
+      final rawOverrides = parsed['periodOverrides'];
+      if (rawOverrides is Map) {
+        for (final entry in rawOverrides.entries) {
+          final item = builtIns[entry.key];
+          final length = entry.value;
+          if (item != null && length is int &&
+              length >= 1 && length <= 500 &&
+              item.kind != ChartIndicatorKind.macd &&
+              (item.kind != ChartIndicatorKind.rsi || length >= 2)) {
+            overrides[item.id] = length;
+          }
+        }
+      }
+      final catalog = ChartIndicatorLibraryState(
+          scripts: scripts, periodOverrides: overrides);
       final allowed = catalog.supported.map((item) => item.id).toSet();
       final existing = <String>{
         ...ChartIndicatorDefinition.builtIns.map((item) => item.id),

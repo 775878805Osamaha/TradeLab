@@ -35,8 +35,10 @@ import '../chart/chart_scale_settings_page.dart';
 import '../chart/chart_symbol_settings.dart';
 import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
-import '../chart/chart_visible_sma.dart';
 import '../chart/chart_indicator_library.dart';
+import '../chart/chart_indicator_engine.dart';
+import '../chart/chart_indicator_autoscale.dart';
+import '../chart/chart_indicator_pane.dart';
 import '../chart/chart_indicator_library_sheet.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/chart_price_text_formatter.dart';
@@ -241,6 +243,8 @@ class _ChartScreenState extends State<ChartScreen>
   ChartMagnetMode _magnetMode = ChartMagnetMode.off;
   ChartIndicatorLibraryState _indicatorLibrary =
       const ChartIndicatorLibraryState();
+  final ChartIndicatorSeriesCache _indicatorSeriesCache =
+      ChartIndicatorSeriesCache();
   final ChartIndicatorLibraryStore _indicatorStore =
       SecureChartIndicatorLibraryStore();
   Future<void> _indicatorSaveQueue = Future<void>.value();
@@ -2044,6 +2048,7 @@ class _ChartScreenState extends State<ChartScreen>
     _frameProfiler.detach();
     _heikinCache.dispose();
     _autoPriceScaleCache.clear();
+    _indicatorSeriesCache.clear();
     _replayPrefixCache.clear();
     _replayTimeIndex.clear();
     widget.controller.removeListener(_onMarketUpdate);
@@ -3954,7 +3959,7 @@ class _ChartScreenState extends State<ChartScreen>
       List<TradeCandle> candles, double width, double height) {
     final plotHeight = math.max(1.0, height - 24);
     if (_priceScaleManual) return _manualPriceScale!.withHeight(plotHeight);
-    return _autoPriceScaleCache.resolve(
+    final scale = _autoPriceScaleCache.resolve(
       candles: candles,
       viewport: _viewport,
       plotWidth: width,
@@ -3968,6 +3973,14 @@ class _ChartScreenState extends State<ChartScreen>
         'مؤشر 100' => ChartPriceReferenceMode.indexed100,
         _ => ChartPriceReferenceMode.price,
       },
+    );
+    return ChartIndicatorAutoScale.include(
+      base: scale,
+      candles: candles,
+      viewport: _viewport,
+      plotWidth: width,
+      indicators: _indicatorLibrary.active,
+      cache: _indicatorSeriesCache,
     );
   }
 
@@ -5249,8 +5262,8 @@ class _ChartScreenState extends State<ChartScreen>
             }, child: const Text('إعادة المحاولة')),
           ]),
         ),
-      Expanded(
-        child: LayoutBuilder(builder: (context, constraints) {
+      Expanded(child: Column(children: [
+        Expanded(child: LayoutBuilder(builder: (context, constraints) {
           final plotWidth = math.max(1.0, constraints.maxWidth - 61);
           _momentumPlotWidth = plotWidth;
           final selecting = _replaySelectingStart && candles.isNotEmpty &&
@@ -5917,6 +5930,7 @@ class _ChartScreenState extends State<ChartScreen>
                   selectedShort: _drawing && _drawingsVisible ? _selectedShort : null,
                   showShortLabels: _showShortLabels,
                   indicators: _indicatorLibrary.active,
+                  indicatorSeriesCache: _indicatorSeriesCache,
                   panel: _panelSettings,
                   scaleSettings: _scaleSettings,
                   symbolSettings: _symbolSettings,
@@ -6207,8 +6221,42 @@ class _ChartScreenState extends State<ChartScreen>
               _selectedRectangle! < _rectangles.length && candles.isNotEmpty)
             _buildRectangleFloatingToolbar(constraints.maxWidth),
           ]);
-        }),
-      ),
+        })),
+        for (final study in _indicatorLibrary.active
+            .where((item) => item.separatePane))
+          ChartIndicatorPane(
+            key: Key('indicator-pane-widget-' + study.id),
+            candles: candles,
+            indicator: study,
+            cache: _indicatorSeriesCache,
+            viewport: () => _viewport,
+            repaint: _chartRepaint,
+            onRemove: () => _changeIndicatorLibrary(
+                _indicatorLibrary.toggleActive(study.id)),
+            onScaleStart: (_) {
+              _stopMomentum();
+              _touchGesture = ChartTouchGesture();
+            },
+            onScaleUpdate: (details) {
+              final plot = math.max(
+                  1.0, MediaQuery.sizeOf(context).width - 61);
+              final next = _touchGesture.update(
+                viewport: _viewport,
+                pointerCount: details.pointerCount,
+                focalX: details.localFocalPoint.dx,
+                scale: details.scale,
+                deltaX: details.focalPointDelta.dx,
+                plotWidth: plot,
+                candleCount: candles.length,
+              );
+              if (_touchGesture.ignoredPointerTransition ||
+                  next == _viewport) return;
+              _viewport = next;
+              _chartRepaint.value++;
+              _prefetchOlderAtEdge(plot, candles.length);
+            },
+          ),
+      ])),
       // The chart stays the dominant surface; its tool strip sits below the
       // time axis, as in the supplied mobile reference.
       // No broker-info or drawing-hint footer: chart tools meet navigation.
@@ -6392,6 +6440,7 @@ class _CandleChartPainter extends CustomPainter {
     required this.selectedShort,
     required this.showShortLabels,
     required this.indicators,
+    required this.indicatorSeriesCache,
     required this.panel,
     required this.scaleSettings,
     required this.symbolSettings,
@@ -6442,6 +6491,7 @@ class _CandleChartPainter extends CustomPainter {
   final int? selectedShort;
   final bool showShortLabels;
   final List<ChartIndicatorDefinition> indicators;
+  final ChartIndicatorSeriesCache indicatorSeriesCache;
   static const _indicatorColors = <Color>[
     Color(0xFF2962FF), Color(0xFFFF9800), Color(0xFF9C27B0),
     Color(0xFF009688), Color(0xFFEF5350), Color(0xFF607D8B),
@@ -6604,30 +6654,37 @@ class _CandleChartPainter extends CustomPainter {
         canvas.drawRect(bodyRect, rising ? positiveBorder : negativeBorder);
       }
     }
-    // Every selected supported indicator is painted from the SAME
-    // authenticated market source and Replay prefix as the candles.
-    // Recompute only O(visible candles + SMA period), not 120k history,
-    // during high-frequency Android drag/pinch and kinetic scrolling.
-    for (var slot = 0; slot < indicators.length; slot++) {
-      final item = indicators[slot];
-      final samples = ChartIndicatorVisiblePoints.sma(
-        candles: candles, start: start, end: ending, period: item.period);
-      if (samples.isEmpty) continue;
-      final path = Path();
-      for (var p = 0; p < samples.length; p++) {
-        final sample = samples[p];
-        final x = viewport.chartX(
-          index: sample.index, candleCount: candles.length, plotWidth: axis);
-        if (p == 0) {
-          path.moveTo(x, y(sample.value));
-        } else {
-          path.lineTo(x, y(sample.value));
+    // True-source overlay plots, cached by immutable history identity.
+    var overlaySlot = 0;
+    for (final item in indicators) {
+      if (item.separatePane) continue;
+      final result = indicatorSeriesCache.get(candles, item);
+      for (var line = 0; line < result.plots.length; line++) {
+        final samples = result.plots[line].values;
+        final path = Path();
+        var started = false;
+        for (var i = start; i < ending; i++) {
+          final value = samples[i];
+          if (value == null || !value.isFinite) {
+            started = false;
+            continue;
+          }
+          final x = viewport.chartX(
+            index: i, candleCount: candles.length, plotWidth: axis);
+          if (!started) {
+            path.moveTo(x, y(value));
+            started = true;
+          } else {
+            path.lineTo(x, y(value));
+          }
         }
+        canvas.drawPath(path, Paint()
+          ..color = _indicatorColors[
+            (overlaySlot + line) % _indicatorColors.length]
+          ..strokeWidth = line == 0 ? 1.6 : 1.1
+          ..style = PaintingStyle.stroke);
       }
-      canvas.drawPath(path, Paint()
-        ..color = _indicatorColors[slot % _indicatorColors.length]
-        ..strokeWidth = 1.6
-        ..style = PaintingStyle.stroke);
+      overlaySlot++;
     }
     final paintLevels = _levelsProvider();
     final paintPatterns = _patternsProvider();
@@ -6854,17 +6911,18 @@ class _CandleChartPainter extends CustomPainter {
     }
     if (indicators.isNotEmpty && start < ending &&
         scaleSettings.indicatorLabels != ChartPriceLabelMode.hidden) {
-      for (var slot = 0; slot < indicators.length; slot++) {
-        final item = indicators[slot];
-        // Match the last plotted SOURCE bar/period, not any hidden
-        // future replay candle or newest market quote offscreen.
-        final visibleSma = ChartVisibleSma.atVisibleEnd(
-          candles, ending, period: item.period);
-        if (visibleSma != null) {
-          annotate(visibleSma,
-              _indicatorColors[slot % _indicatorColors.length],
-              scaleSettings.indicatorLabels);
+      var overlaySlot = 0;
+      for (final item in indicators) {
+        if (item.separatePane) continue;
+        final result = indicatorSeriesCache.get(candles, item);
+        for (var line = 0; line < result.plots.length; line++) {
+          final value = result.plots[line].values[ending - 1];
+          if (value == null || !value.isFinite) continue;
+          annotate(value, _indicatorColors[
+            (overlaySlot + line) % _indicatorColors.length],
+            scaleSettings.indicatorLabels);
         }
+        overlaySlot++;
       }
     }
     // Paint-time source quote freshness is necessary for retained painters:
@@ -7224,6 +7282,7 @@ class _CandleChartPainter extends CustomPainter {
       old.sourceQuote != sourceQuote ||
       old.replayActive != replayActive || old.rangeMode != rangeMode ||
       old.crosshairSnapshot != crosshairSnapshot ||
+      old.indicatorSeriesCache != indicatorSeriesCache ||
       !listEquals(old.indicators, indicators) ||
       !listEquals(old.levels, levels) ||
       !listEquals(old.patterns, patterns) ||

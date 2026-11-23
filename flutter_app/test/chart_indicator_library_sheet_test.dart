@@ -76,16 +76,16 @@ void main() {
     expect(find.byKey(const Key('indicator-pine-capability')), findsOneWidget);
     await tester.enterText(
         find.byKey(const Key('indicator-script-title')),
-        'Ahmad HA First Trend V10');
+        'Unsupported User Strategy');
     await tester.enterText(
         find.byKey(const Key('indicator-script-source')),
-        '//@version=6\nstrategy("Ahmad HA First Trend V10")\n'
+        '//@version=6\nstrategy("Unsupported User Strategy")\n'
         'strategy.entry("Buy", strategy.long)');
     await tester.tap(find.byKey(const Key('indicator-script-save')));
     await tester.pumpAndSettle();
     expect(state.scripts, hasLength(1));
     expect(state.active, isEmpty);
-    expect(find.text('Ahmad HA First Trend V10'), findsOneWidget);
+    expect(find.text('Unsupported User Strategy'), findsOneWidget);
     expect(find.textContaining('يتطلب دعم Pine Script'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -114,5 +114,26 @@ void main() {
     expect(state.active.single.period, 21);
     expect(state.active.single.custom, isTrue);
     expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('study settings change configured length and stay in library',
+      (tester) async {
+    var state=const ChartIndicatorLibraryState();
+    await showLibrary(tester,(s)=>state=s);
+    await tester.tap(find.byKey(const Key('indicator-settings-ema-21')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('indicator-settings-dialog')),
+        findsOneWidget);
+    await tester.enterText(find.byKey(
+      const Key('indicator-length-input')),'34');
+    await tester.tap(find.byKey(const Key('indicator-length-save')));
+    await tester.pumpAndSettle();
+    expect(state.periodOverrides['ema-21'],34);
+    expect(find.text('EMA 34'),findsOneWidget);
+    await tester.tap(find.byKey(const Key('indicator-row-ema-21')));
+    await tester.pumpAndSettle();
+    expect(state.active.single.period,34);
+    expect(tester.takeException(),isNull);
   });
 }

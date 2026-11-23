@@ -1,5 +1,17 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Real indicator parameters and overlay autoscaling (CI PENDING)
+- Native settings dialog changes valid study lengths and persists securely. Added simple EMA/RSI Pine one-plot source support (in addition to SMA) through real verified-source native engine; unsupported scripts remain stored, not run.
+- Price auto-axis now includes visible EMA/SMA/Bollinger series without touching broker highs/lows or oscillator axes; Replay prefix and manual scale protected. SMA outputs only after full period and BB uses numerically stable centered variance.
+- Tests for saved periods, 320/390 phone settings, supported Pine whitelist, BB source-axis integration and source-future isolation. No APK/main/gateway.
+
+
+### 2026-11-23 — Native full-calculation common indicators and synchronized panes (CI PENDING)
+- Expanded the working TradeLab Add Indicators catalog beyond SMA. Actual EMA, BB 3-line overlay, RSI, MACD line/signal/histogram, ATR from verified OHLC; RSI/MACD/ATR independently scaled panes below chart linked to the live source-index viewport. Retained source cache avoids full-history computation on each pan/pinch; strict Replay prefix. Max 8 added, max 2 panes.
+- Tests: exact mathematical fixtures incl session gaps, 120k no-rescan after preparation, Replay hidden-index reads and real Widget pane/gesture functionality; wired into Flutter CI (and optional future APK workflow, no build started).
+- User excluded the prior personal-indicator example; removed hardcoded example/test references. Not a generic Pine compiler, no hardware/TradingView pixel parity claims.
+
+
 ### 2026-11-23 — PR #637 merged: searchable indicator library with safe custom Pine source
 - [PR #637](https://github.com/775878805Osamaha/TradeLab/pull/637) squash `16859bf17c32ae7592435bb0d1090a8d4b6079ac`; [CI #45189306522](https://github.com/775878805Osamaha/TradeLab/actions/runs/45189306522) **success**, Flutter analyze, 877 active tests + 11 catalog/tool checks, Yemen timezone. No APK.
 - Native Arabic RTL search, Built-ins/My Scripts/Favorites/Added tabs, 4 real SMA periods with up to 8 active plots, O(viewport + period) verified candle reads, accurate Replay source prefix, secure local Pine text storage. Supports only single `indicator(...overlay=true)` + `plot(ta.sma(close,N))` execution; complex `Ahmad HA First Trend V10` saved but not executed. Do not imply full TradingView/Pine parity.

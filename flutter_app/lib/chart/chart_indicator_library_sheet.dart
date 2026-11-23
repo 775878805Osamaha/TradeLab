@@ -55,7 +55,7 @@ class _ChartIndicatorLibrarySheetState
     final next = _library.toggleActive(indicator.id);
     if (identical(next, _library)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('يمكن إضافة 8 مؤشرات متزامنة كحد أقصى')));
+        content: Text('يمكن إضافة 8 مؤشرات ولوحتين مستقلتين كحد أقصى')));
       return;
     }
     _change(next);
@@ -86,10 +86,47 @@ class _ChartIndicatorLibrarySheetState
     }
     _change(updated);
     _search.clear();
-    if (script.supportedSmaPeriod == null) {
+    if (script.supportedIndicator() == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('تم حفظ الكود. هذه الصيغة تتطلب محرك Pine '
             'ولم تُضف إلى الشارت بعد.')));
+    }
+  }
+
+  Future<void> _editStudyLength(ChartIndicatorDefinition item) async {
+    if (item.custom || item.kind == ChartIndicatorKind.macd) return;
+    var inputLength = item.period.toString();
+    final length = await showDialog<int>(context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('indicator-settings-dialog'),
+        title: Text('إعدادات ' + item.title),
+        content: TextFormField(
+          key: const Key('indicator-length-input'),
+          initialValue: inputLength,
+          keyboardType: TextInputType.number,
+          onChanged: (value) => inputLength = value,
+          decoration: const InputDecoration(
+            labelText: 'الطول (1–500)', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('إلغاء')),
+          FilledButton(
+            key: const Key('indicator-length-save'),
+            onPressed: () =>
+                Navigator.pop(dialogContext, int.tryParse(inputLength)),
+            child: const Text('تطبيق'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || length == null) return;
+    final updated = _library.setPeriod(item.id, length);
+    if (identical(updated, _library)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('الطول غير صالح لهذا المؤشر')));
+    } else {
+      _change(updated);
     }
   }
 
@@ -101,8 +138,12 @@ class _ChartIndicatorLibrarySheetState
       title: Text(item.title, textDirection: TextDirection.ltr,
         textAlign: TextAlign.right),
       subtitle: Text(item.custom
-          ? 'مؤشرك · SMA محسوب من شموع الشارت'
-          : 'المتوسط المتحرك البسيط · على الشارت'),
+          ? 'من مؤشراتي · ' + item.kind.name.toUpperCase()
+          : item.separatePane
+              ? 'لوحة مستقلة · محسوب من شموع الشارت'
+              : item.kind == ChartIndicatorKind.bollinger
+                  ? 'ثلاثة خطوط · الوسط وحدّا الانحراف المعياري'
+                  : 'مؤشر حقيقي · طول ' + item.period.toString()),
       leading: IconButton(
         key: Key('indicator-favorite-' + item.id),
         tooltip: favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة',
@@ -110,20 +151,24 @@ class _ChartIndicatorLibrarySheetState
           color: favorite ? Colors.amber.shade700 : null),
         onPressed: () => _change(_library.toggleFavorite(item.id)),
       ),
-      trailing: enabled
-          ? const Icon(Icons.check_circle, color: Colors.green)
-          : const Icon(Icons.add_circle_outline),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (!item.custom && item.kind != ChartIndicatorKind.macd)
+          IconButton(
+            key: Key('indicator-settings-' + item.id),
+            tooltip: 'تعديل طول المؤشر',
+            onPressed: () => _editStudyLength(item),
+            icon: const Icon(Icons.tune_outlined, size: 20),
+          ),
+        Icon(enabled ? Icons.check_circle : Icons.add_circle_outline,
+          color: enabled ? Colors.green : null),
+      ]),
       onTap: () => _toggle(item),
     );
   }
 
   Widget _scriptRow(ChartSavedIndicatorScript script) {
-    final period = script.supportedSmaPeriod;
-    if (period != null) {
-      return _indicatorRow(ChartIndicatorDefinition(
-        script.id, script.name, period, custom: true,
-      ));
-    }
+    final supported = script.supportedIndicator();
+    if (supported != null) return _indicatorRow(supported);
     return ListTile(
       key: Key('indicator-unsupported-' + script.id),
       title: Text(script.name),
@@ -145,8 +190,11 @@ class _ChartIndicatorLibrarySheetState
     final children = <Widget>[];
     switch (_tab) {
       case 0:
-        children.addAll(ChartIndicatorDefinition.builtIns
-            .where((item) => _matches(item.title))
+        // Display the effective configured definitions, not the static
+        // preset constants. A changed period must update the row immediately
+        // and remain searchable under its new visible name.
+        children.addAll(_library.supported
+            .where((item) => !item.custom && _matches(item.title))
             .map(_indicatorRow));
         break;
       case 1:
@@ -303,7 +351,7 @@ class _ChartPineSourceEditorDialogState
             textDirection: TextDirection.rtl,
             decoration: const InputDecoration(
               labelText: 'اسم المؤشر',
-              hintText: 'مثال: Ahmad HA First Trend V10',
+              hintText: 'مثال: My Custom Indicator',
             ),
           ),
           const SizedBox(height: 8),
@@ -322,10 +370,11 @@ class _ChartPineSourceEditorDialogState
             ),
           ),
           const Text(
-            'التشغيل المباشر متاح فقط للنوع البسيط '
-            'indicator("Name", overlay=true) مع '
-            'plot(ta.sma(close, N)). '
-            'استراتيجيات Pine المعقدة تُحفظ، ولا تُنفذ أو تُعرض كمؤشر وهمي.',
+            'التشغيل المباشر يدعم مؤشرًا بسيطًا من '
+            'plot(ta.sma(close,N)) أو plot(ta.ema(close,N)) '
+            'فوق الشارت، أو plot(ta.rsi(close,N)) في لوحة '
+            'مستقلة مع overlay=false. بقية كود Pine يحفظ فقط '
+            'حتى يتوفر محرك كامل.',
             key: Key('indicator-pine-capability'),
             style: TextStyle(fontSize: 12),
           ),
