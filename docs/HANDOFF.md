@@ -1,5 +1,14 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-23 — Range BID fallback through corrupted overlapping cache manifests (CI PENDING)
+- Branch `fix/range-verified-cache-fallback-20261123` based on verified Flutter development branch after Replay pagination PR #633. TradeLab only, no APK, `main`, cTrader gateway, Vercel production or cross-project edits.
+- **Proven from source:** `RangeTickStore.readCoveredInterval` queried at most 8 candidate manifest rows per BID cursor, even though the corruption budget `maxRejectedCandidates=64` intentionally allowed more. With nine bad newest overlapping manifests and one intact older SHA-verified manifest, this returned null and needlessly asked cTrader again despite valid cached BID.
+- **Repair:** SQLite candidate LIMIT now uses the remaining bounded corruption budget + one potential valid window, rather than fixed 8. Continue verifying exact SHA-256, tick count, account, symbol, covered milliseconds and raw BID chronological order; no guessed prices or gaps. Fail closed after >64 invalid manifests.
+- **Fresh cache repair:** `readLatestVerifiedWindowWithCoverage` previously fetched only the newest manifest, and returned null if that exact row was corrupt. Now check at most eight recent manifests, return only the first intact SHA-verified window inside the requested maxAge, retain that window's exact `fromMs/toMs`; do not imply current market quotes from an expired snapshot.
+- **Regression tests:** seed nine corrupted overlapping SQLite manifests ahead of a three-tick authentic cache containing two same-ms BID events; assert successful restore; then seed 65 corrupted manifests and assert bounded null. Separately seed a corrupt newest manifest ahead of a fresh genuine window and confirm exact original bounds; expired cache remains a miss.
+- Flutter analyze and CI still pending at this initial handoff. This is a verified **cache fallback issue**, not a claim that live cTrader BID on Android is available, or that weekend candles can be invented. Prior Replay/Results PR #633 merged and documented. Live Range first fetch, chart gaps, device FPS and TradingView pixel parity remain separate acceptance work.
+
+
 ## 2026-11-23 — PR #633 MERGED: all saved Replay sessions now reachable; Flutter CI green
 - [PR #633](https://github.com/775878805Osamaha/TradeLab/pull/633) merged by squash `d135db1762f13ccdc9d7faed8cccb25e31123acb` into `test/flutter-all-fixes-20261116`.
 - [GitHub Actions #45080738105](https://github.com/775878805Osamaha/TradeLab/actions/runs/45080738105) **completed/success**: Flutter analyze, complete selected Flutter Range/chart/Replay/paper/results regression suite, drawing catalog checks and Yemen timezone check succeeded.
