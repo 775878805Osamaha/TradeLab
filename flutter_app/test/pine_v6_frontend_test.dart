@@ -126,8 +126,8 @@ plot(x)''');
 
   test('parser error recovery emits two independent locations',(){
     final result=front.prepare('''indicator("Bad")
-a = (close +
-b = )
+a = )
+b = ?
 plot(close)''');
     expect(result.hasErrors,isTrue);
     expect(result.diagnostics.where((e)=>e.stage==PineDiagnosticStage.parser)
