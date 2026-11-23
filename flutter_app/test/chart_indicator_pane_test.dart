@@ -113,4 +113,50 @@ void main() {
   });
 
 
+  testWidgets('pane move and resize controls are real accessible actions',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var up = 0;
+    var down = 0;
+    var resized = 0;
+    final source = List<TradeCandle>.generate(90, (i) {
+      final close = 100.0 + i;
+      return TradeCandle(close,close+1,close-1,close);
+    });
+    final redraw = ValueNotifier<int>(0);
+    addTearDown(redraw.dispose);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Column(
+      children: [ChartIndicatorPane(
+        indicator: const ChartIndicatorDefinition('rsi-14','RSI 14',14),
+        candles: source, cache: ChartIndicatorSeriesCache(),
+        viewport: () => const ChartViewport(
+          barWidth: 10,scrollBars: 0,rightMarginBars: 4),
+        repaint: redraw,
+        height: 128,
+        onRemove: () {},
+        onMoveUp: () => up++,
+        onMoveDown: () => down++,
+        onResize: () => resized++,
+        onScaleStart: (_) {},
+        onScaleUpdate: (_) {},
+      )],
+    ))));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byKey(
+      const Key('chart-indicator-pane-rsi-14'))).height,128);
+    await tester.tap(find.byKey(
+      const Key('chart-indicator-up-rsi-14')));
+    await tester.tap(find.byKey(
+      const Key('chart-indicator-down-rsi-14')));
+    await tester.tap(find.byKey(
+      const Key('chart-indicator-resize-rsi-14')));
+    await tester.pumpAndSettle();
+    expect(up,1);
+    expect(down,1);
+    expect(resized,1);
+    expect(tester.takeException(),isNull);
+  });
+
+
 }
