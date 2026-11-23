@@ -1,5 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-23 — PR #635 MERGED, source-time weekday label stability; CI GREEN
+- [PR #635](https://github.com/775878805Osamaha/TradeLab/pull/635) squash **`712067b52829d0308346c552f0d12a9bc4c1ff00`** into `test/flutter-all-fixes-20261116`.
+- [Flutter CI #45183340568](https://github.com/775878805Osamaha/TradeLab/actions/runs/45183340568) **completed/success**: Flutter analyze, all selected Range/Replay/Results/chart regression tests, drawing catalog tests and Yemen timezone check passed. No APK built.
+- Confirmed fix: weekday/date captions now depend on preceding phase-aligned authenticated source grid timestamp, not the first currently visible mark. This stops intraday captions switching to weekday as the viewport pans; source candle timestamps, Replay visible count, real Range gaps and all OHLC remain untouched.
+- **Still unverified:** true TradingView Android pixel/gesture/FPS parity, first authenticated real BID Range fetch on user's Android and live gateway source gaps. Do not claim 100% matching. Continue on this development branch; main and production gateway remain unchanged.
+
+
 ## 2026-11-23 — Chart source-grid date labels, CI PENDING
 - Verified painter bug: the first currently visible time tick was always treated as a day boundary (priorTick == null) even when it was a 14:00 source candle, so dragging the chart relabeled that unchanged tick as a weekday.
 - Changed displayed-day classification to compare the current grid source index with the preceding source-grid index using verified timestamps and chosen chart timezone; offscreen prior grid tick still supplies the correct date. Preserves UTC, New York DST, irregular BID weekend gaps and strict Replay visible-prefix indices.
