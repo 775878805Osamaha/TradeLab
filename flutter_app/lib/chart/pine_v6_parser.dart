@@ -302,7 +302,8 @@ class PineV6Parser {
     var expr=_primary();
     while(true){
       if(_accept('.')){
-        final member=_identifier().text;
+        final member=(_kind(PineTokenKind.identifier)||_kind(PineTokenKind.keyword))
+            ? _take().text : _identifier().text;
         expr=PineMemberExpression(expr.span,expr,member);
       }else if(_accept('[')){
         final offset=_expression();
@@ -344,7 +345,9 @@ class PineV6Parser {
       return PineLiteralExpression(tok.span,tok.text,'bool');
     }
     if(_accept('na'))return PineLiteralExpression(tok.span,'na','na');
-    if(_kind(PineTokenKind.identifier)){
+    if(_kind(PineTokenKind.identifier)||
+        (tok.kind==PineTokenKind.keyword&&
+         const {'indicator','strategy','library','input','color'}.contains(tok.text))){
       _take();return PineIdentifierExpression(tok.span,tok.text);
     }
     if(_accept('(')){
