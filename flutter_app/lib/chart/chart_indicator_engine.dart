@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:collection';
 
 import '../data/tradelab_data.dart';
 import 'chart_indicator_library.dart';
@@ -128,7 +129,10 @@ class ChartIndicatorEngine {
     var averageDown = downSum / period;
     double value() {
       if (averageDown == 0) {
-        return averageUp == 0 ? 50.0 : 100.0;
+        // The built-in TradingView RSI resolves a zero loss average to
+        // 100, including the fully flat 0/0 case. Returning 50 here
+        // silently disagrees with the standard built-in Pine script.
+        return 100.0;
       }
       if (averageUp == 0) return 0.0;
       return 100 - 100 / (1 + averageUp / averageDown);
@@ -156,6 +160,92 @@ class ChartIndicatorEngine {
       ChartIndicatorPlot('MACD', macd),
       ChartIndicatorPlot('Signal', signal),
       ChartIndicatorPlot('Histogram', histogram, histogram: true),
+    ];
+  }
+
+
+  /// TradingView ROC: 100*(currentClose / close[period] - 1).
+  /// Do not invent a rate when the real historical denominator is zero.
+  static List<double?> _roc(List<double> close, int period) {
+    final result = List<double?>.filled(close.length, null);
+    for (var i = period; i < close.length; i++) {
+      final previous = close[i - period];
+      if (previous == 0) continue;
+      final value = 100 * (close[i] - previous) / previous;
+      if (value.isFinite) result[i] = value;
+    }
+    return result;
+  }
+
+  /// The built-in TradingView Stochastic is:
+  /// rawK = 100*(close - lowest(low,periodK)) /
+  ///                 (highest(high,periodK)-lowest(low,periodK));
+  /// K = SMA(rawK, 3), D = SMA(K, 3).
+  /// Monotonic deques compute extremes O(source length), even with
+  /// large user-selected lengths (up to 500) and 100k+ real bars.
+  static List<ChartIndicatorPlot> _stochastic(
+      List<TradeCandle> candles, int period) {
+    final smoothK = List<double?>.filled(candles.length, null);
+    final smoothD = List<double?>.filled(candles.length, null);
+    final highIndices = ListQueue<int>();
+    final lowIndices = ListQueue<int>();
+    var rawSum = 0.0;
+    var rawCount = 0;
+    var smoothedSum = 0.0;
+    var smoothedCount = 0;
+    final rawRing = List<double>.filled(3, 0);
+    final kRing = List<double>.filled(3, 0);
+    for (var i = 0; i < candles.length; i++) {
+      final high = candles[i].high;
+      final low = candles[i].low;
+      while (highIndices.isNotEmpty &&
+          candles[highIndices.last].high <= high) {
+        highIndices.removeLast();
+      }
+      highIndices.addLast(i);
+      while (lowIndices.isNotEmpty &&
+          candles[lowIndices.last].low >= low) {
+        lowIndices.removeLast();
+      }
+      lowIndices.addLast(i);
+      final oldest = i - period + 1;
+      while (highIndices.isNotEmpty && highIndices.first < oldest) {
+        highIndices.removeFirst();
+      }
+      while (lowIndices.isNotEmpty && lowIndices.first < oldest) {
+        lowIndices.removeFirst();
+      }
+      if (i < period - 1) continue;
+      final highest = candles[highIndices.first].high;
+      final lowest = candles[lowIndices.first].low;
+      final span = highest - lowest;
+      if (span <= 0 || !span.isFinite) {
+        rawCount = 0;
+        rawSum = 0;
+        smoothedCount = 0;
+        smoothedSum = 0;
+        continue;
+      }
+      final raw = 100 * (candles[i].close - lowest) / span;
+      if (!raw.isFinite) continue;
+      final rawSlot = rawCount % 3;
+      if (rawCount >= 3) rawSum -= rawRing[rawSlot];
+      rawRing[rawSlot] = raw;
+      rawSum += raw;
+      rawCount++;
+      if (rawCount < 3) continue;
+      final k = rawSum / 3;
+      smoothK[i] = k;
+      final kSlot = smoothedCount % 3;
+      if (smoothedCount >= 3) smoothedSum -= kRing[kSlot];
+      kRing[kSlot] = k;
+      smoothedSum += k;
+      smoothedCount++;
+      if (smoothedCount >= 3) smoothD[i] = smoothedSum / 3;
+    }
+    return [
+      ChartIndicatorPlot('%K', smoothK),
+      ChartIndicatorPlot('%D', smoothD),
     ];
   }
 
@@ -206,6 +296,9 @@ class ChartIndicatorEngine {
       ChartIndicatorKind.macd => _macd(close),
       ChartIndicatorKind.atr =>
         [ChartIndicatorPlot('ATR', _atr(candles, length))],
+      ChartIndicatorKind.stochastic => _stochastic(candles, length),
+      ChartIndicatorKind.roc =>
+        [ChartIndicatorPlot('ROC', _roc(close, length))],
     };
     return ChartIndicatorOutput(indicator, plots);
   }
