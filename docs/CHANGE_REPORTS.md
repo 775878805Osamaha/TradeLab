@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — PR #636 merged, historical Replay order-fill parity; CI GREEN
+- [Merged #636](https://github.com/775878805Osamaha/TradeLab/pull/636) squash `ff7eef94ce5c6afcfa3a76813f0585617d87e967` after [CI #45185616391 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45185616391). Flutter analyzer, full active Range/chart/Replay/Results tests, drawing catalog and Yemen timezone passed.
+- Fixed verified next-open gap TP/SL fills, default open-to-nearer-OHLC-extreme intrabar path when both SL and TP hit, with conservative exact ties. Tests: long/short exit order, opening gaps, 12k indexed vs stepping, existing fixture corrected (short TP at real open 95 instead of obsolete stop 105). First CI #45184510908 failed only on that obsolete expectation; new CI green.
+- Official TradingView source: https://www.tradingview.com/pine-script-docs/concepts/strategies/. Only default OHLC assumptions, NOT Bar Magnifier/tick-level execution; no APK, main or production changes; real device and BID first-load unverified.
+
+
 ### 2026-11-23 — Replay intrabar OHLC order parity (CI PENDING)
 - Match official TradingView default source OHLC path: open→nearer high/low first, otherwise farther extreme, close. Gap TP/SL exits fill at authentic next open; both-hit intrabar resolves TP/SL according to direction and path; exactly equidistant open stays conservatively stop-first.
 - Added long/short extreme order and deep indexed/stepped parity regressions. Update `replay_revealed_exit_index.dart` comments to reflect actual logic. Strictly Replay price-delta training only; no Bar Magnifier, broker execution, fabricated ticks, Android APK or production changes.
