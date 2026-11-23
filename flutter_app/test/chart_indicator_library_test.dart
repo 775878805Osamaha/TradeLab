@@ -296,4 +296,49 @@ void main() {
   });
 
 
+  test('editing a running custom Pine series drops old invalid code', () {
+    const source = 'indicator("A", overlay=true)\nplot(close)';
+    const initial = ChartSavedIndicatorScript(
+      id: 'script-custom-edit', name: 'First', source: source);
+    final state = const ChartIndicatorLibraryState()
+      .saveScript(initial)
+      .toggleActive('script-custom-edit');
+    expect(state.active.single.kind, ChartIndicatorKind.pine);
+    final edited = state.updateScript(
+      id: 'script-custom-edit', name: 'Modified',
+      source: 'indicator("B", overlay=false)\nplot(close)');
+    expect(edited.scripts.single.name, 'Modified');
+    expect(edited.active, isEmpty,
+      reason: 'Changing from price overlay to oscillator pane '
+          'must detach old renderer until user re-adds');
+    expect(edited.activeOrder, isEmpty);
+    final invalid = state.updateScript(
+      id: 'script-custom-edit', name: 'Invalid saved source',
+      source: 'indicator("A", overlay=true)\nrequest.security("A","D",close)');
+    expect(invalid.scripts, hasLength(1));
+    expect(invalid.active, isEmpty);
+    expect(invalid.scripts.single.compileError, contains('السطر'));
+    expect(state.updateScript(id:'no-such',name:'No',source:source),
+      same(state));
+    expect(state.updateScript(id:'script-custom-edit',name:'',source:source),
+      same(state));
+  });
+
+  test('supported saved Pine source editing keeps selection and cache id', () {
+    const source = 'indicator("A", overlay=true)\nplot(close)';
+    const initial = ChartSavedIndicatorScript(
+      id: 'script-same', name: 'Original', source: source);
+    final state = const ChartIndicatorLibraryState()
+        .saveScript(initial).toggleActive('script-same');
+    final updated = state.updateScript(id: 'script-same', name: 'Changed',
+      source: 'indicator("B", overlay=true)\nplot(ta.ema(close,3))');
+    expect(updated.active.single.id, 'script-same');
+    expect(updated.active.single.kind, ChartIndicatorKind.ema,
+      reason: 'Simple legacy form still uses native EMA implementation');
+    expect(updated.scripts.single.name, 'Changed');
+    expect(ChartIndicatorLibraryState.decode(updated.encode())
+      .active.single.kind, ChartIndicatorKind.ema);
+  });
+
+
 }
