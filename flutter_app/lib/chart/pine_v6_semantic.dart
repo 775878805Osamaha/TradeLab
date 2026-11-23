@@ -44,6 +44,7 @@ class PineV6SemanticAnalyzer {
   var _visited=0;
   var _symbols=0;
   String? _functionName;
+  int _loopDepth=0;
   _PineScope? _global;
 
   static const _bases=<String,PineBaseType>{
@@ -72,7 +73,7 @@ class PineV6SemanticAnalyzer {
 
   PineSemanticResult analyze(PineScriptAst ast){
     _diagnostics.clear();_inferred.clear();_symbols=0;_visited=0;
-    _functionName=null;_clock=Stopwatch()..start();
+    _functionName=null;_loopDepth=0;_clock=Stopwatch()..start();
     final root=_PineScope(null);_global=root;
     for(final name in <String>['open','high','low','close','volume',
         'hl2','hlc3','ohlc4','hlcc4']){
@@ -210,7 +211,9 @@ class PineV6SemanticAnalyzer {
     }else if(stmt is PineWhileStatement){
       final cond=_expression(stmt.condition,scope);
       _require(cond,PineBaseType.boolType,stmt.condition.span,'condition_type');
+      _loopDepth++;
       _body(stmt.body,_PineScope(scope));
+      _loopDepth--;
     }else if(stmt is PineForStatement){
       for(final expr in [stmt.from,stmt.to,if(stmt.step!=null)stmt.step!]){
         final type=_expression(expr,scope);
@@ -221,7 +224,9 @@ class PineV6SemanticAnalyzer {
       final local=_PineScope(scope);
       _define(local,stmt.name,_PineSymbol(stmt.name,
         const PineTypeInfo(PineBaseType.intType,PineQualifier.series)),stmt.span);
+      _loopDepth++;
       _body(stmt.body,local);
+      _loopDepth--;
     }else if(stmt is PineSwitchStatement){
       final selector=stmt.selector==null?null:_expression(stmt.selector!,scope);
       for(final arm in stmt.arms){
@@ -243,7 +248,10 @@ class PineV6SemanticAnalyzer {
         _error('nested_function','Pine function declarations must be global',stmt.span);
         return;
       }
-      final saved=_functionName;_functionName=stmt.name;
+      final saved=_functionName;
+      final savedLoopDepth=_loopDepth;
+      _functionName=stmt.name;
+      _loopDepth=0; // Function bodies cannot inherit caller loop context.
       final child=_PineScope(scope);
       for(final parameter in stmt.parameters){
         if(parameter.defaultValue!=null){
@@ -260,8 +268,12 @@ class PineV6SemanticAnalyzer {
       }
       _body(stmt.body,child);
       _functionName=saved;
+      _loopDepth=savedLoopDepth;
     }else if(stmt is PineControlStatement){
-      // Loop control legality and full v6 control-flow validation are deferred.
+      if(_loopDepth==0){
+        _error('loop_control_scope',
+            stmt.action+' is allowed only within a for/while loop',stmt.span);
+      }
     }
   }
 
