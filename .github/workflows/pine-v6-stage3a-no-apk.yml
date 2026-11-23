@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - feat/pine-stage3a-language-runtime-20261124
+      - chore/pine-frontend-dedup-audit-20261124
     paths:
       - 'flutter_app/**'
       - '.github/workflows/pine-v6-stage3a-no-apk.yml'
@@ -32,6 +33,9 @@ jobs:
           cache: true
       # Flutter/Dart widget and unit tests need no generated Android host,
       # Gradle, Java toolchain, emulator or APK signing.
+      - name: Audit old frontend imports, registrations and callers on exact SHA
+        run: |
+          git grep -n -E 'pine_frontend(_[a-z]+)?\\.dart|PineFrontend\\.analyze|PineFrontendAnalysis|frontendAnalysis' -- lib test || true
       - name: Fetch dependencies
         run: flutter pub get
       - name: Analyze Dart and Flutter
@@ -152,6 +156,7 @@ jobs:
             test/pine_subset_program_test.dart \
             test/pine_stage1_runtime_test.dart \
             test/pine_frontend_v6_test.dart \
+            test/pine_frontend_differential_test.dart \
             test/pine_v6_frontend_test.dart \
             test/pine_v6_language_runtime_test.dart \
             test/chart_indicator_autoscale_test.dart \
