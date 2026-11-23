@@ -86,7 +86,7 @@ class _ChartIndicatorLibrarySheetState
     }
     _change(updated);
     _search.clear();
-    if (script.supportedSmaPeriod == null) {
+    if (script.supportedIndicator() == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('تم حفظ الكود. هذه الصيغة تتطلب محرك Pine '
             'ولم تُضف إلى الشارت بعد.')));
