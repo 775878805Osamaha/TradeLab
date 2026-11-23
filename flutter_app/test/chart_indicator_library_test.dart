@@ -215,4 +215,40 @@ void main() {
       '{"macd":5,"ema-9":0,"rsi-14":1,"ema-21":37}}');
     expect(bad.periodOverrides,{'ema-21':37});
   });
+  test('Stochastic and ROC appear in actual catalog and persist selection',
+      () {
+    final all = ChartIndicatorDefinition.builtIns;
+    expect(all.map((x) => x.id), containsAll(['stoch-14', 'roc-9']));
+    expect(all.singleWhere((x) => x.id == 'stoch-14').separatePane,
+      isTrue);
+    expect(all.singleWhere((x) => x.id == 'roc-9').separatePane,
+      isTrue);
+    final selected = const ChartIndicatorLibraryState()
+        .toggleActive('stoch-14').toggleActive('roc-9');
+    expect(selected.active.map((s) => s.kind),
+      [ChartIndicatorKind.stochastic, ChartIndicatorKind.roc]);
+    final restored = ChartIndicatorLibraryState.decode(selected.encode());
+    expect(restored.activeIds, selected.activeIds);
+    expect(restored.toggleActive('rsi-14'), same(restored),
+      reason: 'Two independent panes are visible; do not hide a third');
+    expect(restored.toggleActive('stoch-14').active.single.id, 'roc-9');
+  });
+
+  test('Stochastic lookback and ROC length validate and persist', () {
+    final custom = const ChartIndicatorLibraryState()
+        .setPeriod('stoch-14', 21)
+        .setPeriod('roc-9', 12);
+    expect(custom.supported.singleWhere((x) => x.id == 'stoch-14').period,
+      21);
+    expect(custom.supported.singleWhere((x) => x.id == 'stoch-14').title,
+      'Stochastic 21');
+    expect(custom.supported.singleWhere((x) => x.id == 'roc-9').title,
+      'ROC 12');
+    final decoded = ChartIndicatorLibraryState.decode(custom.encode());
+    expect(decoded.periodOverrides, {'stoch-14': 21, 'roc-9': 12});
+    expect(decoded.setPeriod('roc-9', 0), same(decoded));
+    expect(decoded.setPeriod('stoch-14', 501), same(decoded));
+  });
+
+
 }
