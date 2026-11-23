@@ -6,6 +6,9 @@ on:
   push:
     branches:
       - feat/pine-stage2-v6-frontend-20261123
+    paths:
+      - 'flutter_app/**'
+      - '.github/workflows/pine-v6-stage2-no-apk.yml'
 permissions:
   contents: read
 
