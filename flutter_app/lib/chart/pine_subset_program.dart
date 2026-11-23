@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:collection';
 
 import '../data/tradelab_data.dart';
 
@@ -660,7 +661,7 @@ class PineSubsetProgram {
         avgLoss = (avgLoss * (length - 1) + math.max(0.0, -diff)) / length;
       }
       result[i] = avgLoss == 0
-          ? 100 : (avgGain == 0 ? 0 : 100 - 100 / (1 + avgGain / avgLoss));
+          ? 100.0 : (avgGain == 0 ? 0.0 : 100 - 100 / (1 + avgGain / avgLoss));
     }
     return result;
   }
@@ -679,18 +680,34 @@ class PineSubsetProgram {
   static List<double?> _extreme(
       List<double?> source, int period, bool maximum) {
     final result = List<double?>.filled(source.length, null);
-    for (var i = period - 1; i < source.length; i++) {
-      double? extreme;
-      for (var j = i - period + 1; j <= i; j++) {
-        final x = source[j];
-        if (x == null) {
-          extreme = null;
-          break;
+    // O(source length), not O(source * 500) during indicator compilation.
+    // Keep verified source indices in one monotonic deque and track na
+    // windows explicitly; no missing values are silently synthesized.
+    final deque = ListQueue<int>();
+    var missing = 0;
+    for (var i = 0; i < source.length; i++) {
+      final value = source[i];
+      if (value == null) {
+        missing++;
+      } else {
+        while (deque.isNotEmpty) {
+          final tail = source[deque.last]!;
+          if (maximum ? tail <= value : tail >= value) {
+            deque.removeLast();
+          } else {
+            break;
+          }
         }
-        extreme = extreme == null
-            ? x : (maximum ? math.max(extreme, x) : math.min(extreme, x));
+        deque.addLast(i);
       }
-      result[i] = extreme;
+      if (i >= period && source[i - period] == null) missing--;
+      final oldest = i - period + 1;
+      while (deque.isNotEmpty && deque.first < oldest) {
+        deque.removeFirst();
+      }
+      if (i >= period - 1 && missing == 0 && deque.isNotEmpty) {
+        result[i] = source[deque.first];
+      }
     }
     return result;
   }
