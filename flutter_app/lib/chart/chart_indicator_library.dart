@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
-import 'pine_subset_program.dart';
+import 'pine_v6_frontend.dart';
 import 'pine_frontend.dart';
 
 enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc, pine }
@@ -122,8 +122,9 @@ class ChartSavedIndicatorScript {
   }
 
   ChartIndicatorDefinition? _compileSeries() {
-    final program = PineSubsetProgram.tryCompile(source);
-    if (program == null) return null;
+    final checked = const PineV6Frontend().prepare(source);
+    final program = checked.legacyProgram;
+    if (!checked.canExecute || program == null) return null;
     return ChartIndicatorDefinition(id, name, 1,
         custom: true,
         kindOverride: ChartIndicatorKind.pine,
@@ -131,20 +132,22 @@ class ChartSavedIndicatorScript {
         pineOverlay: program.overlay);
   }
 
-  /// Full v6 syntax is parsed for diagnostics only; execution keeps using
-  /// the existing, explicitly bounded numeric Pine subset.
+  /// Compatibility-only diagnostic view inherited from merged #642.
+  /// Main saved-script compile/evaluate behavior uses PineV6Frontend.
   PineFrontendAnalysis get frontendAnalysis => PineFrontend.analyze(source);
 
-  /// Human-readable error with source line, column and category for anything
-  /// the current interpreter cannot execute, without evaluating it.
+  /// Human-readable compile result for unsupported saved source.
   String? get compileError {
-    final analysis = frontendAnalysis;
-    if (analysis.canExecute) return null;
-    if (analysis.diagnostics.isEmpty) return 'غير مدعوم بعد';
-    return analysis.diagnostics.map((d) =>
-        'السطر ' + d.line.toString() + '، العمود ' +
-        d.column.toString() + ' (' + d.code + '): ' + d.message)
-        .join('\n');
+    final checked = const PineV6Frontend().prepare(source);
+    if (checked.canExecute) return null;
+    final diagnostic = checked.diagnostics.isEmpty
+        ? null : checked.diagnostics.first;
+    if (diagnostic == null) return 'Pine: غير مدعوم بعد';
+    return 'السطر ' + diagnostic.line.toString() +
+        '، العمود ' + diagnostic.column.toString() +
+        ' (' + diagnostic.code + '): ' + diagnostic.message +
+        (diagnostic.code == 'not_yet_supported'
+            ? ' — غير مدعوم بعد' : '');
   }
 
   int? get supportedSmaPeriod {
