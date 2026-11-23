@@ -323,4 +323,42 @@ plot(support)''',
     }
   });
 
+  test('v6 named function arguments bind declared parameters in any order',(){
+    final report=front.prepare('''//@version=6
+indicator("Named args")
+combine(int first, simple float second = 2.0) =>
+    first + second
+result = combine(second=3.0, first=2)
+plot(close)''');
+    expect(report.hasErrors,isFalse,reason:report.message);
+    expect(report.status,PineFrontendStatus.parsedButNotExecutable,
+        reason:'User functions remain Stage 3 runtime work');
+    expect(report.diagnostics.any((e)=>e.code=='not_yet_supported'),isTrue);
+  });
+
+  test('semantic analyzer checks unknown, missing, duplicate, wrong-type '
+      'and too-strong-qualifier function arguments',(){
+    final report=front.prepare('''//@version=6
+indicator("Argument validation")
+combine(int first, simple float second = 2.0) =>
+    first + second
+badName = combine(first=2, unexpected=3)
+badType = combine(first="wrong")
+missingRequired = combine(second=3.0)
+duplicateProvided = combine(2, first=3)
+tooStrong = combine(first=2, second=close)
+plot(close)''');
+    final codes=report.diagnostics.map((e)=>e.code).toList();
+    expect(codes,containsAll(<String>[
+      'unknown_named_argument',
+      'function_argument_type',
+      'missing_function_argument',
+      'duplicate_parameter_argument',
+      'function_argument_qualifier',
+    ]),reason:report.message);
+    expect(report.hasErrors,isTrue);
+    expect(report.canExecute,isFalse);
+    expect(report.diagnostics.every((e)=>e.line>0&&e.column>0),isTrue);
+  });
+
 }
