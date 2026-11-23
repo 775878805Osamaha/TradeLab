@@ -299,6 +299,14 @@ plot(moving)''');
       'indicator("Arithmetic", overlay=false)\n'
           'left = (high + low) / 2\n'
           'plot(left)\nplot((left - close) / close)',
+      'indicator("Math families", overlay=false)\n'
+          'base = input.float(1.25, "Base")\n'
+          'plot(math.max(open, close) + base, color=color.purple)\n'
+          'plot(math.min(open, low), title="Minimum")',
+      'indicator("Change and styles", overlay=true)\n'
+          'delta = ta.change(close, 2)\n'
+          'plot(delta, style=plot.style_histogram, color=color.green)\n'
+          'plot(ta.sma(close, 3), linewidth=4, title="Trend")',
     ];
     for (final source in programs) {
       final original = PineSubsetProgram.compile(source);
