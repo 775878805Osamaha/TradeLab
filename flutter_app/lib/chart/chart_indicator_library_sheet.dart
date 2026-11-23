@@ -62,99 +62,34 @@ class _ChartIndicatorLibrarySheetState
   }
 
   Future<void> _addPineSource() async {
-    final title = TextEditingController();
-    final source = TextEditingController();
-    try {
-      final requestedSave = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          key: const Key('indicator-pine-editor'),
-          title: const Text('حفظ مؤشر Pine خاص'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                TextField(
-                  key: const Key('indicator-script-title'),
-                  controller: title,
-                  maxLength: ChartSavedIndicatorScript.maxNameLength,
-                  textDirection: TextDirection.rtl,
-                  decoration: const InputDecoration(
-                    labelText: 'اسم المؤشر',
-                    hintText: 'مثال: Ahmad HA First Trend V10',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  key: const Key('indicator-script-source'),
-                  controller: source,
-                  keyboardType: TextInputType.multiline,
-                  minLines: 5,
-                  maxLines: 10,
-                  maxLength: ChartSavedIndicatorScript.maxSourceLength,
-                  textDirection: TextDirection.ltr,
-                  decoration: const InputDecoration(
-                    labelText: 'كود Pine Script',
-                    border: OutlineInputBorder(),
-                    hintText: '//@version=6',
-                  ),
-                ),
-                const Text(
-                  'التشغيل المباشر متاح فقط للنوع البسيط '
-                  'indicator("Name", overlay=true) مع '
-                  'plot(ta.sma(close, N)). '
-                  'استراتيجيات Pine المعقدة تُحفظ، ولا تُنفذ أو تُعرض كمؤشر وهمي.',
-                  key: Key('indicator-pine-capability'),
-                  style: TextStyle(fontSize: 12),
-                ),
-              ]),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('إلغاء'),
-            ),
-            FilledButton(
-              key: const Key('indicator-script-save'),
-              onPressed: () {
-                if (title.text.trim().isEmpty || source.text.trim().isEmpty) {
-                  return;
-                }
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('حفظ'),
-            ),
-          ],
-        ),
-      );
-      if (requestedSave != true || !mounted) return;
-      final name = title.text.trim();
-      final code = source.text.trim();
-      var id = 'script-' +
-          DateTime.now().microsecondsSinceEpoch.toString();
-      while (_library.scripts.any((item) => item.id == id)) {
-        id = id + '-1';
-      }
-      final script = ChartSavedIndicatorScript(
-          id: id, name: name, source: code);
-      final updated = _library.saveScript(script);
-      if (identical(updated, _library)) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('وصلت إلى الحد المسموح (25 نصًا) '
-              'أو تعذر حفظ هذا النص')));
-        return;
-      }
-      _change(updated);
-      _search.clear();
-      if (script.supportedSmaPeriod == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('تم حفظ الكود. هذه الصيغة تتطلب محرك Pine '
-              'ولم تُضف إلى الشارت بعد.')));
-      }
-    } finally {
-      title.dispose();
-      source.dispose();
+    // The editor owns its TextEditingControllers until the Navigator has
+    // fully disposed the dialog route. Disposing them immediately after
+    // showDialog returns races Flutter's dismissal/focus animation.
+    final input = await showDialog<({String name, String source})>(
+      context: context,
+      builder: (_) => const _ChartPineSourceEditorDialog(),
+    );
+    if (input == null || !mounted) return;
+    var id = 'script-' +
+        DateTime.now().microsecondsSinceEpoch.toString();
+    while (_library.scripts.any((item) => item.id == id)) {
+      id = id + '-1';
+    }
+    final script = ChartSavedIndicatorScript(
+        id: id, name: input.name, source: input.source);
+    final updated = _library.saveScript(script);
+    if (identical(updated, _library)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('وصلت إلى الحد المسموح (25 نصًا) '
+            'أو تعذر حفظ هذا النص')));
+      return;
+    }
+    _change(updated);
+    _search.clear();
+    if (script.supportedSmaPeriod == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('تم حفظ الكود. هذه الصيغة تتطلب محرك Pine '
+            'ولم تُضف إلى الشارت بعد.')));
     }
   }
 
@@ -299,11 +234,11 @@ class _ChartIndicatorLibrarySheetState
               ),
             ),
             const SizedBox(height: 10),
-            SizedBox(height: 48, child: ListView(
+            SizedBox(height: 48, child: SingleChildScrollView(
               key: const Key('indicator-library-tabs'),
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: [
+              child: Row(children: [
                 for (var i = 0; i < _tabNames.length; i++)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 3),
@@ -314,7 +249,7 @@ class _ChartIndicatorLibrarySheetState
                       onSelected: (_) => setState(() => _tab = i),
                     ),
                   ),
-              ],
+              ]),
             )),
             Expanded(child: ListView(
               key: const Key('indicator-library-results'),
@@ -328,4 +263,90 @@ class _ChartIndicatorLibrarySheetState
 
   bool scriptIsUnsupported(ChartSavedIndicatorScript script) =>
       script.supportedSmaPeriod == null;
+}
+
+
+/// The dialog owns its controller lifetime. It cannot be disposed by the
+/// parent on the very frame Navigator.pop begins its exit transition.
+class _ChartPineSourceEditorDialog extends StatefulWidget {
+  const _ChartPineSourceEditorDialog();
+
+  @override
+  State<_ChartPineSourceEditorDialog> createState() =>
+      _ChartPineSourceEditorDialogState();
+}
+
+class _ChartPineSourceEditorDialogState
+    extends State<_ChartPineSourceEditorDialog> {
+  final TextEditingController _name = TextEditingController();
+  final TextEditingController _source = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _source.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    key: const Key('indicator-pine-editor'),
+    title: const Text('حفظ مؤشر Pine خاص'),
+    content: SizedBox(
+      width: double.maxFinite,
+      child: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            key: const Key('indicator-script-title'),
+            controller: _name,
+            maxLength: ChartSavedIndicatorScript.maxNameLength,
+            textDirection: TextDirection.rtl,
+            decoration: const InputDecoration(
+              labelText: 'اسم المؤشر',
+              hintText: 'مثال: Ahmad HA First Trend V10',
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            key: const Key('indicator-script-source'),
+            controller: _source,
+            keyboardType: TextInputType.multiline,
+            minLines: 5,
+            maxLines: 10,
+            maxLength: ChartSavedIndicatorScript.maxSourceLength,
+            textDirection: TextDirection.ltr,
+            decoration: const InputDecoration(
+              labelText: 'كود Pine Script',
+              border: OutlineInputBorder(),
+              hintText: '//@version=6',
+            ),
+          ),
+          const Text(
+            'التشغيل المباشر متاح فقط للنوع البسيط '
+            'indicator("Name", overlay=true) مع '
+            'plot(ta.sma(close, N)). '
+            'استراتيجيات Pine المعقدة تُحفظ، ولا تُنفذ أو تُعرض كمؤشر وهمي.',
+            key: Key('indicator-pine-capability'),
+            style: TextStyle(fontSize: 12),
+          ),
+        ]),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('إلغاء'),
+      ),
+      FilledButton(
+        key: const Key('indicator-script-save'),
+        onPressed: () {
+          final name = _name.text.trim();
+          final source = _source.text.trim();
+          if (name.isEmpty || source.isEmpty) return;
+          Navigator.pop(context, (name: name, source: source));
+        },
+        child: const Text('حفظ'),
+      ),
+    ],
+  );
 }
