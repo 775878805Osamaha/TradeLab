@@ -1,0 +1,82 @@
+import 'pine_subset_program.dart';
+import 'pine_v6_ast.dart';
+import 'pine_v6_lexer.dart';
+import 'pine_v6_parser.dart';
+import 'pine_v6_semantic.dart';
+
+export 'pine_v6_ast.dart';
+export 'pine_v6_lexer.dart';
+export 'pine_v6_parser.dart';
+export 'pine_v6_semantic.dart';
+
+enum PineFrontendStatus { executableSubset, parsedButNotExecutable, invalid }
+
+class PineFrontendResult {
+  const PineFrontendResult({
+    required this.ast, required this.tokens,
+    required this.diagnostics, required this.status,
+    required this.semantic, this.legacyProgram,
+  });
+  final PineScriptAst ast;
+  final List<PineToken> tokens;
+  final List<PineDiagnostic> diagnostics;
+  final PineFrontendStatus status;
+  final PineSemanticResult semantic;
+  final PineSubsetProgram? legacyProgram;
+  bool get canExecute =>
+      status == PineFrontendStatus.executableSubset&&legacyProgram!=null;
+  bool get hasErrors => diagnostics.any((d)=>
+      d.severity==PineDiagnosticSeverity.error);
+  String? get message => diagnostics.isEmpty?null:diagnostics.first.toString();
+
+  List<PineSubsetPlot> evaluateSupported(List<dynamic> unused) {
+    throw UnsupportedError('Use the existing typed Pine subset evaluator');
+  }
+}
+
+/// Analysis and execution eligibility are intentionally separate.
+/// An AST for valid var/varip/for/while/if/functions does NOT imply runtime
+/// support. Existing numeric scripts continue to use the existing compiler.
+class PineV6Frontend {
+  const PineV6Frontend({
+    this.lexer=const PineV6Lexer(),
+    this.maxAstNodes=16000,
+  });
+  final PineV6Lexer lexer;
+  final int maxAstNodes;
+
+  PineFrontendResult prepare(String source) {
+    final lexed=lexer.lex(source);
+    if(lexed.tokens.isEmpty) {
+      final empty=PineSemanticResult(const [],const {});
+      return PineFrontendResult(ast:const PineScriptAst([]),
+        tokens:const [],diagnostics:List.unmodifiable(lexed.diagnostics),
+        semantic:empty,status:PineFrontendStatus.invalid);
+    }
+    final parsed=PineV6Parser(lexed.tokens,maxNodes:maxAstNodes).parse();
+    final semantic=PineV6SemanticAnalyzer(
+      maxSymbols:maxAstNodes).analyze(parsed.ast);
+    final errors=<PineDiagnostic>[
+      ...lexed.diagnostics,...parsed.diagnostics,...semantic.diagnostics,
+    ];
+    final invalid=errors.any((d)=>d.severity==PineDiagnosticSeverity.error);
+    PineSubsetProgram? legacy;
+    if(!invalid)legacy=PineSubsetProgram.tryCompile(source);
+    if(legacy==null&&!invalid) {
+      final loc=parsed.ast.statements.isNotEmpty?
+          parsed.ast.statements.first.span:const PineSourceSpan(1,1);
+      errors.add(PineDiagnostic(PineDiagnosticStage.semantic,
+        'not_yet_supported',
+        'Valid Pine syntax was analyzed, but its runtime is not yet implemented',
+        loc,severity:PineDiagnosticSeverity.unsupported));
+    }
+    return PineFrontendResult(
+      ast:parsed.ast,tokens:List.unmodifiable(lexed.tokens),
+      semantic:semantic,diagnostics:List.unmodifiable(errors),
+      legacyProgram:legacy,
+      status:invalid?PineFrontendStatus.invalid:
+          legacy==null?PineFrontendStatus.parsedButNotExecutable:
+          PineFrontendStatus.executableSubset,
+    );
+  }
+}
