@@ -156,7 +156,10 @@ class ChartSavedIndicatorScript {
         PineV6LanguageProgram.compile(source);
         return null;
       } on PineRuntimeException catch(error) {
-        return 'Pine Stage 3a ('+error.code+'): '+error.message;
+        // Keep the pre-existing Arabic line/column editor contract even
+        // when the advanced runtime compiler rejects a script.
+        return 'السطر 1، العمود 1 (Stage 3a/'+error.code+
+            '): '+error.message;
       }
     }
     final diagnostic = checked.diagnostics.isEmpty
