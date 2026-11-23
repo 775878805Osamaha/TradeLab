@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — PR #635 merged; chart time-axis date marks stable across pan
+- Merged [#635](https://github.com/775878805Osamaha/TradeLab/pull/635) as `712067b52829d0308346c552f0d12a9bc4c1ff00`. [GitHub Actions #45183340568](https://github.com/775878805Osamaha/TradeLab/actions/runs/45183340568) completed/success: full active Flutter analyzer + Range/Replay/Results/chart regression suite and Yemen timezone verified.
+- Previous painter unconditionally treated first visible grid tick as a new day, causing date labels to jump during panning. New mark classification compares preceding real source-grid timestamp in chosen chart timezone, with tests for UTC/NY midnight, 5 pan offsets, weekend BID gap and Replay prefix bounds. No fabricated bars or rewritten prices; no APK, main or production deployment.
+- Remains pending hardware-measured TradingView parity and real cTrader BID first-load verification.
+
+
 ### 2026-11-23 — Chart labels stay source-bound across pan (CI PENDING)
 - Code-confirmed first-visible-tick weekday flicker repaired by comparing previous authentic grid-source index and active chart timezone, not previous onscreen tick. Replay source prefix, prices and timestamps unchanged.
 - Regression tests added for pan at five offsets, UTC/New York midnight, Friday-Monday Range gap and invalid source indices. Validate CI before merging; no APK or production changes.
