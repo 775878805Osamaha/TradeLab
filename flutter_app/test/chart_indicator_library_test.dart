@@ -251,4 +251,126 @@ void main() {
   });
 
 
+  test('pane reorder and independently adjustable heights persist to disk', () {
+    final a = const ChartIndicatorLibraryState()
+      .toggleActive('ema-21')
+      .toggleActive('rsi-14')
+      .toggleActive('macd')
+      .resizePane('rsi-14', 160)
+      .resizePane('macd', 128);
+    expect(a.active.map((s) => s.id), ['ema-21', 'rsi-14', 'macd']);
+    expect(a.movePane('rsi-14', -1), same(a),
+      reason: 'First independent pane cannot move higher');
+    final reordered = a.movePane('macd', -1);
+    expect(reordered.active.map((s) => s.id),
+      ['ema-21', 'macd', 'rsi-14']);
+    expect(reordered.heightForPane('rsi-14'),160);
+    expect(reordered.heightForPane('macd'),128);
+    final restored = ChartIndicatorLibraryState.decode(reordered.encode());
+    expect(restored.active.map((s) => s.id),
+      ['ema-21', 'macd', 'rsi-14']);
+    expect(restored.heightForPane('rsi-14'),160);
+    expect(restored.heightForPane('macd'),128);
+    expect(restored.resizePane('macd', 250), same(restored));
+    expect(restored.resizePane('ema-21', 155), same(restored),
+      reason: 'Only actual independent panes can be resized');
+    final reset = restored.resizePane('macd', 106);
+    expect(reset.heightForPane('macd'),106);
+    final removed = restored.toggleActive('rsi-14');
+    expect(removed.paneHeights.containsKey('rsi-14'),isFalse);
+    expect(removed.activeOrder, ['ema-21','macd']);
+  });
+
+  test('legacy preference migration preserves active indicators ordering', () {
+    final saved = ChartIndicatorLibraryState.decode(
+      '{"version":1,"activeIds":["macd","rsi-14"],'
+      '"favoriteIds":[],"scripts":[]}');
+    expect(saved.active.map((s) => s.id), ['rsi-14','macd'],
+      reason: 'Old saves had catalog order, not explicit drag order');
+    final invalid = ChartIndicatorLibraryState.decode(
+      '{"version":1,"activeIds":["rsi-14","macd"],'
+      '"activeOrder":["macd","garbage","macd","rsi-14"],'
+      '"paneHeights":{"macd":130,"rsi-14":999,"bad":110}}');
+    expect(invalid.active.map((s) => s.id), ['macd','rsi-14']);
+    expect(invalid.paneHeights,{'macd':130});
+  });
+
+
+  test('editing a running custom Pine series drops old invalid code', () {
+    const source = 'indicator("A", overlay=true)\nplot(close)';
+    const initial = ChartSavedIndicatorScript(
+      id: 'script-custom-edit', name: 'First', source: source);
+    final state = const ChartIndicatorLibraryState()
+      .saveScript(initial)
+      .toggleActive('script-custom-edit');
+    expect(state.active.single.kind, ChartIndicatorKind.pine);
+    final edited = state.updateScript(
+      id: 'script-custom-edit', name: 'Modified',
+      source: 'indicator("B", overlay=false)\nplot(close)');
+    expect(edited.scripts.single.name, 'Modified');
+    expect(edited.active, isEmpty,
+      reason: 'Changing from price overlay to oscillator pane '
+          'must detach old renderer until user re-adds');
+    expect(edited.activeOrder, isEmpty);
+    final invalid = state.updateScript(
+      id: 'script-custom-edit', name: 'Invalid saved source',
+      source: 'indicator("A", overlay=true)\nrequest.security("A","D",close)');
+    expect(invalid.scripts, hasLength(1));
+    expect(invalid.active, isEmpty);
+    expect(invalid.scripts.single.compileError, contains('السطر'));
+    expect(state.updateScript(id:'no-such',name:'No',source:source),
+      same(state));
+    expect(state.updateScript(id:'script-custom-edit',name:'',source:source),
+      same(state));
+  });
+
+  test('supported saved Pine source editing keeps selection and cache id', () {
+    const source = 'indicator("A", overlay=true)\nplot(close)';
+    const initial = ChartSavedIndicatorScript(
+      id: 'script-same', name: 'Original', source: source);
+    final state = const ChartIndicatorLibraryState()
+        .saveScript(initial).toggleActive('script-same');
+    final updated = state.updateScript(id: 'script-same', name: 'Changed',
+      source: 'indicator("B", overlay=true)\nplot(ta.ema(close,3))');
+    expect(updated.active.single.id, 'script-same');
+    expect(updated.active.single.kind, ChartIndicatorKind.ema,
+      reason: 'Simple legacy form still uses native EMA implementation');
+    expect(updated.scripts.single.name, 'Changed');
+    expect(ChartIndicatorLibraryState.decode(updated.encode())
+      .active.single.kind, ChartIndicatorKind.ema);
+  });
+
+
+  test('active overlay order and remove-all preserve saved Pine and favorites',
+      () {
+    const script = ChartSavedIndicatorScript(
+      id: 'script-management',
+      name: 'Custom overlay',
+      source: 'indicator("Custom",overlay=true)\nplot(close)\nplot(high)');
+    final original = const ChartIndicatorLibraryState()
+        .saveScript(script)
+        .toggleFavorite('sma-12')
+        .toggleActive('ema-21')
+        .toggleActive('sma-12')
+        .toggleActive('script-management')
+        .toggleActive('rsi-14')
+        .resizePane('rsi-14', 160);
+    final ordered = original.moveActive('script-management', -1);
+    expect(ordered.active.map((item) => item.id),
+        ['ema-21', 'script-management', 'sma-12', 'rsi-14']);
+    expect(ordered.moveActive('rsi-14', 1), same(ordered),
+        reason: 'Single pane has no adjacent pane to swap');
+    final saved = ChartIndicatorLibraryState.decode(ordered.encode());
+    expect(saved.active.map((item) => item.id),
+        ['ema-21', 'script-management', 'sma-12', 'rsi-14']);
+    final cleared = saved.clearActive();
+    expect(cleared.active, isEmpty);
+    expect(cleared.paneHeights, isEmpty);
+    expect(cleared.favoriteIds, contains('sma-12'));
+    expect(cleared.scripts.single.id, 'script-management');
+    expect(cleared.clearActive(), same(cleared));
+    expect(cleared.toggleActive('script-management').active.single.kind,
+        ChartIndicatorKind.pine);
+  });
+
 }

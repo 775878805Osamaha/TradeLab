@@ -93,6 +93,25 @@ class _ChartIndicatorLibrarySheetState
     }
   }
 
+  Future<void> _editSavedPine(ChartSavedIndicatorScript script) async {
+    final updated = await showDialog<({String name, String source})>(
+      context: context,
+      builder: (_) => _ChartPineSourceEditorDialog(
+        originalName: script.name, originalSource: script.source),
+    );
+    if (updated == null || !mounted) return;
+    final next = _library.updateScript(
+      id: script.id, name: updated.name, source: updated.source);
+    if (identical(next, _library)) return;
+    _change(next);
+    final revised = next.scripts.firstWhere((item) => item.id == script.id);
+    if (revised.supportedIndicator() == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('تم حفظ النص دون تشغيل: ' +
+            (revised.compileError ?? 'صيغة غير مدعومة'))));
+    }
+  }
+
   Future<void> _editStudyLength(ChartIndicatorDefinition item) async {
     if (item.custom || item.kind == ChartIndicatorKind.macd) return;
     var inputLength = item.period.toString();
@@ -130,7 +149,8 @@ class _ChartIndicatorLibrarySheetState
     }
   }
 
-  Widget _indicatorRow(ChartIndicatorDefinition item) {
+  Widget _indicatorRow(ChartIndicatorDefinition item,
+      {bool managing = false}) {
     final enabled = _library.activeIds.contains(item.id);
     final favorite = _library.favoriteIds.contains(item.id);
     return ListTile(
@@ -152,7 +172,19 @@ class _ChartIndicatorLibrarySheetState
         onPressed: () => _change(_library.toggleFavorite(item.id)),
       ),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (!item.custom && item.kind != ChartIndicatorKind.macd)
+        if (managing) ...[
+          IconButton(
+            key: Key('indicator-active-up-' + item.id),
+            tooltip: 'تقديم المؤشر',
+            onPressed: () => _change(_library.moveActive(item.id, -1)),
+            icon: const Icon(Icons.keyboard_arrow_up, size: 19)),
+          IconButton(
+            key: Key('indicator-active-down-' + item.id),
+            tooltip: 'تأخير المؤشر',
+            onPressed: () => _change(_library.moveActive(item.id, 1)),
+            icon: const Icon(Icons.keyboard_arrow_down, size: 19)),
+        ],
+        if (!managing && !item.custom && item.kind != ChartIndicatorKind.macd)
           IconButton(
             key: Key('indicator-settings-' + item.id),
             tooltip: 'تعديل طول المؤشر',
@@ -168,20 +200,37 @@ class _ChartIndicatorLibrarySheetState
 
   Widget _scriptRow(ChartSavedIndicatorScript script) {
     final supported = script.supportedIndicator();
-    if (supported != null) return _indicatorRow(supported);
-    return ListTile(
-      key: Key('indicator-unsupported-' + script.id),
-      title: Text(script.name),
-      subtitle: const Text(
-          'محفوظ في مؤشراتي · يتطلب دعم Pine Script للتشغيل'),
-      leading: const Icon(Icons.code_outlined),
-      trailing: IconButton(
-        key: Key('indicator-delete-' + script.id),
-        tooltip: 'حذف النص المحفوظ',
-        onPressed: () => _change(_library.deleteScript(script.id)),
-        icon: const Icon(Icons.delete_outline),
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      if (supported != null)
+        _indicatorRow(supported)
+      else
+        ListTile(
+          key: Key('indicator-unsupported-' + script.id),
+          title: Text(script.name),
+          subtitle: Text('يتطلب دعم Pine Script للتشغيل · ' +
+              (script.compileError ?? 'صيغة غير مدعومة'),
+              maxLines: 3, overflow: TextOverflow.ellipsis),
+          leading: const Icon(Icons.code_outlined),
+        ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(children: [
+          TextButton.icon(
+            key: Key('indicator-edit-' + script.id),
+            onPressed: () => _editSavedPine(script),
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            label: const Text('تعديل'),
+          ),
+          const SizedBox(width: 6),
+          TextButton.icon(
+            key: Key('indicator-delete-' + script.id),
+            onPressed: () => _change(_library.deleteScript(script.id)),
+            icon: const Icon(Icons.delete_outline, size: 16),
+            label: const Text('حذف'),
+          ),
+        ]),
       ),
-    );
+    ]);
   }
 
   @override
@@ -229,9 +278,20 @@ class _ChartIndicatorLibrarySheetState
         }
         break;
       case 3:
+        if (_library.active.isNotEmpty) {
+          children.add(Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const Key('indicator-clear-active'),
+              onPressed: () => _change(_library.clearActive()),
+              icon: const Icon(Icons.layers_clear_outlined),
+              label: const Text('إزالة جميع المؤشرات من الشارت'),
+            ),
+          ));
+        }
         children.addAll(_library.active
             .where((item) => _matches(item.title))
-            .map(_indicatorRow));
+            .map((item) => _indicatorRow(item, managing: true)));
         break;
     }
     if (children.isEmpty) {
@@ -317,7 +377,13 @@ class _ChartIndicatorLibrarySheetState
 /// The dialog owns its controller lifetime. It cannot be disposed by the
 /// parent on the very frame Navigator.pop begins its exit transition.
 class _ChartPineSourceEditorDialog extends StatefulWidget {
-  const _ChartPineSourceEditorDialog();
+  const _ChartPineSourceEditorDialog({
+    this.originalName = '',
+    this.originalSource = '',
+  });
+
+  final String originalName;
+  final String originalSource;
 
   @override
   State<_ChartPineSourceEditorDialog> createState() =>
@@ -326,8 +392,15 @@ class _ChartPineSourceEditorDialog extends StatefulWidget {
 
 class _ChartPineSourceEditorDialogState
     extends State<_ChartPineSourceEditorDialog> {
-  final TextEditingController _name = TextEditingController();
-  final TextEditingController _source = TextEditingController();
+  late final TextEditingController _name;
+  late final TextEditingController _source;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.originalName);
+    _source = TextEditingController(text: widget.originalSource);
+  }
 
   @override
   void dispose() {
@@ -370,11 +443,10 @@ class _ChartPineSourceEditorDialogState
             ),
           ),
           const Text(
-            'التشغيل المباشر يدعم مؤشرًا بسيطًا من '
-            'plot(ta.sma(close,N)) أو plot(ta.ema(close,N)) '
-            'فوق الشارت، أو plot(ta.rsi(close,N)) في لوحة '
-            'مستقلة مع overlay=false. بقية كود Pine يحفظ فقط '
-            'حتى يتوفر محرك كامل.',
+            'محرك السلاسل يدعم عدة متغيرات وplot حتى 8 خطوط، '
+            'وتعبيرات OHLC والحسابات وta.sma/ema/rsi/roc وغيرها. '
+            'يدعم overlay=true/false. أوامر Pine غير المدعومة '
+            'تُحفظ دون تشغيل، ويظهر سبب الرفض مع رقم السطر.',
             key: Key('indicator-pine-capability'),
             style: TextStyle(fontSize: 12),
           ),

@@ -4,21 +4,26 @@ import 'dart:math' as math;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
+import 'pine_subset_program.dart';
 
-enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc }
+enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc, pine }
 
 /// An immutable description of a real, supported on-chart indicator.
 /// All plots are calculated from the CURRENT verified source-candle list.
 /// A saved Pine strategy is NEVER silently substituted with a different line.
 class ChartIndicatorDefinition {
   const ChartIndicatorDefinition(this.id, this.title, this.period,
-      {this.custom = false, this.kindOverride});
+      {this.custom = false, this.kindOverride,
+       this.pineSource, this.pineOverlay = true});
 
   final String id;
   final String title;
   final int period;
   final bool custom;
   final ChartIndicatorKind? kindOverride;
+  /// Only populated after the restricted series compiler validated source.
+  final String? pineSource;
+  final bool pineOverlay;
 
   ChartIndicatorKind get kind {
     if (kindOverride != null) return kindOverride!;
@@ -32,7 +37,8 @@ class ChartIndicatorDefinition {
     return ChartIndicatorKind.sma;
   }
 
-  bool get separatePane => kind == ChartIndicatorKind.rsi ||
+  bool get separatePane => (kind == ChartIndicatorKind.pine && !pineOverlay) ||
+      kind == ChartIndicatorKind.rsi ||
       kind == ChartIndicatorKind.macd || kind == ChartIndicatorKind.atr ||
       kind == ChartIndicatorKind.stochastic || kind == ChartIndicatorKind.roc;
 
@@ -40,10 +46,12 @@ class ChartIndicatorDefinition {
   bool operator ==(Object other) => other is ChartIndicatorDefinition &&
       other.id == id && other.period == period &&
       other.title == title && other.custom == custom &&
-      other.kindOverride == kindOverride;
+      other.kindOverride == kindOverride &&
+      other.pineSource == pineSource && other.pineOverlay == pineOverlay;
 
   @override
-  int get hashCode => Object.hash(id, title, period, custom, kindOverride);
+  int get hashCode => Object.hash(id, title, period, custom, kindOverride,
+      pineSource, pineOverlay);
 
   static const builtIns = <ChartIndicatorDefinition>[
     ChartIndicatorDefinition('sma-12', 'SMA 12', 12),
@@ -92,24 +100,44 @@ class ChartSavedIndicatorScript {
         .map((line) => line.trim())
         .where((line) => line.isNotEmpty && !line.startsWith('//'))
         .toList(growable: false);
-    if (instructions.length != 2) return null;
+    if (instructions.length != 2) return _compileSeries();
     final declaration = RegExp(
       r'''^indicator\(\s*["'][^"']{1,80}["']\s*,\s*overlay\s*=\s*(true|false)\s*\)$''')
         .firstMatch(instructions.first);
     final plot = _singlePlot.firstMatch(instructions.last);
-    if (declaration == null || plot == null) return null;
+    if (declaration == null || plot == null) return _compileSeries();
     final period = int.tryParse(plot.group(2)!);
-    if (period == null || period < 1 || period > 500) return null;
+    if (period == null || period < 1 || period > 500) return _compileSeries();
     final kind = switch (plot.group(1)!) {
       'sma' => ChartIndicatorKind.sma,
       'ema' => ChartIndicatorKind.ema,
       _ => ChartIndicatorKind.rsi,
     };
-    if (kind == ChartIndicatorKind.rsi && period < 2) return null;
+    if (kind == ChartIndicatorKind.rsi && period < 2) return _compileSeries();
     if ((declaration.group(1) == 'false') !=
-        (kind == ChartIndicatorKind.rsi)) return null;
+        (kind == ChartIndicatorKind.rsi)) return _compileSeries();
     return ChartIndicatorDefinition(id, name, period,
         custom: true, kindOverride: kind);
+  }
+
+  ChartIndicatorDefinition? _compileSeries() {
+    final program = PineSubsetProgram.tryCompile(source);
+    if (program == null) return null;
+    return ChartIndicatorDefinition(id, name, 1,
+        custom: true,
+        kindOverride: ChartIndicatorKind.pine,
+        pineSource: source,
+        pineOverlay: program.overlay);
+  }
+
+  /// Human-readable compile result for unsupported saved source.
+  String? get compileError {
+    try {
+      PineSubsetProgram.compile(source);
+      return null;
+    } on PineSubsetException catch (error) {
+      return error.toString();
+    }
   }
 
   int? get supportedSmaPeriod {
@@ -143,12 +171,19 @@ class ChartIndicatorLibraryState {
     this.favoriteIds = const <String>{},
     this.scripts = const <ChartSavedIndicatorScript>[],
     this.periodOverrides = const <String, int>{},
+    this.activeOrder = const <String>[],
+    this.paneHeights = const <String, int>{},
   });
 
   final Set<String> activeIds;
   final Set<String> favoriteIds;
   final List<ChartSavedIndicatorScript> scripts;
   final Map<String, int> periodOverrides;
+  /// The order of rendered overlays and sub-panes; old saves without this
+  /// list fall back to the original built-in catalog order.
+  final List<String> activeOrder;
+  /// Resizable independent study panes use per-id device-local heights.
+  final Map<String, int> paneHeights;
 
   static const maxScripts = 25;
   static const maxActive = 8;
@@ -173,9 +208,83 @@ class ChartIndicatorLibraryState {
     return result;
   }
 
-  List<ChartIndicatorDefinition> get active =>
-      supported.where((item) => activeIds.contains(item.id))
-          .take(maxActive).toList(growable: false);
+  List<ChartIndicatorDefinition> get active {
+    final catalog = supported;
+    final byId = <String, ChartIndicatorDefinition>{
+      for (final item in catalog) item.id: item,
+    };
+    final valid = catalog.where((item) => activeIds.contains(item.id))
+        .map((item) => item.id).toList(growable: false);
+    final order = <String>{
+      ...activeOrder.where((id) => activeIds.contains(id) &&
+          byId.containsKey(id)),
+      ...valid,
+    };
+    return order.take(maxActive).map((id) => byId[id]!)
+        .toList(growable: false);
+  }
+
+  int heightForPane(String id) =>
+      paneHeights[id]?.clamp(84, 192).toInt() ?? 106;
+
+  ChartIndicatorLibraryState resizePane(String id, int height) {
+    final activePane = active.any((item) => item.id == id &&
+        item.separatePane);
+    if (!activePane || height < 84 || height > 192) return this;
+    final next = <String, int>{...paneHeights};
+    if (height == 106) {
+      next.remove(id);
+    } else {
+      next[id] = height;
+    }
+    return copyWith(paneHeights: next);
+  }
+
+  /// Move a pane relative to other panes, without losing overlay positions.
+  ChartIndicatorLibraryState movePane(String id, int direction) {
+    if (direction != -1 && direction != 1) return this;
+    final current = active.map((item) => item.id).toList();
+    final panes = active.where((item) => item.separatePane)
+        .map((item) => item.id).toList();
+    final index = panes.indexOf(id);
+    final target = index + direction;
+    if (index < 0 || target < 0 || target >= panes.length) return this;
+    final first = current.indexOf(panes[index]);
+    final second = current.indexOf(panes[target]);
+    final tmp = current[first];
+    current[first] = current[second];
+    current[second] = tmp;
+    return copyWith(activeOrder: current);
+  }
+
+  /// Change the stacking order of active overlays or independent panes
+  /// without accidentally moving an overlay into the pane list.
+  ChartIndicatorLibraryState moveActive(String id, int direction) {
+    if (direction != -1 && direction != 1) return this;
+    final studies = active;
+    final kind = studies.where((item) =>
+        item.separatePane == studies.any((value) =>
+            value.id == id && value.separatePane))
+        .map((item) => item.id).toList();
+    final at = kind.indexOf(id);
+    final nextIndex = at + direction;
+    if (at < 0 || nextIndex < 0 || nextIndex >= kind.length) return this;
+    final ordering = studies.map((item) => item.id).toList();
+    final first = ordering.indexOf(kind[at]);
+    final second = ordering.indexOf(kind[nextIndex]);
+    final swap = ordering[first];
+    ordering[first] = ordering[second];
+    ordering[second] = swap;
+    return copyWith(activeOrder: ordering);
+  }
+
+  /// Remove all *visible* indicators while preserving the user's source
+  /// drafts, favorites, and custom lengths. No broker or chart data changes.
+  ChartIndicatorLibraryState clearActive() {
+    if (activeIds.isEmpty) return this;
+    return copyWith(activeIds: <String>{},
+        activeOrder: <String>[], paneHeights: <String, int>{});
+  }
 
   bool get hasActive => active.isNotEmpty;
 
@@ -184,6 +293,8 @@ class ChartIndicatorLibraryState {
     Set<String>? favoriteIds,
     List<ChartSavedIndicatorScript>? scripts,
     Map<String, int>? periodOverrides,
+    List<String>? activeOrder,
+    Map<String, int>? paneHeights,
   }) => ChartIndicatorLibraryState(
     activeIds: Set<String>.unmodifiable(activeIds ?? this.activeIds),
     favoriteIds: Set<String>.unmodifiable(favoriteIds ?? this.favoriteIds),
@@ -191,19 +302,29 @@ class ChartIndicatorLibraryState {
         scripts ?? this.scripts),
     periodOverrides: Map<String, int>.unmodifiable(
         periodOverrides ?? this.periodOverrides),
+    activeOrder: List<String>.unmodifiable(activeOrder ?? this.activeOrder),
+    paneHeights: Map<String, int>.unmodifiable(
+        paneHeights ?? this.paneHeights),
   );
 
   ChartIndicatorLibraryState toggleActive(String id) {
     if (!supported.any((item) => item.id == id)) return this;
     final next = <String>{...activeIds};
-    if (!next.remove(id)) {
+    final ordered = active.map((item) => item.id).toList();
+    final heights = <String, int>{...paneHeights};
+    if (next.remove(id)) {
+      ordered.remove(id);
+      heights.remove(id);
+    } else {
       if (active.length >= maxActive) return this;
       final proposed = supported.firstWhere((item) => item.id == id);
       if (proposed.separatePane &&
           active.where((item) => item.separatePane).length >= 2) return this;
       next.add(id);
+      ordered.add(id);
     }
-    return copyWith(activeIds: next);
+    return copyWith(activeIds: next, activeOrder: ordered,
+        paneHeights: heights);
   }
 
   ChartIndicatorLibraryState setPeriod(String id, int length) {
@@ -238,11 +359,48 @@ class ChartIndicatorLibraryState {
     return copyWith(scripts: [...scripts, script]);
   }
 
+  /// Replacing saved Pine source is atomic. Unsupported or pane-changing
+  /// edits never leave an old running program attached to the real chart.
+  /// A user can still retain an unsupported draft locally without execution.
+  ChartIndicatorLibraryState updateScript({
+    required String id,
+    required String name,
+    required String source,
+  }) {
+    final index = scripts.indexWhere((item) => item.id == id);
+    if (index < 0) return this;
+    final replacement = ChartSavedIndicatorScript(
+      id: id, name: name, source: source);
+    if (ChartSavedIndicatorScript.fromJson(replacement.toJson()) == null) {
+      return this;
+    }
+    final updatedScripts = [...scripts]..[index] = replacement;
+    final nextActive = <String>{...activeIds};
+    final nextOrder = [...activeOrder];
+    final heights = <String, int>{...paneHeights};
+    final before = scripts[index].supportedIndicator();
+    final after = replacement.supportedIndicator();
+    if (after == null ||
+        (before != null && before.separatePane != after.separatePane)) {
+      nextActive.remove(id);
+      nextOrder.remove(id);
+      heights.remove(id);
+    }
+    return copyWith(
+      scripts: updatedScripts,
+      activeIds: nextActive,
+      activeOrder: nextOrder,
+      paneHeights: heights,
+    );
+  }
+
   ChartIndicatorLibraryState deleteScript(String id) {
     return copyWith(
       scripts: scripts.where((script) => script.id != id).toList(),
       activeIds: <String>{...activeIds}..remove(id),
       favoriteIds: <String>{...favoriteIds}..remove(id),
+      activeOrder: activeOrder.where((item) => item != id).toList(),
+      paneHeights: <String, int>{...paneHeights}..remove(id),
     );
   }
 
@@ -252,6 +410,8 @@ class ChartIndicatorLibraryState {
     'favoriteIds': favoriteIds.toList(),
     'scripts': scripts.map((item) => item.toJson()).toList(),
     'periodOverrides': periodOverrides,
+    'activeOrder': activeOrder,
+    'paneHeights': paneHeights,
   });
 
   static ChartIndicatorLibraryState decode(String encoded) {
@@ -301,9 +461,41 @@ class ChartIndicatorLibraryState {
         return data.whereType<String>()
             .where(valid.contains).take(cap).toSet();
       }
+      final active = readIds(parsed['activeIds'], allowed, maxActive);
+      final rawOrder = parsed['activeOrder'];
+      final ordered = <String>[];
+      if (rawOrder is List) {
+        for (final id in rawOrder.whereType<String>()) {
+          if (active.contains(id) && !ordered.contains(id) &&
+              ordered.length < maxActive) ordered.add(id);
+        }
+      }
+      for (final item in catalog.supported) {
+        if (active.contains(item.id) && !ordered.contains(item.id)) {
+          ordered.add(item.id);
+        }
+      }
+      final heights = <String, int>{};
+      final rawHeights = parsed['paneHeights'];
+      final byId = <String, ChartIndicatorDefinition>{
+        for (final item in catalog.supported) item.id: item,
+      };
+      if (rawHeights is Map) {
+        for (final entry in rawHeights.entries) {
+          final id = entry.key;
+          final pixels = entry.value;
+          if (id is String && pixels is int && pixels >= 84 &&
+              pixels <= 192 && active.contains(id) &&
+              byId[id]?.separatePane == true) {
+            heights[id] = pixels;
+          }
+        }
+      }
       return catalog.copyWith(
-        activeIds: readIds(parsed['activeIds'], allowed, maxActive),
+        activeIds: active,
         favoriteIds: readIds(parsed['favoriteIds'], existing, 50),
+        activeOrder: ordered,
+        paneHeights: heights,
       );
     } catch (_) {
       return const ChartIndicatorLibraryState();
