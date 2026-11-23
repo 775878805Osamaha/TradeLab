@@ -1,7 +1,43 @@
-# Stage 3a starting checkpoint — 2026-11-24
+# TradeLab — Stage 3a closed-bar Pine language runtime handoff (2026-11-24)
 
-Provisional base: PR #643 at a8f7db3e99123489771d260727a839c1e4e7e2a9, stacked on unmerged #642. Owner decision pending; no merge. #644 is competing, not a dependency. Both PRs were opened by GitHub account 775878805Osamaha; actual session/person cannot be established from metadata. #643: 13 files, +2225/-9, 25 frontend tests, 978 total passing checks (run 45230338091). #644: 12 files, +2048/-8, 16 frontend tests, 969 checks (run 45224969067). Five shared paths: chart_indicator_library.dart, verify-flutter-range.yml, HANDOFF.md, CHANGE_REPORTS.md, PINE_STAGE2_HANDOFF_2026-11-23.md. Prefer #643; selectively port #644 direct-na comparison and EMA/RSI length checks and fixtures, not duplicate frontend.
+**Working branch:** `feat/pine-stage3a-language-runtime-20261124`  
+**Draft PR:** [#645](https://github.com/775878805Osamaha/TradeLab/pull/645) → `feat/pine-stage2-v6-frontend-20261123` (**#643**, still stacked on unmerged **#642**). **Owner chooses / merges only.** PR #644 will NOT merge, and it is NOT a dependency. No main/Kotlin/APK/Release/other repositories touched.
 
-Verified actual CI logs: mutation run 45217673219 job 137843111644 expected indices <3, actual [0,1,2,3], 7 pass/1 fail. Mutation run 45217676913 job 137843126422 expected empty instance state, actual counter PineValue:4.0, 7 pass/1 fail. These are Stage 1 negative controls, not script-level var mutation tests. Differential tests verified green in both PRs: #643 five multi-plot fixtures comparing values and visual metadata, #644 seven fixtures comparing values. Finite fixtures do not prove every possible supported script.
+## Selective transplant before Runtime
 
-Stage 3a implementation NOT STARTED; branch and this checkpoint only. Next: inspect AST and bounded runtime APIs; extend differential fixtures, port selected semantic checks, implement closed-bar var/varip, control flow and independent call-site histories, replay rebuild and script-level mutation test. No APK, no V10, no other projects, no merge. No new CI run or test result claimed for this branch.
+- **Taken from #644 by hand:** `x == na` / `x != na` rejection with use-`na(x)` error, `ta.ema/ta.rsi` length integer/type/qualifier and positive literal enforcement, with **2 new tests** adapted to `pine_v6_frontend_test.dart` on #643 architecture.
+- **Not taken:** alternative `pine_frontend_*.dart` Lexer/Parser/AST/Semantic stack, `chart_indicator_library.dart` overwrite, `verify-flutter-range.yml` overwrite, alternate docs or duplicate workflow. The **existing #643** Lexer, Parser, AST and semantic stack remain authoritative. Chart/library changes after the transplant are specific to Stage 3a, not copied from #644.
+- Shared paths were inspected and old semantics preserved. The main existing Flutter test gate remains unchanged; the new branch has a **separate** `pine-v6-stage3a-no-apk.yml` to avoid touching the five shared paths.
+
+## Source implementation completed so far
+
+1. `flutter_app/lib/chart/pine_v6_semantic.dart`: ported direct-`na` and simple-int length checks; existing scope, type, qualifier, named-UDF and loop-control checks retained.
+2. `flutter_app/lib/chart/pine_v6_language_runtime.dart` **new**: bounded, per-closed-bar executor for the #643 AST, reusing Stage 1 `PineRuntimeBudget`; `var` and closed-bar `varip`, reassignment, `if/else`, ternary, switch-arm blocks, `for`/`while` with break/continue, finite loop cap, numeric scalar UDF with independent written-call-site SMA accumulators, input.int/float, math.abs/min/max, na/nz. Rejects unknown requests/plots/TA functions instead of faking outputs. Old `PineSubsetProgram` remains the execution path for all already-supported numeric scripts; do not bypass invalid legacy script periods via new fallback.
+3. `flutter_app/lib/chart/chart_indicator_library.dart` and `chart_indicator_engine.dart`: **manual additive integration**, gate saved Stage 3a source through new compiler, retain existing saved scripts and all old numeric indicator paths. New scripts use verified current Replay prefix in chart; old scripts use old evaluator. No extra `pine_frontend_*.dart` files imported.
+4. `flutter_app/test/pine_v6_language_runtime_test.dart` **new**: manual var counter/first-close var, closed-bar varip, if/else, historical loop/nz/na, break/continue, for/while limit error, conditional UDF SMA history, two instances, two Replay sessions, 50→20→30 no-future/identical direct output, safe unsupported call, legacy numerical differential, switch return, saved-library-and-chart integration, and rejection of legacy invalid period.
+5. `flutter_app/test/pine_v6_frontend_test.dart` +2 portable #644 rules.
+6. `.github/workflows/pine-v6-stage3a-no-apk.yml`: runs full Flutter analysis + Pine, Replay, Range, chart and paper-regression tests, no APK. `docs/PINE_STAGE3A_SUPPORT_MATRIX_2026-11-24.md` is the explicit parsed/executed/not-yet-supported matrix.
+
+## Verified test evidence and status
+
+**First completed CI before chart wiring:** [#45281977095](https://github.com/775878805Osamaha/TradeLab/actions/runs/45281977095) **completed/success** on `2be26b5577f071396e9b1f64ecc70b91a3ddf3c1`, actual GitHub log **976 main + 4 separately verified drawing + 11 timezone = 991 PASS / 0 FAIL**, Flutter analyze success; all first **11** runtime tests passed. This is NOT a green claim for subsequent chart integration changes.
+
+**Full chart integration CI:** [#45282914169](https://github.com/775878805Osamaha/TradeLab/actions/runs/45282914169), source `ed46b560fbcb907f8f23ac983533ed992cc1fe1e`; **PENDING FINAL VERIFICATION**. Do not label it passed until completed log is inspected.
+
+**Script-level var mutation test:** temporary branch `test/pine-stage3a-var-mutant-no-pr-20261124` at mutant commit `552fabab93ade1768a1cf346e8e6dd5a2aae2013` deliberately uses static shared var state; [run #45283233812](https://github.com/775878805Osamaha/TradeLab/actions/runs/45283233812) **PENDING**, no PR. A green run would indicate the tests are too weak and need strengthening; do not count intentional failures as production failures.
+
+Local Flutter/Dart executables **not installed**. No local Flutter Analyze, emulator, physical device or APK executed.
+
+## Official semantics and known limits
+
+- [TradingView v6 execution model](https://www.tradingview.com/pine-script-docs/language/execution-model/): confirmed historical bar execution; `var` commits across bars, while `varip` escapes intrabar rollback on realtime bars. **This implementation handles confirmed historical candles only.** Replay treats each prefix candle as closed. No realtime tick/recalculation/rollback tests, no claim of full live `varip`.
+- [TradingView v6 user functions](https://www.tradingview.com/pine-script-docs/language/user-defined-functions/): each *written* call-site has an independent variable and historical series scope, and conditional calls can skip some bar executions. New SMA state keys by AST call expression + enclosing written UDF call site; conditionally skipped UDF sites add no SMA samples.
+- [TradingView loops](https://www.tradingview.com/pine-script-docs/language/loops/): `for...in` exists for arrays/maps/matrices, but collection iteration is NOT implemented (Stage 3b or after).
+- **Incomplete v6 coverage**: `if` and `switch` statement blocks/last-expression UDF return supported; the Stage 2 grammar does not yet parse `x = if ...` or `x = switch ...` expression forms, and those are not claimed. Full UDF type/overload/UDT/tuples, other builtins, advanced drawing and cross-timeframe request.* remain unsupported. No broker order logic changed.
+- Full-prefix Replay rebuild is deterministic **O(bars × supported AST work)**; not incremental checkpoints. Budget and time checks are cooperative (not preemptive isolates), so live Android UI frame performance is unverified.
+
+## Merge instructions and next task
+
+Review owner #642 → after owner merge carefully rebase/retarget #643 onto `test/flutter-all-fixes-20261116` and rerun CI → owner merges #643 → rebase/retarget draft #645 to the integration branch and rerun entire CI → **owner alone** merges #645. Never merge #644; owner will close it. Nothing is merged now.
+
+Next technical work after green CI and owner review: Stage 3b built-in function registry and v6-compatible TA/math/array library, tick-level rollback/realtime `varip` design, full if/switch expression grammar, cancellable isolate, and performance tests. No V10, no OMEX, no OMX ERP.
