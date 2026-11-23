@@ -112,7 +112,9 @@ class ReplayTrainingSession {
 
   /// One authoritative fill policy shared by small-step playback and the
   /// indexed long-seek path. The trade never fills on its own entry bar;
-  /// stop wins a same-bar SL+TP tie, and a stop gap fills at adverse open.
+  /// stop wins an unresolved intrabar SL+TP tie; inter-bar gaps fill at the
+  /// actual following open (both adverse SL and favorable TP), before any
+  /// simulated intrabar stop/target checks.
   static ReplayTrainingTrade? _exitOnBar(
       ReplayTrainingTrade trade, TradeCandle candle, int bar) {
     if (trade.entryIndex >= bar) return null;
@@ -124,6 +126,19 @@ class ReplayTrainingSession {
         (trade.side == ReplaySide.buy
             ? candle.high >= trade.takeProfit!
             : candle.low <= trade.takeProfit!);
+    // TradingView's default broker emulator fills a price-based order
+    // at the NEXT bar's opening price when it crosses the order level
+    // inside the inter-bar gap (not at the old limit/target price).
+    // This also means a TP filled immediately at OPEN wins over a later
+    // stop hit within that same candle. These are verified OHLC prices,
+    // not inferred sub-bar ticks or future Replay data.
+    final targetAtOpen = targeted && (trade.side == ReplaySide.buy
+        ? candle.open >= trade.takeProfit!
+        : candle.open <= trade.takeProfit!);
+    if (targetAtOpen) {
+      return trade.close(
+          bar, candle.open, ReplayExitReason.takeProfit);
+    }
     if (stopped) {
       final fill = trade.side == ReplaySide.buy
           ? (candle.open < trade.stopLoss! ? candle.open : trade.stopLoss!)
