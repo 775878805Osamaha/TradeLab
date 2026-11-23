@@ -417,9 +417,55 @@ class PineV6SemanticAnalyzer {
         _error('recursive_function','Pine user-defined functions cannot recurse',call.span);
       }
       final params=function!.params;
-      final mandatory=params.where((p)=>p.defaultValue==null).length;
-      if(call.arguments.length<mandatory||call.arguments.length>params.length){
-        _error('function_arity','Incorrect number of arguments to '+name,call.span);
+      // Map positional and named arguments to the *declared* parameters.
+      // Counting arguments alone is insufficient: f(x=1, bogus=2) must not
+      // accidentally pass the semantic gate when f only declares (x, y).
+      final supplied=<String>{};
+      final byName={for(final p in params)p.name:p};
+      for(var i=0;i<call.arguments.length;i++){
+        final arg=call.arguments[i];
+        final parameter=arg.name!=null
+            ?byName[arg.name]
+            :i<params.length?params[i]:null;
+        if(parameter==null){
+          if(arg.name!=null){
+            _error('unknown_named_argument',
+                'Unknown named argument '+arg.name!+' in '+name,arg.span);
+          }
+          continue;
+        }
+        if(!supplied.add(parameter.name)){
+          _error('duplicate_parameter_argument',
+            'Function parameter '+parameter.name+' is passed more than once',
+            arg.span);
+          continue;
+        }
+        if(parameter.typeName!=null){
+          final expected=_bases[parameter.typeName]??PineBaseType.unknown;
+          if(!_compatible(expected,info[i].type)){
+            _error('function_argument_type',
+                'Argument for '+parameter.name+' requires '+expected.name,
+                arg.span);
+          }
+        }
+        if(parameter.qualifier!=null){
+          final expected=_quals[parameter.qualifier];
+          if(expected!=null&&info[i].qualifier.index>expected.index){
+            _error('function_argument_qualifier',
+                'Argument qualifier is too strong for '+parameter.name,
+                arg.span);
+          }
+        }
+      }
+      for(final parameter in params){
+        if(parameter.defaultValue==null&&!supplied.contains(parameter.name)){
+          _error('missing_function_argument',
+              'Missing required function argument '+parameter.name,
+              call.span);
+        }
+      }
+      if(call.arguments.length>params.length){
+        _error('function_arity','Too many arguments to '+name,call.span);
       }
       return function.type;
     }
