@@ -57,6 +57,7 @@ void main() {
     expect(find.byKey(const Key('indicator-row-sma-50')), findsNothing);
     await tester.tap(find.byKey(const Key('indicator-row-sma-20')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('indicator-tab-3')));
     await tester.tap(find.byKey(const Key('indicator-tab-3')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('indicator-row-sma-20')), findsOneWidget);
