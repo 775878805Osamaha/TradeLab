@@ -222,9 +222,9 @@ plot(close)''';
     final lex=const PineV6Lexer(maxDuration:Duration.zero).lex(source);
     expect(lex.diagnostics.map((d)=>d.code),contains('lexer_timeout'));
 
-    final many='indicator("Many")\\n'+List.generate(
-      100,(i)=>'v'+i.toString()+' = '+i.toString()).join('\\n')+
-      '\\nplot(close)';
+    final many='indicator("Many")\n'+List.generate(
+      100,(i)=>'v'+i.toString()+' = '+i.toString()).join('\n')+
+      '\nplot(close)';
     final tokens=const PineV6Lexer().lex(many).tokens;
     final parsed=PineV6Parser(tokens,maxDuration:Duration.zero).parse();
     expect(parsed.diagnostics.map((d)=>d.code),contains('parser_timeout'));
