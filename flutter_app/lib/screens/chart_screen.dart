@@ -6231,8 +6231,20 @@ class _ChartScreenState extends State<ChartScreen>
             cache: _indicatorSeriesCache,
             viewport: () => _viewport,
             repaint: _chartRepaint,
+            height: _indicatorLibrary.heightForPane(study.id).toDouble(),
             onRemove: () => _changeIndicatorLibrary(
                 _indicatorLibrary.toggleActive(study.id)),
+            onMoveUp: () => _changeIndicatorLibrary(
+                _indicatorLibrary.movePane(study.id, -1)),
+            onMoveDown: () => _changeIndicatorLibrary(
+                _indicatorLibrary.movePane(study.id, 1)),
+            onResize: () {
+              final current = _indicatorLibrary.heightForPane(study.id);
+              final next = current >= 176 ? 106 :
+                  current >= 128 ? 176 : 128;
+              _changeIndicatorLibrary(
+                  _indicatorLibrary.resizePane(study.id, next));
+            },
             onScaleStart: (_) {
               _stopMomentum();
               _touchGesture = ChartTouchGesture();
@@ -6660,7 +6672,12 @@ class _CandleChartPainter extends CustomPainter {
       if (item.separatePane) continue;
       final result = indicatorSeriesCache.get(candles, item);
       for (var line = 0; line < result.plots.length; line++) {
-        final samples = result.plots[line].values;
+        final plot = result.plots[line];
+        final samples = plot.values;
+        final ink = plot.argbColor == null
+            ? _indicatorColors[(overlaySlot + line) %
+                _indicatorColors.length]
+            : Color(plot.argbColor!);
         final path = Path();
         var started = false;
         for (var i = start; i < ending; i++) {
@@ -6671,18 +6688,25 @@ class _CandleChartPainter extends CustomPainter {
           }
           final x = viewport.chartX(
             index: i, candleCount: candles.length, plotWidth: axis);
-          if (!started) {
+          if (plot.histogram) {
+            // Pine histogram plots use the source-independent zero base,
+            // clipped to the main price plot like TradingView overlay=true.
+            canvas.drawLine(Offset(x, y(0)), Offset(x, y(value)),
+              Paint()..color = ink
+                ..strokeWidth = math.max(1, viewport.barWidth * .6));
+          } else if (!started) {
             path.moveTo(x, y(value));
             started = true;
           } else {
             path.lineTo(x, y(value));
           }
         }
-        canvas.drawPath(path, Paint()
-          ..color = _indicatorColors[
-            (overlaySlot + line) % _indicatorColors.length]
-          ..strokeWidth = line == 0 ? 1.6 : 1.1
-          ..style = PaintingStyle.stroke);
+        if (!plot.histogram) {
+          canvas.drawPath(path, Paint()
+            ..color = ink
+            ..strokeWidth = plot.width.toDouble()
+            ..style = PaintingStyle.stroke);
+        }
       }
       overlaySlot++;
     }
@@ -6918,8 +6942,11 @@ class _CandleChartPainter extends CustomPainter {
         for (var line = 0; line < result.plots.length; line++) {
           final value = result.plots[line].values[ending - 1];
           if (value == null || !value.isFinite) continue;
-          annotate(value, _indicatorColors[
-            (overlaySlot + line) % _indicatorColors.length],
+          final plot = result.plots[line];
+          annotate(value, plot.argbColor == null
+              ? _indicatorColors[(overlaySlot + line) %
+                  _indicatorColors.length]
+              : Color(plot.argbColor!),
             scaleSettings.indicatorLabels);
         }
         overlaySlot++;
