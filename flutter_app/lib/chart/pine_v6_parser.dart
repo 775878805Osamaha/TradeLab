@@ -91,8 +91,9 @@ class PineV6Parser {
         _lines();continue;
       }
       try {
-        result.add(_statement());
-        if(!_done&&!_kind(PineTokenKind.dedent)&&
+        final statement = _statement();
+        result.add(statement);
+        if(!_ownsBlock(statement)&&!_done&&!_kind(PineTokenKind.dedent)&&
             !_kind(PineTokenKind.newline)) {
           _fail('trailing_tokens','Unexpected tokens after statement');
         }
@@ -124,6 +125,11 @@ class PineV6Parser {
     }
     return false;
   }
+
+  bool _ownsBlock(PineStatement s) =>
+      s is PineIfStatement || s is PineForStatement ||
+      s is PineWhileStatement || s is PineSwitchStatement ||
+      s is PineFunctionStatement;
 
   PineStatement _statement(){
     _budget();
@@ -168,8 +174,9 @@ class PineV6Parser {
     while(!_done&&!_kind(PineTokenKind.dedent)) {
       final before=_i;
       try {
-        body.add(_statement());
-        if(!_done&&!_kind(PineTokenKind.newline)&&
+        final statement = _statement();
+        body.add(statement);
+        if(!_ownsBlock(statement)&&!_done&&!_kind(PineTokenKind.newline)&&
             !_kind(PineTokenKind.dedent)) {
           _fail('trailing_tokens','Trailing tokens in local block');
         }
@@ -315,7 +322,9 @@ class PineV6Parser {
           do{
             final where=_at.span;
             String? name;
-            if(_kind(PineTokenKind.identifier)&&_next.text=='='){
+            if((_kind(PineTokenKind.identifier)||
+                 (_kind(PineTokenKind.keyword)&&_is('color')))&&
+                _next.text=='='){
               name=_take().text;_take();
             }
             args.add(PineCallArgument(where,_expression(),name:name));
