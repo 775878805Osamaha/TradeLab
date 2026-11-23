@@ -1,0 +1,146 @@
+[
+  {
+    "name": "ta.sma",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2"
+  },
+  {
+    "name": "ta.ema",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2"
+  },
+  {
+    "name": "ta.rma",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2"
+  },
+  {
+    "name": "ta.wma",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2"
+  },
+  {
+    "name": "ta.rsi",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2"
+  },
+  {
+    "name": "ta.atr",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "2"
+  },
+  {
+    "name": "ta.tr",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "true"
+  },
+  {
+    "name": "ta.macd",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "library-only",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "library prefix rebuild only",
+    "call": "close, 2, 3, 2"
+  },
+  {
+    "name": "ta.bb",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "library-only",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "library prefix rebuild only",
+    "call": "close, 2, 2"
+  },
+  {
+    "name": "ta.stdev",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2"
+  },
+  {
+    "name": "ta.highest",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2"
+  },
+  {
+    "name": "ta.lowest",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2"
+  },
+  {
+    "name": "ta.change",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2"
+  },
+  {
+    "name": "ta.roc",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2"
+  },
+  {
+    "name": "ta.crossover",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 13.5"
+  },
+  {
+    "name": "ta.crossunder",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "manual-formula comparison required; no TradingView capture",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 13.5"
+  }
+]
