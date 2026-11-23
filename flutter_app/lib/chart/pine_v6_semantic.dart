@@ -16,11 +16,13 @@ class PineSemanticResult {
   final Map<PineExpression,PineTypeInfo> inferred;
 }
 class _PineSymbol {
-  _PineSymbol(this.name,this.type,{this.function=null,this.params=const []});
+  _PineSymbol(this.name,this.type,{this.function=null,this.params=const [],
+      this.isParameter=false});
   final String name;
   PineTypeInfo type;
   final PineFunctionStatement? function;
   final List<PineFunctionParameter> params;
+  final bool isParameter;
 }
 class _PineScope {
   _PineScope(this.parent);
@@ -194,6 +196,9 @@ class PineV6SemanticAnalyzer {
       final target=scope.lookup(stmt.name);
       if(target==null){
         _error('undefined_name','Cannot reassign undeclared name: '+stmt.name,stmt.span);
+      }else if(target.isParameter){
+        _error('immutable_parameter',
+          'A user function cannot reassign its parameter',stmt.span);
       }else if(_functionName!=null&&
           _global?.locals[stmt.name]==target){
         _error('function_global_reassignment',
@@ -270,7 +275,8 @@ class PineV6SemanticAnalyzer {
         }
         _define(child,parameter.name,_PineSymbol(parameter.name,
           PineTypeInfo(_bases[parameter.typeName]??PineBaseType.unknown,
-            _quals[parameter.qualifier]??PineQualifier.series)),parameter.span);
+            _quals[parameter.qualifier]??PineQualifier.series),
+          isParameter:true),parameter.span);
       }
       _body(stmt.body,child);
       _functionName=saved;
@@ -373,6 +379,14 @@ class PineV6SemanticAnalyzer {
       final original=_expression(expr.target,scope);
       final offset=_expression(expr.offset,scope);
       _require(offset,PineBaseType.intType,expr.offset.span,'history_offset');
+      final index=expr.offset;
+      if(index is PineUnaryExpression && index.operator=='-' &&
+          index.value is PineLiteralExpression){
+        final literal=index.value as PineLiteralExpression;
+        if(literal.literalType=='int' && (int.tryParse(literal.value)??0)>0){
+          _error('history_index','Future history index is not allowed',index.span);
+        }
+      }
       value=PineTypeInfo(original.type,PineQualifier.series);
     }else if(expr is PineTupleExpression){
       for(final child in expr.values)_expression(child,scope);
