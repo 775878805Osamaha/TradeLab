@@ -5,7 +5,7 @@ name: Verify TradeLab Flutter Range History
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, test/flutter-all-fixes-20261116]
+    branches: [main, test/flutter-all-fixes-20261116, feat/pine-stage1-instance-safe-runtime-20261123]
     paths:
       - 'flutter_app/**'
       - '.github/workflows/verify-flutter-range.yml'
@@ -150,6 +150,8 @@ jobs:
             test/chart_indicator_library_test.dart \
             test/chart_indicator_engine_test.dart \
             test/pine_subset_program_test.dart \
+            test/pine_stage1_runtime_test.dart \
+            test/pine_frontend_v6_test.dart \
             test/chart_indicator_autoscale_test.dart \
             test/chart_indicator_pane_test.dart \
             test/chart_indicator_library_sheet_test.dart \
