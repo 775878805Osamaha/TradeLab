@@ -138,6 +138,28 @@ class PineV6LanguageProgram {
     }
 
     if(prepared.legacyProgram==null) {
+      // Do not use the new language tier to bypass an existing numeric
+      // program's period, plot or syntax restrictions. The new tier is only
+      // for scripts that demonstrably use Stage 3a language constructs.
+      bool advanced(List<PineStatement> statements) {
+        for(final statement in statements){
+          if(statement is PineAssignmentStatement ||
+              statement is PineIfStatement ||
+              statement is PineSwitchStatement ||
+              statement is PineForStatement ||
+              statement is PineWhileStatement ||
+              statement is PineFunctionStatement ||
+              (statement is PineVariableStatement &&
+                  (statement.mode=='var'||statement.mode=='varip'))) {
+            return true;
+          }
+        }
+        return false;
+      }
+      if(!advanced(prepared.ast.statements)){
+        throw const PineRuntimeException('unsupported_legacy',
+            'Only previously executable numeric programs or verified Stage 3a language are supported');
+      }
       validateStatements(prepared.ast.statements,global:true);
       if(plots.isEmpty) {
         throw const PineRuntimeException('missing_plot',
