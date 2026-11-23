@@ -165,8 +165,14 @@ class PineV6SemanticAnalyzer {
     if(stmt is PineVariableStatement){
       final rhs=_expression(stmt.value,scope);
       final base=stmt.typeName==null?rhs.type:_bases[stmt.typeName!]??PineBaseType.unknown;
-      if(base==PineBaseType.unknown&&rhs.type==PineBaseType.unknown) {
-        _error('unknown_variable_type','Explicit type required for na initialization',stmt.span);
+      // Only a literal na (not an unresolved user-function return type)
+      // requires an explicit declaration type. Stage 2 cannot infer custom
+      // function return types until the Stage 3 execution/type pass.
+      if(base==PineBaseType.unknown &&
+          stmt.value is PineLiteralExpression &&
+          (stmt.value as PineLiteralExpression).literalType=='na') {
+        _error('unknown_variable_type',
+            'Explicit type required for na initialization',stmt.span);
       }
       if(base==PineBaseType.boolType&&
           stmt.value is PineLiteralExpression&&
