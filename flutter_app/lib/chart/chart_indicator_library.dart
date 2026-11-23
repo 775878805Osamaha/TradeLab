@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
 import 'pine_v6_frontend.dart';
+import 'pine_runtime_core.dart';
 import 'pine_v6_language_runtime.dart';
 
 enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc, pine }
