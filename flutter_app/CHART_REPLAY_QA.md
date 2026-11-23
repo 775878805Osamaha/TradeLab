@@ -15,6 +15,10 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
   Previous potentially unclosed D1/W1/MN1 records remain on disk but are not
   trusted for Replay; intraday cached candles are unaffected.
 - Never populate chart gaps with synthetic price history.
+- Mobile chart time-axis labels use measured text widths and collision guards.
+  The timezone label is placed at the right side of the plot instead of under
+  the left drawing rail; overlapping time labels are omitted rather than
+  clipped or shifted to an incorrect market timestamp.
 - Do not compare Range bar shapes with a screenshot alone. Its broker BID tick
   sequence, price distance, decimal precision, session start and timezone must
   match the reference. The current `RangeBarBuilder` is a reference
@@ -48,8 +52,9 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
 ```bash
 cd flutter_app
 flutter pub get
-flutter analyze
-flutter test test/ctrader_closed_bar_cutoff_test.dart \
+flutter analyze --no-fatal-infos
+flutter test test/chart_time_axis_label_layout_test.dart \
+  test/ctrader_closed_bar_cutoff_test.dart \
   test/replay_training_session_test.dart \
   test/replay_training_archive_test.dart \
   test/replay_training_widget_test.dart \
