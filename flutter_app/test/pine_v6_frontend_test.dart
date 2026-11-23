@@ -297,4 +297,30 @@ plot(support)''',
       }
     }
   });
+  test('explicit Pine version 5 is rejected before numeric subset execution',(){
+    const source='//@version=5\nindicator("Old")\nplot(close)';
+    final result=front.prepare(source);
+    expect(result.canExecute,isFalse);
+    expect(result.status,PineFrontendStatus.invalid);
+    final diagnostic=result.diagnostics.firstWhere((d)=>
+        d.code=='version_mismatch');
+    expect(diagnostic.line,1);
+    expect(diagnostic.column,1);
+    expect(diagnostic.message,contains('v6'));
+    expect(() => result.evaluateSupported(_bars()),
+        throwsA(isA<PineFrontendExecutionException>()));
+  });
+
+  test('explicit v6 and untagged supported numeric scripts remain executable',(){
+    const body='indicator("Tagged")\nplot(ta.sma(close, 3))';
+    for(final source in <String>['//@version=6\n'+body,body]){
+      final result=front.prepare(source);
+      expect(result.canExecute,isTrue,reason:result.message);
+      expect(result.diagnostics,isEmpty);
+      final legacy=PineSubsetProgram.compile(source).evaluate(_bars());
+      final actual=result.evaluateSupported(_bars());
+      expect(actual.single.values,legacy.single.values);
+    }
+  });
+
 }
