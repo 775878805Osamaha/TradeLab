@@ -17,6 +17,14 @@ class ChartIndicatorDefinition {
   final int period;
   final bool custom;
 
+  @override
+  bool operator ==(Object other) => other is ChartIndicatorDefinition &&
+      other.id == id && other.period == period &&
+      other.title == title && other.custom == custom;
+
+  @override
+  int get hashCode => Object.hash(id, title, period, custom);
+
   static const builtIns = <ChartIndicatorDefinition>[
     ChartIndicatorDefinition('sma-12', 'SMA 12', 12),
     ChartIndicatorDefinition('sma-20', 'SMA 20', 20),
