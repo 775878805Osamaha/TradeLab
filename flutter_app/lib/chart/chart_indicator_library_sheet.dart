@@ -55,7 +55,7 @@ class _ChartIndicatorLibrarySheetState
     final next = _library.toggleActive(indicator.id);
     if (identical(next, _library)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('يمكن إضافة 8 مؤشرات متزامنة كحد أقصى')));
+        content: Text('يمكن إضافة 8 مؤشرات ولوحتين مستقلتين كحد أقصى')));
       return;
     }
     _change(next);
@@ -101,8 +101,12 @@ class _ChartIndicatorLibrarySheetState
       title: Text(item.title, textDirection: TextDirection.ltr,
         textAlign: TextAlign.right),
       subtitle: Text(item.custom
-          ? 'مؤشرك · SMA محسوب من شموع الشارت'
-          : 'المتوسط المتحرك البسيط · على الشارت'),
+          ? 'SMA محفوظ · محسوب من الشموع'
+          : item.separatePane
+              ? 'لوحة منفصلة عن الأسعار'
+              : item.kind == ChartIndicatorKind.bollinger
+                  ? 'المتوسط وحدّا الانحراف المعياري'
+                  : 'مؤشر محسوب من بيانات الشارت'),
       leading: IconButton(
         key: Key('indicator-favorite-' + item.id),
         tooltip: favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة',
@@ -303,7 +307,7 @@ class _ChartPineSourceEditorDialogState
             textDirection: TextDirection.rtl,
             decoration: const InputDecoration(
               labelText: 'اسم المؤشر',
-              hintText: 'مثال: Ahmad HA First Trend V10',
+              hintText: 'مثال: My Custom Indicator',
             ),
           ),
           const SizedBox(height: 8),
