@@ -20,6 +20,10 @@ class ChartIndicatorPane extends StatelessWidget {
     required this.onRemove,
     required this.onScaleStart,
     required this.onScaleUpdate,
+    this.onMoveUp,
+    this.onMoveDown,
+    this.onResize,
+    this.height = 106,
     super.key,
   });
 
@@ -31,10 +35,14 @@ class ChartIndicatorPane extends StatelessWidget {
   final VoidCallback onRemove;
   final GestureScaleStartCallback onScaleStart;
   final GestureScaleUpdateCallback onScaleUpdate;
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
+  final VoidCallback? onResize;
+  final double height;
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 106,
+    height: height.clamp(84.0, 192.0),
     child: Stack(children: [
       Positioned.fill(child: GestureDetector(
         key: Key('chart-indicator-pane-' + indicator.id),
@@ -56,23 +64,33 @@ class ChartIndicatorPane extends StatelessWidget {
           ),
         ),
       )),
-      Positioned(left: 8, top: 4, child: Row(children: [
-        Text(indicator.title,
-          textDirection: TextDirection.ltr,
-          style: TextStyle(
-            fontSize: 10, fontWeight: FontWeight.w700,
-            color: Theme.of(context).colorScheme.onSurface)),
-        const SizedBox(width: 4),
-        SizedBox(height: 28, width: 28,
-          child: IconButton(
-            key: Key('chart-indicator-remove-' + indicator.id),
-            tooltip: 'إزالة المؤشر',
-            padding: EdgeInsets.zero,
-            onPressed: onRemove,
-            icon: const Icon(Icons.close, size: 16),
-          ),
-        ),
-      ])),
+      // The pane header is a deliberate hit target; its buttons never
+      // leak taps into the underlying candle GestureDetector or crosshair.
+      Positioned(left: 5, top: 3, right: 61, child: Container(
+        height: 30,
+        color: Theme.of(context).colorScheme.surface
+            .withValues(alpha: .9),
+        child: Row(children: [
+          Flexible(child: Text(indicator.title,
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            textDirection: TextDirection.ltr,
+            style: TextStyle(
+              fontSize: 10, fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurface))),
+          const Spacer(),
+          if (onMoveUp != null)
+            _PaneAction(Key('chart-indicator-up-' + indicator.id),
+              Icons.keyboard_arrow_up, 'تحريك اللوحة للأعلى', onMoveUp!),
+          if (onMoveDown != null)
+            _PaneAction(Key('chart-indicator-down-' + indicator.id),
+              Icons.keyboard_arrow_down, 'تحريك اللوحة للأسفل', onMoveDown!),
+          if (onResize != null)
+            _PaneAction(Key('chart-indicator-resize-' + indicator.id),
+              Icons.height, 'تغيير حجم اللوحة', onResize!),
+          _PaneAction(Key('chart-indicator-remove-' + indicator.id),
+            Icons.close, 'إزالة المؤشر', onRemove),
+        ]),
+      )),
     ]),
   );
 }
@@ -195,10 +213,12 @@ class ChartIndicatorPanePainter extends CustomPainter {
     canvas.clipRect(Rect.fromLTWH(0, top, plotWidth, height));
     for (var j = 0; j < output.plots.length; j++) {
       final series = output.plots[j];
-      final color = _lineColors[j % _lineColors.length];
+      final color = series.argbColor == null
+          ? _lineColors[j % _lineColors.length]
+          : Color(series.argbColor!);
       final stroke = Paint()
         ..color = color
-        ..strokeWidth = 1.5
+        ..strokeWidth = series.width.toDouble()
         ..style = PaintingStyle.stroke;
       if (series.histogram) {
         final zeroY = y(0);
@@ -246,4 +266,26 @@ class ChartIndicatorPanePainter extends CustomPainter {
       indicator != old.indicator ||
       viewportSnapshot != old.viewportSnapshot ||
       dark != old.dark || cache != old.cache;
+}
+
+
+class _PaneAction extends StatelessWidget {
+  const _PaneAction(this.actionKey, this.glyph, this.title, this.onTap);
+  final Key actionKey;
+  final IconData glyph;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 27, height: 28,
+    child: IconButton(
+      key: actionKey,
+      tooltip: title,
+      padding: EdgeInsets.zero,
+      iconSize: 16,
+      onPressed: onTap,
+      icon: Icon(glyph),
+    ),
+  );
 }
