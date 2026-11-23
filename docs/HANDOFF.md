@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-23 — Study length editing, price-overlay autoscale and Pine mini-subset (CI PENDING)
+- General indicators only, per user request. Added configurable lengths for bundled EMA/SMA/Bollinger/RSI/ATR (1–500, RSI min 2) through native sheet's per-study settings dialog, with validated `periodOverrides` stored in private secure preferences and correctly reconstructed when restarting. MACD still fixed canonical 12/26/9; do not display misleading single-period setting for it.
+- Extended safe **single-plot native** Pine source whitelist: `indicator("Name", overlay=true)` + `plot(ta.sma(close,N))` or `plot(ta.ema(close,N))`; `indicator(..., overlay=false)` + `plot(ta.rsi(close,N))` in a separate chart pane. **No arbitrary Pine engine**, no multi-line variables, request.security, strategies, loops, alerts or unsupported plots. Preserve unsupported source without executing it.
+- Fixed genuine on-chart indicator clipping by `ChartIndicatorAutoScale.include`: uses only source-visible SMA/EMA/Bollinger plot values to expand auto price-axis bounds with safety margins, while keeping source OHLC extrema, percent/log/inverted price semantics and Replay lookahead strict. Manual axis is never overridden; independent oscillators never affect price ruler.
+- Native `ta.sma` now waits for a complete period before output rather than the previous partial average (the old `ChartVisibleSma` utility warmup is legacy and is no longer the chart's indicator label). Bollinger variance computed around first source value to avoid catastrophic precision cancellation at high gold prices with tiny real deltas.
+- New formula, input settings, Pine whitelist, autoscale and widget tests wired to Flutter CI; pending green status. This is partial fidelity, not full Pine or device-level TradingView matching. No APK.
+
+
 ## 2026-11-23 — General indicator math and TradingView-style independent panes (CI PENDING)
 - User explicitly **excluded one personal indicator** from this work; do not discuss, invoke, import, test or use it as an example. Focus solely on general indicator engine, visual and functional TradingView parity.
 - Branch `feature/native-indicators-parity-20261123`, based on TradeLab dev after merged PR #637. Source-confirmed shortcoming: earlier library only painted SMA overlays. TradingView's EMA, Bollinger bands, RSI, MACD and ATR demand distinct real calculations; RSI, MACD and ATR require independent scaled panes. Official docs: https://www.tradingview.com/pine-script-docs/faq/indicators/ ; https://www.tradingview.com/support/solutions/43000502338-relative-strength-index-rsi/ ; https://www.tradingview.com/support/solutions/43000502344-moving-average-convergence-divergence-macd-indicator/ .
