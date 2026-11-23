@@ -21,6 +21,21 @@ class PineV6LanguageProgram {
   final Map<String, PineFunctionStatement> _functions;
   final List<PineCallExpression> _plotCalls;
 
+  bool get overlay {
+    for(final statement in ast.statements){
+      if(statement is! PineExpressionStatement)continue;
+      final value=statement.expression;
+      if(value is! PineCallExpression || value.name!='indicator')continue;
+      for(final argument in value.arguments){
+        if(argument.name=='overlay'&&
+            argument.value is PineLiteralExpression){
+          return (argument.value as PineLiteralExpression).value=='true';
+        }
+      }
+    }
+    return false;
+  }
+
   static PineV6LanguageProgram compile(String source) {
     final prepared=const PineV6Frontend().prepare(source);
     if(prepared.hasErrors) {
