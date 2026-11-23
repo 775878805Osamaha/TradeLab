@@ -109,7 +109,7 @@ plot(ta.change(close,n))
     final output = PineSubsetProgram.compile(source)
         .evaluate(bars([10, 11, 12, 13, 14]));
     expect(output, hasLength(3));
-    expect(output[0].values, [null, 4, 4, 4, 4]);
+    expect(output[0].values, [null, 3, 3, 3, 3]);
     expect(output[1].values.take(2), [null, null]);
     expect(output[1].values.skip(2), [100, 100, 100]);
     expect(output[2].values, [null, null, 2, 2, 2]);
