@@ -416,19 +416,27 @@ class RangeTickStore {
   }) async {
     final now = DateTime.now().toUtc().millisecondsSinceEpoch;
     final db = await _open();
+    // A newly recorded manifest may be interrupted/corrupted while the
+    // previous fully verified provider interval remains fresh. The former
+    // limit: 1 stopped at the damaged latest row and incorrectly discarded
+    // a valid cached snapshot. Check a bounded number of newer candidates
+    // without ever accepting an invalid digest or leaving maxAge coverage.
     final windows = await db.query('range_tick_windows',
       columns: ['from_ms', 'to_ms'],
       where: 'account_id = ? AND symbol = ? AND to_ms BETWEEN ? AND ?',
       whereArgs: [accountId, symbol, now - maxAge.inMilliseconds, now],
-      orderBy: 'to_ms DESC', limit: 1);
-    if (windows.isEmpty) return null;
-    final row = windows.single;
-    final fromMs = (row['from_ms'] as num).toInt();
-    final toMs = (row['to_ms'] as num).toInt();
-    final ticks = await readVerifiedWindow(
-      accountId, symbol, fromMs: fromMs, toMs: toMs);
-    if (ticks == null) return null;
-    return VerifiedBidWindow(fromMs: fromMs, toMs: toMs, ticks: ticks);
+      orderBy: 'to_ms DESC', limit: 8);
+    for (final row in windows) {
+      final fromMs = (row['from_ms'] as num).toInt();
+      final toMs = (row['to_ms'] as num).toInt();
+      final ticks = await readVerifiedWindow(
+        accountId, symbol, fromMs: fromMs, toMs: toMs);
+      if (ticks != null) {
+        return VerifiedBidWindow(
+            fromMs: fromMs, toMs: toMs, ticks: ticks);
+      }
+    }
+    return null;
   }
 
   /// Legacy caller convenience; chart paging should use the coverage-aware
