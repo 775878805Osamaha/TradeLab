@@ -64,7 +64,7 @@ void main() {
     expect(session.realizedPricePnl, -10);
   });
 
-  test('independent open exits keep SL priority and unprotected trades open',
+  test('independent exits honor next-open TP, stop gap, and unprotected trades',
       () {
     const bars = [
       TradeCandle(100, 101, 99, 100),
@@ -80,10 +80,12 @@ void main() {
     session.moveTo(bars, 3);
     expect(session.trades[0].exitPrice, 95);
     expect(session.trades[0].exitReason, ReplayExitReason.stopLoss);
-    expect(session.trades[1].exitPrice, 105);
-    expect(session.trades[1].exitReason, ReplayExitReason.stopLoss);
+    expect(session.trades[1].exitPrice, 95,
+      reason: 'The sell TP already filled at the next bar opening 95');
+    expect(session.trades[1].exitReason, ReplayExitReason.takeProfit);
     expect(session.trades[2].isOpen, isTrue);
-    expect(session.realizedPricePnl, -10);
+    expect(session.realizedPricePnl, 0,
+      reason: 'Buy stop at 95 (-5) and short TP at 95 (+5) cancel');
   });
 
   test('rewind and re-advance reprocesses only revealed future exits', () {

@@ -1,5 +1,19 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-23 — Replay default TradingView intrabar fill order (CI PENDING)
+- Actual source discrepancy: `_exitOnBar` always resolved a single candle touching both SL and TP as a stop, regardless of the genuine OHLC geometry. Official TradingView Strategy broker emulator defaults to OPEN→nearer HIGH/LOW→farther LOW/HIGH→CLOSE, with price-order gap crossings executed at next OPEN. No Bar Magnifier here.
+- Now first execute an authentic favorable TP opening gap or adverse SL opening gap; if neither is already hit at OPEN, use the relative open-to-high vs open-to-low distances on the revealed source bar to prioritize the actually *assumed* first extreme. Long high-first TP; short low-first TP; otherwise SL; exact equal-distance tie stays conservative stop. This ONLY changes local Replay practice results, no USD/broker order, no synthetic candle/tick or unrevealed future.
+- Added long/short high-first/low-first/symmetric tests, adverse stop gaps, and 12k-bar indexed vs sequential parity. All Range/chart/Replay regressions rerun via same PR CI; production/main/APK untouched.
+- Reference: https://www.tradingview.com/pine-script-docs/concepts/strategies/ (Broker emulator assumptions). Actual intrabar order remains assumed absent true tick history; full TradingView or Android parity not claimed.
+
+
+## 2026-11-23 — Replay TP gaps fill at real next open (CI PENDING)
+- **Source-verified discrepancy vs TradingView:** `ReplayTrainingSession._exitOnBar` already filled a stop-loss gap at an adverse candle.open, but always filled take-profit at the limit/target even if the next authenticated candle opened beyond TP in the favorable direction. Worse, a later intrabar SL could override a TP already filled at the bar's open. TradingView's default broker emulator documents that price-based orders crossed during the interbar gap execute at the following bar OPEN (tradingview.com/pine-script-docs/concepts/strategies/).
+- **Fix:** If a real verified candle opens at or favorably beyond TP, close at the genuine candle.open before any intrabar SL-vs-TP tie resolution. Keep existing conservative stop-first choice when both levels are touched *within* a bar and no opening gap target was executed; maintain adverse stop gap fill, no synthetic ticks, no revealed-future access. The playback remains local price-delta x quantity, not broker/live USD.
+- **Regression:** long and short TP gaps, TP at open preceding a later SL touch, ordinary intrabar TP at exact limit, and identical deep indexed seek vs sequential one-bar Replay for 12 trades across 12k source candles.
+- **Gate:** Flutter analyzer and active Range/Replay/chart/Results suite via PR CI. No APK, main, production gateway or unrelated projects.
+
+
 ## 2026-11-23 — PR #635 MERGED, source-time weekday label stability; CI GREEN
 - [PR #635](https://github.com/775878805Osamaha/TradeLab/pull/635) squash **`712067b52829d0308346c552f0d12a9bc4c1ff00`** into `test/flutter-all-fixes-20261116`.
 - [Flutter CI #45183340568](https://github.com/775878805Osamaha/TradeLab/actions/runs/45183340568) **completed/success**: Flutter analyze, all selected Range/Replay/Results/chart regression tests, drawing catalog tests and Yemen timezone check passed. No APK built.

@@ -88,9 +88,9 @@ class ReplayRevealedExitIndex {
   /// Find the first genuinely revealed source bar meeting EITHER bound.
   /// For buy: lowAtMost=SL, highAtLeast=TP.
   /// For sell: lowAtMost=TP, highAtLeast=SL.
-  /// The caller resolves ambiguous SL+TP in the same bar using its existing
-  /// conservative stop-first execution policy, including adverse opening
-  /// gaps. This index never invents a fill or looks into unrevealed candles.
+  /// The caller resolves a same-bar SL+TP by verified OPEN gap or the
+  /// default historical OHLC path (nearer extreme first; equidistant ties
+  /// conservative). The index never invents a fill or reads future candles.
   int? firstCrossing({
     required int fromInclusive,
     required int throughExclusive,
