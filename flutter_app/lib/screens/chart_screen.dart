@@ -36,6 +36,8 @@ import '../chart/chart_symbol_settings.dart';
 import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
 import '../chart/chart_visible_sma.dart';
+import '../chart/chart_indicator_library.dart';
+import '../chart/chart_indicator_library_sheet.dart';
 import '../chart/chart_axis_ticks.dart';
 import '../chart/chart_price_text_formatter.dart';
 import '../chart/chart_time_axis_label_layout.dart';
@@ -237,7 +239,34 @@ class _ChartScreenState extends State<ChartScreen>
   ShortPositionHandle? _draggingShortHandle;
   ChartShortPosition? _shortAtDragStart;
   ChartMagnetMode _magnetMode = ChartMagnetMode.off;
-  bool _showIndicators = false;
+  ChartIndicatorLibraryState _indicatorLibrary =
+      const ChartIndicatorLibraryState();
+  final ChartIndicatorLibraryStore _indicatorStore =
+      SecureChartIndicatorLibraryStore();
+  Future<void> _indicatorSaveQueue = Future<void>.value();
+  int _indicatorSelectionRevision = 0;
+  bool get _showIndicators => _indicatorLibrary.hasActive;
+
+  Future<void> _restoreIndicatorLibrary() async {
+    final revision = _indicatorSelectionRevision;
+    try {
+      final loaded = await _indicatorStore.load();
+      if (!mounted || revision != _indicatorSelectionRevision) return;
+      setState(() => _indicatorLibrary = loaded);
+    } catch (_) {
+      // Indicator preferences cannot block a verified broker chart.
+    }
+  }
+
+  void _changeIndicatorLibrary(ChartIndicatorLibraryState updated) {
+    _indicatorSelectionRevision++;
+    setState(() => _indicatorLibrary = updated);
+    // Serialize saves so a slow old write cannot restore removed scripts or
+    // stale overlays after quick taps. Do not leak code into account storage.
+    _indicatorSaveQueue = _indicatorSaveQueue
+        .then((_) => _indicatorStore.save(updated))
+        .catchError((Object _, StackTrace __) {});
+  }
   bool _showShortLabels = true;
   int _visibleThrough = 60;
   // Keep the newest verified bar close to the price scale on mobile.
@@ -472,6 +501,7 @@ class _ChartScreenState extends State<ChartScreen>
     }
     _frameProfiler.attach();
     unawaited(_loadDrawingFavorites());
+    unawaited(_restoreIndicatorLibrary());
     unawaited(_loadPanelSettings());
     unawaited(_loadScaleSettings());
     unawaited(_loadSymbolSettings());
@@ -3064,6 +3094,8 @@ class _ChartScreenState extends State<ChartScreen>
         await _showMagnetSettings();
       case AnalysisHubAction.indicators:
         await _showIndicatorCatalog();
+      case AnalysisHubAction.indicatorTemplates:
+        await _showIndicatorCatalog(initialTab: 2);
       case AnalysisHubAction.replay:
         // Replay is always owned by this ChartScreen, never a separate page.
         _toggleReplay();
@@ -3088,7 +3120,6 @@ class _ChartScreenState extends State<ChartScreen>
       case AnalysisHubAction.openLayout:
       case AnalysisHubAction.compare:
       case AnalysisHubAction.alerts:
-      case AnalysisHubAction.indicatorTemplates:
         await _showUnavailableAnalysisAction(action);
     }
   }
@@ -3108,29 +3139,25 @@ class _ChartScreenState extends State<ChartScreen>
       ));
   }
 
-  Future<void> _showIndicatorCatalog() async {
-    await showModalBottomSheet<void>(context: context,
+  Future<void> _showIndicatorCatalog({int initialTab = 0}) async {
+    _stopMomentum();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(child: StatefulBuilder(
-        builder: (context, updateSheet) => Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const TradeSectionTitle('المؤشرات'),
-            SwitchListTile(
-              key: const Key('analysis-sma12-toggle'),
-              title: const Text('المتوسط المتحرك البسيط (12)',
-                textDirection: TextDirection.rtl),
-              subtitle: const Text('مُحتسب من شموع السوق المعروضة فقط',
-                textDirection: TextDirection.rtl),
-              value: _showIndicators,
-              onChanged: (value) {
-                setState(() => _showIndicators = value);
-                updateSheet(() {});
-              },
-            ),
-          ]),
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom),
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .80,
+          child: ChartIndicatorLibrarySheet(
+            initial: _indicatorLibrary,
+            initialTab: initialTab,
+            onChange: _changeIndicatorLibrary,
+          ),
         ),
-      )),
+      ),
     );
   }
 
@@ -5079,7 +5106,7 @@ class _ChartScreenState extends State<ChartScreen>
             label: 'محور التحليل', onPressed: _showAnalysisHub),
         _iconAction(icon: Icons.functions, label: 'المؤشرات',
             active: _showIndicators,
-            onPressed: () => setState(() => _showIndicators = !_showIndicators)),
+            onPressed: _showIndicatorCatalog),
         if (_panelSettings.paneButtons == ChartButtonVisibility.always ||
             (_panelSettings.paneButtons == ChartButtonVisibility.onTap &&
               _panelChartTouched)) ...[
@@ -5889,7 +5916,7 @@ class _ChartScreenState extends State<ChartScreen>
                   selectedPattern: _drawing && _drawingsVisible ? _selectedPattern : null,
                   selectedShort: _drawing && _drawingsVisible ? _selectedShort : null,
                   showShortLabels: _showShortLabels,
-                  indicator: _showIndicators,
+                  indicators: _indicatorLibrary.active,
                   panel: _panelSettings,
                   scaleSettings: _scaleSettings,
                   symbolSettings: _symbolSettings,
@@ -6364,7 +6391,7 @@ class _CandleChartPainter extends CustomPainter {
     required this.selectedPattern,
     required this.selectedShort,
     required this.showShortLabels,
-    required this.indicator,
+    required this.indicators,
     required this.panel,
     required this.scaleSettings,
     required this.symbolSettings,
@@ -6414,7 +6441,12 @@ class _CandleChartPainter extends CustomPainter {
   final int? selectedPattern;
   final int? selectedShort;
   final bool showShortLabels;
-  final bool indicator;
+  final List<ChartIndicatorDefinition> indicators;
+  static const _indicatorColors = <Color>[
+    Color(0xFF2962FF), Color(0xFFFF9800), Color(0xFF9C27B0),
+    Color(0xFF009688), Color(0xFFEF5350), Color(0xFF607D8B),
+    Color(0xFF8BC34A), Color(0xFF795548),
+  ];
   final ChartPanelSettings panel;
   final ChartScaleSettings scaleSettings;
   final ChartSymbolSettings symbolSettings;
@@ -6572,21 +6604,29 @@ class _CandleChartPainter extends CustomPainter {
         canvas.drawRect(bodyRect, rising ? positiveBorder : negativeBorder);
       }
     }
-    if (indicator) {
-      final linePath = Path();
-      var rollingSum = 0.0;
-      for (var i = math.max(0, start - 11); i < start; i++) {
-        rollingSum += candles[i].close;
-      }
-      for (var i = start; i < ending; i++) {
-        rollingSum += candles[i].close;
-        if (i > start && i >= 12) rollingSum -= candles[i - 12].close;
-        final average = rollingSum / math.min(12, i + 1);
+    // Every selected supported indicator is painted from the SAME
+    // authenticated market source and Replay prefix as the candles.
+    // Recompute only O(visible candles + SMA period), not 120k history,
+    // during high-frequency Android drag/pinch and kinetic scrolling.
+    for (var slot = 0; slot < indicators.length; slot++) {
+      final item = indicators[slot];
+      final samples = ChartIndicatorVisiblePoints.sma(
+        candles: candles, start: start, end: ending, period: item.period);
+      if (samples.isEmpty) continue;
+      final path = Path();
+      for (var p = 0; p < samples.length; p++) {
+        final sample = samples[p];
         final x = viewport.chartX(
-          index: i, candleCount: candles.length, plotWidth: axis);
-        if (i == start) { linePath.moveTo(x, y(average)); } else { linePath.lineTo(x, y(average)); }
+          index: sample.index, candleCount: candles.length, plotWidth: axis);
+        if (p == 0) {
+          path.moveTo(x, y(sample.value));
+        } else {
+          path.lineTo(x, y(sample.value));
+        }
       }
-      canvas.drawPath(linePath, Paint()..color = TradeColors.blue..strokeWidth = 1.6
+      canvas.drawPath(path, Paint()
+        ..color = _indicatorColors[slot % _indicatorColors.length]
+        ..strokeWidth = 1.6
         ..style = PaintingStyle.stroke);
     }
     final paintLevels = _levelsProvider();
@@ -6812,16 +6852,19 @@ class _CandleChartPainter extends CustomPainter {
         annotate(extremes.$2, Color(scaleSettings.lowColor), scaleSettings.highLow);
       }
     }
-    if (indicator && start < ending &&
+    if (indicators.isNotEmpty && start < ending &&
         scaleSettings.indicatorLabels != ChartPriceLabelMode.hidden) {
-      // The rightmost PAINTED SMA12 point belongs to visible bar ending-1.
-      // The full broker archive can contain later candles while the user
-      // scrolls into history. Never label their unseen SMA as the currently
-      // plotted indicator, including in historical Replay or Range mode.
-      final visibleSma = ChartVisibleSma.atVisibleEnd(candles, ending);
-      if (visibleSma != null) {
-        annotate(visibleSma, TradeColors.blue,
-            scaleSettings.indicatorLabels);
+      for (var slot = 0; slot < indicators.length; slot++) {
+        final item = indicators[slot];
+        // Match the last plotted SOURCE bar/period, not any hidden
+        // future replay candle or newest market quote offscreen.
+        final visibleSma = ChartVisibleSma.atVisibleEnd(
+          candles, ending, period: item.period);
+        if (visibleSma != null) {
+          annotate(visibleSma,
+              _indicatorColors[slot % _indicatorColors.length],
+              scaleSettings.indicatorLabels);
+        }
       }
     }
     // Paint-time source quote freshness is necessary for retained painters:
@@ -7180,7 +7223,8 @@ class _CandleChartPainter extends CustomPainter {
       old.previousSessionClose != previousSessionClose ||
       old.sourceQuote != sourceQuote ||
       old.replayActive != replayActive || old.rangeMode != rangeMode ||
-      old.crosshairSnapshot != crosshairSnapshot || old.indicator != indicator ||
+      old.crosshairSnapshot != crosshairSnapshot ||
+      !listEquals(old.indicators, indicators) ||
       !listEquals(old.levels, levels) ||
       !listEquals(old.patterns, patterns) ||
       !listEquals(old.shortPositions, shortPositions) ||
