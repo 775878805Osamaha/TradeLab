@@ -593,4 +593,125 @@ void main() {
       reason: 'A failed validation cannot leave partly committed BID ticks');
     expect(bad[6198].bid.isNaN, isTrue);
   });
+
+  test('Range archive recovers verified BID after nine corrupt overlaps '
+      'but fails closed beyond bounded candidate budget', () async {
+    const account = 'many-corrupt-overlaps-account';
+    final start = DateTime.utc(2026, 11, 20).millisecondsSinceEpoch;
+    final end = start + 60000;
+    final ticks = [
+      MarketTick(start + 100, 2310.1),
+      MarketTick(start + 100, 2310.2),
+      MarketTick(start + 200, 2310.3),
+    ];
+    // This manifest and all source BID values are authentic test fixtures.
+    // The nine newer-looking manifests below deliberately have bad SHA-256
+    // digests and MUST never become trusted cached history.
+    await RangeTickStore.archiveVerifiedWindow(
+      account, 'XAUUSD', ticks,
+      fromMs: start, toMs: end,
+    );
+    final root = await getDatabasesPath();
+    final db = await openDatabase(
+      path.join(root, 'tradelab_range_ticks.db'),
+      singleInstance: false,
+    );
+    try {
+      await db.transaction((txn) async {
+        for (var index = 1; index <= 9; index++) {
+          await txn.insert('range_tick_windows', {
+            'account_id': account,
+            'symbol': 'XAUUSD',
+            'from_ms': start,
+            'to_ms': end + index,
+            'tick_count': ticks.length,
+            'tick_digest': List.filled(64, '0').join(),
+            'saved_at_ms': start + index,
+          });
+        }
+      });
+      final restored = await RangeTickStore.readCoveredInterval(
+        account, 'XAUUSD', fromMs: start, toMs: end,
+      );
+      expect(restored, isNotNull,
+          reason: 'The ninth bad overlapping manifest must not hide a '
+              'later authentic SHA-verified candidate');
+      expect(restored!.map((t) => t.bid).toList(),
+          [2310.1, 2310.2, 2310.3]);
+      expect(restored[0].timestamp, restored[1].timestamp,
+          reason: 'Genuine BID same-millisecond multiplicity survives');
+      expect(await RangeTickStore.readCoveredInterval(
+        account, 'XAUUSD', fromMs: start - 1, toMs: end,
+      ), isNull,
+          reason: 'A missing millisecond may not be inferred from overlap');
+
+      // Even a deeper corrupt archive must be bounded: do not walk
+      // unbounded SHA checks or accept a bad window to improve appearance.
+      await db.transaction((txn) async {
+        for (var index = 10; index <= 65; index++) {
+          await txn.insert('range_tick_windows', {
+            'account_id': account,
+            'symbol': 'XAUUSD',
+            'from_ms': start,
+            'to_ms': end + index,
+            'tick_count': ticks.length,
+            'tick_digest': List.filled(64, 'f').join(),
+            'saved_at_ms': start + index,
+          });
+        }
+      });
+      expect(await RangeTickStore.readCoveredInterval(
+        account, 'XAUUSD', fromMs: start, toMs: end,
+      ), isNull,
+          reason: 'More than 64 rejected manifests remain a cache miss');
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('fresh Range restore skips a corrupt newer manifest and keeps '
+      'exact earlier source coverage', () async {
+    const account = 'recover-latest-valid-account';
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final oldFrom = now - 100000;
+    final oldTo = now - 60000;
+    final previousTicks = [
+      MarketTick(now - 90000, 2444.1),
+      MarketTick(now - 80000, 2444.3),
+    ];
+    await RangeTickStore.archiveVerifiedWindow(
+      account, 'XAUUSD', previousTicks,
+      fromMs: oldFrom, toMs: oldTo,
+    );
+    final root = await getDatabasesPath();
+    final db = await openDatabase(
+      path.join(root, 'tradelab_range_ticks.db'),
+      singleInstance: false,
+    );
+    try {
+      await db.insert('range_tick_windows', {
+        'account_id': account,
+        'symbol': 'XAUUSD',
+        'from_ms': now - 10000,
+        'to_ms': now - 1000,
+        'tick_count': 0,
+        'tick_digest': List.filled(64, '0').join(),
+        'saved_at_ms': now - 1000,
+      });
+      final restored =
+          await RangeTickStore.readLatestVerifiedWindowWithCoverage(
+        account, 'XAUUSD',
+      );
+      expect(restored, isNotNull);
+      expect(restored!.fromMs, oldFrom);
+      expect(restored.toMs, oldTo);
+      expect(restored.ticks.map((t) => t.bid).toList(), [2444.1, 2444.3]);
+      expect(await RangeTickStore.readLatestVerifiedWindowWithCoverage(
+        account, 'XAUUSD', maxAge: const Duration(seconds: 10),
+      ), isNull,
+          reason: 'An expired valid window cannot be rebranded as live BID');
+    } finally {
+      await db.close();
+    }
+  });
 }

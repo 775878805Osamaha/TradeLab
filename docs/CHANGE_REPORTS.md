@@ -1,5 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Recover verified Range BID behind bad overlapping SQLite cache manifests (CI PENDING)
+- Found exact `readCoveredInterval` mismatch: hard LIMIT 8 could hide valid manifest behind nine bad newer overlapping windows even though the bounded corruption budget is 64. Query remaining budget + one; all invalid hashes still rejected, source BID and same-ms ordering preserved.
+- Fresh restore now checks up to eight recent actual SHA-verified windows instead of treating a corrupt newest manifest as all history being lost; original coverage and maxAge enforced.
+- Regression tests added to `range_tick_store_test.dart`: nine corrupt overlaps plus valid same-ms page, 65-manifest upper safety bound, corrupt newest plus intact fresh older window, expired-source rejection.
+- Flutter CI pending; no APK, main, Vercel production, broker order path, or synthetic history changes.
+
+
 ### 2026-11-23 — PR #633 merged, verified all Replay session pages
 - Squash `d135db1762f13ccdc9d7faed8cccb25e31123acb`: [PR #633](https://github.com/775878805Osamaha/TradeLab/pull/633) merged into Flutter development, never `main`.
 - [CI #45080738105](https://github.com/775878805Osamaha/TradeLab/actions/runs/45080738105) **success**: analyze and existing Flutter, Range, Replay, Results, timezone and drawing catalog tests. Archives now accessible beyond five sessions and beyond first SQL batch with bounded paginated reads.

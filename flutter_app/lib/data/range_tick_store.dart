@@ -353,13 +353,18 @@ class RangeTickStore {
     var rejectedCandidates = 0;
     while (cursor <= toMs) {
       if (++windowsConsumed > maxVerifiedWindows) return null;
-      // Prefer the furthest-ending verified window, but try a few
-      // alternatives if a migrated or corrupted manifest fails validation.
+      // A phone can accumulate many overlapping, completed short-window
+      // manifests. Eight latest candidates may all be damaged/migrated while
+      // a ninth genuine SHA-verified window still covers this exact cursor.
+      // Scan only the remaining bounded corruption budget (+ one valid
+      // candidate). Never trust an invalid digest, infer quiet coverage, or
+      // scan an unbounded number of SQLite manifests.
       final candidates = await db.query('range_tick_windows',
         columns: ['from_ms', 'to_ms'],
         where: 'account_id = ? AND symbol = ? AND from_ms <= ? AND to_ms >= ?',
         whereArgs: [accountId, symbol, cursor, cursor],
-        orderBy: 'to_ms DESC', limit: 8);
+        orderBy: 'to_ms DESC',
+        limit: maxRejectedCandidates - rejectedCandidates + 1);
       if (candidates.isEmpty) return null;
       List<MarketTick>? validTicks;
       int? coverageEnd;
@@ -411,19 +416,27 @@ class RangeTickStore {
   }) async {
     final now = DateTime.now().toUtc().millisecondsSinceEpoch;
     final db = await _open();
+    // A newly recorded manifest may be interrupted/corrupted while the
+    // previous fully verified provider interval remains fresh. The former
+    // limit: 1 stopped at the damaged latest row and incorrectly discarded
+    // a valid cached snapshot. Check a bounded number of newer candidates
+    // without ever accepting an invalid digest or leaving maxAge coverage.
     final windows = await db.query('range_tick_windows',
       columns: ['from_ms', 'to_ms'],
       where: 'account_id = ? AND symbol = ? AND to_ms BETWEEN ? AND ?',
       whereArgs: [accountId, symbol, now - maxAge.inMilliseconds, now],
-      orderBy: 'to_ms DESC', limit: 1);
-    if (windows.isEmpty) return null;
-    final row = windows.single;
-    final fromMs = (row['from_ms'] as num).toInt();
-    final toMs = (row['to_ms'] as num).toInt();
-    final ticks = await readVerifiedWindow(
-      accountId, symbol, fromMs: fromMs, toMs: toMs);
-    if (ticks == null) return null;
-    return VerifiedBidWindow(fromMs: fromMs, toMs: toMs, ticks: ticks);
+      orderBy: 'to_ms DESC', limit: 8);
+    for (final row in windows) {
+      final fromMs = (row['from_ms'] as num).toInt();
+      final toMs = (row['to_ms'] as num).toInt();
+      final ticks = await readVerifiedWindow(
+        accountId, symbol, fromMs: fromMs, toMs: toMs);
+      if (ticks != null) {
+        return VerifiedBidWindow(
+            fromMs: fromMs, toMs: toMs, ticks: ticks);
+      }
+    }
+    return null;
   }
 
   /// Legacy caller convenience; chart paging should use the coverage-aware
