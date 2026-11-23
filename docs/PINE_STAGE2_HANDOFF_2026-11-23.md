@@ -48,6 +48,16 @@ Source references:
 - https://www.tradingview.com/pine-script-docs/language/conditional-structures/
 - https://www.tradingview.com/pine-script-docs/language/user-defined-functions/
 
+## Additional v6 semantic validation and last code CI (2026-11-23)
+
+Verified against official Pine v6 language and migration documentation: numeric values are **not** implicitly cast to bool in if/while/ternary/logical conditions; explicit `bool(value)` syntax is parsed/type-checked, but the Stage 2 runtime still rejects advanced control flow. Direct `x == na` or `x != na` is flagged in source analysis (use `na(x)`); stage-1 numeric-value arithmetic/comparison model remains a separate internal API. For the documented simple-int family, `ta.ema` and `ta.rsi` length arguments reject a series-int qualifier, including named `length=` arguments; input-int values remain accepted. Cast calls for int/float/bool/string/color are represented and typed but are **not** independently executed unless the existing bounded interpreter already supports them. Added four regression tests for these cases and extended differential fixtures with `ta.change`, `math.min/max`, `input.float` and plot styles. No market data fabricated.
+
+[GitHub Actions #45224018771](https://github.com/775878805Osamaha/TradeLab/actions/runs/45224018771): **completed / success** on **last production-code SHA e6971be9fc0315d40ffe50dd360ede8c8e29694c**. Real log: **954** tests in main Flutter suite, **4** individually passing drawing cases, **11** Yemen chart-scale tests: **969 passed, 0 failed**. `flutter analyze` PASS, all 16 current Pine Stage 2 test cases PASS. This supersedes the earlier 965-test run for the final code; earlier failed and cancelled runs remain documented above. Local Flutter/Dart, real device, performance benchmarks and APK **not run**. This documentation/CI maintenance commit will have its own exact-head check after upload.
+
+Temporary push-trigger CI has been removed from the workflow because the stacked PR is now checked directly against its allowed Stage 1 target; `workflow_dispatch` remains available. This avoids doubling future CI jobs. PR #644 remains draft/unmerged; no modifications to PR #642 or main.
+
+Official references: https://www.tradingview.com/pine-script-docs/migration-guides/to-pine-version-6/ and https://www.tradingview.com/pine-script-docs/language/type-system/.
+
 ## Next approved work direction (proposal, NOT executed)
 
 After the user merges #642, compare branch HEADs, retarget/rebase #644 onto test/flutter-all-fixes-20261116 with approval, run full CI again on final PR SHA and merge only by user. Next Stage 3: runtime execution of the validated AST with var/varip persistence and realtime rollback/commit, if/switch/for/while and user functions, independent replay snapshots and strict resource budgets. Keep no-future, numeric parity and safe unsupported fallbacks.

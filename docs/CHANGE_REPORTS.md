@@ -1,5 +1,13 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Pine Stage 2 v6 semantic hardening and CI proof (no merge)
+- مشروع TradeLab، الفرع feat/pine-stage2-frontend-v6-20261123، PR [#644](https://github.com/775878805Osamaha/TradeLab/pull/644) **Draft** فوق PR #642 غير المدمج. لا تعديل لـ main أو أي مشروع آخر، ولا APK.
+- ملفات الكود المعدلة: flutter_app/lib/chart/pine_frontend_semantic.dart وpine_frontend_parser.dart وtest/pine_frontend_v6_test.dart. تحققت من وثائق Pine v6 الرسمية: bool numeric implicit casts غير مسموحة، المقارنة المباشرة بـ na غير صالحة في المصدر، وta.ema/ta.rsi length يتطلبان simple int أو مؤهلًا أضعف. تمت إضافة دعم تحليل تحويلات bool/int/float/string/color الصريحة، وأربع حالات اختبار جديدة، وحالتين من المقارنة التفاضلية مع المحرك القديم، دون إضافة Runtime جديد.
+- [CI #45224018771](https://github.com/775878805Osamaha/TradeLab/actions/runs/45224018771) **completed/success** على كود e6971be9fc0315d40ffe50dd360ede8c8e29694c، من السجل: 954 main + 4 رسم منفصلة + 11 Yemen = **969 PASS / 0 FAIL**، Flutter analyze PASS. اختبارات Stage 1 وReplay وRange والتداول ضمن مجموعة CI؛ اختبار Android فعلي **NOT RUN**.
+- إزالة push-only trigger المؤقت من .github/workflows/verify-flutter-range.yml لمنع تشغيلات GitHub Actions المزدوجة، مع إبقاء PR والـworkflow_dispatch. تم توثيق CI قبل وبعد التصحيح؛ لا توجد عمليات دمج تلقائية.
+- التالي: فحص CI على رأس PR بعد تحديث التوثيق، ثم مراجعة المستخدم ودمجه شخصيًا بعد معالجة PR #642. المرحلة 3 المقترحة لاحقًا هي تنفيذ var/varip والحلقات ودوال المستخدم مع Replay rollback صحيح، وليس جزءًا من هذه الدفعة.
+
+
 ### 2026-11-23 — Pine Stage 2 frontend, mutation-proven Stage 1 tests, stacked PR #644 (CI GREEN — no merge)
 - Mutations on no-PR temporary branch: Replay future index failure in [#45217685758](https://github.com/775878805Osamaha/TradeLab/actions/runs/45217685758) **937 PASS/1 expected FAIL**, isolated-state leak in [#45218410206](https://github.com/775878805Osamaha/TradeLab/actions/runs/45218410206) **937 PASS/1 expected FAIL**; branch reset to clean Stage 1 HEAD. Both meaningful failures from named regression tests, no production source changes.
 - Stage 2 branch feat/pine-stage2-frontend-v6-20261123 from unmerged PR #642 HEAD ef917ad2c3dd3dc3e036e17b690d08a00814be57e1; [draft PR #644](https://github.com/775878805Osamaha/TradeLab/pull/644) targets the Stage 1 branch (not main). Added frontend_ast/lexer/parser/semantic/frontend Dart files, source diagnostics for saved Pine, test/pine_frontend_v6_test.dart, CI gate and docs matrix/handoff. Frontend only; execution unchanged.

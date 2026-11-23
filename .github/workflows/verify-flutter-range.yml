@@ -3,11 +3,6 @@ name: Verify TradeLab Flutter Range History
 # Lightweight quality gate: no Gradle release build, emulator or APK.
 # Runs only for Flutter changes in PRs, and on explicit manual dispatch.
 on:
-  push:
-    branches: [feat/pine-stage2-frontend-v6-20261123]
-    paths:
-      - 'flutter_app/**'
-      - '.github/workflows/verify-flutter-range.yml'
   workflow_dispatch:
   pull_request:
     branches: [main, test/flutter-all-fixes-20261116, feat/pine-stage1-instance-safe-runtime-20261123]

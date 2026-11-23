@@ -8,6 +8,9 @@ The stages differ: "Parsed" means the structure is represented in a source-spann
 
 | Language feature | Tokenized / parsed | Semantic checks | Runtime execution |
 |---|---|---|---|
+| v6 bool strictness in conditions and logical operators | Yes | Numbers cannot be implicitly cast to bool; explicit bool() is typed; direct na comparisons flagged | No new runtime (legacy subset only) |
+| ta.ema / ta.rsi length qualifier | Yes | Reject series-int and non-int lengths, allow simple or weaker int (including input.int) | Existing bounded numeric subset only |
+| Five explicit primitive cast calls: int/float/bool/string/color | Yes | Typed AST / qualifiers with one argument | Advanced/control-flow usage not executed |
 | v6 version annotation, // comments and inline comments | Yes | Version check (v6) | Existing subset when valid |
 | Four-space/tab local indentation and dedents | Yes | Scope trees | No control-flow execution |
 | Wrapped calls/parenthesized expressions, operator continuation | Yes for covered forms | Expression trees | Existing subset only; multi-line old compiler may reject |
