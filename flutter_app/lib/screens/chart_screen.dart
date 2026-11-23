@@ -37,6 +37,7 @@ import '../chart/chart_symbol_settings_page.dart';
 import '../chart/chart_axis_source_labels.dart';
 import '../chart/chart_indicator_library.dart';
 import '../chart/chart_indicator_engine.dart';
+import '../chart/chart_indicator_autoscale.dart';
 import '../chart/chart_indicator_pane.dart';
 import '../chart/chart_indicator_library_sheet.dart';
 import '../chart/chart_axis_ticks.dart';
@@ -3958,7 +3959,7 @@ class _ChartScreenState extends State<ChartScreen>
       List<TradeCandle> candles, double width, double height) {
     final plotHeight = math.max(1.0, height - 24);
     if (_priceScaleManual) return _manualPriceScale!.withHeight(plotHeight);
-    return _autoPriceScaleCache.resolve(
+    final scale = _autoPriceScaleCache.resolve(
       candles: candles,
       viewport: _viewport,
       plotWidth: width,
@@ -3972,6 +3973,14 @@ class _ChartScreenState extends State<ChartScreen>
         'مؤشر 100' => ChartPriceReferenceMode.indexed100,
         _ => ChartPriceReferenceMode.price,
       },
+    );
+    return ChartIndicatorAutoScale.include(
+      base: scale,
+      candles: candles,
+      viewport: _viewport,
+      plotWidth: width,
+      indicators: _indicatorLibrary.active,
+      cache: _indicatorSeriesCache,
     );
   }
 
