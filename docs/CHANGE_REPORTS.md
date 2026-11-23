@@ -1,5 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Pine Stage 1 core runtime, draft PR #642 (NOT MERGED)
+- فرع feat/pine-stage1-instance-safe-runtime-20261123 مبني على test/flutter-all-fixes-20261116؛ ملفات الكود: flutter_app/lib/chart/pine_runtime_core.dart وpine_subset_program.dart وpine_indicator_instance.dart وchart_indicator_engine.dart؛ الاختبار الجديد flutter_app/test/pine_stage1_runtime_test.dart؛ إضافة إلى .github/workflows/verify-flutter-range.yml.
+- إنجاز مثبت: فصل التعريف المحفوظ عن نسخ التشغيل، إعدادات وحالة وسلاسل مستقلة، na/مقارنات v6 في النموذج، حساب AST شمعة بشمعة بميزانيات موارد، Replay prefix/rebuild بلا شموع مستقبلية. لم تُستبدل البنية القديمة. واجهة النسخ المتعددة وvar/varip لم تنفذ بعد.
+- [CI #45214588951](https://github.com/775878805Osamaha/TradeLab/actions/runs/45214588951) **completed/success**, مصدر 4b6b58558a5e904474ff28aa69af8b683302e00b، سجل حقيقي: **938+4+11 = 953 PASS, 0 FAIL** وFlutter analyze PASS؛ محليًا Flutter/Dart غير متاح. لا APK ولا دمج ولا main ولا مشاريع أخرى.
+- تقرير الاستكمال: [docs/PINE_STAGE1_HANDOFF_2026-11-23.md](PINE_STAGE1_HANDOFF_2026-11-23.md) و[PR #642](https://github.com/775878805Osamaha/TradeLab/pull/642). التالي المقترح المرحلة 2: محلل نحوي ودلالي وأخطاء سطر/عمود وvar/varip والحلقات ودوال المستخدم بعد مراجعة المستخدم.
+
+
 ### 2026-11-23 — PR #640 MERGED, bounded multi-series Pine interpreter and study controls
 - [PR #640](https://github.com/775878805Osamaha/TradeLab/pull/640) squash `01ddb4eee720f073b0cc1ff5c24eec0fd46189a5` after [CI #45206147704](https://github.com/775878805Osamaha/TradeLab/actions/runs/45206147704) **success**: Flutter analyzer, **930 full active regression tests + 11 catalog/drawing tests**, Yemen timezone. First CI #45205126997 flagged one stale built-in-kind test, corrected then all green.
 - `pine_subset_program.dart` is a bounded typed expression/series compiler, not full Pine. Multi-plot color/width/histogram to the same real source chart/Replay prefix, `na`-aware ta.sma, custom source key cache, 120k no-repeat paint and strict non-future, sandbox rejection for unimplemented syntax with line diagnostics.
