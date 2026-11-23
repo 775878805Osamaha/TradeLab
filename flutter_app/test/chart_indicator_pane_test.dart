@@ -159,4 +159,51 @@ void main() {
   });
 
 
+  test('Pine oscillator scale preserves negative-only source output', () {
+    const indicator = ChartIndicatorDefinition('script-neg', 'Negative', 1,
+      custom: true, kindOverride: ChartIndicatorKind.pine,
+      pineOverlay: false);
+    final range = ChartIndicatorPaneScale.domain(
+      indicator: indicator,
+      plots: const [ChartIndicatorPlot('Bearish',
+          <double?>[-4, -8, -12, -16])],
+      start: 0, end: 4);
+    expect(range, isNotNull);
+    expect(range!.$1, lessThan(-16));
+    expect(range.$2, lessThan(0),
+      reason: 'All-negative custom Pine pane must not be forced above zero');
+  });
+
+  test('Pine histogram keeps the genuine zero baseline visible', () {
+    const indicator = ChartIndicatorDefinition('script-hist', 'Histogram', 1,
+      custom: true, kindOverride: ChartIndicatorKind.pine,
+      pineOverlay: false);
+    final range = ChartIndicatorPaneScale.domain(
+      indicator: indicator,
+      plots: const [
+        ChartIndicatorPlot('One', <double?>[3, -4, 2],
+          histogram: true),
+        ChartIndicatorPlot('Line', <double?>[2, 2, 1]),
+      ],
+      start: 0, end: 3);
+    expect(range!.$1, lessThan(-4));
+    expect(range.$2, greaterThan(3));
+    final unchanged = ChartIndicatorPaneScale.domain(
+      indicator: const ChartIndicatorDefinition('rsi-14','RSI',14),
+      plots: const [ChartIndicatorPlot('RSI', <double?>[20,60,99])],
+      start: 0, end: 3);
+    expect(unchanged, (0.0,100.0));
+  });
+
+  test('source-empty Pine pane has no invented oscillator scale', () {
+    const indicator = ChartIndicatorDefinition('script-na', 'Empty', 1,
+      custom: true, kindOverride: ChartIndicatorKind.pine,
+      pineOverlay: false);
+    expect(ChartIndicatorPaneScale.domain(
+      indicator: indicator,
+      plots: const [ChartIndicatorPlot('Plot',
+        <double?>[null,null,null])],
+      start: 0, end: 3), isNull);
+  });
+
 }
