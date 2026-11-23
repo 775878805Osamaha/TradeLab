@@ -8,7 +8,7 @@ Definitions: **PARSED** means tokenization, AST creation and the implemented sem
 
 | Capability | Frontend | Runtime | Notes |
 |---|---|---|---|
-| Version annotation, line comments | Parsed/ignored safely | Existing numeric scripts execute | No automatic version conversion |
+| Version annotation, line comments | Explicit v6 parsed; explicit non-v6 REJECTED with line/column | Existing v6 numeric scripts execute | Untagged legacy numeric scripts deliberately allowed for old TradeLab compatibility (TradingView defaults untagged scripts to v1; not full v6 parity) |
 | Four-space indentation, dedents | PARSED | No new runtime | Local scopes |
 | Parenthesized and trailing-operator line wrapping | PARSED | Existing subset only | Unparenthesized continuation cannot resemble a block |
 | Numbers, ordinary/triple strings, bool, na | PARSED with primitive types | Numeric values only | Other types remain analysis only |
@@ -54,3 +54,9 @@ Definitions: **PARSED** means tokenization, AST creation and the implemented sem
 - https://www.tradingview.com/pine-script-docs/visuals/plots/
 
 **Limit:** This is the implemented frontend subset, not a universal Pine v6 compiler. Full overload/type-system fidelity, tuple and UDT forms, all builtins, realtime rollback/commit, actual Android hardware parity and exact TradingView results remain unverified. Stage 3 is the next execution phase.
+
+### 2026-11-23 QA update
+
+- [CI #45225811614](https://github.com/775878805Osamaha/TradeLab/actions/runs/45225811614): **974 pass, 0 fail**, Flutter analyzer pass, including **21 frontend cases** and existing Pine/Replay/Range/paper regressions. Stage 2 code+workflow HEAD `1d6f6bb97e2133cde701469ee309ee18e74bc70e`.
+- Explicit annotation rejection is a safe compatibility gate, not an interpreter for other Pine versions; undocumented and advanced v6 operations remain analysis-only until Stage 3.
+- PR #644 overlaps with #643; treat them as alternatives and **never merge both**.
