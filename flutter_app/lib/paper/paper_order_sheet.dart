@@ -19,20 +19,24 @@ class _PaperOrderSheetState extends State<PaperOrderSheet> {
   final _units = TextEditingController(text: '1');
   PaperSide _side = PaperSide.buy;
   bool _saving = false;
+  bool _confirming = false;
   String? _error;
 
   @override
   void dispose() { _units.dispose(); super.dispose(); }
 
   Future<void> _submit(PreparedPaperQuote prepared) async {
-    if (_saving) return;
+    if (_saving || _confirming) return;
     final units = double.tryParse(_units.text.trim().replaceAll(',', '.'));
     if (units == null || !units.isFinite || units <= 0) {
       setState(() => _error = 'أدخل كمية موجبة بوحدات الأصل، وليست لوت.');
       return;
     }
     final quotedPrice = prepared.quote.executionPrice(buy: _side == PaperSide.buy);
-    final accepted = await showDialog<bool>(context: context, builder: (dialogContext) =>
+    setState(() => _confirming = true);
+    bool? accepted;
+    try {
+      accepted = await showDialog<bool>(context: context, builder: (dialogContext) =>
       AlertDialog(
         title: const Text('تأكيد صفقة تجريبية'),
         content: Text('${_side == PaperSide.buy ? 'شراء' : 'بيع'} '
@@ -46,6 +50,9 @@ class _PaperOrderSheetState extends State<PaperOrderSheet> {
             child: const Text('فتح تجريبي')),
         ],
       ));
+    } finally {
+      if (mounted) setState(() => _confirming = false);
+    }
     if (accepted != true || !mounted) return;
     setState(() { _saving = true; _error = null; });
     try {
@@ -118,7 +125,8 @@ class _PaperOrderSheetState extends State<PaperOrderSheet> {
                 const SizedBox(height: 12),
                 if (_error != null) Text(_error!,
                   style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                FilledButton.icon(onPressed: _saving ? null : () => _submit(prepared),
+                FilledButton.icon(onPressed: _saving || _confirming
+                    ? null : () => _submit(prepared),
                   icon: const Icon(Icons.add_chart), label: const Text('فتح صفقة تجريبية')),
               ]);
             }),
