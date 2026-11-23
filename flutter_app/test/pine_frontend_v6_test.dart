@@ -211,6 +211,74 @@ plot(close)
         contains('"node":"if"'));
   });
 
+
+  test('Pine v6 strictly rejects numeric conditions and logical operands', () {
+    final bad = PineFrontend.analyze('''//@version=6
+indicator("V6 bool")
+if close
+    plot(close)
+value = close ? high : low
+flag = close and open
+inverse = not high
+plot(close)''');
+    final mismatches = bad.diagnostics.where((d) =>
+        d.code == 'type_mismatch').toList();
+    expect(mismatches.length, greaterThanOrEqualTo(4),
+        reason: bad.diagnosticMessage);
+    expect(mismatches.any((d) => d.line == 3), isTrue);
+    expect(mismatches.any((d) => d.line == 5), isTrue);
+    expect(mismatches.any((d) => d.line == 6), isTrue);
+    expect(mismatches.any((d) => d.line == 7), isTrue);
+    expect(bad.canExecute, isFalse);
+  });
+
+  test('Pine v6 allows explicit bool casting and boolean expressions', () {
+    final valid = PineFrontend.analyze('''//@version=6
+indicator("Explicit boolean")
+bool signal = bool(close)
+if signal and (high > low)
+    signal := not signal
+plot(close)''');
+    expect(valid.hasSyntaxErrors, isFalse,
+        reason: valid.diagnosticMessage);
+    expect(valid.diagnostics.any((d) =>
+        d.code == 'type_mismatch' || d.code == 'unknown_function'), isFalse,
+        reason: valid.diagnosticMessage);
+    expect(valid.canExecute, isFalse,
+        reason: 'Control-flow AST must not execute in Stage 2');
+  });
+
+  test('direct na comparisons are semantically rejected in v6', () {
+    final bad = PineFrontend.analyze(
+      'indicator("na comparison")\nflag = close == na\nplot(close)');
+    expect(bad.diagnostics.any((d) =>
+        d.code == 'na_comparison' && d.line == 2), isTrue,
+        reason: bad.diagnosticMessage);
+    final good = PineFrontend.analyze(
+      'indicator("na function")\nflag = na(close)\nplot(close)');
+    expect(good.diagnostics.any((d) =>
+        d.code == 'na_comparison' || d.code == 'unknown_function'), isFalse);
+  });
+
+  test('EMA and RSI length require simple int or weaker qualifier', () {
+    final rejected = PineFrontend.analyze('''indicator("qualifier")
+dynamic = ta.ema(close, bar_index)
+again = ta.rsi(close, length=bar_index)
+plot(dynamic)''');
+    final errors = rejected.diagnostics.where((d) =>
+        d.code == 'argument_qualifier').toList();
+    expect(errors, hasLength(2), reason: rejected.diagnosticMessage);
+    final allowed = PineFrontend.analyze('''indicator("qualified")
+length = input.int(5, "Length")
+moving = ta.ema(close, length)
+plot(moving)''');
+    expect(allowed.diagnostics, isEmpty,
+        reason: allowed.diagnosticMessage);
+    expect(allowed.canExecute, isTrue,
+        reason: 'Supported numeric input source must remain executable');
+  });
+
+
   test('differential route preserves all supported numeric-subset outputs',
       () {
     final candles = <TradeCandle>[
