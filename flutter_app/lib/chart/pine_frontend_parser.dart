@@ -311,8 +311,9 @@ class PineParser {
       throw const _PineParseLimit();
     }
     try {
-      var left = _prefix();
-      if (left == null) return null;
+      final first = _prefix();
+      if (first == null) return null;
+      PineExpression left = first;
       while (true) {
         final power = priority[current.text];
         if (power == null || power < minPriority) break;
