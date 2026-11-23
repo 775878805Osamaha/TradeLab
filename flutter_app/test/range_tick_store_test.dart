@@ -668,4 +668,50 @@ void main() {
       await db.close();
     }
   });
+
+  test('fresh Range restore skips a corrupt newer manifest and keeps '
+      'exact earlier source coverage', () async {
+    const account = 'recover-latest-valid-account';
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final oldFrom = now - 100000;
+    final oldTo = now - 60000;
+    final previousTicks = [
+      MarketTick(now - 90000, 2444.1),
+      MarketTick(now - 80000, 2444.3),
+    ];
+    await RangeTickStore.archiveVerifiedWindow(
+      account, 'XAUUSD', previousTicks,
+      fromMs: oldFrom, toMs: oldTo,
+    );
+    final root = await getDatabasesPath();
+    final db = await openDatabase(
+      path.join(root, 'tradelab_range_ticks.db'),
+      singleInstance: false,
+    );
+    try {
+      await db.insert('range_tick_windows', {
+        'account_id': account,
+        'symbol': 'XAUUSD',
+        'from_ms': now - 10000,
+        'to_ms': now - 1000,
+        'tick_count': 0,
+        'tick_digest': List.filled(64, '0').join(),
+        'saved_at_ms': now - 1000,
+      });
+      final restored =
+          await RangeTickStore.readLatestVerifiedWindowWithCoverage(
+        account, 'XAUUSD',
+      );
+      expect(restored, isNotNull);
+      expect(restored!.fromMs, oldFrom);
+      expect(restored.toMs, oldTo);
+      expect(restored.ticks.map((t) => t.bid).toList(), [2444.1, 2444.3]);
+      expect(await RangeTickStore.readLatestVerifiedWindowWithCoverage(
+        account, 'XAUUSD', maxAge: const Duration(seconds: 10),
+      ), isNull,
+          reason: 'An expired valid window cannot be rebranded as live BID');
+    } finally {
+      await db.close();
+    }
+  });
 }
