@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:collection';
+import 'pine_runtime_core.dart';
 
 import '../data/tradelab_data.dart';
 
@@ -711,4 +712,288 @@ class PineSubsetProgram {
     }
     return result;
   }
+}
+
+
+/// Stage 1: a bar-at-a-time executor for the already-supported Pine subset.
+/// Deliberately extends the existing AST instead of replacing the parser or
+/// claiming that arbitrary Pine v6 syntax works.
+extension PineSubsetRuntime on PineSubsetProgram {
+  PineSubsetProgram withInputs(Map<String, double> inputs) {
+    final updated = <String, double>{...constants};
+    for (final entry in inputs.entries) {
+      if (!updated.containsKey(entry.key) ||
+          !entry.value.isFinite || entry.value.abs() > 1000000) {
+        throw const PineRuntimeException(
+            'invalid_input', 'Unknown or non-finite Pine input override');
+      }
+      updated[entry.key] = entry.value;
+    }
+    return PineSubsetProgram._(
+        title, overlay, updated, statements, plots);
+  }
+
+  PineBarExecutor startExecutor({
+    Map<String, double> inputs = const {},
+    PineRuntimeLimits limits = const PineRuntimeLimits(),
+  }) => PineBarExecutor._(withInputs(inputs), limits);
+
+  List<PineSubsetPlot> evaluateIncrementally(
+    List<TradeCandle> candles, {
+    Map<String, double> inputs = const {},
+    PineRuntimeLimits limits = const PineRuntimeLimits(),
+  }) {
+    final worker = startExecutor(inputs: inputs, limits: limits);
+    try {
+      for (var index = 0; index < candles.length; index++) {
+        worker.advance(candles[index]);
+      }
+      return worker.outputs;
+    } finally {
+      worker.close();
+    }
+  }
+}
+
+class _PineTaState {
+  final ListQueue<double> valid = ListQueue<double>();
+  final ListQueue<(int, double)> ordered = ListQueue<(int, double)>();
+  double sum = 0;
+  double? last;
+  double? previous;
+  double gains = 0, losses = 0;
+  double? avgGain, avgLoss;
+  int samples = 0, missing = 0;
+
+  double? sma(double? x, int length) {
+    if (x != null) {
+      valid.addLast(x);
+      sum += x;
+      if (valid.length > length) sum -= valid.removeFirst();
+    }
+    return valid.length == length ? sum / length : null;
+  }
+
+  double? ema(double? x, int length) {
+    if (x != null) {
+      final alpha = 2 / (length + 1);
+      last = last == null ? x : alpha * x + (1 - alpha) * last!;
+    }
+    return last;
+  }
+
+  double? rsi(double? x, int length) {
+    if (x == null) return null;
+    if (previous == null) {
+      previous = x;
+      return null;
+    }
+    final diff = x - previous!;
+    previous = x;
+    final gain = math.max(0.0, diff);
+    final loss = math.max(0.0, -diff);
+    if (avgGain == null || avgLoss == null) {
+      gains += gain;
+      losses += loss;
+      samples++;
+      if (samples < length) return null;
+      avgGain = gains / length;
+      avgLoss = losses / length;
+    } else {
+      avgGain = (avgGain! * (length - 1) + gain) / length;
+      avgLoss = (avgLoss! * (length - 1) + loss) / length;
+    }
+    if (avgLoss == 0) return 100.0;
+    if (avgGain == 0) return 0.0;
+    return 100 - 100 / (1 + avgGain! / avgLoss!);
+  }
+
+  double? extreme(int index, int length, double? x,
+      double? expired, bool maximum) {
+    if (x == null) {
+      missing++;
+    } else {
+      while (ordered.isNotEmpty &&
+          (maximum ? ordered.last.$2 <= x : ordered.last.$2 >= x)) {
+        ordered.removeLast();
+      }
+      ordered.addLast((index, x));
+    }
+    if (index >= length && expired == null) missing--;
+    final firstAllowed = index - length + 1;
+    while (ordered.isNotEmpty && ordered.first.$1 < firstAllowed) {
+      ordered.removeFirst();
+    }
+    return index >= length - 1 && missing == 0 && ordered.isNotEmpty
+        ? ordered.first.$2 : null;
+  }
+}
+
+/// Owns every historical value, moving-average accumulator and memoized AST
+/// expression for ONE run/indicator instance; no global static series.
+class PineBarExecutor {
+  PineBarExecutor._(this.program, this.limits)
+      : budget = PineRuntimeBudget(limits) {
+    final names = <String>{
+      'open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4',
+      ...program.statements.map((s) => s.name),
+    };
+    for (final name in names) {
+      _variables[name] = _newSeries();
+    }
+    for (var i = 0; i < program.plots.length; i++) {
+      _plotValues.add(<double?>[]);
+    }
+  }
+
+  final PineSubsetProgram program;
+  final PineRuntimeLimits limits;
+  final PineRuntimeBudget budget;
+  final Map<String, PineSeries> _variables = {};
+  final Map<_PineExpr, PineSeries> _memo = {};
+  final Map<_PineCall, _PineTaState> _ta = {};
+  final List<List<double?>> _plotValues = [];
+  int _index = -1;
+  bool _closed = false;
+
+  int get completedBars => _index + 1;
+
+  PineSeries _newSeries() {
+    budget.reserveHistory(limits.maxHistory);
+    return PineSeries(historyLimit: limits.maxHistory);
+  }
+
+  void close() {
+    _closed = true;
+    budget.stop();
+  }
+
+  void advance(TradeCandle candle) {
+    if (_closed) {
+      throw const PineRuntimeException(
+          'closed', 'Pine executor cannot run after close');
+    }
+    budget.consume();
+    _index++;
+    final open = candle.open;
+    final high = candle.high;
+    final low = candle.low;
+    final close = candle.close;
+    final source = <String, double>{
+      'open': open, 'high': high, 'low': low, 'close': close,
+      'hl2': (high + low) / 2,
+      'hlc3': (high + low + close) / 3,
+      'ohlc4': (open + high + low + close) / 4,
+    };
+    for (final entry in source.entries) {
+      _variables[entry.key]!.append(PineValue.numeric(entry.value));
+    }
+    for (final statement in program.statements) {
+      final value = _evaluate(statement.expression);
+      _variables[statement.name]!.append(PineValue.numeric(value));
+    }
+    for (var j = 0; j < program.plots.length; j++) {
+      final value = _evaluate(program.plots[j].expr);
+      budget.consume(work: 0, values: 1);
+      _plotValues[j].add(value);
+    }
+  }
+
+  double? _evaluate(_PineExpr expression) {
+    budget.consume();
+    var history = _memo[expression];
+    if (history != null && history.length == completedBars) {
+      return history.history(0).number;
+    }
+    if (history != null && history.length != _index) {
+      throw const PineRuntimeException(
+          'series_order', 'Pine evaluation order is inconsistent');
+    }
+    history ??= _memo.putIfAbsent(expression, _newSeries);
+    double? result;
+    switch (expression) {
+      case _PineValue(:final value):
+        result = value;
+      case _PineName(:final name):
+        result = program.constants[name] ??
+            _variables[name]!.absolute(_index).number;
+      case _PineHistory(:final name, :final offset):
+        if (offset >= limits.maxHistory) {
+          throw const PineRuntimeException(
+              'history_limit', 'Requested Pine history was not retained');
+        }
+        result = program.constants[name] ??
+            _variables[name]!.absolute(_index - offset).number;
+      case _PineUnary(:final operator, :final value):
+        final x = _evaluate(value);
+        result = x == null ? null : (operator == '-' ? -x : x);
+      case _PineBinary(:final operator, :final left, :final right):
+        final x = _evaluate(left);
+        final y = _evaluate(right);
+        if (x != null && y != null && (operator != '/' || y != 0)) {
+          result = switch (operator) {
+            '+' => x + y,
+            '-' => x - y,
+            '*' => x * y,
+            _ => x / y,
+          };
+        }
+      case _PineCall(:final name, :final args):
+        final values = args.map(_evaluate).toList(growable: false);
+        final x = values.first;
+        final y = values.length > 1 ? values[1] : null;
+        if (name == 'nz') {
+          result = x ?? y ?? 0;
+        } else if (name == 'math.abs') {
+          result = x?.abs();
+        } else if (name == 'math.min') {
+          result = x == null || y == null ? null : math.min(x, y);
+        } else if (name == 'math.max') {
+          result = x == null || y == null ? null : math.max(x, y);
+        } else {
+          final length = PineSubsetProgram._length(
+              args[1], program.constants, 0);
+          final state = _ta.putIfAbsent(expression, () {
+            budget.reserveHistory(length);
+            return _PineTaState();
+          });
+          switch (name) {
+            case 'ta.sma':
+              result = state.sma(x, length);
+            case 'ta.ema':
+              result = state.ema(x, length);
+            case 'ta.rsi':
+              result = state.rsi(x, length);
+            case 'ta.roc':
+            case 'ta.change':
+              final old = _memo[args.first]?.absolute(_index - length).number;
+              if (x != null && old != null &&
+                  (name != 'ta.roc' || old != 0)) {
+                result = name == 'ta.roc'
+                    ? 100 * (x - old) / old : x - old;
+              }
+            case 'ta.highest':
+            case 'ta.lowest':
+              final old = _memo[args.first]?.absolute(_index - length).number;
+              result = state.extreme(_index, length, x, old,
+                  name == 'ta.highest');
+            default:
+              throw const PineRuntimeException(
+                  'unsupported_function', 'Pine function not implemented');
+          }
+        }
+    }
+    if (result != null && !result.isFinite) result = null;
+    history.append(PineValue.numeric(result));
+    return result;
+  }
+
+  List<PineSubsetPlot> get outputs => List<PineSubsetPlot>.unmodifiable([
+    for (var i = 0; i < program.plots.length; i++)
+      PineSubsetPlot(program.plots[i].title,
+          List<double?>.unmodifiable(_plotValues[i]),
+          histogram: program.plots[i].histogram,
+          argbColor: program.plots[i].color,
+          width: program.plots[i].width),
+  ]);
 }
