@@ -257,6 +257,35 @@ class ChartIndicatorLibraryState {
     return copyWith(activeOrder: current);
   }
 
+  /// Change the stacking order of active overlays or independent panes
+  /// without accidentally moving an overlay into the pane list.
+  ChartIndicatorLibraryState moveActive(String id, int direction) {
+    if (direction != -1 && direction != 1) return this;
+    final studies = active;
+    final kind = studies.where((item) =>
+        item.separatePane == studies.any((value) =>
+            value.id == id && value.separatePane))
+        .map((item) => item.id).toList();
+    final at = kind.indexOf(id);
+    final nextIndex = at + direction;
+    if (at < 0 || nextIndex < 0 || nextIndex >= kind.length) return this;
+    final ordering = studies.map((item) => item.id).toList();
+    final first = ordering.indexOf(kind[at]);
+    final second = ordering.indexOf(kind[nextIndex]);
+    final swap = ordering[first];
+    ordering[first] = ordering[second];
+    ordering[second] = swap;
+    return copyWith(activeOrder: ordering);
+  }
+
+  /// Remove all *visible* indicators while preserving the user's source
+  /// drafts, favorites, and custom lengths. No broker or chart data changes.
+  ChartIndicatorLibraryState clearActive() {
+    if (activeIds.isEmpty) return this;
+    return copyWith(activeIds: <String>{},
+        activeOrder: <String>[], paneHeights: <String, int>{});
+  }
+
   bool get hasActive => active.isNotEmpty;
 
   ChartIndicatorLibraryState copyWith({
