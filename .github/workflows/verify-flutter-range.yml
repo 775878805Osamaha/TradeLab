@@ -152,6 +152,7 @@ jobs:
             test/pine_subset_program_test.dart \
             test/pine_stage1_runtime_test.dart \
             test/pine_v6_frontend_test.dart \
+            test/pine_differential_matrix_test.dart \
             test/chart_indicator_autoscale_test.dart \
             test/chart_indicator_pane_test.dart \
             test/chart_indicator_library_sheet_test.dart \
