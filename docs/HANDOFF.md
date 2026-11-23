@@ -1,5 +1,8 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+> **أحدث استكمال Pine (2026-11-23):** [PR #643](https://github.com/775878805Osamaha/TradeLab/pull/643) **مسودة غير مدمجة** فوق فرع المرحلة الأولى [PR #642](https://github.com/775878805Osamaha/TradeLab/pull/642) غير المدمج. تمت إضافة Lexer/Parser/AST/Semantic للغة Pine v6 دون تغيير Runtime السابق؛ [مصفوفة الدعم](PINE_V6_LANGUAGE_SUPPORT_STAGE2_2026-11-23.md) و[تقرير الاستكمال](PINE_STAGE2_HANDOFF_2026-11-23.md). فشل اختبارا mutation عمدًا وكشفا تسرب Replay ومشاركة الحالة ([#45217673219](https://github.com/775878805Osamaha/TradeLab/actions/runs/45217673219)، [#45217676913](https://github.com/775878805Osamaha/TradeLab/actions/runs/45217676913)). آخر CI ناجح للكود [#45222318255](https://github.com/775878805Osamaha/TradeLab/actions/runs/45222318255) **972 ناجح / 0 فاشل**، Flutter analyze PASS. لا APK، لا دمج، لا تغيير main. المرحلة 3 مقترحة فقط لتشغيل var/varip والحلقات والدوال عبر Runtime آمن.
+
+
 > **آخر نقطة استكمال Pine — 2026-11-23:** [PR #642](https://github.com/775878805Osamaha/TradeLab/pull/642) مسودة غير مدمجة نحو فرع Flutter المعتمد test/flutter-all-fixes-20261116؛ تم بناء أساس نسخ المؤشرات المستقلة وقيم na ومحرك تقدم شمعة بشمعة وحدود موارد وتحقق Replay للجزء المدعوم. آخر كود اختبرته [CI #45214588951](https://github.com/775878805Osamaha/TradeLab/actions/runs/45214588951) **نجاح 953 / فشل 0** على 4b6b58558a5e904474ff28aa69af8b683302e00b. التقرير التفصيلي: [PINE_STAGE1_HANDOFF_2026-11-23.md](PINE_STAGE1_HANDOFF_2026-11-23.md). ما زال دعم Pine v6 الكامل وتكرار النسخ عبر واجهة المستخدم ناقصًا. لا APK أو main أو دمج قبل مراجعة المستخدم.
 
 
