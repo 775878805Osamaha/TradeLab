@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-24 — #643 manual rebase green 994/0, owner merge only
+- أكد GitHub دمج #642 على `test/flutter-all-fixes-20261116` عند `a8ee02924701afdb62f333172381360ca1ca8148`. إعادة تموضع PR #643 اليدوية حفظت جميع إضافات المحلل الرئيسي `pine_v6_*` واختبارات المحلل البديل الموجودة ضمن #642، مع حسم تعارضات `chart_indicator_library.dart` و`verify-flutter-range.yml` و`PINE_STAGE2_HANDOFF` و`HANDOFF` و`CHANGE_REPORTS`؛ أرشفة التقرير المتداخل دون فقد. [تقرير تفصيلي](PINE_STAGE2_REBASE_2026-11-24.md)، ورأس سابق مؤرشف في `backup/pine-stage2-before-rebase-20261124`.
+- أول CI PR بعد الدمج [#45287365632](https://github.com/775878805Osamaha/TradeLab/actions/runs/45287365632) **978 PASS/1 FAIL**: اختبار قديم توقع «غير مدعوم»؛ التعديل `9371a44df92b758669117faa3c5c7b62a154586e` أضاف العبارة مع بقاء خطأ المصدر الدقيق. [CI النهائي #45288069347](https://github.com/775878805Osamaha/TradeLab/actions/runs/45288069347) **979+4+11 = 994 PASS/0 FAIL** وFlutter Analyze PASS؛ 25 اختبار Stage2 رئيسية و16 اختبار توافق موروثة. [CI مستقل #45288058896](https://github.com/775878805Osamaha/TradeLab/actions/runs/45288058896) **978 PASS/0 FAIL**. Vercel: Deployment rate limited (فشل نشر منفصل)، branch protected=false وقائمة checks مطلوبة فارغة من GitHub، بينما استعلام protection التفصيلي رفضته الصلاحيات 403. لا APK/دمج، لا تعديل #645 إلى أن يدمج المالك #643.
+
+
+
 
 ### 2026-11-24 — Rebase #643 onto merged #642 (Flutter CI pending)
 - Integrated Stage 1 head `a8ee02924701afdb62f333172381360ca1ca8148` kept intact, including alternate frontend files and their existing tests. The chosen canonical #643 `pine_v6_*` is the main saved-script route; compatibility getter kept. Five conflicting paths reconciled manually; [full report](PINE_STAGE2_REBASE_2026-11-24.md). No APK/merge.
