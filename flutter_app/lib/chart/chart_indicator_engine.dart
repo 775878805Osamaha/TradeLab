@@ -3,13 +3,17 @@ import 'dart:collection';
 
 import '../data/tradelab_data.dart';
 import 'chart_indicator_library.dart';
+import 'pine_subset_program.dart';
 
 /// Exact source-indexed indicator output; unsupported scripts never reach it.
 class ChartIndicatorPlot {
-  const ChartIndicatorPlot(this.title, this.values, {this.histogram = false});
+  const ChartIndicatorPlot(this.title, this.values,
+      {this.histogram = false, this.argbColor, this.width = 2});
   final String title;
   final List<double?> values;
   final bool histogram;
+  final int? argbColor;
+  final int width;
 }
 
 class ChartIndicatorOutput {
@@ -33,7 +37,9 @@ class ChartIndicatorSeriesCache {
       _outputs.clear();
     }
     final key = indicator.id + ':' + indicator.kind.name +
-        ':' + indicator.period.toString();
+        ':' + indicator.period.toString() +
+        ':' + (indicator.pineSource ?? '') +
+        ':' + indicator.pineOverlay.toString();
     return _outputs.putIfAbsent(
         key, () => ChartIndicatorEngine.compute(candles, indicator));
   }
@@ -299,6 +305,13 @@ class ChartIndicatorEngine {
       ChartIndicatorKind.stochastic => _stochastic(candles, length),
       ChartIndicatorKind.roc =>
         [ChartIndicatorPlot('ROC', _roc(close, length))],
+      ChartIndicatorKind.pine => [
+        for (final plot in PineSubsetProgram.compile(
+            indicator.pineSource!).evaluate(candles))
+          ChartIndicatorPlot(plot.title, plot.values,
+              histogram: plot.histogram,
+              argbColor: plot.argbColor, width: plot.width),
+      ],
     };
     return ChartIndicatorOutput(indicator, plots);
   }
