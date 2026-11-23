@@ -60,3 +60,10 @@ Definitions: **PARSED** means tokenization, AST creation and the implemented sem
 - [CI #45225811614](https://github.com/775878805Osamaha/TradeLab/actions/runs/45225811614): **974 pass, 0 fail**, Flutter analyzer pass, including **21 frontend cases** and existing Pine/Replay/Range/paper regressions. Stage 2 code+workflow HEAD `1d6f6bb97e2133cde701469ee309ee18e74bc70e`.
 - Explicit annotation rejection is a safe compatibility gate, not an interpreter for other Pine versions; undocumented and advanced v6 operations remain analysis-only until Stage 3.
 - PR #644 overlaps with #643; treat them as alternatives and **never merge both**.
+
+### 2026-11-23 — UDF argument and loop control QA
+
+- User-function **named/positional argument** binding: PARSED + CHECKED for declared parameter names, missing required, duplicate binding, primitive type and const/input/simple/series qualifier mismatch. **NOT EXECUTABLE**, and UDF return type inference remains partial.
+- `break`/`continue` within `for`/`while` (including nested `if`): PARSED + CHECKED; outside a loop: REJECTED with source line and column. **NOT EXECUTABLE**. Official basis: https://www.tradingview.com/pine-script-docs/language/loops/ .
+- Explicit untyped `na` declarations remain REJECTED; unknown user-function return values are not automatically classified as `na`.
+- Final source CI [#45230338091](https://github.com/775878805Osamaha/TradeLab/actions/runs/45230338091) on `f135bf4119512777eea643fb72eca8010992454e`: **963+4+11=978 PASS / 0 FAIL**, Flutter analyzer PASS, **25 frontend tests**. Prior failed [#45229881973](https://github.com/775878805Osamaha/TradeLab/actions/runs/45229881973) 962 PASS/1 FAIL fixed.
