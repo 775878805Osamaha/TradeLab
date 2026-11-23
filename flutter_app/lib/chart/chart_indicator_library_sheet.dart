@@ -149,7 +149,8 @@ class _ChartIndicatorLibrarySheetState
     }
   }
 
-  Widget _indicatorRow(ChartIndicatorDefinition item) {
+  Widget _indicatorRow(ChartIndicatorDefinition item,
+      {bool managing = false}) {
     final enabled = _library.activeIds.contains(item.id);
     final favorite = _library.favoriteIds.contains(item.id);
     return ListTile(
@@ -171,6 +172,18 @@ class _ChartIndicatorLibrarySheetState
         onPressed: () => _change(_library.toggleFavorite(item.id)),
       ),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (managing) ...[
+          IconButton(
+            key: Key('indicator-active-up-' + item.id),
+            tooltip: 'تقديم المؤشر',
+            onPressed: () => _change(_library.moveActive(item.id, -1)),
+            icon: const Icon(Icons.keyboard_arrow_up, size: 19)),
+          IconButton(
+            key: Key('indicator-active-down-' + item.id),
+            tooltip: 'تأخير المؤشر',
+            onPressed: () => _change(_library.moveActive(item.id, 1)),
+            icon: const Icon(Icons.keyboard_arrow_down, size: 19)),
+        ],
         if (!item.custom && item.kind != ChartIndicatorKind.macd)
           IconButton(
             key: Key('indicator-settings-' + item.id),
@@ -265,9 +278,20 @@ class _ChartIndicatorLibrarySheetState
         }
         break;
       case 3:
+        if (_library.active.isNotEmpty) {
+          children.add(Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const Key('indicator-clear-active'),
+              onPressed: () => _change(_library.clearActive()),
+              icon: const Icon(Icons.layers_clear_outlined),
+              label: const Text('إزالة جميع المؤشرات من الشارت'),
+            ),
+          ));
+        }
         children.addAll(_library.active
             .where((item) => _matches(item.title))
-            .map(_indicatorRow));
+            .map((item) => _indicatorRow(item, managing: true)));
         break;
     }
     if (children.isEmpty) {
