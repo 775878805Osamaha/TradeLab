@@ -1,0 +1,66 @@
+name: TradeLab Flutter Android Replay smoke (manual)
+
+# Cost control: never run on push/PR. Builds only a temporary debug test app
+# on a requested Android emulator; no signed release APK or artifact upload.
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Git ref to test (run only after code review)'
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tradelab-flutter-android-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-replay-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - name: Checkout selected source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+      - name: Setup JDK for the temporary Android test host
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate isolated Flutter Android host (not legacy Kotlin app)
+        run: flutter create --platforms android --project-name tradelab_flutter . --no-pub
+      - name: Configure INTERNET permission and Flutter-only OAuth callback
+        run: python3 tool/configure_android_host.py
+      - name: Fetch locked Flutter dependencies
+        run: flutter pub get
+      - name: Require hardware acceleration
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Validate disconnected cTrader and Binance Replay on Android 13
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 2
+          ram-size: 2048M
+          heap-size: 256M
+          disable-animations: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -accel on -no-snapshot -noaudio -no-boot-anim -no-metrics
+          script: cd flutter_app && flutter test integration_test/replay_device_smoke_test.dart -d emulator-5554 --reporter expanded
