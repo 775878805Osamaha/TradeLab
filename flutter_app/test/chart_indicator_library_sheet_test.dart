@@ -76,16 +76,16 @@ void main() {
     expect(find.byKey(const Key('indicator-pine-capability')), findsOneWidget);
     await tester.enterText(
         find.byKey(const Key('indicator-script-title')),
-        'Ahmad HA First Trend V10');
+        'Unsupported User Strategy');
     await tester.enterText(
         find.byKey(const Key('indicator-script-source')),
-        '//@version=6\nstrategy("Ahmad HA First Trend V10")\n'
+        '//@version=6\nstrategy("Unsupported User Strategy")\n'
         'strategy.entry("Buy", strategy.long)');
     await tester.tap(find.byKey(const Key('indicator-script-save')));
     await tester.pumpAndSettle();
     expect(state.scripts, hasLength(1));
     expect(state.active, isEmpty);
-    expect(find.text('Ahmad HA First Trend V10'), findsOneWidget);
+    expect(find.text('Unsupported User Strategy'), findsOneWidget);
     expect(find.textContaining('يتطلب دعم Pine Script'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
