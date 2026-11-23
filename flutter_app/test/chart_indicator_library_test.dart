@@ -251,4 +251,49 @@ void main() {
   });
 
 
+  test('pane reorder and independently adjustable heights persist to disk', () {
+    final a = const ChartIndicatorLibraryState()
+      .toggleActive('ema-21')
+      .toggleActive('rsi-14')
+      .toggleActive('macd')
+      .resizePane('rsi-14', 160)
+      .resizePane('macd', 128);
+    expect(a.active.map((s) => s.id), ['ema-21', 'rsi-14', 'macd']);
+    expect(a.movePane('rsi-14', -1), same(a),
+      reason: 'First independent pane cannot move higher');
+    final reordered = a.movePane('macd', -1);
+    expect(reordered.active.map((s) => s.id),
+      ['ema-21', 'macd', 'rsi-14']);
+    expect(reordered.heightForPane('rsi-14'),160);
+    expect(reordered.heightForPane('macd'),128);
+    final restored = ChartIndicatorLibraryState.decode(reordered.encode());
+    expect(restored.active.map((s) => s.id),
+      ['ema-21', 'macd', 'rsi-14']);
+    expect(restored.heightForPane('rsi-14'),160);
+    expect(restored.heightForPane('macd'),128);
+    expect(restored.resizePane('macd', 250), same(restored));
+    expect(restored.resizePane('ema-21', 155), same(restored),
+      reason: 'Only actual independent panes can be resized');
+    final reset = restored.resizePane('macd', 106);
+    expect(reset.heightForPane('macd'),106);
+    final removed = restored.toggleActive('rsi-14');
+    expect(removed.paneHeights.containsKey('rsi-14'),isFalse);
+    expect(removed.activeOrder, ['ema-21','macd']);
+  });
+
+  test('legacy preference migration preserves active indicators ordering', () {
+    final saved = ChartIndicatorLibraryState.decode(
+      '{"version":1,"activeIds":["macd","rsi-14"],'
+      '"favoriteIds":[],"scripts":[]}');
+    expect(saved.active.map((s) => s.id), ['rsi-14','macd'],
+      reason: 'Old saves had catalog order, not explicit drag order');
+    final invalid = ChartIndicatorLibraryState.decode(
+      '{"version":1,"activeIds":["rsi-14","macd"],'
+      '"activeOrder":["macd","garbage","macd","rsi-14"],'
+      '"paneHeights":{"macd":130,"rsi-14":999,"bad":110}}');
+    expect(invalid.active.map((s) => s.id), ['macd','rsi-14']);
+    expect(invalid.paneHeights,{'macd':130});
+  });
+
+
 }
