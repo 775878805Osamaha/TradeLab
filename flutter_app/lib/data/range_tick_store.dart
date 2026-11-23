@@ -353,13 +353,18 @@ class RangeTickStore {
     var rejectedCandidates = 0;
     while (cursor <= toMs) {
       if (++windowsConsumed > maxVerifiedWindows) return null;
-      // Prefer the furthest-ending verified window, but try a few
-      // alternatives if a migrated or corrupted manifest fails validation.
+      // A phone can accumulate many overlapping, completed short-window
+      // manifests. Eight latest candidates may all be damaged/migrated while
+      // a ninth genuine SHA-verified window still covers this exact cursor.
+      // Scan only the remaining bounded corruption budget (+ one valid
+      // candidate). Never trust an invalid digest, infer quiet coverage, or
+      // scan an unbounded number of SQLite manifests.
       final candidates = await db.query('range_tick_windows',
         columns: ['from_ms', 'to_ms'],
         where: 'account_id = ? AND symbol = ? AND from_ms <= ? AND to_ms >= ?',
         whereArgs: [accountId, symbol, cursor, cursor],
-        orderBy: 'to_ms DESC', limit: 8);
+        orderBy: 'to_ms DESC',
+        limit: maxRejectedCandidates - rejectedCandidates + 1);
       if (candidates.isEmpty) return null;
       List<MarketTick>? validTicks;
       int? coverageEnd;
