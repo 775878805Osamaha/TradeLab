@@ -1,5 +1,13 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-23 — PR #634 MERGED: verified Range BID cache recovery, CI success
+- [PR #634](https://github.com/775878805Osamaha/TradeLab/pull/634) squash `2d7227764169a4263b777a8dc6eaf1c428a22c7b` successfully merged into `test/flutter-all-fixes-20261116`.
+- [Flutter CI #45180903830](https://github.com/775878805Osamaha/TradeLab/actions/runs/45180903830) **completed/success**: Flutter analyzer, all active Range/chart/Replay/Results regression tests (including new corrupted-manifest tests), drawing tool smoke and Yemen timezone test passed. No APK created.
+- Fixed confirmed code defects in `RangeTickStore`: overlapping cached BID selector previously stopped after eight bad manifests; now continues only within existing 64-candidate corruption safety bound and trusts only exact SHA-verified windows. Latest recent snapshot lookup now skips a damaged newest manifest and can recover a still-fresh older authenticated interval with its original source bounds.
+- Testing included nine invalid SHA manifests ahead of an intact same-ms BID source window, fail-closed after 65 invalid manifests, newest corrupt vs. earlier fresh valid, and no stale/expired data. No synthetic ticks or OHLC, no account mixing.
+- **Not verified:** first-time cTrader BID production loading on user's Android, historical market-source discontinuities, true TradingView Android pixel/gesture parity. Do not claim those are fixed based only on CI. main and production gateway remain unchanged.
+
+
 ## 2026-11-23 — Range BID fallback through corrupted overlapping cache manifests (CI PENDING)
 - Branch `fix/range-verified-cache-fallback-20261123` based on verified Flutter development branch after Replay pagination PR #633. TradeLab only, no APK, `main`, cTrader gateway, Vercel production or cross-project edits.
 - **Proven from source:** `RangeTickStore.readCoveredInterval` queried at most 8 candidate manifest rows per BID cursor, even though the corruption budget `maxRejectedCandidates=64` intentionally allowed more. With nine bad newest overlapping manifests and one intact older SHA-verified manifest, this returned null and needlessly asked cTrader again despite valid cached BID.
