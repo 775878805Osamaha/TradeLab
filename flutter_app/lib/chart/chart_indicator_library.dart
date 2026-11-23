@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
 import 'pine_subset_program.dart';
+import 'pine_frontend.dart';
 
 enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc, pine }
 
@@ -130,14 +131,20 @@ class ChartSavedIndicatorScript {
         pineOverlay: program.overlay);
   }
 
-  /// Human-readable compile result for unsupported saved source.
+  /// Full v6 syntax is parsed for diagnostics only; execution keeps using
+  /// the existing, explicitly bounded numeric Pine subset.
+  PineFrontendAnalysis get frontendAnalysis => PineFrontend.analyze(source);
+
+  /// Human-readable error with source line, column and category for anything
+  /// the current interpreter cannot execute, without evaluating it.
   String? get compileError {
-    try {
-      PineSubsetProgram.compile(source);
-      return null;
-    } on PineSubsetException catch (error) {
-      return error.toString();
-    }
+    final analysis = frontendAnalysis;
+    if (analysis.canExecute) return null;
+    if (analysis.diagnostics.isEmpty) return 'غير مدعوم بعد';
+    return analysis.diagnostics.map((d) =>
+        'السطر ' + d.line.toString() + '، العمود ' +
+        d.column.toString() + ' (' + d.code + '): ' + d.message)
+        .join('\n');
   }
 
   int? get supportedSmaPeriod {
