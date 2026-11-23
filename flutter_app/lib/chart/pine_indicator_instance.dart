@@ -42,6 +42,10 @@ class PineIndicatorInstance {
   PineBarExecutor? _runtime;
 
   int get completedBars => _runtime?.completedBars ?? 0;
+
+  /// Each instance owns its own series; no external mutable buffer escapes.
+  PineValue seriesAt(String name, int barsAgo) =>
+      _runtime?.seriesAt(name, barsAgo) ?? PineValue.na;
   List<PineSubsetPlot> get outputs => _runtime?.outputs ?? const [];
 
   /// Intended for verified streaming closes only. If a budget is exceeded,
