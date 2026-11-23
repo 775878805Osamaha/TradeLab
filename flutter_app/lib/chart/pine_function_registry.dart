@@ -12,6 +12,8 @@ class PineTaSignature {
   final Map<String,Object> defaults;
   final List<int> lengthSlots;
   final bool booleanResult, tupleResult, legacy;
+  bool isBooleanParameter(int slot)=>
+      parameters[slot]=='biased'||parameters[slot]=='handle_na';
 
   List<int> bind(List<String?> names) {
     final slots=<int>[];

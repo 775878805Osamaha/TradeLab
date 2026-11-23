@@ -1,2 +1,4 @@
 # Stage 3b batch 1 handoff
 Base bf993d298fc4e31cecf47bbb8bb3a31b29fd5b1d, #645 and #646 merged. Independent branch feat/pine-stage3b-ta-registry-batch1-20261124, no owner merge. Registry + 16 TA library functions, 14 scalar advanced runtime routes, two tuple library-only. Legacy numeric executor untouched. Canonical semantic return type for crosses/tuples connected to registry only, no parser deduplication. Automated support JSON must match registry and tests. Reference source and limitations: PINE_STAGE3B_REFERENCE_FORMULAS_2026-11-24.md. CI pending; do not report success until logs confirm. No other stage or APK.
+
+Follow-up hardening: validate known argument types and literal lengths before evaluation; add interior-na policy assertions per function, malformed signature cases, and real saved-script chart integration for RMA. No change to reference outputs. Exact final CI required.

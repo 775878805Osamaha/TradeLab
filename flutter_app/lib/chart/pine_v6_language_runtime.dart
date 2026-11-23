@@ -77,7 +77,28 @@ class PineV6LanguageProgram {
         final name=expr.name;
         final ta=PineFunctionRegistry.ta[name];
         if(ta!=null&&!ta.tupleResult){
-          ta.bind(expr.arguments.map((a)=>a.name).toList());
+          final slots=ta.bind(expr.arguments.map((a)=>a.name).toList());
+          for(var i=0;i<slots.length;i++){
+            final slot=slots[i],value=expr.arguments[i].value;
+            final type=prepared.semantic.inferred[value];
+            final base=type?.type;
+            if(base!=null&&base!=PineBaseType.unknown){
+              final valid=ta.isBooleanParameter(slot)
+                  ?base==PineBaseType.boolType
+                  :ta.lengthSlots.contains(slot)
+                      ?base==PineBaseType.intType
+                      :base==PineBaseType.intType||base==PineBaseType.floatType;
+              if(!valid)throw PineRuntimeException('ta_type',
+                  'Wrong parameter type for '+ta.name);
+            }
+            if(ta.lengthSlots.contains(slot)&&value is PineLiteralExpression){
+              final length=int.tryParse(value.value);
+              if(length==null||length<1||length>500){
+                throw const PineRuntimeException('length',
+                    'TA literal length must be 1..500');
+              }
+            }
+          }
           if(!ta.legacy)usesNewTa=true;
         }
         if(name==null || !(<String>{

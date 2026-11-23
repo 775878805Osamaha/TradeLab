@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/pine_function_registry.dart';
+import 'package:tradelab_flutter/chart/chart_indicator_library.dart';
+import 'package:tradelab_flutter/chart/chart_indicator_engine.dart';
 import 'package:tradelab_flutter/chart/pine_runtime_core.dart';
 import 'package:tradelab_flutter/chart/pine_ta_library.dart';
 import 'package:tradelab_flutter/chart/pine_v6_language_runtime.dart';
@@ -62,10 +64,10 @@ void main(){
   for(final row in matrix){
     final name=row['name'] as String;
     final signature=PineFunctionRegistry.ta[name]!;
-    List<Object?> prefix(List<TradeCandle> input,int count,{bool gap=false}){
+    List<Object?> prefix(List<TradeCandle> input,int count,{bool gap=false,int missingAt=0}){
       final budget=PineRuntimeBudget();
       final state=PineTaState(signature,budget);
-      try{return [for(var i=0;i<count;i++)state.step(argsFor(name,gap&&i==0?null:input[i].close),
+      try{return [for(var i=0;i<count;i++)state.step(argsFor(name,gap&&i==missingAt?null:input[i].close),
           input[i],i==0?null:input[i-1].close)];}finally{budget.stop();}
     }
     final series=expected[name] as List;
@@ -90,6 +92,17 @@ void main(){
         if(!['ta.ema'].contains(name))expect(actual[1],isNull);
         if(['ta.rsi','ta.change','ta.roc'].contains(name))expect(actual[2],isNull);
       }
+      // Missing source after warm-up must not become an invented zero or
+      // read a later bar. These are explicitly internal policy assertions.
+      final middle=prefix(bars,bars.length,gap:true,missingAt:3);
+      if(name=='ta.tr'||name=='ta.atr'){compare(middle,series);}
+      else if(signature.booleanResult){expect(middle[3],isFalse);expect(middle[4],isFalse);}
+      else if(name=='ta.bb'||name=='ta.macd'){
+        expect(middle[3],isA<List>());
+        if(name=='ta.bb')compare(middle[3],middle[2]);
+      }else if(['ta.sma','ta.ema','ta.rma','ta.wma','ta.stdev'].contains(name)){
+        compare(middle[3],middle[2]);
+      }else{expect(middle[3],isNull);}
     });
     test('$name Replay prefix 6 -> 2 -> 4, no future read',(){
       final guarded=GuardedBars(bars,6);
@@ -122,8 +135,22 @@ void main(){
     expect(()=>s.bind(['source','source']),throwsA(isA<PineRuntimeException>()));
     expect(()=>s.bind(['source','bogus']),throwsA(isA<PineRuntimeException>()));
   });
+  test('registry rejects malformed TA calls before reading bars',(){
+    for(final call in ['ta.rma(close, 0)','ta.rma(close, 501)',
+        'ta.rma(close, 2.5)','ta.rma(close, true)','ta.tr(1)',
+        'ta.rma(close)','ta.rma(close, unknown=2)']){
+      expect(()=>PineV6LanguageProgram.compile('indicator("Invalid")\nplot($call)'),
+          throwsA(isA<PineRuntimeException>()),reason:call);
+    }
+  });
   test('new scalar source needs no artificial advanced statement',(){
     final p=PineV6LanguageProgram.compile('indicator("RMA")\nplot(ta.rma(close, 2))');
     compare(p.evaluate(bars).single.values,expected['ta.rma']);
+    const saved=ChartSavedIndicatorScript(id:'script-stage3b-rma',name:'RMA',
+        source:'indicator("RMA")\nplot(ta.rma(close, 2))');
+    final definition=saved.supportedIndicator();
+    expect(definition,isNotNull,reason:saved.compileError);
+    compare(ChartIndicatorEngine.compute(bars,definition!).plots.single.values,
+        expected['ta.rma']);
   });
 }
