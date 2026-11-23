@@ -1,5 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Pine Stage 2 frontend, mutation-proven Stage 1 tests, stacked PR #644 (CI PENDING)
+- Mutations on no-PR temporary branch: Replay future index failure in [#45217685758](https://github.com/775878805Osamaha/TradeLab/actions/runs/45217685758) **937 PASS/1 expected FAIL**, isolated-state leak in [#45218410206](https://github.com/775878805Osamaha/TradeLab/actions/runs/45218410206) **937 PASS/1 expected FAIL**; branch reset to clean Stage 1 HEAD. Both meaningful failures from named regression tests, no production source changes.
+- Stage 2 branch feat/pine-stage2-frontend-v6-20261123 from unmerged PR #642 HEAD ef917ad2c3dd3dc3e036e17b690d08a00814be57e1; [draft PR #644](https://github.com/775878805Osamaha/TradeLab/pull/644) targets the Stage 1 branch (not main). Added frontend_ast/lexer/parser/semantic/frontend Dart files, source diagnostics for saved Pine, test/pine_frontend_v6_test.dart, CI gate and docs matrix/handoff. Frontend only; execution unchanged.
+- First CI [#45221049180](https://github.com/775878805Osamaha/TradeLab/actions/runs/45221049180) **FAIL analyze** with five nullability/return errors, corrected. Next CI [#45221372610](https://github.com/775878805Osamaha/TradeLab/actions/runs/45221372610) **FAIL tests**: 947 PASS/3 FAIL (syntax recovery, Arabic unsupported status, color= named arg), fixed on later commits. Latest exact-head CI pending, do not merge. Local Flutter unavailable, no APK or Android test.
+- Report [PINE_STAGE2_HANDOFF_2026-11-23.md](PINE_STAGE2_HANDOFF_2026-11-23.md), matrix [PINE_V6_STAGE2_LANGUAGE_MATRIX_2026-11-23.md](PINE_V6_STAGE2_LANGUAGE_MATRIX_2026-11-23.md). Next: verify green CI on latest SHA, then user review; Stage 3 runtime control flow/var/varip only after acceptance.
+
+
 ### 2026-11-23 — Pine Stage 1 core runtime, draft PR #642 (NOT MERGED)
 - فرع feat/pine-stage1-instance-safe-runtime-20261123 مبني على test/flutter-all-fixes-20261116؛ ملفات الكود: flutter_app/lib/chart/pine_runtime_core.dart وpine_subset_program.dart وpine_indicator_instance.dart وchart_indicator_engine.dart؛ الاختبار الجديد flutter_app/test/pine_stage1_runtime_test.dart؛ إضافة إلى .github/workflows/verify-flutter-range.yml.
 - إنجاز مثبت: فصل التعريف المحفوظ عن نسخ التشغيل، إعدادات وحالة وسلاسل مستقلة، na/مقارنات v6 في النموذج، حساب AST شمعة بشمعة بميزانيات موارد، Replay prefix/rebuild بلا شموع مستقبلية. لم تُستبدل البنية القديمة. واجهة النسخ المتعددة وvar/varip لم تنفذ بعد.
