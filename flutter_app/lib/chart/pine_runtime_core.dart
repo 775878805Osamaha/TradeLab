@@ -170,7 +170,7 @@ class PineRuntimeBudget {
 
   void consume({int work = 1, int values = 0}) {
     if (work < 0 || values < 0) {
-      throw const ArgumentError('Negative Pine execution budget charge');
+      throw ArgumentError('Negative Pine execution budget charge');
     }
     if (steps > limits.maxSteps - work) {
       throw const PineRuntimeException(
