@@ -72,8 +72,8 @@ class ChartIndicatorEngine {
     for (var i = 0; i < close.length; i++) {
       sum += close[i];
       if (i >= period) sum -= close[i - period];
-      // Preserve the existing chart's early SMA warmup convention.
-      output[i] = sum / math.min(period, i + 1);
+      // TradingView ta.sma emits na until a full period of closes.
+      if (i >= period - 1) output[i] = sum / period;
     }
     return output;
   }
@@ -85,17 +85,23 @@ class ChartIndicatorEngine {
     final low = List<double?>.filled(close.length, null);
     var sum = 0.0;
     var sumSquared = 0.0;
+    // Center before summing squares to avoid cancellation on high-price
+    // symbols with tiny genuine band deviations (e.g. 3000.01).
+    final origin = close.isEmpty ? 0.0 : close.first;
     for (var i = 0; i < close.length; i++) {
-      final value = close[i];
+      final value = close[i] - origin;
       sum += value;
       sumSquared += value * value;
       if (i >= period) {
-        sum -= close[i - period];
-        sumSquared -= close[i - period] * close[i - period];
+        final removed = close[i - period] - origin;
+        sum -= removed;
+        sumSquared -= removed * removed;
       }
       if (i < period - 1) continue;
-      final middle = sum / period;
-      final variance = math.max(0.0, sumSquared / period - middle * middle);
+      final centeredMean = sum / period;
+      final middle = origin + centeredMean;
+      final variance = math.max(0.0,
+          sumSquared / period - centeredMean * centeredMean);
       final deviation = 2 * math.sqrt(variance);
       basis[i] = middle;
       high[i] = middle + deviation;
