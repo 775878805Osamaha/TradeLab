@@ -595,23 +595,23 @@ class PineSubsetProgram {
 
   static List<double?> _sma(List<double?> source, int length) {
     final result = List<double?>.filled(source.length, null);
+    // Pine ta.sma uses the most recent [length] non-na source values,
+    // not a fixed number of bars. Never reinterpret unavailable
+    // replay/history values as zero or use unrevealed future candles.
+    final recent = ListQueue<double>();
     var sum = 0.0;
-    var count = 0;
     for (var i = 0; i < source.length; i++) {
       final x = source[i];
-      if (x != null) {
+      if (x != null && x.isFinite) {
+        recent.addLast(x);
         sum += x;
-        count++;
-      }
-      if (i >= length) {
-        final previous = source[i - length];
-        if (previous != null) {
-          sum -= previous;
-          count--;
+        if (recent.length > length) {
+          sum -= recent.removeFirst();
         }
       }
-      if (i >= length - 1 && count == length) {
-        result[i] = sum / length;
+      if (recent.length == length) {
+        final value = sum / length;
+        if (value.isFinite) result[i] = value;
       }
     }
     return result;
