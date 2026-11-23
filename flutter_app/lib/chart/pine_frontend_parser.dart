@@ -373,7 +373,8 @@ class PineParser {
     } else if (take('na')) {
       item = PineLiteral(start, null, PineType.naType);
     } else if (isKind(PineTokenKind.identifier) ||
-        {'indicator','strategy','library','input','color'}.contains(current.text)) {
+        {'indicator','strategy','library','input','color',
+         'int','float','bool','string'}.contains(current.text)) {
       final name = advance();
       var path = name.text;
       while (take('.')) {
