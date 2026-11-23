@@ -5,6 +5,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
 import 'pine_v6_frontend.dart';
+import 'pine_runtime_core.dart';
+import 'pine_v6_language_runtime.dart';
 import 'pine_frontend.dart';
 
 enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc, pine }
@@ -124,12 +126,26 @@ class ChartSavedIndicatorScript {
   ChartIndicatorDefinition? _compileSeries() {
     final checked = const PineV6Frontend().prepare(source);
     final program = checked.legacyProgram;
-    if (!checked.canExecute || program == null) return null;
-    return ChartIndicatorDefinition(id, name, 1,
-        custom: true,
-        kindOverride: ChartIndicatorKind.pine,
-        pineSource: source,
-        pineOverlay: program.overlay);
+    if (checked.canExecute && program != null) {
+      return ChartIndicatorDefinition(id, name, 1,
+          custom: true,
+          kindOverride: ChartIndicatorKind.pine,
+          pineSource: source,
+          pineOverlay: program.overlay);
+    }
+    if (checked.hasErrors) return null;
+    // Stage 3a is an opt-in next language tier. The new compiler refuses
+    // unsupported calls/statements before any chart data is evaluated.
+    try {
+      final verified=PineV6LanguageProgram.compile(source);
+      return ChartIndicatorDefinition(id, name, 1,
+          custom: true,
+          kindOverride: ChartIndicatorKind.pine,
+          pineSource: source,
+          pineOverlay: verified.overlay);
+    } on PineRuntimeException {
+      return null;
+    }
   }
 
   /// Compatibility-only diagnostic view inherited from merged #642.
@@ -140,6 +156,17 @@ class ChartSavedIndicatorScript {
   String? get compileError {
     final checked = const PineV6Frontend().prepare(source);
     if (checked.canExecute) return null;
+    if (!checked.hasErrors) {
+      try {
+        PineV6LanguageProgram.compile(source);
+        return null;
+      } on PineRuntimeException catch(error) {
+        // Keep the pre-existing Arabic line/column editor contract even
+        // when the advanced runtime compiler rejects a script.
+        return 'السطر 1، العمود 1 (Stage 3a/'+error.code+
+            '): '+error.message;
+      }
+    }
     final diagnostic = checked.diagnostics.isEmpty
         ? null : checked.diagnostics.first;
     if (diagnostic == null) return 'Pine: غير مدعوم بعد';

@@ -4,6 +4,7 @@ import 'dart:collection';
 import '../data/tradelab_data.dart';
 import 'chart_indicator_library.dart';
 import 'pine_subset_program.dart';
+import 'pine_v6_language_runtime.dart';
 
 /// Exact source-indexed indicator output; unsupported scripts never reach it.
 class ChartIndicatorPlot {
@@ -306,8 +307,8 @@ class ChartIndicatorEngine {
       ChartIndicatorKind.roc =>
         [ChartIndicatorPlot('ROC', _roc(close, length))],
       ChartIndicatorKind.pine => [
-        for (final plot in PineSubsetProgram.compile(
-            indicator.pineSource!).evaluateIncrementally(candles))
+        for (final plot in _evaluatePineLanguage(
+            indicator.pineSource!, candles))
           ChartIndicatorPlot(plot.title, plot.values,
               histogram: plot.histogram,
               argbColor: plot.argbColor, width: plot.width),
@@ -315,4 +316,14 @@ class ChartIndicatorEngine {
     };
     return ChartIndicatorOutput(indicator, plots);
   }
+  /// Original executable numeric programs always retain their original
+  /// compiler/runtime; only new syntax enters the bounded Stage 3a engine.
+  static List<PineSubsetPlot> _evaluatePineLanguage(
+      String source,List<TradeCandle> candles) {
+    final old=PineSubsetProgram.tryCompile(source);
+    if(old!=null) return old.evaluateIncrementally(candles);
+    return PineV6LanguageProgram.compile(source).evaluate(
+        candles,maxLoopIterations:2000);
+  }
+
 }

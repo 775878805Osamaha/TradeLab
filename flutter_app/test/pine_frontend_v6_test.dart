@@ -196,7 +196,7 @@ plot(close)
     expect(timed.canExecute, isFalse);
   });
 
-  test('unsupported v6 scripts save cleanly without evaluating fake data',
+  test('Stage 3a runs supported control flow while compatibility frontend remains analysis-only',
       () {
     const script = ChartSavedIndicatorScript(
       id: 'script-control-flow', name: 'Safe AST',
@@ -204,8 +204,8 @@ plot(close)
           'var float n = 1\nif close > open\n    n := n + 1\n'
           'plot(n)',
     );
-    expect(script.supportedIndicator(), isNull);
-    expect(script.compileError, contains('غير مدعوم'));
+    expect(script.supportedIndicator(), isNotNull, reason: script.compileError);
+    expect(script.compileError, isNull);
     expect(script.frontendAnalysis.canExecute, isFalse);
     expect(script.frontendAnalysis.ast.snapshot(),
         contains('"node":"if"'));
