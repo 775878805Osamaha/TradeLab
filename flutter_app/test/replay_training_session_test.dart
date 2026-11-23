@@ -272,4 +272,109 @@ void main() {
     }
   });
 
+  test('buy exits follow TradingView OHLC high-first / low-first path', () {
+    const first = TradeCandle(100, 101, 99, 100);
+    for (final (next, exit, reason) in <(
+        TradeCandle, double, ReplayExitReason)>[
+      // OPEN is 6 below HIGH and 20 above LOW -> HIGH first.
+      (const TradeCandle(100, 106, 80, 94), 105,
+        ReplayExitReason.takeProfit),
+      // OPEN is 20 below HIGH and 6 above LOW -> LOW first.
+      (const TradeCandle(100, 120, 94, 110), 95,
+        ReplayExitReason.stopLoss),
+      // OPEN 10 from both extremes; do not invent a price path.
+      (const TradeCandle(100, 110, 90, 100), 95,
+        ReplayExitReason.stopLoss),
+    ]) {
+      final bars = [first, next];
+      final session = ReplayTrainingSession()..moveTo(bars, 1);
+      session.enter(side: ReplaySide.buy, candles: bars,
+        quantity: 1, stopLoss: 95, takeProfit: 105);
+      session.moveTo(bars, 2);
+      expect(session.trades.single.exitPrice, exit);
+      expect(session.trades.single.exitReason, reason);
+    }
+  });
+
+  test('sell exits follow TradingView OHLC high-first / low-first path', () {
+    const first = TradeCandle(100, 101, 99, 100);
+    for (final (next, exit, reason) in <(
+        TradeCandle, double, ReplayExitReason)>[
+      // HIGH-first: short stop before short profit.
+      (const TradeCandle(100, 106, 80, 94), 105,
+        ReplayExitReason.stopLoss),
+      // LOW-first: short TP before short stop.
+      (const TradeCandle(100, 120, 94, 110), 95,
+        ReplayExitReason.takeProfit),
+      (const TradeCandle(100, 110, 90, 100), 105,
+        ReplayExitReason.stopLoss),
+    ]) {
+      final bars = [first, next];
+      final session = ReplayTrainingSession()..moveTo(bars, 1);
+      session.enter(side: ReplaySide.sell, candles: bars,
+        quantity: 1, stopLoss: 105, takeProfit: 95);
+      session.moveTo(bars, 2);
+      expect(session.trades.single.exitPrice, exit);
+      expect(session.trades.single.exitReason, reason);
+    }
+  });
+
+  test('adverse stop gap wins even when intrabar path would favor TP', () {
+    const buy = [
+      TradeCandle(100, 101, 99, 100),
+      TradeCandle(90, 110, 89, 106),
+    ];
+    final a = ReplayTrainingSession()..moveTo(buy, 1);
+    a.enter(side: ReplaySide.buy, candles: buy,
+      quantity: 1, stopLoss: 95, takeProfit: 105);
+    a.moveTo(buy, 2);
+    expect(a.trades.single.exitPrice, 90);
+    expect(a.trades.single.exitReason, ReplayExitReason.stopLoss);
+
+    const sell = [
+      TradeCandle(100, 101, 99, 100),
+      TradeCandle(110, 111, 89, 94),
+    ];
+    final b = ReplayTrainingSession()..moveTo(sell, 1);
+    b.enter(side: ReplaySide.sell, candles: sell,
+      quantity: 1, stopLoss: 105, takeProfit: 95);
+    b.moveTo(sell, 2);
+    expect(b.trades.single.exitPrice, 110);
+    expect(b.trades.single.exitReason, ReplayExitReason.stopLoss);
+  });
+
+  test('12k indexed seek has identical intrabar order to one-bar playback',
+      () {
+    const count = 12000;
+    final candles = List<TradeCandle>.filled(
+      count, const TradeCandle(100, 101, 99, 100)).toList();
+    candles[10000] = const TradeCandle(100, 106, 80, 94);
+    final indexed = ReplayTrainingSession()..moveTo(candles, 1);
+    final stepped = ReplayTrainingSession()..moveTo(candles, 1);
+    for (var n = 0; n < 6; n++) {
+      for (final target in [indexed, stepped]) {
+        target.enter(side: ReplaySide.buy, candles: candles,
+          quantity: 1, stopLoss: 95, takeProfit: 105);
+        target.enter(side: ReplaySide.sell, candles: candles,
+          quantity: 1, stopLoss: 105, takeProfit: 95);
+      }
+    }
+    expect(ReplayTrainingSession.shouldUseIndexedExitSearch(
+      newlyRevealedBars: count - 1, watchedTrades: 12), isTrue);
+    indexed.moveTo(candles, count);
+    for (var i = 2; i <= count; i++) {
+      stepped.moveTo(candles, i);
+    }
+    for (var i = 0; i < indexed.trades.length; i++) {
+      expect(indexed.trades[i].exitIndex, 10000);
+      expect(stepped.trades[i].exitIndex, 10000);
+      expect(indexed.trades[i].exitPrice, 105,
+        reason: 'HIGH-first = buy target, sell stop');
+      expect(stepped.trades[i].exitPrice, 105);
+      expect(indexed.trades[i].exitReason,
+        stepped.trades[i].exitReason);
+    }
+    expect(indexed.realizedPricePnl, stepped.realizedPricePnl);
+  });
+
 }
