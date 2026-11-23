@@ -26,7 +26,7 @@ import com.example.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StrategyScreen(
-    onNavigateToBacktest: (String) -> Unit,
+    onNavigateToBacktest: (String, Map<String, Any>) -> Unit,
     onNavigateToReplay: (String) -> Unit = {},
     onBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -34,7 +34,7 @@ fun StrategyScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<StrategyCategory?>(null) }
     var expandedStrategyId by remember { mutableStateOf<String?>(null) }
-    var userParameters by remember { mutableStateOf(mutableMapOf<String, MutableMap<String, Any>>()) }
+    var userParameters by remember { mutableStateOf<Map<String, Map<String, Any>>>(emptyMap()) }
     var validationErrors by remember { mutableStateOf(mapOf<String, List<ValidationError>>()) }
     val snackbarHostState = remember { SnackbarHostState() }
     var statusMessage by remember { mutableStateOf<String?>(null) }
@@ -167,9 +167,7 @@ fun StrategyScreen(
             } else {
                 items(filteredStrategies, key = { it.id }) { strategy ->
                 val isExpanded = expandedStrategyId == strategy.id
-                val currentParams = userParameters.getOrPut(strategy.id) {
-                    strategy.defaultParameters.toMutableMap()
-                }
+                val currentParams = userParameters[strategy.id] ?: strategy.defaultParameters
                 val errors = validationErrors[strategy.id] ?: emptyList()
                 val presets = remember(strategy.id) { StrategyRegistry.getPresetsForStrategy(strategy.id) }
 
@@ -246,7 +244,7 @@ fun StrategyScreen(
                                             .clip(RoundedCornerShape(6.dp))
                                             .background(TradingElevated)
                                             .clickable {
-                                                userParameters[strategy.id] = p.parameters.toMutableMap()
+                                                userParameters = userParameters + (strategy.id to p.parameters.toMap())
                                                 val valid = StrategyValidator.validate(strategy, p.parameters)
                                                 validationErrors = validationErrors + (strategy.id to valid.errors)
                                                 statusMessage = "تم تطبيق نموذج '${p.name}'"
@@ -292,7 +290,7 @@ fun StrategyScreen(
                                             }
                                             val updated = currentParams.toMutableMap()
                                             updated[def.id] = parsed
-                                            userParameters[strategy.id] = updated
+                                            userParameters = userParameters + (strategy.id to updated)
                                             val valid = StrategyValidator.validate(strategy, updated)
                                             validationErrors = validationErrors + (strategy.id to valid.errors)
                                         },
@@ -332,7 +330,7 @@ fun StrategyScreen(
                         ) {
                             OutlinedButton(
                                 onClick = {
-                                    userParameters[strategy.id] = strategy.defaultParameters.toMutableMap()
+                                    userParameters = userParameters + (strategy.id to strategy.defaultParameters)
                                     validationErrors = validationErrors - strategy.id
                                     statusMessage = "تمت إعادة ضبط المعاملات للافتراضي"
                                 },
@@ -356,7 +354,13 @@ fun StrategyScreen(
                                 }
 
                                 Button(
-                                    onClick = { onNavigateToBacktest(strategy.id) },
+                                    onClick = {
+                                        val selectedParams = userParameters[strategy.id] ?: strategy.defaultParameters
+                                        val check = StrategyValidator.validate(strategy, selectedParams)
+                                        validationErrors = validationErrors + (strategy.id to check.errors)
+                                        if (check.isValid) onNavigateToBacktest(strategy.id, selectedParams.toMap())
+                                        else statusMessage = "صحح معاملات الاستراتيجية قبل بدء الاختبار"
+                                    },
                                     colors = ButtonDefaults.buttonColors(containerColor = TradingAccent),
                                     shape = RoundedCornerShape(8.dp),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)

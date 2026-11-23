@@ -37,6 +37,7 @@ fun TradingBottomBar(currentRoute: String?, onNavigate: (Screen) -> Unit) {
                         Screen.Market -> "السوق"
                         Screen.Chart -> "الشارت"
                         Screen.Results -> "النتائج"
+                        Screen.Trade -> "المختبر"
                         else -> "الحساب"
                     }
                     Box(Modifier.weight(1f).fillMaxHeight()

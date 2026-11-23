@@ -154,11 +154,12 @@ class StrategyEngineTests {
     }
 
     @Test
-    fun `test StrategyRegistry has no built-in strategies and presets by default`() {
+    fun `test StrategyRegistry offers only its explicit educational example by default`() {
         val all = StrategyRegistry.getAllStrategies()
-        assertTrue("StrategyRegistry must be empty of built-in strategies by default", all.isEmpty())
+        assertEquals(listOf("SMA_CROSSOVER_EXAMPLE"), all.map { it.id })
 
         assertNull(StrategyRegistry.getStrategy("EMA_CROSSOVER"))
+        assertNotNull(StrategyRegistry.getStrategy("SMA_CROSSOVER_EXAMPLE"))
         assertNull(StrategyRegistry.getStrategy("SMA_CROSSOVER"))
         assertNull(StrategyRegistry.getStrategy("RSI_REVERSION"))
         assertNull(StrategyRegistry.getStrategy("BOLLINGER_REVERSION"))

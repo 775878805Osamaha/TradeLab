@@ -140,12 +140,12 @@ class ChartReferenceInteractionTest {
         android.util.Log.i("TradeLabYearHistoryUI", "XAUUSD/D1 current=${checkpoint.state.currentCandle!!.openTime} bars=${checkpoint.candles.size}")
     }
 
-    @Test fun fourDestinationsNavigateAndRestoreChartControls() {
+    @Test fun fiveDestinationsNavigateAndRestoreChartControls() {
         compose.onNodeWithTag("chart_bottom_strip").assertIsDisplayed()
         compose.onNodeWithTag("chart_reference_tool_0").assertIsDisplayed()
         compose.onNodeWithTag("chart_reference_tool_8").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("nav_item_chart").assertIsSelected()
-        for ((route, screen) in listOf("market" to "market_screen", "results" to "results_screen", "account" to "account_screen")) {
+        for ((route, screen) in listOf("market" to "market_screen", "results" to "results_screen", "trade" to "lab_screen", "account" to "account_screen")) {
             compose.onNodeWithTag("nav_item_$route").performClick()
             compose.onNodeWithTag("nav_item_$route").assertIsSelected()
             compose.onNodeWithTag(screen).assertIsDisplayed()
@@ -154,7 +154,7 @@ class ChartReferenceInteractionTest {
         compose.onNodeWithTag("chart_bottom_symbol").assertIsDisplayed()
         compose.onNodeWithTag("chart_bottom_timeframe").assertIsDisplayed()
         compose.onNodeWithTag("chart_bottom_replay").assertIsDisplayed()
-        compose.onNodeWithTag("nav_item_trade").assertDoesNotExist()
+        compose.onNodeWithTag("nav_item_trade").assertIsDisplayed()
         compose.onNodeWithTag("chart_floating_symbol_selector").assertDoesNotExist()
         compose.onNodeWithTag("chart_floating_timeframe").assertDoesNotExist()
     }

@@ -24,4 +24,11 @@ class CTraderGatewayErrorsTest {
         assertEquals(503, error.statusCode)
         assertTrue(error.message.orEmpty().contains("ctrader_connection_failed"))
     }
+
+    @Test fun unusableCTraderCandlesShowAnActionableErrorInsteadOfBare502() {
+        val description = CTraderGatewayErrors.explain(502, "ctrader_candle_history_unusable")
+        assertTrue(description.contains("شموع تاريخية"))
+        assertTrue(description.contains("cTrader"))
+        assertTrue(description.contains("HTTP 502"))
+    }
 }

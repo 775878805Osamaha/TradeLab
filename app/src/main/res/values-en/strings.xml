@@ -3,7 +3,7 @@
     <string name="nav_account">Account</string>
     <string name="nav_market">Market</string>
     <string name="nav_chart">Chart</string>
-    <string name="nav_trade">Trade</string>
+    <string name="nav_trade">Lab</string>
     <string name="nav_results">Results</string>
 
     <string name="title_history">Trade History</string>

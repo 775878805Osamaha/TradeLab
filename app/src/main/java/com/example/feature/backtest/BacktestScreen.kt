@@ -116,6 +116,21 @@ fun BacktestScreen(
                 )
             }
 
+            if (uiState.failureReason != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                        .testTag("backtest_source_error"),
+                    colors = CardDefaults.cardColors(containerColor = TradingNegativeBg)
+                ) {
+                    Text(
+                        text = uiState.failureReason.orEmpty(),
+                        modifier = Modifier.padding(12.dp),
+                        color = TradingNegative,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
             when (uiState.selectedTab) {
                 BacktestTab.CONFIG -> BacktestConfigContent(viewModel = viewModel, uiState = uiState)
                 BacktestTab.RESULTS -> BacktestResultsContent(viewModel = viewModel, uiState = uiState)

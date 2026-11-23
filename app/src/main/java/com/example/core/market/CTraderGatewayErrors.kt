@@ -10,6 +10,7 @@ object CTraderGatewayErrors {
         "ctrader_broker_rejected_request" to "رفض خادم cTrader طلب القراءة",
         "ctrader_broker_unavailable" to "فشل الطلب داخل بوابة cTrader؛ يلزم فحص سجلات Vercel",
         "ctrader_tick_history_unusable" to "بيانات Tick التاريخية من cTrader ناقصة أو غير قابلة للترقيم دون فجوات",
+        "ctrader_candle_history_unusable" to "تعذّر استخراج شموع تاريخية سليمة من وسيط cTrader؛ تحقق من الرمز والفاصل الزمني أو راجع سجلات بوابة الاتصال",
         "ctrader_token_exchange_failed" to "فشل تجديد أو تبادل رمز تفويض cTrader",
         "ctrader_view_only_required" to "صلاحية التفويض ليست للقراءة فقط؛ أعد التفويض بصلاحية accounts",
         "authentication_paused_for_security" to "بوابة cTrader متوقفة إداريًا",
