@@ -56,6 +56,10 @@ plot(close[1], title="Prior")''';
     }
     expect(fast.completedBars, 6);
     expect(slow.completedBars, 6);
+    expect(fast.seriesAt('smooth', 0).number,
+        isNot(slow.seriesAt('smooth', 0).number));
+    expect(fast.seriesAt('smooth', 1).number, isNotNull);
+    expect(fast.seriesAt('smooth', 6000).isNa, isTrue);
     expect(fast.outputs[0].values.last, isNot(slow.outputs[0].values.last));
     expect(fast.outputs[0].values.last, closeTo(55.0205761317, 1e-6));
     manager.remove('fast');
