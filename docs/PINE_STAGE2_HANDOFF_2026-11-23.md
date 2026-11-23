@@ -1,5 +1,27 @@
 # TradeLab — Pine v6 Stage 2 frontend handoff (2026-11-23)
 
+## 2026-11-23 continuation — UDF argument semantics and loop-control validation
+
+**Actual source commit tested:** `f135bf4119512777eea643fb72eca8010992454e` (PR #643, stacked on unmerged PR #642; do not merge).  
+**Final exact-source GitHub Actions:** [#45230338091](https://github.com/775878805Osamaha/TradeLab/actions/runs/45230338091), **completed/success**. Actual runner log: **963 Flutter regression tests + 4 independent drawing-selection cases + 11 Yemen timezone/scale tests = 978 PASS, 0 FAIL**; Flutter Analyze **success**. All **25 Pine Stage 2 frontend cases** pass, including four newly added cases. No local Flutter/Dart executable or Android device verification; no APK.
+
+### Source and test changes
+- `flutter_app/lib/chart/pine_v6_semantic.dart`: resolve positional/named user-function arguments against declared parameters; detect unknown name, missing required argument, duplicate positional+named binding, incompatible primitive type and stronger-than-allowed `const/input/simple/series` qualifier. Track loop nesting so `break` and `continue` work only inside `for`/`while`, including nested `if`, without inheriting caller-loop context in a function definition. Fix overzealous "untyped na" detection: only a **literal na** needs explicit type; an as-yet-unresolved user-function return is not na.
+- `flutter_app/test/pine_v6_frontend_test.dart`: four added tests for correctly reordered named args, five independent argument errors, legal nested loop controls and illegal top-level/local non-loop controls. Total Stage 2 tests now **25**.
+
+### Test failure and repair
+- [CI #45229881973](https://github.com/775878805Osamaha/TradeLab/actions/runs/45229881973): **FAILED**, runner reported **962 PASS / 1 FAIL**. The new valid-function-call test detected an incorrect `unknown_variable_type` diagnostic on a function return whose type is not yet inferred.
+- Fix committed as `f135bf4119512777eea643fb72eca8010992454e`, preserving explicit `na` rejection without rejecting unresolved UDF returns. [Final CI #45230338091](https://github.com/775878805Osamaha/TradeLab/actions/runs/45230338091) passed all 978 checks (963+4+11).
+- Earlier version annotation regex failure [CI #45225142962](https://github.com/775878805Osamaha/TradeLab/actions/runs/45225142962) **933 PASS / 26 FAIL** was previously fixed and documented. Never present failed/cancelled jobs as green.
+
+### Current capability and scope limits
+This is **only Pine v6 frontend semantic analysis**. The old Stage 1 numeric AST/evaluator is the sole executable engine. New UDF/loop/var/varip constructs remain parsed/validated but never evaluated by the runtime. The new type rules cover primitive declared parameters and qualifier ordering, not generic collections, overloads, inferred UDF return types or all built-in API signatures. Stage 3 remains **proposed**, not implemented. User V10 and unrelated projects are excluded; no modification to main, no APK or merge.
+
+**PR status:** #642 and #643 remain draft/unmerged, and parallel alternative [#644](https://github.com/775878805Osamaha/TradeLab/pull/644) must NOT also be merged. Owner reviews #643 as the candidate stacked on #642. Once #642 is merged by owner, compare/rebase or retarget #643 safely, rerun CI, and merge only on owner action. Next technical task: Stage 3 runtime with real v6 var/varip/loops/UDF and Replay rollback/checkpoints plus bounded execution.
+
+Official source for loop-only break/continue: https://www.tradingview.com/pine-script-docs/language/loops/ .
+
+
 ## Post-review quality follow-up — confirmed 2026-11-23
 
 - **Final code + workflow commit:** `1d6f6bb97e2133cde701469ee309ee18e74bc70e` on PR #643. [Exact-head CI #45225811614](https://github.com/775878805Osamaha/TradeLab/actions/runs/45225811614) **completed/success**. GitHub log reports **959 primary Flutter tests + 4 drawing checks + 11 Yemen/timezone scale tests = 974 passed, 0 failed**. Flutter Analyze passed and all **21 Stage 2** tests, including 2 new version tests, passed. No locally run Flutter/Dart tests and no APK.
