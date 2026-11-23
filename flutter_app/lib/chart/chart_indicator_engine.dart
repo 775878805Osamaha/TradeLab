@@ -307,7 +307,7 @@ class ChartIndicatorEngine {
         [ChartIndicatorPlot('ROC', _roc(close, length))],
       ChartIndicatorKind.pine => [
         for (final plot in PineSubsetProgram.compile(
-            indicator.pineSource!).evaluate(candles))
+            indicator.pineSource!).evaluateIncrementally(candles))
           ChartIndicatorPlot(plot.title, plot.values,
               histogram: plot.histogram,
               argbColor: plot.argbColor, width: plot.width),
