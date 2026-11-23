@@ -145,7 +145,9 @@ class ChartSavedIndicatorScript {
     if (diagnostic == null) return 'Pine: غير مدعوم بعد';
     return 'السطر ' + diagnostic.line.toString() +
         '، العمود ' + diagnostic.column.toString() +
-        ' (' + diagnostic.code + '): ' + diagnostic.message;
+        ' (' + diagnostic.code + '): ' + diagnostic.message +
+        (diagnostic.code == 'not_yet_supported'
+            ? ' — غير مدعوم بعد' : '');
   }
 
   int? get supportedSmaPeriod {
