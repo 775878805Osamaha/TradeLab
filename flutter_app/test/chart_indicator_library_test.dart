@@ -47,9 +47,9 @@ void main() {
     );
     expect(valid.supportedSmaPeriod, 21);
     const strategy = ChartSavedIndicatorScript(
-      id: 'script-v10', name: 'Ahmad HA First Trend V10',
+      id: 'script-unsupported', name: 'Unsupported User Strategy',
       source: '//@version=6\n'
-        'strategy("Ahmad HA First Trend V10", overlay=true)\n'
+        'strategy("Unsupported User Strategy", overlay=true)\n'
         'strategy.entry("Buy", strategy.long)\n'
         'plot(ta.sma(close, 21))',
     );
@@ -59,7 +59,7 @@ void main() {
       .saveScript(valid).saveScript(strategy);
     expect(state.scripts, hasLength(2));
     expect(state.supported.where((x) => x.custom).single.period, 21);
-    expect(state.toggleActive('script-v10'), same(state),
+    expect(state.toggleActive('script-unsupported'), same(state),
       reason: 'Unsupported Pine is stored but must not run on the chart');
     final active = state.toggleActive('script-example');
     expect(active.active.single.id, 'script-example');
