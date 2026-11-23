@@ -238,4 +238,24 @@ plot(a-b)''';
     expect(cache.get(prefix, indicator).plots.first.values.length, 119999);
     expect(actual.reads.every((i) => i < 119999), isTrue);
   });
+  test('ta.sma skips na samples instead of shortening the real window', () {
+    const script = '''indicator("Sparse", overlay=false)
+ratio = close / close[1]
+plot(ta.sma(ratio, 2))
+plot(ratio)
+''';
+    final output = PineSubsetProgram.compile(script)
+        .evaluate(bars([10, 0, 20, 30, 40]));
+    expect(output[1].values[0], isNull);
+    expect(output[1].values[1], 0);
+    expect(output[1].values[2], isNull,
+        reason: 'A real zero denominator is unavailable');
+    expect(output[0].values.take(3), [null, null, null]);
+    expect(output[0].values[3], closeTo(.75, 1e-12),
+      reason: 'SMA 2 uses most recent two non-na samples, 0 and 1.5');
+    expect(output[0].values[4],
+      closeTo((1.5 + 40 / 30) / 2, 1e-12));
+  });
+
+
 }
