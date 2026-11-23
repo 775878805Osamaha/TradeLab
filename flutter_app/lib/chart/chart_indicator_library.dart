@@ -5,6 +5,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
 
+enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr }
+
 /// An immutable description of a real, supported on-chart indicator.
 /// All plots are calculated from the CURRENT verified source-candle list.
 /// A saved Pine strategy is NEVER silently substituted with a different line.
@@ -16,6 +18,18 @@ class ChartIndicatorDefinition {
   final String title;
   final int period;
   final bool custom;
+
+  ChartIndicatorKind get kind {
+    if (id.startsWith('ema-')) return ChartIndicatorKind.ema;
+    if (id.startsWith('bb-')) return ChartIndicatorKind.bollinger;
+    if (id.startsWith('rsi-')) return ChartIndicatorKind.rsi;
+    if (id == 'macd') return ChartIndicatorKind.macd;
+    if (id.startsWith('atr-')) return ChartIndicatorKind.atr;
+    return ChartIndicatorKind.sma;
+  }
+
+  bool get separatePane => kind == ChartIndicatorKind.rsi ||
+      kind == ChartIndicatorKind.macd || kind == ChartIndicatorKind.atr;
 
   @override
   bool operator ==(Object other) => other is ChartIndicatorDefinition &&
@@ -30,6 +44,14 @@ class ChartIndicatorDefinition {
     ChartIndicatorDefinition('sma-20', 'SMA 20', 20),
     ChartIndicatorDefinition('sma-50', 'SMA 50', 50),
     ChartIndicatorDefinition('sma-200', 'SMA 200', 200),
+    ChartIndicatorDefinition('ema-9', 'EMA 9', 9),
+    ChartIndicatorDefinition('ema-21', 'EMA 21', 21),
+    ChartIndicatorDefinition('ema-50', 'EMA 50', 50),
+    ChartIndicatorDefinition('ema-200', 'EMA 200', 200),
+    ChartIndicatorDefinition('bb-20', 'Bollinger Bands 20', 20),
+    ChartIndicatorDefinition('rsi-14', 'RSI 14', 14),
+    ChartIndicatorDefinition('macd', 'MACD (12, 26, 9)', 12),
+    ChartIndicatorDefinition('atr-14', 'ATR 14', 14),
   ];
 }
 
@@ -139,6 +161,9 @@ class ChartIndicatorLibraryState {
     final next = <String>{...activeIds};
     if (!next.remove(id)) {
       if (active.length >= maxActive) return this;
+      final proposed = supported.firstWhere((item) => item.id == id);
+      if (proposed.separatePane &&
+          active.where((item) => item.separatePane).length >= 2) return this;
       next.add(id);
     }
     return copyWith(activeIds: next);
