@@ -34,7 +34,10 @@ void main() {
   test('all real built-in types have explicit placement and selection', () {
     final kinds = ChartIndicatorDefinition.builtIns
         .map((indicator) => indicator.kind).toSet();
-    expect(kinds, containsAll(ChartIndicatorKind.values));
+    expect(kinds, containsAll(ChartIndicatorKind.values
+        .where((kind) => kind != ChartIndicatorKind.pine)),
+      reason: 'User-compiled Pine is not a built-in study and must not '
+          'appear in the built-in catalog');
     expect(definition('ema-21',21).separatePane, isFalse);
     expect(definition('bb-20',20).separatePane, isFalse);
     expect(definition('rsi-14',14).separatePane, isTrue);
