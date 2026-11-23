@@ -93,7 +93,9 @@ class ReplayTrainingTrade {
 
 /// Deterministic trade simulation. It can only advance through revealed bars.
 /// If the user rewinds, entries and exits from unrevealed bars are rolled back.
-/// Intrabar SL+TP ambiguity is always resolved conservatively (SL first).
+/// Historical SL/TP ties follow TradingView's default OHLC price-path
+/// assumption (open -> nearer extreme -> farther extreme -> close).
+/// Only an exactly equidistant/unknown path keeps the conservative SL tie.
 class ReplayTrainingSession {
   final List<ReplayTrainingTrade> _trades = [];
   int _visibleCount = 0;
@@ -112,9 +114,10 @@ class ReplayTrainingSession {
 
   /// One authoritative fill policy shared by small-step playback and the
   /// indexed long-seek path. The trade never fills on its own entry bar;
-  /// stop wins an unresolved intrabar SL+TP tie; inter-bar gaps fill at the
-  /// actual following open (both adverse SL and favorable TP), before any
-  /// simulated intrabar stop/target checks.
+  /// price-order gaps fill at the actual next open, before intrabar
+  /// extremes. If SL and TP both touch inside that bar, TradingView's
+  /// default OHLC path uses the nearer extreme first; exact equidistance
+  /// remains conservative (SL), since no source tick order is available.
   static ReplayTrainingTrade? _exitOnBar(
       ReplayTrainingTrade trade, TradeCandle candle, int bar) {
     if (trade.entryIndex >= bar) return null;
@@ -139,11 +142,35 @@ class ReplayTrainingSession {
       return trade.close(
           bar, candle.open, ReplayExitReason.takeProfit);
     }
+    // A protective stop crossed in the inter-bar gap is already
+    // executable at the genuine opening price, before either OHLC extreme.
+    final stopAtOpen = stopped && (trade.side == ReplaySide.buy
+        ? candle.open <= trade.stopLoss!
+        : candle.open >= trade.stopLoss!);
+    if (stopAtOpen) {
+      return trade.close(bar, candle.open, ReplayExitReason.stopLoss);
+    }
+    if (stopped && targeted) {
+      // TradingView's default historical broker emulator chooses the
+      // first path extremum by proximity to OPEN, not unconditional SL.
+      // This is an explicit OHLC assumption, NOT a claim that the broker
+      // supplied intrabar BID ticks or that Bar Magnifier is enabled.
+      final towardHigh = candle.high - candle.open;
+      final towardLow = candle.open - candle.low;
+      final highFirst = towardHigh < towardLow;
+      final lowFirst = towardLow < towardHigh;
+      final targetFirst = trade.side == ReplaySide.buy
+          ? highFirst : lowFirst;
+      if (targetFirst) {
+        return trade.close(
+            bar, trade.takeProfit!, ReplayExitReason.takeProfit);
+      }
+      // On an exactly symmetric candle, neither extreme is proven first:
+      // remain conservative instead of inventing a sub-bar sequence.
+      return trade.close(bar, trade.stopLoss!, ReplayExitReason.stopLoss);
+    }
     if (stopped) {
-      final fill = trade.side == ReplaySide.buy
-          ? (candle.open < trade.stopLoss! ? candle.open : trade.stopLoss!)
-          : (candle.open > trade.stopLoss! ? candle.open : trade.stopLoss!);
-      return trade.close(bar, fill, ReplayExitReason.stopLoss);
+      return trade.close(bar, trade.stopLoss!, ReplayExitReason.stopLoss);
     }
     if (targeted) {
       return trade.close(
