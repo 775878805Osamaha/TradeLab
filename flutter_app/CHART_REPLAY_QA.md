@@ -26,6 +26,10 @@ This document applies to `flutter_app/`, not the legacy Kotlin app.
 - Practice tickets are local-only and cannot open broker or paper-journal orders.
 - A ticket enters at the latest **revealed raw close**; Heikin-Ashi display
   cannot turn its synthetic average into an execution price.
+- Active training tickets draw independent entry, stop-loss and target segments
+  above the chart; closed tickets end at their actual exit candle. The overlay
+  is purely visual, ignores touches and never draws entries in future bars.
+  It is not rendered outside Replay and does not affect actual market quotes.
 - SL/TP is evaluated only when **subsequent** candles become visible.
 - If SL and TP both lie inside one bar, SL wins (conservative ambiguity).
 - Seeking backward removes any practice trade that was entered later and
