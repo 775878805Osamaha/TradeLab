@@ -213,6 +213,7 @@ class _ChartIndicatorLibrarySheetState
         children.addAll(ChartIndicatorDefinition.builtIns
             .where((item) => _matches(item.title))
             .map(_indicatorRow));
+        break;
       case 1:
         children.add(Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -232,6 +233,7 @@ class _ChartIndicatorLibrarySheetState
             subtitle: Text('أضف كودك الخاص من الزر أعلاه'),
           ));
         }
+        break;
       case 2:
         children.addAll(all.where((item) =>
             _library.favoriteIds.contains(item.id) &&
@@ -242,10 +244,12 @@ class _ChartIndicatorLibrarySheetState
             _matches(item.name))) {
           children.add(_scriptRow(script));
         }
+        break;
       case 3:
         children.addAll(_library.active
             .where((item) => _matches(item.title))
             .map(_indicatorRow));
+        break;
     }
     if (children.isEmpty) {
       children.add(const ListTile(title: Text('لا توجد مؤشرات مطابقة')));
