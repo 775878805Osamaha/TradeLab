@@ -241,7 +241,25 @@ class PineLexer {
         continuation = true;
       } else {
         final last = tokens.isEmpty ? '' : tokens.last.text;
-        continuation = wraps.contains(last);
+        continuation = false;
+        // A dangling operator is a wrap ONLY when the following code line
+        // uses Pine's non-block continuation indentation (non-multiple of 4).
+        // An unindented next statement must remain a separate syntax error.
+        if (wraps.contains(last)) {
+          for (var next = lineIndex + 1; next < lines.length; next++) {
+            final upcoming = lines[next];
+            final trim = upcoming.trimLeft();
+            if (trim.isEmpty || trim.startsWith('//')) continue;
+            var pad = 0;
+            for (var k = 0; k < upcoming.length; k++) {
+              if (upcoming[k] == ' ') { pad++; }
+              else if (upcoming[k] == '\t') { pad += 4; }
+              else { break; }
+            }
+            continuation = pad > indent && pad % 4 != 0;
+            break;
+          }
+        }
         if (!continuation && !exhausted) {
           emit(PineTokenKind.newline, '<newline>',
               lineIndex + 1, raw.length + 1);
