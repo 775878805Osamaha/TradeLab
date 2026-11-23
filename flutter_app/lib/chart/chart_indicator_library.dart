@@ -4,21 +4,26 @@ import 'dart:math' as math;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
+import 'pine_subset_program.dart';
 
-enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc }
+enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc, pine }
 
 /// An immutable description of a real, supported on-chart indicator.
 /// All plots are calculated from the CURRENT verified source-candle list.
 /// A saved Pine strategy is NEVER silently substituted with a different line.
 class ChartIndicatorDefinition {
   const ChartIndicatorDefinition(this.id, this.title, this.period,
-      {this.custom = false, this.kindOverride});
+      {this.custom = false, this.kindOverride,
+       this.pineSource, this.pineOverlay = true});
 
   final String id;
   final String title;
   final int period;
   final bool custom;
   final ChartIndicatorKind? kindOverride;
+  /// Only populated after the restricted series compiler validated source.
+  final String? pineSource;
+  final bool pineOverlay;
 
   ChartIndicatorKind get kind {
     if (kindOverride != null) return kindOverride!;
@@ -32,7 +37,8 @@ class ChartIndicatorDefinition {
     return ChartIndicatorKind.sma;
   }
 
-  bool get separatePane => kind == ChartIndicatorKind.rsi ||
+  bool get separatePane => (kind == ChartIndicatorKind.pine && !pineOverlay) ||
+      kind == ChartIndicatorKind.rsi ||
       kind == ChartIndicatorKind.macd || kind == ChartIndicatorKind.atr ||
       kind == ChartIndicatorKind.stochastic || kind == ChartIndicatorKind.roc;
 
@@ -40,10 +46,12 @@ class ChartIndicatorDefinition {
   bool operator ==(Object other) => other is ChartIndicatorDefinition &&
       other.id == id && other.period == period &&
       other.title == title && other.custom == custom &&
-      other.kindOverride == kindOverride;
+      other.kindOverride == kindOverride &&
+      other.pineSource == pineSource && other.pineOverlay == pineOverlay;
 
   @override
-  int get hashCode => Object.hash(id, title, period, custom, kindOverride);
+  int get hashCode => Object.hash(id, title, period, custom, kindOverride,
+      pineSource, pineOverlay);
 
   static const builtIns = <ChartIndicatorDefinition>[
     ChartIndicatorDefinition('sma-12', 'SMA 12', 12),
@@ -92,24 +100,44 @@ class ChartSavedIndicatorScript {
         .map((line) => line.trim())
         .where((line) => line.isNotEmpty && !line.startsWith('//'))
         .toList(growable: false);
-    if (instructions.length != 2) return null;
+    if (instructions.length != 2) return _compileSeries();
     final declaration = RegExp(
       r'''^indicator\(\s*["'][^"']{1,80}["']\s*,\s*overlay\s*=\s*(true|false)\s*\)$''')
         .firstMatch(instructions.first);
     final plot = _singlePlot.firstMatch(instructions.last);
-    if (declaration == null || plot == null) return null;
+    if (declaration == null || plot == null) return _compileSeries();
     final period = int.tryParse(plot.group(2)!);
-    if (period == null || period < 1 || period > 500) return null;
+    if (period == null || period < 1 || period > 500) return _compileSeries();
     final kind = switch (plot.group(1)!) {
       'sma' => ChartIndicatorKind.sma,
       'ema' => ChartIndicatorKind.ema,
       _ => ChartIndicatorKind.rsi,
     };
-    if (kind == ChartIndicatorKind.rsi && period < 2) return null;
+    if (kind == ChartIndicatorKind.rsi && period < 2) return _compileSeries();
     if ((declaration.group(1) == 'false') !=
-        (kind == ChartIndicatorKind.rsi)) return null;
+        (kind == ChartIndicatorKind.rsi)) return _compileSeries();
     return ChartIndicatorDefinition(id, name, period,
         custom: true, kindOverride: kind);
+  }
+
+  ChartIndicatorDefinition? _compileSeries() {
+    final program = PineSubsetProgram.tryCompile(source);
+    if (program == null) return null;
+    return ChartIndicatorDefinition(id, name, 1,
+        custom: true,
+        kindOverride: ChartIndicatorKind.pine,
+        pineSource: source,
+        pineOverlay: program.overlay);
+  }
+
+  /// Human-readable compile result for unsupported saved source.
+  String? get compileError {
+    try {
+      PineSubsetProgram.compile(source);
+      return null;
+    } on PineSubsetException catch (error) {
+      return error.toString();
+    }
   }
 
   int? get supportedSmaPeriod {
