@@ -341,4 +341,36 @@ void main() {
   });
 
 
+  test('active overlay order and remove-all preserve saved Pine and favorites',
+      () {
+    const script = ChartSavedIndicatorScript(
+      id: 'script-management',
+      name: 'Custom overlay',
+      source: 'indicator("Custom",overlay=true)\nplot(close)\nplot(high)');
+    final original = const ChartIndicatorLibraryState()
+        .saveScript(script)
+        .toggleFavorite('sma-12')
+        .toggleActive('ema-21')
+        .toggleActive('sma-12')
+        .toggleActive('script-management')
+        .toggleActive('rsi-14')
+        .resizePane('rsi-14', 160);
+    final ordered = original.moveActive('script-management', -1);
+    expect(ordered.active.map((item) => item.id),
+        ['ema-21', 'script-management', 'sma-12', 'rsi-14']);
+    expect(ordered.moveActive('rsi-14', 1), same(ordered),
+        reason: 'Single pane has no adjacent pane to swap');
+    final saved = ChartIndicatorLibraryState.decode(ordered.encode());
+    expect(saved.active.map((item) => item.id),
+        ['ema-21', 'script-management', 'sma-12', 'rsi-14']);
+    final cleared = saved.clearActive();
+    expect(cleared.active, isEmpty);
+    expect(cleared.paneHeights, isEmpty);
+    expect(cleared.favoriteIds, contains('sma-12'));
+    expect(cleared.scripts.single.id, 'script-management');
+    expect(cleared.clearActive(), same(cleared));
+    expect(cleared.toggleActive('script-management').active.single.kind,
+        ChartIndicatorKind.pine);
+  });
+
 }
