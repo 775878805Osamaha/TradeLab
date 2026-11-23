@@ -1,5 +1,10 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Chart labels stay source-bound across pan (CI PENDING)
+- Code-confirmed first-visible-tick weekday flicker repaired by comparing previous authentic grid-source index and active chart timezone, not previous onscreen tick. Replay source prefix, prices and timestamps unchanged.
+- Regression tests added for pan at five offsets, UTC/New York midnight, Friday-Monday Range gap and invalid source indices. Validate CI before merging; no APK or production changes.
+
+
 ### 2026-11-23 — PR #634 merged; CI successful Range BID authenticated cache fallback
 - [PR #634](https://github.com/775878805Osamaha/TradeLab/pull/634), squash `2d7227764169a4263b777a8dc6eaf1c428a22c7b`, merged to Flutter development.
 - [CI #45180903830](https://github.com/775878805Osamaha/TradeLab/actions/runs/45180903830) success: Flutter analyzer, comprehensive Range/chart/Replay/Results tests, catalog and timezone checks. New test proves recovery after nine corrupt overlapping BID manifests and capped failure after 65, plus fresh older valid restore.
