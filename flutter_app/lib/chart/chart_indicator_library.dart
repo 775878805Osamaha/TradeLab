@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
 import 'pine_subset_program.dart';
+import 'pine_v6_frontend.dart';
 
 enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc, pine }
 
@@ -121,8 +122,9 @@ class ChartSavedIndicatorScript {
   }
 
   ChartIndicatorDefinition? _compileSeries() {
-    final program = PineSubsetProgram.tryCompile(source);
-    if (program == null) return null;
+    final checked = const PineV6Frontend().prepare(source);
+    final program = checked.legacyProgram;
+    if (!checked.canExecute || program == null) return null;
     return ChartIndicatorDefinition(id, name, 1,
         custom: true,
         kindOverride: ChartIndicatorKind.pine,
@@ -132,12 +134,14 @@ class ChartSavedIndicatorScript {
 
   /// Human-readable compile result for unsupported saved source.
   String? get compileError {
-    try {
-      PineSubsetProgram.compile(source);
-      return null;
-    } on PineSubsetException catch (error) {
-      return error.toString();
-    }
+    final checked = const PineV6Frontend().prepare(source);
+    if (checked.canExecute) return null;
+    final diagnostic = checked.diagnostics.isEmpty
+        ? null : checked.diagnostics.first;
+    if (diagnostic == null) return 'Pine: غير مدعوم بعد';
+    return 'السطر ' + diagnostic.line.toString() +
+        '، العمود ' + diagnostic.column.toString() +
+        ' (' + diagnostic.code + '): ' + diagnostic.message;
   }
 
   int? get supportedSmaPeriod {
