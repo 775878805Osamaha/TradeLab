@@ -280,10 +280,13 @@ class PineSemanticAnalyzer {
 
   void _condition(PineExpression condition, _PineScope scope) {
     final type = _expression(condition, scope);
-    if (type.type == PineType.stringType ||
-        type.type == PineType.colorType) {
+    // v6 removed implicit numeric-to-bool casts. Keep unknown for recovery:
+    // the original undefined-name error remains the primary diagnostic.
+    if (type.type != PineType.boolType &&
+        type.type != PineType.unknown) {
       _error('type_mismatch',
-          'Condition requires bool or numeric value', condition);
+          'Pine v6 requires a bool condition; use an explicit comparison '
+          'or bool() conversion', condition);
     }
   }
 
@@ -321,9 +324,9 @@ class PineSemanticAnalyzer {
       case PineUnary():
         final value = _expression(expr.operand, scope);
         if (expr.operator == 'not') {
-          if (value.type == PineType.stringType ||
-              value.type == PineType.colorType) {
-            _error('type_mismatch', 'not expects a boolean', expr);
+          if (value.type != PineType.boolType &&
+              value.type != PineType.unknown) {
+            _error('type_mismatch', 'Pine v6 not requires bool', expr);
           }
           return PineInferredType(PineType.boolType, value.qualifier);
         }
@@ -337,11 +340,27 @@ class PineSemanticAnalyzer {
         final right = _expression(expr.right, scope);
         final qual = _strongest(left.qualifier, right.qualifier);
         if ({'==','!=','<','<=','>','>=','and','or'}.contains(expr.operator)) {
-          if ({'<','<=','>','>=','and','or'}.contains(expr.operator) &&
-              (left.type == PineType.stringType ||
-               right.type == PineType.colorType)) {
+          if ({'and', 'or'}.contains(expr.operator)) {
+            if ((left.type != PineType.boolType &&
+                 left.type != PineType.unknown) ||
+                (right.type != PineType.boolType &&
+                 right.type != PineType.unknown)) {
+              _error('type_mismatch',
+                  'Pine v6 logical operators require bool operands', expr);
+            }
+          } else if (left.type == PineType.naType ||
+                     right.type == PineType.naType) {
+            _error('na_comparison',
+                'Use na(x) instead of comparing an expression directly to na', expr);
+          } else if ({'<','<=','>','>='}.contains(expr.operator) &&
+              (!_numeric(left.type) || !_numeric(right.type))) {
             _error('type_mismatch',
-                'Operands incompatible with boolean/ordered comparison', expr);
+                'Ordered comparison requires numeric operands', expr);
+          } else if ({'==','!='}.contains(expr.operator) &&
+              !_assignable(left.type, right.type) &&
+              !_assignable(right.type, left.type)) {
+            _error('type_mismatch',
+                'Comparison operands have incompatible types', expr);
           }
           return PineInferredType(PineType.boolType, qual);
         }
@@ -414,6 +433,29 @@ class PineSemanticAnalyzer {
           return PineInferredType(type, PineQualifier.input);
         }
         if (name.startsWith('ta.')) {
+          // The documented ta.ema() and ta.rsi() length arguments require a
+          // simple int or a weaker qualifier, never a series int.
+          if (name == 'ta.ema' || name == 'ta.rsi') {
+            PineInferredType? length;
+            for (var i = 0; i < expr.arguments.length; i++) {
+              if (expr.arguments[i].name == 'length') {
+                length = args[i];
+                break;
+              }
+            }
+            if (length == null && args.length > 1) length = args[1];
+            if (length != null) {
+              if (length.type != PineType.intType &&
+                  length.type != PineType.unknown) {
+                _error('argument_type',
+                    name + ' length must be int', expr);
+              }
+              if (length.qualifier.index > PineQualifier.simple.index) {
+                _error('argument_qualifier',
+                    name + ' length requires simple int or weaker, not series', expr);
+              }
+            }
+          }
           return PineInferredType(
               booleanTa.contains(name) ? PineType.boolType :
                   PineType.floatType, PineQualifier.series);
