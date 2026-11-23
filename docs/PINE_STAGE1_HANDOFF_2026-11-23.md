@@ -30,7 +30,7 @@ First complete run: https://github.com/775878805Osamaha/TradeLab/actions/runs/45
 - **status: completed / success** on source commit 06ef92aefbf8e56ced98a96aa75b6532bd4ed229.
 - Real GitHub log totals: **938** passing tests in main Flutter suite, **four** independently executed drawing tests, **11** Yemen-timezone price scale tests. Total **953 passed / 0 failed**. Flutter analyzer step success.
 - All eight tests in pine_stage1_runtime_test.dart are individually marked PASS in the main test output.
-- Later source commits add public read-only named-series inspection. Recheck PR #642 latest HEAD and its own workflow before merge; no assumption that the first green run covers subsequent source changes.
+- Final code revalidation: [GitHub Actions #45214588951](https://github.com/775878805Osamaha/TradeLab/actions/runs/45214588951) **completed/success**, source HEAD 4b6b58558a5e904474ff28aa69af8b683302e00b. Real log **938 main + 4 separate drawing + 11 Yemen = 953 passed / 0 failed**, successful Flutter analyze and eight new Stage 1 tests. This covers the follow-up read-only named-series code. Later documentation-only commits do not change tested runtime code.
 - The local container had git but **no flutter or dart executable**, so local Flutter analyze/test was **not run**. No real Android hardware/emulator, broker feed, benchmark, screenshot-golden baseline or APK checked.
 - Existing full test workflow intentionally skips optional drawing goldens with missing reference PNGs and runs specific reliable catalog checks instead. Do not mislabel absent baselines as passed.
 
@@ -44,7 +44,7 @@ First complete run: https://github.com/775878805Osamaha/TradeLab/actions/runs/45
 | Step-by-step repeatable evaluation with bounded memory/time/work | Implemented and tested for existing AST subset |
 | Budget failure throws clean typed exception | Implemented and tested |
 | Replay progress/rewind identical to fresh prefix, no future reads | Implemented and tested for current numeric subset |
-| Existing full Pine/Replay/Range/paper regression suite | 953 passed in first CI; latest-run revalidation required |
+| Existing full Pine/Replay/Range/paper regression suite | 953 passed in final source CI #45214588951 |
 | User-facing duplicate-instance indicator list/saved state migrations | **NOT IMPLEMENTED**; existing activeIds UI still definition keyed |
 | Arbitrary v6 syntax, realtime var/varip, type/qualifier checks | **NOT IMPLEMENTED** |
 | Non-blocking Android compute | **PARTIAL**; cooperative deadline only, no cancellable isolate yet |
