@@ -330,6 +330,41 @@ class ChartIndicatorLibraryState {
     return copyWith(scripts: [...scripts, script]);
   }
 
+  /// Replacing saved Pine source is atomic. Unsupported or pane-changing
+  /// edits never leave an old running program attached to the real chart.
+  /// A user can still retain an unsupported draft locally without execution.
+  ChartIndicatorLibraryState updateScript({
+    required String id,
+    required String name,
+    required String source,
+  }) {
+    final index = scripts.indexWhere((item) => item.id == id);
+    if (index < 0) return this;
+    final replacement = ChartSavedIndicatorScript(
+      id: id, name: name, source: source);
+    if (ChartSavedIndicatorScript.fromJson(replacement.toJson()) == null) {
+      return this;
+    }
+    final updatedScripts = [...scripts]..[index] = replacement;
+    final nextActive = <String>{...activeIds};
+    final nextOrder = [...activeOrder];
+    final heights = <String, int>{...paneHeights};
+    final before = scripts[index].supportedIndicator();
+    final after = replacement.supportedIndicator();
+    if (after == null ||
+        (before != null && before.separatePane != after.separatePane)) {
+      nextActive.remove(id);
+      nextOrder.remove(id);
+      heights.remove(id);
+    }
+    return copyWith(
+      scripts: updatedScripts,
+      activeIds: nextActive,
+      activeOrder: nextOrder,
+      paneHeights: heights,
+    );
+  }
+
   ChartIndicatorLibraryState deleteScript(String id) {
     return copyWith(
       scripts: scripts.where((script) => script.id != id).toList(),
