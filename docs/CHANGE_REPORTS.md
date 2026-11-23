@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Stage 2 UDF argument and loop semantic hardening — 978 PASS, NO MERGE
+- Repo TradeLab, branch `feat/pine-stage2-v6-frontend-20261123`, stacked draft PR [#643](https://github.com/775878805Osamaha/TradeLab/pull/643) over unmerged #642; main/Kotlin, OMEX, ERP, excluded V10 not touched. Source files: `flutter_app/lib/chart/pine_v6_semantic.dart`; tests: `flutter_app/test/pine_v6_frontend_test.dart` (+4 cases, Stage 2=25). Semantics: bind named/positional UDF args, check unknown/duplicate/missing/type/qualifier; enforce break/continue loop scope; distinguish literal na from unknown UDF return. No new Runtime/APK/Release.
+- Earlier [CI #45229881973](https://github.com/775878805Osamaha/TradeLab/actions/runs/45229881973) failed **962 PASS / 1 FAIL** due false untyped-na diagnostic on unresolved UDF return. Repaired at commit `f135bf4119512777eea643fb72eca8010992454e`. Latest verified [CI #45230338091](https://github.com/775878805Osamaha/TradeLab/actions/runs/45230338091) **completed/success**, 963 main + 4 drawing + 11 timezone = **978 PASS / 0 FAIL**; Flutter Analyze success; 25/25 Stage 2 frontend tests passed. Local Flutter/Dart and physical device: NOT RUN.
+- [Report](PINE_STAGE2_HANDOFF_2026-11-23.md), [matrix](PINE_V6_LANGUAGE_SUPPORT_STAGE2_2026-11-23.md). PR #644 remains competing draft; DO NOT merge both. Next: owner reviews #642/#643, then separate Stage 3 runtime with var/varip, loops, UDF, Replay rollback and finite resource budgets.
+
+
 ### 2026-11-23 — Stage 2 QA hardening, explicit Pine v6 version, final CI GREEN (NO MERGE)
 - Repo TradeLab, branch feat/pine-stage2-v6-frontend-20261123, PR [#643](https://github.com/775878805Osamaha/TradeLab/pull/643) يعتمد على فرع PR #642 غير المدمج. تغييرات الكود: flutter_app/lib/chart/pine_v6_frontend.dart وflutter_app/test/pine_v6_frontend_test.dart (اختباران إضافيان)، و.workflow no-APK path-filter. إصدار v5 معلن يرفض قبل التنفيذ، والنصوص القديمة بلا تصريح تستمر فقط للتوافق الخلفي.
 - [CI #45225142962](https://github.com/775878805Osamaha/TradeLab/actions/runs/45225142962) **FAIL حقيقي 933 PASS/26 FAIL**؛ السبب Dart RegExp لا يدعم (?m)، إصلاح في commit c45d112d5d0bf061be1e0da3749f67678c0fc2ad باستعمال multiLine: true.
