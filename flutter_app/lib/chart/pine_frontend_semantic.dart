@@ -451,5 +451,6 @@ class PineSemanticAnalyzer {
         _error('unknown_function', 'Unknown Pine function: ' + name, expr);
         return unknown;
     }
+    return unknown;
   }
 }
