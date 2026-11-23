@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — PR #637 merged: searchable indicator library with safe custom Pine source
+- [PR #637](https://github.com/775878805Osamaha/TradeLab/pull/637) squash `16859bf17c32ae7592435bb0d1090a8d4b6079ac`; [CI #45189306522](https://github.com/775878805Osamaha/TradeLab/actions/runs/45189306522) **success**, Flutter analyze, 877 active tests + 11 catalog/tool checks, Yemen timezone. No APK.
+- Native Arabic RTL search, Built-ins/My Scripts/Favorites/Added tabs, 4 real SMA periods with up to 8 active plots, O(viewport + period) verified candle reads, accurate Replay source prefix, secure local Pine text storage. Supports only single `indicator(...overlay=true)` + `plot(ta.sma(close,N))` execution; complex `Ahmad HA First Trend V10` saved but not executed. Do not imply full TradingView/Pine parity.
+- Earlier CI #45188545287 caught 4 widget regressions (old toggle key, lazy tab, premature dialog controller dispose). Fixed and reran full clean suite; browser screenshot/Android device test still pending. No main/production changes.
+
+
 ### 2026-11-23 — Searchable in-app indicators and custom script library (CI PENDING)
 - Source evidence: only SMA12 bool toggle existed; native editor/library was absent. Built RTL indicator library searchable across four tabs, active indicators management, favorites, device-local saved Pine source, strict mini-subset SMA-only import, multiple real SMA overlay lines with 120k O(viewport) paint and Replay prefix safety. The user's Pine strategy V10 is saved as source but marked unsupported, NEVER executed or misrepresented.
 - Added unit, widget and secure preference tests and integrated into active verify Flutter + optional APK verification workflow. Scope TradeLab development branch only, no APK/main/gateway. CI and PR pending.
