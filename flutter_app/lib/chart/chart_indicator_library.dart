@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
-import 'pine_subset_program.dart';
 import 'pine_v6_frontend.dart';
 
 enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc, pine }
