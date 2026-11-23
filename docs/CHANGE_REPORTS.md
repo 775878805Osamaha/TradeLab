@@ -1,5 +1,11 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — PR #639 merged: built-in STOCH+ROC and exact RSI boundary; CI success
+- [Merged #639](https://github.com/775878805Osamaha/TradeLab/pull/639) as `04ffbd5157f3dc1b01088b0525565e25461d2cb9`. [CI #45198266973](https://github.com/775878805Osamaha/TradeLab/actions/runs/45198266973) **success**: Flutter analyzer, **908 core tests**, 11 catalog/drawing tests, Yemen timezone.
+- Built authentic-source Stochastic 14/3/3 (SMA smoothed %K/%D, O(N) high/low deque, 80/50/20 pane guides), ROC9 (real period-back close % and zero-price guard), validated persistent periods, source-pinned new panes; RSI flat gain/loss boundary aligned with published Pine built-in behavior. Tests include 175 independent rolling-extrema references and 120k × lookback500 no repeated scan plus Replay hidden-prefix cutoff.
+- References: https://www.tradingview.com/support/solutions/43000502332-stochastic-stoch/ and https://www.tradingview.com/support/solutions/43000502343-rate-of-change-roc/. No full Pine compiler, no APK, no production/main changes. Mobile fidelity/real cTrader BID remain unverified.
+
+
 ### 2026-11-23 — Stochastic / ROC and RSI flat-case parity (CI PENDING)
 - Added source-derived TradingView-style Stochastic (14, 3, 3) and ROC9 to searchable built-in library, with independent oscillator panes, persistent period settings and shared Replay x/viewport. References: TradingView [STOCH](https://www.tradingview.com/support/solutions/43000502332-stochastic-stoch/) and [ROC](https://www.tradingview.com/support/solutions/43000502343-rate-of-change-roc/). No synthetic volume/data.
 - Source correctness: monotonic deque O(history) high/low windows (also 500-bar lookback), complete warmup, 3/3 smoothers, zero-range/zero-denominator guard; RSI flat gain/loss boundary aligns with commonly published built-in Pine condition. Tests cover numerical fixtures, real 120k cache, 320dp panes and strict Replay prefix.
