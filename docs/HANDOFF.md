@@ -1,5 +1,8 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+> **PR #643 بعد إعادة التموضع — 2026-11-24:** دمج المستخدم #642 في `test/flutter-all-fixes-20261116`، وجرى حل تعارضات خمسة ملفات يدويًا وإعادة تموضع PR #643 على الرأس `a8ee02924701afdb62f333172381360ca1ca8148`. الكود الجديد في `9371a44df92b758669117faa3c5c7b62a154586e`. [CI Flutter PR #45288069347](https://github.com/775878805Osamaha/TradeLab/actions/runs/45288069347) **994 ناجح/0 فاشل** (979+4+11)، Flutter Analyze ناجح، 25 اختبار `pine_v6_*` و16 اختبار `pine_frontend_*` ناجحة. [CI المرحلة الثانية #45288058896](https://github.com/775878805Osamaha/TradeLab/actions/runs/45288058896) **978/0**. فشل أول [#45287365632](https://github.com/775878805Osamaha/TradeLab/actions/runs/45287365632) 978/1 بسبب عبارة عربية ناقصة وصُحح. تقرير [حل التعارضات](PINE_STAGE2_REBASE_2026-11-24.md). Vercel فاشل بسبب Deployment rate limited، وليس خطأ Flutter؛ الفرع غير محمي حسب بيانات GitHub المتاحة. لا APK/دمج. #645 مؤجل بعد دمج المالك #643.
+
+
 
 > **PR #643 rebase (2026-11-24):** on merged #642 integration head `a8ee02924701afdb62f333172381360ca1ca8148`; canonical `pine_v6_*` frontend and alternate compatibility tests are both retained. Five overlap resolutions are logged in [PINE_STAGE2_REBASE_2026-11-24.md](PINE_STAGE2_REBASE_2026-11-24.md). CI is pending for the new commit.
 
