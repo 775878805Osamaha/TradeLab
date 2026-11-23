@@ -190,8 +190,11 @@ class _ChartIndicatorLibrarySheetState
     final children = <Widget>[];
     switch (_tab) {
       case 0:
-        children.addAll(ChartIndicatorDefinition.builtIns
-            .where((item) => _matches(item.title))
+        // Display the effective configured definitions, not the static
+        // preset constants. A changed period must update the row immediately
+        // and remain searchable under its new visible name.
+        children.addAll(_library.supported
+            .where((item) => !item.custom && _matches(item.title))
             .map(_indicatorRow));
         break;
       case 1:
