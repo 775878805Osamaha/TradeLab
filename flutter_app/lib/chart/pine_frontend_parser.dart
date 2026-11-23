@@ -394,7 +394,8 @@ class PineParser {
         final args = <PineArgument>[];
         while (!ended && !isText(')') && args.length < 60) {
           String? name;
-          if (current.kind == PineTokenKind.identifier &&
+          if ((current.kind == PineTokenKind.identifier ||
+               current.kind == PineTokenKind.keyword) &&
               peek().text == '=') {
             name = advance().text;
             advance();
