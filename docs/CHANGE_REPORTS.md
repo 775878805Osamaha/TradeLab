@@ -1,5 +1,12 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Stage 2 QA hardening, explicit Pine v6 version, final CI GREEN (NO MERGE)
+- Repo TradeLab, branch feat/pine-stage2-v6-frontend-20261123, PR [#643](https://github.com/775878805Osamaha/TradeLab/pull/643) يعتمد على فرع PR #642 غير المدمج. تغييرات الكود: flutter_app/lib/chart/pine_v6_frontend.dart وflutter_app/test/pine_v6_frontend_test.dart (اختباران إضافيان)، و.workflow no-APK path-filter. إصدار v5 معلن يرفض قبل التنفيذ، والنصوص القديمة بلا تصريح تستمر فقط للتوافق الخلفي.
+- [CI #45225142962](https://github.com/775878805Osamaha/TradeLab/actions/runs/45225142962) **FAIL حقيقي 933 PASS/26 FAIL**؛ السبب Dart RegExp لا يدعم (?m)، إصلاح في commit c45d112d5d0bf061be1e0da3749f67678c0fc2ad باستعمال multiLine: true.
+- [CI النهائي #45225811614](https://github.com/775878805Osamaha/TradeLab/actions/runs/45225811614) على مصدر/Workflow `1d6f6bb97e2133cde701469ee309ee18e74bc70e`: **completed/success، 959 + 4 + 11 = 974 ناجح / 0 فاشل**؛ Flutter Analyze ناجح، 21 اختبار Stage 2 موجودة وجميع اختبارات Pine/Replay/Range/Paper المحددة مرت. Flutter محليًا غير متاح، ولا اختبار جهاز حقيقي/Golden، لا APK أو Release.
+- PR #644 بديل مكرر يجب عدم دمجه مع PR #643؛ لم يدمج أو يغلق أي منهما ولم يتغير main أو مشاريع أخرى. تقرير [Stage 2](PINE_STAGE2_HANDOFF_2026-11-23.md)، مصفوفة [الدعم](PINE_V6_LANGUAGE_SUPPORT_STAGE2_2026-11-23.md). التالية: مراجعة المالك، ثم Stage 3 لتنفيذ var/varip والحلقات والدوال ضمن حدود الموارد وReplay الصحيح.
+
+
 ### 2026-11-23 — Pine v6 Stage 2 frontend, stacked draft PR #643 — NO MERGE
 - تم تطبيق Lexer مع indentation/continuation/comments/colors/strings، AST متنوع، Parser for if/switch/for/while/functions/var/varip/assignment/named args/history، وتحليل دلالي للأنواع والنطاقات والمؤهلات مع خطأ سطر/عمود متعدد، ومسار رفض واضح not_yet_supported دون تشغيل الدوال غير المنفذة. المحرك العددي القديم بقي فعالًا.
 - Mutation proof قبل التطوير: [Replay future CI #45217673219](https://github.com/775878805Osamaha/TradeLab/actions/runs/45217673219) FAIL مقصود 7 PASS/1 FAIL؛ [shared instance CI #45217676913](https://github.com/775878805Osamaha/TradeLab/actions/runs/45217676913) FAIL مقصود 7 PASS/1 FAIL؛ في فرعين معزولين بلا PR.
