@@ -6918,16 +6918,17 @@ class _CandleChartPainter extends CustomPainter {
       // Time labels AND grid lines reference the exact same source candle
       // and x pixel. Realtime pan moves them together; no snap-to-screen
       // discontinuity, fabricated Range time or invisible Replay source.
-      DateTime? priorTick;
       for (final mark in sourceTimeMarks) {
         final x = mark.x;
         final index = mark.index;
         final local = symbolSettings.timeZone.displayDate(timestamps[index]);
         final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
-        final isDayBoundary = priorTick == null ||
-            priorTick.day != local.day || priorTick.month != local.month ||
-            priorTick.year != local.year;
-        priorTick = local;
+        final isDayBoundary = ChartSourceTimeGrid.beginsDisplayedDay(
+          sourceIndex: index,
+          barWidth: viewport.barWidth,
+          timestampsUtcMs: timestamps,
+          zone: symbolSettings.timeZone,
+        );
         final isWeekdayLabel =
             scaleSettings.weekdayOnLabels && isDayBoundary;
         final label = isWeekdayLabel

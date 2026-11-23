@@ -1,5 +1,12 @@
 # TradeLab — ملف استكمال العمل من أي محادثة
 
+## 2026-11-23 — Chart source-grid date labels, CI PENDING
+- Verified painter bug: the first currently visible time tick was always treated as a day boundary (priorTick == null) even when it was a 14:00 source candle, so dragging the chart relabeled that unchanged tick as a weekday.
+- Changed displayed-day classification to compare the current grid source index with the preceding source-grid index using verified timestamps and chosen chart timezone; offscreen prior grid tick still supplies the correct date. Preserves UTC, New York DST, irregular BID weekend gaps and strict Replay visible-prefix indices.
+- Tests: 200-bar intraday pan across five positions, UTC vs New York midnight, no fake weekend Range bars, and invalid/out-of-prefix indices. Target CI and PR review pending. No Android hardware/TradingView 100% proof or cTrader first-load verification.
+- TradeLab dev only; no APK, main, other projects or production gateway changes.
+
+
 ## 2026-11-23 — PR #634 MERGED: verified Range BID cache recovery, CI success
 - [PR #634](https://github.com/775878805Osamaha/TradeLab/pull/634) squash `2d7227764169a4263b777a8dc6eaf1c428a22c7b` successfully merged into `test/flutter-all-fixes-20261116`.
 - [Flutter CI #45180903830](https://github.com/775878805Osamaha/TradeLab/actions/runs/45180903830) **completed/success**: Flutter analyzer, all active Range/chart/Replay/Results regression tests (including new corrupted-manifest tests), drawing tool smoke and Yemen timezone test passed. No APK created.
