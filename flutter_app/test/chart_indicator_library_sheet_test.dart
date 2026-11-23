@@ -136,4 +136,46 @@ void main() {
     expect(state.active.single.period,34);
     expect(tester.takeException(),isNull);
   });
+  testWidgets('saved multi-plot Pine can be edited and re-added from My Scripts',
+      (tester) async {
+    var state = const ChartIndicatorLibraryState();
+    await showLibrary(tester, (value) => state = value);
+    await tester.tap(find.byKey(const Key('indicator-tab-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('indicator-import-pine')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('indicator-script-title')), 'Two Lines');
+    await tester.enterText(
+      find.byKey(const Key('indicator-script-source')),
+      'indicator("Two", overlay=true)\na = ta.sma(close,2)\n'
+      'plot(a)\nplot(a+2)');
+    await tester.tap(find.byKey(const Key('indicator-script-save')));
+    await tester.pumpAndSettle();
+    final id = state.scripts.single.id;
+    expect(state.supported.singleWhere((v) => v.id == id).kind,
+      ChartIndicatorKind.pine);
+    await tester.tap(find.byKey(Key('indicator-row-' + id)));
+    await tester.pumpAndSettle();
+    expect(state.active, hasLength(1));
+    await tester.tap(find.byKey(Key('indicator-edit-' + id)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('indicator-pine-editor')), findsOneWidget);
+    await tester.enterText(find.byKey(
+      const Key('indicator-script-source')),
+      'indicator("Unsupported", overlay=true)\nplotshape(close)');
+    await tester.tap(find.byKey(const Key('indicator-script-save')));
+    await tester.pumpAndSettle();
+    expect(state.scripts, hasLength(1));
+    expect(state.active, isEmpty);
+    expect(find.byKey(Key('indicator-unsupported-' + id)),
+      findsOneWidget);
+    expect(find.textContaining('السطر'), findsWidgets);
+    await tester.tap(find.byKey(Key('indicator-delete-' + id)));
+    await tester.pumpAndSettle();
+    expect(state.scripts, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+
 }
