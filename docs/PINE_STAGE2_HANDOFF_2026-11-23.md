@@ -1,5 +1,17 @@
 # TradeLab — Pine v6 Stage 2 frontend handoff (2026-11-23)
 
+## Post-review quality follow-up — confirmed 2026-11-23
+
+- **Final code + workflow commit:** `1d6f6bb97e2133cde701469ee309ee18e74bc70e` on PR #643. [Exact-head CI #45225811614](https://github.com/775878805Osamaha/TradeLab/actions/runs/45225811614) **completed/success**. GitHub log reports **959 primary Flutter tests + 4 drawing checks + 11 Yemen/timezone scale tests = 974 passed, 0 failed**. Flutter Analyze passed and all **21 Stage 2** tests, including 2 new version tests, passed. No locally run Flutter/Dart tests and no APK.
+
+- **Added strict version gate without replacing existing execution:** `pine_v6_frontend.dart` rejects an explicitly annotated `//@version=5` (or any non-v6 annotation) with `version_mismatch` and source location rather than executing it under v6 assumptions. Existing unannotated numeric scripts remain executable **only as a documented backward-compatibility exception**. Official Pine semantics treat unannotated source as v1, so this exception is not full v6 parity. See [TradingView script structure](https://www.tradingview.com/pine-script-docs/language/script-structure/). Two regression tests added to `pine_v6_frontend_test.dart`.
+
+- **Failure preserved:** [CI #45225142962](https://github.com/775878805Osamaha/TradeLab/actions/runs/45225142962) failed **933 passed / 26 failed** because the new version guard mistakenly used the inline regex flag `(?m)`, unsupported by Dart's RegExp implementation. Corrected to `RegExp(..., multiLine: true)` in commit `c45d112d5d0bf061be1e0da3749f67678c0fc2ad`; the subsequent exact-head CI above is green. This failure is **not** evidence of a newly broken runtime remaining in the final code.
+
+- The dedicated no-APK workflow now uses push path filtering for Flutter/workflow changes, avoiding full-test reruns on documentation-only commits.
+
+- **Parallel PR warning:** [#644](https://github.com/775878805Osamaha/TradeLab/pull/644) is an independent alternative frontend targeting the same Stage 1 branch. **Do not merge both #643 and #644**; they contain competing lexer/parser/AST stacks. #643 is recommended as the primary review candidate, with broader coverage (21 frontend tests and 974 green), while #644 remains draft/unmerged. Nothing was merged or deleted. The owner will make the merge decision.
+
 **Status:** Stage 2 frontend source implemented and CI-verified. **PR #643 DRAFT / NOT MERGED**: https://github.com/775878805Osamaha/TradeLab/pull/643
 
 **Dependency:** Stage 1 PR #642 is still open and unmerged at implementation time: https://github.com/775878805Osamaha/TradeLab/pull/642 . Therefore this Stage 2 branch is deliberately based on its feature branch and PR #643 targets feat/pine-stage1-instance-safe-runtime-20261123. Nothing was merged into main or development by the assistant. Rebase/retarget to the agreed Flutter integration branch only after the owner merges Stage 1.
