@@ -62,6 +62,7 @@ class PineV6SemanticAnalyzer {
   static const _namespaces=<String>{
     'ta','math','array','color','str','input','timeframe','request',
     'syminfo','barstate','ticker','chart','time','strategy','line','label','box',
+    'plot','display','scale','format','shape','location','size','extend',
   };
   static const _builtInFunctions=<String>{
     'indicator','strategy','library','plot','plotshape','plotchar',
