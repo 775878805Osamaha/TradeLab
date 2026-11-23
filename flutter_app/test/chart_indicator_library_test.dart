@@ -162,7 +162,7 @@ void main() {
             candles: bars, start: start, end: 60, period: period);
         expect(points.length, 60 - start);
         for (final p in points) {
-          final first = (p.index - period + 1).clamp(0, 60);
+          final first = (p.index - period + 1).clamp(0, 60).toInt();
           final window = bars
             .sublist(first, p.index + 1).map((x) => x.close);
           final expected = window.reduce((a, b) => a + b) / window.length;
