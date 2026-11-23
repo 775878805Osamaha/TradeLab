@@ -171,12 +171,19 @@ class ChartIndicatorLibraryState {
     this.favoriteIds = const <String>{},
     this.scripts = const <ChartSavedIndicatorScript>[],
     this.periodOverrides = const <String, int>{},
+    this.activeOrder = const <String>[],
+    this.paneHeights = const <String, int>{},
   });
 
   final Set<String> activeIds;
   final Set<String> favoriteIds;
   final List<ChartSavedIndicatorScript> scripts;
   final Map<String, int> periodOverrides;
+  /// The order of rendered overlays and sub-panes; old saves without this
+  /// list fall back to the original built-in catalog order.
+  final List<String> activeOrder;
+  /// Resizable independent study panes use per-id device-local heights.
+  final Map<String, int> paneHeights;
 
   static const maxScripts = 25;
   static const maxActive = 8;
@@ -201,9 +208,54 @@ class ChartIndicatorLibraryState {
     return result;
   }
 
-  List<ChartIndicatorDefinition> get active =>
-      supported.where((item) => activeIds.contains(item.id))
-          .take(maxActive).toList(growable: false);
+  List<ChartIndicatorDefinition> get active {
+    final catalog = supported;
+    final byId = <String, ChartIndicatorDefinition>{
+      for (final item in catalog) item.id: item,
+    };
+    final valid = catalog.where((item) => activeIds.contains(item.id))
+        .map((item) => item.id).toList(growable: false);
+    final order = <String>{
+      ...activeOrder.where((id) => activeIds.contains(id) &&
+          byId.containsKey(id)),
+      ...valid,
+    };
+    return order.take(maxActive).map((id) => byId[id]!)
+        .toList(growable: false);
+  }
+
+  int heightForPane(String id) =>
+      paneHeights[id]?.clamp(84, 192).toInt() ?? 106;
+
+  ChartIndicatorLibraryState resizePane(String id, int height) {
+    final activePane = active.any((item) => item.id == id &&
+        item.separatePane);
+    if (!activePane || height < 84 || height > 192) return this;
+    final next = <String, int>{...paneHeights};
+    if (height == 106) {
+      next.remove(id);
+    } else {
+      next[id] = height;
+    }
+    return copyWith(paneHeights: next);
+  }
+
+  /// Move a pane relative to other panes, without losing overlay positions.
+  ChartIndicatorLibraryState movePane(String id, int direction) {
+    if (direction != -1 && direction != 1) return this;
+    final current = active.map((item) => item.id).toList();
+    final panes = active.where((item) => item.separatePane)
+        .map((item) => item.id).toList();
+    final index = panes.indexOf(id);
+    final target = index + direction;
+    if (index < 0 || target < 0 || target >= panes.length) return this;
+    final first = current.indexOf(panes[index]);
+    final second = current.indexOf(panes[target]);
+    final tmp = current[first];
+    current[first] = current[second];
+    current[second] = tmp;
+    return copyWith(activeOrder: current);
+  }
 
   bool get hasActive => active.isNotEmpty;
 
@@ -212,6 +264,8 @@ class ChartIndicatorLibraryState {
     Set<String>? favoriteIds,
     List<ChartSavedIndicatorScript>? scripts,
     Map<String, int>? periodOverrides,
+    List<String>? activeOrder,
+    Map<String, int>? paneHeights,
   }) => ChartIndicatorLibraryState(
     activeIds: Set<String>.unmodifiable(activeIds ?? this.activeIds),
     favoriteIds: Set<String>.unmodifiable(favoriteIds ?? this.favoriteIds),
@@ -219,19 +273,29 @@ class ChartIndicatorLibraryState {
         scripts ?? this.scripts),
     periodOverrides: Map<String, int>.unmodifiable(
         periodOverrides ?? this.periodOverrides),
+    activeOrder: List<String>.unmodifiable(activeOrder ?? this.activeOrder),
+    paneHeights: Map<String, int>.unmodifiable(
+        paneHeights ?? this.paneHeights),
   );
 
   ChartIndicatorLibraryState toggleActive(String id) {
     if (!supported.any((item) => item.id == id)) return this;
     final next = <String>{...activeIds};
-    if (!next.remove(id)) {
+    final ordered = active.map((item) => item.id).toList();
+    final heights = <String, int>{...paneHeights};
+    if (next.remove(id)) {
+      ordered.remove(id);
+      heights.remove(id);
+    } else {
       if (active.length >= maxActive) return this;
       final proposed = supported.firstWhere((item) => item.id == id);
       if (proposed.separatePane &&
           active.where((item) => item.separatePane).length >= 2) return this;
       next.add(id);
+      ordered.add(id);
     }
-    return copyWith(activeIds: next);
+    return copyWith(activeIds: next, activeOrder: ordered,
+        paneHeights: heights);
   }
 
   ChartIndicatorLibraryState setPeriod(String id, int length) {
@@ -271,6 +335,8 @@ class ChartIndicatorLibraryState {
       scripts: scripts.where((script) => script.id != id).toList(),
       activeIds: <String>{...activeIds}..remove(id),
       favoriteIds: <String>{...favoriteIds}..remove(id),
+      activeOrder: activeOrder.where((item) => item != id).toList(),
+      paneHeights: <String, int>{...paneHeights}..remove(id),
     );
   }
 
@@ -280,6 +346,8 @@ class ChartIndicatorLibraryState {
     'favoriteIds': favoriteIds.toList(),
     'scripts': scripts.map((item) => item.toJson()).toList(),
     'periodOverrides': periodOverrides,
+    'activeOrder': activeOrder,
+    'paneHeights': paneHeights,
   });
 
   static ChartIndicatorLibraryState decode(String encoded) {
@@ -329,9 +397,41 @@ class ChartIndicatorLibraryState {
         return data.whereType<String>()
             .where(valid.contains).take(cap).toSet();
       }
+      final active = readIds(parsed['activeIds'], allowed, maxActive);
+      final rawOrder = parsed['activeOrder'];
+      final ordered = <String>[];
+      if (rawOrder is List) {
+        for (final id in rawOrder.whereType<String>()) {
+          if (active.contains(id) && !ordered.contains(id) &&
+              ordered.length < maxActive) ordered.add(id);
+        }
+      }
+      for (final item in catalog.supported) {
+        if (active.contains(item.id) && !ordered.contains(item.id)) {
+          ordered.add(item.id);
+        }
+      }
+      final heights = <String, int>{};
+      final rawHeights = parsed['paneHeights'];
+      final byId = <String, ChartIndicatorDefinition>{
+        for (final item in catalog.supported) item.id: item,
+      };
+      if (rawHeights is Map) {
+        for (final entry in rawHeights.entries) {
+          final id = entry.key;
+          final pixels = entry.value;
+          if (id is String && pixels is int && pixels >= 84 &&
+              pixels <= 192 && active.contains(id) &&
+              byId[id]?.separatePane == true) {
+            heights[id] = pixels;
+          }
+        }
+      }
       return catalog.copyWith(
-        activeIds: readIds(parsed['activeIds'], allowed, maxActive),
+        activeIds: active,
         favoriteIds: readIds(parsed['favoriteIds'], existing, 50),
+        activeOrder: ordered,
+        paneHeights: heights,
       );
     } catch (_) {
       return const ChartIndicatorLibraryState();
