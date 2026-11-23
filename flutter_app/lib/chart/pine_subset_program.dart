@@ -922,8 +922,9 @@ class PineBarExecutor {
           throw const PineRuntimeException(
               'history_limit', 'Requested Pine history was not retained');
         }
-        result = program.constants[name] ??
-            _variables[name]!.absolute(_index - offset).number;
+        result = _index < offset ? null :
+            (program.constants[name] ??
+                _variables[name]!.absolute(_index - offset).number);
       case _PineUnary(:final operator, :final value):
         final x = _evaluate(value);
         result = x == null ? null : (operator == '-' ? -x : x);
