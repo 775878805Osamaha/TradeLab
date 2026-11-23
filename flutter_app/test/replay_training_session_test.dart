@@ -179,4 +179,97 @@ void main() {
     expect(() => session.moveTo(bars, bars.length + 1), throwsRangeError);
     expect(session.trades, isEmpty);
   });
+  test('gap-through long take profit fills at favorable next open', () {
+    const gap = [
+      TradeCandle(100, 101, 99, 100),
+      TradeCandle(112, 114, 109, 110),
+    ];
+    final session = ReplayTrainingSession()..moveTo(gap, 1);
+    session.enter(side: ReplaySide.buy, candles: gap,
+      quantity: 2, stopLoss: 95, takeProfit: 105);
+    session.moveTo(gap, 2);
+    expect(session.trades.single.exitReason, ReplayExitReason.takeProfit);
+    expect(session.trades.single.exitPrice, 112,
+      reason: 'A limit exit crossed between bars fills at the next open');
+    expect(session.realizedPricePnl, 24);
+  });
+
+  test('gap-through short take profit fills at favorable next open', () {
+    const gap = [
+      TradeCandle(100, 101, 99, 100),
+      TradeCandle(88, 91, 85, 90),
+    ];
+    final session = ReplayTrainingSession()..moveTo(gap, 1);
+    session.enter(side: ReplaySide.sell, candles: gap,
+      quantity: 3, stopLoss: 105, takeProfit: 95);
+    session.moveTo(gap, 2);
+    expect(session.trades.single.exitReason, ReplayExitReason.takeProfit);
+    expect(session.trades.single.exitPrice, 88);
+    expect(session.realizedPricePnl, 36);
+  });
+
+  test('already-crossed TP at bar open precedes later intrabar stop', () {
+    const longGap = [
+      TradeCandle(100, 101, 99, 100),
+      TradeCandle(112, 114, 88, 90),
+    ];
+    final longSession = ReplayTrainingSession()..moveTo(longGap, 1);
+    longSession.enter(side: ReplaySide.buy, candles: longGap,
+      quantity: 1, stopLoss: 95, takeProfit: 105);
+    longSession.moveTo(longGap, 2);
+    expect(longSession.trades.single.exitPrice, 112);
+    expect(longSession.trades.single.exitReason, ReplayExitReason.takeProfit);
+
+    const shortGap = [
+      TradeCandle(100, 101, 99, 100),
+      TradeCandle(88, 108, 85, 106),
+    ];
+    final shortSession = ReplayTrainingSession()..moveTo(shortGap, 1);
+    shortSession.enter(side: ReplaySide.sell, candles: shortGap,
+      quantity: 1, stopLoss: 105, takeProfit: 95);
+    shortSession.moveTo(shortGap, 2);
+    expect(shortSession.trades.single.exitPrice, 88);
+    expect(shortSession.trades.single.exitReason, ReplayExitReason.takeProfit);
+  });
+
+  test('ordinary intrabar target still fills at exact order level', () {
+    const usual = [
+      TradeCandle(100, 101, 99, 100),
+      TradeCandle(101, 108, 100, 106),
+    ];
+    final s = ReplayTrainingSession()..moveTo(usual, 1);
+    s.enter(side: ReplaySide.buy, candles: usual,
+      quantity: 1, stopLoss: 95, takeProfit: 105);
+    s.moveTo(usual, 2);
+    expect(s.trades.single.exitPrice, 105);
+  });
+
+  test('indexed deep-seek and one-bar playback agree on TP gap opens', () {
+    const count = 12000;
+    final candles = List<TradeCandle>.filled(
+      count, const TradeCandle(100, 101, 99, 100)).toList();
+    candles[10000] = const TradeCandle(112, 113, 88, 90);
+    final indexed = ReplayTrainingSession()..moveTo(candles, 1);
+    final stepped = ReplayTrainingSession()..moveTo(candles, 1);
+    for (var i = 0; i < 12; i++) {
+      indexed.enter(side: ReplaySide.buy, candles: candles,
+        quantity: 1, stopLoss: 95, takeProfit: 105);
+      stepped.enter(side: ReplaySide.buy, candles: candles,
+        quantity: 1, stopLoss: 95, takeProfit: 105);
+    }
+    expect(ReplayTrainingSession.shouldUseIndexedExitSearch(
+      newlyRevealedBars: count - 1, watchedTrades: 12), isTrue);
+    indexed.moveTo(candles, count);
+    for (var i = 2; i <= count; i++) {
+      stepped.moveTo(candles, i);
+    }
+    expect(indexed.realizedPricePnl, 144);
+    expect(stepped.realizedPricePnl, 144);
+    for (var i = 0; i < 12; i++) {
+      expect(indexed.trades[i].exitIndex, 10000);
+      expect(indexed.trades[i].exitPrice, 112);
+      expect(stepped.trades[i].exitPrice, 112);
+    }
+  });
+
 }
