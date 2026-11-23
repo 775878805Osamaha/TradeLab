@@ -147,6 +147,8 @@ jobs:
             test/chart_feed_health_test.dart \
             test/chart_time_axis_label_layout_test.dart \
             test/chart_source_time_grid_test.dart \
+            test/chart_indicator_library_test.dart \
+            test/chart_indicator_library_sheet_test.dart \
             test/replay_trade_overlay_test.dart \
             test/paper_results_flow_test.dart \
             test/chart_frame_profiler_test.dart
