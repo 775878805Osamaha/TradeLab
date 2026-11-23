@@ -421,6 +421,14 @@ class PineSemanticAnalyzer {
           _error('recursive_function',
               'Pine user functions cannot call themselves', expr);
         }
+        if ({'int', 'float', 'bool', 'string', 'color'}.contains(name)) {
+          if (args.length != 1) {
+            _error('argument_count',
+                name + '() conversion requires one argument', expr);
+          }
+          return PineInferredType(_type(name),
+              args.isEmpty ? PineQualifier.series : args.first.qualifier);
+        }
         if (name.startsWith('input.')) {
           final type = switch (name) {
             'input.int' => PineType.intType,
