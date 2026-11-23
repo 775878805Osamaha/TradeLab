@@ -2,6 +2,8 @@ import 'dart:collection';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/pine_runtime_core.dart';
+import 'package:tradelab_flutter/chart/chart_indicator_library.dart';
+import 'package:tradelab_flutter/chart/chart_indicator_engine.dart';
 import 'package:tradelab_flutter/chart/pine_subset_program.dart';
 import 'package:tradelab_flutter/chart/pine_v6_language_runtime.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
@@ -201,4 +203,61 @@ plot(request.security("BINANCE:BTCUSDT", "D", close))''';
       }
     }
   });
+  test('switch last-value expression inside user function follows selected arm',(){
+    const code='''//@version=6
+indicator("Switch")
+choose(int value) =>
+    switch value
+        0 => 7
+        1 => 9
+        => 11
+plot(choose(bar_index))''';
+    expect(single(code,bars([1,2,3,4])),[7,9,11,11]);
+  });
+
+  test('Stage 3a saved script is admitted to chart and executed with real OHLC',(){
+    const saved=ChartSavedIndicatorScript(
+        id:'script-stage3',name:'Var Counter',
+        source:'''//@version=6
+indicator("Counter", overlay=true)
+var int count = 0
+count += 1
+plot(count)''');
+    final definition=saved.supportedIndicator();
+    expect(definition,isNotNull,reason:saved.compileError);
+    expect(definition!.kind,ChartIndicatorKind.pine);
+    expect(definition.pineOverlay,isTrue);
+    final plotted=ChartIndicatorEngine.compute(bars([10,11,12]),definition);
+    expect(plotted.plots.single.values,[1,2,3]);
+    expect(saved.compileError,isNull);
+  });
+
+  test('legacy invalid-period source is not admitted via Stage 3a fallback',(){
+    const saved=ChartSavedIndicatorScript(
+        id:'script-rejected',name:'Bad SMA',
+        source:'''//@version=6
+indicator("Bad", overlay=true)
+plot(ta.sma(close,501))''');
+    expect(saved.supportedIndicator(),isNull);
+    expect(saved.compileError,isNotNull);
+  });
+
+  test('two independent Replay sessions never leak var state across rebuilds',(){
+    const code='''//@version=6
+indicator("Session isolation")
+var int count = 0
+count += 1
+plot(count)''';
+    final program=PineV6LanguageProgram.compile(code);
+    final source=bars([for(var i=0;i<10;i++)i.toDouble()]);
+    final first=program.newInstance()..rebuild(source,5);
+    final second=program.newInstance()..rebuild(source,2);
+    first.rebuild(source,1);
+    expect(first.persistentValue('count'),1);
+    expect(second.persistentValue('count'),2);
+    expect(second.outputs.single.values,[1,2]);
+    final fresh=program.newInstance()..rebuild(source,2);
+    expect(second.outputs.single.values,fresh.outputs.single.values);
+  });
+
 }
