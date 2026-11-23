@@ -76,7 +76,6 @@ void main() {
           'plot(ta.sma(close, 20))\nplot(close)',
       'indicator("A", overlay=true)\nrequest.security("A", "D", close)\n'
           'plot(ta.sma(close, 20))',
-      'indicator("A", overlay=true)\nplot(ta.ema(close, 20))',
     ]) {
       expect(ChartSavedIndicatorScript(
         id: 'script-rejected', name: 'Unsafe', source: source,
@@ -170,5 +169,50 @@ void main() {
         }
       }
     }
+  });
+
+
+  test('supported one-plot Pine EMA and RSI execute with correct placement',
+      () {
+    const emaScript = ChartSavedIndicatorScript(
+      id:'script-ema',name:'My EMA 34',
+      source:'//@version=6\nindicator("EMA", overlay=true)\n'
+          'plot(ta.ema(close,34))');
+    const rsiScript = ChartSavedIndicatorScript(
+      id:'script-rsi',name:'My RSI 14',
+      source:'//@version=6\nindicator("RSI", overlay=false)\n'
+          'plot(ta.rsi(close,14))');
+    expect(emaScript.supportedIndicator()?.kind,ChartIndicatorKind.ema);
+    expect(emaScript.supportedIndicator()?.separatePane,isFalse);
+    expect(rsiScript.supportedIndicator()?.kind,ChartIndicatorKind.rsi);
+    expect(rsiScript.supportedIndicator()?.separatePane,isTrue);
+    expect(rsiScript.supportedSmaPeriod,isNull);
+    final state=const ChartIndicatorLibraryState()
+        .saveScript(emaScript).saveScript(rsiScript)
+        .toggleActive('script-ema').toggleActive('script-rsi');
+    expect(state.active.where((x)=>x.custom).length,2);
+    expect(state.active.first.period,34);
+  });
+
+  test('study-length customization is persisted and rejects invalid data',
+      () {
+    final base=const ChartIndicatorLibraryState();
+    final configured=base.setPeriod('ema-21',34).setPeriod('rsi-14',9);
+    expect(configured.active,isEmpty);
+    final byId={for(final item in configured.supported)item.id:item};
+    expect(byId['ema-21']!.title,'EMA 34');
+    expect(byId['ema-21']!.period,34);
+    expect(byId['rsi-14']!.period,9);
+    expect(configured.setPeriod('macd',5),same(configured));
+    expect(configured.setPeriod('rsi-14',1),same(configured));
+    expect(configured.setPeriod('ema-21',501),same(configured));
+    final restored=ChartIndicatorLibraryState.decode(configured.encode());
+    expect(restored.periodOverrides,{'ema-21':34,'rsi-14':9});
+    expect(restored.setPeriod('ema-21',21)
+        .periodOverrides.containsKey('ema-21'),isFalse);
+    final bad=ChartIndicatorLibraryState.decode(
+      '{"version":1,"periodOverrides":'
+      '{"macd":5,"ema-9":0,"rsi-14":1,"ema-21":37}}');
+    expect(bad.periodOverrides,{'ema-21':37});
   });
 }
