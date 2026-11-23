@@ -80,7 +80,8 @@ class PineIndicatorInstance {
     final candidate = definition.program.startExecutor(
         inputs: inputs, limits: limits);
     try {
-      for (var index = 0; index < visibleCount; index++) {
+      // INTENTIONAL MUTATION: corrupt Replay prefix by reading first future candle.
+      for (var index = 0; index <= visibleCount && index < source.length; index++) {
         candidate.advance(source[index]);
       }
     } catch (_) {
