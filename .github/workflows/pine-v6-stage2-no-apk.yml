@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - feat/pine-stage2-v6-frontend-20261123
+      - feat/pine-stage3a-runtime-provisional-20261124
     paths:
       - 'flutter_app/**'
       - '.github/workflows/pine-v6-stage2-no-apk.yml'
@@ -152,6 +153,7 @@ jobs:
             test/pine_subset_program_test.dart \
             test/pine_stage1_runtime_test.dart \
             test/pine_v6_frontend_test.dart \
+            test/pine_differential_matrix_test.dart \
             test/chart_indicator_autoscale_test.dart \
             test/chart_indicator_pane_test.dart \
             test/chart_indicator_library_sheet_test.dart \
