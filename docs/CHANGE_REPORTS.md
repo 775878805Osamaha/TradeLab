@@ -1,5 +1,10 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — General Pine AST series execution foundation (CI PENDING)
+- Added `pine_subset_program.dart` tokenization, strict typed expression AST, limited user inputs, variable assignments, historic source references, TA/math operators and multiple named colored plots. Safely rejects unsupported functions, loops, offset lookahead, dynamic periods and control syntax. Connected compiler to existing chart/Replay source cache and independent/overlay pane choice via script's `indicator(overlay=...)`. Test suite includes real multi-plot values, diagnostics, 120k bars cache, Replay prefix cutoff and invalid scripts.
+- Pine v6 full language **not implemented**. Active implementation is source-validated subset only. Further pane management work pending before final PR merge. Scope TradeLab only, no APK.
+
+
 ### 2026-11-23 — PR #639 merged: built-in STOCH+ROC and exact RSI boundary; CI success
 - [Merged #639](https://github.com/775878805Osamaha/TradeLab/pull/639) as `04ffbd5157f3dc1b01088b0525565e25461d2cb9`. [CI #45198266973](https://github.com/775878805Osamaha/TradeLab/actions/runs/45198266973) **success**: Flutter analyzer, **908 core tests**, 11 catalog/drawing tests, Yemen timezone.
 - Built authentic-source Stochastic 14/3/3 (SMA smoothed %K/%D, O(N) high/low deque, 80/50/20 pane guides), ROC9 (real period-back close % and zero-price guard), validated persistent periods, source-pinned new panes; RSI flat gain/loss boundary aligned with published Pine built-in behavior. Tests include 175 independent rolling-extrema references and 120k × lookback500 no repeated scan plus Replay hidden-prefix cutoff.
