@@ -46,6 +46,10 @@ jobs:
             test/range_bar_timeline_test.dart \
             test/range_bar_builder_test.dart \
             test/chart_viewport_test.dart \
+            test/chart_panel_settings_test.dart \
+            test/chart_symbol_settings_test.dart \
+            test/chart_mobile_controls_test.dart \
+            test/markets_chart_navigation_test.dart \
             test/chart_mode_transition_test.dart \
             test/chart_annotations_test.dart \
             test/ctrader_candle_stitcher_test.dart \
@@ -57,4 +61,14 @@ jobs:
             test/replay_training_archive_test.dart \
             test/replay_training_widget_test.dart \
             test/replay_training_order_dialog_test.dart \
+            test/paper_ledger_test.dart \
+            test/paper_journal_controller_test.dart \
+            test/paper_journal_sqlite_test.dart \
+            test/paper_trade_service_test.dart \
+            test/results_connection_test.dart \
+            test/ctrader_quote_ordering_test.dart \
+            test/chart_feed_health_test.dart \
+            test/chart_time_axis_label_layout_test.dart \
+            test/replay_trade_overlay_test.dart \
+            test/paper_results_flow_test.dart \
             test/chart_frame_profiler_test.dart

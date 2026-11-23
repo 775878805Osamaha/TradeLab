@@ -6,8 +6,10 @@ import '../theme/tradelab_theme.dart';
 import '../widgets/trade_components.dart';
 
 class MarketsScreen extends StatefulWidget {
-  const MarketsScreen({required this.controller, super.key});
+  const MarketsScreen({required this.controller, this.onSymbolSelected,
+    super.key});
   final MarketController controller;
+  final ValueChanged<TradeSymbol>? onSymbolSelected;
 
   @override
   State<MarketsScreen> createState() => _MarketsScreenState();
@@ -112,6 +114,7 @@ class _MarketsScreenState extends State<MarketsScreen> {
                 description: 'غيّر كلمات البحث أو نوع السوق.',
               )
             : ListView.separated(
+                key: const Key('markets-symbol-list'),
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 itemCount: _visible.length + 1,
                 separatorBuilder: (context, index) => const SizedBox(height: 8),
@@ -126,7 +129,12 @@ class _MarketsScreenState extends State<MarketsScreen> {
                   final symbol = _visible[index - 1];
                   return TradeSurface(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    child: Row(children: [
+                    child: InkWell(
+                      key: Key('market-open-chart-${symbol.code}'),
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: widget.onSymbolSelected == null
+                          ? null : () => widget.onSymbolSelected!(symbol),
+                      child: Row(children: [
                       Container(
                         width: 42,
                         height: 42,
@@ -194,7 +202,7 @@ class _MarketsScreenState extends State<MarketsScreen> {
                           }
                         }),
                       ),
-                    ]),
+                    ])),
                   );
                 },
               ),
