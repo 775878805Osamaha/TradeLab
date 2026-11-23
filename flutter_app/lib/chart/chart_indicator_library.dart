@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../data/tradelab_data.dart';
 import 'pine_v6_frontend.dart';
+import 'pine_v6_language_runtime.dart';
 
 enum ChartIndicatorKind { sma, ema, bollinger, rsi, macd, atr, stochastic, roc, pine }
 
@@ -123,18 +124,40 @@ class ChartSavedIndicatorScript {
   ChartIndicatorDefinition? _compileSeries() {
     final checked = const PineV6Frontend().prepare(source);
     final program = checked.legacyProgram;
-    if (!checked.canExecute || program == null) return null;
-    return ChartIndicatorDefinition(id, name, 1,
-        custom: true,
-        kindOverride: ChartIndicatorKind.pine,
-        pineSource: source,
-        pineOverlay: program.overlay);
+    if (checked.canExecute && program != null) {
+      return ChartIndicatorDefinition(id, name, 1,
+          custom: true,
+          kindOverride: ChartIndicatorKind.pine,
+          pineSource: source,
+          pineOverlay: program.overlay);
+    }
+    if (checked.hasErrors) return null;
+    // Stage 3a is an opt-in next language tier. The new compiler refuses
+    // unsupported calls/statements before any chart data is evaluated.
+    try {
+      final verified=PineV6LanguageProgram.compile(source);
+      return ChartIndicatorDefinition(id, name, 1,
+          custom: true,
+          kindOverride: ChartIndicatorKind.pine,
+          pineSource: source,
+          pineOverlay: verified.overlay);
+    } on PineRuntimeException {
+      return null;
+    }
   }
 
   /// Human-readable compile result for unsupported saved source.
   String? get compileError {
     final checked = const PineV6Frontend().prepare(source);
     if (checked.canExecute) return null;
+    if (!checked.hasErrors) {
+      try {
+        PineV6LanguageProgram.compile(source);
+        return null;
+      } on PineRuntimeException catch(error) {
+        return 'Pine Stage 3a ('+error.code+'): '+error.message;
+      }
+    }
     final diagnostic = checked.diagnostics.isEmpty
         ? null : checked.diagnostics.first;
     if (diagnostic == null) return 'Pine: غير مدعوم بعد';
