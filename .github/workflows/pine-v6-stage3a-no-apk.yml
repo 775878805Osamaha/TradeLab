@@ -35,7 +35,14 @@ jobs:
       # Gradle, Java toolchain, emulator or APK signing.
       - name: Audit old frontend imports, registrations and callers on exact SHA
         run: |
-          git grep -n -E 'pine_frontend(_[a-z]+)?\\.dart|PineFrontend\\.analyze|PineFrontendAnalysis|frontendAnalysis' -- lib test || true
+          # POSIX character classes and [.] avoid shell/regex backslash ambiguity.
+          # Exit 1 is a valid empty result; any other error must fail the audit.
+          git grep -n -E 'pine_frontend(_[[:alnum:]_]+)?[.]dart|PineFrontend([.]|Analysis)|frontendAnalysis' -- lib test || {
+            code=$?
+            if [ "$code" -ne 1 ]; then exit "$code"; fi
+          }
+          # Known live compatibility declaration: verify the scan can find it.
+          git grep -n -F 'frontendAnalysis' -- lib/chart/chart_indicator_library.dart
       - name: Fetch dependencies
         run: flutter pub get
       - name: Analyze Dart and Flutter
