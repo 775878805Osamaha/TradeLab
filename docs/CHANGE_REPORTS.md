@@ -1,5 +1,10 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — PR #638 merged, general native indicator math and independent axes
+- [Merged #638](https://github.com/775878805Osamaha/TradeLab/pull/638) squash `f1d7916f288f970d059caab3bd4e52974b158337`. [CI #45196582242](https://github.com/775878805Osamaha/TradeLab/actions/runs/45196582242) completed/success: analyzer, **897 main tests**, four individual catalog/drawing tests, 11 extra catalog tests, Yemen timezone. Includes fix for stale visible library period labels after settings changes.
+- Real-source EMA, BB, RSI, MACD, ATR calculated with source-list cache, source-prefix Replay guard, independent RSI/MACD/ATR panes, true price overlays and custom lengths (MACD canonical preset). No arbitrary Pine compiler, no APK/main or production changes, no proof of Android device pixel parity.
+
+
 ### 2026-11-23 — Real indicator parameters and overlay autoscaling (CI PENDING)
 - Native settings dialog changes valid study lengths and persists securely. Added simple EMA/RSI Pine one-plot source support (in addition to SMA) through real verified-source native engine; unsupported scripts remain stored, not run.
 - Price auto-axis now includes visible EMA/SMA/Bollinger series without touching broker highs/lows or oscillator axes; Replay prefix and manual scale protected. SMA outputs only after full period and BB uses numerically stable centered variance.
