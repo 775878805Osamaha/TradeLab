@@ -1,5 +1,10 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Replay TP favorable gap OPEN vs target-price mismatch (CI PENDING)
+- TradingView docs confirm price-based orders crossed between bars fill at next genuine OHLC open. TradeLab already used adverse open for stop-loss but used TP limit even when opening beyond favorable target; and could incorrectly apply later intrabar stop before that TP.
+- Corrected Replay practice exit policy to prioritize verified next-bar TP open, preserve ordinary intrabar TP, and keep conservative both-hit tie when no open TP. Added buy/sell, same-bar stop, and indexed/stepped parity regression across 12k authentic-style test bars. No source fabrication, no APK or backend changes.
+
+
 ### 2026-11-23 — PR #635 merged; chart time-axis date marks stable across pan
 - Merged [#635](https://github.com/775878805Osamaha/TradeLab/pull/635) as `712067b52829d0308346c552f0d12a9bc4c1ff00`. [GitHub Actions #45183340568](https://github.com/775878805Osamaha/TradeLab/actions/runs/45183340568) completed/success: full active Flutter analyzer + Range/Replay/Results/chart regression suite and Yemen timezone verified.
 - Previous painter unconditionally treated first visible grid tick as a new day, causing date labels to jump during panning. New mark classification compares preceding real source-grid timestamp in chosen chart timezone, with tests for UTC/NY midnight, 5 pan offsets, weekend BID gap and Replay prefix bounds. No fabricated bars or rewritten prices; no APK, main or production deployment.
