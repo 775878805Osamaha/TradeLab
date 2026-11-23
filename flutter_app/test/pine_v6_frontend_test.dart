@@ -361,4 +361,37 @@ plot(close)''');
     expect(report.diagnostics.every((e)=>e.line>0&&e.column>0),isTrue);
   });
 
+  test('break and continue are valid inside loops, including nested if',(){
+    final report=front.prepare('''//@version=6
+indicator("Loop flow")
+int n = 0
+for i = 0 to 4
+    if i > 2
+        break
+    continue
+while n < 3
+    n += 1
+    if n == 2
+        continue
+plot(close)''');
+    expect(report.hasErrors,isFalse,reason:report.message);
+    expect(report.canExecute,isFalse,
+        reason:'Loop AST must not run before Stage 3');
+  });
+
+  test('break/continue outside loops are semantic errors with locations',(){
+    final report=front.prepare('''//@version=6
+indicator("Invalid flow")
+break
+if close > open
+    continue
+plot(close)''');
+    final diagnostics=report.diagnostics.where((d)=>
+        d.code=='loop_control_scope').toList();
+    expect(diagnostics,hasLength(2),reason:report.message);
+    expect(diagnostics.map((d)=>d.line),[3,5]);
+    expect(diagnostics.every((d)=>d.column>0),isTrue);
+    expect(report.canExecute,isFalse);
+  });
+
 }
