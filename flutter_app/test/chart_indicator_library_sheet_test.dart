@@ -178,4 +178,25 @@ void main() {
   });
 
 
+  testWidgets('active tab reorders and clears multiple indicators at 320dp',
+      (tester) async {
+    var state = const ChartIndicatorLibraryState()
+        .toggleActive('ema-21')
+        .toggleActive('sma-12');
+    await showLibrary(tester, (next) => state = next,
+        state: state, size: const Size(320, 640));
+    await tester.ensureVisible(find.byKey(const Key('indicator-tab-3')));
+    await tester.tap(find.byKey(const Key('indicator-tab-3')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('indicator-active-up-sma-12')),
+        findsOneWidget);
+    await tester.tap(find.byKey(const Key('indicator-active-up-sma-12')));
+    await tester.pumpAndSettle();
+    expect(state.active.map((item) => item.id), ['sma-12', 'ema-21']);
+    await tester.tap(find.byKey(const Key('indicator-clear-active')));
+    await tester.pumpAndSettle();
+    expect(state.active, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
 }
