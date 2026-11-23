@@ -95,6 +95,57 @@ class ChartIndicatorPane extends StatelessWidget {
   );
 }
 
+
+/// Independent y-scale geometry for actual source-derived oscillator plots.
+/// A multi-plot Pine oscillator may be entirely negative, entirely positive,
+/// or histogram-based: never clamp arbitrary Pine values to [0,+max].
+class ChartIndicatorPaneScale {
+  const ChartIndicatorPaneScale._();
+
+  static (double, double)? domain({
+    required ChartIndicatorDefinition indicator,
+    required List<ChartIndicatorPlot> plots,
+    required int start,
+    required int end,
+  }) {
+    if (indicator.kind == ChartIndicatorKind.rsi ||
+        indicator.kind == ChartIndicatorKind.stochastic) {
+      return (0.0, 100.0);
+    }
+    var lowest = double.infinity;
+    var highest = double.negativeInfinity;
+    for (final series in plots) {
+      final left = math.max(0, start);
+      final right = math.min(end, series.values.length);
+      for (var i = left; i < right; i++) {
+        final value = series.values[i];
+        if (value == null || !value.isFinite) continue;
+        lowest = math.min(lowest, value);
+        highest = math.max(highest, value);
+      }
+    }
+    if (!lowest.isFinite || !highest.isFinite) return null;
+    if (indicator.kind == ChartIndicatorKind.macd ||
+        indicator.kind == ChartIndicatorKind.roc) {
+      final extent = math.max(1e-10,
+          math.max(lowest.abs(), highest.abs()) * 1.12);
+      return (-extent, extent);
+    }
+    if (indicator.kind == ChartIndicatorKind.pine) {
+      if (plots.any((plot) => plot.histogram)) {
+        lowest = math.min(0.0, lowest);
+        highest = math.max(0.0, highest);
+      }
+      final spread = highest - lowest;
+      final padding = spread > 0
+          ? spread * .10
+          : math.max(1e-8, math.max(highest.abs(),lowest.abs()) * .05);
+      return (lowest - padding, highest + padding);
+    }
+    return (0.0, math.max(1e-10, highest * 1.12));
+  }
+}
+
 /// Independent panel painter. All y-axis labels refer to indicator values,
 /// not to broker price quotes; x positions are identical to candle x.
 class ChartIndicatorPanePainter extends CustomPainter {
@@ -148,32 +199,11 @@ class ChartIndicatorPanePainter extends CustomPainter {
     final output = cache.get(candles, indicator);
     if (output.plots.isEmpty) return;
 
-    var minimum = double.infinity;
-    var maximum = double.negativeInfinity;
-    if (indicator.kind == ChartIndicatorKind.rsi ||
-        indicator.kind == ChartIndicatorKind.stochastic) {
-      minimum = 0;
-      maximum = 100;
-    } else {
-      for (final series in output.plots) {
-        for (var i = start; i < end; i++) {
-          final value = series.values[i];
-          if (value == null || !value.isFinite) continue;
-          minimum = math.min(minimum, value);
-          maximum = math.max(maximum, value);
-        }
-      }
-      if (!minimum.isFinite || !maximum.isFinite) return;
-      if (indicator.kind == ChartIndicatorKind.macd ||
-          indicator.kind == ChartIndicatorKind.roc) {
-        final extreme = math.max(minimum.abs(), maximum.abs());
-        minimum = -math.max(1e-10, extreme * 1.12);
-        maximum = math.max(1e-10, extreme * 1.12);
-      } else {
-        minimum = 0;
-        maximum = math.max(1e-10, maximum * 1.12);
-      }
-    }
+    final range = ChartIndicatorPaneScale.domain(
+      indicator: indicator, plots: output.plots,
+      start: start, end: end);
+    if (range == null) return;
+    final (minimum, maximum) = range;
 
     final top = 21.0;
     final bottom = size.height - 10.0;
