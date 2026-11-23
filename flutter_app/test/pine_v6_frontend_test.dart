@@ -394,4 +394,39 @@ plot(close)''');
     expect(report.canExecute,isFalse);
   });
 
+  test('ported from 644: direct na comparison is a v6 semantic error',(){
+    final bad=front.prepare('''//@version=6
+indicator("No direct na comparison")
+flag = close == na
+plot(close)''');
+    expect(bad.diagnostics.any((d)=>d.code=='na_comparison' &&
+        d.line==3),isTrue,reason:bad.message);
+    final valid=front.prepare('''//@version=6
+indicator("na function")
+flag = na(close)
+plot(close)''');
+    expect(valid.diagnostics.any((d)=>d.code=='na_comparison'),isFalse);
+  });
+
+  test('ported from 644: ta.ema and ta.rsi length require simple int',(){
+    final rejected=front.prepare('''//@version=6
+indicator("length")
+badEma = ta.ema(close, bar_index)
+badRsi = ta.rsi(close, length=bar_index)
+badFloat = ta.ema(close, 2.5)
+badZero = ta.rsi(close, 0)
+plot(close)''');
+    expect(rejected.diagnostics.where((d)=>d.code=='argument_qualifier'),
+        hasLength(2));
+    expect(rejected.diagnostics.any((d)=>d.code=='argument_type'),isTrue);
+    expect(rejected.diagnostics.any((d)=>d.code=='invalid_length'),isTrue);
+
+    final accepted=front.prepare('''//@version=6
+indicator("valid length")
+length = input.int(5, "Length")
+moving = ta.ema(close, length)
+plot(moving)''');
+    expect(accepted.canExecute,isTrue,reason:accepted.message);
+  });
+
 }

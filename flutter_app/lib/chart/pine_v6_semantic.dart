@@ -335,7 +335,17 @@ class PineV6SemanticAnalyzer {
         _require(c,PineBaseType.boolType,expr.right.span,'logical_type');
         value=PineTypeInfo(PineBaseType.boolType,q);
       }else if(['==','!=','<','>','<=','>='].contains(expr.operator)){
-        if(!_compatible(a.type,c.type)&&!_compatible(c.type,a.type)){
+        // Pine v6 rejects direct comparison with the na literal. It is not
+        // equivalent to a boolean comparison; use na(x) instead.
+        final directNa=(expr.left is PineLiteralExpression &&
+                (expr.left as PineLiteralExpression).literalType=='na') ||
+            (expr.right is PineLiteralExpression &&
+                (expr.right as PineLiteralExpression).literalType=='na');
+        if(directNa){
+          _error('na_comparison',
+              'Use na(x) instead of comparing an expression directly to na',
+              expr.span);
+        }else if(!_compatible(a.type,c.type)&&!_compatible(c.type,a.type)){
           _error('comparison_type','Cannot compare incompatible Pine types',expr.span);
         }
         value=PineTypeInfo(PineBaseType.boolType,q);
@@ -493,6 +503,38 @@ class PineV6SemanticAnalyzer {
           PineQualifier.input);
     }
     if(name.startsWith('ta.')){
+      // Pine v6 ta.ema() and ta.rsi() expect simple int (or weaker)
+      // length; series int and float lengths are invalid.
+      if(name=='ta.ema'||name=='ta.rsi'){
+        int lengthPosition=1;
+        for(var i=0;i<call.arguments.length;i++){
+          if(call.arguments[i].name=='length'){
+            lengthPosition=i;
+            break;
+          }
+        }
+        if(lengthPosition<info.length){
+          final length=info[lengthPosition];
+          if(length.type!=PineBaseType.intType &&
+              length.type!=PineBaseType.unknown){
+            _error('argument_type',name+' length must be int',
+                call.arguments[lengthPosition].span);
+          }
+          if(length.qualifier.index>PineQualifier.simple.index){
+            _error('argument_qualifier',
+                name+' length requires simple int, not series int',
+                call.arguments[lengthPosition].span);
+          }
+          final expr=call.arguments[lengthPosition].value;
+          if(expr is PineLiteralExpression &&
+              expr.literalType=='int' &&
+              (int.tryParse(expr.value)??0)<1){
+            _error('invalid_length',
+                name+' length must be a positive integer',
+                expr.span);
+          }
+        }
+      }
       return const PineTypeInfo(PineBaseType.floatType,PineQualifier.series);
     }
     if(name.startsWith('request.')){
