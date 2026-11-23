@@ -78,7 +78,7 @@ class PineV6Frontend {
     // never be silently interpreted as v6. Untagged legacy scripts remain
     // accepted for backwards compatibility with the existing numeric subset.
     final directive=RegExp(
-      r'(?m)^[ \t]*//@version[ \t]*=[ \t]*([^\s/]+)')
+      r'^[ \t]*//@version[ \t]*=[ \t]*([^\s/]+)', multiLine: true)
       .firstMatch(source);
     if(directive!=null&&directive.group(1)!='6'){
       final before=source.substring(0,directive.start);
