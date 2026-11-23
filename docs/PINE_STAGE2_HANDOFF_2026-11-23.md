@@ -34,7 +34,7 @@ Two controlled regressions were introduced on the isolated branch test/pine-muta
 ## Tests and real CI (update after final exact-head run)
 
 - Initial Stage 2 [CI #45221049180](https://github.com/775878805Osamaha/TradeLab/actions/runs/45221049180): **FAILED in flutter analyze** (four nullability errors in Pratt parser, one semantic function missing total return). Corrected in follow-up code commits 22cd486acd6d53def6d96549957b0c0428d3ccd5 and 335c9b4665fb8b0fe8472db1b376e4de55d7e3f3. Do not count that run as passed.
-- Pending as of initial report: final exact-head Flutter analyzer, Stage 2 unit tests and all existing Pine/Replay/Range/Paper CI. Until a successful run is verified, the PR must remain draft and unmerged.
+- **Green code run:** [Actions #45222237585](https://github.com/775878805Osamaha/TradeLab/actions/runs/45222237585), SHA 6523e5c67ba4ed67c2f4947b40fff34f2e9a4b6f, **completed/success**. Job log: **950 main Flutter tests + 4 separately run drawing tests + 11 Yemen scale tests = 965 passed, 0 failed**. All 12 new Pine Stage 2 tests passed; flutter analyze PASS; Phase 1 Pine/Replay/Range/Paper regressions included. A subsequent docs-only PR run [#45222404968](https://github.com/775878805Osamaha/TradeLab/actions/runs/45222404968) also **completed/success** at SHA fb3ae18a01809cd054be8da70801296223e76708. No local Flutter or Android tests. Leave PR draft and unmerged.
 - Local Flutter/Dart toolchain **NOT AVAILABLE**, no locally executed tests or device/emulator session. No APK or Releases.
 - See final PR body and updated report for the actual outcome and test count.
 
