@@ -260,4 +260,34 @@ plot(count)''';
     expect(second.outputs.single.values,fresh.outputs.single.values);
   });
 
+  test('two written UDF call sites keep separate persistent var histories',(){
+    const script='''//@version=6
+indicator("Separate UDF vars")
+accumulate(float amount) =>
+    var float total = 0
+    total += amount
+    total
+first = accumulate(1)
+second = accumulate(2)
+plot(first)
+plot(second)''';
+    final plots=PineV6LanguageProgram.compile(script)
+        .evaluate(bars([2,4,6]));
+    expect(plots[0].values,[1,2,3]);
+    expect(plots[1].values,[2,4,6]);
+  });
+
+  test('separate written ta.sma calls inside one UDF have disjoint trails',(){
+    const script='''//@version=6
+indicator("Separate SMA sites")
+smooth(float x) =>
+    ta.sma(x,2)
+plot(smooth(close))
+plot(smooth(close*2))''';
+    final plots=PineV6LanguageProgram.compile(script)
+        .evaluate(bars([2,4,6]));
+    expect(plots[0].values,[null,3,5]);
+    expect(plots[1].values,[null,6,10]);
+  });
+
 }
