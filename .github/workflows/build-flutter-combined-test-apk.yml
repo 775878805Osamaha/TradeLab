@@ -74,6 +74,8 @@ jobs:
             test/chart_mode_transition_test.dart \
             test/chart_time_axis_label_layout_test.dart \
             test/chart_source_time_grid_test.dart \
+            test/chart_indicator_library_test.dart \
+            test/chart_indicator_library_sheet_test.dart \
             test/chart_offscreen_price_scale_test.dart \
             test/chart_viewport_test.dart \
             test/chart_axis_contrast_test.dart \

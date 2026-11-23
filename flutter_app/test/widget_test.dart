@@ -83,9 +83,11 @@ void main() {
       find.byKey(const Key('analysis-action-indicators')));
     await tester.tap(find.byKey(const Key('analysis-action-indicators')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('analysis-sma12-toggle')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('analysis-sma12-toggle')));
+    expect(find.byKey(const Key('indicator-library-title')), findsOneWidget);
+    expect(find.byKey(const Key('indicator-row-sma-12')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('indicator-row-sma-12')));
     await tester.pumpAndSettle();
+    expect(find.text('1 مضافة'), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('محور التحليل'));

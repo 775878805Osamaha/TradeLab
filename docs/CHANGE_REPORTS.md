@@ -1,5 +1,10 @@
 # TradeLab — سجل تقارير التطوير في GitHub
 
+### 2026-11-23 — Searchable in-app indicators and custom script library (CI PENDING)
+- Source evidence: only SMA12 bool toggle existed; native editor/library was absent. Built RTL indicator library searchable across four tabs, active indicators management, favorites, device-local saved Pine source, strict mini-subset SMA-only import, multiple real SMA overlay lines with 120k O(viewport) paint and Replay prefix safety. The user's Pine strategy V10 is saved as source but marked unsupported, NEVER executed or misrepresented.
+- Added unit, widget and secure preference tests and integrated into active verify Flutter + optional APK verification workflow. Scope TradeLab development branch only, no APK/main/gateway. CI and PR pending.
+
+
 ### 2026-11-23 — PR #636 merged, historical Replay order-fill parity; CI GREEN
 - [Merged #636](https://github.com/775878805Osamaha/TradeLab/pull/636) squash `ff7eef94ce5c6afcfa3a76813f0585617d87e967` after [CI #45185616391 success](https://github.com/775878805Osamaha/TradeLab/actions/runs/45185616391). Flutter analyzer, full active Range/chart/Replay/Results tests, drawing catalog and Yemen timezone passed.
 - Fixed verified next-open gap TP/SL fills, default open-to-nearer-OHLC-extreme intrabar path when both SL and TP hit, with conservative exact ties. Tests: long/short exit order, opening gaps, 12k indexed vs stepping, existing fixture corrected (short TP at real open 95 instead of obsolete stop 105). First CI #45184510908 failed only on that obsolete expectation; new CI green.
