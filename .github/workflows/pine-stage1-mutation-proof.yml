@@ -1,0 +1,23 @@
+name: Pine Stage 1 mutation evidence — no APK
+on:
+  push:
+    branches:
+      - test/pine-stage1-mutation-replay-20261123
+      - test/pine-stage1-mutation-state-20261123
+permissions:
+  contents: read
+jobs:
+  targeted-mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Test that injected defect fails safety regressions (failure expected)
+        run: flutter test test/pine_stage1_runtime_test.dart --reporter expanded

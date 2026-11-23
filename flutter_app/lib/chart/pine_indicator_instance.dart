@@ -38,7 +38,9 @@ class PineIndicatorInstance {
   final PineIndicatorDefinition definition;
   final Map<String, double> inputs;
   final PineRuntimeLimits limits;
-  final Map<String, PineValue> persistentState = {};
+  // INTENTIONAL MUTATION: violate instance isolation; NEVER ship.
+  static final Map<String, PineValue> sharedMutationState = {};
+  final Map<String, PineValue> persistentState = sharedMutationState;
   PineBarExecutor? _runtime;
 
   int get completedBars => _runtime?.completedBars ?? 0;
