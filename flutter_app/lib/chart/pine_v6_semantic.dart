@@ -1,10 +1,13 @@
 import 'pine_v6_ast.dart';
 import 'pine_function_registry.dart';
 
-enum PineBaseType { intType, floatType, boolType, stringType, colorType, unknown, tupleType, voidType }
+part 'pine_v6_semantic_registry.dart';
+
+enum PineBaseType { intType, floatType, boolType, stringType, colorType, unknown, tupleType, voidType, mapType, tableType, lookaheadType, gapsType, directionType, ocaType }
 enum PineQualifier { constant, input, simple, series }
 class PineTypeInfo {
-  const PineTypeInfo(this.type,this.qualifier);
+  const PineTypeInfo(this.type,this.qualifier,{this.mapKey,this.mapValue});
+  final PineBaseType? mapKey,mapValue;
   final PineBaseType type;
   final PineQualifier qualifier;
   static const unknown=PineTypeInfo(PineBaseType.unknown,PineQualifier.series);
@@ -12,7 +15,12 @@ class PineTypeInfo {
   @override String toString() => qualifier.name+' '+type.name;
 }
 class PineSemanticResult {
-  const PineSemanticResult(this.diagnostics,this.inferred);
+  const PineSemanticResult(this.diagnostics,this.inferred,{
+    this.completed=true,this.lastVisitedLine=0,
+  });
+  /// False when the diagnostic cap or resource budget interrupted traversal.
+  final bool completed;
+  final int lastVisitedLine;
   final List<PineDiagnostic> diagnostics;
   final Map<PineExpression,PineTypeInfo> inferred;
 }
@@ -38,7 +46,17 @@ class PineV6SemanticAnalyzer {
   PineV6SemanticAnalyzer({
     this.maxSymbols=16000,
     this.maxDuration=const Duration(seconds: 3),
-  });
+  }):_uncappedAudit=false;
+  /// Measurement only: removes the diagnostic cap, not time/node/symbol limits.
+  /// Production frontends continue to use the default constructor.
+  PineV6SemanticAnalyzer.forDiagnosticAudit({
+    this.maxSymbols=16000,
+    this.maxDuration=const Duration(seconds: 3),
+  }):_uncappedAudit=true;
+  final bool _uncappedAudit;
+  bool get _atDiagnosticCap=>!_uncappedAudit&&_diagnostics.length>=48;
+  bool _resourceInterrupted=false;
+  int _lastVisitedLine=0;
   final int maxSymbols;
   final Duration maxDuration;
   final List<PineDiagnostic> _diagnostics=[];
@@ -66,6 +84,7 @@ class PineV6SemanticAnalyzer {
     'hline','fill','bgcolor','barcolor',
   };
   static const _namespaces=<String>{
+    'map','table','position','barmerge','alert','text','font',
     'ta','math','array','color','str','input','timeframe','request',
     'syminfo','barstate','ticker','chart','time','strategy','line','label','box',
     'plot','display','scale','format','shape','location','size','extend',
@@ -78,7 +97,8 @@ class PineV6SemanticAnalyzer {
 
   PineSemanticResult analyze(PineScriptAst ast){
     _diagnostics.clear();_unsupportedDiagnostics.clear();_inferred.clear();_symbols=0;_visited=0;
-    _functionName=null;_loopDepth=0;_clock=Stopwatch()..start();
+    _functionName=null;_loopDepth=0;_resourceInterrupted=false;_lastVisitedLine=0;
+    _clock=Stopwatch()..start();
     final root=_PineScope(null);_global=root;
     for(final name in <String>['open','high','low','close','volume',
         'hl2','hlc3','ohlc4','hlcc4']){
@@ -98,32 +118,38 @@ class PineV6SemanticAnalyzer {
     }
     for(final statement in ast.statements){
       _statement(statement,root);
-      if(_diagnostics.length>=48)break;
+      if(_atDiagnosticCap)break;
     }
     _clock.stop();
     return PineSemanticResult(
       List.unmodifiable([..._diagnostics,..._unsupportedDiagnostics]),
       Map.unmodifiable(_inferred),
+      completed:!_atDiagnosticCap&&!_resourceInterrupted,
+      lastVisitedLine:_lastVisitedLine,
     );
   }
 
   bool _budget(PineSourceSpan loc) {
     _visited++;
     if(_visited>maxSymbols*8||_symbols>maxSymbols) {
+      _resourceInterrupted=true;
       _error('semantic_limit','Pine semantic resource budget exceeded',loc);
       return false;
     }
     if((_visited&127)==0&&_clock.elapsed>=maxDuration){
+      _resourceInterrupted=true;
       _error('semantic_timeout','Pine semantic deadline exceeded',loc);
       return false;
     }
-    return _diagnostics.length<48;
+    if(_atDiagnosticCap)return false;
+    if(loc.line>_lastVisitedLine)_lastVisitedLine=loc.line;
+    return true;
   }
   void _error(String code,String message,PineSourceSpan loc,
       {PineDiagnosticSeverity severity=PineDiagnosticSeverity.error}){
     final destination=severity==PineDiagnosticSeverity.unsupported
         ?_unsupportedDiagnostics:_diagnostics;
-    if(destination.length<48)destination.add(PineDiagnostic(
+    if(_uncappedAudit||destination.length<48)destination.add(PineDiagnostic(
       PineDiagnosticStage.semantic,code,message,loc,severity:severity));
   }
   void _define(_PineScope scope,String name,_PineSymbol symbol,PineSourceSpan loc){
@@ -268,7 +294,7 @@ class PineV6SemanticAnalyzer {
       }
       _syntaxOnly(stmt.span,'Tuple declaration');
     }else if(stmt is PineReferenceVariableStatement){
-      _expression(stmt.value,scope);
+      final rhs=_expression(stmt.value,scope);
       if(stmt.typeName=='map'){
         _checkReferenceTypes(stmt.typeArguments,stmt.span);
         final value=stmt.value;
@@ -282,7 +308,16 @@ class PineV6SemanticAnalyzer {
           }
         }
       }
-      _define(scope,stmt.name,_PineSymbol(stmt.name,PineTypeInfo.unknown),stmt.span);
+      final types=stmt.typeArguments;
+      final declared=stmt.typeName=='map'
+          ?PineTypeInfo(PineBaseType.mapType,PineQualifier.series,
+              mapKey:types.length==2?_bases[types[0].name]:null,
+              mapValue:types.length==2?_bases[types[1].name]:null)
+          :const PineTypeInfo(PineBaseType.tableType,PineQualifier.series);
+      if(!_compatible(declared.type,rhs.type)){
+        _error('reference_type_mismatch','Reference initializer has incorrect type',stmt.value.span);
+      }
+      _define(scope,stmt.name,_PineSymbol(stmt.name,declared),stmt.span);
       _syntaxOnly(stmt.span,'Reference declaration');
     }else if(stmt is PineVariableStatement){
       final rhs=_expression(stmt.value,scope);
@@ -311,7 +346,7 @@ class PineV6SemanticAnalyzer {
         _error('qualifier_mismatch','Value qualifier exceeds declared qualifier',stmt.value.span);
       }
       _define(scope,stmt.name,_PineSymbol(stmt.name,
-        PineTypeInfo(base,declared)),stmt.span);
+        PineTypeInfo(base,declared,mapKey:rhs.mapKey,mapValue:rhs.mapValue)),stmt.span);
     }else if(stmt is PineAssignmentStatement){
       final target=scope.lookup(stmt.name);
       if(target==null){
@@ -330,7 +365,7 @@ class PineV6SemanticAnalyzer {
       }
       if(target!=null) {
         target.type=PineTypeInfo(target.type.type,
-            _stronger(target.type.qualifier,rhs.qualifier));
+            _stronger(target.type.qualifier,rhs.qualifier),mapKey:target.type.mapKey,mapValue:target.type.mapValue);
       }
     }else if(stmt is PineExpressionStatement){
       _expression(stmt.expression,scope);
@@ -429,16 +464,12 @@ class PineV6SemanticAnalyzer {
     }else if(expr is PineMemberExpression){
       final qualified=expr.qualifiedName;
       final base=qualified?.split('.').first;
-      if(base=='color') {
-        value=const PineTypeInfo(PineBaseType.colorType,PineQualifier.constant);
-      }else if(base=='timeframe'||base=='syminfo') {
-        value=const PineTypeInfo(PineBaseType.stringType,PineQualifier.simple);
-      }else if(base=='barstate'){
-        value=const PineTypeInfo(PineBaseType.boolType,PineQualifier.series);
-      }else if(base=='math'&&qualified=='math.pi') {
-        value=const PineTypeInfo(PineBaseType.floatType,PineQualifier.constant);
-      }else if(base!=null&&_namespaces.contains(base)) {
-        value=PineTypeInfo.unknown;
+      final member=_pineMembers[qualified];
+      if(member!=null){
+        value=member.type;
+        if(member.unimplemented)_known(qualified!,expr.span);
+      }else if(base!=null&&_namespaces.contains(base)){
+        _error('undefined_name','Unknown Pine member: '+qualified!,expr.span);
       }else{
         _expression(expr.target,scope);
       }
@@ -518,6 +549,105 @@ class PineV6SemanticAnalyzer {
     return value;
   }
 
+  void _known(String name,PineSourceSpan span){
+    _error('known_unimplemented',
+        'Known Pine symbol; runtime not implemented yet: '+name,
+        span,severity:PineDiagnosticSeverity.unsupported);
+  }
+
+  PineTypeInfo _checkLibraryCall(PineCallExpression call,List<PineTypeInfo> info,
+      _LibrarySignature signature){
+    // Select overload by binding names and checking supplied types, not a
+    // namespace prefix. Report the closest candidate if none is valid.
+    final options=<List<String>>[];
+    for(final spec in signature.parameters) {
+      final params=spec.isEmpty?<String>[]:spec.split(' ');
+      options.add(params);
+    }
+    List<String>? best;
+    List<int>? bestSlots;
+    var bestScore=1<<30;
+    for(final params in options){
+      final names=params.map((p)=>p.split(':').first.replaceAll('?','')).toList();
+      final slots=<int>[];
+      final used=<int>{};
+      var score=0;
+      for(var i=0;i<info.length;i++){
+        final arg=call.arguments[i];
+        final slot=arg.name==null?i:names.indexOf(arg.name!);
+        slots.add(slot);
+        if(slot<0||slot>=params.length||!used.add(slot)){score+=4;continue;}
+        final rule=params[slot].split(':').last;
+        if(!_matchesLibraryRule(rule,info[i],info))score++;
+      }
+      for(var j=0;j<params.length;j++){
+        if(!params[j].split(':').first.endsWith('?')&&!used.contains(j))score+=4;
+      }
+      if(score<bestScore){best=params;bestSlots=slots;bestScore=score;}
+    }
+    final params=best!,slots=bestSlots!,used=<int>{};
+    for(var i=0;i<info.length;i++){
+      final arg=call.arguments[i],slot=slots[i];
+      if(slot<0||slot>=params.length){
+        _error(arg.name==null?'function_arity':'unknown_named_argument',
+          'Invalid argument '+(arg.name??'${i+1}')+' for '+call.name!,arg.span);
+      }else if(!used.add(slot)){
+        _error('duplicate_parameter_argument','Repeated argument for '+call.name!,arg.span);
+      }else if(!_matchesLibraryRule(params[slot].split(':').last,info[i],info)){
+        _error('argument_type','Wrong type or qualifier for '+call.name!+'.'+
+            params[slot].split(':').first.replaceAll('?',''),arg.span);
+      }
+    }
+    for(var j=0;j<params.length;j++){
+      if(!params[j].split(':').first.endsWith('?')&&!used.contains(j)){
+        _error('missing_function_argument','Missing '+params[j].split(':').first+
+            ' for '+call.name!,call.span);
+      }
+    }
+    final result=signature.result;
+    if(result=='ticker'){
+      final q=info.isEmpty?PineQualifier.simple:info.first.qualifier;
+      return PineTypeInfo(PineBaseType.stringType,
+          q==PineQualifier.series?q:PineQualifier.simple);
+    }
+    if(result=='mapValue'){
+      final map=info.where((x)=>x.type==PineBaseType.mapType).firstOrNull;
+      return PineTypeInfo(map?.mapValue??PineBaseType.unknown,PineQualifier.series);
+    }
+    if(result=='security'){
+      // Semantic only. Existing tuple shape checking remains responsible for
+      // tuple binding. Scalar expressions retain their actual type.
+      for(var i=0;i<slots.length;i++){
+        if(slots[i]>=0&&slots[i]<params.length&&
+            params[slots[i]].startsWith('expression:')){
+          return PineTypeInfo(info[i].type,PineQualifier.series);
+        }
+      }
+      return PineTypeInfo.unknown;
+    }
+    final pair=result.split('/');
+    return PineTypeInfo(_libraryTypes[pair[0]]!,
+        pair.length==2?_quals[pair[1]]!:PineQualifier.series);
+  }
+
+  bool _matchesLibraryRule(String rule,PineTypeInfo actual,List<PineTypeInfo> args){
+    if(actual.type==PineBaseType.unknown)return true;
+    final parts=rule.split('/');
+    if(parts.length>1&&actual.qualifier.index>_quals[parts[1]]!.index)return false;
+    for(final type in parts.first.split('|')){
+      if(type=='any')return true;
+      if(type=='key'||type=='value'){
+        final map=args.where((x)=>x.type==PineBaseType.mapType).firstOrNull;
+        final expected=type=='key'?map?.mapKey:map?.mapValue;
+        if(expected==null||_compatible(expected,actual.type))return true;
+      }else{
+        final expected=_libraryTypes[type];
+        if(expected!=null&&_compatible(expected,actual.type))return true;
+      }
+    }
+    return false;
+  }
+
   PineTypeInfo _call(PineCallExpression call,_PineScope scope){
     final name=call.name;
     if(name==null){
@@ -525,6 +655,7 @@ class PineV6SemanticAnalyzer {
       _error('invalid_callee','Expected function name',call.span);
       return PineTypeInfo.unknown;
     }
+    final beforeErrors=_diagnostics.length;
     final info=<PineTypeInfo>[];
     final seen=<String>{};
     var named=false;
@@ -541,9 +672,18 @@ class PineV6SemanticAnalyzer {
     }
     if(call.callee is PineGenericReferenceExpression){
       final generic=call.callee as PineGenericReferenceExpression;
+      if(name!='map.new'){
+        _error('unknown_function','Unknown Pine function: '+name,call.span);
+        return PineTypeInfo.unknown;
+      }
       _checkReferenceTypes(generic.typeArguments,generic.span);
+      if(info.isNotEmpty)_error('function_arity','map.new takes no arguments',call.span);
       _syntaxOnly(call.span,'Generic constructor');
-      return PineTypeInfo.unknown;
+      if(_diagnostics.length==beforeErrors)_known(name,call.span);
+      final types=generic.typeArguments;
+      return PineTypeInfo(PineBaseType.mapType,PineQualifier.series,
+          mapKey:types.length==2?_bases[types[0].name]:null,
+          mapValue:types.length==2?_bases[types[1].name]:null);
     }
     if(name=='int'){
       if(info.length!=1){
@@ -566,7 +706,7 @@ class PineV6SemanticAnalyzer {
           call.arguments.first.span,'indicator_title_type');
       return PineTypeInfo.voidType;
     }
-    if(_plots.contains(name)||name=='alert') {
+    if(_plots.contains(name)) {
       if(['plot','hline'].contains(name)&&info.isNotEmpty&&
           !_numeric(info.first.type)&&info.first.type!=PineBaseType.unknown){
         _error('plot_value_type','Plot series must be numeric',call.arguments.first.span);
@@ -647,12 +787,15 @@ class PineV6SemanticAnalyzer {
       }
       return function.type;
     }
-    if(name.startsWith('input.')){
-      final kind=name.substring(6);
-      return PineTypeInfo(_bases[kind]??PineBaseType.unknown,
-          PineQualifier.input);
+    final registered=_pineCalls[name];
+    if(registered!=null){
+      final result=_checkLibraryCall(call,info,registered);
+      if(registered.unimplemented&&_diagnostics.length==beforeErrors){
+        _known(name,call.span);
+      }
+      return result;
     }
-    if(name.startsWith('ta.')){
+    if(PineFunctionRegistry.ta.containsKey(name)){
       final signature=PineFunctionRegistry.ta[name];
       if(signature?.booleanResult==true){
         return const PineTypeInfo(PineBaseType.boolType,PineQualifier.series);
@@ -694,22 +837,59 @@ class PineV6SemanticAnalyzer {
       }
       return const PineTypeInfo(PineBaseType.floatType,PineQualifier.series);
     }
-    if(name.startsWith('request.')){
-      return const PineTypeInfo(PineBaseType.floatType,PineQualifier.series);
+
+    // https://www.tradingview.com/pine-script-reference/v6/#fun_math.max
+    // All-int overloads return int; mixed numeric overloads return float.
+    if(name=='math.max'){
+      if(info.length<2){
+        _error('function_arity','math.max requires at least two numbers',call.span);
+      }
+      var qual=PineQualifier.constant;
+      var type=PineBaseType.intType;
+      var unknown=false;
+      for(var i=0;i<info.length;i++){
+        final t=info[i];
+        qual=_stronger(qual,t.qualifier);
+        if(t.type==PineBaseType.unknown){unknown=true;}
+        else if(!_numeric(t.type)){
+          _error('argument_type','math.max requires numeric arguments',call.arguments[i].span);
+        }else if(t.type==PineBaseType.floatType){type=PineBaseType.floatType;}
+        // The reference exposes numbered variadic parameters.
+        final argName=call.arguments[i].name;
+        if(argName!=null&&argName!='number$i'){
+          _error('unknown_named_argument','Invalid math.max argument: '+argName,call.arguments[i].span);
+        }
+      }
+      return PineTypeInfo(unknown&&type!=PineBaseType.floatType
+          ?PineBaseType.unknown:type,qual);
     }
-    if(name.startsWith('math.')){
+    // https://www.tradingview.com/pine-script-reference/v6/#fun_str.contains
+    // const/simple/series string overloads return the corresponding bool.
+    if(name=='str.contains'){
+      const parameters=['source','str'];
+      final supplied=<String>{};
+      var qual=PineQualifier.constant;
+      for(var i=0;i<info.length;i++){
+        final arg=call.arguments[i];
+        final parameter=arg.name??(i<parameters.length?parameters[i]:null);
+        if(parameter==null||!parameters.contains(parameter)){
+          _error('unknown_named_argument','Invalid str.contains argument: '+(arg.name??'${i+1}'),arg.span);
+        }else if(!supplied.add(parameter)){
+          _error('duplicate_parameter_argument','Repeated str.contains argument: '+parameter,arg.span);
+        }
+        _require(info[i],PineBaseType.stringType,arg.span,'argument_type');
+        qual=_stronger(qual,info[i].qualifier);
+      }
+      if(supplied.length!=2||info.length!=2){
+        _error('function_arity','str.contains requires source and str',call.span);
+      }
+      if(qual==PineQualifier.input)qual=PineQualifier.simple;
+      return PineTypeInfo(PineBaseType.boolType,qual);
+    }
+    if(const {'math.abs','math.min'}.contains(name)){
       var qual=PineQualifier.constant;
       for(final t in info)qual=_stronger(qual,t.qualifier);
       return PineTypeInfo(PineBaseType.floatType,qual);
-    }
-    if(name.startsWith('str.')){
-      return const PineTypeInfo(PineBaseType.stringType,PineQualifier.series);
-    }
-    if(name.startsWith('color.')){
-      return const PineTypeInfo(PineBaseType.colorType,PineQualifier.series);
-    }
-    if(name.startsWith('array.')||name.startsWith('timeframe.')){
-      return PineTypeInfo.unknown;
     }
     if(!_builtInFunctions.contains(name)){
       _error('unknown_function','Unknown Pine function: '+name,call.span);

@@ -5,7 +5,7 @@ name: Verify TradeLab Flutter Range History
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, test/flutter-all-fixes-20261116, feat/pine-stage1-instance-safe-runtime-20261123]
+    branches: [main, test/flutter-all-fixes-20261116, feat/pine-stage1-instance-safe-runtime-20261123, feat/pine-v10-02-semantic-registry-20261125]
     paths:
       - 'flutter_app/**'
       - '.github/workflows/verify-flutter-range.yml'
@@ -42,9 +42,11 @@ jobs:
         run: flutter pub get
       - name: Analyze Dart and Flutter
         run: flutter analyze --no-fatal-infos
+      - name: Prepare machine-readable test evidence
+        run: mkdir -p build/pine_audit
       - name: Verify historical tick archive and chart interactions
         run: |
-          flutter test test/range_older_page_test.dart \
+          flutter test --reporter expanded --file-reporter json:build/pine_audit/main.jsonl test/range_older_page_test.dart \
             test/range_bid_page_verifier_test.dart \
             test/range_older_page_scanner_test.dart \
             test/range_startup_loader_test.dart \
@@ -162,6 +164,9 @@ jobs:
             test/pine_v6_frontend_test.dart \
             test/pine_v10_01_syntax_test.dart \
             test/pine_ahv10_audit_test.dart \
+            test/pine_semantic_diagnostic_audit_test.dart \
+            test/pine_semantic_type_registry_test.dart \
+            test/pine_semantic_library_registry_test.dart \
             test/pine_v6_language_runtime_test.dart \
             test/pine_stage3b_ta_test.dart \
             test/pine_stage3b_reference_test.dart \
@@ -178,16 +183,27 @@ jobs:
       # than falsely failing CI on unrelated missing golden assets. Preserve
       # the original visual tests for environments with their true baselines.
       - name: Verify Long and Short catalog selection without missing goldens
-        run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'risk/reward drawings support both real long and short tools'
+        run: flutter test --reporter expanded --file-reporter json:build/pine_audit/extra_1.jsonl test/drawing_tools_sheet_test.dart --plain-name 'risk/reward drawings support both real long and short tools'
       - name: Verify Crossline catalog choice without missing screenshot goldens
-        run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'crossline is enabled as a single-touch trend drawing'
+        run: flutter test --reporter expanded --file-reporter json:build/pine_audit/extra_2.jsonl test/drawing_tools_sheet_test.dart --plain-name 'crossline is enabled as a single-touch trend drawing'
       - name: Verify Info Line selectable without unrelated missing Golden files
-        run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'Info Line is selectable and trend-only, without false Gann support'
+        run: flutter test --reporter expanded --file-reporter json:build/pine_audit/extra_3.jsonl test/drawing_tools_sheet_test.dart --plain-name 'Info Line is selectable and trend-only, without false Gann support'
       - name: Verify Trend Angle is a selectable source drawing without missing Goldens
-        run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'Trend Angle is selectable from the native two-anchor catalog'
+        run: flutter test --reporter expanded --file-reporter json:build/pine_audit/extra_4.jsonl test/drawing_tools_sheet_test.dart --plain-name 'Trend Angle is selectable from the native two-anchor catalog'
       # The original bug appears on phones whose local timezone differs
       # from the selected chart timezone (e.g. New York on a Yemen device).
       - name: Verify chart weekdays under Yemen device timezone
         env:
           TZ: Asia/Aden
-        run: flutter test test/chart_scale_settings_test.dart
+        run: flutter test --reporter expanded --file-reporter json:build/pine_audit/extra_5.jsonl test/chart_scale_settings_test.dart
+      - name: Summarize actual test events and Pine diagnostics
+        if: ${{ always() }}
+        run: python3 ../tools/pine/summarize_ci_audit.py
+      - name: Upload full Pine diagnostic and test evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pine-diagnostic-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flutter_app/build/pine_audit/
+          if-no-files-found: error
+          retention-days: 30

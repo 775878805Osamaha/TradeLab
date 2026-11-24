@@ -1,0 +1,859 @@
+{
+  "source": {
+    "run_id": 45507793923,
+    "job_id": 138847388635,
+    "head_sha": "15ee45280ca95ec5f22c86546425a1b9f4cd879d",
+    "log_url": "https://github.com/775878805Osamaha/TradeLab/actions/runs/45507793923/job/138847388635",
+    "counts_source": "PINE_FULL_COUNTS and PINE_FULL_DIAG from completed job log",
+    "fixture_git_blob": "efd3b24b629fbfa5baf0a22b01af9a4ba078ace1",
+    "fixture_sha256": "c56228d7c374848392823d0ab7be18fae31c64871b734f5cb576d75d06e504c7",
+    "fixture_sha256_source": "Previously verified exact Git blob in V10-01 CI checkpoint"
+  },
+  "counts": {
+    "lexer": 0,
+    "parser": 0,
+    "completed": true,
+    "lastVisitedLine": 443,
+    "total": 91,
+    "type_error": 16,
+    "unresolved_name": 58,
+    "other_error": 0,
+    "unsupported_notice": 17,
+    "other_notice": 0
+  },
+  "diagnostics": [
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "logical_type",
+      "line": 116,
+      "column": 10,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "logical_type",
+      "line": 116,
+      "column": 49,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "condition_type",
+      "line": 119,
+      "column": 37,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "logical_type",
+      "line": 124,
+      "column": 36,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 126,
+      "column": 30,
+      "message": "Unknown Pine function: ticker.standard"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 126,
+      "column": 12,
+      "message": "Unknown Pine function: ticker.heikinashi"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "undefined_name",
+      "line": 127,
+      "column": 105,
+      "message": "Undeclared Pine identifier: barmerge"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "arithmetic_type",
+      "line": 128,
+      "column": 17,
+      "message": "Arithmetic requires numeric arguments"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "undefined_name",
+      "line": 140,
+      "column": 108,
+      "message": "Undeclared Pine identifier: barmerge"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 149,
+      "column": 17,
+      "message": "Unknown Pine function: time"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "logical_type",
+      "line": 221,
+      "column": 38,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "logical_type",
+      "line": 221,
+      "column": 66,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "logical_type",
+      "line": 221,
+      "column": 114,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "logical_type",
+      "line": 221,
+      "column": 141,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "logical_type",
+      "line": 221,
+      "column": 191,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "logical_type",
+      "line": 221,
+      "column": 218,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "condition_type",
+      "line": 221,
+      "column": 267,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "condition_type",
+      "line": 221,
+      "column": 313,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "condition_type",
+      "line": 221,
+      "column": 359,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "condition_type",
+      "line": 221,
+      "column": 405,
+      "message": "Expected boolType, found stringType"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "undefined_name",
+      "line": 223,
+      "column": 78,
+      "message": "Undeclared Pine identifier: barmerge"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 362,
+      "column": 28,
+      "message": "Unknown Pine function: strategy.closedtrades.exit_price"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 362,
+      "column": 72,
+      "message": "Unknown Pine function: strategy.closedtrades.entry_price"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 362,
+      "column": 128,
+      "message": "Unknown Pine function: strategy.closedtrades.size"
+    },
+    {
+      "category": "type_error",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "type_mismatch",
+      "line": 367,
+      "column": 12,
+      "message": "Reassignment has incompatible type"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 386,
+      "column": 28,
+      "message": "Unknown Pine function: map.get"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 386,
+      "column": 1,
+      "message": "Unknown Pine function: map.put"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 387,
+      "column": 30,
+      "message": "Unknown Pine function: map.get"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 387,
+      "column": 1,
+      "message": "Unknown Pine function: map.put"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 388,
+      "column": 30,
+      "message": "Unknown Pine function: map.get"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 388,
+      "column": 1,
+      "message": "Unknown Pine function: map.put"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 389,
+      "column": 31,
+      "message": "Unknown Pine function: map.get"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 389,
+      "column": 1,
+      "message": "Unknown Pine function: map.put"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 394,
+      "column": 12,
+      "message": "Unknown Pine function: map.get"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 395,
+      "column": 14,
+      "message": "Unknown Pine function: map.get"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 396,
+      "column": 14,
+      "message": "Unknown Pine function: map.get"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 397,
+      "column": 15,
+      "message": "Unknown Pine function: map.get"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "undefined_name",
+      "line": 405,
+      "column": 34,
+      "message": "Undeclared Pine identifier: position"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 405,
+      "column": 24,
+      "message": "Unknown Pine function: table.new"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 406,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 407,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 408,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 409,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 410,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 411,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 412,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 413,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 414,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 415,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 416,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 417,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 418,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 419,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 420,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 421,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 422,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 423,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 424,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 425,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 426,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 427,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 428,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 429,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 430,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 431,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 432,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 433,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 434,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 435,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 436,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 437,
+      "column": 1,
+      "message": "Unknown Pine function: table.cell"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 441,
+      "column": 5,
+      "message": "Unknown Pine function: strategy.entry"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "undefined_name",
+      "line": 441,
+      "column": 429,
+      "message": "Undeclared Pine identifier: alert"
+    },
+    {
+      "category": "unresolved_name",
+      "stage": "semantic",
+      "severity": "error",
+      "code": "unknown_function",
+      "line": 443,
+      "column": 5,
+      "message": "Unknown Pine function: strategy.exit"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 127,
+      "column": 1,
+      "message": "Tuple declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 142,
+      "column": 1,
+      "message": "Tuple declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 143,
+      "column": 1,
+      "message": "Tuple declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 144,
+      "column": 1,
+      "message": "Tuple declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 223,
+      "column": 1,
+      "message": "Tuple declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 378,
+      "column": 11,
+      "message": "int() cast parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 379,
+      "column": 29,
+      "message": "Generic constructor parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 379,
+      "column": 1,
+      "message": "Reference declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 380,
+      "column": 31,
+      "message": "Generic constructor parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 380,
+      "column": 1,
+      "message": "Reference declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 381,
+      "column": 31,
+      "message": "Generic constructor parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 381,
+      "column": 1,
+      "message": "Reference declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 382,
+      "column": 32,
+      "message": "Generic constructor parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 382,
+      "column": 1,
+      "message": "Reference declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 393,
+      "column": 35,
+      "message": "int() cast parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 405,
+      "column": 1,
+      "message": "Reference declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 441,
+      "column": 5,
+      "message": "Comma-separated statement sequence parsed and checked; runtime not implemented yet"
+    }
+  ],
+  "ci": {
+    "passed": 1116,
+    "skipped": 1,
+    "failed": 0,
+    "failed_source": "Completed successful workflow and all six test invocation success summaries",
+    "summaries": [
+      "2026-11-24T23:13:32.5342829Z 🎉 1101 tests passed, 1 skipped.",
+      "2026-11-24T23:13:34.2877048Z 🎉 1 test passed.",
+      "2026-11-24T23:13:35.9966968Z 🎉 1 test passed.",
+      "2026-11-24T23:13:37.6822012Z 🎉 1 test passed.",
+      "2026-11-24T23:13:39.4136458Z 🎉 1 test passed.",
+      "2026-11-24T23:13:42.1048200Z 🎉 11 tests passed."
+    ]
+  }
+}
