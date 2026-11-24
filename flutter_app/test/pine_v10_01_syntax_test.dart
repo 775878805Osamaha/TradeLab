@@ -18,17 +18,20 @@ void refuses(String body){
 
 void main(){
   test('tuple declaration AST spans, order, typed literal outputs',(){
-    final r=prepare('[a, b, c] = [1, close, true]\nx = a + b\nflag = c and true');
+    final r=prepare('f() => [1, close, true]\n[a, b, c] = f()\nx = a + b\nflag = c and true');
     expect(r.hasErrors,isFalse,reason:r.diagnostics.join('\n'));
-    final node=r.ast.statements[1] as PineTupleDeclarationStatement;
+    final node=r.ast.statements[2] as PineTupleDeclarationStatement;
     expect(node.targets.map((x)=>x.name),['a','b','c']);
     expect(node.targets.map((x)=>x.span.column),[2,5,8]);
-    expect(node.span.line,3);
+    expect(node.span.line,4);
     expect(node.toJson()['node'],'tuple_declare');
-    expect(node.value,isA<PineTupleExpression>());
-    final use=r.ast.statements[2] as PineVariableStatement;
+    expect(node.value,isA<PineCallExpression>());
+    final fn=r.ast.statements[1] as PineFunctionStatement;
+    expect((fn.body.single as PineExpressionStatement).expression,isA<PineTupleExpression>());
+    final use=r.ast.statements[3] as PineVariableStatement;
     expect(r.semantic.inferred[use.value]!.type,PineBaseType.floatType);
-    refuses('[a, b] = [1,2]');
+    expect(r.semantic.inferred[use.value]!.qualifier,PineQualifier.series);
+    refuses('f() => [1,2]\n[a, b] = f()');
   });
   test('known tuple function signatures: only semantic binding',(){
     for(final expr in ['ta.macd(close, 12, 26, 9)','ta.dmi(14, 14)','ta.bb(close,20,2)']){
@@ -39,25 +42,26 @@ void main(){
     refuses('f() => [1, true]\n[a,b] = f()\nflag = b and true');
   });
   test('tuple arity and scalar reject at exact location',(){
-    final a=error(prepare('[a,b] = [1,2,3]'),'tuple_arity');
+    final a=error(prepare('[a,b] = ta.macd(close,12,26,9)'),'tuple_arity');
     expect([a.line,a.column],[3,1]);
     final b=error(prepare('[a,b] = 1'),'tuple_required');
     expect([b.line,b.column],[3,9]);
-    expect(error(prepare('[a,b] = ta.macd(close,12,26,9)'),'tuple_arity').line,3);
+    expect(error(prepare('[a,b] = [1,2]'),'tuple_source').line,3);
+    expect(error(prepare('[a,b] = request.security("X","60",close)'),'tuple_required').line,3);
   });
   test('tuple duplicate and reassign errors; repeated discard allowed',(){
-    final d=error(prepare('[a, a] = [1,2]'),'duplicate_name');
+    final d=error(prepare('[a, a] = ta.supertrend(3,10)'),'duplicate_name');
     expect([d.line,d.column],[3,5]);
-    expect(error(prepare('a = 1\n[a,b] = [1,2]'),'duplicate_name').line,4);
+    expect(error(prepare('a = 1\n[a,b] = ta.supertrend(3,10)'),'duplicate_name').line,4);
     final q=error(prepare('[a,b] := [1,2]'),'tuple_reassignment');
     expect([q.line,q.column],[3,7]);
-    refuses('[_, _, x] = [1, 2, 3]');
-    expect(error(prepare('[_, x] = [1,2]\ny = _'),'undefined_name').line,4);
+    refuses('[_, _, x] = ta.macd(close,12,26,9)');
+    expect(error(prepare('[_, x] = ta.supertrend(3,10)\ny = _'),'undefined_name').line,4);
   });
   test('tuple invalid target and local scope diagnostics',(){
     final d=error(prepare('[a, 2] = [1,2]'),'expected_identifier');
     expect([d.line,d.column],[3,5]);
-    expect(error(prepare('if true\n    [a,b] = [1,2]\nx = a'),'undefined_name').line,5);
+    expect(error(prepare('if true\n    [a,b] = ta.supertrend(3,10)\nx = a'),'undefined_name').line,5);
   });
   test('comma statements preserve order and same lexical scope',(){
     final r=prepare('if true\n    a = math.max(1,2), b = a + 1, alert("ok")');
@@ -70,6 +74,7 @@ void main(){
     expect(seq.statements[1].span.column,24);
     expect((seq.statements[2] as PineExpressionStatement).expression,isA<PineCallExpression>());
     refuses('a = 1, b = a + 1');
+    refuses('f() => a = 1, [a, close]\n[x,y] = f()');
   });
   test('comma sequence still checks scope and errors',(){
     final d=error(prepare('if true\n    a = 1, b = missing'),'undefined_name');
@@ -77,6 +82,14 @@ void main(){
     final trailing=error(prepare('a = 1,'),'expected_sequence_statement');
     expect(trailing.line,3);
     expect(error(prepare('if true\n    a = 1, plot(close)'),'plot_local_scope').line,4);
+  });
+  test('unsupported notices do not consume semantic error capacity',(){
+    final body=List.generate(50,(i)=>'a$i = int(close)').join('\n');
+    final r=prepare('$body\nbad = missing');
+    final d=error(r,'undefined_name');
+    expect([d.line,d.column],[53,7]);
+    expect(r.semantic.diagnostics.where((d)=>d.code=='syntax_only'),hasLength(48));
+    expect(r.hasErrors,isTrue);
   });
   test('na literal and callable are distinct; int cast parses and is gated',(){
     final r=prepare('float a = na\nx = na(a)\ny = int(close)');

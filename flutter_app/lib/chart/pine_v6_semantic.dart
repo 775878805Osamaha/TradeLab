@@ -42,6 +42,8 @@ class PineV6SemanticAnalyzer {
   final int maxSymbols;
   final Duration maxDuration;
   final List<PineDiagnostic> _diagnostics=[];
+  // Keep syntax-only notices out of the original 48-error budget.
+  final List<PineDiagnostic> _unsupportedDiagnostics=[];
   final Map<PineExpression,PineTypeInfo> _inferred={};
   late Stopwatch _clock;
   var _visited=0;
@@ -75,7 +77,7 @@ class PineV6SemanticAnalyzer {
   };
 
   PineSemanticResult analyze(PineScriptAst ast){
-    _diagnostics.clear();_inferred.clear();_symbols=0;_visited=0;
+    _diagnostics.clear();_unsupportedDiagnostics.clear();_inferred.clear();_symbols=0;_visited=0;
     _functionName=null;_loopDepth=0;_clock=Stopwatch()..start();
     final root=_PineScope(null);_global=root;
     for(final name in <String>['open','high','low','close','volume',
@@ -100,7 +102,7 @@ class PineV6SemanticAnalyzer {
     }
     _clock.stop();
     return PineSemanticResult(
-      List.unmodifiable(_diagnostics),
+      List.unmodifiable([..._diagnostics,..._unsupportedDiagnostics]),
       Map.unmodifiable(_inferred),
     );
   }
@@ -119,7 +121,9 @@ class PineV6SemanticAnalyzer {
   }
   void _error(String code,String message,PineSourceSpan loc,
       {PineDiagnosticSeverity severity=PineDiagnosticSeverity.error}){
-    if(_diagnostics.length<48)_diagnostics.add(PineDiagnostic(
+    final destination=severity==PineDiagnosticSeverity.unsupported
+        ?_unsupportedDiagnostics:_diagnostics;
+    if(destination.length<48)destination.add(PineDiagnostic(
       PineDiagnosticStage.semantic,code,message,loc,severity:severity));
   }
   void _define(_PineScope scope,String name,_PineSymbol symbol,PineSourceSpan loc){
@@ -169,7 +173,10 @@ class PineV6SemanticAnalyzer {
   }
   List<PineTypeInfo>? _tupleComponents(PineExpression expr,_PineScope scope){
     if(expr is PineTupleExpression){
-      return [for(final item in expr.values)_inferred[item]??PineTypeInfo.unknown];
+      final types=[for(final item in expr.values)_inferred[item]??PineTypeInfo.unknown];
+      var common=PineQualifier.constant;
+      for(final type in types){common=_stronger(common,type.qualifier);}
+      return [for(final type in types)PineTypeInfo(type.type,common)];
     }
     if(expr is PineCallExpression){
       const numeric=PineTypeInfo(PineBaseType.floatType,PineQualifier.series);
@@ -187,12 +194,18 @@ class PineV6SemanticAnalyzer {
           if(requested==null&&expr.arguments.length>=3&&
               expr.arguments[2].name==null)requested=expr.arguments[2];
           final value=requested?.value;
-          if(value is PineTupleExpression)return _tupleComponents(value,scope);
+          if(value is PineTupleExpression){
+            return [for(final type in _tupleComponents(value,scope)!)
+              PineTypeInfo(type.type,PineQualifier.series)];
+          }
           return null;
       }
       final function=scope.lookup(expr.name??'')?.function;
       if(function!=null&&function.body.isNotEmpty){
-        final last=function.body.last;
+        var last=function.body.last;
+        if(last is PineSequenceStatement&&last.statements.isNotEmpty){
+          last=last.statements.last;
+        }
         if(last is PineExpressionStatement&&last.expression is PineTupleExpression){
           return _tupleComponents(last.expression,scope);
         }
@@ -221,13 +234,14 @@ class PineV6SemanticAnalyzer {
       final rhs=_expression(stmt.value,scope);
       final components=_tupleComponents(stmt.value,scope);
       var valid=true;
-      if(components!=null&&components.length!=stmt.targets.length){
+      if(stmt.value is PineTupleExpression){
+        _error('tuple_source','Tuple declarations require a function or structure result, not a standalone tuple literal',stmt.value.span);
+        valid=false;
+      }else if(components!=null&&components.length!=stmt.targets.length){
         _error('tuple_arity','Tuple target count does not match returned values',stmt.span);
         valid=false;
       }else if(components==null&&rhs.type!=PineBaseType.unknown&&
-          rhs.type!=PineBaseType.tupleType&&
-          !(stmt.value is PineCallExpression&&
-            (stmt.value as PineCallExpression).name=='request.security')){
+          rhs.type!=PineBaseType.tupleType){
         _error('tuple_required','Tuple declaration requires a tuple result',stmt.value.span);
         valid=false;
       }else if(components==null){

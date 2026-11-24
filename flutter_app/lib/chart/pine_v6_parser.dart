@@ -137,9 +137,11 @@ class PineV6Parser {
     final first=_statement();
     if(_ownsBlock(first)||!_is(','))return first;
     final members=<PineStatement>[first];
-    while(_accept(',')){
-      if(_done||_kind(PineTokenKind.newline)||_kind(PineTokenKind.dedent)){
-        _fail('expected_sequence_statement','Expected statement after comma');
+    while(_is(',')){
+      final comma=_take();
+      if(_done||_kind(PineTokenKind.newline)||_kind(PineTokenKind.dedent)||
+          _at.span.line!=comma.span.line){
+        _fail('expected_sequence_statement','Expected statement after comma on the same line',comma);
       }
       final next=_statement();
       if(_ownsBlock(next))_fail('sequence_block','Block cannot follow a statement comma');
@@ -310,7 +312,7 @@ class PineV6Parser {
         if(_kind(PineTokenKind.newline)){
           body=_block();
         } else {
-          body=[PineExpressionStatement(_at.span,_expression())];
+          body=[_sequence()];
         }
         arms.add(PineSwitchArm(at,key,body));
         if(!_kind(PineTokenKind.newline)&&!_kind(PineTokenKind.dedent)&&
@@ -348,7 +350,7 @@ class PineV6Parser {
     _expected('=>');
     final body=_kind(PineTokenKind.newline)
         ? _block()
-        : <PineStatement>[PineExpressionStatement(_at.span,_expression())];
+        : <PineStatement>[_sequence()];
     return PineFunctionStatement(start,name,parameters,body,
         returnType:returnType);
   }
