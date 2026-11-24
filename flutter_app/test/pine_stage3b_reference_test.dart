@@ -67,7 +67,7 @@ void main(){
     for(final row in matrix){
       expect(row['status'],classification);
       expect(row['verification'],'internal_independent_formula');
-      expect(row['tradingView'],names.contains(row['name'])?'pending_exact_head_ci':'not_verified');
+      expect(row['tradingView'],names.contains(row['name'])?'verified_scoped_capture':'not_verified');
       expect((row['longReference'] as String).startsWith('seeded-360-ohlcv-v2'),names.contains(row['name']));
     }
     for(final row in doc['bars'] as List){expect(number(row[4]),greaterThanOrEqualTo(0));}

@@ -160,7 +160,18 @@ void main(){
         expect(external['absoluteTolerance'],tolerance);
         expect(external['startIndex'],startIndex);
         expect(external['endIndexExclusive'],excludedIndex);
-        expect(external['status'],'pending_exact_head_ci');
+        expect(external['status'],'verified_scoped_capture');
+        expect(external['classification'],'مطابقة لـ TradingView على TVC:GOLD 1h بطول 14 بتسامح 1e-6');
+        expect(external['testedHead'],'0ce365013639f70d2fc588f562e6dbb9dd2ebb9d');
+        expect(external['ciRun'],45407514078);
+        expect(external['referenceCount'],698);
+        final warmup=external['warmup'] as Map;
+        expect(warmup['startIndex'],0);
+        expect(warmup['endIndexExclusive'],300);
+        expect(warmup['reference'],isFalse);
+        expect(warmup['replayMayDiffer'],isTrue);
+        expect(warmup['knownLimitation'],contains('not a universal convergence guarantee'));
+        expect(row['tradingView'],'verified_scoped_capture');
       }else{
         expect(row['externalReference'],isNull);
         expect(row['tradingView'],'not_verified');

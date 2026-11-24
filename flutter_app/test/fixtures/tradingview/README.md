@@ -24,3 +24,6 @@ plot(ta.rsi(close,14), "rsi")
 plot(ta.atr(14), "atr")
 plot(ta.rma(close,14), "rma")
 ```
+
+## Verified scoped result
+CI 45407514078, exact head `0ce365013639f70d2fc588f562e6dbb9dd2ebb9d`: 1099 passed, 0 failed, 1 skipped (optional additional JSON only); all 10 CSV tests passed. See `docs/evidence/PINE_STAGE3B_TVC_GOLD_DART_CI_45407514078.json`. When available history starts later than TradingView's calculation history, EMA/RMA/ATR/RSI can differ or be na during early bars. Indices 0..299 of this capture are diagnostic only; approximately 300 preceding available bars is a tested cutoff for this capture, not a universal convergence guarantee. Replay near the beginning of available history may show different values; never use future candles or seed from reference outputs.
