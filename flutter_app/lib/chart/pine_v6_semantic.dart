@@ -163,9 +163,114 @@ class PineV6SemanticAnalyzer {
       _statement(statement,scope);
     }
   }
+  void _syntaxOnly(PineSourceSpan span,String feature){
+    _error('syntax_only',feature+' parsed and checked; runtime not implemented yet',
+      span,severity:PineDiagnosticSeverity.unsupported);
+  }
+  List<PineTypeInfo>? _tupleComponents(PineExpression expr,_PineScope scope){
+    if(expr is PineTupleExpression){
+      return [for(final item in expr.values)_inferred[item]??PineTypeInfo.unknown];
+    }
+    if(expr is PineCallExpression){
+      const numeric=PineTypeInfo(PineBaseType.floatType,PineQualifier.series);
+      // Signature metadata only, not TA implementation or evaluation.
+      switch(expr.name){
+        case 'ta.macd': case 'ta.bb': case 'ta.dmi':
+          return const [numeric,numeric,numeric];
+        case 'ta.supertrend':
+          return const [numeric,numeric];
+        case 'request.security':
+          PineCallArgument? requested;
+          for(final arg in expr.arguments){
+            if(arg.name=='expression')requested=arg;
+          }
+          if(requested==null&&expr.arguments.length>=3&&
+              expr.arguments[2].name==null)requested=expr.arguments[2];
+          final value=requested?.value;
+          if(value is PineTupleExpression)return _tupleComponents(value,scope);
+          return null;
+      }
+      final function=scope.lookup(expr.name??'')?.function;
+      if(function!=null&&function.body.isNotEmpty){
+        final last=function.body.last;
+        if(last is PineExpressionStatement&&last.expression is PineTupleExpression){
+          return _tupleComponents(last.expression,scope);
+        }
+      }
+    }
+    return null;
+  }
+  void _checkReferenceTypes(List<PineIdentifierExpression> types,
+      PineSourceSpan span){
+    if(types.length!=2){
+      _error('map_type_arity','Map requires key and value type arguments',span);
+    }
+    for(final type in types){
+      if(!_bases.containsKey(type.name)){
+        _error('unsupported_type_argument','Type argument not supported: '+type.name,
+          type.span);
+      }
+    }
+  }
   void _statement(PineStatement stmt,_PineScope scope){
     if(!_budget(stmt.span))return;
-    if(stmt is PineVariableStatement){
+    if(stmt is PineSequenceStatement){
+      _syntaxOnly(stmt.span,'Comma-separated statement sequence');
+      _body(stmt.statements,scope);
+    }else if(stmt is PineTupleDeclarationStatement){
+      final rhs=_expression(stmt.value,scope);
+      final components=_tupleComponents(stmt.value,scope);
+      var valid=true;
+      if(components!=null&&components.length!=stmt.targets.length){
+        _error('tuple_arity','Tuple target count does not match returned values',stmt.span);
+        valid=false;
+      }else if(components==null&&rhs.type!=PineBaseType.unknown&&
+          rhs.type!=PineBaseType.tupleType&&
+          !(stmt.value is PineCallExpression&&
+            (stmt.value as PineCallExpression).name=='request.security')){
+        _error('tuple_required','Tuple declaration requires a tuple result',stmt.value.span);
+        valid=false;
+      }else if(components==null){
+        _error('tuple_shape_unknown','Tuple result shape is not resolved',stmt.value.span,
+          severity:PineDiagnosticSeverity.unsupported);
+      }
+      final names=<String>{};
+      for(final target in stmt.targets){
+        if(target.name=='_')continue;
+        if(!names.add(target.name)||scope.locals.containsKey(target.name)){
+          _error('duplicate_name','Name is already defined in this scope: '+target.name,
+            target.span);
+          valid=false;
+        }
+      }
+      // Validate the full declaration before introducing any bindings.
+      if(valid){
+        for(var i=0;i<stmt.targets.length;i++){
+          final target=stmt.targets[i];
+          if(target.name=='_')continue;
+          final type=components==null?PineTypeInfo.unknown:components[i];
+          _define(scope,target.name,_PineSymbol(target.name,type),target.span);
+        }
+      }
+      _syntaxOnly(stmt.span,'Tuple declaration');
+    }else if(stmt is PineReferenceVariableStatement){
+      _expression(stmt.value,scope);
+      if(stmt.typeName=='map'){
+        _checkReferenceTypes(stmt.typeArguments,stmt.span);
+        final value=stmt.value;
+        if(value is PineCallExpression&&value.callee is PineGenericReferenceExpression){
+          final generic=value.callee as PineGenericReferenceExpression;
+          if(value.name=='map.new'&&
+              generic.typeArguments.map((t)=>t.name).join(',')!=
+              stmt.typeArguments.map((t)=>t.name).join(',')){
+            _error('reference_type_mismatch','Map constructor types must match declaration',
+              value.span);
+          }
+        }
+      }
+      _define(scope,stmt.name,_PineSymbol(stmt.name,PineTypeInfo.unknown),stmt.span);
+      _syntaxOnly(stmt.span,'Reference declaration');
+    }else if(stmt is PineVariableStatement){
       final rhs=_expression(stmt.value,scope);
       final base=stmt.typeName==null?rhs.type:_bases[stmt.typeName!]??PineBaseType.unknown;
       // Only a literal na (not an unresolved user-function return type)
@@ -419,6 +524,22 @@ class PineV6SemanticAnalyzer {
       }else if(named){
         _error('positional_after_named','Positional argument after named argument',arg.span);
       }
+    }
+    if(call.callee is PineGenericReferenceExpression){
+      final generic=call.callee as PineGenericReferenceExpression;
+      _checkReferenceTypes(generic.typeArguments,generic.span);
+      _syntaxOnly(call.span,'Generic constructor');
+      return PineTypeInfo.unknown;
+    }
+    if(name=='int'){
+      if(info.length!=1){
+        _error('cast_arity','int() expects exactly one argument',call.span);
+      }else if(!_numeric(info.first.type)&&info.first.type!=PineBaseType.unknown){
+        _error('cast_type','int() requires a numeric value',call.arguments.first.span);
+      }
+      _syntaxOnly(call.span,'int() cast');
+      return PineTypeInfo(PineBaseType.intType,
+        info.isEmpty?PineQualifier.constant:info.first.qualifier);
     }
     if(_plots.contains(name)&&scope.depth>0){
       _error('plot_local_scope',name+'() is not permitted in a local Pine scope',call.span);

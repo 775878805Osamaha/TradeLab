@@ -95,6 +95,14 @@ class PineCallArgument extends PineAstNode {
   final PineExpression value;
   @override Map<String,Object?> toJson()=>{'name':name,'value':value.toJson()};
 }
+/// A generic constructor reference, distinct from numeric comparisons.
+class PineGenericReferenceExpression extends PineExpression {
+  const PineGenericReferenceExpression(super.span,this.target,this.typeArguments);
+  final PineExpression target;
+  final List<PineIdentifierExpression> typeArguments;
+  @override Map<String,Object?> toJson()=>{'node':'generic_reference',
+    'target':target.toJson(),'types':typeArguments.map((t)=>t.name).toList()};
+}
 class PineCallExpression extends PineExpression {
   const PineCallExpression(super.span,this.callee,this.arguments);
   final PineExpression callee;
@@ -102,6 +110,10 @@ class PineCallExpression extends PineExpression {
   String? get name {
     if(callee is PineIdentifierExpression)return (callee as PineIdentifierExpression).name;
     if(callee is PineMemberExpression)return (callee as PineMemberExpression).qualifiedName;
+    if(callee is PineGenericReferenceExpression){
+      final target=(callee as PineGenericReferenceExpression).target;
+      if(target is PineMemberExpression)return target.qualifiedName;
+    }
     return null;
   }
   @override Map<String,Object?> toJson()=>{'node':'call','callee':callee.toJson(),'args':arguments.map((a)=>a.toJson()).toList()};
@@ -117,6 +129,32 @@ class PineVariableStatement extends PineStatement {
   final String? mode,typeName,qualifier;
   final PineExpression value;
   @override Map<String,Object?> toJson()=>{'node':'declare','name':name,'mode':mode,'type':typeName,'qualifier':qualifier,'value':value.toJson()};
+}
+/// Parse-only declarations. They intentionally do not inherit executable
+/// scalar declarations or expression statements.
+class PineTupleDeclarationStatement extends PineStatement {
+  const PineTupleDeclarationStatement(super.span,this.targets,this.value);
+  final List<PineIdentifierExpression> targets;
+  final PineExpression value;
+  @override Map<String,Object?> toJson()=>{'node':'tuple_declare',
+    'targets':targets.map((t)=>t.toJson()).toList(),'value':value.toJson()};
+}
+class PineSequenceStatement extends PineStatement {
+  const PineSequenceStatement(super.span,this.statements);
+  final List<PineStatement> statements;
+  @override Map<String,Object?> toJson()=>{'node':'sequence',
+    'body':statements.map((s)=>s.toJson()).toList()};
+}
+class PineReferenceVariableStatement extends PineStatement {
+  const PineReferenceVariableStatement(super.span,this.name,this.typeName,
+    this.typeArguments,this.value,{this.mode,this.qualifier});
+  final String name,typeName;
+  final String? mode,qualifier;
+  final List<PineIdentifierExpression> typeArguments;
+  final PineExpression value;
+  @override Map<String,Object?> toJson()=>{'node':'reference_declare',
+    'name':name,'type':typeName,'types':typeArguments.map((t)=>t.name).toList(),
+    'mode':mode,'qualifier':qualifier,'value':value.toJson()};
 }
 class PineAssignmentStatement extends PineStatement {
   const PineAssignmentStatement(super.span,this.name,this.operator,this.value);

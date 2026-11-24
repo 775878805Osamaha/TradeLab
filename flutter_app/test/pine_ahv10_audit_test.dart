@@ -13,6 +13,13 @@ void main() {
     final result = const PineV6Frontend().prepare(source);
     // ignore: avoid_print
     print('AHV10_STATUS ${result.status.name} tokens=${result.tokens.length} statements=${result.ast.statements.length}');
+    final errors=result.diagnostics.where((d)=>d.severity==PineDiagnosticSeverity.error).toList();
+    final parser=errors.where((d)=>d.stage==PineDiagnosticStage.parser).toList();
+    final semantic=errors.where((d)=>d.stage==PineDiagnosticStage.semantic).toList();
+    final sites=errors.map((d)=>'${d.line}:${d.column}').toSet();
+    // ignore: avoid_print
+    print('AHV10_COUNTS ${jsonEncode({'parserErrors':parser.length,'semanticErrors':semantic.length,'uniqueErrorSites':sites.length,'allDiagnostics':result.diagnostics.length,'semanticDiagnostics':result.semantic.diagnostics.length,'parserSites':parser.map((d)=>'${d.line}:${d.column}').toList()})}');
+    expect(parser,isEmpty,reason:'V10-01 syntax-only acceptance');
     for (final d in result.diagnostics) {
       // ignore: avoid_print
       print('AHV10_DIAG ${d.toString()}');

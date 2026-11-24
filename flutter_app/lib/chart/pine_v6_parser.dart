@@ -91,7 +91,7 @@ class PineV6Parser {
         _lines();continue;
       }
       try {
-        final statement = _statement();
+        final statement = _sequence();
         result.add(statement);
         if(!_ownsBlock(statement)&&!_done&&!_kind(PineTokenKind.dedent)&&
             !_kind(PineTokenKind.newline)) {
@@ -131,6 +131,56 @@ class PineV6Parser {
       s is PineWhileStatement || s is PineSwitchStatement ||
       s is PineFunctionStatement;
 
+  // Commas at statement depth only. Argument/tuple commas are consumed by
+  // expression parsing, and each member retains its own source span.
+  PineStatement _sequence(){
+    final first=_statement();
+    if(_ownsBlock(first)||!_is(','))return first;
+    final members=<PineStatement>[first];
+    while(_accept(',')){
+      if(_done||_kind(PineTokenKind.newline)||_kind(PineTokenKind.dedent)){
+        _fail('expected_sequence_statement','Expected statement after comma');
+      }
+      final next=_statement();
+      if(_ownsBlock(next))_fail('sequence_block','Block cannot follow a statement comma');
+      members.add(next);
+    }
+    return PineSequenceStatement(first.span,List.unmodifiable(members));
+  }
+
+  // Look ahead to distinguish a declaration from a bracket tuple expression.
+  // Invalid targets are then diagnosed at their exact token by _identifier.
+  bool _tupleDeclarationAhead(){
+    if(!_is('['))return false;
+    var depth=0;
+    for(var j=_i;j<tokens.length;j++){
+      final t=tokens[j];
+      if(t.kind==PineTokenKind.newline||t.kind==PineTokenKind.eof)return false;
+      if(t.text=='[')depth++;
+      if(t.text==']'){
+        depth--;
+        if(depth==0)return j+1<tokens.length&&
+          (tokens[j+1].text=='='||_assign.contains(tokens[j+1].text));
+      }
+    }
+    return false;
+  }
+
+  List<PineIdentifierExpression> _typeArguments(){
+    _expected('<');
+    final types=<PineIdentifierExpression>[];
+    do{
+      _budget();
+      if(!_kind(PineTokenKind.identifier)&&!_types.contains(_at.text)){
+        _fail('expected_type_argument','Expected type name');
+      }
+      final token=_take();
+      types.add(PineIdentifierExpression(token.span,token.text));
+    }while(_accept(','));
+    _expected('>');
+    return List.unmodifiable(types);
+  }
+
   PineStatement _statement(){
     _budget();
     final first=_at;
@@ -141,6 +191,19 @@ class PineV6Parser {
     if(_accept('break'))return PineControlStatement(first.span,'break');
     if(_accept('continue'))return PineControlStatement(first.span,'continue');
     if(_isFunctionHeader())return _function();
+    if(_tupleDeclarationAhead()){
+      _expected('[');
+      final targets=<PineIdentifierExpression>[];
+      do{
+        _budget();
+        final target=_identifier();
+        targets.add(PineIdentifierExpression(target.span,target.text));
+      }while(_accept(','));
+      _expected(']');
+      if(!_is('='))_fail('tuple_reassignment','Tuple declarations require =, not reassignment');
+      _expected('=');
+      return PineTupleDeclarationStatement(first.span,List.unmodifiable(targets),_expression());
+    }
     if(_kind(PineTokenKind.identifier)&&_assign.contains(_next.text)){
       final name=_take().text, op=_take().text;
       return PineAssignmentStatement(first.span,name,op,_expression());
@@ -149,7 +212,16 @@ class PineV6Parser {
     if(_is('var')||_is('varip'))mode.add(_take().text);
     String? qualifier,type;
     if(_qualifiers.contains(_at.text))qualifier=_take().text;
-    if(_types.contains(_at.text))type=_take().text;
+    if((_is('map')&&_next.text=='<')||
+       (_is('table')&&_next.kind==PineTokenKind.identifier)){
+      final referenceType=_take().text;
+      final typeArgs=referenceType=='map'?_typeArguments():<PineIdentifierExpression>[];
+      final name=_identifier().text;
+      _expected('=');
+      return PineReferenceVariableStatement(first.span,name,referenceType,
+        typeArgs,_expression(),mode:mode.isEmpty?null:mode.first,qualifier:qualifier);
+    }
+    if(_types.contains(_at.text)&&_next.text!='(')type=_take().text;
     if(mode.isNotEmpty||qualifier!=null||type!=null||
       (_kind(PineTokenKind.identifier)&&_next.text=='=')){
       final name=_identifier().text;
@@ -174,7 +246,7 @@ class PineV6Parser {
     while(!_done&&!_kind(PineTokenKind.dedent)) {
       final before=_i;
       try {
-        final statement = _statement();
+        final statement = _sequence();
         body.add(statement);
         if(!_ownsBlock(statement)&&!_done&&!_kind(PineTokenKind.newline)&&
             !_kind(PineTokenKind.dedent)) {
@@ -312,6 +384,9 @@ class PineV6Parser {
         final member=(_kind(PineTokenKind.identifier)||_kind(PineTokenKind.keyword))
             ? _take().text : _identifier().text;
         expr=PineMemberExpression(expr.span,expr,member);
+      }else if(_is('<')&&expr is PineMemberExpression&&
+          expr.qualifiedName=='map.new'){
+        expr=PineGenericReferenceExpression(expr.span,expr,_typeArguments());
       }else if(_accept('[')){
         final offset=_expression();
         _expected(']');
@@ -353,7 +428,13 @@ class PineV6Parser {
     if(_accept('true')||_accept('false')){
       return PineLiteralExpression(tok.span,tok.text,'bool');
     }
-    if(_accept('na'))return PineLiteralExpression(tok.span,'na','na');
+    // na is a literal unless followed by a call; casts are callable keywords.
+    if(_is('na')&&_next.text!='('){
+      _take();return PineLiteralExpression(tok.span,'na','na');
+    }
+    if(_next.text=='('&&(tok.text=='na'||_types.contains(tok.text))){
+      _take();return PineIdentifierExpression(tok.span,tok.text);
+    }
     if(_kind(PineTokenKind.identifier)||
         (tok.kind==PineTokenKind.keyword&&
          const {'indicator','strategy','library','input','color'}.contains(tok.text))){
