@@ -451,7 +451,18 @@ class PineV6SemanticAnalyzer {
     }else if(expr is PineMemberExpression){
       final qualified=expr.qualifiedName;
       final base=qualified?.split('.').first;
-      if(base=='color') {
+      // Official Pine v6 reference: exact properties, not namespace guesses.
+      // https://www.tradingview.com/pine-script-reference/v6/#var_timeframe.isminutes
+      // https://www.tradingview.com/pine-script-reference/v6/#var_chart.is_standard
+      // https://www.tradingview.com/pine-script-reference/v6/#var_syminfo.mintick
+      // https://www.tradingview.com/pine-script-reference/v6/#var_barstate.isconfirmed
+      if(qualified=='timeframe.isminutes'||qualified=='chart.is_standard'){
+        value=const PineTypeInfo(PineBaseType.boolType,PineQualifier.simple);
+      }else if(qualified=='syminfo.mintick'){
+        value=const PineTypeInfo(PineBaseType.floatType,PineQualifier.simple);
+      }else if(qualified=='barstate.isconfirmed'){
+        value=const PineTypeInfo(PineBaseType.boolType,PineQualifier.series);
+      }else if(base=='color') {
         value=const PineTypeInfo(PineBaseType.colorType,PineQualifier.constant);
       }else if(base=='timeframe'||base=='syminfo') {
         value=const PineTypeInfo(PineBaseType.stringType,PineQualifier.simple);
@@ -718,6 +729,54 @@ class PineV6SemanticAnalyzer {
     }
     if(name.startsWith('request.')){
       return const PineTypeInfo(PineBaseType.floatType,PineQualifier.series);
+    }
+    // https://www.tradingview.com/pine-script-reference/v6/#fun_math.max
+    // All-int overloads return int; mixed numeric overloads return float.
+    if(name=='math.max'){
+      if(info.length<2){
+        _error('function_arity','math.max requires at least two numbers',call.span);
+      }
+      var qual=PineQualifier.constant;
+      var type=PineBaseType.intType;
+      var unknown=false;
+      for(var i=0;i<info.length;i++){
+        final t=info[i];
+        qual=_stronger(qual,t.qualifier);
+        if(t.type==PineBaseType.unknown){unknown=true;}
+        else if(!_numeric(t.type)){
+          _error('argument_type','math.max requires numeric arguments',call.arguments[i].span);
+        }else if(t.type==PineBaseType.floatType){type=PineBaseType.floatType;}
+        // The reference exposes numbered variadic parameters.
+        final argName=call.arguments[i].name;
+        if(argName!=null&&argName!='number$i'){
+          _error('unknown_named_argument','Invalid math.max argument: '+argName,call.arguments[i].span);
+        }
+      }
+      return PineTypeInfo(unknown&&type!=PineBaseType.floatType
+          ?PineBaseType.unknown:type,qual);
+    }
+    // https://www.tradingview.com/pine-script-reference/v6/#fun_str.contains
+    // const/simple/series string overloads return the corresponding bool.
+    if(name=='str.contains'){
+      const parameters=['source','str'];
+      final supplied=<String>{};
+      var qual=PineQualifier.constant;
+      for(var i=0;i<info.length;i++){
+        final arg=call.arguments[i];
+        final parameter=arg.name??(i<parameters.length?parameters[i]:null);
+        if(parameter==null||!parameters.contains(parameter)){
+          _error('unknown_named_argument','Invalid str.contains argument: '+(arg.name??'${i+1}'),arg.span);
+        }else if(!supplied.add(parameter)){
+          _error('duplicate_parameter_argument','Repeated str.contains argument: '+parameter,arg.span);
+        }
+        _require(info[i],PineBaseType.stringType,arg.span,'argument_type');
+        qual=_stronger(qual,info[i].qualifier);
+      }
+      if(supplied.length!=2||info.length!=2){
+        _error('function_arity','str.contains requires source and str',call.span);
+      }
+      if(qual==PineQualifier.input)qual=PineQualifier.simple;
+      return PineTypeInfo(PineBaseType.boolType,qual);
     }
     if(name.startsWith('math.')){
       var qual=PineQualifier.constant;

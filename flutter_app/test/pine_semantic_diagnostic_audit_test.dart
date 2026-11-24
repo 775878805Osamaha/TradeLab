@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/pine_v6_frontend.dart';
 
@@ -12,6 +13,7 @@ PineScriptAst parseAudit(String source) {
 }
 
 String category(PineDiagnostic d) {
+  if(d.code=='known_unimplemented')return 'known_unimplemented';
   if(d.severity==PineDiagnosticSeverity.unsupported)return 'unsupported_notice';
   if(d.severity!=PineDiagnosticSeverity.error)return 'other_notice';
   if(d.code=='unknown_function'||d.code=='undefined_name')return 'unresolved_name';
@@ -56,25 +58,41 @@ void main() {
     expect(result.diagnostics.any((d)=>d.code=='semantic_limit'),isTrue);
   });
   test('original Pine fixture full diagnostic census, no execution',(){
-    final source=File('test/fixtures/pine/ahv10.pine').readAsStringSync();
+    final bytes=File('test/fixtures/pine/ahv10.pine').readAsBytesSync();
+    final source=utf8.decode(bytes);
+    final fingerprint=sha256.convert(bytes).toString();
+    expect(fingerprint,'c56228d7c374848392823d0ab7be18fae31c64871b734f5cb576d75d06e504c7');
     expect(const LineSplitter().convert(source),hasLength(443));
     final ast=parseAudit(source);
     final result=PineV6SemanticAnalyzer.forDiagnosticAudit().analyze(ast);
     expect(result.completed,isTrue,reason:'Do not report a partial count');
     expect(result.lastVisitedLine,443,reason:'Must inspect final source line');
     final counts=<String,int>{'type_error':0,'unresolved_name':0,
-      'other_error':0,'unsupported_notice':0,'other_notice':0};
+      'other_error':0,'known_unimplemented':0,'unsupported_notice':0,'other_notice':0};
+    final rows=<Map<String,Object?>>[];
     for(final d in result.diagnostics) {
       final kind=category(d);
       counts[kind]=counts[kind]!+1;
-      // ignore: avoid_print
-      print('PINE_FULL_DIAG ${jsonEncode({'category':kind,'stage':d.stage.name,
+      final row=<String,Object?>{'category':kind,'stage':d.stage.name,
         'severity':d.severity.name,'code':d.code,'line':d.line,
-        'column':d.column,'message':d.message})}');
+        'column':d.column,'message':d.message};
+      rows.add(row);
+      // ignore: avoid_print
+      print('PINE_FULL_DIAG ${jsonEncode(row)}');
     }
-    // ignore: avoid_print
-    print('PINE_FULL_COUNTS ${jsonEncode({'lexer':0,'parser':0,
+    final summary=<String,Object?>{'lexer':0,'parser':0,
       'completed':result.completed,'lastVisitedLine':result.lastVisitedLine,
-      'total':result.diagnostics.length,...counts})}');
+      'total':result.diagnostics.length,...counts};
+    final output=File('build/pine_audit/ahv10_full_diagnostics.json');
+    output.parent.createSync(recursive:true);
+    output.writeAsStringSync(const JsonEncoder.withIndent('  ').convert({
+      'fixture':'test/fixtures/pine/ahv10.pine','fixture_sha256':fingerprint,
+      'fixture_bytes':bytes.length,
+      'git_sha':Platform.environment['GITHUB_SHA'],
+      'run_id':Platform.environment['GITHUB_RUN_ID'],
+      'counts':summary,'diagnostics':rows,
+    }));
+    // ignore: avoid_print
+    print('PINE_FULL_COUNTS ${jsonEncode(summary)}');
   });
 }
