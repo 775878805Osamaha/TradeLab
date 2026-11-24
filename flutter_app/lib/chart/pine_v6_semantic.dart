@@ -12,7 +12,12 @@ class PineTypeInfo {
   @override String toString() => qualifier.name+' '+type.name;
 }
 class PineSemanticResult {
-  const PineSemanticResult(this.diagnostics,this.inferred);
+  const PineSemanticResult(this.diagnostics,this.inferred,{
+    this.completed=true,this.lastVisitedLine=0,
+  });
+  /// False when the diagnostic cap or resource budget interrupted traversal.
+  final bool completed;
+  final int lastVisitedLine;
   final List<PineDiagnostic> diagnostics;
   final Map<PineExpression,PineTypeInfo> inferred;
 }
@@ -38,7 +43,17 @@ class PineV6SemanticAnalyzer {
   PineV6SemanticAnalyzer({
     this.maxSymbols=16000,
     this.maxDuration=const Duration(seconds: 3),
-  });
+  }):_uncappedAudit=false;
+  /// Measurement only: removes the diagnostic cap, not time/node/symbol limits.
+  /// Production frontends continue to use the default constructor.
+  PineV6SemanticAnalyzer.forDiagnosticAudit({
+    this.maxSymbols=16000,
+    this.maxDuration=const Duration(seconds: 3),
+  }):_uncappedAudit=true;
+  final bool _uncappedAudit;
+  bool get _atDiagnosticCap=>!_uncappedAudit&&_diagnostics.length>=48;
+  bool _resourceInterrupted=false;
+  int _lastVisitedLine=0;
   final int maxSymbols;
   final Duration maxDuration;
   final List<PineDiagnostic> _diagnostics=[];
@@ -78,7 +93,8 @@ class PineV6SemanticAnalyzer {
 
   PineSemanticResult analyze(PineScriptAst ast){
     _diagnostics.clear();_unsupportedDiagnostics.clear();_inferred.clear();_symbols=0;_visited=0;
-    _functionName=null;_loopDepth=0;_clock=Stopwatch()..start();
+    _functionName=null;_loopDepth=0;_resourceInterrupted=false;_lastVisitedLine=0;
+    _clock=Stopwatch()..start();
     final root=_PineScope(null);_global=root;
     for(final name in <String>['open','high','low','close','volume',
         'hl2','hlc3','ohlc4','hlcc4']){
@@ -98,32 +114,38 @@ class PineV6SemanticAnalyzer {
     }
     for(final statement in ast.statements){
       _statement(statement,root);
-      if(_diagnostics.length>=48)break;
+      if(_atDiagnosticCap)break;
     }
     _clock.stop();
     return PineSemanticResult(
       List.unmodifiable([..._diagnostics,..._unsupportedDiagnostics]),
       Map.unmodifiable(_inferred),
+      completed:!_atDiagnosticCap&&!_resourceInterrupted,
+      lastVisitedLine:_lastVisitedLine,
     );
   }
 
   bool _budget(PineSourceSpan loc) {
     _visited++;
     if(_visited>maxSymbols*8||_symbols>maxSymbols) {
+      _resourceInterrupted=true;
       _error('semantic_limit','Pine semantic resource budget exceeded',loc);
       return false;
     }
     if((_visited&127)==0&&_clock.elapsed>=maxDuration){
+      _resourceInterrupted=true;
       _error('semantic_timeout','Pine semantic deadline exceeded',loc);
       return false;
     }
-    return _diagnostics.length<48;
+    if(_atDiagnosticCap)return false;
+    if(loc.line>_lastVisitedLine)_lastVisitedLine=loc.line;
+    return true;
   }
   void _error(String code,String message,PineSourceSpan loc,
       {PineDiagnosticSeverity severity=PineDiagnosticSeverity.error}){
     final destination=severity==PineDiagnosticSeverity.unsupported
         ?_unsupportedDiagnostics:_diagnostics;
-    if(destination.length<48)destination.add(PineDiagnostic(
+    if(_uncappedAudit||destination.length<48)destination.add(PineDiagnostic(
       PineDiagnosticStage.semantic,code,message,loc,severity:severity));
   }
   void _define(_PineScope scope,String name,_PineSymbol symbol,PineSourceSpan loc){
