@@ -2,6 +2,8 @@ import '../data/tradelab_data.dart';
 import 'pine_runtime_core.dart';
 import 'pine_subset_program.dart';
 import 'pine_v6_frontend.dart';
+import 'pine_function_registry.dart';
+import 'pine_ta_library.dart';
 
 /// Stage 3a, closed-bar Pine language execution. The old PineSubsetProgram
 /// remains the sole runtime for source it already supports. This interpreter
@@ -48,6 +50,7 @@ class PineV6LanguageProgram {
       if(stmt is PineFunctionStatement)functions[stmt.name]=stmt;
     }
 
+    var usesNewTa=false;
     void validateExpr(PineExpression expr, {bool global=false}) {
       if(expr is PineLiteralExpression || expr is PineIdentifierExpression) {
         return;
@@ -72,9 +75,36 @@ class PineV6LanguageProgram {
       }
       if(expr is PineCallExpression) {
         final name=expr.name;
+        final ta=PineFunctionRegistry.ta[name];
+        if(ta!=null&&!ta.tupleResult){
+          final slots=ta.bind(expr.arguments.map((a)=>a.name).toList());
+          for(var i=0;i<slots.length;i++){
+            final slot=slots[i],value=expr.arguments[i].value;
+            final type=prepared.semantic.inferred[value];
+            final base=type?.type;
+            if(base!=null&&base!=PineBaseType.unknown){
+              final valid=ta.isBooleanParameter(slot)
+                  ?base==PineBaseType.boolType
+                  :ta.lengthSlots.contains(slot)
+                      ?base==PineBaseType.intType
+                      :base==PineBaseType.intType||base==PineBaseType.floatType;
+              if(!valid)throw PineRuntimeException('ta_type',
+                  'Wrong parameter type for '+ta.name);
+            }
+            if(ta.lengthSlots.contains(slot)&&value is PineLiteralExpression){
+              final length=int.tryParse(value.value);
+              if(length==null||length<1||length>500){
+                throw const PineRuntimeException('length',
+                    'TA literal length must be 1..500');
+              }
+            }
+          }
+          if(!ta.legacy)usesNewTa=true;
+        }
         if(name==null || !(<String>{
           'indicator','plot','na','nz','input.int','input.float',
-          'math.abs','math.min','math.max','ta.sma',
+          'math.abs','math.min','math.max',
+          ...PineFunctionRegistry.ta.values.where((s)=>!s.tupleResult).map((s)=>s.name),
           ...functions.keys,
         }).contains(name)) {
           throw PineRuntimeException('unsupported_function',
@@ -156,11 +186,11 @@ class PineV6LanguageProgram {
         }
         return false;
       }
-      if(!advanced(prepared.ast.statements)){
+      validateStatements(prepared.ast.statements,global:true);
+      if(!advanced(prepared.ast.statements)&&!usesNewTa){
         throw const PineRuntimeException('unsupported_legacy',
             'Only previously executable numeric programs or verified Stage 3a language are supported');
       }
-      validateStatements(prepared.ast.statements,global:true);
       if(plots.isEmpty) {
         throw const PineRuntimeException('missing_plot',
             'Stage 3a numeric language requires at least one global plot');
@@ -217,7 +247,7 @@ class PineV6LanguageInstance {
   final int maxLoopIterations;
   PineRuntimeBudget budget;
   final Map<(PineCallExpression?,PineVariableStatement),Object?> _persistent={};
-  final Map<(PineCallExpression?,PineCallExpression),List<double>> _sma={};
+  final Map<(PineCallExpression?,PineCallExpression),PineTaState> _ta={};
   final Map<String,List<Object?>> _history={};
   final List<TradeCandle> _seen=[];
   late List<List<double?>> _plots;
@@ -397,25 +427,13 @@ class PineV6LanguageInstance {
         return expr.arguments.length>1
             ?_eval(expr.arguments[1].value,frame):0.0;
       }
-      if(name=='ta.sma'){
-        final x=_num(_eval(expr.arguments.first.value,frame));
-        final length=_integer(_eval(expr.arguments[1].value,frame));
-        if(length<1||length>limits.maxHistory) {
-          throw const PineRuntimeException('length',
-              'SMA length outside bounded history');
-        }
+      final ta=PineFunctionRegistry.ta[name];
+      if(ta!=null&&!ta.tupleResult){
+        final args=ta.arguments(expr.arguments.map((a)=>a.name).toList(),
+            [for(final arg in expr.arguments)_eval(arg.value,frame)]);
         final key=(_callSite,expr);
-        final samples=_sma.putIfAbsent(key,(){
-          budget.reserveHistory(length);
-          return <double>[];
-        });
-        if(x!=null)samples.add(x);
-        budget.consume(work:0,values:x==null?0:1);
-        if(samples.length>length)samples.removeAt(0);
-        if(samples.length<length)return null;
-        var total=0.0;
-        for(final value in samples){_charge();total+=value;}
-        return total/length;
+        final state=_ta.putIfAbsent(key,()=>PineTaState(ta,budget));
+        return state.step(args,_seen.last,_bar==0?null:_seen[_bar-1].close);
       }
       if(name=='input.int'||name=='input.float') {
         return _eval(expr.arguments.first.value,frame);
@@ -616,7 +634,7 @@ class PineV6LanguageInstance {
     }catch(_){candidate.close();rethrow;}
     budget.stop();
     _persistent..clear()..addAll(candidate._persistent);
-    _sma..clear()..addAll(candidate._sma);
+    _ta..clear()..addAll(candidate._ta);
     _history..clear()..addAll(candidate._history);
     _seen..clear()..addAll(candidate._seen);
     _plots=candidate._plots;

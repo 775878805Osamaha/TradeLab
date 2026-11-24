@@ -1,4 +1,5 @@
 import 'pine_v6_ast.dart';
+import 'pine_function_registry.dart';
 
 enum PineBaseType { intType, floatType, boolType, stringType, colorType, unknown, tupleType, voidType }
 enum PineQualifier { constant, input, simple, series }
@@ -517,6 +518,13 @@ class PineV6SemanticAnalyzer {
           PineQualifier.input);
     }
     if(name.startsWith('ta.')){
+      final signature=PineFunctionRegistry.ta[name];
+      if(signature?.booleanResult==true){
+        return const PineTypeInfo(PineBaseType.boolType,PineQualifier.series);
+      }
+      if(signature?.tupleResult==true){
+        return const PineTypeInfo(PineBaseType.tupleType,PineQualifier.series);
+      }
       // Pine v6 ta.ema() and ta.rsi() expect simple int (or weaker)
       // length; series int and float lengths are invalid.
       if(name=='ta.ema'||name=='ta.rsi'){
