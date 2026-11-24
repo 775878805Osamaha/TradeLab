@@ -1,0 +1,23 @@
+name: AHV10 source and diagnostic audit (no APK)
+on:
+  workflow_dispatch:
+  push:
+    branches: [audit/pine-ahv10-acceptance-gap-20261125]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Existing canonical frontend diagnostics on original source
+        run: flutter test test/pine_ahv10_audit_test.dart --reporter expanded
