@@ -1,0 +1,443 @@
+//@version=6
+strategy("Ahmad HA First Trend V10", shorttitle="AHV10", overlay=true, pyramiding=0, process_orders_on_close=true, initial_capital=10000)
+
+// ===== الإعدادات =====
+gEntry = "شروط الدخول"
+gTrend = "قفل اتجاه الشارت (منع الصفقات العكسية)"
+gFilter = "الفلاتر"
+gAcc = "تأكيدات الدخول"
+gAcc2 = "تأكيدات قوية جداً"
+gSmc = "تأكيدات SMC / ICT"
+gRisk = "الهدف والستوب (بالنقاط)"
+gMg = "إدارة الصفقة (بالنقاط)"
+gView = "العرض"
+wickTicks = input.float(0.0, "تسامح الذيل المعاكس (تيك)", minval=0.0, step=0.5, group=gEntry)
+allowRepeat = input.bool(true, "السماح بأكثر من صندوق في نفس الاتجاه", group=gEntry)
+reqStrong = input.int(2, "عدد شموع HA القوية المتتالية للصندوق", options=[1, 2], group=gEntry)
+minAge = input.int(2, "أقل عمر للاتجاه (شموع) لتكوين الصندوق", minval=1, maxval=10, group=gEntry)
+trendGate = input.string("مطفأ", "قفل الاتجاه: منع الدخول عكس", options=["مطفأ", "EMA", "فريم أكبر", "Supertrend", "ترتيب EMA", "الكل"], group=gTrend)
+useEarly = input.bool(false, "تفعيل فلتر البداية المبكرة", group=gFilter)
+firstBars = input.int(3, "عدد شموع HA الأولى بعد تغير اللون", minval=2, maxval=20, group=gFilter)
+useExpiry = input.bool(true, "تفعيل انتهاء صلاحية الصندوق", group=gFilter)
+boxLife = input.int(3, "عدد الشموع التي يبقى فيها الصندوق صالحاً", minval=1, maxval=30, group=gFilter)
+useRR = input.bool(true, "تفعيل فلتر نسبة العائد للمخاطرة (مع نقاط ثابتة)", group=gFilter)
+minRR = input.float(1.5, "أدنى نسبة عائد / مخاطرة", minval=0.1, group=gFilter)
+needAll = input.bool(true, "اشتراط كل التأكيدات المفعّلة", group=gAcc)
+minConf = input.int(1, "أو: عدد التأكيدات المطلوبة (إذا أُطفئ الخيار السابق)", minval=1, maxval=24, group=gAcc)
+useTrend = input.bool(false, "تأكيد 1: اتجاه EMA (شراء فوقه / بيع تحته)", group=gAcc)
+emaLen = input.int(200, "طول EMA البطيء (يستخدمه أيضاً قفل الاتجاه)", minval=2, group=gAcc)
+useHtf = input.bool(false, "تأكيد 2: فريم أكبر (شموع HA)", group=gAcc)
+htfTf = input.timeframe("60", "فريم التأكيد (أكبر من فريم الشارت)", group=gAcc)
+useVol = input.bool(false, "تأكيد 3: حركة كافية (أدنى ATR)", group=gAcc)
+atrLen = input.int(14, "طول ATR", minval=1, group=gAcc)
+minAtrPts = input.float(50.0, "أدنى ATR (نقاط)", minval=0.0, group=gAcc)
+useSession = input.bool(false, "تأكيد 4: وقت الجلسة", group=gAcc)
+sessStr = input.session("0700-2000", "وقت الجلسة", group=gAcc)
+useRsi = input.bool(false, "تأكيد 5: RSI (شراء فوق المستوى / بيع تحته)", group=gAcc)
+rsiLen = input.int(14, "طول RSI", minval=2, group=gAcc)
+rsiLevel = input.float(50.0, "مستوى RSI للشراء (البيع = 100 - المستوى)", minval=1.0, maxval=99.0, group=gAcc)
+useMacd = input.bool(false, "تأكيد 6: MACD (الهستوغرام فوق/تحت الصفر)", group=gAcc)
+useAdx = input.bool(false, "تأكيد 7: قوة الاتجاه ADX", group=gAcc)
+adxMin = input.float(20.0, "أدنى قيمة ADX", minval=1.0, group=gAcc)
+useVolu = input.bool(false, "تأكيد 8: حجم التداول فوق المتوسط", group=gAcc)
+voluMult = input.float(1.2, "مضاعف متوسط الحجم (20 شمعة)", minval=0.1, step=0.1, group=gAcc)
+useBody = input.bool(false, "تأكيد 9: قوة شمعة الاختراق (جسم كبير)", group=gAcc)
+bodyMin = input.float(60.0, "أدنى نسبة للجسم من الشمعة %", minval=1.0, maxval=100.0, group=gAcc)
+strongPack = input.bool(false, "تفعيل حزمة التأكيدات القوية الجاهزة (10 + 11 + 13 + 16 + 9)", group=gAcc2)
+useAlign = input.bool(false, "تأكيد 10: قوة اتجاه الشارت (ترتيب EMA + ميل)", group=gAcc2)
+fastLen = input.int(20, "طول EMA السريع", minval=2, group=gAcc2)
+midLen = input.int(50, "طول EMA المتوسط", minval=2, group=gAcc2)
+slopeBars = input.int(5, "عدد الشموع لقياس ميل EMA المتوسط", minval=1, maxval=50, group=gAcc2)
+usePrior = input.bool(false, "تأكيد 11: الشموع السابقة اتجاهية وقوية", group=gAcc2)
+priorN = input.int(5, "عدد الشموع السابقة المفحوصة", minval=2, maxval=30, group=gAcc2)
+priorMin = input.int(4, "أقل عدد منها في اتجاه الصفقة", minval=1, maxval=30, group=gAcc2)
+priorBody = input.float(50.0, "أدنى متوسط لجسم هذه الشموع %", minval=1.0, maxval=100.0, group=gAcc2)
+useDc = input.bool(false, "تأكيد 12: كسر أعلى/أدنى عدد من الشموع", group=gAcc2)
+dcLen = input.int(20, "عدد الشموع لكسر القمة/القاع", minval=2, maxval=200, group=gAcc2)
+useDi = input.bool(false, "تأكيد 13: اتجاه DI مع ADX (يستخدم أدنى ADX أعلاه)", group=gAcc2)
+useSt = input.bool(false, "تأكيد 14: اتجاه Supertrend", group=gAcc2)
+stFactor = input.float(3.0, "معامل Supertrend (يستخدمه أيضاً قفل الاتجاه)", minval=0.5, step=0.5, group=gAcc2)
+stLen = input.int(10, "طول Supertrend", minval=1, group=gAcc2)
+useExt = input.bool(false, "تأكيد 15: عدم الدخول المتأخر (بعد السعر عن EMA المتوسط)", group=gAcc2)
+maxExt = input.float(3.0, "أقصى بعد عن EMA المتوسط (بعدد ATR)", minval=0.5, step=0.5, group=gAcc2)
+useClose = input.bool(false, "تأكيد 16: إغلاق الشمعة قرب القمة/القاع", group=gAcc2)
+closeMin = input.float(70.0, "موضع الإغلاق من مدى الشمعة %", minval=50.0, maxval=100.0, group=gAcc2)
+smcPack = input.bool(false, "تفعيل حزمة SMC القوية جداً الجاهزة (18 + 19 + 21 + 22 + 23)", group=gSmc)
+swingLen = input.int(5, "طول القمم/القيعان (شموع يمين ويسار)", minval=1, maxval=20, group=gSmc)
+useSweep = input.bool(false, "تأكيد 17: سحب سيولة قبل الصفقة", group=gSmc)
+sweepWin = input.int(10, "نافذة سحب السيولة قبل الاختراق (شموع)", minval=1, maxval=100, group=gSmc)
+useSweepBox = input.bool(false, "تأكيد 18: سحب سيولة قبل تكوين الصندوق", group=gSmc)
+sweepBoxWin = input.int(10, "نافذة سحب السيولة قبل الصندوق (شموع)", minval=1, maxval=100, group=gSmc)
+useSmt = input.bool(false, "تأكيد 19: SMT (تباعد مع أصل مرتبط)", group=gSmc)
+smtMode = input.string("تلقائي", "رمز المقارنة لـ SMT", options=["تلقائي", "يدوي"], group=gSmc)
+smtManual = input.symbol("OANDA:XAGUSD", "رمز المقارنة اليدوي", group=gSmc)
+smtLen = input.int(20, "عدد الشموع للقمة/القاع في SMT", minval=3, maxval=200, group=gSmc)
+smtWin = input.int(10, "نافذة SMT (شموع)", minval=1, maxval=100, group=gSmc)
+useMss = input.bool(false, "تأكيد 20: MSS (تحول هيكل السوق)", group=gSmc)
+useBos = input.bool(false, "تأكيد 21: BOS (كسر الهيكل)", group=gSmc)
+mssWin = input.int(15, "نافذة MSS / BOS / التسلسل (شموع)", minval=1, maxval=100, group=gSmc)
+useFvg = input.bool(false, "تأكيد 22: فجوة FVG مع شمعة اندفاع", group=gSmc)
+fvgWin = input.int(8, "نافذة FVG (شموع)", minval=1, maxval=100, group=gSmc)
+fvgBody = input.float(1.0, "أدنى جسم لشمعة الاندفاع (× ATR)", minval=0.1, step=0.1, group=gSmc)
+useSeq = input.bool(false, "تأكيد 23: تسلسل ICT: سحب سيولة ثم MSS", group=gSmc)
+seqGap = input.int(10, "أقصى مسافة بين سحب السيولة و MSS (شموع)", minval=1, maxval=100, group=gSmc)
+usePD = input.bool(false, "تأكيد 24: منطقة خصم/علاوة (الشراء تحت 50% من آخر نطاق)", group=gSmc)
+targetMode = input.string("نقاط ثابتة", "نمط الهدف", options=["نقاط ثابتة", "مضاعف الستوب"], group=gRisk)
+targetPts = input.float(500.0, "مسافة الهدف (نقاط) - للنمط الثابت", minval=0.1, group=gRisk)
+rrMult = input.float(1.0, "مضاعف الستوب للهدف - للنمط الثاني (1.0 = بقدر الستوب)", minval=0.2, step=0.1, group=gRisk)
+stopPts = input.float(0.0, "إضافة للستوب (نقاط)", minval=0.0, group=gRisk)
+ptInput = input.float(0.0, "حجم النقطة بالسعر (0 = تلقائي)", minval=0.0, step=0.00001, group=gRisk)
+useBE = input.bool(false, "تفعيل نقل الستوب للتعادل", group=gMg)
+beTrig = input.float(150.0, "نقل للتعادل بعد ربح (نقاط)", minval=0.1, group=gMg)
+beOff = input.float(10.0, "الستوب عند التعادل فوق/تحت الدخول (نقاط)", minval=0.0, group=gMg)
+useTrail = input.bool(false, "تفعيل الستوب المتحرك", group=gMg)
+trStart = input.float(200.0, "بدء الستوب المتحرك بعد ربح (نقاط)", minval=0.1, group=gMg)
+trDist = input.float(100.0, "مسافة الستوب المتحرك عن القمة (نقاط)", minval=0.1, group=gMg)
+showBoxes = input.bool(true, "إظهار صناديق الأجسام", group=gView)
+showLevels = input.bool(true, "إظهار الدخول والستوب والهدف", group=gView)
+showSmc = input.bool(false, "إظهار علامات SMC على الشارت (SWP / MSS / BOS / SMT)", group=gView)
+showStats = input.bool(true, "إظهار جدول نتائج الأسبوع", group=gView)
+tblSize = input.string("small", "حجم نص الجدول", options=["tiny", "small", "normal"], group=gView)
+txtSize = tblSize == "tiny" ? size.tiny : tblSize == "normal" ? size.normal : size.small
+
+// الحزم الجاهزة
+kAlign = useAlign or strongPack
+kPrior = usePrior or strongPack
+kDi = useDi or strongPack
+kClose = useClose or strongPack
+kBody = useBody or strongPack
+kSweepBox = useSweepBox or smcPack
+kSmt = useSmt or smcPack
+kBos = useBos or smcPack
+kFvg = useFvg or smcPack
+kSeq = useSeq or smcPack
+
+// ===== حجم النقطة: الذهب 0.10 ، الفوركس بيب ، غير ذلك 1.00 =====
+isGold = str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD")
+isForex = syminfo.type == "forex"
+isJpy = str.contains(syminfo.ticker, "JPY")
+autoPt = isGold ? 0.10 : isForex ? (isJpy ? 0.01 : 0.0001) : 1.0
+pointSize = ptInput > 0 ? ptInput : autoPt
+stopBuffer = stopPts * pointSize
+
+// Timeframe follows the chart (any minutes timeframe). Standard candles only.
+validChart = chart.is_standard and timeframe.isminutes
+confirmed = validChart and barstate.isconfirmed
+haTicker = ticker.heikinashi(ticker.standard(syminfo.tickerid))
+[haO, haH, haL, haC] = request.security(haTicker, timeframe.period, [open, high, low, close], lookahead=barmerge.lookahead_off)
+tol = wickTicks * syminfo.mintick + 0.00000001
+direction = haC > haO ? 1 : haC < haO ? -1 : 0
+strongBull = direction == 1 and math.min(haO, haC) - haL <= tol
+strongBear = direction == -1 and haH - math.max(haO, haC) <= tol
+bullModel = strongBull and (reqStrong == 1 or strongBull[1]) and haC > haH[1]
+bearModel = strongBear and (reqStrong == 1 or strongBear[1]) and haC < haL[1]
+
+// ===== تأكيدات الدخول =====
+emaTrend = ta.ema(close, emaLen)
+emaFast = ta.ema(close, fastLen)
+emaMid = ta.ema(close, midLen)
+atrVal = ta.atr(atrLen)
+htfDir = request.security(haTicker, htfTf, close[1] > open[1] ? 1 : close[1] < open[1] ? -1 : 0, lookahead=barmerge.lookahead_on)
+rsiVal = ta.rsi(close, rsiLen)
+[macdL, macdS, macdH] = ta.macd(close, 12, 26, 9)
+[diP, diM, adxVal] = ta.dmi(14, 14)
+[stVal, stDir] = ta.supertrend(stFactor, stLen)
+volAvg = ta.sma(volume, 20)
+candleRange = high - low
+bodyPct = candleRange > 0 ? math.abs(close - open) / candleRange * 100 : 0.0
+closePos = candleRange > 0 ? (close - low) / candleRange * 100 : 50.0
+sessIn = not na(time(timeframe.period, sessStr))
+upCnt = math.sum(close > open ? 1.0 : 0.0, priorN)[1]
+dnCnt = math.sum(close < open ? 1.0 : 0.0, priorN)[1]
+priorBodyAvg = ta.sma(bodyPct, priorN)[1]
+bullPrior = upCnt >= priorMin and priorBodyAvg >= priorBody
+bearPrior = dnCnt >= priorMin and priorBodyAvg >= priorBody
+dcHigh = ta.highest(high, dcLen)[1]
+dcLow = ta.lowest(low, dcLen)[1]
+extOk = atrVal > 0 and math.abs(close - emaMid) / atrVal <= maxExt
+bullAlign = emaFast > emaMid and emaMid > emaTrend and emaMid > emaMid[slopeBars]
+bearAlign = emaFast < emaMid and emaMid < emaTrend and emaMid < emaMid[slopeBars]
+
+// ===== SMC / ICT: قمم وقيعان الهيكل =====
+var float pivHigh1 = na
+var float pivHigh2 = na
+var float pivLow1 = na
+var float pivLow2 = na
+var bool boxSweepBull = false
+var bool boxSweepBear = false
+pHigh = ta.pivothigh(high, swingLen, swingLen)
+pLow = ta.pivotlow(low, swingLen, swingLen)
+pivHigh2 := na(pHigh) ? pivHigh2 : pivHigh1
+pivHigh1 := na(pHigh) ? pivHigh1 : pHigh
+pivLow2 := na(pLow) ? pivLow2 : pivLow1
+pivLow1 := na(pLow) ? pivLow1 : pLow
+structBull = pivLow1 > pivLow2 and pivHigh1 > pivHigh2
+structBear = pivLow1 < pivLow2 and pivHigh1 < pivHigh2
+
+// سحب السيولة
+bullSweep = low < pivLow1 and close > pivLow1
+bearSweep = high > pivHigh1 and close < pivHigh1
+bsSweepBull = ta.barssince(bullSweep)
+bsSweepBear = ta.barssince(bearSweep)
+bullSweepRecent = bsSweepBull <= sweepWin
+bearSweepRecent = bsSweepBear <= sweepWin
+bullSweepBoxNow = bsSweepBull <= sweepBoxWin
+bearSweepBoxNow = bsSweepBear <= sweepBoxWin
+
+// MSS و BOS
+upBreak = close > pivHigh1 and close[1] <= pivHigh1
+dnBreak = close < pivLow1 and close[1] >= pivLow1
+bosBullEv = upBreak and structBull
+bosBearEv = dnBreak and structBear
+mssBullEv = upBreak and structBear
+mssBearEv = dnBreak and structBull
+bsMssBull = ta.barssince(mssBullEv)
+bsMssBear = ta.barssince(mssBearEv)
+bsBosBull = ta.barssince(bosBullEv)
+bsBosBear = ta.barssince(bosBearEv)
+bullMssRecent = bsMssBull <= mssWin
+bearMssRecent = bsMssBear <= mssWin
+bullBosRecent = bsBosBull <= mssWin
+bearBosRecent = bsBosBear <= mssWin
+
+// تسلسل ICT: سحب سيولة ثم MSS
+seqBullEv = mssBullEv and bsSweepBull <= seqGap
+seqBearEv = mssBearEv and bsSweepBear <= seqGap
+bsSeqBull = ta.barssince(seqBullEv)
+bsSeqBear = ta.barssince(seqBearEv)
+bullSeqRecent = bsSeqBull <= mssWin
+bearSeqRecent = bsSeqBear <= mssWin
+
+// فجوة FVG مع شمعة اندفاع
+bullFvgEv = low > high[2] and close[1] > open[1] and (close[1] - open[1]) >= fvgBody * atrVal[1]
+bearFvgEv = high < low[2] and close[1] < open[1] and (open[1] - close[1]) >= fvgBody * atrVal[1]
+bsFvgBull = ta.barssince(bullFvgEv)
+bsFvgBear = ta.barssince(bearFvgEv)
+bullFvgRecent = bsFvgBull <= fvgWin
+bearFvgRecent = bsFvgBear <= fvgWin
+
+// SMT: تباعد مع أصل مرتبط
+tk = syminfo.ticker
+smtAuto = isGold ? "OANDA:XAGUSD" : (str.contains(tk, "US30") or str.contains(tk, "DJI")) ? "OANDA:SPX500USD" : (str.contains(tk, "NAS") or str.contains(tk, "US100")) ? "OANDA:SPX500USD" : (str.contains(tk, "SPX") or str.contains(tk, "US500")) ? "OANDA:NAS100USD" : str.contains(tk, "EURUSD") ? "OANDA:GBPUSD" : str.contains(tk, "GBPUSD") ? "OANDA:EURUSD" : str.contains(tk, "BTC") ? "BINANCE:ETHUSDT" : str.contains(tk, "ETH") ? "BINANCE:BTCUSDT" : "OANDA:XAUUSD"
+smtSym = smtMode == "تلقائي" ? smtAuto : smtManual
+[cH, cL] = request.security(smtSym, timeframe.period, [high, low], lookahead=barmerge.lookahead_off)
+ourLowest = ta.lowest(low, smtLen)
+ourHighest = ta.highest(high, smtLen)
+cLowest = ta.lowest(cL, smtLen)
+cHighest = ta.highest(cH, smtLen)
+smtBullEv = low < ourLowest[1] and cL >= cLowest[1]
+smtBearEv = high > ourHighest[1] and cH <= cHighest[1]
+bsSmtBull = ta.barssince(smtBullEv)
+bsSmtBear = ta.barssince(smtBearEv)
+bullSmtRecent = bsSmtBull <= smtWin
+bearSmtRecent = bsSmtBear <= smtWin
+
+// خصم / علاوة
+pdMid = (pivHigh1 + pivLow1) / 2
+bullPD = not na(pdMid) and close < pdMid
+bearPD = not na(pdMid) and close > pdMid
+
+enabledCount = (useTrend ? 1 : 0) + (useHtf ? 1 : 0) + (useVol ? 1 : 0) + (useSession ? 1 : 0) + (useRsi ? 1 : 0) + (useMacd ? 1 : 0) + (useAdx ? 1 : 0) + (useVolu ? 1 : 0) + (kBody ? 1 : 0) + (kAlign ? 1 : 0) + (kPrior ? 1 : 0) + (useDc ? 1 : 0) + (kDi ? 1 : 0) + (useSt ? 1 : 0) + (useExt ? 1 : 0) + (kClose ? 1 : 0) + (useSweep ? 1 : 0) + (kSweepBox ? 1 : 0) + (kSmt ? 1 : 0) + (useMss ? 1 : 0) + (kBos ? 1 : 0) + (kFvg ? 1 : 0) + (kSeq ? 1 : 0) + (usePD ? 1 : 0)
+neededConf = needAll ? enabledCount : math.min(minConf, enabledCount)
+commonScore = (useVol and atrVal >= minAtrPts * pointSize ? 1 : 0) + (useSession and sessIn ? 1 : 0) + (useAdx and adxVal >= adxMin ? 1 : 0) + (useVolu and volume > volAvg * voluMult ? 1 : 0) + (useExt and extOk ? 1 : 0)
+bullScore1 = commonScore + (useTrend and close > emaTrend ? 1 : 0) + (useHtf and htfDir == 1 ? 1 : 0) + (useRsi and rsiVal > rsiLevel ? 1 : 0) + (useMacd and macdH > 0 ? 1 : 0) + (kBody and close > open and bodyPct >= bodyMin ? 1 : 0) + (kAlign and bullAlign ? 1 : 0) + (kPrior and bullPrior ? 1 : 0) + (useDc and close > dcHigh ? 1 : 0) + (kDi and diP > diM and adxVal >= adxMin ? 1 : 0) + (useSt and stDir < 0 ? 1 : 0) + (kClose and closePos >= closeMin ? 1 : 0)
+bearScore1 = commonScore + (useTrend and close < emaTrend ? 1 : 0) + (useHtf and htfDir == -1 ? 1 : 0) + (useRsi and rsiVal < 100 - rsiLevel ? 1 : 0) + (useMacd and macdH < 0 ? 1 : 0) + (kBody and close < open and bodyPct >= bodyMin ? 1 : 0) + (kAlign and bearAlign ? 1 : 0) + (kPrior and bearPrior ? 1 : 0) + (useDc and close < dcLow ? 1 : 0) + (kDi and diM > diP and adxVal >= adxMin ? 1 : 0) + (useSt and stDir > 0 ? 1 : 0) + (kClose and closePos <= 100 - closeMin ? 1 : 0)
+smcBull = (useSweep and bullSweepRecent ? 1 : 0) + (kSweepBox and boxSweepBull ? 1 : 0) + (kSmt and bullSmtRecent ? 1 : 0) + (useMss and bullMssRecent ? 1 : 0) + (kBos and bullBosRecent ? 1 : 0) + (kFvg and bullFvgRecent ? 1 : 0) + (kSeq and bullSeqRecent ? 1 : 0) + (usePD and bullPD ? 1 : 0)
+smcBear = (useSweep and bearSweepRecent ? 1 : 0) + (kSweepBox and boxSweepBear ? 1 : 0) + (kSmt and bearSmtRecent ? 1 : 0) + (useMss and bearMssRecent ? 1 : 0) + (kBos and bearBosRecent ? 1 : 0) + (kFvg and bearFvgRecent ? 1 : 0) + (kSeq and bearSeqRecent ? 1 : 0) + (usePD and bearPD ? 1 : 0)
+bullScore = bullScore1 + smcBull
+bearScore = bearScore1 + smcBear
+bullOk = bullScore >= neededConf
+bearOk = bearScore >= neededConf
+
+// ===== قفل اتجاه الشارت: بوابة تمنع الدخول عكس الاتجاه =====
+gateBull = trendGate == "مطفأ" or (trendGate == "EMA" and close > emaTrend) or (trendGate == "فريم أكبر" and htfDir == 1) or (trendGate == "Supertrend" and stDir < 0) or (trendGate == "ترتيب EMA" and bullAlign) or (trendGate == "الكل" and close > emaTrend and htfDir == 1 and stDir < 0)
+gateBear = trendGate == "مطفأ" or (trendGate == "EMA" and close < emaTrend) or (trendGate == "فريم أكبر" and htfDir == -1) or (trendGate == "Supertrend" and stDir > 0) or (trendGate == "ترتيب EMA" and bearAlign) or (trendGate == "الكل" and close < emaTrend and htfDir == -1 and stDir > 0)
+
+// Stored trend and setup state
+var int trendDir = 0
+var int trendAge = 0
+var bool usedModel = false
+var bool armed = false
+var int zoneDir = 0
+var int setupBar = na
+var float zoneTop = na
+var float zoneBottom = na
+var float stopLevel = na
+
+// Evaluate old state before updating it
+colorFlip = confirmed and direction != 0 and direction != trendDir
+trendAge := confirmed ? (colorFlip ? 1 : direction == trendDir ? trendAge + 1 : trendAge) : trendAge
+trendDir := colorFlip ? direction : trendDir
+age = na(setupBar) ? 0 : bar_index - setupBar
+expired = useExpiry and age > boxLife
+invalid = colorFlip or direction != zoneDir
+canBreak = confirmed and armed and age >= 1 and not expired and not invalid
+breakBull = canBreak and zoneDir == 1 and haC > zoneTop
+breakBear = canBreak and zoneDir == -1 and haC < zoneBottom
+risk = math.abs(close - stopLevel)
+targetPrice = targetMode == "مضاعف الستوب" ? nz(risk, 0.0) * rrMult : targetPts * pointSize
+validStop = breakBull ? close > stopLevel : breakBear ? close < stopLevel : false
+validRisk = not na(risk) and risk > 0 and (not useRR or targetMode == "مضاعف الستوب" or targetPrice / risk >= minRR)
+buy = breakBull and validStop and validRisk and bullOk and gateBull and strategy.position_size == 0
+sell = breakBear and validStop and validRisk and bearOk and gateBear and strategy.position_size == 0
+finishBox = confirmed and armed and (expired or invalid or breakBull or breakBear)
+early = not useEarly or trendAge <= firstBars
+newSetup = confirmed and not colorFlip and not armed and (allowRepeat or not usedModel) and trendAge >= minAge and early and strategy.position_size == 0 and (bullModel or bearModel)
+setupBull = newSetup and bullModel
+setupBear = newSetup and bearModel
+
+// Update state after breakout decisions
+usedModel := colorFlip ? false : newSetup ? true : usedModel
+armed := newSetup ? true : finishBox ? false : armed
+zoneDir := newSetup ? direction : finishBox ? 0 : zoneDir
+setupBar := newSetup ? bar_index : setupBar
+zoneTop := newSetup ? math.max(haO, haC) : zoneTop
+zoneBottom := newSetup ? math.min(haO, haC) : zoneBottom
+stopLevel := setupBull ? haL[1] - stopBuffer : setupBear ? haH[1] + stopBuffer : stopLevel
+boxSweepBull := newSetup ? bullSweepBoxNow : boxSweepBull
+boxSweepBear := newSetup ? bearSweepBoxNow : boxSweepBear
+
+// ===== إدارة الصفقة: تعادل + ستوب متحرك =====
+var float origStop = na
+var float peakPx = na
+tradeNow = buy or sell
+inLong = strategy.position_size > 0
+inShort = strategy.position_size < 0
+inPos = strategy.position_size != 0
+entryPx = strategy.position_avg_price
+origStop := tradeNow ? stopLevel : origStop
+peakPx := tradeNow ? close : inLong ? math.max(nz(peakPx, entryPx), high) : inShort ? math.min(nz(peakPx, entryPx), low) : na
+gainPts = inLong ? (peakPx - entryPx) / pointSize : inShort ? (entryPx - peakPx) / pointSize : 0.0
+beOn = useBE and inPos and gainPts >= beTrig
+trOn = useTrail and inPos and gainPts >= trStart
+beStop = inLong ? entryPx + beOff * pointSize : entryPx - beOff * pointSize
+trStop = inLong ? peakPx - trDist * pointSize : peakPx + trDist * pointSize
+longStop = math.max(origStop, beOn ? beStop : origStop, trOn ? trStop : origStop)
+shortStop = math.min(origStop, beOn ? beStop : origStop, trOn ? trStop : origStop)
+curStop = inLong ? longStop : inShort ? shortStop : origStop
+
+// Body-only box visualized as a shaded zone until breakout or expiry.
+zoneVisible = showBoxes and armed
+upperPlot = plot(zoneVisible ? zoneTop : na, "Body box top", color=color.orange, linewidth=2, style=plot.style_linebr)
+lowerPlot = plot(zoneVisible ? zoneBottom : na, "Body box bottom", color=color.orange, linewidth=2, style=plot.style_linebr)
+fill(upperPlot, lowerPlot, color=zoneVisible ? color.new(zoneDir == 1 ? color.teal : color.red, 84) : na, title="Body box")
+
+// All plotshape calls stay in GLOBAL scope (never inside an if).
+plotshape(setupBull, title="Bullish box", text="BOX", style=shape.circle, location=location.belowbar, color=color.teal, size=size.tiny)
+plotshape(setupBear, title="Bearish box", text="BOX", style=shape.circle, location=location.abovebar, color=color.red, size=size.tiny)
+plotshape(buy, title="BUY", text="BUY", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)
+plotshape(sell, title="SELL", text="SELL", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
+plotshape(showSmc and bullSweep, title="Sweep Bull", text="SWP", style=shape.triangleup, location=location.belowbar, color=color.orange, size=size.tiny)
+plotshape(showSmc and bearSweep, title="Sweep Bear", text="SWP", style=shape.triangledown, location=location.abovebar, color=color.orange, size=size.tiny)
+plotshape(showSmc and mssBullEv, title="MSS Bull", text="MSS", style=shape.triangleup, location=location.belowbar, color=color.purple, size=size.tiny)
+plotshape(showSmc and mssBearEv, title="MSS Bear", text="MSS", style=shape.triangledown, location=location.abovebar, color=color.purple, size=size.tiny)
+plotshape(showSmc and bosBullEv, title="BOS Bull", text="BOS", style=shape.triangleup, location=location.belowbar, color=color.blue, size=size.tiny)
+plotshape(showSmc and bosBearEv, title="BOS Bear", text="BOS", style=shape.triangledown, location=location.abovebar, color=color.blue, size=size.tiny)
+plotshape(showSmc and smtBullEv, title="SMT Bull", text="SMT", style=shape.triangleup, location=location.belowbar, color=color.yellow, size=size.tiny)
+plotshape(showSmc and smtBearEv, title="SMT Bear", text="SMT", style=shape.triangledown, location=location.abovebar, color=color.yellow, size=size.tiny)
+
+// Levels remain visible while position is open.
+var float entryLine = na
+var float stopLine = na
+var float targetLine = na
+entryLine := tradeNow ? close : inPos ? entryLine : na
+stopLine := tradeNow ? stopLevel : inPos ? curStop : na
+targetLine := buy ? close + targetPrice : sell ? close - targetPrice : inPos ? targetLine : na
+plot(showLevels ? entryLine : na, "Entry reference", color=color.blue, linewidth=2, style=plot.style_linebr)
+plot(showLevels ? stopLine : na, "Stop loss", color=color.red, linewidth=2, style=plot.style_linebr)
+plot(showLevels ? targetLine : na, "Take profit", color=color.lime, linewidth=2, style=plot.style_linebr)
+bgcolor(not validChart ? color.new(color.red, 92) : na, title="Use standard minutes chart")
+
+// ===== Closed trade points (in YOUR points) =====
+var float netPts = 0.0
+var float grossWin = 0.0
+var float grossLoss = 0.0
+var int curLoss = 0
+var int maxLoss = 0
+var float peakEq = 0.0
+var float maxDD = 0.0
+closedNow = strategy.closedtrades
+newClosed = closedNow > nz(closedNow[1])
+lastIdx = math.max(closedNow - 1, 0)
+tradePts = newClosed ? nz((strategy.closedtrades.exit_price(lastIdx) - strategy.closedtrades.entry_price(lastIdx)) * math.sign(strategy.closedtrades.size(lastIdx))) / pointSize : 0.0
+netPts += tradePts
+grossWin += tradePts > 0 ? tradePts : 0.0
+grossLoss += tradePts < 0 ? -tradePts : 0.0
+curLoss := tradePts < 0 ? curLoss + 1 : tradePts > 0 ? 0 : curLoss
+maxLoss := math.max(maxLoss, curLoss)
+peakEq := math.max(peakEq, netPts)
+maxDD := math.max(maxDD, peakEq - netPts)
+pfTxt = grossLoss > 0 ? str.tostring(grossWin / grossLoss, "#.##") : grossWin > 0 ? "∞" : "-"
+allWins = strategy.wintrades
+allLosses = strategy.losstrades
+allRate = allWins + allLosses > 0 ? allWins / (allWins + allLosses) * 100 : 0.0
+
+// ===== Weekly stats stored per week (no loops, no indented blocks) =====
+wkMs = 604800000
+wkOff = 338400000
+barWeek = int(math.floor((time - wkOff) / wkMs))
+var map<int, float> mWins = map.new<int, float>()
+var map<int, float> mLosses = map.new<int, float>()
+var map<int, float> mWinPts = map.new<int, float>()
+var map<int, float> mLossPts = map.new<int, float>()
+var int firstWeek = na
+firstWeek := na(firstWeek) and newClosed ? barWeek : firstWeek
+addOk = barstate.isconfirmed and newClosed
+map.put(mWins, barWeek, nz(map.get(mWins, barWeek)) + (addOk and tradePts > 0 ? 1.0 : 0.0))
+map.put(mLosses, barWeek, nz(map.get(mLosses, barWeek)) + (addOk and tradePts < 0 ? 1.0 : 0.0))
+map.put(mWinPts, barWeek, nz(map.get(mWinPts, barWeek)) + (addOk and tradePts > 0 ? tradePts : 0.0))
+map.put(mLossPts, barWeek, nz(map.get(mLossPts, barWeek)) + (addOk and tradePts < 0 ? tradePts : 0.0))
+
+// ===== Week of the last visible bar =====
+visTime = chart.right_visible_bar_time
+refWeek = na(visTime) ? barWeek : int(math.floor((visTime - wkOff) / wkMs))
+wWins = nz(map.get(mWins, refWeek))
+wLosses = nz(map.get(mLosses, refWeek))
+wWinPts = nz(map.get(mWinPts, refWeek))
+wLossPts = nz(map.get(mLossPts, refWeek))
+wTotal = wWins + wLosses
+wRate = wTotal > 0 ? wWins / wTotal * 100 : 0.0
+wNet = wWinPts + wLossPts
+weekNo = na(firstWeek) ? 1 : refWeek - firstWeek + 1
+weekStartMs = refWeek * wkMs + wkOff
+weekTitle = "الأسبوع " + str.tostring(weekNo) + " | " + str.format_time(weekStartMs, "MM-dd", "UTC")
+
+var table statsTable = table.new(position.top_right, 2, 16, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)
+table.cell(statsTable, 0, 0, showStats ? weekTitle : "", text_color=color.white, text_size=txtSize, bgcolor=color.new(color.blue, 30))
+table.cell(statsTable, 1, 0, showStats ? "AHV10" : "", text_color=color.white, text_size=txtSize, bgcolor=color.new(color.blue, 30))
+table.cell(statsTable, 0, 1, showStats ? "ناجحة" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 1, showStats ? str.tostring(wWins, "#") : "", text_color=color.lime, text_size=txtSize)
+table.cell(statsTable, 0, 2, showStats ? "خاسرة" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 2, showStats ? str.tostring(wLosses, "#") : "", text_color=color.red, text_size=txtSize)
+table.cell(statsTable, 0, 3, showStats ? "نسبة النجاح" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 3, showStats ? str.tostring(wRate, "#.#") + "%" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 0, 4, showStats ? "نقاط الربح" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 4, showStats ? str.tostring(wWinPts, "#.#") : "", text_color=color.lime, text_size=txtSize)
+table.cell(statsTable, 0, 5, showStats ? "نقاط الخسارة" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 5, showStats ? str.tostring(wLossPts, "#.#") : "", text_color=color.red, text_size=txtSize)
+table.cell(statsTable, 0, 6, showStats ? "صافي الأسبوع" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 6, showStats ? str.tostring(wNet, "#.#") : "", text_color=wNet >= 0 ? color.lime : color.red, text_size=txtSize)
+table.cell(statsTable, 0, 7, showStats ? "صافي الكل" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 7, showStats ? str.tostring(netPts, "#.#") : "", text_color=netPts >= 0 ? color.lime : color.red, text_size=txtSize)
+table.cell(statsTable, 0, 8, showStats ? "كل الصفقات" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 8, showStats ? str.tostring(strategy.closedtrades, "#") : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 0, 9, showStats ? "عامل الربح PF" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 9, showStats ? pfTxt : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 0, 10, showStats ? "أكبر خسارة متتالية" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 10, showStats ? str.tostring(maxLoss, "#") : "", text_color=color.red, text_size=txtSize)
+table.cell(statsTable, 0, 11, showStats ? "أكبر تراجع (نقاط)" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 11, showStats ? str.tostring(maxDD, "#.#") : "", text_color=color.red, text_size=txtSize)
+table.cell(statsTable, 0, 12, showStats ? "حجم النقطة" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 12, showStats ? str.tostring(pointSize, "#.#####") : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 0, 13, showStats ? "ناجحة (الكل)" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 13, showStats ? str.tostring(allWins, "#") : "", text_color=color.lime, text_size=txtSize)
+table.cell(statsTable, 0, 14, showStats ? "خاسرة (الكل)" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 14, showStats ? str.tostring(allLosses, "#") : "", text_color=color.red, text_size=txtSize)
+table.cell(statsTable, 0, 15, showStats ? "نسبة النجاح (الكل)" : "", text_color=color.white, text_size=txtSize)
+table.cell(statsTable, 1, 15, showStats ? str.tostring(allRate, "#.#") + "%" : "", text_color=color.yellow, text_size=txtSize)
+
+// Entry + alert, then exit (stop moves every bar)
+if buy or sell
+    strategy.entry(buy ? "BUY" : "SELL", buy ? strategy.long : strategy.short), alert((buy ? "شراء " : "بيع ") + syminfo.ticker + " | الدخول " + str.tostring(close, format.mintick) + " | الستوب " + str.tostring(stopLevel, format.mintick) + " | الهدف " + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + " | تأكيدات " + str.tostring(buy ? bullScore : bearScore) + "/" + str.tostring(enabledCount), alert.freq_once_per_bar_close)
+if tradeNow or inPos
+    strategy.exit((buy or inLong) ? "BUY EXIT" : "SELL EXIT", from_entry=(buy or inLong) ? "BUY" : "SELL", stop=curStop, limit=targetLine)

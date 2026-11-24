@@ -1,0 +1,5136 @@
+{
+  "source": "flutter_app/test/fixtures/pine/ahv10.pine",
+  "lines": 443,
+  "counts": {
+    "strategy": 19,
+    "لغة": 286,
+    "عرض": 168,
+    "مكتبة": 69,
+    "بيانات": 19,
+    "request.security": 8
+  },
+  "note": "Static code inspection, includes partial/unsupported candidate occurrences; not emitted diagnostic counts. No implementation.",
+  "sites": [
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 2,
+      "column": 1,
+      "construct": "strategy",
+      "source": "strategy(\"Ahmad HA First Trend V10\", shorttitle=\"AHV10\", overlay=true, pyramiding=0, process_orders_on_close=true, initial_capital=10000)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 14,
+      "column": 13,
+      "construct": "input.float",
+      "source": "wickTicks = input.float(0.0, \"تسامح الذيل المعاكس (تيك)\", minval=0.0, step=0.5, group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 14,
+      "column": 59,
+      "construct": "minval=",
+      "source": "wickTicks = input.float(0.0, \"تسامح الذيل المعاكس (تيك)\", minval=0.0, step=0.5, group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 14,
+      "column": 71,
+      "construct": "step=",
+      "source": "wickTicks = input.float(0.0, \"تسامح الذيل المعاكس (تيك)\", minval=0.0, step=0.5, group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 14,
+      "column": 81,
+      "construct": "group=",
+      "source": "wickTicks = input.float(0.0, \"تسامح الذيل المعاكس (تيك)\", minval=0.0, step=0.5, group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 15,
+      "column": 15,
+      "construct": "input.bool",
+      "source": "allowRepeat = input.bool(true, \"السماح بأكثر من صندوق في نفس الاتجاه\", group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 15,
+      "column": 72,
+      "construct": "group=",
+      "source": "allowRepeat = input.bool(true, \"السماح بأكثر من صندوق في نفس الاتجاه\", group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 16,
+      "column": 13,
+      "construct": "input.int",
+      "source": "reqStrong = input.int(2, \"عدد شموع HA القوية المتتالية للصندوق\", options=[1, 2], group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 16,
+      "column": 66,
+      "construct": "options=",
+      "source": "reqStrong = input.int(2, \"عدد شموع HA القوية المتتالية للصندوق\", options=[1, 2], group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 16,
+      "column": 82,
+      "construct": "group=",
+      "source": "reqStrong = input.int(2, \"عدد شموع HA القوية المتتالية للصندوق\", options=[1, 2], group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 17,
+      "column": 10,
+      "construct": "input.int",
+      "source": "minAge = input.int(2, \"أقل عمر للاتجاه (شموع) لتكوين الصندوق\", minval=1, maxval=10, group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 17,
+      "column": 64,
+      "construct": "minval=",
+      "source": "minAge = input.int(2, \"أقل عمر للاتجاه (شموع) لتكوين الصندوق\", minval=1, maxval=10, group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 17,
+      "column": 74,
+      "construct": "maxval=",
+      "source": "minAge = input.int(2, \"أقل عمر للاتجاه (شموع) لتكوين الصندوق\", minval=1, maxval=10, group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 17,
+      "column": 85,
+      "construct": "group=",
+      "source": "minAge = input.int(2, \"أقل عمر للاتجاه (شموع) لتكوين الصندوق\", minval=1, maxval=10, group=gEntry)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 18,
+      "column": 13,
+      "construct": "input.string",
+      "source": "trendGate = input.string(\"مطفأ\", \"قفل الاتجاه: منع الدخول عكس\", options=[\"مطفأ\", \"EMA\", \"فريم أكبر\", \"Supertrend\", \"ترتيب EMA\", \"الكل\"], group=gTrend)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 18,
+      "column": 65,
+      "construct": "options=",
+      "source": "trendGate = input.string(\"مطفأ\", \"قفل الاتجاه: منع الدخول عكس\", options=[\"مطفأ\", \"EMA\", \"فريم أكبر\", \"Supertrend\", \"ترتيب EMA\", \"الكل\"], group=gTrend)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 18,
+      "column": 138,
+      "construct": "group=",
+      "source": "trendGate = input.string(\"مطفأ\", \"قفل الاتجاه: منع الدخول عكس\", options=[\"مطفأ\", \"EMA\", \"فريم أكبر\", \"Supertrend\", \"ترتيب EMA\", \"الكل\"], group=gTrend)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 19,
+      "column": 12,
+      "construct": "input.bool",
+      "source": "useEarly = input.bool(false, \"تفعيل فلتر البداية المبكرة\", group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 19,
+      "column": 60,
+      "construct": "group=",
+      "source": "useEarly = input.bool(false, \"تفعيل فلتر البداية المبكرة\", group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 20,
+      "column": 13,
+      "construct": "input.int",
+      "source": "firstBars = input.int(3, \"عدد شموع HA الأولى بعد تغير اللون\", minval=2, maxval=20, group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 20,
+      "column": 63,
+      "construct": "minval=",
+      "source": "firstBars = input.int(3, \"عدد شموع HA الأولى بعد تغير اللون\", minval=2, maxval=20, group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 20,
+      "column": 73,
+      "construct": "maxval=",
+      "source": "firstBars = input.int(3, \"عدد شموع HA الأولى بعد تغير اللون\", minval=2, maxval=20, group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 20,
+      "column": 84,
+      "construct": "group=",
+      "source": "firstBars = input.int(3, \"عدد شموع HA الأولى بعد تغير اللون\", minval=2, maxval=20, group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 21,
+      "column": 13,
+      "construct": "input.bool",
+      "source": "useExpiry = input.bool(true, \"تفعيل انتهاء صلاحية الصندوق\", group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 21,
+      "column": 61,
+      "construct": "group=",
+      "source": "useExpiry = input.bool(true, \"تفعيل انتهاء صلاحية الصندوق\", group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 22,
+      "column": 11,
+      "construct": "input.int",
+      "source": "boxLife = input.int(3, \"عدد الشموع التي يبقى فيها الصندوق صالحاً\", minval=1, maxval=30, group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 22,
+      "column": 68,
+      "construct": "minval=",
+      "source": "boxLife = input.int(3, \"عدد الشموع التي يبقى فيها الصندوق صالحاً\", minval=1, maxval=30, group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 22,
+      "column": 78,
+      "construct": "maxval=",
+      "source": "boxLife = input.int(3, \"عدد الشموع التي يبقى فيها الصندوق صالحاً\", minval=1, maxval=30, group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 22,
+      "column": 89,
+      "construct": "group=",
+      "source": "boxLife = input.int(3, \"عدد الشموع التي يبقى فيها الصندوق صالحاً\", minval=1, maxval=30, group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 23,
+      "column": 9,
+      "construct": "input.bool",
+      "source": "useRR = input.bool(true, \"تفعيل فلتر نسبة العائد للمخاطرة (مع نقاط ثابتة)\", group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 23,
+      "column": 77,
+      "construct": "group=",
+      "source": "useRR = input.bool(true, \"تفعيل فلتر نسبة العائد للمخاطرة (مع نقاط ثابتة)\", group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 24,
+      "column": 9,
+      "construct": "input.float",
+      "source": "minRR = input.float(1.5, \"أدنى نسبة عائد / مخاطرة\", minval=0.1, group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 24,
+      "column": 53,
+      "construct": "minval=",
+      "source": "minRR = input.float(1.5, \"أدنى نسبة عائد / مخاطرة\", minval=0.1, group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 24,
+      "column": 65,
+      "construct": "group=",
+      "source": "minRR = input.float(1.5, \"أدنى نسبة عائد / مخاطرة\", minval=0.1, group=gFilter)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 25,
+      "column": 11,
+      "construct": "input.bool",
+      "source": "needAll = input.bool(true, \"اشتراط كل التأكيدات المفعّلة\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 25,
+      "column": 60,
+      "construct": "group=",
+      "source": "needAll = input.bool(true, \"اشتراط كل التأكيدات المفعّلة\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 26,
+      "column": 11,
+      "construct": "input.int",
+      "source": "minConf = input.int(1, \"أو: عدد التأكيدات المطلوبة (إذا أُطفئ الخيار السابق)\", minval=1, maxval=24, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 26,
+      "column": 80,
+      "construct": "minval=",
+      "source": "minConf = input.int(1, \"أو: عدد التأكيدات المطلوبة (إذا أُطفئ الخيار السابق)\", minval=1, maxval=24, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 26,
+      "column": 90,
+      "construct": "maxval=",
+      "source": "minConf = input.int(1, \"أو: عدد التأكيدات المطلوبة (إذا أُطفئ الخيار السابق)\", minval=1, maxval=24, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 26,
+      "column": 101,
+      "construct": "group=",
+      "source": "minConf = input.int(1, \"أو: عدد التأكيدات المطلوبة (إذا أُطفئ الخيار السابق)\", minval=1, maxval=24, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 27,
+      "column": 12,
+      "construct": "input.bool",
+      "source": "useTrend = input.bool(false, \"تأكيد 1: اتجاه EMA (شراء فوقه / بيع تحته)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 27,
+      "column": 75,
+      "construct": "group=",
+      "source": "useTrend = input.bool(false, \"تأكيد 1: اتجاه EMA (شراء فوقه / بيع تحته)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 28,
+      "column": 10,
+      "construct": "input.int",
+      "source": "emaLen = input.int(200, \"طول EMA البطيء (يستخدمه أيضاً قفل الاتجاه)\", minval=2, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 28,
+      "column": 71,
+      "construct": "minval=",
+      "source": "emaLen = input.int(200, \"طول EMA البطيء (يستخدمه أيضاً قفل الاتجاه)\", minval=2, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 28,
+      "column": 81,
+      "construct": "group=",
+      "source": "emaLen = input.int(200, \"طول EMA البطيء (يستخدمه أيضاً قفل الاتجاه)\", minval=2, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 29,
+      "column": 10,
+      "construct": "input.bool",
+      "source": "useHtf = input.bool(false, \"تأكيد 2: فريم أكبر (شموع HA)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 29,
+      "column": 60,
+      "construct": "group=",
+      "source": "useHtf = input.bool(false, \"تأكيد 2: فريم أكبر (شموع HA)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 30,
+      "column": 9,
+      "construct": "input.timeframe",
+      "source": "htfTf = input.timeframe(\"60\", \"فريم التأكيد (أكبر من فريم الشارت)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 30,
+      "column": 69,
+      "construct": "group=",
+      "source": "htfTf = input.timeframe(\"60\", \"فريم التأكيد (أكبر من فريم الشارت)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 31,
+      "column": 10,
+      "construct": "input.bool",
+      "source": "useVol = input.bool(false, \"تأكيد 3: حركة كافية (أدنى ATR)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 31,
+      "column": 62,
+      "construct": "group=",
+      "source": "useVol = input.bool(false, \"تأكيد 3: حركة كافية (أدنى ATR)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 32,
+      "column": 10,
+      "construct": "input.int",
+      "source": "atrLen = input.int(14, \"طول ATR\", minval=1, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 32,
+      "column": 35,
+      "construct": "minval=",
+      "source": "atrLen = input.int(14, \"طول ATR\", minval=1, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 32,
+      "column": 45,
+      "construct": "group=",
+      "source": "atrLen = input.int(14, \"طول ATR\", minval=1, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 33,
+      "column": 13,
+      "construct": "input.float",
+      "source": "minAtrPts = input.float(50.0, \"أدنى ATR (نقاط)\", minval=0.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 33,
+      "column": 50,
+      "construct": "minval=",
+      "source": "minAtrPts = input.float(50.0, \"أدنى ATR (نقاط)\", minval=0.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 33,
+      "column": 62,
+      "construct": "group=",
+      "source": "minAtrPts = input.float(50.0, \"أدنى ATR (نقاط)\", minval=0.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 34,
+      "column": 14,
+      "construct": "input.bool",
+      "source": "useSession = input.bool(false, \"تأكيد 4: وقت الجلسة\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 34,
+      "column": 55,
+      "construct": "group=",
+      "source": "useSession = input.bool(false, \"تأكيد 4: وقت الجلسة\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 35,
+      "column": 11,
+      "construct": "input.session",
+      "source": "sessStr = input.session(\"0700-2000\", \"وقت الجلسة\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 35,
+      "column": 52,
+      "construct": "group=",
+      "source": "sessStr = input.session(\"0700-2000\", \"وقت الجلسة\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 36,
+      "column": 10,
+      "construct": "input.bool",
+      "source": "useRsi = input.bool(false, \"تأكيد 5: RSI (شراء فوق المستوى / بيع تحته)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 36,
+      "column": 74,
+      "construct": "group=",
+      "source": "useRsi = input.bool(false, \"تأكيد 5: RSI (شراء فوق المستوى / بيع تحته)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 37,
+      "column": 10,
+      "construct": "input.int",
+      "source": "rsiLen = input.int(14, \"طول RSI\", minval=2, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 37,
+      "column": 35,
+      "construct": "minval=",
+      "source": "rsiLen = input.int(14, \"طول RSI\", minval=2, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 37,
+      "column": 45,
+      "construct": "group=",
+      "source": "rsiLen = input.int(14, \"طول RSI\", minval=2, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 38,
+      "column": 12,
+      "construct": "input.float",
+      "source": "rsiLevel = input.float(50.0, \"مستوى RSI للشراء (البيع = 100 - المستوى)\", minval=1.0, maxval=99.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 38,
+      "column": 74,
+      "construct": "minval=",
+      "source": "rsiLevel = input.float(50.0, \"مستوى RSI للشراء (البيع = 100 - المستوى)\", minval=1.0, maxval=99.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 38,
+      "column": 86,
+      "construct": "maxval=",
+      "source": "rsiLevel = input.float(50.0, \"مستوى RSI للشراء (البيع = 100 - المستوى)\", minval=1.0, maxval=99.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 38,
+      "column": 99,
+      "construct": "group=",
+      "source": "rsiLevel = input.float(50.0, \"مستوى RSI للشراء (البيع = 100 - المستوى)\", minval=1.0, maxval=99.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 39,
+      "column": 11,
+      "construct": "input.bool",
+      "source": "useMacd = input.bool(false, \"تأكيد 6: MACD (الهستوغرام فوق/تحت الصفر)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 39,
+      "column": 73,
+      "construct": "group=",
+      "source": "useMacd = input.bool(false, \"تأكيد 6: MACD (الهستوغرام فوق/تحت الصفر)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 40,
+      "column": 10,
+      "construct": "input.bool",
+      "source": "useAdx = input.bool(false, \"تأكيد 7: قوة الاتجاه ADX\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 40,
+      "column": 56,
+      "construct": "group=",
+      "source": "useAdx = input.bool(false, \"تأكيد 7: قوة الاتجاه ADX\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 41,
+      "column": 10,
+      "construct": "input.float",
+      "source": "adxMin = input.float(20.0, \"أدنى قيمة ADX\", minval=1.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 41,
+      "column": 45,
+      "construct": "minval=",
+      "source": "adxMin = input.float(20.0, \"أدنى قيمة ADX\", minval=1.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 41,
+      "column": 57,
+      "construct": "group=",
+      "source": "adxMin = input.float(20.0, \"أدنى قيمة ADX\", minval=1.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 42,
+      "column": 11,
+      "construct": "input.bool",
+      "source": "useVolu = input.bool(false, \"تأكيد 8: حجم التداول فوق المتوسط\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 42,
+      "column": 65,
+      "construct": "group=",
+      "source": "useVolu = input.bool(false, \"تأكيد 8: حجم التداول فوق المتوسط\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 43,
+      "column": 12,
+      "construct": "input.float",
+      "source": "voluMult = input.float(1.2, \"مضاعف متوسط الحجم (20 شمعة)\", minval=0.1, step=0.1, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 43,
+      "column": 60,
+      "construct": "minval=",
+      "source": "voluMult = input.float(1.2, \"مضاعف متوسط الحجم (20 شمعة)\", minval=0.1, step=0.1, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 43,
+      "column": 72,
+      "construct": "step=",
+      "source": "voluMult = input.float(1.2, \"مضاعف متوسط الحجم (20 شمعة)\", minval=0.1, step=0.1, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 43,
+      "column": 82,
+      "construct": "group=",
+      "source": "voluMult = input.float(1.2, \"مضاعف متوسط الحجم (20 شمعة)\", minval=0.1, step=0.1, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 44,
+      "column": 11,
+      "construct": "input.bool",
+      "source": "useBody = input.bool(false, \"تأكيد 9: قوة شمعة الاختراق (جسم كبير)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 44,
+      "column": 70,
+      "construct": "group=",
+      "source": "useBody = input.bool(false, \"تأكيد 9: قوة شمعة الاختراق (جسم كبير)\", group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 45,
+      "column": 11,
+      "construct": "input.float",
+      "source": "bodyMin = input.float(60.0, \"أدنى نسبة للجسم من الشمعة %\", minval=1.0, maxval=100.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 45,
+      "column": 60,
+      "construct": "minval=",
+      "source": "bodyMin = input.float(60.0, \"أدنى نسبة للجسم من الشمعة %\", minval=1.0, maxval=100.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 45,
+      "column": 72,
+      "construct": "maxval=",
+      "source": "bodyMin = input.float(60.0, \"أدنى نسبة للجسم من الشمعة %\", minval=1.0, maxval=100.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 45,
+      "column": 86,
+      "construct": "group=",
+      "source": "bodyMin = input.float(60.0, \"أدنى نسبة للجسم من الشمعة %\", minval=1.0, maxval=100.0, group=gAcc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 46,
+      "column": 14,
+      "construct": "input.bool",
+      "source": "strongPack = input.bool(false, \"تفعيل حزمة التأكيدات القوية الجاهزة (10 + 11 + 13 + 16 + 9)\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 46,
+      "column": 95,
+      "construct": "group=",
+      "source": "strongPack = input.bool(false, \"تفعيل حزمة التأكيدات القوية الجاهزة (10 + 11 + 13 + 16 + 9)\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 47,
+      "column": 12,
+      "construct": "input.bool",
+      "source": "useAlign = input.bool(false, \"تأكيد 10: قوة اتجاه الشارت (ترتيب EMA + ميل)\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 47,
+      "column": 78,
+      "construct": "group=",
+      "source": "useAlign = input.bool(false, \"تأكيد 10: قوة اتجاه الشارت (ترتيب EMA + ميل)\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 48,
+      "column": 11,
+      "construct": "input.int",
+      "source": "fastLen = input.int(20, \"طول EMA السريع\", minval=2, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 48,
+      "column": 43,
+      "construct": "minval=",
+      "source": "fastLen = input.int(20, \"طول EMA السريع\", minval=2, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 48,
+      "column": 53,
+      "construct": "group=",
+      "source": "fastLen = input.int(20, \"طول EMA السريع\", minval=2, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 49,
+      "column": 10,
+      "construct": "input.int",
+      "source": "midLen = input.int(50, \"طول EMA المتوسط\", minval=2, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 49,
+      "column": 43,
+      "construct": "minval=",
+      "source": "midLen = input.int(50, \"طول EMA المتوسط\", minval=2, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 49,
+      "column": 53,
+      "construct": "group=",
+      "source": "midLen = input.int(50, \"طول EMA المتوسط\", minval=2, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 50,
+      "column": 13,
+      "construct": "input.int",
+      "source": "slopeBars = input.int(5, \"عدد الشموع لقياس ميل EMA المتوسط\", minval=1, maxval=50, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 50,
+      "column": 62,
+      "construct": "minval=",
+      "source": "slopeBars = input.int(5, \"عدد الشموع لقياس ميل EMA المتوسط\", minval=1, maxval=50, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 50,
+      "column": 72,
+      "construct": "maxval=",
+      "source": "slopeBars = input.int(5, \"عدد الشموع لقياس ميل EMA المتوسط\", minval=1, maxval=50, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 50,
+      "column": 83,
+      "construct": "group=",
+      "source": "slopeBars = input.int(5, \"عدد الشموع لقياس ميل EMA المتوسط\", minval=1, maxval=50, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 51,
+      "column": 12,
+      "construct": "input.bool",
+      "source": "usePrior = input.bool(false, \"تأكيد 11: الشموع السابقة اتجاهية وقوية\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 51,
+      "column": 72,
+      "construct": "group=",
+      "source": "usePrior = input.bool(false, \"تأكيد 11: الشموع السابقة اتجاهية وقوية\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 52,
+      "column": 10,
+      "construct": "input.int",
+      "source": "priorN = input.int(5, \"عدد الشموع السابقة المفحوصة\", minval=2, maxval=30, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 52,
+      "column": 54,
+      "construct": "minval=",
+      "source": "priorN = input.int(5, \"عدد الشموع السابقة المفحوصة\", minval=2, maxval=30, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 52,
+      "column": 64,
+      "construct": "maxval=",
+      "source": "priorN = input.int(5, \"عدد الشموع السابقة المفحوصة\", minval=2, maxval=30, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 52,
+      "column": 75,
+      "construct": "group=",
+      "source": "priorN = input.int(5, \"عدد الشموع السابقة المفحوصة\", minval=2, maxval=30, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 53,
+      "column": 12,
+      "construct": "input.int",
+      "source": "priorMin = input.int(4, \"أقل عدد منها في اتجاه الصفقة\", minval=1, maxval=30, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 53,
+      "column": 57,
+      "construct": "minval=",
+      "source": "priorMin = input.int(4, \"أقل عدد منها في اتجاه الصفقة\", minval=1, maxval=30, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 53,
+      "column": 67,
+      "construct": "maxval=",
+      "source": "priorMin = input.int(4, \"أقل عدد منها في اتجاه الصفقة\", minval=1, maxval=30, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 53,
+      "column": 78,
+      "construct": "group=",
+      "source": "priorMin = input.int(4, \"أقل عدد منها في اتجاه الصفقة\", minval=1, maxval=30, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 54,
+      "column": 13,
+      "construct": "input.float",
+      "source": "priorBody = input.float(50.0, \"أدنى متوسط لجسم هذه الشموع %\", minval=1.0, maxval=100.0, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 54,
+      "column": 63,
+      "construct": "minval=",
+      "source": "priorBody = input.float(50.0, \"أدنى متوسط لجسم هذه الشموع %\", minval=1.0, maxval=100.0, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 54,
+      "column": 75,
+      "construct": "maxval=",
+      "source": "priorBody = input.float(50.0, \"أدنى متوسط لجسم هذه الشموع %\", minval=1.0, maxval=100.0, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 54,
+      "column": 89,
+      "construct": "group=",
+      "source": "priorBody = input.float(50.0, \"أدنى متوسط لجسم هذه الشموع %\", minval=1.0, maxval=100.0, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 55,
+      "column": 9,
+      "construct": "input.bool",
+      "source": "useDc = input.bool(false, \"تأكيد 12: كسر أعلى/أدنى عدد من الشموع\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 55,
+      "column": 68,
+      "construct": "group=",
+      "source": "useDc = input.bool(false, \"تأكيد 12: كسر أعلى/أدنى عدد من الشموع\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 56,
+      "column": 9,
+      "construct": "input.int",
+      "source": "dcLen = input.int(20, \"عدد الشموع لكسر القمة/القاع\", minval=2, maxval=200, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 56,
+      "column": 54,
+      "construct": "minval=",
+      "source": "dcLen = input.int(20, \"عدد الشموع لكسر القمة/القاع\", minval=2, maxval=200, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 56,
+      "column": 64,
+      "construct": "maxval=",
+      "source": "dcLen = input.int(20, \"عدد الشموع لكسر القمة/القاع\", minval=2, maxval=200, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 56,
+      "column": 76,
+      "construct": "group=",
+      "source": "dcLen = input.int(20, \"عدد الشموع لكسر القمة/القاع\", minval=2, maxval=200, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 57,
+      "column": 9,
+      "construct": "input.bool",
+      "source": "useDi = input.bool(false, \"تأكيد 13: اتجاه DI مع ADX (يستخدم أدنى ADX أعلاه)\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 57,
+      "column": 80,
+      "construct": "group=",
+      "source": "useDi = input.bool(false, \"تأكيد 13: اتجاه DI مع ADX (يستخدم أدنى ADX أعلاه)\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 58,
+      "column": 9,
+      "construct": "input.bool",
+      "source": "useSt = input.bool(false, \"تأكيد 14: اتجاه Supertrend\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 58,
+      "column": 57,
+      "construct": "group=",
+      "source": "useSt = input.bool(false, \"تأكيد 14: اتجاه Supertrend\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 59,
+      "column": 12,
+      "construct": "input.float",
+      "source": "stFactor = input.float(3.0, \"معامل Supertrend (يستخدمه أيضاً قفل الاتجاه)\", minval=0.5, step=0.5, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 59,
+      "column": 77,
+      "construct": "minval=",
+      "source": "stFactor = input.float(3.0, \"معامل Supertrend (يستخدمه أيضاً قفل الاتجاه)\", minval=0.5, step=0.5, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 59,
+      "column": 89,
+      "construct": "step=",
+      "source": "stFactor = input.float(3.0, \"معامل Supertrend (يستخدمه أيضاً قفل الاتجاه)\", minval=0.5, step=0.5, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 59,
+      "column": 99,
+      "construct": "group=",
+      "source": "stFactor = input.float(3.0, \"معامل Supertrend (يستخدمه أيضاً قفل الاتجاه)\", minval=0.5, step=0.5, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 60,
+      "column": 9,
+      "construct": "input.int",
+      "source": "stLen = input.int(10, \"طول Supertrend\", minval=1, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 60,
+      "column": 41,
+      "construct": "minval=",
+      "source": "stLen = input.int(10, \"طول Supertrend\", minval=1, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 60,
+      "column": 51,
+      "construct": "group=",
+      "source": "stLen = input.int(10, \"طول Supertrend\", minval=1, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 61,
+      "column": 10,
+      "construct": "input.bool",
+      "source": "useExt = input.bool(false, \"تأكيد 15: عدم الدخول المتأخر (بعد السعر عن EMA المتوسط)\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 61,
+      "column": 87,
+      "construct": "group=",
+      "source": "useExt = input.bool(false, \"تأكيد 15: عدم الدخول المتأخر (بعد السعر عن EMA المتوسط)\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 62,
+      "column": 10,
+      "construct": "input.float",
+      "source": "maxExt = input.float(3.0, \"أقصى بعد عن EMA المتوسط (بعدد ATR)\", minval=0.5, step=0.5, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 62,
+      "column": 65,
+      "construct": "minval=",
+      "source": "maxExt = input.float(3.0, \"أقصى بعد عن EMA المتوسط (بعدد ATR)\", minval=0.5, step=0.5, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 62,
+      "column": 77,
+      "construct": "step=",
+      "source": "maxExt = input.float(3.0, \"أقصى بعد عن EMA المتوسط (بعدد ATR)\", minval=0.5, step=0.5, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 62,
+      "column": 87,
+      "construct": "group=",
+      "source": "maxExt = input.float(3.0, \"أقصى بعد عن EMA المتوسط (بعدد ATR)\", minval=0.5, step=0.5, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 63,
+      "column": 12,
+      "construct": "input.bool",
+      "source": "useClose = input.bool(false, \"تأكيد 16: إغلاق الشمعة قرب القمة/القاع\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 63,
+      "column": 72,
+      "construct": "group=",
+      "source": "useClose = input.bool(false, \"تأكيد 16: إغلاق الشمعة قرب القمة/القاع\", group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 64,
+      "column": 12,
+      "construct": "input.float",
+      "source": "closeMin = input.float(70.0, \"موضع الإغلاق من مدى الشمعة %\", minval=50.0, maxval=100.0, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 64,
+      "column": 62,
+      "construct": "minval=",
+      "source": "closeMin = input.float(70.0, \"موضع الإغلاق من مدى الشمعة %\", minval=50.0, maxval=100.0, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 64,
+      "column": 75,
+      "construct": "maxval=",
+      "source": "closeMin = input.float(70.0, \"موضع الإغلاق من مدى الشمعة %\", minval=50.0, maxval=100.0, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 64,
+      "column": 89,
+      "construct": "group=",
+      "source": "closeMin = input.float(70.0, \"موضع الإغلاق من مدى الشمعة %\", minval=50.0, maxval=100.0, group=gAcc2)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 65,
+      "column": 11,
+      "construct": "input.bool",
+      "source": "smcPack = input.bool(false, \"تفعيل حزمة SMC القوية جداً الجاهزة (18 + 19 + 21 + 22 + 23)\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 65,
+      "column": 92,
+      "construct": "group=",
+      "source": "smcPack = input.bool(false, \"تفعيل حزمة SMC القوية جداً الجاهزة (18 + 19 + 21 + 22 + 23)\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 66,
+      "column": 12,
+      "construct": "input.int",
+      "source": "swingLen = input.int(5, \"طول القمم/القيعان (شموع يمين ويسار)\", minval=1, maxval=20, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 66,
+      "column": 64,
+      "construct": "minval=",
+      "source": "swingLen = input.int(5, \"طول القمم/القيعان (شموع يمين ويسار)\", minval=1, maxval=20, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 66,
+      "column": 74,
+      "construct": "maxval=",
+      "source": "swingLen = input.int(5, \"طول القمم/القيعان (شموع يمين ويسار)\", minval=1, maxval=20, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 66,
+      "column": 85,
+      "construct": "group=",
+      "source": "swingLen = input.int(5, \"طول القمم/القيعان (شموع يمين ويسار)\", minval=1, maxval=20, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 67,
+      "column": 12,
+      "construct": "input.bool",
+      "source": "useSweep = input.bool(false, \"تأكيد 17: سحب سيولة قبل الصفقة\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 67,
+      "column": 64,
+      "construct": "group=",
+      "source": "useSweep = input.bool(false, \"تأكيد 17: سحب سيولة قبل الصفقة\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 68,
+      "column": 12,
+      "construct": "input.int",
+      "source": "sweepWin = input.int(10, \"نافذة سحب السيولة قبل الاختراق (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 68,
+      "column": 67,
+      "construct": "minval=",
+      "source": "sweepWin = input.int(10, \"نافذة سحب السيولة قبل الاختراق (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 68,
+      "column": 77,
+      "construct": "maxval=",
+      "source": "sweepWin = input.int(10, \"نافذة سحب السيولة قبل الاختراق (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 68,
+      "column": 89,
+      "construct": "group=",
+      "source": "sweepWin = input.int(10, \"نافذة سحب السيولة قبل الاختراق (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 69,
+      "column": 15,
+      "construct": "input.bool",
+      "source": "useSweepBox = input.bool(false, \"تأكيد 18: سحب سيولة قبل تكوين الصندوق\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 69,
+      "column": 74,
+      "construct": "group=",
+      "source": "useSweepBox = input.bool(false, \"تأكيد 18: سحب سيولة قبل تكوين الصندوق\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 70,
+      "column": 15,
+      "construct": "input.int",
+      "source": "sweepBoxWin = input.int(10, \"نافذة سحب السيولة قبل الصندوق (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 70,
+      "column": 69,
+      "construct": "minval=",
+      "source": "sweepBoxWin = input.int(10, \"نافذة سحب السيولة قبل الصندوق (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 70,
+      "column": 79,
+      "construct": "maxval=",
+      "source": "sweepBoxWin = input.int(10, \"نافذة سحب السيولة قبل الصندوق (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 70,
+      "column": 91,
+      "construct": "group=",
+      "source": "sweepBoxWin = input.int(10, \"نافذة سحب السيولة قبل الصندوق (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 71,
+      "column": 10,
+      "construct": "input.bool",
+      "source": "useSmt = input.bool(false, \"تأكيد 19: SMT (تباعد مع أصل مرتبط)\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 71,
+      "column": 66,
+      "construct": "group=",
+      "source": "useSmt = input.bool(false, \"تأكيد 19: SMT (تباعد مع أصل مرتبط)\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 72,
+      "column": 11,
+      "construct": "input.string",
+      "source": "smtMode = input.string(\"تلقائي\", \"رمز المقارنة لـ SMT\", options=[\"تلقائي\", \"يدوي\"], group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 72,
+      "column": 57,
+      "construct": "options=",
+      "source": "smtMode = input.string(\"تلقائي\", \"رمز المقارنة لـ SMT\", options=[\"تلقائي\", \"يدوي\"], group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 72,
+      "column": 85,
+      "construct": "group=",
+      "source": "smtMode = input.string(\"تلقائي\", \"رمز المقارنة لـ SMT\", options=[\"تلقائي\", \"يدوي\"], group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 73,
+      "column": 13,
+      "construct": "input.symbol",
+      "source": "smtManual = input.symbol(\"OANDA:XAGUSD\", \"رمز المقارنة اليدوي\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 73,
+      "column": 65,
+      "construct": "group=",
+      "source": "smtManual = input.symbol(\"OANDA:XAGUSD\", \"رمز المقارنة اليدوي\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 74,
+      "column": 10,
+      "construct": "input.int",
+      "source": "smtLen = input.int(20, \"عدد الشموع للقمة/القاع في SMT\", minval=3, maxval=200, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 74,
+      "column": 57,
+      "construct": "minval=",
+      "source": "smtLen = input.int(20, \"عدد الشموع للقمة/القاع في SMT\", minval=3, maxval=200, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 74,
+      "column": 67,
+      "construct": "maxval=",
+      "source": "smtLen = input.int(20, \"عدد الشموع للقمة/القاع في SMT\", minval=3, maxval=200, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 74,
+      "column": 79,
+      "construct": "group=",
+      "source": "smtLen = input.int(20, \"عدد الشموع للقمة/القاع في SMT\", minval=3, maxval=200, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 75,
+      "column": 10,
+      "construct": "input.int",
+      "source": "smtWin = input.int(10, \"نافذة SMT (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 75,
+      "column": 44,
+      "construct": "minval=",
+      "source": "smtWin = input.int(10, \"نافذة SMT (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 75,
+      "column": 54,
+      "construct": "maxval=",
+      "source": "smtWin = input.int(10, \"نافذة SMT (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 75,
+      "column": 66,
+      "construct": "group=",
+      "source": "smtWin = input.int(10, \"نافذة SMT (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 76,
+      "column": 10,
+      "construct": "input.bool",
+      "source": "useMss = input.bool(false, \"تأكيد 20: MSS (تحول هيكل السوق)\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 76,
+      "column": 63,
+      "construct": "group=",
+      "source": "useMss = input.bool(false, \"تأكيد 20: MSS (تحول هيكل السوق)\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 77,
+      "column": 10,
+      "construct": "input.bool",
+      "source": "useBos = input.bool(false, \"تأكيد 21: BOS (كسر الهيكل)\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 77,
+      "column": 58,
+      "construct": "group=",
+      "source": "useBos = input.bool(false, \"تأكيد 21: BOS (كسر الهيكل)\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 78,
+      "column": 10,
+      "construct": "input.int",
+      "source": "mssWin = input.int(15, \"نافذة MSS / BOS / التسلسل (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 78,
+      "column": 60,
+      "construct": "minval=",
+      "source": "mssWin = input.int(15, \"نافذة MSS / BOS / التسلسل (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 78,
+      "column": 70,
+      "construct": "maxval=",
+      "source": "mssWin = input.int(15, \"نافذة MSS / BOS / التسلسل (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 78,
+      "column": 82,
+      "construct": "group=",
+      "source": "mssWin = input.int(15, \"نافذة MSS / BOS / التسلسل (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 79,
+      "column": 10,
+      "construct": "input.bool",
+      "source": "useFvg = input.bool(false, \"تأكيد 22: فجوة FVG مع شمعة اندفاع\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 79,
+      "column": 65,
+      "construct": "group=",
+      "source": "useFvg = input.bool(false, \"تأكيد 22: فجوة FVG مع شمعة اندفاع\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 80,
+      "column": 10,
+      "construct": "input.int",
+      "source": "fvgWin = input.int(8, \"نافذة FVG (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 80,
+      "column": 43,
+      "construct": "minval=",
+      "source": "fvgWin = input.int(8, \"نافذة FVG (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 80,
+      "column": 53,
+      "construct": "maxval=",
+      "source": "fvgWin = input.int(8, \"نافذة FVG (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 80,
+      "column": 65,
+      "construct": "group=",
+      "source": "fvgWin = input.int(8, \"نافذة FVG (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 81,
+      "column": 11,
+      "construct": "input.float",
+      "source": "fvgBody = input.float(1.0, \"أدنى جسم لشمعة الاندفاع (× ATR)\", minval=0.1, step=0.1, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 81,
+      "column": 63,
+      "construct": "minval=",
+      "source": "fvgBody = input.float(1.0, \"أدنى جسم لشمعة الاندفاع (× ATR)\", minval=0.1, step=0.1, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 81,
+      "column": 75,
+      "construct": "step=",
+      "source": "fvgBody = input.float(1.0, \"أدنى جسم لشمعة الاندفاع (× ATR)\", minval=0.1, step=0.1, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 81,
+      "column": 85,
+      "construct": "group=",
+      "source": "fvgBody = input.float(1.0, \"أدنى جسم لشمعة الاندفاع (× ATR)\", minval=0.1, step=0.1, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 82,
+      "column": 10,
+      "construct": "input.bool",
+      "source": "useSeq = input.bool(false, \"تأكيد 23: تسلسل ICT: سحب سيولة ثم MSS\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 82,
+      "column": 69,
+      "construct": "group=",
+      "source": "useSeq = input.bool(false, \"تأكيد 23: تسلسل ICT: سحب سيولة ثم MSS\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 83,
+      "column": 10,
+      "construct": "input.int",
+      "source": "seqGap = input.int(10, \"أقصى مسافة بين سحب السيولة و MSS (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 83,
+      "column": 67,
+      "construct": "minval=",
+      "source": "seqGap = input.int(10, \"أقصى مسافة بين سحب السيولة و MSS (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 83,
+      "column": 77,
+      "construct": "maxval=",
+      "source": "seqGap = input.int(10, \"أقصى مسافة بين سحب السيولة و MSS (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 83,
+      "column": 89,
+      "construct": "group=",
+      "source": "seqGap = input.int(10, \"أقصى مسافة بين سحب السيولة و MSS (شموع)\", minval=1, maxval=100, group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 84,
+      "column": 9,
+      "construct": "input.bool",
+      "source": "usePD = input.bool(false, \"تأكيد 24: منطقة خصم/علاوة (الشراء تحت 50% من آخر نطاق)\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 84,
+      "column": 85,
+      "construct": "group=",
+      "source": "usePD = input.bool(false, \"تأكيد 24: منطقة خصم/علاوة (الشراء تحت 50% من آخر نطاق)\", group=gSmc)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 85,
+      "column": 14,
+      "construct": "input.string",
+      "source": "targetMode = input.string(\"نقاط ثابتة\", \"نمط الهدف\", options=[\"نقاط ثابتة\", \"مضاعف الستوب\"], group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 85,
+      "column": 54,
+      "construct": "options=",
+      "source": "targetMode = input.string(\"نقاط ثابتة\", \"نمط الهدف\", options=[\"نقاط ثابتة\", \"مضاعف الستوب\"], group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 85,
+      "column": 94,
+      "construct": "group=",
+      "source": "targetMode = input.string(\"نقاط ثابتة\", \"نمط الهدف\", options=[\"نقاط ثابتة\", \"مضاعف الستوب\"], group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 86,
+      "column": 13,
+      "construct": "input.float",
+      "source": "targetPts = input.float(500.0, \"مسافة الهدف (نقاط) - للنمط الثابت\", minval=0.1, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 86,
+      "column": 69,
+      "construct": "minval=",
+      "source": "targetPts = input.float(500.0, \"مسافة الهدف (نقاط) - للنمط الثابت\", minval=0.1, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 86,
+      "column": 81,
+      "construct": "group=",
+      "source": "targetPts = input.float(500.0, \"مسافة الهدف (نقاط) - للنمط الثابت\", minval=0.1, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 87,
+      "column": 10,
+      "construct": "input.float",
+      "source": "rrMult = input.float(1.0, \"مضاعف الستوب للهدف - للنمط الثاني (1.0 = بقدر الستوب)\", minval=0.2, step=0.1, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 87,
+      "column": 84,
+      "construct": "minval=",
+      "source": "rrMult = input.float(1.0, \"مضاعف الستوب للهدف - للنمط الثاني (1.0 = بقدر الستوب)\", minval=0.2, step=0.1, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 87,
+      "column": 96,
+      "construct": "step=",
+      "source": "rrMult = input.float(1.0, \"مضاعف الستوب للهدف - للنمط الثاني (1.0 = بقدر الستوب)\", minval=0.2, step=0.1, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 87,
+      "column": 106,
+      "construct": "group=",
+      "source": "rrMult = input.float(1.0, \"مضاعف الستوب للهدف - للنمط الثاني (1.0 = بقدر الستوب)\", minval=0.2, step=0.1, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 88,
+      "column": 11,
+      "construct": "input.float",
+      "source": "stopPts = input.float(0.0, \"إضافة للستوب (نقاط)\", minval=0.0, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 88,
+      "column": 51,
+      "construct": "minval=",
+      "source": "stopPts = input.float(0.0, \"إضافة للستوب (نقاط)\", minval=0.0, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 88,
+      "column": 63,
+      "construct": "group=",
+      "source": "stopPts = input.float(0.0, \"إضافة للستوب (نقاط)\", minval=0.0, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 89,
+      "column": 11,
+      "construct": "input.float",
+      "source": "ptInput = input.float(0.0, \"حجم النقطة بالسعر (0 = تلقائي)\", minval=0.0, step=0.00001, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 89,
+      "column": 62,
+      "construct": "minval=",
+      "source": "ptInput = input.float(0.0, \"حجم النقطة بالسعر (0 = تلقائي)\", minval=0.0, step=0.00001, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 89,
+      "column": 74,
+      "construct": "step=",
+      "source": "ptInput = input.float(0.0, \"حجم النقطة بالسعر (0 = تلقائي)\", minval=0.0, step=0.00001, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 89,
+      "column": 88,
+      "construct": "group=",
+      "source": "ptInput = input.float(0.0, \"حجم النقطة بالسعر (0 = تلقائي)\", minval=0.0, step=0.00001, group=gRisk)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 90,
+      "column": 9,
+      "construct": "input.bool",
+      "source": "useBE = input.bool(false, \"تفعيل نقل الستوب للتعادل\", group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 90,
+      "column": 55,
+      "construct": "group=",
+      "source": "useBE = input.bool(false, \"تفعيل نقل الستوب للتعادل\", group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 91,
+      "column": 10,
+      "construct": "input.float",
+      "source": "beTrig = input.float(150.0, \"نقل للتعادل بعد ربح (نقاط)\", minval=0.1, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 91,
+      "column": 59,
+      "construct": "minval=",
+      "source": "beTrig = input.float(150.0, \"نقل للتعادل بعد ربح (نقاط)\", minval=0.1, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 91,
+      "column": 71,
+      "construct": "group=",
+      "source": "beTrig = input.float(150.0, \"نقل للتعادل بعد ربح (نقاط)\", minval=0.1, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 92,
+      "column": 9,
+      "construct": "input.float",
+      "source": "beOff = input.float(10.0, \"الستوب عند التعادل فوق/تحت الدخول (نقاط)\", minval=0.0, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 92,
+      "column": 71,
+      "construct": "minval=",
+      "source": "beOff = input.float(10.0, \"الستوب عند التعادل فوق/تحت الدخول (نقاط)\", minval=0.0, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 92,
+      "column": 83,
+      "construct": "group=",
+      "source": "beOff = input.float(10.0, \"الستوب عند التعادل فوق/تحت الدخول (نقاط)\", minval=0.0, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 93,
+      "column": 12,
+      "construct": "input.bool",
+      "source": "useTrail = input.bool(false, \"تفعيل الستوب المتحرك\", group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 93,
+      "column": 54,
+      "construct": "group=",
+      "source": "useTrail = input.bool(false, \"تفعيل الستوب المتحرك\", group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 94,
+      "column": 11,
+      "construct": "input.float",
+      "source": "trStart = input.float(200.0, \"بدء الستوب المتحرك بعد ربح (نقاط)\", minval=0.1, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 94,
+      "column": 67,
+      "construct": "minval=",
+      "source": "trStart = input.float(200.0, \"بدء الستوب المتحرك بعد ربح (نقاط)\", minval=0.1, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 94,
+      "column": 79,
+      "construct": "group=",
+      "source": "trStart = input.float(200.0, \"بدء الستوب المتحرك بعد ربح (نقاط)\", minval=0.1, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "numeric input returns default only",
+      "line": 95,
+      "column": 10,
+      "construct": "input.float",
+      "source": "trDist = input.float(100.0, \"مسافة الستوب المتحرك عن القمة (نقاط)\", minval=0.1, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 95,
+      "column": 69,
+      "construct": "minval=",
+      "source": "trDist = input.float(100.0, \"مسافة الستوب المتحرك عن القمة (نقاط)\", minval=0.1, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 95,
+      "column": 81,
+      "construct": "group=",
+      "source": "trDist = input.float(100.0, \"مسافة الستوب المتحرك عن القمة (نقاط)\", minval=0.1, group=gMg)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 96,
+      "column": 13,
+      "construct": "input.bool",
+      "source": "showBoxes = input.bool(true, \"إظهار صناديق الأجسام\", group=gView)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 96,
+      "column": 54,
+      "construct": "group=",
+      "source": "showBoxes = input.bool(true, \"إظهار صناديق الأجسام\", group=gView)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 97,
+      "column": 14,
+      "construct": "input.bool",
+      "source": "showLevels = input.bool(true, \"إظهار الدخول والستوب والهدف\", group=gView)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 97,
+      "column": 62,
+      "construct": "group=",
+      "source": "showLevels = input.bool(true, \"إظهار الدخول والستوب والهدف\", group=gView)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 98,
+      "column": 11,
+      "construct": "input.bool",
+      "source": "showSmc = input.bool(false, \"إظهار علامات SMC على الشارت (SWP / MSS / BOS / SMT)\", group=gView)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 98,
+      "column": 84,
+      "construct": "group=",
+      "source": "showSmc = input.bool(false, \"إظهار علامات SMC على الشارت (SWP / MSS / BOS / SMT)\", group=gView)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 99,
+      "column": 13,
+      "construct": "input.bool",
+      "source": "showStats = input.bool(true, \"إظهار جدول نتائج الأسبوع\", group=gView)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 99,
+      "column": 58,
+      "construct": "group=",
+      "source": "showStats = input.bool(true, \"إظهار جدول نتائج الأسبوع\", group=gView)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "other input forms",
+      "line": 100,
+      "column": 11,
+      "construct": "input.string",
+      "source": "tblSize = input.string(\"small\", \"حجم نص الجدول\", options=[\"tiny\", \"small\", \"normal\"], group=gView)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 100,
+      "column": 50,
+      "construct": "options=",
+      "source": "tblSize = input.string(\"small\", \"حجم نص الجدول\", options=[\"tiny\", \"small\", \"normal\"], group=gView)"
+    },
+    {
+      "category": "لغة",
+      "status": "partial",
+      "reason": "input metadata not enforced/option array not executable",
+      "line": 100,
+      "column": 87,
+      "construct": "group=",
+      "source": "tblSize = input.string(\"small\", \"حجم نص الجدول\", options=[\"tiny\", \"small\", \"normal\"], group=gView)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 101,
+      "column": 31,
+      "construct": "size.tiny",
+      "source": "txtSize = tblSize == \"tiny\" ? size.tiny : tblSize == \"normal\" ? size.normal : size.small"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 101,
+      "column": 65,
+      "construct": "size.normal",
+      "source": "txtSize = tblSize == \"tiny\" ? size.tiny : tblSize == \"normal\" ? size.normal : size.small"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 101,
+      "column": 79,
+      "construct": "size.small",
+      "source": "txtSize = tblSize == \"tiny\" ? size.tiny : tblSize == \"normal\" ? size.normal : size.small"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 116,
+      "column": 10,
+      "construct": "str.contains",
+      "source": "isGold = str.contains(syminfo.ticker, \"XAU\") or str.contains(syminfo.ticker, \"GOLD\")"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 116,
+      "column": 23,
+      "construct": "syminfo.ticker",
+      "source": "isGold = str.contains(syminfo.ticker, \"XAU\") or str.contains(syminfo.ticker, \"GOLD\")"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 116,
+      "column": 49,
+      "construct": "str.contains",
+      "source": "isGold = str.contains(syminfo.ticker, \"XAU\") or str.contains(syminfo.ticker, \"GOLD\")"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 116,
+      "column": 62,
+      "construct": "syminfo.ticker",
+      "source": "isGold = str.contains(syminfo.ticker, \"XAU\") or str.contains(syminfo.ticker, \"GOLD\")"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 117,
+      "column": 11,
+      "construct": "syminfo.type",
+      "source": "isForex = syminfo.type == \"forex\""
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 118,
+      "column": 9,
+      "construct": "str.contains",
+      "source": "isJpy = str.contains(syminfo.ticker, \"JPY\")"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 118,
+      "column": 22,
+      "construct": "syminfo.ticker",
+      "source": "isJpy = str.contains(syminfo.ticker, \"JPY\")"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 124,
+      "column": 14,
+      "construct": "chart.is_standard",
+      "source": "validChart = chart.is_standard and timeframe.isminutes"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 124,
+      "column": 36,
+      "construct": "timeframe.isminutes",
+      "source": "validChart = chart.is_standard and timeframe.isminutes"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 125,
+      "column": 28,
+      "construct": "barstate.isconfirmed",
+      "source": "confirmed = validChart and barstate.isconfirmed"
+    },
+    {
+      "category": "request.security",
+      "status": "unsupported",
+      "reason": "security/context/ticker/merge semantics",
+      "line": 126,
+      "column": 12,
+      "construct": "ticker.heikinashi",
+      "source": "haTicker = ticker.heikinashi(ticker.standard(syminfo.tickerid))"
+    },
+    {
+      "category": "request.security",
+      "status": "unsupported",
+      "reason": "security/context/ticker/merge semantics",
+      "line": 126,
+      "column": 30,
+      "construct": "ticker.standard",
+      "source": "haTicker = ticker.heikinashi(ticker.standard(syminfo.tickerid))"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 126,
+      "column": 46,
+      "construct": "syminfo.tickerid",
+      "source": "haTicker = ticker.heikinashi(ticker.standard(syminfo.tickerid))"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "tuple declaration",
+      "line": 127,
+      "column": 1,
+      "construct": "[haO, haH, haL, haC] =",
+      "source": "[haO, haH, haL, haC] = request.security(haTicker, timeframe.period, [open, high, low, close], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "category": "request.security",
+      "status": "unsupported",
+      "reason": "security/context/ticker/merge semantics",
+      "line": 127,
+      "column": 24,
+      "construct": "request.security",
+      "source": "[haO, haH, haL, haC] = request.security(haTicker, timeframe.period, [open, high, low, close], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 127,
+      "column": 51,
+      "construct": "timeframe.period",
+      "source": "[haO, haH, haL, haC] = request.security(haTicker, timeframe.period, [open, high, low, close], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "category": "request.security",
+      "status": "unsupported",
+      "reason": "security/context/ticker/merge semantics",
+      "line": 127,
+      "column": 105,
+      "construct": "barmerge.lookahead_off",
+      "source": "[haO, haH, haL, haC] = request.security(haTicker, timeframe.period, [open, high, low, close], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 128,
+      "column": 19,
+      "construct": "syminfo.mintick",
+      "source": "tol = wickTicks * syminfo.mintick + 0.00000001"
+    },
+    {
+      "category": "request.security",
+      "status": "unsupported",
+      "reason": "security/context/ticker/merge semantics",
+      "line": 140,
+      "column": 10,
+      "construct": "request.security",
+      "source": "htfDir = request.security(haTicker, htfTf, close[1] > open[1] ? 1 : close[1] < open[1] ? -1 : 0, lookahead=barmerge.lookahead_on)"
+    },
+    {
+      "category": "request.security",
+      "status": "unsupported",
+      "reason": "security/context/ticker/merge semantics",
+      "line": 140,
+      "column": 108,
+      "construct": "barmerge.lookahead_on",
+      "source": "htfDir = request.security(haTicker, htfTf, close[1] > open[1] ? 1 : close[1] < open[1] ? -1 : 0, lookahead=barmerge.lookahead_on)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "tuple declaration",
+      "line": 142,
+      "column": 1,
+      "construct": "[macdL, macdS, macdH] =",
+      "source": "[macdL, macdS, macdH] = ta.macd(close, 12, 26, 9)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "library-only",
+      "reason": "MACD tuple",
+      "line": 142,
+      "column": 25,
+      "construct": "ta.macd",
+      "source": "[macdL, macdS, macdH] = ta.macd(close, 12, 26, 9)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "tuple declaration",
+      "line": 143,
+      "column": 1,
+      "construct": "[diP, diM, adxVal] =",
+      "source": "[diP, diM, adxVal] = ta.dmi(14, 14)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 143,
+      "column": 22,
+      "construct": "ta.dmi",
+      "source": "[diP, diM, adxVal] = ta.dmi(14, 14)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "tuple declaration",
+      "line": 144,
+      "column": 1,
+      "construct": "[stVal, stDir] =",
+      "source": "[stVal, stDir] = ta.supertrend(stFactor, stLen)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 144,
+      "column": 18,
+      "construct": "ta.supertrend",
+      "source": "[stVal, stDir] = ta.supertrend(stFactor, stLen)"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 145,
+      "column": 17,
+      "construct": "volume",
+      "source": "volAvg = ta.sma(volume, 20)"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 149,
+      "column": 14,
+      "construct": "na",
+      "source": "sessIn = not na(time(timeframe.period, sessStr))"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 149,
+      "column": 17,
+      "construct": "time",
+      "source": "sessIn = not na(time(timeframe.period, sessStr))"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 149,
+      "column": 22,
+      "construct": "timeframe.period",
+      "source": "sessIn = not na(time(timeframe.period, sessStr))"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "history of function result",
+      "line": 150,
+      "column": 9,
+      "construct": "math.sum(close > open ? 1.0 : 0.0, priorN)[1]",
+      "source": "upCnt = math.sum(close > open ? 1.0 : 0.0, priorN)[1]"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "math functions outside runtime allowlist",
+      "line": 150,
+      "column": 9,
+      "construct": "math.sum",
+      "source": "upCnt = math.sum(close > open ? 1.0 : 0.0, priorN)[1]"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "history of function result",
+      "line": 151,
+      "column": 9,
+      "construct": "math.sum(close < open ? 1.0 : 0.0, priorN)[1]",
+      "source": "dnCnt = math.sum(close < open ? 1.0 : 0.0, priorN)[1]"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "math functions outside runtime allowlist",
+      "line": 151,
+      "column": 9,
+      "construct": "math.sum",
+      "source": "dnCnt = math.sum(close < open ? 1.0 : 0.0, priorN)[1]"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "history of function result",
+      "line": 152,
+      "column": 16,
+      "construct": "ta.sma(bodyPct, priorN)[1]",
+      "source": "priorBodyAvg = ta.sma(bodyPct, priorN)[1]"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "history of function result",
+      "line": 155,
+      "column": 10,
+      "construct": "ta.highest(high, dcLen)[1]",
+      "source": "dcHigh = ta.highest(high, dcLen)[1]"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "history of function result",
+      "line": 156,
+      "column": 9,
+      "construct": "ta.lowest(low, dcLen)[1]",
+      "source": "dcLow = ta.lowest(low, dcLen)[1]"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 168,
+      "column": 9,
+      "construct": "ta.pivothigh",
+      "source": "pHigh = ta.pivothigh(high, swingLen, swingLen)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 169,
+      "column": 8,
+      "construct": "ta.pivotlow",
+      "source": "pLow = ta.pivotlow(low, swingLen, swingLen)"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 170,
+      "column": 13,
+      "construct": "na",
+      "source": "pivHigh2 := na(pHigh) ? pivHigh2 : pivHigh1"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 171,
+      "column": 13,
+      "construct": "na",
+      "source": "pivHigh1 := na(pHigh) ? pivHigh1 : pHigh"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 172,
+      "column": 12,
+      "construct": "na",
+      "source": "pivLow2 := na(pLow) ? pivLow2 : pivLow1"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 173,
+      "column": 12,
+      "construct": "na",
+      "source": "pivLow1 := na(pLow) ? pivLow1 : pLow"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 180,
+      "column": 15,
+      "construct": "ta.barssince",
+      "source": "bsSweepBull = ta.barssince(bullSweep)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 181,
+      "column": 15,
+      "construct": "ta.barssince",
+      "source": "bsSweepBear = ta.barssince(bearSweep)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 194,
+      "column": 13,
+      "construct": "ta.barssince",
+      "source": "bsMssBull = ta.barssince(mssBullEv)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 195,
+      "column": 13,
+      "construct": "ta.barssince",
+      "source": "bsMssBear = ta.barssince(mssBearEv)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 196,
+      "column": 13,
+      "construct": "ta.barssince",
+      "source": "bsBosBull = ta.barssince(bosBullEv)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 197,
+      "column": 13,
+      "construct": "ta.barssince",
+      "source": "bsBosBear = ta.barssince(bosBearEv)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 206,
+      "column": 13,
+      "construct": "ta.barssince",
+      "source": "bsSeqBull = ta.barssince(seqBullEv)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 207,
+      "column": 13,
+      "construct": "ta.barssince",
+      "source": "bsSeqBear = ta.barssince(seqBearEv)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 214,
+      "column": 13,
+      "construct": "ta.barssince",
+      "source": "bsFvgBull = ta.barssince(bullFvgEv)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 215,
+      "column": 13,
+      "construct": "ta.barssince",
+      "source": "bsFvgBear = ta.barssince(bearFvgEv)"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 220,
+      "column": 6,
+      "construct": "syminfo.ticker",
+      "source": "tk = syminfo.ticker"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 221,
+      "column": 38,
+      "construct": "str.contains",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 221,
+      "column": 66,
+      "construct": "str.contains",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 221,
+      "column": 114,
+      "construct": "str.contains",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 221,
+      "column": 141,
+      "construct": "str.contains",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 221,
+      "column": 191,
+      "construct": "str.contains",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 221,
+      "column": 218,
+      "construct": "str.contains",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 221,
+      "column": 267,
+      "construct": "str.contains",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 221,
+      "column": 313,
+      "construct": "str.contains",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 221,
+      "column": 359,
+      "construct": "str.contains",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 221,
+      "column": 405,
+      "construct": "str.contains",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "tuple declaration",
+      "line": 223,
+      "column": 1,
+      "construct": "[cH, cL] =",
+      "source": "[cH, cL] = request.security(smtSym, timeframe.period, [high, low], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "category": "request.security",
+      "status": "unsupported",
+      "reason": "security/context/ticker/merge semantics",
+      "line": 223,
+      "column": 12,
+      "construct": "request.security",
+      "source": "[cH, cL] = request.security(smtSym, timeframe.period, [high, low], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 223,
+      "column": 37,
+      "construct": "timeframe.period",
+      "source": "[cH, cL] = request.security(smtSym, timeframe.period, [high, low], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "category": "request.security",
+      "status": "unsupported",
+      "reason": "security/context/ticker/merge semantics",
+      "line": 223,
+      "column": 78,
+      "construct": "barmerge.lookahead_off",
+      "source": "[cH, cL] = request.security(smtSym, timeframe.period, [high, low], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 230,
+      "column": 13,
+      "construct": "ta.barssince",
+      "source": "bsSmtBull = ta.barssince(smtBullEv)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "TA not in registry",
+      "line": 231,
+      "column": 13,
+      "construct": "ta.barssince",
+      "source": "bsSmtBear = ta.barssince(smtBearEv)"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 237,
+      "column": 14,
+      "construct": "na",
+      "source": "bullPD = not na(pdMid) and close < pdMid"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 238,
+      "column": 14,
+      "construct": "na",
+      "source": "bearPD = not na(pdMid) and close > pdMid"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 242,
+      "column": 157,
+      "construct": "volume",
+      "source": "commonScore = (useVol and atrVal >= minAtrPts * pointSize ? 1 : 0) + (useSession and sessIn ? 1 : 0) + (useAdx and adxVal >= adxMin ? 1 : 0) + (useVolu and volume > volAvg * voluMult ? 1 : 0) + (useExt and extOk ? 1 : 0)"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 271,
+      "column": 7,
+      "construct": "na",
+      "source": "age = na(setupBar) ? 0 : bar_index - setupBar"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 280,
+      "column": 17,
+      "construct": "na",
+      "source": "validRisk = not na(risk) and risk > 0 and (not useRR or targetMode == \"مضاعف الستوب\" or targetPrice / risk >= minRR)"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 281,
+      "column": 73,
+      "construct": "strategy.position_size",
+      "source": "buy = breakBull and validStop and validRisk and bullOk and gateBull and strategy.position_size == 0"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 282,
+      "column": 74,
+      "construct": "strategy.position_size",
+      "source": "sell = breakBear and validStop and validRisk and bearOk and gateBear and strategy.position_size == 0"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 285,
+      "column": 126,
+      "construct": "strategy.position_size",
+      "source": "newSetup = confirmed and not colorFlip and not armed and (allowRepeat or not usedModel) and trendAge >= minAge and early and strategy.position_size == 0 and (bullModel or bearModel)"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 304,
+      "column": 10,
+      "construct": "strategy.position_size",
+      "source": "inLong = strategy.position_size > 0"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 305,
+      "column": 11,
+      "construct": "strategy.position_size",
+      "source": "inShort = strategy.position_size < 0"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 306,
+      "column": 9,
+      "construct": "strategy.position_size",
+      "source": "inPos = strategy.position_size != 0"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 307,
+      "column": 11,
+      "construct": "strategy.position_avg_price",
+      "source": "entryPx = strategy.position_avg_price"
+    },
+    {
+      "category": "عرض",
+      "status": "partial",
+      "reason": "plot options and handle vs numeric output",
+      "line": 321,
+      "column": 13,
+      "construct": "plot",
+      "source": "upperPlot = plot(zoneVisible ? zoneTop : na, \"Body box top\", color=color.orange, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 321,
+      "column": 68,
+      "construct": "color.orange",
+      "source": "upperPlot = plot(zoneVisible ? zoneTop : na, \"Body box top\", color=color.orange, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 321,
+      "column": 101,
+      "construct": "plot.style_linebr",
+      "source": "upperPlot = plot(zoneVisible ? zoneTop : na, \"Body box top\", color=color.orange, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "partial",
+      "reason": "plot options and handle vs numeric output",
+      "line": 322,
+      "column": 13,
+      "construct": "plot",
+      "source": "lowerPlot = plot(zoneVisible ? zoneBottom : na, \"Body box bottom\", color=color.orange, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 322,
+      "column": 74,
+      "construct": "color.orange",
+      "source": "lowerPlot = plot(zoneVisible ? zoneBottom : na, \"Body box bottom\", color=color.orange, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 322,
+      "column": 107,
+      "construct": "plot.style_linebr",
+      "source": "lowerPlot = plot(zoneVisible ? zoneBottom : na, \"Body box bottom\", color=color.orange, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 323,
+      "column": 1,
+      "construct": "fill",
+      "source": "fill(upperPlot, lowerPlot, color=zoneVisible ? color.new(zoneDir == 1 ? color.teal : color.red, 84) : na, title=\"Body box\")"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 323,
+      "column": 48,
+      "construct": "color.new",
+      "source": "fill(upperPlot, lowerPlot, color=zoneVisible ? color.new(zoneDir == 1 ? color.teal : color.red, 84) : na, title=\"Body box\")"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 323,
+      "column": 73,
+      "construct": "color.teal",
+      "source": "fill(upperPlot, lowerPlot, color=zoneVisible ? color.new(zoneDir == 1 ? color.teal : color.red, 84) : na, title=\"Body box\")"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 323,
+      "column": 86,
+      "construct": "color.red",
+      "source": "fill(upperPlot, lowerPlot, color=zoneVisible ? color.new(zoneDir == 1 ? color.teal : color.red, 84) : na, title=\"Body box\")"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 326,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(setupBull, title=\"Bullish box\", text=\"BOX\", style=shape.circle, location=location.belowbar, color=color.teal, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 326,
+      "column": 61,
+      "construct": "shape.circle",
+      "source": "plotshape(setupBull, title=\"Bullish box\", text=\"BOX\", style=shape.circle, location=location.belowbar, color=color.teal, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 326,
+      "column": 84,
+      "construct": "location.belowbar",
+      "source": "plotshape(setupBull, title=\"Bullish box\", text=\"BOX\", style=shape.circle, location=location.belowbar, color=color.teal, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 326,
+      "column": 109,
+      "construct": "color.teal",
+      "source": "plotshape(setupBull, title=\"Bullish box\", text=\"BOX\", style=shape.circle, location=location.belowbar, color=color.teal, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 326,
+      "column": 126,
+      "construct": "size.tiny",
+      "source": "plotshape(setupBull, title=\"Bullish box\", text=\"BOX\", style=shape.circle, location=location.belowbar, color=color.teal, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 327,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(setupBear, title=\"Bearish box\", text=\"BOX\", style=shape.circle, location=location.abovebar, color=color.red, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 327,
+      "column": 61,
+      "construct": "shape.circle",
+      "source": "plotshape(setupBear, title=\"Bearish box\", text=\"BOX\", style=shape.circle, location=location.abovebar, color=color.red, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 327,
+      "column": 84,
+      "construct": "location.abovebar",
+      "source": "plotshape(setupBear, title=\"Bearish box\", text=\"BOX\", style=shape.circle, location=location.abovebar, color=color.red, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 327,
+      "column": 109,
+      "construct": "color.red",
+      "source": "plotshape(setupBear, title=\"Bearish box\", text=\"BOX\", style=shape.circle, location=location.abovebar, color=color.red, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 327,
+      "column": 125,
+      "construct": "size.tiny",
+      "source": "plotshape(setupBear, title=\"Bearish box\", text=\"BOX\", style=shape.circle, location=location.abovebar, color=color.red, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 328,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(buy, title=\"BUY\", text=\"BUY\", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 328,
+      "column": 47,
+      "construct": "shape.labelup",
+      "source": "plotshape(buy, title=\"BUY\", text=\"BUY\", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 328,
+      "column": 71,
+      "construct": "location.belowbar",
+      "source": "plotshape(buy, title=\"BUY\", text=\"BUY\", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 328,
+      "column": 96,
+      "construct": "color.green",
+      "source": "plotshape(buy, title=\"BUY\", text=\"BUY\", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 328,
+      "column": 119,
+      "construct": "color.white",
+      "source": "plotshape(buy, title=\"BUY\", text=\"BUY\", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 328,
+      "column": 137,
+      "construct": "size.small",
+      "source": "plotshape(buy, title=\"BUY\", text=\"BUY\", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 329,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(sell, title=\"SELL\", text=\"SELL\", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 329,
+      "column": 50,
+      "construct": "shape.labeldown",
+      "source": "plotshape(sell, title=\"SELL\", text=\"SELL\", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 329,
+      "column": 76,
+      "construct": "location.abovebar",
+      "source": "plotshape(sell, title=\"SELL\", text=\"SELL\", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 329,
+      "column": 101,
+      "construct": "color.red",
+      "source": "plotshape(sell, title=\"SELL\", text=\"SELL\", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 329,
+      "column": 122,
+      "construct": "color.white",
+      "source": "plotshape(sell, title=\"SELL\", text=\"SELL\", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 329,
+      "column": 140,
+      "construct": "size.small",
+      "source": "plotshape(sell, title=\"SELL\", text=\"SELL\", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 330,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(showSmc and bullSweep, title=\"Sweep Bull\", text=\"SWP\", style=shape.triangleup, location=location.belowbar, color=color.orange, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 330,
+      "column": 72,
+      "construct": "shape.triangleup",
+      "source": "plotshape(showSmc and bullSweep, title=\"Sweep Bull\", text=\"SWP\", style=shape.triangleup, location=location.belowbar, color=color.orange, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 330,
+      "column": 99,
+      "construct": "location.belowbar",
+      "source": "plotshape(showSmc and bullSweep, title=\"Sweep Bull\", text=\"SWP\", style=shape.triangleup, location=location.belowbar, color=color.orange, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 330,
+      "column": 124,
+      "construct": "color.orange",
+      "source": "plotshape(showSmc and bullSweep, title=\"Sweep Bull\", text=\"SWP\", style=shape.triangleup, location=location.belowbar, color=color.orange, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 330,
+      "column": 143,
+      "construct": "size.tiny",
+      "source": "plotshape(showSmc and bullSweep, title=\"Sweep Bull\", text=\"SWP\", style=shape.triangleup, location=location.belowbar, color=color.orange, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 331,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(showSmc and bearSweep, title=\"Sweep Bear\", text=\"SWP\", style=shape.triangledown, location=location.abovebar, color=color.orange, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 331,
+      "column": 72,
+      "construct": "shape.triangledown",
+      "source": "plotshape(showSmc and bearSweep, title=\"Sweep Bear\", text=\"SWP\", style=shape.triangledown, location=location.abovebar, color=color.orange, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 331,
+      "column": 101,
+      "construct": "location.abovebar",
+      "source": "plotshape(showSmc and bearSweep, title=\"Sweep Bear\", text=\"SWP\", style=shape.triangledown, location=location.abovebar, color=color.orange, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 331,
+      "column": 126,
+      "construct": "color.orange",
+      "source": "plotshape(showSmc and bearSweep, title=\"Sweep Bear\", text=\"SWP\", style=shape.triangledown, location=location.abovebar, color=color.orange, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 331,
+      "column": 145,
+      "construct": "size.tiny",
+      "source": "plotshape(showSmc and bearSweep, title=\"Sweep Bear\", text=\"SWP\", style=shape.triangledown, location=location.abovebar, color=color.orange, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 332,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(showSmc and mssBullEv, title=\"MSS Bull\", text=\"MSS\", style=shape.triangleup, location=location.belowbar, color=color.purple, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 332,
+      "column": 70,
+      "construct": "shape.triangleup",
+      "source": "plotshape(showSmc and mssBullEv, title=\"MSS Bull\", text=\"MSS\", style=shape.triangleup, location=location.belowbar, color=color.purple, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 332,
+      "column": 97,
+      "construct": "location.belowbar",
+      "source": "plotshape(showSmc and mssBullEv, title=\"MSS Bull\", text=\"MSS\", style=shape.triangleup, location=location.belowbar, color=color.purple, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 332,
+      "column": 122,
+      "construct": "color.purple",
+      "source": "plotshape(showSmc and mssBullEv, title=\"MSS Bull\", text=\"MSS\", style=shape.triangleup, location=location.belowbar, color=color.purple, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 332,
+      "column": 141,
+      "construct": "size.tiny",
+      "source": "plotshape(showSmc and mssBullEv, title=\"MSS Bull\", text=\"MSS\", style=shape.triangleup, location=location.belowbar, color=color.purple, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 333,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(showSmc and mssBearEv, title=\"MSS Bear\", text=\"MSS\", style=shape.triangledown, location=location.abovebar, color=color.purple, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 333,
+      "column": 70,
+      "construct": "shape.triangledown",
+      "source": "plotshape(showSmc and mssBearEv, title=\"MSS Bear\", text=\"MSS\", style=shape.triangledown, location=location.abovebar, color=color.purple, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 333,
+      "column": 99,
+      "construct": "location.abovebar",
+      "source": "plotshape(showSmc and mssBearEv, title=\"MSS Bear\", text=\"MSS\", style=shape.triangledown, location=location.abovebar, color=color.purple, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 333,
+      "column": 124,
+      "construct": "color.purple",
+      "source": "plotshape(showSmc and mssBearEv, title=\"MSS Bear\", text=\"MSS\", style=shape.triangledown, location=location.abovebar, color=color.purple, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 333,
+      "column": 143,
+      "construct": "size.tiny",
+      "source": "plotshape(showSmc and mssBearEv, title=\"MSS Bear\", text=\"MSS\", style=shape.triangledown, location=location.abovebar, color=color.purple, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 334,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(showSmc and bosBullEv, title=\"BOS Bull\", text=\"BOS\", style=shape.triangleup, location=location.belowbar, color=color.blue, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 334,
+      "column": 70,
+      "construct": "shape.triangleup",
+      "source": "plotshape(showSmc and bosBullEv, title=\"BOS Bull\", text=\"BOS\", style=shape.triangleup, location=location.belowbar, color=color.blue, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 334,
+      "column": 97,
+      "construct": "location.belowbar",
+      "source": "plotshape(showSmc and bosBullEv, title=\"BOS Bull\", text=\"BOS\", style=shape.triangleup, location=location.belowbar, color=color.blue, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 334,
+      "column": 122,
+      "construct": "color.blue",
+      "source": "plotshape(showSmc and bosBullEv, title=\"BOS Bull\", text=\"BOS\", style=shape.triangleup, location=location.belowbar, color=color.blue, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 334,
+      "column": 139,
+      "construct": "size.tiny",
+      "source": "plotshape(showSmc and bosBullEv, title=\"BOS Bull\", text=\"BOS\", style=shape.triangleup, location=location.belowbar, color=color.blue, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 335,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(showSmc and bosBearEv, title=\"BOS Bear\", text=\"BOS\", style=shape.triangledown, location=location.abovebar, color=color.blue, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 335,
+      "column": 70,
+      "construct": "shape.triangledown",
+      "source": "plotshape(showSmc and bosBearEv, title=\"BOS Bear\", text=\"BOS\", style=shape.triangledown, location=location.abovebar, color=color.blue, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 335,
+      "column": 99,
+      "construct": "location.abovebar",
+      "source": "plotshape(showSmc and bosBearEv, title=\"BOS Bear\", text=\"BOS\", style=shape.triangledown, location=location.abovebar, color=color.blue, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 335,
+      "column": 124,
+      "construct": "color.blue",
+      "source": "plotshape(showSmc and bosBearEv, title=\"BOS Bear\", text=\"BOS\", style=shape.triangledown, location=location.abovebar, color=color.blue, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 335,
+      "column": 141,
+      "construct": "size.tiny",
+      "source": "plotshape(showSmc and bosBearEv, title=\"BOS Bear\", text=\"BOS\", style=shape.triangledown, location=location.abovebar, color=color.blue, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 336,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(showSmc and smtBullEv, title=\"SMT Bull\", text=\"SMT\", style=shape.triangleup, location=location.belowbar, color=color.yellow, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 336,
+      "column": 70,
+      "construct": "shape.triangleup",
+      "source": "plotshape(showSmc and smtBullEv, title=\"SMT Bull\", text=\"SMT\", style=shape.triangleup, location=location.belowbar, color=color.yellow, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 336,
+      "column": 97,
+      "construct": "location.belowbar",
+      "source": "plotshape(showSmc and smtBullEv, title=\"SMT Bull\", text=\"SMT\", style=shape.triangleup, location=location.belowbar, color=color.yellow, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 336,
+      "column": 122,
+      "construct": "color.yellow",
+      "source": "plotshape(showSmc and smtBullEv, title=\"SMT Bull\", text=\"SMT\", style=shape.triangleup, location=location.belowbar, color=color.yellow, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 336,
+      "column": 141,
+      "construct": "size.tiny",
+      "source": "plotshape(showSmc and smtBullEv, title=\"SMT Bull\", text=\"SMT\", style=shape.triangleup, location=location.belowbar, color=color.yellow, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 337,
+      "column": 1,
+      "construct": "plotshape",
+      "source": "plotshape(showSmc and smtBearEv, title=\"SMT Bear\", text=\"SMT\", style=shape.triangledown, location=location.abovebar, color=color.yellow, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 337,
+      "column": 70,
+      "construct": "shape.triangledown",
+      "source": "plotshape(showSmc and smtBearEv, title=\"SMT Bear\", text=\"SMT\", style=shape.triangledown, location=location.abovebar, color=color.yellow, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 337,
+      "column": 99,
+      "construct": "location.abovebar",
+      "source": "plotshape(showSmc and smtBearEv, title=\"SMT Bear\", text=\"SMT\", style=shape.triangledown, location=location.abovebar, color=color.yellow, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 337,
+      "column": 124,
+      "construct": "color.yellow",
+      "source": "plotshape(showSmc and smtBearEv, title=\"SMT Bear\", text=\"SMT\", style=shape.triangledown, location=location.abovebar, color=color.yellow, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 337,
+      "column": 143,
+      "construct": "size.tiny",
+      "source": "plotshape(showSmc and smtBearEv, title=\"SMT Bear\", text=\"SMT\", style=shape.triangledown, location=location.abovebar, color=color.yellow, size=size.tiny)"
+    },
+    {
+      "category": "عرض",
+      "status": "partial",
+      "reason": "plot options and handle vs numeric output",
+      "line": 346,
+      "column": 1,
+      "construct": "plot",
+      "source": "plot(showLevels ? entryLine : na, \"Entry reference\", color=color.blue, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 346,
+      "column": 60,
+      "construct": "color.blue",
+      "source": "plot(showLevels ? entryLine : na, \"Entry reference\", color=color.blue, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 346,
+      "column": 91,
+      "construct": "plot.style_linebr",
+      "source": "plot(showLevels ? entryLine : na, \"Entry reference\", color=color.blue, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "partial",
+      "reason": "plot options and handle vs numeric output",
+      "line": 347,
+      "column": 1,
+      "construct": "plot",
+      "source": "plot(showLevels ? stopLine : na, \"Stop loss\", color=color.red, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 347,
+      "column": 53,
+      "construct": "color.red",
+      "source": "plot(showLevels ? stopLine : na, \"Stop loss\", color=color.red, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 347,
+      "column": 83,
+      "construct": "plot.style_linebr",
+      "source": "plot(showLevels ? stopLine : na, \"Stop loss\", color=color.red, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "partial",
+      "reason": "plot options and handle vs numeric output",
+      "line": 348,
+      "column": 1,
+      "construct": "plot",
+      "source": "plot(showLevels ? targetLine : na, \"Take profit\", color=color.lime, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 348,
+      "column": 57,
+      "construct": "color.lime",
+      "source": "plot(showLevels ? targetLine : na, \"Take profit\", color=color.lime, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 348,
+      "column": 88,
+      "construct": "plot.style_linebr",
+      "source": "plot(showLevels ? targetLine : na, \"Take profit\", color=color.lime, linewidth=2, style=plot.style_linebr)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 349,
+      "column": 1,
+      "construct": "bgcolor",
+      "source": "bgcolor(not validChart ? color.new(color.red, 92) : na, title=\"Use standard minutes chart\")"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 349,
+      "column": 26,
+      "construct": "color.new",
+      "source": "bgcolor(not validChart ? color.new(color.red, 92) : na, title=\"Use standard minutes chart\")"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 349,
+      "column": 36,
+      "construct": "color.red",
+      "source": "bgcolor(not validChart ? color.new(color.red, 92) : na, title=\"Use standard minutes chart\")"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 359,
+      "column": 13,
+      "construct": "strategy.closedtrades",
+      "source": "closedNow = strategy.closedtrades"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 362,
+      "column": 28,
+      "construct": "strategy.closedtrades.exit_price",
+      "source": "tradePts = newClosed ? nz((strategy.closedtrades.exit_price(lastIdx) - strategy.closedtrades.entry_price(lastIdx)) * math.sign(strategy.closedtrades.size(lastIdx))) / pointSize : 0.0"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 362,
+      "column": 72,
+      "construct": "strategy.closedtrades.entry_price",
+      "source": "tradePts = newClosed ? nz((strategy.closedtrades.exit_price(lastIdx) - strategy.closedtrades.entry_price(lastIdx)) * math.sign(strategy.closedtrades.size(lastIdx))) / pointSize : 0.0"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "math functions outside runtime allowlist",
+      "line": 362,
+      "column": 118,
+      "construct": "math.sign",
+      "source": "tradePts = newClosed ? nz((strategy.closedtrades.exit_price(lastIdx) - strategy.closedtrades.entry_price(lastIdx)) * math.sign(strategy.closedtrades.size(lastIdx))) / pointSize : 0.0"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 362,
+      "column": 128,
+      "construct": "strategy.closedtrades.size",
+      "source": "tradePts = newClosed ? nz((strategy.closedtrades.exit_price(lastIdx) - strategy.closedtrades.entry_price(lastIdx)) * math.sign(strategy.closedtrades.size(lastIdx))) / pointSize : 0.0"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 370,
+      "column": 25,
+      "construct": "str.tostring",
+      "source": "pfTxt = grossLoss > 0 ? str.tostring(grossWin / grossLoss, \"#.##\") : grossWin > 0 ? \"∞\" : \"-\""
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 371,
+      "column": 11,
+      "construct": "strategy.wintrades",
+      "source": "allWins = strategy.wintrades"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 372,
+      "column": 13,
+      "construct": "strategy.losstrades",
+      "source": "allLosses = strategy.losstrades"
+    },
+    {
+      "category": "لغة",
+      "status": "parser/runtime gap",
+      "reason": "int() cast",
+      "line": 378,
+      "column": 11,
+      "construct": "int",
+      "source": "barWeek = int(math.floor((time - wkOff) / wkMs))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "math functions outside runtime allowlist",
+      "line": 378,
+      "column": 15,
+      "construct": "math.floor",
+      "source": "barWeek = int(math.floor((time - wkOff) / wkMs))"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 378,
+      "column": 27,
+      "construct": "time",
+      "source": "barWeek = int(math.floor((time - wkOff) / wkMs))"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "typed map declaration/constructor",
+      "line": 379,
+      "column": 5,
+      "construct": "map<",
+      "source": "var map<int, float> mWins = map.new<int, float>()"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "typed map declaration/constructor",
+      "line": 379,
+      "column": 29,
+      "construct": "map.new<",
+      "source": "var map<int, float> mWins = map.new<int, float>()"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "typed map declaration/constructor",
+      "line": 380,
+      "column": 5,
+      "construct": "map<",
+      "source": "var map<int, float> mLosses = map.new<int, float>()"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "typed map declaration/constructor",
+      "line": 380,
+      "column": 31,
+      "construct": "map.new<",
+      "source": "var map<int, float> mLosses = map.new<int, float>()"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "typed map declaration/constructor",
+      "line": 381,
+      "column": 5,
+      "construct": "map<",
+      "source": "var map<int, float> mWinPts = map.new<int, float>()"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "typed map declaration/constructor",
+      "line": 381,
+      "column": 31,
+      "construct": "map.new<",
+      "source": "var map<int, float> mWinPts = map.new<int, float>()"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "typed map declaration/constructor",
+      "line": 382,
+      "column": 5,
+      "construct": "map<",
+      "source": "var map<int, float> mLossPts = map.new<int, float>()"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "typed map declaration/constructor",
+      "line": 382,
+      "column": 32,
+      "construct": "map.new<",
+      "source": "var map<int, float> mLossPts = map.new<int, float>()"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 384,
+      "column": 14,
+      "construct": "na",
+      "source": "firstWeek := na(firstWeek) and newClosed ? barWeek : firstWeek"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 385,
+      "column": 9,
+      "construct": "barstate.isconfirmed",
+      "source": "addOk = barstate.isconfirmed and newClosed"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 386,
+      "column": 1,
+      "construct": "map.put",
+      "source": "map.put(mWins, barWeek, nz(map.get(mWins, barWeek)) + (addOk and tradePts > 0 ? 1.0 : 0.0))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 386,
+      "column": 28,
+      "construct": "map.get",
+      "source": "map.put(mWins, barWeek, nz(map.get(mWins, barWeek)) + (addOk and tradePts > 0 ? 1.0 : 0.0))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 387,
+      "column": 1,
+      "construct": "map.put",
+      "source": "map.put(mLosses, barWeek, nz(map.get(mLosses, barWeek)) + (addOk and tradePts < 0 ? 1.0 : 0.0))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 387,
+      "column": 30,
+      "construct": "map.get",
+      "source": "map.put(mLosses, barWeek, nz(map.get(mLosses, barWeek)) + (addOk and tradePts < 0 ? 1.0 : 0.0))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 388,
+      "column": 1,
+      "construct": "map.put",
+      "source": "map.put(mWinPts, barWeek, nz(map.get(mWinPts, barWeek)) + (addOk and tradePts > 0 ? tradePts : 0.0))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 388,
+      "column": 30,
+      "construct": "map.get",
+      "source": "map.put(mWinPts, barWeek, nz(map.get(mWinPts, barWeek)) + (addOk and tradePts > 0 ? tradePts : 0.0))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 389,
+      "column": 1,
+      "construct": "map.put",
+      "source": "map.put(mLossPts, barWeek, nz(map.get(mLossPts, barWeek)) + (addOk and tradePts < 0 ? tradePts : 0.0))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 389,
+      "column": 31,
+      "construct": "map.get",
+      "source": "map.put(mLossPts, barWeek, nz(map.get(mLossPts, barWeek)) + (addOk and tradePts < 0 ? tradePts : 0.0))"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 392,
+      "column": 11,
+      "construct": "chart.right_visible_bar_time",
+      "source": "visTime = chart.right_visible_bar_time"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 393,
+      "column": 11,
+      "construct": "na",
+      "source": "refWeek = na(visTime) ? barWeek : int(math.floor((visTime - wkOff) / wkMs))"
+    },
+    {
+      "category": "لغة",
+      "status": "parser/runtime gap",
+      "reason": "int() cast",
+      "line": 393,
+      "column": 35,
+      "construct": "int",
+      "source": "refWeek = na(visTime) ? barWeek : int(math.floor((visTime - wkOff) / wkMs))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "math functions outside runtime allowlist",
+      "line": 393,
+      "column": 39,
+      "construct": "math.floor",
+      "source": "refWeek = na(visTime) ? barWeek : int(math.floor((visTime - wkOff) / wkMs))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 394,
+      "column": 12,
+      "construct": "map.get",
+      "source": "wWins = nz(map.get(mWins, refWeek))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 395,
+      "column": 14,
+      "construct": "map.get",
+      "source": "wLosses = nz(map.get(mLosses, refWeek))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 396,
+      "column": 14,
+      "construct": "map.get",
+      "source": "wWinPts = nz(map.get(mWinPts, refWeek))"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "mutable map operations",
+      "line": 397,
+      "column": 15,
+      "construct": "map.get",
+      "source": "wLossPts = nz(map.get(mLossPts, refWeek))"
+    },
+    {
+      "category": "لغة",
+      "status": "parser defect",
+      "reason": "na() token parsed as literal rather than callable",
+      "line": 401,
+      "column": 10,
+      "construct": "na",
+      "source": "weekNo = na(firstWeek) ? 1 : refWeek - firstWeek + 1"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "string concatenation requires string + (runtime numeric only)",
+      "line": 403,
+      "column": 13,
+      "construct": "string concatenation expression",
+      "source": "weekTitle = \"الأسبوع \" + str.tostring(weekNo) + \" | \" + str.format_time(weekStartMs, \"MM-dd\", \"UTC\")"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 403,
+      "column": 26,
+      "construct": "str.tostring",
+      "source": "weekTitle = \"الأسبوع \" + str.tostring(weekNo) + \" | \" + str.format_time(weekStartMs, \"MM-dd\", \"UTC\")"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 403,
+      "column": 57,
+      "construct": "str.format_time",
+      "source": "weekTitle = \"الأسبوع \" + str.tostring(weekNo) + \" | \" + str.format_time(weekStartMs, \"MM-dd\", \"UTC\")"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "typed table declaration",
+      "line": 405,
+      "column": 1,
+      "construct": "var table",
+      "source": "var table statsTable = table.new(position.top_right, 2, 16, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 405,
+      "column": 24,
+      "construct": "table.new",
+      "source": "var table statsTable = table.new(position.top_right, 2, 16, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 405,
+      "column": 34,
+      "construct": "position.top_right",
+      "source": "var table statsTable = table.new(position.top_right, 2, 16, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 405,
+      "column": 69,
+      "construct": "color.new",
+      "source": "var table statsTable = table.new(position.top_right, 2, 16, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 405,
+      "column": 79,
+      "construct": "color.black",
+      "source": "var table statsTable = table.new(position.top_right, 2, 16, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 405,
+      "column": 110,
+      "construct": "color.gray",
+      "source": "var table statsTable = table.new(position.top_right, 2, 16, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 406,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 0, showStats ? weekTitle : \"\", text_color=color.white, text_size=txtSize, bgcolor=color.new(color.blue, 30))"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 406,
+      "column": 69,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 0, showStats ? weekTitle : \"\", text_color=color.white, text_size=txtSize, bgcolor=color.new(color.blue, 30))"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 406,
+      "column": 109,
+      "construct": "color.new",
+      "source": "table.cell(statsTable, 0, 0, showStats ? weekTitle : \"\", text_color=color.white, text_size=txtSize, bgcolor=color.new(color.blue, 30))"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 406,
+      "column": 119,
+      "construct": "color.blue",
+      "source": "table.cell(statsTable, 0, 0, showStats ? weekTitle : \"\", text_color=color.white, text_size=txtSize, bgcolor=color.new(color.blue, 30))"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 407,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 0, showStats ? \"AHV10\" : \"\", text_color=color.white, text_size=txtSize, bgcolor=color.new(color.blue, 30))"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 407,
+      "column": 67,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 1, 0, showStats ? \"AHV10\" : \"\", text_color=color.white, text_size=txtSize, bgcolor=color.new(color.blue, 30))"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 407,
+      "column": 107,
+      "construct": "color.new",
+      "source": "table.cell(statsTable, 1, 0, showStats ? \"AHV10\" : \"\", text_color=color.white, text_size=txtSize, bgcolor=color.new(color.blue, 30))"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 407,
+      "column": 117,
+      "construct": "color.blue",
+      "source": "table.cell(statsTable, 1, 0, showStats ? \"AHV10\" : \"\", text_color=color.white, text_size=txtSize, bgcolor=color.new(color.blue, 30))"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 408,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 1, showStats ? \"ناجحة\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 408,
+      "column": 67,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 1, showStats ? \"ناجحة\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 409,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 1, showStats ? str.tostring(wWins, \"#\") : \"\", text_color=color.lime, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 409,
+      "column": 42,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 1, showStats ? str.tostring(wWins, \"#\") : \"\", text_color=color.lime, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 409,
+      "column": 84,
+      "construct": "color.lime",
+      "source": "table.cell(statsTable, 1, 1, showStats ? str.tostring(wWins, \"#\") : \"\", text_color=color.lime, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 410,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 2, showStats ? \"خاسرة\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 410,
+      "column": 67,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 2, showStats ? \"خاسرة\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 411,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 2, showStats ? str.tostring(wLosses, \"#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 411,
+      "column": 42,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 2, showStats ? str.tostring(wLosses, \"#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 411,
+      "column": 86,
+      "construct": "color.red",
+      "source": "table.cell(statsTable, 1, 2, showStats ? str.tostring(wLosses, \"#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 412,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 3, showStats ? \"نسبة النجاح\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 412,
+      "column": 73,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 3, showStats ? \"نسبة النجاح\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 413,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 3, showStats ? str.tostring(wRate, \"#.#\") + \"%\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "string concatenation requires string + (runtime numeric only)",
+      "line": 413,
+      "column": 42,
+      "construct": "string concatenation expression",
+      "source": "table.cell(statsTable, 1, 3, showStats ? str.tostring(wRate, \"#.#\") + \"%\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 413,
+      "column": 42,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 3, showStats ? str.tostring(wRate, \"#.#\") + \"%\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 413,
+      "column": 92,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 1, 3, showStats ? str.tostring(wRate, \"#.#\") + \"%\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 414,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 4, showStats ? \"نقاط الربح\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 414,
+      "column": 72,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 4, showStats ? \"نقاط الربح\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 415,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 4, showStats ? str.tostring(wWinPts, \"#.#\") : \"\", text_color=color.lime, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 415,
+      "column": 42,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 4, showStats ? str.tostring(wWinPts, \"#.#\") : \"\", text_color=color.lime, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 415,
+      "column": 88,
+      "construct": "color.lime",
+      "source": "table.cell(statsTable, 1, 4, showStats ? str.tostring(wWinPts, \"#.#\") : \"\", text_color=color.lime, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 416,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 5, showStats ? \"نقاط الخسارة\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 416,
+      "column": 74,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 5, showStats ? \"نقاط الخسارة\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 417,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 5, showStats ? str.tostring(wLossPts, \"#.#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 417,
+      "column": 42,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 5, showStats ? str.tostring(wLossPts, \"#.#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 417,
+      "column": 89,
+      "construct": "color.red",
+      "source": "table.cell(statsTable, 1, 5, showStats ? str.tostring(wLossPts, \"#.#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 418,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 6, showStats ? \"صافي الأسبوع\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 418,
+      "column": 74,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 6, showStats ? \"صافي الأسبوع\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 419,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 6, showStats ? str.tostring(wNet, \"#.#\") : \"\", text_color=wNet >= 0 ? color.lime : color.red, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 419,
+      "column": 42,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 6, showStats ? str.tostring(wNet, \"#.#\") : \"\", text_color=wNet >= 0 ? color.lime : color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 419,
+      "column": 97,
+      "construct": "color.lime",
+      "source": "table.cell(statsTable, 1, 6, showStats ? str.tostring(wNet, \"#.#\") : \"\", text_color=wNet >= 0 ? color.lime : color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 419,
+      "column": 110,
+      "construct": "color.red",
+      "source": "table.cell(statsTable, 1, 6, showStats ? str.tostring(wNet, \"#.#\") : \"\", text_color=wNet >= 0 ? color.lime : color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 420,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 7, showStats ? \"صافي الكل\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 420,
+      "column": 71,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 7, showStats ? \"صافي الكل\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 421,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 7, showStats ? str.tostring(netPts, \"#.#\") : \"\", text_color=netPts >= 0 ? color.lime : color.red, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 421,
+      "column": 42,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 7, showStats ? str.tostring(netPts, \"#.#\") : \"\", text_color=netPts >= 0 ? color.lime : color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 421,
+      "column": 101,
+      "construct": "color.lime",
+      "source": "table.cell(statsTable, 1, 7, showStats ? str.tostring(netPts, \"#.#\") : \"\", text_color=netPts >= 0 ? color.lime : color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 421,
+      "column": 114,
+      "construct": "color.red",
+      "source": "table.cell(statsTable, 1, 7, showStats ? str.tostring(netPts, \"#.#\") : \"\", text_color=netPts >= 0 ? color.lime : color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 422,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 8, showStats ? \"كل الصفقات\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 422,
+      "column": 72,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 8, showStats ? \"كل الصفقات\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 423,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 8, showStats ? str.tostring(strategy.closedtrades, \"#\") : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 423,
+      "column": 42,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 8, showStats ? str.tostring(strategy.closedtrades, \"#\") : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 423,
+      "column": 55,
+      "construct": "strategy.closedtrades",
+      "source": "table.cell(statsTable, 1, 8, showStats ? str.tostring(strategy.closedtrades, \"#\") : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 423,
+      "column": 100,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 1, 8, showStats ? str.tostring(strategy.closedtrades, \"#\") : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 424,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 9, showStats ? \"عامل الربح PF\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 424,
+      "column": 75,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 9, showStats ? \"عامل الربح PF\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 425,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 9, showStats ? pfTxt : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 425,
+      "column": 65,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 1, 9, showStats ? pfTxt : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 426,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 10, showStats ? \"أكبر خسارة متتالية\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 426,
+      "column": 81,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 10, showStats ? \"أكبر خسارة متتالية\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 427,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 10, showStats ? str.tostring(maxLoss, \"#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 427,
+      "column": 43,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 10, showStats ? str.tostring(maxLoss, \"#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 427,
+      "column": 87,
+      "construct": "color.red",
+      "source": "table.cell(statsTable, 1, 10, showStats ? str.tostring(maxLoss, \"#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 428,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 11, showStats ? \"أكبر تراجع (نقاط)\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 428,
+      "column": 80,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 11, showStats ? \"أكبر تراجع (نقاط)\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 429,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 11, showStats ? str.tostring(maxDD, \"#.#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 429,
+      "column": 43,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 11, showStats ? str.tostring(maxDD, \"#.#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 429,
+      "column": 87,
+      "construct": "color.red",
+      "source": "table.cell(statsTable, 1, 11, showStats ? str.tostring(maxDD, \"#.#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 430,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 12, showStats ? \"حجم النقطة\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 430,
+      "column": 73,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 12, showStats ? \"حجم النقطة\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 431,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 12, showStats ? str.tostring(pointSize, \"#.#####\") : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 431,
+      "column": 43,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 12, showStats ? str.tostring(pointSize, \"#.#####\") : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 431,
+      "column": 95,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 1, 12, showStats ? str.tostring(pointSize, \"#.#####\") : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 432,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 13, showStats ? \"ناجحة (الكل)\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 432,
+      "column": 75,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 13, showStats ? \"ناجحة (الكل)\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 433,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 13, showStats ? str.tostring(allWins, \"#\") : \"\", text_color=color.lime, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 433,
+      "column": 43,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 13, showStats ? str.tostring(allWins, \"#\") : \"\", text_color=color.lime, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 433,
+      "column": 87,
+      "construct": "color.lime",
+      "source": "table.cell(statsTable, 1, 13, showStats ? str.tostring(allWins, \"#\") : \"\", text_color=color.lime, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 434,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 14, showStats ? \"خاسرة (الكل)\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 434,
+      "column": 75,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 14, showStats ? \"خاسرة (الكل)\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 435,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 14, showStats ? str.tostring(allLosses, \"#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 435,
+      "column": 43,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 14, showStats ? str.tostring(allLosses, \"#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 435,
+      "column": 89,
+      "construct": "color.red",
+      "source": "table.cell(statsTable, 1, 14, showStats ? str.tostring(allLosses, \"#\") : \"\", text_color=color.red, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 436,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 0, 15, showStats ? \"نسبة النجاح (الكل)\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 436,
+      "column": 81,
+      "construct": "color.white",
+      "source": "table.cell(statsTable, 0, 15, showStats ? \"نسبة النجاح (الكل)\" : \"\", text_color=color.white, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 437,
+      "column": 1,
+      "construct": "table.cell",
+      "source": "table.cell(statsTable, 1, 15, showStats ? str.tostring(allRate, \"#.#\") + \"%\" : \"\", text_color=color.yellow, text_size=txtSize)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "string concatenation requires string + (runtime numeric only)",
+      "line": 437,
+      "column": 43,
+      "construct": "string concatenation expression",
+      "source": "table.cell(statsTable, 1, 15, showStats ? str.tostring(allRate, \"#.#\") + \"%\" : \"\", text_color=color.yellow, text_size=txtSize)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 437,
+      "column": 43,
+      "construct": "str.tostring",
+      "source": "table.cell(statsTable, 1, 15, showStats ? str.tostring(allRate, \"#.#\") + \"%\" : \"\", text_color=color.yellow, text_size=txtSize)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 437,
+      "column": 95,
+      "construct": "color.yellow",
+      "source": "table.cell(statsTable, 1, 15, showStats ? str.tostring(allRate, \"#.#\") + \"%\" : \"\", text_color=color.yellow, text_size=txtSize)"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 441,
+      "column": 5,
+      "construct": "strategy.entry",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 441,
+      "column": 48,
+      "construct": "strategy.long",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 441,
+      "column": 64,
+      "construct": "strategy.short",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "comma-separated statements",
+      "line": 441,
+      "column": 79,
+      "construct": ", ",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "display primitives and table",
+      "line": 441,
+      "column": 81,
+      "construct": "alert",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "لغة",
+      "status": "unsupported",
+      "reason": "string concatenation requires string + (runtime numeric only)",
+      "line": 441,
+      "column": 81,
+      "construct": "string concatenation expression",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "بيانات",
+      "status": "unsupported",
+      "reason": "symbol/timeframe/bar state/session/volume data",
+      "line": 441,
+      "column": 114,
+      "construct": "syminfo.ticker",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 441,
+      "column": 146,
+      "construct": "str.tostring",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 441,
+      "column": 166,
+      "construct": "format.mintick",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 441,
+      "column": 199,
+      "construct": "str.tostring",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 441,
+      "column": 223,
+      "construct": "format.mintick",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 441,
+      "column": 255,
+      "construct": "str.tostring",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 441,
+      "column": 317,
+      "construct": "format.mintick",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 441,
+      "column": 351,
+      "construct": "str.tostring",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "مكتبة",
+      "status": "unsupported",
+      "reason": "string functions; contains also has wrong semantic return type",
+      "line": 441,
+      "column": 401,
+      "construct": "str.tostring",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "عرض",
+      "status": "unsupported",
+      "reason": "qualified visual constants/functions and visible range",
+      "line": 441,
+      "column": 429,
+      "construct": "alert.freq_once_per_bar_close",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "category": "strategy",
+      "status": "unsupported",
+      "reason": "strategy declaration, orders, state and statistics",
+      "line": 443,
+      "column": 5,
+      "construct": "strategy.exit",
+      "source": "    strategy.exit((buy or inLong) ? \"BUY EXIT\" : \"SELL EXIT\", from_entry=(buy or inLong) ? \"BUY\" : \"SELL\", stop=curStop, limit=targetLine)"
+    }
+  ]
+}
