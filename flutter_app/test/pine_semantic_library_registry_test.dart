@@ -81,8 +81,7 @@ void main(){
       expect(r.hasErrors,isTrue,reason:bad);
     }
   });
-  test('inject exact typo variants in memory; original fixture never written',(){
-    final source=File('test/fixtures/pine/ahv10.pine').readAsStringSync();
+  group('Exact typo rejection (in-memory fixture)',(){
     final replacements={
       'ta.ema':'ta.emaa','str.contains':'str.containz','strategy.entry':'strategy.entri',
       'table.cell':'table.celll','map.get':'map.gett','ticker.standard':'ticker.standart',
@@ -92,14 +91,21 @@ void main(){
       'alert.freq_once_per_bar_close':'alert.freq_once_per_bar_closee',
     };
     for(final entry in replacements.entries){
-      expect(source,contains(entry.key));
-      final result=full(source.replaceFirst(entry.key,entry.value));
-      expect(result.completed,isTrue);
-      expect(result.diagnostics.any((d)=>
-          (d.code=='unknown_function'||d.code=='undefined_name')&&
-          d.message.contains(entry.value)),isTrue,reason:entry.value);
+      test('rejects ${entry.value}',(){
+        final file=File('test/fixtures/pine/ahv10.pine');
+        final source=file.readAsStringSync();
+        expect(source,contains(entry.key));
+        final result=full(source.replaceFirst(entry.key,entry.value));
+        expect(result.completed,isTrue);
+        expect(result.diagnostics.any((d)=>
+            (d.code=='unknown_function'||d.code=='undefined_name')&&
+            d.message.contains(entry.value)),isTrue,reason:entry.value);
+        expect(file.readAsStringSync(),source);
+      });
     }
-    expect(File('test/fixtures/pine/ahv10.pine').readAsStringSync(),source);
+  });
+  test('original fixture remains error-free and retains syntax-only notices',(){
+    final source=File('test/fixtures/pine/ahv10.pine').readAsStringSync();
     final original=full(source);
     expect(original.completed,isTrue);
     expect(original.lastVisitedLine,443);
