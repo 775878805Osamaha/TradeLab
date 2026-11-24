@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tradelab_flutter/chart/pine_v6_language_runtime.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 import 'pine_stage3b_reference_test.dart' show libraryValues, program;
 import 'pine_stage3b_ta_test.dart' show GuardedBars;
@@ -90,7 +89,9 @@ void compareCapture(String route,String name,List<double?> actual,List<double> r
   if(early){
     final warm=stats(actual,ref,0,startIndex);
     // Diagnostics only: historical state before the CSV start is unknown.
-    print('TV_CAPTURE_STATS ${jsonEncode({'route':route,'function':name,'window':'warmup','stats':warm})}');
+    // ignore: avoid_print
+    // ignore: avoid_print
+  print('TV_CAPTURE_STATS ${jsonEncode({'route':route,'function':name,'window':'warmup','stats':warm})}');
   }
   final result=stats(actual,ref,startIndex,end);
   print('TV_CAPTURE_STATS ${jsonEncode({'route':route,'function':name,'window':'reference','stats':result})}');
