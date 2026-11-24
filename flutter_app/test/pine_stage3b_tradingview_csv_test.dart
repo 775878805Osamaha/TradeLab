@@ -90,10 +90,10 @@ void compareCapture(String route,String name,List<double?> actual,List<double> r
     final warm=stats(actual,ref,0,startIndex);
     // Diagnostics only: historical state before the CSV start is unknown.
     // ignore: avoid_print
-    // ignore: avoid_print
-  print('TV_CAPTURE_STATS ${jsonEncode({'route':route,'function':name,'window':'warmup','stats':warm})}');
+    print('TV_CAPTURE_STATS ${jsonEncode({'route':route,'function':name,'window':'warmup','stats':warm})}');
   }
   final result=stats(actual,ref,startIndex,end);
+  // ignore: avoid_print
   print('TV_CAPTURE_STATS ${jsonEncode({'route':route,'function':name,'window':'reference','stats':result})}');
   expect(result['na'],0,reason:'$route $name missing reference-window output');
   expect(result['overTolerance'],0,reason:'$route $name exceeds absolute 1e-6: $result');
