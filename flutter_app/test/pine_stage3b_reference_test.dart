@@ -67,7 +67,7 @@ void main(){
     for(final row in matrix){
       expect(row['status'],classification);
       expect(row['verification'],'internal_independent_formula');
-      expect(row['tradingView'],'not_verified');
+      expect(row['tradingView'],names.contains(row['name'])?'pending_exact_head_ci':'not_verified');
       expect((row['longReference'] as String).startsWith('seeded-360-ohlcv-v2'),names.contains(row['name']));
     }
     for(final row in doc['bars'] as List){expect(number(row[4]),greaterThanOrEqualTo(0));}
@@ -148,5 +148,5 @@ void main(){
       compareSeries(program(names[k],14).evaluate(source).single.values,ref,
           'TradingView ${data['symbol']} ${names[k]}',start:start-1,absTol:absTol,relTol:relTol);
     }
-  },skip:capture.existsSync()?false:'SKIP: no genuine TradingView export at test/fixtures/tradingview/pine_stage3b_actual.json; no external parity claim.');
+  },skip:capture.existsSync()?false:'SKIP: no additional optional JSON capture; the fixed genuine CSV is tested separately by pine_stage3b_tradingview_csv_test.dart.');
 }

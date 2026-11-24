@@ -26,6 +26,9 @@ jobs:
         working-directory: flutter_app
     steps:
       - uses: actions/checkout@v4
+      - name: Verify original TradingView capture SHA-256
+        working-directory: .
+        run: echo '64b557c209f44c387a127bdf213703d4858fa3d62305711a12630713422221b3  flutter_app/test/fixtures/tradingview/4_5778588908598075071.csv' | sha256sum --check
       - name: Verify independent long OHLCV fixture reproducibility
         working-directory: .
         run: node tools/pine/generate_stage3b_reference.cjs --check
@@ -160,6 +163,7 @@ jobs:
             test/pine_v6_language_runtime_test.dart \
             test/pine_stage3b_ta_test.dart \
             test/pine_stage3b_reference_test.dart \
+            test/pine_stage3b_tradingview_csv_test.dart \
             test/chart_indicator_autoscale_test.dart \
             test/chart_indicator_pane_test.dart \
             test/chart_indicator_library_sheet_test.dart \

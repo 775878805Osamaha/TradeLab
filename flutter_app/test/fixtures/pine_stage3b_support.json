@@ -20,8 +20,18 @@
     "replay": "runtime guarded prefix rebuild",
     "call": "close, 2",
     "verification": "internal_independent_formula",
-    "tradingView": "not_verified",
-    "longReference": "seeded-360-ohlcv-v2 (pending CI)"
+    "tradingView": "pending_exact_head_ci",
+    "longReference": "seeded-360-ohlcv-v2 (pending CI)",
+    "externalReference": {
+      "symbol": "TVC:GOLD",
+      "timeframe": "1h",
+      "length": 14,
+      "absoluteTolerance": 0.000001,
+      "startIndex": 300,
+      "endIndexExclusive": 998,
+      "status": "pending_exact_head_ci",
+      "classificationIfGreen": "مطابقة لـ TradingView على TVC:GOLD 1h بطول 14 بتسامح 1e-6"
+    }
   },
   {
     "name": "ta.rma",
@@ -32,8 +42,18 @@
     "replay": "runtime guarded prefix rebuild",
     "call": "close, 2",
     "verification": "internal_independent_formula",
-    "tradingView": "not_verified",
-    "longReference": "seeded-360-ohlcv-v2 (pending CI)"
+    "tradingView": "pending_exact_head_ci",
+    "longReference": "seeded-360-ohlcv-v2 (pending CI)",
+    "externalReference": {
+      "symbol": "TVC:GOLD",
+      "timeframe": "1h",
+      "length": 14,
+      "absoluteTolerance": 0.000001,
+      "startIndex": 300,
+      "endIndexExclusive": 998,
+      "status": "pending_exact_head_ci",
+      "classificationIfGreen": "مطابقة لـ TradingView على TVC:GOLD 1h بطول 14 بتسامح 1e-6"
+    }
   },
   {
     "name": "ta.wma",
@@ -56,8 +76,18 @@
     "replay": "runtime guarded prefix rebuild",
     "call": "close, 2",
     "verification": "internal_independent_formula",
-    "tradingView": "not_verified",
-    "longReference": "seeded-360-ohlcv-v2 (pending CI)"
+    "tradingView": "pending_exact_head_ci",
+    "longReference": "seeded-360-ohlcv-v2 (pending CI)",
+    "externalReference": {
+      "symbol": "TVC:GOLD",
+      "timeframe": "1h",
+      "length": 14,
+      "absoluteTolerance": 0.000001,
+      "startIndex": 300,
+      "endIndexExclusive": 998,
+      "status": "pending_exact_head_ci",
+      "classificationIfGreen": "مطابقة لـ TradingView على TVC:GOLD 1h بطول 14 بتسامح 1e-6"
+    }
   },
   {
     "name": "ta.atr",
@@ -68,8 +98,18 @@
     "replay": "runtime guarded prefix rebuild",
     "call": "2",
     "verification": "internal_independent_formula",
-    "tradingView": "not_verified",
-    "longReference": "seeded-360-ohlcv-v2 (pending CI)"
+    "tradingView": "pending_exact_head_ci",
+    "longReference": "seeded-360-ohlcv-v2 (pending CI)",
+    "externalReference": {
+      "symbol": "TVC:GOLD",
+      "timeframe": "1h",
+      "length": 14,
+      "absoluteTolerance": 0.000001,
+      "startIndex": 300,
+      "endIndexExclusive": 998,
+      "status": "pending_exact_head_ci",
+      "classificationIfGreen": "مطابقة لـ TradingView على TVC:GOLD 1h بطول 14 بتسامح 1e-6"
+    }
   },
   {
     "name": "ta.tr",
