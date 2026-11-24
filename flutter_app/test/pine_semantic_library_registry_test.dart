@@ -1,8 +1,11 @@
+import 'dart:collection';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/pine_v6_frontend.dart';
 import 'package:tradelab_flutter/chart/pine_v6_language_runtime.dart';
 import 'package:tradelab_flutter/chart/pine_runtime_core.dart';
+import 'package:tradelab_flutter/chart/chart_indicator_library.dart';
+import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 PineFrontendResult prepare(String body)=>const PineV6Frontend().prepare(
     '//@version=6\nstrategy("Registry")\n$body');
@@ -13,6 +16,36 @@ PineSemanticResult full(String source){
   expect(parsed.diagnostics,isEmpty);
   return PineV6SemanticAnalyzer.forDiagnosticAudit().analyze(parsed.ast);
 }
+// A rejection must happen before either evaluator touches chart data.
+class _UnreadableBars extends ListBase<TradeCandle> {
+  int reads=0;
+  Never _read(){reads++;throw StateError('Execution accessed candles before rejection');}
+  @override int get length=>_read();
+  @override set length(int value)=>throw StateError('Unexpected mutation');
+  @override TradeCandle operator [](int index)=>_read();
+  @override void operator []=(int index,TradeCandle value)=>throw StateError('Unexpected mutation');
+}
+
+void assertRejectedBeforeEvaluation(String source,String symbol){
+  final checked=const PineV6Frontend().prepare(source);
+  expect(checked.hasErrors,isFalse,reason:checked.diagnostics.join('\n'));
+  expect(checked.semantic.diagnostics.any((d)=>d.code=='known_unimplemented'&&
+      d.message.endsWith(': '+symbol)),isTrue,reason:symbol);
+  expect(checked.status,PineFrontendStatus.parsedButNotExecutable);
+  expect(checked.legacyProgram,isNull,reason:'No legacy fallback');
+  expect(checked.canExecute,isFalse);
+  final bars=_UnreadableBars();
+  expect(()=>checked.evaluateSupported(bars),throwsA(
+      isA<PineFrontendExecutionException>().having((e)=>e.message,'message',
+        contains('runtime not implemented yet'))));
+  expect(()=>PineV6LanguageProgram.compile(source).evaluate(bars),throwsA(
+      isA<PineRuntimeException>().having((e)=>e.code,'code',startsWith('unsupported_'))));
+  expect(bars.reads,0,reason:'No partial evaluation');
+  final saved=ChartSavedIndicatorScript(id:'guard',name:'Guard',source:source);
+  expect(saved.supportedIndicator(),isNull,reason:'No saved-indicator fallback');
+  expect(saved.compileError,contains('unsupported_'));
+}
+
 void main(){
   test('typed known library symbols, both time forms and both lookahead values',(){
     final r=prepare('int stamp = time\nint sessionTime = time("60","0700-2000")\n'
@@ -86,4 +119,41 @@ void main(){
       expect(()=>PineV6LanguageProgram.compile(source),throwsA(isA<PineRuntimeException>()));
     }
   });
+  // Test each of the sixteen formerly unresolved documented names on a
+  // small script with a supported numeric plot before the forbidden call.
+  final cases=<String,String>{
+    'ticker.standard':'x = ticker.standard("X")',
+    'ticker.heikinashi':'x = ticker.heikinashi("X")',
+    'barmerge.lookahead_off':'x = barmerge.lookahead_off',
+    'barmerge.lookahead_on':'x = barmerge.lookahead_on',
+    'time':'x = time("60","0700-2000")',
+    'strategy.closedtrades.exit_price':'x = strategy.closedtrades.exit_price(0)',
+    'strategy.closedtrades.entry_price':'x = strategy.closedtrades.entry_price(0)',
+    'strategy.closedtrades.size':'x = strategy.closedtrades.size(0)',
+    'map.get':'var map<int,float> m = map.new<int,float>()\nx = map.get(m,1)',
+    'map.put':'var map<int,float> m = map.new<int,float>()\nx = map.put(m,1,2.0)',
+    'position.top_right':'x = position.top_right',
+    'table.new':'var table t = table.new(position.top_right,1,1)',
+    'table.cell':'var table t = table.new(position.top_right,1,1)\ntable.cell(t,0,0,"ok")',
+    'strategy.entry':'strategy.entry("L",strategy.long)',
+    'alert.freq_once_per_bar_close':'x = alert.freq_once_per_bar_close',
+    'strategy.exit':'strategy.exit("X","L",stop=close)',
+  };
+  for(final entry in cases.entries){
+    test('D rejects before reading a candle: ${entry.key}',(){
+      final header=entry.key.startsWith('strategy.')?'strategy("Guard")':'indicator("Guard")';
+      assertRejectedBeforeEvaluation('//@version=6\n$header\nplot(close)\n${entry.value}',entry.key);
+    });
+  }
+  test('D rejects unsupported call in unreachable branch before execution',(){
+    assertRejectedBeforeEvaluation(
+        '//@version=6\nindicator("Guard")\nplot(close)\nif false\n    x = ticker.standard("X")',
+        'ticker.standard');
+  });
+  test('D rejects unsupported call in unused function before execution',(){
+    assertRejectedBeforeEvaluation(
+        '//@version=6\nindicator("Guard")\nf() => ticker.standard("X")\nplot(close)',
+        'ticker.standard');
+  });
+
 }

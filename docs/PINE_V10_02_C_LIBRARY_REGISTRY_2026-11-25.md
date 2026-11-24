@@ -1,4 +1,4 @@
-# V10-02 C — exact library catalogue and execution boundary (CI pending)
+# V10-02 C — exact library catalogue and execution boundary (C/D measured; additional D checks pending)
 Stacked draft targeting feat/pine-v10-02-semantic-registry-20261125 at 4324f1cc72ffbed96ec0e5907a46e9ee83f8e069, not integration. A CI 45508488527 succeeded: 1120 passed, 0 failed, 1 skipped. Downloaded artifact 14972674693 contains verified fingerprint and count JSON: 75 total = 0 types + 58 unresolved + 17 syntax-only; reached 443/443. Evidence commit 1ec40baa772cdfc4f5d88295f7f5a3858c4a8fff on C only; B remains 91. All 75 A diagnostic records match B excluding the 16 removed types. Checkout merge SHA 104b9f31995880bf152ea02c8d284c11c34e1bec has identical tree to A head. A unchanged.
 ## Explicit signatures (no evaluation)
 Every registered entry has a distinct exact name. Official Pine v6 reference links below; function parameter descriptors and result type/qualifier in pine_v6_semantic_registry.dart. No blanket prefix acceptance. Existing TA executable registry is reused by exact name, not expanded runtime. Finite semantic catalog, not complete coverage of all Pine APIs: names outside catalog are rejected; documented remaining APIs require future audited entries. Previously silently accepted fixture members/functions also now receive typed metadata and known_unimplemented notices when applicable, so notice count can exceed 58. Existing 17 syntax-only notices must remain in uncapped audit.
@@ -12,3 +12,25 @@ Every registered entry has a distinct exact name. Official Pine v6 reference lin
 - Related exact entries: [inputs](https://www.tradingview.com/pine-script-docs/concepts/inputs/), [chart information](https://www.tradingview.com/pine-script-docs/concepts/chart-information/), [request.security](https://www.tradingview.com/pine-script-reference/v6/#fun_request.security) semantic expression return only, no execution; [ta.dmi](https://www.tradingview.com/pine-script-reference/v6/#fun_ta.dmi), [ta.supertrend](https://www.tradingview.com/pine-script-reference/v6/#fun_ta.supertrend), [ta.barssince](https://www.tradingview.com/pine-script-reference/v6/#fun_ta.barssince), [ta.pivothigh](https://www.tradingview.com/pine-script-reference/v6/#fun_ta.pivothigh), [ta.pivotlow](https://www.tradingview.com/pine-script-reference/v6/#fun_ta.pivotlow), [math.sum](https://www.tradingview.com/pine-script-reference/v6/#fun_math.sum), [math.floor](https://www.tradingview.com/pine-script-reference/v6/#fun_math.floor), [math.sign](https://www.tradingview.com/pine-script-reference/v6/#fun_math.sign), [str.tostring](https://www.tradingview.com/pine-script-reference/v6/#fun_str.tostring), [str.format_time](https://www.tradingview.com/pine-script-reference/v6/#fun_str.format_time), [color.new](https://www.tradingview.com/pine-script-reference/v6/#fun_color.new). 
 ## D boundary and tests
 New known_unimplemented unsupported diagnostic is separate from type/undefined errors and syntax_only. Frontend disables legacy fallback on it. Existing runtime validator unchanged; test refuses both paths. Production cap remains 48, audit uncapped. Tests assert original fixture no errors, exact 17 old notices, mutation of ten names in memory, valid lookahead_on, map key/value and call signature rejection. No change to original file, runtime, HA, simulator or APK. No merge. CI workflow target list expanded to A branch for stacked PR; record actual C evidence after CI. E pending.
+
+## E measurement — actual C/D run 45509402217
+- Head c752905607caf0189b622d573adc670f3baa4fa9; PR checkout 7c8220e61d5095de2b924960249c3017d07246e1 has identical tree. [CI](https://github.com/775878805Osamaha/TradeLab/actions/runs/45509402217) completed success; 1125 passed, 0 failed, 1 skipped. Analyzer completed with 393 nonfatal infos/issues. Artifact 14974203882 was downloaded and inspected; JSON matches log, fingerprint unchanged.
+- Evidence: docs/evidence/PINE_AHV10_V10_02_C_CI_45509402217.json (all 203 rows). Previous B and A JSON retained. All 58 former unresolved sites match C known_unimplemented by source line and column (16 exact names); 128 extra formerly silent sites, detailed by name/location in JSON. All 17 syntax-only diagnostics match A byte-for-byte as records. No errors remain in original fixture, last visited line 443, completed=true. This is semantic acceptance of the fixture only, not execution or full language coverage.
+|Category|B|A|C/D|
+|---|---:|---:|---:|
+|Lexer|0|0|0|
+|Parser|0|0|0|
+|Type errors|16|0|0|
+|Unresolved names|58|58|0|
+|Other errors|0|0|0|
+|Known unimplemented|0|0|186|
+|Syntax-only notices|17|17|17|
+|Other notices|0|0|0|
+|Total|91|75|203|
+|Last visited line|443|443|443|
+|Passed|1116|1120|1125|
+|Failed|0|0|0|
+|Skipped|1|1|1|
+- Ten in-memory mutation assertions passed within one test; no individual test IDs in this run. Exact names: ta.emaa, str.containz, strategy.entri, table.celll, map.gett, ticker.standart, barmerge.lookahead_offf, strategy.closedtrades.exit_pricee, position.topright, alert.freq_once_per_bar_closee. lookahead_on accepted by positive test. The original 5-case guard test passed; differential test now contains seven fixtures (SMA, math/history, EMA, TA, arithmetic, math families, change/styles) and verifies values, plot metadata and overlay against legacy. Optional genuine TradingView export comparison skipped as before; fixed CSV reference tests remain in the gate.
+- Additional D-only tests now submitted: all 16 reclassified names, unreachable branch, unused function; explicit no-legacy-program assertion, both evaluation paths throw before any candle read (poison list), saved-indicator refuses and displays compile error. These tests do not change Runtime; result pending on new head. No merge. Do not call final E complete until new tests verified.
+- Merge proposal after green: owner merges #653 into A, then verify new A CI and evidence, then #652 into integration. Do not independently merge #653 to integration. Check #651 docs-only status and recheck base/mergeability before each merge. Both owner decisions; no automatic merging.
