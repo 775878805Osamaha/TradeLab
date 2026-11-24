@@ -160,6 +160,8 @@ jobs:
             test/pine_frontend_v6_test.dart \
             test/pine_frontend_differential_test.dart \
             test/pine_v6_frontend_test.dart \
+            test/pine_v10_01_syntax_test.dart \
+            test/pine_ahv10_audit_test.dart \
             test/pine_v6_language_runtime_test.dart \
             test/pine_stage3b_ta_test.dart \
             test/pine_stage3b_reference_test.dart \

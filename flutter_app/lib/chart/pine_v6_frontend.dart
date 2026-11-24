@@ -92,7 +92,9 @@ class PineV6Frontend {
     }
     final invalid=errors.any((d)=>d.severity==PineDiagnosticSeverity.error);
     PineSubsetProgram? legacy;
-    if(!invalid)legacy=PineSubsetProgram.tryCompile(source);
+    final syntaxOnly=semantic.diagnostics.any((d)=>d.code=='syntax_only'||
+        d.code=='tuple_shape_unknown');
+    if(!invalid&&!syntaxOnly)legacy=PineSubsetProgram.tryCompile(source);
     if(legacy==null&&!invalid) {
       final loc=parsed.ast.statements.isNotEmpty?
           parsed.ast.statements.first.span:const PineSourceSpan(1,1);
