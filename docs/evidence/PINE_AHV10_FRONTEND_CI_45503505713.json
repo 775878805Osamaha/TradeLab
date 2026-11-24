@@ -1,0 +1,510 @@
+{
+  "source": "actual GitHub Actions Dart canonical frontend diagnostics; original source only",
+  "head": "8bcac03e2b2b9288af5d348feeb5b521a4557a8f",
+  "runId": 45503505713,
+  "jobId": 138832615363,
+  "status": "invalid",
+  "tokens": 7343,
+  "astStatements": 383,
+  "counts": {
+    "parser": 13,
+    "semantic": 48
+  },
+  "semanticDiagnosticCap": 48,
+  "completeSemanticTraversal": false,
+  "compile": "PineRuntimeException(compile_invalid): parser:trailing_tokens at 127:22: Unexpected tokens after statement",
+  "tests": {
+    "passed": 1,
+    "failed": 0
+  },
+  "diagnostics": [
+    {
+      "stage": "parser",
+      "code": "trailing_tokens",
+      "line": 127,
+      "column": 22,
+      "message": "Unexpected tokens after statement",
+      "source": "[haO, haH, haL, haC] = request.security(haTicker, timeframe.period, [open, high, low, close], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "stage": "parser",
+      "code": "trailing_tokens",
+      "line": 142,
+      "column": 23,
+      "message": "Unexpected tokens after statement",
+      "source": "[macdL, macdS, macdH] = ta.macd(close, 12, 26, 9)"
+    },
+    {
+      "stage": "parser",
+      "code": "trailing_tokens",
+      "line": 143,
+      "column": 20,
+      "message": "Unexpected tokens after statement",
+      "source": "[diP, diM, adxVal] = ta.dmi(14, 14)"
+    },
+    {
+      "stage": "parser",
+      "code": "trailing_tokens",
+      "line": 144,
+      "column": 16,
+      "message": "Unexpected tokens after statement",
+      "source": "[stVal, stDir] = ta.supertrend(stFactor, stLen)"
+    },
+    {
+      "stage": "parser",
+      "code": "trailing_tokens",
+      "line": 223,
+      "column": 10,
+      "message": "Unexpected tokens after statement",
+      "source": "[cH, cL] = request.security(smtSym, timeframe.period, [high, low], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "stage": "parser",
+      "code": "expected_expression",
+      "line": 378,
+      "column": 11,
+      "message": "Expected Pine expression",
+      "source": "barWeek = int(math.floor((time - wkOff) / wkMs))"
+    },
+    {
+      "stage": "parser",
+      "code": "expected_token",
+      "line": 379,
+      "column": 8,
+      "message": "Expected =",
+      "source": "var map<int, float> mWins = map.new<int, float>()"
+    },
+    {
+      "stage": "parser",
+      "code": "expected_token",
+      "line": 380,
+      "column": 8,
+      "message": "Expected =",
+      "source": "var map<int, float> mLosses = map.new<int, float>()"
+    },
+    {
+      "stage": "parser",
+      "code": "expected_token",
+      "line": 381,
+      "column": 8,
+      "message": "Expected =",
+      "source": "var map<int, float> mWinPts = map.new<int, float>()"
+    },
+    {
+      "stage": "parser",
+      "code": "expected_token",
+      "line": 382,
+      "column": 8,
+      "message": "Expected =",
+      "source": "var map<int, float> mLossPts = map.new<int, float>()"
+    },
+    {
+      "stage": "parser",
+      "code": "expected_expression",
+      "line": 393,
+      "column": 35,
+      "message": "Expected Pine expression",
+      "source": "refWeek = na(visTime) ? barWeek : int(math.floor((visTime - wkOff) / wkMs))"
+    },
+    {
+      "stage": "parser",
+      "code": "expected_token",
+      "line": 405,
+      "column": 11,
+      "message": "Expected =",
+      "source": "var table statsTable = table.new(position.top_right, 2, 16, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)"
+    },
+    {
+      "stage": "parser",
+      "code": "trailing_tokens",
+      "line": 441,
+      "column": 79,
+      "message": "Trailing tokens in local block",
+      "source": "    strategy.entry(buy ? \"BUY\" : \"SELL\", buy ? strategy.long : strategy.short), alert((buy ? \"شراء \" : \"بيع \") + syminfo.ticker + \" | الدخول \" + str.tostring(close, format.mintick) + \" | الستوب \" + str.tostring(stopLevel, format.mintick) + \" | الهدف \" + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + \" | تأكيدات \" + str.tostring(buy ? bullScore : bearScore) + \"/\" + str.tostring(enabledCount), alert.freq_once_per_bar_close)"
+    },
+    {
+      "stage": "semantic",
+      "code": "logical_type",
+      "line": 116,
+      "column": 10,
+      "message": "Expected boolType, found stringType",
+      "source": "isGold = str.contains(syminfo.ticker, \"XAU\") or str.contains(syminfo.ticker, \"GOLD\")"
+    },
+    {
+      "stage": "semantic",
+      "code": "logical_type",
+      "line": 116,
+      "column": 49,
+      "message": "Expected boolType, found stringType",
+      "source": "isGold = str.contains(syminfo.ticker, \"XAU\") or str.contains(syminfo.ticker, \"GOLD\")"
+    },
+    {
+      "stage": "semantic",
+      "code": "condition_type",
+      "line": 119,
+      "column": 37,
+      "message": "Expected boolType, found stringType",
+      "source": "autoPt = isGold ? 0.10 : isForex ? (isJpy ? 0.01 : 0.0001) : 1.0"
+    },
+    {
+      "stage": "semantic",
+      "code": "logical_type",
+      "line": 124,
+      "column": 36,
+      "message": "Expected boolType, found stringType",
+      "source": "validChart = chart.is_standard and timeframe.isminutes"
+    },
+    {
+      "stage": "semantic",
+      "code": "unknown_function",
+      "line": 126,
+      "column": 30,
+      "message": "Unknown Pine function: ticker.standard",
+      "source": "haTicker = ticker.heikinashi(ticker.standard(syminfo.tickerid))"
+    },
+    {
+      "stage": "semantic",
+      "code": "unknown_function",
+      "line": 126,
+      "column": 12,
+      "message": "Unknown Pine function: ticker.heikinashi",
+      "source": "haTicker = ticker.heikinashi(ticker.standard(syminfo.tickerid))"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 127,
+      "column": 2,
+      "message": "Undeclared Pine identifier: haO",
+      "source": "[haO, haH, haL, haC] = request.security(haTicker, timeframe.period, [open, high, low, close], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 127,
+      "column": 7,
+      "message": "Undeclared Pine identifier: haH",
+      "source": "[haO, haH, haL, haC] = request.security(haTicker, timeframe.period, [open, high, low, close], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 127,
+      "column": 12,
+      "message": "Undeclared Pine identifier: haL",
+      "source": "[haO, haH, haL, haC] = request.security(haTicker, timeframe.period, [open, high, low, close], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 127,
+      "column": 17,
+      "message": "Undeclared Pine identifier: haC",
+      "source": "[haO, haH, haL, haC] = request.security(haTicker, timeframe.period, [open, high, low, close], lookahead=barmerge.lookahead_off)"
+    },
+    {
+      "stage": "semantic",
+      "code": "arithmetic_type",
+      "line": 128,
+      "column": 17,
+      "message": "Arithmetic requires numeric arguments",
+      "source": "tol = wickTicks * syminfo.mintick + 0.00000001"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 129,
+      "column": 13,
+      "message": "Undeclared Pine identifier: haC",
+      "source": "direction = haC > haO ? 1 : haC < haO ? -1 : 0"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 129,
+      "column": 19,
+      "message": "Undeclared Pine identifier: haO",
+      "source": "direction = haC > haO ? 1 : haC < haO ? -1 : 0"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 129,
+      "column": 29,
+      "message": "Undeclared Pine identifier: haC",
+      "source": "direction = haC > haO ? 1 : haC < haO ? -1 : 0"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 129,
+      "column": 35,
+      "message": "Undeclared Pine identifier: haO",
+      "source": "direction = haC > haO ? 1 : haC < haO ? -1 : 0"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 130,
+      "column": 42,
+      "message": "Undeclared Pine identifier: haO",
+      "source": "strongBull = direction == 1 and math.min(haO, haC) - haL <= tol"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 130,
+      "column": 47,
+      "message": "Undeclared Pine identifier: haC",
+      "source": "strongBull = direction == 1 and math.min(haO, haC) - haL <= tol"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 130,
+      "column": 54,
+      "message": "Undeclared Pine identifier: haL",
+      "source": "strongBull = direction == 1 and math.min(haO, haC) - haL <= tol"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 131,
+      "column": 34,
+      "message": "Undeclared Pine identifier: haH",
+      "source": "strongBear = direction == -1 and haH - math.max(haO, haC) <= tol"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 131,
+      "column": 49,
+      "message": "Undeclared Pine identifier: haO",
+      "source": "strongBear = direction == -1 and haH - math.max(haO, haC) <= tol"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 131,
+      "column": 54,
+      "message": "Undeclared Pine identifier: haC",
+      "source": "strongBear = direction == -1 and haH - math.max(haO, haC) <= tol"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 132,
+      "column": 66,
+      "message": "Undeclared Pine identifier: haC",
+      "source": "bullModel = strongBull and (reqStrong == 1 or strongBull[1]) and haC > haH[1]"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 132,
+      "column": 72,
+      "message": "Undeclared Pine identifier: haH",
+      "source": "bullModel = strongBull and (reqStrong == 1 or strongBull[1]) and haC > haH[1]"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 133,
+      "column": 66,
+      "message": "Undeclared Pine identifier: haC",
+      "source": "bearModel = strongBear and (reqStrong == 1 or strongBear[1]) and haC < haL[1]"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 133,
+      "column": 72,
+      "message": "Undeclared Pine identifier: haL",
+      "source": "bearModel = strongBear and (reqStrong == 1 or strongBear[1]) and haC < haL[1]"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 140,
+      "column": 108,
+      "message": "Undeclared Pine identifier: barmerge",
+      "source": "htfDir = request.security(haTicker, htfTf, close[1] > open[1] ? 1 : close[1] < open[1] ? -1 : 0, lookahead=barmerge.lookahead_on)"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 142,
+      "column": 2,
+      "message": "Undeclared Pine identifier: macdL",
+      "source": "[macdL, macdS, macdH] = ta.macd(close, 12, 26, 9)"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 142,
+      "column": 9,
+      "message": "Undeclared Pine identifier: macdS",
+      "source": "[macdL, macdS, macdH] = ta.macd(close, 12, 26, 9)"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 142,
+      "column": 16,
+      "message": "Undeclared Pine identifier: macdH",
+      "source": "[macdL, macdS, macdH] = ta.macd(close, 12, 26, 9)"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 143,
+      "column": 2,
+      "message": "Undeclared Pine identifier: diP",
+      "source": "[diP, diM, adxVal] = ta.dmi(14, 14)"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 143,
+      "column": 7,
+      "message": "Undeclared Pine identifier: diM",
+      "source": "[diP, diM, adxVal] = ta.dmi(14, 14)"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 143,
+      "column": 12,
+      "message": "Undeclared Pine identifier: adxVal",
+      "source": "[diP, diM, adxVal] = ta.dmi(14, 14)"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 144,
+      "column": 2,
+      "message": "Undeclared Pine identifier: stVal",
+      "source": "[stVal, stDir] = ta.supertrend(stFactor, stLen)"
+    },
+    {
+      "stage": "semantic",
+      "code": "undefined_name",
+      "line": 144,
+      "column": 9,
+      "message": "Undeclared Pine identifier: stDir",
+      "source": "[stVal, stDir] = ta.supertrend(stFactor, stLen)"
+    },
+    {
+      "stage": "semantic",
+      "code": "invalid_callee",
+      "line": 149,
+      "column": 14,
+      "message": "Expected function name",
+      "source": "sessIn = not na(time(timeframe.period, sessStr))"
+    },
+    {
+      "stage": "semantic",
+      "code": "invalid_callee",
+      "line": 170,
+      "column": 13,
+      "message": "Expected function name",
+      "source": "pivHigh2 := na(pHigh) ? pivHigh2 : pivHigh1"
+    },
+    {
+      "stage": "semantic",
+      "code": "invalid_callee",
+      "line": 171,
+      "column": 13,
+      "message": "Expected function name",
+      "source": "pivHigh1 := na(pHigh) ? pivHigh1 : pHigh"
+    },
+    {
+      "stage": "semantic",
+      "code": "invalid_callee",
+      "line": 172,
+      "column": 12,
+      "message": "Expected function name",
+      "source": "pivLow2 := na(pLow) ? pivLow2 : pivLow1"
+    },
+    {
+      "stage": "semantic",
+      "code": "invalid_callee",
+      "line": 173,
+      "column": 12,
+      "message": "Expected function name",
+      "source": "pivLow1 := na(pLow) ? pivLow1 : pLow"
+    },
+    {
+      "stage": "semantic",
+      "code": "logical_type",
+      "line": 221,
+      "column": 38,
+      "message": "Expected boolType, found stringType",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "stage": "semantic",
+      "code": "logical_type",
+      "line": 221,
+      "column": 66,
+      "message": "Expected boolType, found stringType",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "stage": "semantic",
+      "code": "logical_type",
+      "line": 221,
+      "column": 114,
+      "message": "Expected boolType, found stringType",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "stage": "semantic",
+      "code": "logical_type",
+      "line": 221,
+      "column": 141,
+      "message": "Expected boolType, found stringType",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "stage": "semantic",
+      "code": "logical_type",
+      "line": 221,
+      "column": 191,
+      "message": "Expected boolType, found stringType",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "stage": "semantic",
+      "code": "logical_type",
+      "line": 221,
+      "column": 218,
+      "message": "Expected boolType, found stringType",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "stage": "semantic",
+      "code": "condition_type",
+      "line": 221,
+      "column": 267,
+      "message": "Expected boolType, found stringType",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "stage": "semantic",
+      "code": "condition_type",
+      "line": 221,
+      "column": 313,
+      "message": "Expected boolType, found stringType",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    },
+    {
+      "stage": "semantic",
+      "code": "condition_type",
+      "line": 221,
+      "column": 359,
+      "message": "Expected boolType, found stringType",
+      "source": "smtAuto = isGold ? \"OANDA:XAGUSD\" : (str.contains(tk, \"US30\") or str.contains(tk, \"DJI\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"NAS\") or str.contains(tk, \"US100\")) ? \"OANDA:SPX500USD\" : (str.contains(tk, \"SPX\") or str.contains(tk, \"US500\")) ? \"OANDA:NAS100USD\" : str.contains(tk, \"EURUSD\") ? \"OANDA:GBPUSD\" : str.contains(tk, \"GBPUSD\") ? \"OANDA:EURUSD\" : str.contains(tk, \"BTC\") ? \"BINANCE:ETHUSDT\" : str.contains(tk, \"ETH\") ? \"BINANCE:BTCUSDT\" : \"OANDA:XAUUSD\""
+    }
+  ]
+}

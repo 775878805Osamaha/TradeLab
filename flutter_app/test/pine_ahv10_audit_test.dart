@@ -17,13 +17,15 @@ void main() {
       // ignore: avoid_print
       print('AHV10_DIAG ${d.toString()}');
     }
+    Object? compileError;
     try {
       PineV6LanguageProgram.compile(source);
-      fail('Unexpected execution eligibility; review audit');
     } catch (error) {
+      compileError = error;
       // ignore: avoid_print
       print('AHV10_COMPILE $error');
     }
+    expect(compileError, isNotNull, reason: 'Compiler must refuse current unsupported strategy');
     expect(result.canExecute, isFalse);
   });
 }
