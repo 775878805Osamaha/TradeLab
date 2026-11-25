@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
-import {CTraderGateway} from '../ctrader.mjs';
+import {CTraderGateway, normalizeBar} from '../ctrader.mjs';
 
 function socketForTrendbars({accountId='12345',malformed=false,extraOlder=false,conflictingDuplicate=false,adaptiveMode=null,barMinutes=30000000}={}) {
   const requests=[];
@@ -265,3 +265,11 @@ test('empty truncated count-back remains empty, never invents gold OHLC',async()
   } finally {socket.close();}
 });
 
+
+test('trendbar normalization preserves unknown versus zero native volume',()=>{
+  const raw={utcTimestampInMinutes:30000000,low:100000,deltaOpen:10000,deltaHigh:20000,deltaClose:15000};
+  assert.equal(normalizeBar(raw).volume,null);
+  assert.equal(normalizeBar({...raw,volume:0}).volume,0);
+  assert.equal(normalizeBar({...raw,volume:'42'}).volume,42);
+  for (const volume of [-1,NaN,Infinity,1.5]) assert.throws(()=>normalizeBar({...raw,volume}),/invalid_ctrader_trendbar/);
+});
