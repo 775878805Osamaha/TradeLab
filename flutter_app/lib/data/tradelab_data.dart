@@ -21,7 +21,17 @@ const tradeSymbols = <TradeSymbol>[
 ];
 
 class TradeCandle {
-  const TradeCandle(this.open, this.high, this.low, this.close);
+  const TradeCandle(this.open, this.high, this.low, this.close, {
+    this.timestampMs, this.volume,
+  });
+
+  /// Source bar open time in UTC milliseconds. Null for synthetic/display
+  /// candles without authenticated metadata; never use a device clock.
+  final int? timestampMs;
+
+  /// Native provider volume (cTrader tick volume / Binance base asset).
+  /// Null means unavailable, not zero. Do not compare units across feeds.
+  final double? volume;
 
   final double open;
   final double high;

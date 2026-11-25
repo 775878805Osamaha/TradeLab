@@ -13,6 +13,32 @@ void main() {
   final gold = tradeSymbols.firstWhere((s) => s.code == 'XAUUSD');
   final btc = tradeSymbols.firstWhere((s) => s.code == 'BTCUSDT');
 
+  test('persist timestamp and nullable volume; verified enrichment is idempotent', () async {
+    final account='volume-metadata-${DateTime.now().microsecondsSinceEpoch}';
+    const t=1700000000000;
+    MarketBar bar(double? volume) => MarketBar(t,
+        TradeCandle(10,12,9,11,timestampMs:t,volume:volume));
+    await MarketCandleStore.archive(gold,'1h',account,[bar(null)]);
+    expect((await MarketCandleStore.read(gold,'1h',account)).single.candle.volume,isNull);
+    await MarketCandleStore.archive(gold,'1h',account,[bar(0)]);
+    await MarketCandleStore.archive(gold,'1h',account,[bar(null)]);
+    final restored=(await MarketCandleStore.read(gold,'1h',account)).single.candle;
+    expect(restored.timestampMs,t);
+    expect(restored.volume,0);
+    await expectLater(MarketCandleStore.archive(gold,'1h',account,[bar(7)]),
+      throwsA(isA<MarketDataException>()));
+    expect((await MarketCandleStore.read(gold,'1h',account)).single.candle.volume,0);
+  });
+
+  test('verified overlap retains known volume and rejects disagreement', () {
+    const t=1700000000000;
+    MarketBar bar(double? v)=>MarketBar(t,TradeCandle(10,12,9,11,timestampMs:t,volume:v));
+    expect(MarketCandleStore.mergeVerified([bar(null)],[bar(7)]).single.candle.volume,7);
+    expect(MarketCandleStore.mergeVerified([bar(7)],[bar(null)]).single.candle.volume,7);
+    expect(()=>MarketCandleStore.mergeVerified([bar(7)],[bar(8)]),
+      throwsA(isA<MarketDataException>()));
+  });
+
   test('broker account identity cannot be omitted or mixed', () {
     expect(() => MarketCandleStore.key(gold, '1m', null), throwsArgumentError);
     expect(MarketCandleStore.key(gold, '1m', 'one'),

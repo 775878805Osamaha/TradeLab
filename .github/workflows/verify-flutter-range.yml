@@ -129,6 +129,7 @@ jobs:
             test/theme_preference_store_test.dart \
             test/dark_mode_persistence_widget_test.dart \
             test/market_candle_store_test.dart \
+            test/market_candle_metadata_migration_test.dart \
             test/market_api_test.dart \
             test/ctrader_closed_bar_cutoff_test.dart \
             test/replay_start_resolver_test.dart \

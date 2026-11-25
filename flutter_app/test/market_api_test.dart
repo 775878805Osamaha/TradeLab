@@ -7,6 +7,36 @@ import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 void main() {
+  test('provider metadata preserves missing versus actual zero and rejects corrupt volume', () {
+    List<MarketBar> parse(Object? volume) => parseVerifiedBars([
+      {'timestamp':60000,'open':10,'high':12,'low':9,'close':11,'volume':volume}
+    ], sourceType:TradeSource.ctrader,minTime:0,maxTime:120000);
+    expect(parse(null).single.candle.volume,isNull);
+    expect(parse(0).single.candle.volume,0);
+    expect(parse(123).single.candle.volume,123);
+    expect(parse(123).single.candle.timestampMs,60000);
+    for (final bad in [double.nan,double.infinity,-1,'7']) {
+      expect(()=>parse(bad),throwsA(isA<MarketDataException>()));
+    }
+    expect(()=>validateBars([const MarketBar(60000,
+      TradeCandle(10,12,9,11,timestampMs:120000))]),
+      throwsA(isA<MarketDataException>()));
+  });
+
+  test('Binance missing, zero and invalid base volume never become guessed data', () async {
+    Future<List<MarketBar>> parse(Object? volume) =>
+      MarketApi(client:MockClient((_) async => http.Response(jsonEncode([
+        [1000,'10','12','9','11',volume,1999]
+      ]),200))).binanceCandles(symbol:'BTCUSDT',timeframe:'5m',
+        before:DateTime.fromMillisecondsSinceEpoch(2200,isUtc:true));
+    expect((await parse(null)).single.candle.volume,isNull);
+    expect((await parse('0')).single.candle.volume,0);
+    expect((await parse('1.25')).single.candle.volume,1.25);
+    for (final bad in ['NaN','Infinity','-1','bad']) {
+      await expectLater(parse(bad),throwsA(isA<MarketDataException>()));
+    }
+  });
+
   test('Flutter login is blocked until compatible gateway version is deployed', () async {
     final old = MarketApi(client: MockClient((_) async =>
       http.Response(jsonEncode({'status':'ok','authEnabled':true}),200)));
@@ -32,6 +62,8 @@ void main() {
       before: DateTime.fromMillisecondsSinceEpoch(2200, isUtc: true));
     expect(bars.length, 1);
     expect(bars.single.candle.close, 101);
+    expect(bars.single.candle.timestampMs, 1000);
+    expect(bars.single.candle.volume, 7);
   });
 
   test('Binance native 2h uses verified klines and excludes unclosed bar',
