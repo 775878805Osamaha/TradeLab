@@ -112,3 +112,54 @@ final class PineSupertrendCandidate {
     return (value:_trend,direction:direction);
   }
 }
+
+/// DMI candidate, first pair of bars supplies TR and directional movement.
+/// https://www.tradingview.com/support/solutions/43000502250-directional-movement-dmi/
+final class PineDmiCandidate {
+  PineDmiCandidate(this.budget,{required int length,required int smoothing})
+      :_tr=_WilderSeed(budget,length),_plus=_WilderSeed(budget,length),
+       _minus=_WilderSeed(budget,length),_adx=_WilderSeed(budget,smoothing);
+  final PineRuntimeBudget budget;
+  final _WilderSeed _tr,_plus,_minus,_adx;
+  TradeCandle? _previous;
+  ({double? plus,double? minus,double? adx}) step(TradeCandle bar){
+    budget.consume();
+    final prev=_previous;
+    _previous=bar;
+    if(prev==null)return (plus:null,minus:null,adx:null);
+    final up=bar.high-prev.high,down=prev.low-bar.low;
+    final tr=math.max(bar.high-bar.low,
+      math.max((bar.high-prev.close).abs(),(bar.low-prev.close).abs()));
+    final t=_tr.step(tr),p=_plus.step(up>down&&up>0?up:0),
+      m=_minus.step(down>up&&down>0?down:0);
+    if(t==null||p==null||m==null)return (plus:null,minus:null,adx:null);
+    if(t==0)throw const PineRuntimeException('unverified_dmi_zero_tr',
+      'Zero true range needs separate reference validation');
+    final diP=100*p/t,diM=100*m/t,total=diP+diM;
+    final adx=_adx.step(total==0?0:(diP-diM).abs()/total);
+    return (plus:diP,minus:diM,adx:adx==null?null:100*adx);
+  }
+}
+final class _WilderSeed {
+  _WilderSeed(this.budget,this.length){
+    if(length<1||length>budget.limits.maxHistory){
+      throw const PineRuntimeException('length','Invalid bounded Wilder length');
+    }
+    budget.consume(work:0,values:3);
+  }
+  final PineRuntimeBudget budget;
+  final int length;
+  int _samples=0;
+  double _sum=0;
+  double? _last;
+  double? step(double value){
+    budget.consume();
+    if(_last==null){
+      _sum+=value;
+      if(++_samples==length)_last=_sum/length;
+    }else{
+      _last=(value+(length-1)*_last!)/length;
+    }
+    return _last;
+  }
+}
