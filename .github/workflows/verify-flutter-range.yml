@@ -167,6 +167,7 @@ jobs:
             test/pine_semantic_diagnostic_audit_test.dart \
             test/pine_semantic_type_registry_test.dart \
             test/pine_semantic_library_registry_test.dart \
+            test/pine_scalar_primitives_test.dart \
             test/pine_v6_language_runtime_test.dart \
             test/pine_stage3b_ta_test.dart \
             test/pine_stage3b_reference_test.dart \
