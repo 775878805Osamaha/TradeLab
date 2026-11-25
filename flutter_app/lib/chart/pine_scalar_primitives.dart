@@ -73,7 +73,7 @@ abstract final class PineScalarPrimitives {
     }
     final offset = (hours * 60 + minutes) * (zone.group(1) == '-' ? -1 : 1);
     final int ms = timestamp ?? 0;
-    if (ms.abs() > 8640000000000000 - 86400000) {
+    if (ms < -(8640000000000000 - 86400000) || ms > 8640000000000000 - 86400000) {
       throw const PineRuntimeException('timestamp_range', 'Timestamp outside safe DateTime range');
     }
     final date = DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true)
@@ -94,7 +94,10 @@ abstract final class PineScalarPrimitives {
     for (var i = 0; i < format.length;) {
       String? match;
       for (final token in tokens.keys) {
-        if (format.startsWith(token, i)) {match = token;break;}
+        if (format.startsWith(token, i) &&
+            (i + token.length == format.length || format[i + token.length] != token[0])) {
+          match = token;break;
+        }
       }
       if (match != null) {
         out.write(tokens[match]);i += match.length;
