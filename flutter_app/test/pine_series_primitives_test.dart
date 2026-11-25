@@ -74,6 +74,15 @@ void main(){
     expect(()=>pivots([1,5,5,3,1],5,high:true),throwsA(
         isA<PineRuntimeException>().having((e)=>e.code,'code','unverified_pivot_tie')));
   });
+  test('pivotlow equal older left leg is accepted at confirmation',(){
+    expect(pivots([5,1,1,3,5],5,high:false),[null,null,null,null,1]);
+  });
+  test('pivotlow equal newer right leg disqualifies the center',(){
+    expect(pivots([5,3,1,1,5],5,high:false),[null,null,null,null,null]);
+  });
+  test('pivotlow right equality wins over allowed left equality',(){
+    expect(pivots([5,1,1,1,5],5,high:false),[null,null,null,null,null]);
+  });
   test('pivots match independent strict-extremum reference across unique series',(){
     final source=<double?>[for(var i=0;i<101;i++)((i*37)%101).toDouble()];
     for(final high in [true,false]){

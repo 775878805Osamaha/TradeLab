@@ -56,8 +56,9 @@ final class PineBarsSinceState {
 
 /// Strict-extremum candidate: returns a pivot on the *confirmation bar*.
 /// Does not backdate the result, read future bars or invent a missing source.
-/// Ties and incomplete windows are not claimed as Pine-equivalent; actual
-/// TradingView output is required for the unresolved tie/na policy.
+/// Owner-reported TradingView evidence: low ties on the left are allowed,
+/// on the right disqualify the center. High ties remain unverified. Actual
+/// capture is required before claiming parity; missing policy not proven.
 /// https://www.tradingview.com/pine-script-reference/v6/#fun_ta.pivothigh
 /// https://www.tradingview.com/pine-script-reference/v6/#fun_ta.pivotlow
 final class PinePivotState {
@@ -83,7 +84,11 @@ final class PinePivotState {
       final other=_history.read(n);
       if(other==null)return null; // Explicit conservative missing-data policy.
       if(high?other>center:other<center)return null;
-      if(other==center)tie=true;
+      if(other==center){
+        if(high){tie=true;}
+        else if(n<right){return null;} // Right of center, newer: disqualify.
+        // n>right is the older left leg: equal lows are allowed.
+      }
     }
     if(tie){
       throw const PineRuntimeException('unverified_pivot_tie',
