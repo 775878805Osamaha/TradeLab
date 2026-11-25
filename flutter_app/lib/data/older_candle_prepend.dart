@@ -112,7 +112,8 @@ class OlderCandlePrepend {
             if (original.open != repeated.open ||
                 original.high != repeated.high ||
                 original.low != repeated.low ||
-                original.close != repeated.close) {
+                original.close != repeated.close ||
+                conflictingKnownVolume(original, repeated)) {
               throw const MarketDataException(
                   'تعارض في قيم شمعة محفوظة عند تحميل تاريخ أقدم؛ '
                   'أوقفنا الدمج لحماية الشارت وReplay.');
@@ -128,10 +129,14 @@ class OlderCandlePrepend {
         final left = previous.candle;
         final right = bar.candle;
         if (left.open != right.open || left.high != right.high ||
-            left.low != right.low || left.close != right.close) {
+            left.low != right.low || left.close != right.close ||
+            conflictingKnownVolume(left, right)) {
           throw const MarketDataException(
             'تعارض في قيم الشموع الأقدم لنفس وقت المصدر؛ '
             'تم إيقاف الدمج لحماية Replay.');
+        }
+        if (left.volume == null && right.volume != null) {
+          byTimestamp[bar.timestamp] = bar;
         }
         continue;
       }

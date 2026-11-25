@@ -683,8 +683,11 @@ class MarketApi {
         }
         // Exclude the current, unclosed candle to keep Replay look-ahead-free.
         if (closeAt >= end) return null;
+        final volume = row[5] == null ? null : double.tryParse('${row[5]}');
+        if (row[5] != null && volume == null) throw const FormatException('Invalid volume');
         return MarketBar(ts, TradeCandle(double.parse('${row[1]}'), double.parse('${row[2]}'),
-          double.parse('${row[3]}'), double.parse('${row[4]}')));
+          double.parse('${row[3]}'), double.parse('${row[4]}'),
+          timestampMs: ts, volume: volume));
       }).whereType<MarketBar>().toList(growable: false);
       validateBars(bars);
       return bars;
@@ -745,6 +748,11 @@ class MarketTick {
   final double bid;
 }
 
+/// Known volumes must not conflict at a verified overlapping timestamp.
+/// Legacy records with missing volume are not evidence of zero volume.
+bool conflictingKnownVolume(TradeCandle a, TradeCandle b) =>
+    a.volume != null && b.volume != null && a.volume != b.volume;
+
 class MarketBar {
   const MarketBar(this.timestamp, this.candle);
   final int timestamp;
@@ -769,7 +777,12 @@ List<MarketBar> parseVerifiedBars(dynamic source, {required TradeSource sourceTy
     if (ts == null || ts < minTime || ts > maxTime || o == null || h == null || l == null || c == null) {
       throw const MarketDataException('شمعة خارج الفترة المطلوبة أو بها حقول ناقصة.');
     }
-    return MarketBar(ts, TradeCandle(o, h, l, c));
+    final rawVolume = item['volume'];
+    if (rawVolume != null && rawVolume is! num) {
+      throw const MarketDataException('حجم شمعة المصدر غير صالح.');
+    }
+    final volume = (rawVolume as num?)?.toDouble();
+    return MarketBar(ts, TradeCandle(o, h, l, c, timestampMs: ts, volume: volume));
   }).toList(growable: false);
   validateBars(bars);
   return bars;
@@ -779,7 +792,10 @@ void validateBars(List<MarketBar> bars) {
   var lastTime = -1;
   for (final bar in bars) {
     final c = bar.candle;
-    if (bar.timestamp <= lastTime || !c.open.isFinite || !c.high.isFinite ||
+    if (bar.timestamp <= lastTime ||
+        (c.timestampMs != null && c.timestampMs != bar.timestamp) ||
+        (c.volume != null && (!c.volume!.isFinite || c.volume! < 0)) ||
+        !c.open.isFinite || !c.high.isFinite ||
         !c.low.isFinite || !c.close.isFinite || c.low <= 0 ||
         c.low > c.high || c.open < c.low || c.close < c.low ||
         c.open > c.high || c.close > c.high) {

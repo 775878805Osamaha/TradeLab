@@ -61,7 +61,8 @@ class CTraderCandleStitcher {
       if (prior.open != incoming.open ||
           prior.high != incoming.high ||
           prior.low != incoming.low ||
-          prior.close != incoming.close) {
+          prior.close != incoming.close ||
+          conflictingKnownVolume(prior, incoming)) {
         throw const MarketDataException(
             'تغيّرت قيم شمعة cTrader تاريخية بين طلبين؛ '
             'أوقفنا التحديث حتى يُراجع المصدر.');

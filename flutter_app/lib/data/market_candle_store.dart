@@ -19,6 +19,8 @@ List<MarketBar> _decodeArchivedCandleRows(List<Map<String, Object?>> rows) {
       (row['high'] as num).toDouble(),
       (row['low'] as num).toDouble(),
       (row['close'] as num).toDouble(),
+      timestampMs: (row['timestamp_ms'] as num).toInt(),
+      volume: (row['volume'] as num?)?.toDouble(),
     ),
   )).toList(growable: false);
   validateBars(bars);
@@ -146,13 +148,16 @@ class MarketCandleStore {
         if (archived.candle.open != incoming.candle.open ||
             archived.candle.high != incoming.candle.high ||
             archived.candle.low != incoming.candle.low ||
-            archived.candle.close != incoming.candle.close) {
+            archived.candle.close != incoming.candle.close ||
+            conflictingKnownVolume(archived.candle, incoming.candle)) {
           throw const MarketDataException(
             'تعارض بين الشموع المحفوظة وبيانات المصدر. '
             'أوقفنا تحديث الشارت لحماية Replay؛ تحقق من مصدر البيانات.');
         }
         // Equal timestamps have identical validated OHLC. Retain one bar.
-        merged.add(incoming);
+        // Do not discard a verified volume if the incoming source omitted it.
+        merged.add(incoming.candle.volume == null && archived.candle.volume != null
+            ? archived : incoming);
         archiveIndex++;
         incomingIndex++;
       }
@@ -181,7 +186,14 @@ class MarketCandleStore {
   static Future<Database> _openDatabase() async {
     final root = await getDatabasesPath();
     return openDatabase(path.join(root, 'tradelab_market_candles.db'),
-      version: 1,
+      version: 2,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          // SQLite preserves existing OHLC rows. Unknown historical volume
+          // remains NULL until a verified provider response can enrich it.
+          await db.execute('ALTER TABLE candle_history ADD COLUMN volume REAL');
+        }
+      },
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE candle_history (
@@ -191,6 +203,7 @@ class MarketCandleStore {
             high REAL NOT NULL,
             low REAL NOT NULL,
             close REAL NOT NULL,
+            volume REAL,
             PRIMARY KEY (cache_key, timestamp_ms)
           )
         ''');
@@ -291,25 +304,36 @@ class MarketCandleStore {
         // history behind Replay's back. SQLite serializes this transaction.
         final timestamps = page.map((bar) => bar.timestamp).toList(growable: false);
         final archived = await txn.query('candle_history',
-          columns: ['timestamp_ms', 'open', 'high', 'low', 'close'],
+          columns: ['timestamp_ms', 'open', 'high', 'low', 'close', 'volume'],
           where: 'cache_key = ? AND timestamp_ms IN (${List.filled(page.length, '?').join(',')})',
           whereArgs: [cacheKey, ...timestamps],
         );
         final incoming = <int, MarketBar>{
           for (final bar in page) bar.timestamp: bar,
         };
+        final enrich = <int, double>{};
         for (final row in archived) {
           final candle = incoming[row['timestamp_ms'] as int]!.candle;
           if ((row['open'] as num).toDouble() != candle.open ||
               (row['high'] as num).toDouble() != candle.high ||
               (row['low'] as num).toDouble() != candle.low ||
-              (row['close'] as num).toDouble() != candle.close) {
+              (row['close'] as num).toDouble() != candle.close ||
+              (row['volume'] != null && candle.volume != null &&
+                (row['volume'] as num).toDouble() != candle.volume)) {
             throw const MarketDataException(
               'تعارض في الشموع التاريخية المؤرشفة. '
               'لم نستبدل أسعارًا سابقة؛ تحقق من بيانات المصدر.');
           }
+          if (row['volume'] == null && candle.volume != null) {
+            enrich[row['timestamp_ms'] as int] = candle.volume!;
+          }
         }
         final batch = txn.batch();
+        for (final entry in enrich.entries) {
+          batch.update('candle_history', {'volume': entry.value},
+            where: 'cache_key = ? AND timestamp_ms = ? AND volume IS NULL',
+            whereArgs: [cacheKey, entry.key]);
+        }
         for (final bar in page) {
           batch.insert('candle_history', {
             'cache_key': cacheKey,
@@ -318,6 +342,7 @@ class MarketCandleStore {
             'high': bar.candle.high,
             'low': bar.candle.low,
             'close': bar.candle.close,
+            'volume': bar.candle.volume,
           }, conflictAlgorithm: ConflictAlgorithm.ignore);
         }
         await batch.commit(noResult: true);
