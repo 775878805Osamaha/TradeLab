@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/pine_v6_language_runtime.dart';
-import 'package:tradelab_flutter/chart/pine_runtime_core.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 class _Poison extends ListBase<TradeCandle>{

@@ -9,7 +9,6 @@ import 'pine_scalar_dispatch.dart';
 import 'pine_series_primitives.dart';
 import 'pine_series_dispatch.dart';
 import 'pine_indicator_dispatch.dart';
-import 'pine_indicator_seed_candidates.dart';
 
 /// Stage 3a, closed-bar Pine language execution. The old PineSubsetProgram
 /// remains the sole runtime for source it already supports. This interpreter
