@@ -29,6 +29,9 @@ jobs:
       - name: Verify original TradingView capture SHA-256
         working-directory: .
         run: echo '64b557c209f44c387a127bdf213703d4858fa3d62305711a12630713422221b3  flutter_app/test/fixtures/tradingview/4_5778588908598075071.csv' | sha256sum --check
+      - name: Verify unmodified TradingView V2 capture SHA-256
+        working-directory: .
+        run: echo '6a052a535dc4bf77d3687a10446e9572bdf523a3bc80e2fe728a2c290899da7f  flutter_app/test/fixtures/tradingview/pine-logs-TradeLab Reference Logs V2.csv' | sha256sum --check
       - name: Verify independent long OHLCV fixture reproducibility
         working-directory: .
         run: node tools/pine/generate_stage3b_reference.cjs --check
@@ -133,6 +136,8 @@ jobs:
             test/market_candle_migration_safety_gate_test.dart \
             test/market_candle_migration_backup_test.dart \
             test/pine_series_primitives_test.dart \
+            test/pine_indicator_seed_candidates_test.dart \
+            test/tradingview_reference_v2_test.dart \
             test/pine_scalar_primitives_test.dart \
             test/market_api_test.dart \
             test/ctrader_closed_bar_cutoff_test.dart \
