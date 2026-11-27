@@ -13,6 +13,7 @@ import 'pine_execution_context.dart';
 import 'pine_runtime_map.dart';
 import 'pine_security_dispatch.dart';
 import 'pine_broker_emulator.dart';
+import 'pine_display_runtime.dart';
 
 /// Stage 3a, closed-bar Pine language execution. The old PineSubsetProgram
 /// remains the sole runtime for source it already supports. This interpreter
@@ -24,7 +25,7 @@ import 'pine_broker_emulator.dart';
 /// historical candles: there is no speculative tick/rollback.
 class PineV6LanguageProgram {
   PineV6LanguageProgram._(this.source, this.ast, this.legacy,
-      this._functions, this._plotCalls, this._types, this.context,this._inputs,this._securitySpecs,this.brokerConfig);
+      this._functions, this._plotCalls, this._types, this.context,this._inputs,this._securitySpecs,this.brokerConfig,this.enableDisplay);
 
   final String source;
   final PineScriptAst ast;
@@ -36,6 +37,7 @@ class PineV6LanguageProgram {
   final Map<PineCallExpression,Object> _inputs;
   final Map<PineCallExpression,PineSecuritySpec> _securitySpecs;
   final PineBrokerConfig? brokerConfig;
+  final bool enableDisplay;
 
   bool get overlay {
     for(final statement in ast.statements){
@@ -52,13 +54,13 @@ class PineV6LanguageProgram {
     return false;
   }
 
-  static PineV6LanguageProgram compile(String source,{bool preferGeneral=false,PineExecutionContext? context,PineBrokerConfig? brokerConfig}) {
+  static PineV6LanguageProgram compile(String source,{bool preferGeneral=false,PineExecutionContext? context,PineBrokerConfig? brokerConfig,bool enableDisplay=false}) {
     final prepared=const PineV6Frontend().prepare(source);
     if(prepared.hasErrors) {
       throw PineRuntimeException('compile_invalid',
           prepared.message??'Invalid Pine syntax or semantics');
     }
-    final legacy=preferGeneral||context!=null||brokerConfig!=null?null:prepared.legacyProgram;
+    final legacy=preferGeneral||context!=null||brokerConfig!=null||enableDisplay?null:prepared.legacyProgram;
     final executionContext=context??PineExecutionContext();
     if(prepared.diagnostics.any((d)=>d.code=='tuple_shape_unknown')){
       throw const PineRuntimeException('tuple_shape_unknown','Tuple result shape must be resolved before execution');
@@ -82,6 +84,9 @@ class PineV6LanguageProgram {
         return;
       }
       if(expr is PineMemberExpression) {
+        if(enableDisplay&&PineDisplayDispatch.members.contains(expr.qualifiedName)){
+          usesNewTa=true;return;
+        }
         if(brokerConfig!=null&&PineBrokerDispatch.members.contains(expr.qualifiedName)){
           usesNewTa=true;return;
         }
@@ -97,7 +102,7 @@ class PineV6LanguageProgram {
         return;
       }
       if(expr is PineHistoryExpression) {
-        if(prepared.semantic.inferred[expr.target]?.type==PineBaseType.mapType){
+        if(prepared.semantic.inferred[expr.target]?.type==PineBaseType.mapType||prepared.semantic.inferred[expr.target]?.type==PineBaseType.tableType){
           throw const PineRuntimeException('unsupported_map_history','Map history is not enabled');
         }
         if(expr.target is PineCallExpression){
@@ -126,6 +131,15 @@ class PineV6LanguageProgram {
       }
       if(expr is PineCallExpression) {
         final name=expr.name;
+        if(enableDisplay&&PineDisplayDispatch.calls.contains(name)){
+          PineDisplayDispatch.validate(expr,global:global);
+          if(name=='plot'){
+            if(plots.length>=8)throw const PineRuntimeException('plot_scope','Maximum eight numeric plots');
+            plots.add(expr);
+          }
+          for(final arg in expr.arguments)validateExpr(arg.value);
+          usesNewTa=true;return;
+        }
         if(brokerConfig!=null&&PineBrokerDispatch.calls.contains(name)){
           PineBrokerDispatch.validateCall(expr);
           if(name!='strategy'){
@@ -241,12 +255,14 @@ class PineV6LanguageProgram {
           usesNewTa=true;
           validateStatements(stmt.statements,global:global);
         }else if(stmt is PineReferenceVariableStatement){
-          if(stmt.typeName!='map'||stmt.value is! PineCallExpression||(stmt.value as PineCallExpression).name!='map.new'){
+          final map=stmt.typeName=='map'&&stmt.value is PineCallExpression&&(stmt.value as PineCallExpression).name=='map.new';
+          final table=enableDisplay&&global&&stmt.mode=='var'&&stmt.typeName=='table'&&stmt.value is PineCallExpression&&(stmt.value as PineCallExpression).name=='table.new';
+          if(!map&&!table){
             throw const PineRuntimeException('unsupported_reference','Only typed map.new reference declarations are enabled');
           }
-          validateExpr(stmt.value);usesNewTa=true;
+          validateExpr(stmt.value,global:table);usesNewTa=true;
         }else if(stmt is PineVariableStatement) {
-          validateExpr(stmt.value);
+          validateExpr(stmt.value,global:enableDisplay&&global&&stmt.value is PineCallExpression&&(stmt.value as PineCallExpression).name=='plot');
           if(global&&prepared.semantic.inferred[stmt.value]?.qualifier==PineQualifier.constant){
             try{constants[stmt.name]=PineExecutionContext.constantValue(stmt.value,constants);}
             on PineRuntimeException{/* Only literal constants are accepted as input metadata. */}
@@ -307,13 +323,13 @@ class PineV6LanguageProgram {
         throw const PineRuntimeException('unsupported_legacy',
             'Only previously executable numeric programs or verified Stage 3a language are supported');
       }
-      if(plots.isEmpty&&brokerConfig==null) {
+      if(plots.isEmpty&&brokerConfig==null&&!enableDisplay) {
         throw const PineRuntimeException('missing_plot',
             'Stage 3a numeric language requires at least one global plot');
       }
     }
     return PineV6LanguageProgram._(
-        source,prepared.ast,legacy,functions,plots,prepared.semantic.inferred,executionContext,Map.unmodifiable(inputs),Map.unmodifiable(securitySpecs),brokerConfig);
+        source,prepared.ast,legacy,functions,plots,prepared.semantic.inferred,executionContext,Map.unmodifiable(inputs),Map.unmodifiable(securitySpecs),brokerConfig,enableDisplay);
   }
 
   PineV6LanguageInstance newInstance({
@@ -357,6 +373,7 @@ class PineV6LanguageInstance {
       : budget=PineRuntimeBudget(limits) {
     _plots=[for(final _ in program._plotCalls)<double?>[]];
     if(program.brokerConfig!=null)_broker=PineBrokerEmulator(program.brokerConfig!,budget);
+    if(program.enableDisplay)_display=PineDisplayState(budget);
   }
 
   final PineV6LanguageProgram program;
@@ -380,6 +397,8 @@ class PineV6LanguageInstance {
   final Map<(String,PineCallExpression),PineIndicatorDispatch> _indicators={};
   final Map<(String,PineCallExpression),PineSecurityState> _security={};
   PineBrokerEmulator? _broker;
+  PineDisplayState? _display;
+  PineDisplaySnapshot? get displaySnapshot=>_display?.snapshot;
   PineBrokerSnapshot? get brokerSnapshot=>_broker?.snapshot;
 
   int get completedBars=>_bar+1;
@@ -452,6 +471,7 @@ class PineV6LanguageInstance {
       };
     }
     if(expr is PineMemberExpression){
+      if(_display!=null&&PineDisplayDispatch.members.contains(expr.qualifiedName))return expr.qualifiedName;
       if(_broker!=null&&PineBrokerDispatch.members.contains(expr.qualifiedName))return _broker!.member(expr.qualifiedName!);
       if(PineExecutionContext.members.contains(expr.qualifiedName))return program.context.member(expr.qualifiedName!);
       return PineScalarDispatch.memberColor(expr.qualifiedName);
@@ -566,6 +586,17 @@ class PineV6LanguageInstance {
     if(expr is PineCallExpression) {
       final name=expr.name??'';
       if(name=='indicator')return null;
+      if(_display!=null&&PineDisplayDispatch.calls.contains(name)){
+        final args=PineDisplayDispatch.bind(expr,[for(final a in expr.arguments)_eval(a.value,frame)]);
+        if(name=='plot'){
+          final index=program._plotCalls.indexOf(expr);
+          if(index<0)throw const PineRuntimeException('plot_scope','Missing global plot');
+          final value=_num(args['series']);
+          budget.consume(work:0,values:1);_plots[index].add(value);
+          return _display!.plot(index,_bar,args,value);
+        }
+        return _display!.execute(name,_bar,args);
+      }
       if(_broker!=null&&PineBrokerDispatch.calls.contains(name)){
         if(name=='strategy')return null;
         return PineBrokerDispatch.execute(_broker!,expr,[for(final a in expr.arguments)_eval(a.value,frame)]);
@@ -850,7 +881,7 @@ class PineV6LanguageInstance {
       _execute(program.ast.statements,global);
       _broker?.endBar();
       for(final entry in global.locals.entries){
-        if(entry.value.value is PineRuntimeMap)continue;
+        if(entry.value.value is PineRuntimeMap||entry.value.value is PineDisplayTable||entry.value.value is PinePlotHandle)continue;
         final history=_history.putIfAbsent(entry.key,()=>[]);
         while(history.length<_bar)history.add(null);
         history.add(entry.value.value);
@@ -893,6 +924,7 @@ class PineV6LanguageInstance {
     _indicators..clear()..addAll(candidate._indicators);
     _security..clear()..addAll(candidate._security);
     _broker=candidate._broker;
+    _display=candidate._display;
     _history..clear()..addAll(candidate._history);
     _seen..clear()..addAll(candidate._seen);
     _plots=candidate._plots;
