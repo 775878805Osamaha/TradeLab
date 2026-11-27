@@ -4,6 +4,8 @@ import 'pine_subset_program.dart';
 import 'pine_v6_frontend.dart';
 import 'pine_function_registry.dart';
 import 'pine_ta_library.dart';
+import 'pine_scalar_primitives.dart';
+import 'pine_scalar_dispatch.dart';
 
 /// Stage 3a, closed-bar Pine language execution. The old PineSubsetProgram
 /// remains the sole runtime for source it already supports. This interpreter
@@ -55,6 +57,13 @@ class PineV6LanguageProgram {
       if(expr is PineLiteralExpression || expr is PineIdentifierExpression) {
         return;
       }
+      if(expr is PineMemberExpression) {
+        if(!PineScalarDispatch.isColorMember(expr.qualifiedName)) {
+          throw PineRuntimeException('unsupported_member',
+            'Unimplemented Pine member: '+(expr.qualifiedName??'unknown'));
+        }
+        return;
+      }
       if(expr is PineHistoryExpression) {
         if(expr.target is! PineIdentifierExpression) {
           throw const PineRuntimeException('unsupported_history',
@@ -75,6 +84,10 @@ class PineV6LanguageProgram {
       }
       if(expr is PineCallExpression) {
         final name=expr.name;
+        if(PineScalarDispatch.supports(name)){
+          PineScalarDispatch.validate(expr);
+          usesNewTa=true;
+        }
         final ta=PineFunctionRegistry.ta[name];
         if(ta!=null&&!ta.tupleResult){
           final slots=ta.bind(expr.arguments.map((a)=>a.name).toList());
@@ -104,6 +117,7 @@ class PineV6LanguageProgram {
         if(name==null || !(<String>{
           'indicator','plot','na','nz','input.int','input.float',
           'math.abs','math.min','math.max',
+          ...PineScalarDispatch.names,
           ...PineFunctionRegistry.ta.values.where((s)=>!s.tupleResult).map((s)=>s.name),
           ...functions.keys,
         }).contains(name)) {
@@ -249,6 +263,9 @@ class PineV6LanguageInstance {
   final Map<(PineCallExpression?,PineVariableStatement),Object?> _persistent={};
   final Map<(PineCallExpression?,PineCallExpression),PineTaState> _ta={};
   final Map<String,List<Object?>> _history={};
+  final Map<(String,PineCallExpression),PineRollingSum> _sums={};
+  final Map<(String,PineCallExpression),int> _sumLastBar={};
+  String _callPath='';
   final List<TradeCandle> _seen=[];
   late List<List<double?>> _plots;
   int _bar=-1;
@@ -318,10 +335,13 @@ class PineV6LanguageInstance {
         'bool'=>expr.value=='true',
         'na'=>null,
         'string'=>expr.value.replaceAll('"','').replaceAll("'",''),
-        'color'=>expr.value,
+        'color'=>PineScalarDispatch.parseColor(expr.value),
         _=>throw const PineRuntimeException('literal',
             'Unsupported literal type'),
       };
+    }
+    if(expr is PineMemberExpression){
+      return PineScalarDispatch.memberColor(expr.qualifiedName);
     }
     if(expr is PineIdentifierExpression){
       final name=expr.name;
@@ -395,6 +415,13 @@ class PineV6LanguageInstance {
             '<'=>a<c,'>'=>a>c,'<='=>a<=c,_=>a>=c,
           };
       }
+      if(expr.operator=='+'&&left is String&&right is String){
+        if(left.length+right.length>16384){
+          throw const PineRuntimeException('string_limit','Pine string exceeds bounded length');
+        }
+        _charge(left.length+right.length+1);
+        return left+right;
+      }
       final a=_num(left),c=_num(right);
       if(a==null||c==null)return null;
       final result=switch(expr.operator){
@@ -438,6 +465,22 @@ class PineV6LanguageInstance {
       if(name=='input.int'||name=='input.float') {
         return _eval(expr.arguments.first.value,frame);
       }
+      if(PineScalarDispatch.supports(name)){
+        final values=PineScalarDispatch.bind(expr,
+          [for(final arg in expr.arguments)_eval(arg.value,frame)]);
+        if(name=='math.sum'){
+          final key=(_callPath,expr);
+          if(_sumLastBar[key]==_bar){
+            throw const PineRuntimeException('unsupported_repeated_series_call',
+              'math.sum cannot execute the same written call twice on one closed bar yet');
+          }
+          _sumLastBar[key]=_bar;
+          final capacity=limits.maxHistory<500?limits.maxHistory:500;
+          final state=_sums.putIfAbsent(key,()=>PineRollingSum(budget,capacity:capacity));
+          return state.step(_num(values[0]),_integer(values[1]));
+        }
+        return PineScalarDispatch.evaluate(name,values,budget);
+      }
       if(name.startsWith('math.')){
         final args=[for(final arg in expr.arguments)_num(_eval(arg.value,frame))];
         if(args.any((x)=>x==null))return null;
@@ -463,8 +506,9 @@ class PineV6LanguageInstance {
             (i<fn.parameters.length?fn.parameters[i].name:'');
         values[target]=_eval(argument.value,frame);
       }
-      final previous=_callSite;
+      final previous=_callSite,previousPath=_callPath;
       _callSite=expr;
+      _callPath=previousPath+'/'+expr.span.line.toString()+':'+expr.span.column.toString();
       final local=_PineFrame(frame);
       try {
         for(final parameter in fn.parameters) {
@@ -476,7 +520,7 @@ class PineV6LanguageInstance {
           local.locals[parameter.name]=_PineBinding(value);
         }
         return _execute(fn.body,local);
-      } finally { _callSite=previous; }
+      } finally { _callSite=previous;_callPath=previousPath; }
     }
     throw const PineRuntimeException('unsupported_expression',
         'Unimplemented Stage 3a expression');
@@ -635,6 +679,8 @@ class PineV6LanguageInstance {
     budget.stop();
     _persistent..clear()..addAll(candidate._persistent);
     _ta..clear()..addAll(candidate._ta);
+    _sums..clear()..addAll(candidate._sums);
+    _sumLastBar..clear()..addAll(candidate._sumLastBar);
     _history..clear()..addAll(candidate._history);
     _seen..clear()..addAll(candidate._seen);
     _plots=candidate._plots;

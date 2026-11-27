@@ -131,6 +131,8 @@ final class PineRgba {
         assert(alpha >= 0 && alpha <= 255);
   final int red,green,blue,alpha;
   int get argb => (alpha << 24) | (red << 16) | (green << 8) | blue;
+  @override bool operator ==(Object other)=>other is PineRgba&&argb==other.argb;
+  @override int get hashCode=>argb.hashCode;
 }
 
 /// https://www.tradingview.com/pine-script-reference/v6/#fun_math.sum
