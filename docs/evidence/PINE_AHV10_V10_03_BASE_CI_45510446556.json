@@ -1,0 +1,1905 @@
+{
+  "source": {
+    "run_id": 45510446556,
+    "job_id": 138856550172,
+    "head_sha": "69de94dc8ce0663adb2e28da8798d7073d79f4b2",
+    "checked_out_sha": "6a20bfa25d90b9fde86dcc49962c17d08cf482c2",
+    "source": "Actual CI PINE_FULL_COUNTS/PINE_FULL_DIAG/PINE_CI_TOTALS; all diagnostic rows identical to previous C/D"
+  },
+  "fixture_git_blob": "efd3b24b629fbfa5baf0a22b01af9a4ba078ace1",
+  "counts": {
+    "lexer": 0,
+    "parser": 0,
+    "completed": true,
+    "lastVisitedLine": 443,
+    "total": 203,
+    "type_error": 0,
+    "unresolved_name": 0,
+    "other_error": 0,
+    "known_unimplemented": 186,
+    "unsupported_notice": 17,
+    "other_notice": 0
+  },
+  "diagnostics": [
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 15,
+      "column": 15,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 18,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: input.string"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 19,
+      "column": 12,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 21,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 23,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 25,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 27,
+      "column": 12,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 29,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 30,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: input.timeframe"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 31,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 34,
+      "column": 14,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 35,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: input.session"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 36,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 39,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 40,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 42,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 44,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 46,
+      "column": 14,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 47,
+      "column": 12,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 51,
+      "column": 12,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 55,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 57,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 58,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 61,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 63,
+      "column": 12,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 65,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 67,
+      "column": 12,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 69,
+      "column": 15,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 71,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 72,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: input.string"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 73,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: input.symbol"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 76,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 77,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 79,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 82,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 84,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 85,
+      "column": 14,
+      "message": "Known Pine symbol; runtime not implemented yet: input.string"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 90,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 93,
+      "column": 12,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 96,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 97,
+      "column": 14,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 98,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 99,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: input.bool"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 100,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: input.string"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 116,
+      "column": 23,
+      "message": "Known Pine symbol; runtime not implemented yet: syminfo.ticker"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 116,
+      "column": 62,
+      "message": "Known Pine symbol; runtime not implemented yet: syminfo.ticker"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 117,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: syminfo.type"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 118,
+      "column": 22,
+      "message": "Known Pine symbol; runtime not implemented yet: syminfo.ticker"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 124,
+      "column": 14,
+      "message": "Known Pine symbol; runtime not implemented yet: chart.is_standard"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 125,
+      "column": 28,
+      "message": "Known Pine symbol; runtime not implemented yet: barstate.isconfirmed"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 126,
+      "column": 46,
+      "message": "Known Pine symbol; runtime not implemented yet: syminfo.tickerid"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 126,
+      "column": 30,
+      "message": "Known Pine symbol; runtime not implemented yet: ticker.standard"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 126,
+      "column": 12,
+      "message": "Known Pine symbol; runtime not implemented yet: ticker.heikinashi"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 127,
+      "column": 51,
+      "message": "Known Pine symbol; runtime not implemented yet: timeframe.period"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 127,
+      "column": 105,
+      "message": "Known Pine symbol; runtime not implemented yet: barmerge.lookahead_off"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 127,
+      "column": 24,
+      "message": "Known Pine symbol; runtime not implemented yet: request.security"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 127,
+      "column": 1,
+      "message": "Tuple declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 128,
+      "column": 19,
+      "message": "Known Pine symbol; runtime not implemented yet: syminfo.mintick"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 140,
+      "column": 108,
+      "message": "Known Pine symbol; runtime not implemented yet: barmerge.lookahead_on"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 140,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: request.security"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 142,
+      "column": 1,
+      "message": "Tuple declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 143,
+      "column": 22,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.dmi"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 143,
+      "column": 1,
+      "message": "Tuple declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 144,
+      "column": 18,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.supertrend"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 144,
+      "column": 1,
+      "message": "Tuple declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 149,
+      "column": 22,
+      "message": "Known Pine symbol; runtime not implemented yet: timeframe.period"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 149,
+      "column": 17,
+      "message": "Known Pine symbol; runtime not implemented yet: time"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 150,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: math.sum"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 151,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: math.sum"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 168,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.pivothigh"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 169,
+      "column": 8,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.pivotlow"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 180,
+      "column": 15,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 181,
+      "column": 15,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 194,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 195,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 196,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 197,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 206,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 207,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 214,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 215,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 220,
+      "column": 6,
+      "message": "Known Pine symbol; runtime not implemented yet: syminfo.ticker"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 223,
+      "column": 37,
+      "message": "Known Pine symbol; runtime not implemented yet: timeframe.period"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 223,
+      "column": 78,
+      "message": "Known Pine symbol; runtime not implemented yet: barmerge.lookahead_off"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 223,
+      "column": 12,
+      "message": "Known Pine symbol; runtime not implemented yet: request.security"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 223,
+      "column": 1,
+      "message": "Tuple declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 230,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 231,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: ta.barssince"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 281,
+      "column": 73,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.position_size"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 282,
+      "column": 74,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.position_size"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 285,
+      "column": 126,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.position_size"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 304,
+      "column": 10,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.position_size"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 305,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.position_size"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 306,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.position_size"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 307,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.position_avg_price"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 323,
+      "column": 48,
+      "message": "Known Pine symbol; runtime not implemented yet: color.new"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 349,
+      "column": 26,
+      "message": "Known Pine symbol; runtime not implemented yet: color.new"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 359,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.closedtrades"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 362,
+      "column": 28,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.closedtrades.exit_price"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 362,
+      "column": 72,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.closedtrades.entry_price"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 362,
+      "column": 128,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.closedtrades.size"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 362,
+      "column": 118,
+      "message": "Known Pine symbol; runtime not implemented yet: math.sign"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 370,
+      "column": 25,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 371,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.wintrades"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 372,
+      "column": 13,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.losstrades"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 378,
+      "column": 15,
+      "message": "Known Pine symbol; runtime not implemented yet: math.floor"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 378,
+      "column": 11,
+      "message": "int() cast parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 379,
+      "column": 29,
+      "message": "Generic constructor parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 379,
+      "column": 29,
+      "message": "Known Pine symbol; runtime not implemented yet: map.new"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 379,
+      "column": 1,
+      "message": "Reference declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 380,
+      "column": 31,
+      "message": "Generic constructor parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 380,
+      "column": 31,
+      "message": "Known Pine symbol; runtime not implemented yet: map.new"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 380,
+      "column": 1,
+      "message": "Reference declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 381,
+      "column": 31,
+      "message": "Generic constructor parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 381,
+      "column": 31,
+      "message": "Known Pine symbol; runtime not implemented yet: map.new"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 381,
+      "column": 1,
+      "message": "Reference declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 382,
+      "column": 32,
+      "message": "Generic constructor parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 382,
+      "column": 32,
+      "message": "Known Pine symbol; runtime not implemented yet: map.new"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 382,
+      "column": 1,
+      "message": "Reference declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 385,
+      "column": 9,
+      "message": "Known Pine symbol; runtime not implemented yet: barstate.isconfirmed"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 386,
+      "column": 28,
+      "message": "Known Pine symbol; runtime not implemented yet: map.get"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 386,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: map.put"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 387,
+      "column": 30,
+      "message": "Known Pine symbol; runtime not implemented yet: map.get"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 387,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: map.put"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 388,
+      "column": 30,
+      "message": "Known Pine symbol; runtime not implemented yet: map.get"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 388,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: map.put"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 389,
+      "column": 31,
+      "message": "Known Pine symbol; runtime not implemented yet: map.get"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 389,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: map.put"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 392,
+      "column": 11,
+      "message": "Known Pine symbol; runtime not implemented yet: chart.right_visible_bar_time"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 393,
+      "column": 39,
+      "message": "Known Pine symbol; runtime not implemented yet: math.floor"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 393,
+      "column": 35,
+      "message": "int() cast parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 394,
+      "column": 12,
+      "message": "Known Pine symbol; runtime not implemented yet: map.get"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 395,
+      "column": 14,
+      "message": "Known Pine symbol; runtime not implemented yet: map.get"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 396,
+      "column": 14,
+      "message": "Known Pine symbol; runtime not implemented yet: map.get"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 397,
+      "column": 15,
+      "message": "Known Pine symbol; runtime not implemented yet: map.get"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 403,
+      "column": 26,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 403,
+      "column": 57,
+      "message": "Known Pine symbol; runtime not implemented yet: str.format_time"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 405,
+      "column": 34,
+      "message": "Known Pine symbol; runtime not implemented yet: position.top_right"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 405,
+      "column": 69,
+      "message": "Known Pine symbol; runtime not implemented yet: color.new"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 405,
+      "column": 24,
+      "message": "Known Pine symbol; runtime not implemented yet: table.new"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 405,
+      "column": 1,
+      "message": "Reference declaration parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 406,
+      "column": 109,
+      "message": "Known Pine symbol; runtime not implemented yet: color.new"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 406,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 407,
+      "column": 107,
+      "message": "Known Pine symbol; runtime not implemented yet: color.new"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 407,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 408,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 409,
+      "column": 42,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 409,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 410,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 411,
+      "column": 42,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 411,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 412,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 413,
+      "column": 42,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 413,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 414,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 415,
+      "column": 42,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 415,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 416,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 417,
+      "column": 42,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 417,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 418,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 419,
+      "column": 42,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 419,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 420,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 421,
+      "column": 42,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 421,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 422,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 423,
+      "column": 55,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.closedtrades"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 423,
+      "column": 42,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 423,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 424,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 425,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 426,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 427,
+      "column": 43,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 427,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 428,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 429,
+      "column": 43,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 429,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 430,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 431,
+      "column": 43,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 431,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 432,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 433,
+      "column": 43,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 433,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 434,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 435,
+      "column": 43,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 435,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 436,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 437,
+      "column": 43,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 437,
+      "column": 1,
+      "message": "Known Pine symbol; runtime not implemented yet: table.cell"
+    },
+    {
+      "category": "unsupported_notice",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "syntax_only",
+      "line": 441,
+      "column": 5,
+      "message": "Comma-separated statement sequence parsed and checked; runtime not implemented yet"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 441,
+      "column": 48,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.long"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 441,
+      "column": 64,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.short"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 441,
+      "column": 5,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.entry"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 441,
+      "column": 114,
+      "message": "Known Pine symbol; runtime not implemented yet: syminfo.ticker"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 441,
+      "column": 146,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 441,
+      "column": 199,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 441,
+      "column": 255,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 441,
+      "column": 351,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 441,
+      "column": 401,
+      "message": "Known Pine symbol; runtime not implemented yet: str.tostring"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 441,
+      "column": 429,
+      "message": "Known Pine symbol; runtime not implemented yet: alert.freq_once_per_bar_close"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 441,
+      "column": 81,
+      "message": "Known Pine symbol; runtime not implemented yet: alert"
+    },
+    {
+      "category": "known_unimplemented",
+      "stage": "semantic",
+      "severity": "unsupported",
+      "code": "known_unimplemented",
+      "line": 443,
+      "column": 5,
+      "message": "Known Pine symbol; runtime not implemented yet: strategy.exit"
+    }
+  ],
+  "ci": {
+    "run_id": "45510446556",
+    "git_sha": "6a20bfa25d90b9fde86dcc49962c17d08cf482c2",
+    "source": "Dart JSON reporter testDone and late error events",
+    "completed": true,
+    "groups": {
+      "main": {
+        "completed": true,
+        "success": true,
+        "passed": 1128,
+        "failed": 0,
+        "skipped": 1
+      },
+      "extra_1": {
+        "completed": true,
+        "success": true,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "extra_2": {
+        "completed": true,
+        "success": true,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "extra_3": {
+        "completed": true,
+        "success": true,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "extra_4": {
+        "completed": true,
+        "success": true,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "extra_5": {
+        "completed": true,
+        "success": true,
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    "passed": 1143,
+    "failed": 0,
+    "skipped": 1
+  }
+}
