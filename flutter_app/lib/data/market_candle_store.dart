@@ -3,6 +3,7 @@ import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
 import 'market_api.dart';
+import 'market_candle_migration_backup.dart';
 import 'chart_timeframe_catalog.dart';
 import 'market_history_budget.dart';
 import 'tradelab_data.dart';
@@ -185,8 +186,12 @@ class MarketCandleStore {
 
   static Future<Database> _openDatabase() async {
     final root = await getDatabasesPath();
-    return openDatabase(path.join(root, 'tradelab_market_candles.db'),
-      version: 2,
+    final filename = path.join(root, 'tradelab_market_candles.db');
+    const version = 2;
+    return MarketCandleMigrationBackup.open(
+      filename: filename, targetVersion: version,
+      openTarget: () => openDatabase(filename,
+      version: version,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           // SQLite preserves existing OHLC rows. Unknown historical volume
@@ -214,7 +219,7 @@ class MarketCandleStore {
           )
         ''');
       },
-    );
+    ));
   }
 
   /// Returns only stored provider bars in ascending time order; the caller
