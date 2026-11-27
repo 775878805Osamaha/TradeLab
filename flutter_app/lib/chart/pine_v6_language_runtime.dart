@@ -6,6 +6,8 @@ import 'pine_function_registry.dart';
 import 'pine_ta_library.dart';
 import 'pine_scalar_primitives.dart';
 import 'pine_scalar_dispatch.dart';
+import 'pine_series_primitives.dart';
+import 'pine_series_dispatch.dart';
 
 /// Stage 3a, closed-bar Pine language execution. The old PineSubsetProgram
 /// remains the sole runtime for source it already supports. This interpreter
@@ -17,13 +19,14 @@ import 'pine_scalar_dispatch.dart';
 /// historical candles: there is no speculative tick/rollback.
 class PineV6LanguageProgram {
   PineV6LanguageProgram._(this.source, this.ast, this.legacy,
-      this._functions, this._plotCalls);
+      this._functions, this._plotCalls, this._types);
 
   final String source;
   final PineScriptAst ast;
   final PineSubsetProgram? legacy;
   final Map<String, PineFunctionStatement> _functions;
   final List<PineCallExpression> _plotCalls;
+  final Map<PineExpression,PineTypeInfo> _types;
 
   bool get overlay {
     for(final statement in ast.statements){
@@ -65,9 +68,12 @@ class PineV6LanguageProgram {
         return;
       }
       if(expr is PineHistoryExpression) {
-        if(expr.target is! PineIdentifierExpression) {
+        if(expr.target is PineCallExpression){
+          validateExpr(expr.target);
+          usesNewTa=true;
+        }else if(expr.target is! PineIdentifierExpression){
           throw const PineRuntimeException('unsupported_history',
-              'Stage 3a history requires a named series, not arbitrary expression');
+              'History currently supports named series and written call results');
         }
         validateExpr(expr.offset);
         return;
@@ -86,6 +92,10 @@ class PineV6LanguageProgram {
         final name=expr.name;
         if(PineScalarDispatch.supports(name)){
           PineScalarDispatch.validate(expr);
+          usesNewTa=true;
+        }
+        if(PineSeriesDispatch.supports(name)){
+          PineSeriesDispatch.validate(expr);
           usesNewTa=true;
         }
         final ta=PineFunctionRegistry.ta[name];
@@ -118,6 +128,7 @@ class PineV6LanguageProgram {
           'indicator','plot','na','nz','input.int','input.float',
           'math.abs','math.min','math.max',
           ...PineScalarDispatch.names,
+          ...PineSeriesDispatch.names,
           ...PineFunctionRegistry.ta.values.where((s)=>!s.tupleResult).map((s)=>s.name),
           ...functions.keys,
         }).contains(name)) {
@@ -211,7 +222,7 @@ class PineV6LanguageProgram {
       }
     }
     return PineV6LanguageProgram._(
-        source,prepared.ast,prepared.legacyProgram,functions,plots);
+        source,prepared.ast,prepared.legacyProgram,functions,plots,prepared.semantic.inferred);
   }
 
   PineV6LanguageInstance newInstance({
@@ -266,6 +277,10 @@ class PineV6LanguageInstance {
   final Map<(String,PineCallExpression),PineRollingSum> _sums={};
   final Map<(String,PineCallExpression),int> _sumLastBar={};
   String _callPath='';
+  final Map<(String,PineHistoryExpression),PineCommittedHistory<Object>> _callHistory={};
+  final Map<(String,PineCallExpression),PineBarsSinceState> _since={};
+  final Map<(String,PineCallExpression),PinePivotState> _pivots={};
+  final Map<(String,PineCallExpression),int> _seriesLastBar={};
   final List<TradeCandle> _seen=[];
   late List<List<double?>> _plots;
   int _bar=-1;
@@ -362,15 +377,26 @@ class PineV6LanguageInstance {
       };
     }
     if(expr is PineHistoryExpression) {
-      final name=(expr.target as PineIdentifierExpression).name;
       final offset=_integer(_eval(expr.offset,frame));
       if(offset<0||offset>=limits.maxHistory) {
         throw const PineRuntimeException('history_limit',
             'History offset outside bounded window');
       }
+      final missing=program._types[expr.target]?.type==PineBaseType.boolType?false:null;
+      if(expr.target is PineCallExpression){
+        final key=(_callPath,expr);
+        final history=_callHistory.putIfAbsent(key,()=>PineCommittedHistory<Object>(
+          budget,capacity:limits.maxHistory,missing:missing));
+        // Commit this bar even when reading a past value. A skipped or repeated
+        // call rejects rather than guessing local history semantics.
+        final current=_eval(expr.target,frame);
+        history.commit(_bar,current);
+        return history.read(offset);
+      }
+      final name=(expr.target as PineIdentifierExpression).name;
       if(offset==0)return _eval(expr.target,frame);
       final index=_bar-offset;
-      if(index<0)return null;
+      if(index<0)return missing;
       if(name=='bar_index')return index.toDouble();
       if(<String>{'close','open','high','low','hl2','hlc3','ohlc4'}
           .contains(name)){
@@ -383,7 +409,7 @@ class PineV6LanguageInstance {
         };
       }
       final history=_history[name];
-      return history==null||index>=history.length?null:history[index];
+      return history==null||index>=history.length?missing:history[index]??missing;
     }
     if(expr is PineUnaryExpression) {
       final x=_eval(expr.value,frame);
@@ -464,6 +490,25 @@ class PineV6LanguageInstance {
       }
       if(name=='input.int'||name=='input.float') {
         return _eval(expr.arguments.first.value,frame);
+      }
+      if(PineSeriesDispatch.supports(name)){
+        final key=(_callPath,expr);
+        if((_seriesLastBar[key]??-1)+1!=_bar){
+          throw const PineRuntimeException('history_order',
+            'Stateful series call must execute once on every closed bar in this tier');
+        }
+        _seriesLastBar[key]=_bar;
+        final args=PineSeriesDispatch.bind(expr,[for(final arg in expr.arguments)_eval(arg.value,frame)],_seen.last);
+        if(name=='ta.barssince'){
+          return _since.putIfAbsent(key,()=>PineBarsSinceState(budget)).step(_bool(args[0]));
+        }
+        final capacity=limits.maxHistory<1001?limits.maxHistory:1001;
+        final state=_pivots.putIfAbsent(key,()=>PinePivotState(budget,capacity:capacity,high:name=='ta.pivothigh'));
+        final left=_integer(args[1]),right=_integer(args[2]);
+        if(left<1||right<1||left>500||right>500){
+          throw const PineRuntimeException('pivot_length','Pivot legs must be positive bounded integers (1..500)');
+        }
+        return state.step(_bar,_num(args[0]),left,right);
       }
       if(PineScalarDispatch.supports(name)){
         final values=PineScalarDispatch.bind(expr,
@@ -681,6 +726,10 @@ class PineV6LanguageInstance {
     _ta..clear()..addAll(candidate._ta);
     _sums..clear()..addAll(candidate._sums);
     _sumLastBar..clear()..addAll(candidate._sumLastBar);
+    _callHistory..clear()..addAll(candidate._callHistory);
+    _since..clear()..addAll(candidate._since);
+    _pivots..clear()..addAll(candidate._pivots);
+    _seriesLastBar..clear()..addAll(candidate._seriesLastBar);
     _history..clear()..addAll(candidate._history);
     _seen..clear()..addAll(candidate._seen);
     _plots=candidate._plots;
