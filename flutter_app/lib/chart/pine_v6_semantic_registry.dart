@@ -129,7 +129,7 @@ const _pineCalls=<String,_LibrarySignature>{
   ],'security'),
   'ta.dmi':_LibrarySignature(['diLength:int/simple adxSmoothing:int/simple'],'tuple'),
   'ta.supertrend':_LibrarySignature(['factor:float atrPeriod:int/simple'],'tuple'),
-  'ta.barssince':_LibrarySignature(['condition:bool'],'int'),
+  'ta.barssince':_LibrarySignature(['condition:bool'],'int',unimplemented:false),
   'ta.pivothigh':_LibrarySignature(['source:float leftbars:float rightbars:float','leftbars:float rightbars:float'],'float'),
   'ta.pivotlow':_LibrarySignature(['source:float leftbars:float rightbars:float','leftbars:float rightbars:float'],'float'),
   'math.sum':_LibrarySignature(['source:float length:int'],'float',unimplemented:false),
