@@ -1,0 +1,139 @@
+--- a/flutter_app/test/fixtures/pine/ahv10.pine
++++ b/docs/fixtures/ahv10_capture_logs_only.pine
+@@ -441,3 +441,134 @@
+     strategy.entry(buy ? "BUY" : "SELL", buy ? strategy.long : strategy.short), alert((buy ? "شراء " : "بيع ") + syminfo.ticker + " | الدخول " + str.tostring(close, format.mintick) + " | الستوب " + str.tostring(stopLevel, format.mintick) + " | الهدف " + str.tostring(buy ? close + targetPrice : close - targetPrice, format.mintick) + " | تأكيدات " + str.tostring(buy ? bullScore : bearScore) + "/" + str.tostring(enabledCount), alert.freq_once_per_bar_close)
+ if tradeNow or inPos
+-    strategy.exit((buy or inLong) ? "BUY EXIT" : "SELL EXIT", from_entry=(buy or inLong) ? "BUY" : "SELL", stop=curStop, limit=targetLine)
+\ No newline at end of file
++    strategy.exit((buy or inLong) ? "BUY EXIT" : "SELL EXIT", from_entry=(buy or inLong) ? "BUY" : "SELL", stop=curStop, limit=targetLine)
++
++// ===== CAPTURE ONLY: append-only observational log; original strategy above is unchanged =====
++// One row per confirmed script execution; not a broker fill event.
++if barstate.isconfirmed
++    log.info(
++        "AHV10_CAPTURE_V1|phase=script_eval_after_order_calls" +
++        "|symbol=" + syminfo.tickerid +
++        "|tf=" + timeframe.period +
++        "|time_ms=" + str.tostring(time) +
++        "|time_close_ms=" + str.tostring(time_close) +
++        "|bar_index=" + str.tostring(bar_index) +
++        "|mintick=" + str.tostring(syminfo.mintick, "#.################") +
++        "|pointvalue=" + str.tostring(syminfo.pointvalue, "#.################") +
++        "|confirmed=" + str.tostring(confirmed) +
++        "|O=" + str.tostring(open, "#.################") +
++        "|H=" + str.tostring(high, "#.################") +
++        "|L=" + str.tostring(low, "#.################") +
++        "|C=" + str.tostring(close, "#.################") +
++        "|V=" + str.tostring(volume, "#.################") +
++        "|haO=" + str.tostring(haO, "#.################") +
++        "|haH=" + str.tostring(haH, "#.################") +
++        "|haL=" + str.tostring(haL, "#.################") +
++        "|haC=" + str.tostring(haC, "#.################") +
++        "|htfDir=" + str.tostring(htfDir) +
++        "|smtSym=" + smtSym +
++        "|cH=" + str.tostring(cH, "#.################") +
++        "|cL=" + str.tostring(cL, "#.################") +
++        "|direction=" + str.tostring(direction) +
++        "|trendDir=" + str.tostring(trendDir) +
++        "|trendAge=" + str.tostring(trendAge) +
++        "|age=" + str.tostring(age) +
++        "|enabledCount=" + str.tostring(enabledCount) +
++        "|neededConf=" + str.tostring(neededConf) +
++        "|bullScore=" + str.tostring(bullScore) +
++        "|bearScore=" + str.tostring(bearScore) +
++        "|strongBull=" + str.tostring(strongBull) +
++        "|strongBear=" + str.tostring(strongBear) +
++        "|bullModel=" + str.tostring(bullModel) +
++        "|bearModel=" + str.tostring(bearModel) +
++        "|colorFlip=" + str.tostring(colorFlip) +
++        "|early=" + str.tostring(early) +
++        "|expired=" + str.tostring(expired) +
++        "|invalid=" + str.tostring(invalid) +
++        "|canBreak=" + str.tostring(canBreak) +
++        "|breakBull=" + str.tostring(breakBull) +
++        "|breakBear=" + str.tostring(breakBear) +
++        "|validStop=" + str.tostring(validStop) +
++        "|validRisk=" + str.tostring(validRisk) +
++        "|bullOk=" + str.tostring(bullOk) +
++        "|bearOk=" + str.tostring(bearOk) +
++        "|gateBull=" + str.tostring(gateBull) +
++        "|gateBear=" + str.tostring(gateBear) +
++        "|newSetup=" + str.tostring(newSetup) +
++        "|setupBull=" + str.tostring(setupBull) +
++        "|setupBear=" + str.tostring(setupBear) +
++        "|finishBox=" + str.tostring(finishBox) +
++        "|buy=" + str.tostring(buy) +
++        "|sell=" + str.tostring(sell) +
++        "|usedModel_prev=" + str.tostring(usedModel[1]) +
++        "|armed_prev=" + str.tostring(armed[1]) +
++        "|zoneDir_prev=" + str.tostring(zoneDir[1]) +
++        "|setupBar_prev=" + str.tostring(setupBar[1]) +
++        "|zoneTop_prev=" + str.tostring(zoneTop[1], "#.################") +
++        "|zoneBottom_prev=" + str.tostring(zoneBottom[1], "#.################") +
++        "|stopLevel_prev=" + str.tostring(stopLevel[1], "#.################") +
++        "|usedModel=" + str.tostring(usedModel) +
++        "|armed=" + str.tostring(armed) +
++        "|zoneDir=" + str.tostring(zoneDir) +
++        "|setupBar=" + str.tostring(setupBar) +
++        "|zoneTop=" + str.tostring(zoneTop, "#.################") +
++        "|zoneBottom=" + str.tostring(zoneBottom, "#.################") +
++        "|stopLevel=" + str.tostring(stopLevel, "#.################") +
++        "|risk=" + str.tostring(risk, "#.################") +
++        "|targetPrice=" + str.tostring(targetPrice, "#.################") +
++        "|pointSize=" + str.tostring(pointSize, "#.################") +
++        "|tol=" + str.tostring(tol, "#.################") +
++        "|entryPx=" + str.tostring(entryPx, "#.################") +
++        "|origStop=" + str.tostring(origStop, "#.################") +
++        "|peakPx=" + str.tostring(peakPx, "#.################") +
++        "|gainPts=" + str.tostring(gainPts, "#.################") +
++        "|beStop=" + str.tostring(beStop, "#.################") +
++        "|trStop=" + str.tostring(trStop, "#.################") +
++        "|curStop=" + str.tostring(curStop, "#.################") +
++        "|entryLine=" + str.tostring(entryLine, "#.################") +
++        "|stopLine=" + str.tostring(stopLine, "#.################") +
++        "|targetLine=" + str.tostring(targetLine, "#.################") +
++        "|beOn=" + str.tostring(beOn) +
++        "|trOn=" + str.tostring(trOn) +
++        "|tradeNow=" + str.tostring(tradeNow) +
++        "|emaTrend=" + str.tostring(emaTrend, "#.################") +
++        "|emaFast=" + str.tostring(emaFast, "#.################") +
++        "|emaMid=" + str.tostring(emaMid, "#.################") +
++        "|atrVal=" + str.tostring(atrVal, "#.################") +
++        "|rsiVal=" + str.tostring(rsiVal, "#.################") +
++        "|macdL=" + str.tostring(macdL, "#.################") +
++        "|macdS=" + str.tostring(macdS, "#.################") +
++        "|macdH=" + str.tostring(macdH, "#.################") +
++        "|diP=" + str.tostring(diP, "#.################") +
++        "|diM=" + str.tostring(diM, "#.################") +
++        "|adxVal=" + str.tostring(adxVal, "#.################") +
++        "|stVal=" + str.tostring(stVal, "#.################") +
++        "|stDir=" + str.tostring(stDir, "#.################") +
++        "|volAvg=" + str.tostring(volAvg, "#.################") +
++        "|pHigh=" + str.tostring(pHigh, "#.################") +
++        "|pLow=" + str.tostring(pLow, "#.################") +
++        "|pivHigh1=" + str.tostring(pivHigh1, "#.################") +
++        "|pivHigh2=" + str.tostring(pivHigh2, "#.################") +
++        "|pivLow1=" + str.tostring(pivLow1, "#.################") +
++        "|pivLow2=" + str.tostring(pivLow2, "#.################") +
++        "|position_size=" + str.tostring(strategy.position_size, "#.################") +
++        "|position_avg_price=" + str.tostring(strategy.position_avg_price, "#.################") +
++        "|opentrades=" + str.tostring(strategy.opentrades) +
++        "|closedNow=" + str.tostring(closedNow) +
++        "|newClosed=" + str.tostring(newClosed) +
++        "|lastIdx=" + str.tostring(lastIdx) +
++        "|netprofit=" + str.tostring(strategy.netprofit, "#.################") +
++        "|equity=" + str.tostring(strategy.equity, "#.################") +
++        "|tradePts=" + str.tostring(tradePts, "#.################") +
++        "|netPts=" + str.tostring(netPts, "#.################") +
++        "|last_entry_id=" + (newClosed ? strategy.closedtrades.entry_id(lastIdx) : "") +
++        "|last_exit_id=" + (newClosed ? strategy.closedtrades.exit_id(lastIdx) : "") +
++        "|last_entry_time=" + str.tostring((newClosed ? strategy.closedtrades.entry_time(lastIdx) : na)) +
++        "|last_exit_time=" + str.tostring((newClosed ? strategy.closedtrades.exit_time(lastIdx) : na)) +
++        "|last_entry_bar_index=" + str.tostring((newClosed ? strategy.closedtrades.entry_bar_index(lastIdx) : na)) +
++        "|last_exit_bar_index=" + str.tostring((newClosed ? strategy.closedtrades.exit_bar_index(lastIdx) : na)) +
++        "|last_entry_price=" + str.tostring((newClosed ? strategy.closedtrades.entry_price(lastIdx) : na), "#.################") +
++        "|last_exit_price=" + str.tostring((newClosed ? strategy.closedtrades.exit_price(lastIdx) : na), "#.################") +
++        "|last_size=" + str.tostring((newClosed ? strategy.closedtrades.size(lastIdx) : na), "#.################") +
++        "|last_profit=" + str.tostring((newClosed ? strategy.closedtrades.profit(lastIdx) : na), "#.################") +
++        "|last_commission=" + str.tostring((newClosed ? strategy.closedtrades.commission(lastIdx) : na), "#.################")
++    )
