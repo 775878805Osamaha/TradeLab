@@ -1,0 +1,152 @@
+import 'dart:math' as math;
+
+import '../data/market_api.dart';
+
+/// Presentation-only evidence about verified quote and candle timestamps.
+///
+/// A fresh cTrader BID/ASK quote can be newer than the most recent *closed*
+/// OHLC bar. Never synthesize a new bar or move the user's historical viewport
+/// to make the two prices appear equal.
+abstract final class ChartFeedHealth {
+  static int? intervalMinutes(String timeframe) => switch (timeframe) {
+    '1m' => 1,
+    '2m' => 2,
+    '3m' => 3,
+    '5m' => 5,
+    '15m' => 15,
+    '30m' => 30,
+    '1h' => 60,
+    '4h' => 240,
+    '1D' => 1440,
+    '1W' => 10080,
+    '1M' => 43200,
+    _ => null,
+  };
+
+  /// True if a new, verified quote revision warrants repainting its labels.
+  /// cTrader account invalidation returns null; the old quote then disappears.
+  static bool quoteChanged(MarketQuote? previous, MarketQuote? next) =>
+      previous?.symbol != next?.symbol ||
+      previous?.source != next?.source ||
+      previous?.timestampMs != next?.timestampMs ||
+      previous?.bid != next?.bid ||
+      previous?.ask != next?.ask;
+
+  /// The live BID/ASK tag is optional and HIDDEN by default. Changes in
+  /// quote timestamp alone are not new visible pixels; when the quote tags
+  /// are hidden, no quote-only update should repaint the entire 120k-source
+  /// chart canvas. The header's separate evidence rule still handles stale
+  /// closed candles, source minute changes and reconnects.
+  ///
+  /// This is a presentation-only decision. The broker quote cache and the
+  /// latest source revision are still consumed and never synthesized.
+  static bool quoteAffectsChartCanvas({
+    required MarketQuote? previous,
+    required MarketQuote? next,
+    required bool bidAskLabelsVisible,
+  }) =>
+      bidAskLabelsVisible &&
+      (previous?.bid != next?.bid ||
+       previous?.ask != next?.ask ||
+       previous?.symbol != next?.symbol ||
+       previous?.source != next?.source);
+
+  /// The full chart header needs a rebuild only if source evidence shown in
+  /// its tooltip/indicator changes. BID/ASK price movement *inside* the same
+  /// minute belongs to the chart painter, not to every header/control widget.
+  ///
+  /// Keeping the staleness transition here matters: it may happen within
+  /// the same minute, as a newer quote crosses the last closed-bar threshold.
+  static bool quoteHeaderEvidenceChanged({
+    required MarketQuote? previous,
+    required MarketQuote? next,
+    required int? lastClosedOpenMs,
+    required String timeframe,
+    required int nowMs,
+  }) {
+    if ((previous == null) != (next == null)) return true;
+    if (previous == null || next == null) return false;
+    if (previous.source != next.source || previous.symbol != next.symbol) {
+      return true;
+    }
+    if (previous.timestampMs ~/ Duration.millisecondsPerMinute !=
+        next.timestampMs ~/ Duration.millisecondsPerMinute) {
+      return true;
+    }
+    final previouslyLagging = closedCandlesLagging(
+      latestClosedOpenMs: lastClosedOpenMs,
+      timeframe: timeframe,
+      nowMs: nowMs,
+      freshQuoteTimestampMs: previous.timestampMs,
+    );
+    final nowLagging = closedCandlesLagging(
+      latestClosedOpenMs: lastClosedOpenMs,
+      timeframe: timeframe,
+      nowMs: nowMs,
+      freshQuoteTimestampMs: next.timestampMs,
+    );
+    return previouslyLagging != nowLagging;
+  }
+
+  /// Throttle read-only quote checks to at most once per minute. A fresh
+  /// quote already obtained by the Markets screen satisfies the chart, so
+  /// the same source is not fetched a second time needlessly.
+  static bool shouldRequestQuote({
+    required int nowMs,
+    required int lastAttemptMs,
+    int? freshQuoteTimestampMs,
+    int minimumIntervalMs = 60000,
+  }) {
+    if (nowMs <= 0 || minimumIntervalMs <= 0 ||
+        lastAttemptMs > nowMs ||
+        nowMs - lastAttemptMs < minimumIntervalMs) {
+      return false;
+    }
+    if (freshQuoteTimestampMs != null &&
+        nowMs - freshQuoteTimestampMs < minimumIntervalMs) {
+      return false;
+    }
+    return true;
+  }
+
+  /// A missing initial OHLC history can recover automatically, but a broker
+  /// outage must never cause a request every frame/30-second poll. The first
+  /// attempted reload is delayed until the configured interval has elapsed.
+  static bool shouldRetryEmptyHistory({
+    required int nowMs,
+    required int lastAttemptMs,
+    int minimumIntervalMs = 120000,
+  }) {
+    if (nowMs <= 0 || lastAttemptMs < 0 || minimumIntervalMs <= 0 ||
+        nowMs < lastAttemptMs) {
+      return false;
+    }
+    return nowMs - lastAttemptMs >= minimumIntervalMs;
+  }
+
+  /// A closed-bar open can be older than the current BID without being wrong:
+  /// the newest forming bar has deliberately NOT been appended. Only flag
+  /// a lag beyond three frame intervals (minimum ten minutes).
+  ///
+  /// The caller must supply a fresh broker quote (if available); otherwise
+  /// the wall-clock is used for the existing chart-staleness badge. Broker
+  /// calendar frames keep the same conservative threshold as before.
+  static bool closedCandlesLagging({
+    required int? latestClosedOpenMs,
+    required String timeframe,
+    required int nowMs,
+    int? freshQuoteTimestampMs,
+  }) {
+    final frameMinutes = intervalMinutes(timeframe);
+    if (latestClosedOpenMs == null || latestClosedOpenMs <= 0 ||
+        frameMinutes == null) {
+      return false;
+    }
+    final reference = freshQuoteTimestampMs ?? nowMs;
+    if (reference <= latestClosedOpenMs) {
+      return false;
+    }
+    return reference - latestClosedOpenMs >
+        math.max(frameMinutes * 3, 10) * Duration.millisecondsPerMinute;
+  }
+}

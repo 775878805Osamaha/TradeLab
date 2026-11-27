@@ -47,12 +47,46 @@ void main() {
     expect(trend.where((tool) => tool.implemented).toList(), [
       DrawingCatalogKind.trendLine,
       DrawingCatalogKind.ray,
+      DrawingCatalogKind.infoLine,
       DrawingCatalogKind.extendedLine,
+      DrawingCatalogKind.trendAngle,
       DrawingCatalogKind.horizontal,
       DrawingCatalogKind.horizontalRay,
       DrawingCatalogKind.verticalLine,
+      DrawingCatalogKind.crossLine,
       DrawingCatalogKind.parallelChannel,
     ]);
+  });
+
+  test('crossline is enabled as a single-touch trend drawing', () {
+    expect(DrawingCatalogKind.crossLine.implemented, isTrue);
+    expect(DrawingCatalogKind.crossLine.category, DrawingCategory.trend);
+    expect(DrawingCatalogKind.crossLine.label, 'خط عرضي');
+    expect(DrawingCatalogKind.infoLine.implemented, isTrue);
+  });
+
+  test('Info Line is selectable and trend-only, without false Gann support',
+      () {
+    expect(DrawingCatalogKind.infoLine.implemented, isTrue);
+    expect(DrawingCatalogKind.infoLine.category, DrawingCategory.trend);
+    expect(DrawingCatalogKind.infoLine.label, 'خط معلومات');
+    expect(DrawingCatalogKind.trendAngle.implemented, isTrue);
+    expect(DrawingCatalogKind.regressionTrend.implemented, isFalse,
+        reason: 'Info Line and Trend Angle cannot enable unrelated drawings');
+  });
+
+  test('Trend Angle is selectable from the native two-anchor catalog',
+      () {
+    expect(DrawingCatalogKind.trendAngle.implemented, isTrue);
+    expect(DrawingCatalogKind.trendAngle.label, 'زاوية الاتجاه');
+    expect(DrawingCatalogKind.trendAngle.category, DrawingCategory.trend);
+    expect(DrawingCatalogKind.regressionTrend.implemented, isFalse);
+  });
+
+  test('risk/reward drawings support both real long and short tools', () {
+    expect(DrawingCatalogKind.shortPosition.implemented, isTrue);
+    expect(DrawingCatalogKind.longPosition.implemented, isTrue);
+    expect(DrawingCatalogKind.fixedVolumeProfile.implemented, isFalse);
   });
 
   test('favorites codec preserves selection across process restart', () {

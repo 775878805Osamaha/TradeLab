@@ -21,13 +21,27 @@ class RangeTickRollforward {
         newToMs < suffixFrom) {
       throw ArgumentError('Missing verified tick coverage for rolling window');
     }
+    // The cache was digest-verified in chronological BID order. Find the
+    // earliest still-relevant event in O(log N), not by reading 120k+
+    // discarded events on Flutter's UI isolate. Keep every same-ms event.
+    final verified = cached.ticks;
+    var low = 0;
+    var high = verified.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (verified[middle].timestamp < newFromMs) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
     final retained = <MarketTick>[];
-    for (final tick in cached.ticks) {
-      if (tick.timestamp >= newFromMs && tick.timestamp <= cached.toMs) {
-        retained.add(tick);
-        if (retained.length > maxWindowTicks) {
-          throw StateError('Rolling BID tick window exceeds safe limit');
-        }
+    for (var index = low; index < verified.length; index++) {
+      final tick = verified[index];
+      if (tick.timestamp > cached.toMs) break;
+      retained.add(tick);
+      if (retained.length > maxWindowTicks) {
+        throw StateError('Rolling BID tick window exceeds safe limit');
       }
     }
     var last = cached.toMs;

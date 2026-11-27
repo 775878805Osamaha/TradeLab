@@ -1,0 +1,193 @@
+name: Pine v6 Stage 3a Runtime Verify (no APK)
+
+# Lightweight quality gate: no Gradle release build, emulator or APK.
+# Runs only for Flutter changes in PRs, and on explicit manual dispatch.
+on:
+  push:
+    branches:
+      - feat/pine-stage3a-language-runtime-20261124
+      - chore/pine-frontend-dedup-audit-20261124
+    paths:
+      - 'flutter_app/**'
+      - '.github/workflows/pine-v6-stage3a-no-apk.yml'
+permissions:
+  contents: read
+
+# A new PR commit supersedes previous quick-test attempts.
+concurrency:
+  group: tradelab-pine-stage3a-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-flutter-range:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      # Flutter/Dart widget and unit tests need no generated Android host,
+      # Gradle, Java toolchain, emulator or APK signing.
+      - name: Audit old frontend imports, registrations and callers on exact SHA
+        run: |
+          # POSIX character classes and [.] avoid shell/regex backslash ambiguity.
+          # Exit 1 is a valid empty result; any other error must fail the audit.
+          git grep -n -E 'pine_frontend(_[[:alnum:]_]+)?[.]dart|PineFrontend([.]|Analysis)|frontendAnalysis' -- lib test || {
+            code=$?
+            if [ "$code" -ne 1 ]; then exit "$code"; fi
+          }
+          # Known live compatibility declaration: verify the scan can find it.
+          git grep -n -F 'frontendAnalysis' -- lib/chart/chart_indicator_library.dart
+      - name: Fetch dependencies
+        run: flutter pub get
+      - name: Analyze Dart and Flutter
+        run: flutter analyze --no-fatal-infos
+      - name: Verify historical tick archive and chart interactions
+        run: |
+          flutter test test/range_older_page_test.dart \
+            test/range_bid_page_verifier_test.dart \
+            test/range_older_page_scanner_test.dart \
+            test/range_startup_loader_test.dart \
+            test/range_history_fill_policy_test.dart \
+            test/range_tick_store_test.dart \
+            test/range_verified_bid_window_slice_test.dart \
+            test/widget_test.dart \
+            test/candle_prefix_test.dart \
+            test/range_tick_rollforward_test.dart \
+            test/range_bar_timeline_test.dart \
+            test/range_size_reuse_test.dart \
+            test/range_refresh_retention_test.dart \
+            test/range_refresh_retention_widget_test.dart \
+            test/range_live_bid_delta_test.dart \
+            test/range_drawing_rebase_search_test.dart \
+            test/range_bar_builder_test.dart \
+            test/range_bar_validation_test.dart \
+            test/chart_viewport_test.dart \
+            test/chart_axis_contrast_test.dart \
+            test/chart_dark_toolbar_labels_test.dart \
+            test/chart_history_prefetch_policy_test.dart \
+            test/chart_120k_viewport_workload_test.dart \
+            test/chart_price_scale_cache_test.dart \
+            test/chart_offscreen_price_scale_test.dart \
+            test/chart_logarithmic_price_scale_test.dart \
+            test/chart_logarithmic_toggle_widget_test.dart \
+            test/chart_inverted_price_scale_test.dart \
+            test/chart_inverted_axis_menu_widget_test.dart \
+            test/chart_axis_ticks_test.dart \
+            test/chart_axis_mobile_density_test.dart \
+            test/chart_relative_price_scale_test.dart \
+            test/chart_relative_price_axis_widget_test.dart \
+            test/chart_price_text_formatter_test.dart \
+            test/chart_axis_source_labels_test.dart \
+            test/chart_visible_highlow_reuse_test.dart \
+            test/chart_ohlc_inspector_test.dart \
+            test/chart_crosshair_time_label_test.dart \
+            test/chart_visible_sma_test.dart \
+            test/chart_short_position_test.dart \
+            test/chart_position_viewport_visibility_test.dart \
+            test/chart_long_position_widget_test.dart \
+            test/chart_position_paint_only_drag_test.dart \
+            test/chart_crossline_widget_test.dart \
+            test/chart_info_line_stats_test.dart \
+            test/chart_info_line_widget_test.dart \
+            test/chart_trend_angle_widget_test.dart \
+            test/chart_double_tap_guide_test.dart \
+            test/chart_paint_only_pan_test.dart \
+            test/chart_frame_profiler_test.dart \
+            test/chart_load_profiler_test.dart \
+            test/chart_text_layout_cache_test.dart \
+            test/chart_rectangle_label_cache_test.dart \
+            test/chart_rectangle_visibility_timezone_test.dart \
+            test/chart_timeframe_catalog_test.dart \
+            test/chart_panel_settings_test.dart \
+            test/chart_symbol_settings_test.dart \
+            test/chart_mobile_controls_test.dart \
+            test/chart_range_initial_preset_test.dart \
+            test/chart_focus_mode_test.dart \
+            test/markets_chart_navigation_test.dart \
+            test/watchlist_favorites_sqlite_test.dart \
+            test/watchlist_favorites_widget_test.dart \
+            test/chart_mode_transition_test.dart \
+            test/chart_annotations_test.dart \
+            test/chart_line_geometry_test.dart \
+            test/chart_drawing_hit_test_test.dart \
+            test/chart_candle_wicks_test.dart \
+            test/chart_heikin_ashi_test.dart \
+            test/chart_wick_raster_parity_test.dart \
+            test/ctrader_candle_stitcher_test.dart \
+            test/ctrader_older_candle_pager_test.dart \
+            test/older_candle_prepend_test.dart \
+            test/market_history_budget_test.dart \
+            test/verified_market_history_snapshot_test.dart \
+            test/ctrader_account_selection_test.dart \
+            test/ctrader_account_persistence_order_test.dart \
+            test/ctrader_history_auth_revision_test.dart \
+            test/ctrader_session_token_write_queue_test.dart \
+            test/account_active_selection_widget_test.dart \
+            test/theme_preference_store_test.dart \
+            test/dark_mode_persistence_widget_test.dart \
+            test/market_candle_store_test.dart \
+            test/market_api_test.dart \
+            test/ctrader_closed_bar_cutoff_test.dart \
+            test/replay_start_resolver_test.dart \
+            test/replay_revealed_exit_index_test.dart \
+            test/replay_mobile_controls_test.dart \
+            test/replay_playback_speed_test.dart \
+            test/chart_historical_time_zone_test.dart \
+            test/chart_scale_settings_test.dart \
+            test/replay_date_time_resolver_test.dart \
+            test/replay_viewport_focus_test.dart \
+            test/replay_training_session_test.dart \
+            test/replay_sparse_seek_test.dart \
+            test/replay_training_archive_test.dart \
+            test/replay_training_widget_test.dart \
+            test/replay_training_order_dialog_test.dart \
+            test/paper_ledger_test.dart \
+            test/paper_journal_controller_test.dart \
+            test/paper_journal_sqlite_test.dart \
+            test/paper_trade_service_test.dart \
+            test/results_connection_test.dart \
+            test/dashboard_ui_responsive_test.dart \
+            test/dashboard_compact_ui_test.dart \
+            test/ctrader_quote_ordering_test.dart \
+            test/chart_feed_health_test.dart \
+            test/chart_time_axis_label_layout_test.dart \
+            test/chart_source_time_grid_test.dart \
+            test/chart_indicator_library_test.dart \
+            test/chart_indicator_engine_test.dart \
+            test/pine_subset_program_test.dart \
+            test/pine_stage1_runtime_test.dart \
+            test/pine_frontend_v6_test.dart \
+            test/pine_frontend_differential_test.dart \
+            test/pine_v6_frontend_test.dart \
+            test/pine_v6_language_runtime_test.dart \
+            test/chart_indicator_autoscale_test.dart \
+            test/chart_indicator_pane_test.dart \
+            test/chart_indicator_library_sheet_test.dart \
+            test/replay_trade_overlay_test.dart \
+            test/paper_results_flow_test.dart \
+            test/chart_frame_profiler_test.dart
+      # The catalog test file also contains optional screenshot-golden
+      # comparisons whose baseline PNG files are NOT checked into this repo.
+      # Exercise the new Long/Short catalog behavior explicitly here rather
+      # than falsely failing CI on unrelated missing golden assets. Preserve
+      # the original visual tests for environments with their true baselines.
+      - name: Verify Long and Short catalog selection without missing goldens
+        run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'risk/reward drawings support both real long and short tools'
+      - name: Verify Crossline catalog choice without missing screenshot goldens
+        run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'crossline is enabled as a single-touch trend drawing'
+      - name: Verify Info Line selectable without unrelated missing Golden files
+        run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'Info Line is selectable and trend-only, without false Gann support'
+      - name: Verify Trend Angle is a selectable source drawing without missing Goldens
+        run: flutter test test/drawing_tools_sheet_test.dart --plain-name 'Trend Angle is selectable from the native two-anchor catalog'
+      # The original bug appears on phones whose local timezone differs
+      # from the selected chart timezone (e.g. New York on a Yemen device).
+      - name: Verify chart weekdays under Yemen device timezone
+        env:
+          TZ: Asia/Aden
+        run: flutter test test/chart_scale_settings_test.dart

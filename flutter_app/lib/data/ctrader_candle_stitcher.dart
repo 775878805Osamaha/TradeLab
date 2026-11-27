@@ -1,4 +1,5 @@
 import 'market_api.dart';
+import 'market_history_budget.dart';
 
 /// Merge chronologically verified broker candles without inventing missing
 /// minutes or silently replacing historical OHLC from a second response.
@@ -10,39 +11,80 @@ class CTraderCandleStitcher {
     List<MarketBar> recent,
   ) {
     validateBars(existing);
-    validateBars(recent);
-    if (existing.isEmpty) return List<MarketBar>.unmodifiable(recent);
-    if (recent.isEmpty) return existing;
+    // Direct callers still validate the entire input archive. The chart's
+    // already-verified refresh path below may avoid this 120k+ re-scan.
+    return appendPreviouslyVerified(existing, recent);
+  }
 
-    final known = <int, MarketBar>{
-      for (final bar in existing) bar.timestamp: bar,
-    };
-    final next = <MarketBar>[...existing];
+  /// Count new closed candles without allocating a replacement source array.
+  /// PRECONDITION: [existing] is an immutable archive already validated by
+  /// the authenticated cTrader feed or verified SQLite history.
+  /// The small fresh broker response is *always* validated here.
+  ///
+  /// All overlaps use lower-bound search, so a no-change 30-second poll
+  /// checks O(recent * log(existing.length)) rather than walking 120k bars.
+  /// Historical gaps and revised OHLC are rejected before any publication.
+  static int countNewFromVerifiedHistory(
+      List<MarketBar> existing, List<MarketBar> recent) {
+    validateBars(recent);
+    if (existing.isEmpty) {
+      if (recent.length > MarketHistoryBudget.maxVisibleTimeCandles) {
+        throw const MarketDataException(
+            'تجاوز التاريخ المحمّل حد الذاكرة. أعد فتح الشارت.');
+      }
+      return recent.length;
+    }
     final latest = existing.last.timestamp;
+    var appended = 0;
     for (final bar in recent) {
-      final prior = known[bar.timestamp];
-      if (prior != null) {
-        if (prior.candle.open != bar.candle.open ||
-            prior.candle.high != bar.candle.high ||
-            prior.candle.low != bar.candle.low ||
-            prior.candle.close != bar.candle.close) {
-          throw const MarketDataException(
-              'تغيّرت قيم شمعة cTrader تاريخية بين طلبين؛ '
-              'أوقفنا التحديث حتى يُراجع المصدر.');
+      if (bar.timestamp > latest) {
+        appended++;
+        continue;
+      }
+      var low = 0;
+      var high = existing.length;
+      while (low < high) {
+        final mid = low + (high - low) ~/ 2;
+        if (existing[mid].timestamp < bar.timestamp) {
+          low = mid + 1;
+        } else {
+          high = mid;
         }
-      } else if (bar.timestamp > latest) {
-        next.add(bar);
-      } else {
-        // The broker returned an old candle missing from the previously
-        // displayed history. Do not silently insert bars into Replay indices.
+      }
+      if (low == existing.length ||
+          existing[low].timestamp != bar.timestamp) {
         throw const MarketDataException(
             'تاريخ cTrader غير متصل؛ ظهرت شموع قديمة لم تُحمّل سابقًا.');
       }
+      final prior = existing[low].candle;
+      final incoming = bar.candle;
+      if (prior.open != incoming.open ||
+          prior.high != incoming.high ||
+          prior.low != incoming.low ||
+          prior.close != incoming.close ||
+          conflictingKnownVolume(prior, incoming)) {
+        throw const MarketDataException(
+            'تغيّرت قيم شمعة cTrader تاريخية بين طلبين؛ '
+            'أوقفنا التحديث حتى يُراجع المصدر.');
+      }
     }
-    if (next.length > 200000) {
+    if (existing.length + appended > MarketHistoryBudget.maxVisibleTimeCandles) {
       throw const MarketDataException(
           'تجاوز التاريخ المحمّل حد الذاكرة. أعد فتح الشارت.');
     }
-    return List<MarketBar>.unmodifiable(next);
+    return appended;
+  }
+
+  /// The chart has already validated its stored history before publishing
+  /// it. Preserve original object identity when all broker closes overlap.
+  static List<MarketBar> appendPreviouslyVerified(
+      List<MarketBar> existing, List<MarketBar> recent) {
+    final appended = countNewFromVerifiedHistory(existing, recent);
+    if (existing.isEmpty) return List<MarketBar>.unmodifiable(recent);
+    if (appended == 0) return existing;
+    return List<MarketBar>.unmodifiable([
+      ...existing,
+      ...recent.skip(recent.length - appended),
+    ]);
   }
 }

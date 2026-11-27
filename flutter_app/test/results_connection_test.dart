@@ -25,4 +25,246 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
   });
+  testWidgets('Replay archive shows opened and closed training upon tab return',
+      (tester) async {
+    final controller = _ConnectedReadOnlyController();
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var reads = 0;
+    Future<List<Map<String, Object?>>> load() async {
+      reads++;
+      return [<String, Object?>{
+        'sessionId': 'session-visible',
+        'sourceKey': 'never-show-account-id',
+        'savedAtMs': 1795262400000,
+        'tradeCount': 2,
+        'openTradeCount': 1,
+        'closedTradeCount': 1,
+        'realizedPricePnl': 17.5,
+        'trades': [
+          <String, Object?>{
+            'side': 'buy', 'entryPrice': 100.0, 'quantity': 1.0,
+            'exitPrice': null, 'isOpen': true, 'realizedPricePnl': 0.0,
+          },
+          <String, Object?>{
+            'side': 'sell', 'entryPrice': 110.0, 'quantity': 2.0,
+            'exitPrice': 101.25, 'isOpen': false, 'realizedPricePnl': 17.5,
+          },
+        ],
+      }];
+    }
+    Future<void> show(bool active) => tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: ResultsScreen(controller: controller,
+        active: active, replayArchiveReader: load)),
+    ));
+    await show(false);
+    expect(reads, 0);
+    await show(true);
+    await tester.pump();
+    expect(reads, 1);
+    await tester.ensureVisible(find.byKey(const Key('results-tab-5')));
+    await tester.tap(find.byKey(const Key('results-tab-5')));
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-session-0')), findsOneWidget);
+    expect(find.text('الصفقات: 2 · مفتوحة: 1 · مغلقة: 1'), findsOneWidget);
+    expect(find.textContaining('17.5000'), findsWidgets);
+    expect(find.textContaining('ليست أرباحًا بالدولار'), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-trade-0-1')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-trade-0-0')), findsOneWidget);
+    expect(find.textContaining('بيع · مغلقة'), findsOneWidget);
+    expect(find.textContaining('شراء · مفتوحة'), findsOneWidget);
+    expect(find.textContaining('دخول: 110.00000'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('never-show-account-id'), findsNothing);
+    await show(false);
+    await show(true);
+    await tester.pump();
+    expect(reads, 2);
+  });
+
+  testWidgets('Replay archive read failure is not displayed as no trades',
+      (tester) async {
+    final controller = _ConnectedReadOnlyController();
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Future<List<Map<String, Object?>>> failed() async =>
+        throw StateError('SQLite unavailable');
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: ResultsScreen(controller: controller,
+        active: true, replayArchiveReader: failed)),
+    ));
+    await tester.pump();
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('results-tab-5')));
+    await tester.tap(find.byKey(const Key('results-tab-5')));
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-error')), findsOneWidget);
+    expect(find.textContaining('لا توجد جلسات Replay محفوظة بعد'), findsNothing);
+  });
+
+  testWidgets('Overview links to actual Replay open/closed counts at 320dp',
+      (tester) async {
+    final controller = _ConnectedReadOnlyController();
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(320, 760));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Future<List<Map<String, Object?>>> read() async => [
+      <String, Object?>{
+        'sessionId': 'internal-not-visible',
+        'sourceKey': 'account-hidden',
+        'savedAtMs': 1795262400000,
+        'tradeCount': 2,
+        'openTradeCount': 1,
+        'closedTradeCount': 1,
+        'realizedPricePnl': 12.5,
+      },
+    ];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: ResultsScreen(controller: controller,
+          active: true, replayArchiveReader: read)),
+    ));
+    await tester.pump();
+    final shortcut = find.byKey(
+        const Key('results-replay-overview-shortcut'));
+    expect(shortcut, findsOneWidget);
+    expect(find.textContaining('مفتوحة: 1 · مغلقة: 1'), findsOneWidget);
+    // The normal USD hero still reads only the separate paper ledger.
+    expect(find.byKey(const Key('results-net-profit-hero')), findsOneWidget);
+    await tester.ensureVisible(shortcut);
+    await tester.tap(shortcut);
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-session-0')), findsOneWidget);
+    expect(find.textContaining('12.5000'), findsOneWidget);
+    expect(find.textContaining('account-hidden'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Replay rows reveal older positions in bounded pages at 320dp',
+      (tester) async {
+    final controller = _ConnectedReadOnlyController();
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(320, 760));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Future<List<Map<String, Object?>>> read() async => [
+      <String, Object?>{
+        'sessionId': 'many-entries',
+        'savedAtMs': 1795262400000,
+        'tradeCount': 25,
+        'openTradeCount': 25,
+        'closedTradeCount': 0,
+        'realizedPricePnl': 0.0,
+        'trades': List<Map<String, Object?>>.generate(25, (index) => {
+          'side': 'buy',
+          'entryPrice': 100.0 + index,
+          'quantity': 1.0,
+          'exitPrice': null,
+          'isOpen': true,
+          'realizedPricePnl': 0.0,
+        }),
+      },
+    ];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: ResultsScreen(controller: controller,
+          active: true, replayArchiveReader: read),
+    )));
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('results-tab-5')));
+    await tester.tap(find.byKey(const Key('results-tab-5')));
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-trade-0-24')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-trade-0-21')), findsNothing);
+    final more = find.byKey(const Key('results-replay-more-trades-0'));
+    // The results tab has a sticky header; ensureVisible may put a
+    // TextButton center exactly on the bottom test-view boundary (y=760),
+    // where a pointer tap misses. Scroll a little farther before tapping.
+    await tester.ensureVisible(more);
+    await tester.pump();
+    await tester.drag(find.byKey(const Key('results-dashboard-list')),
+        const Offset(0, -90));
+    await tester.pump();
+    await tester.tap(more);
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-trade-0-21')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-trade-0-0')), findsNothing);
+    await tester.ensureVisible(more);
+    await tester.pump();
+    await tester.drag(find.byKey(const Key('results-dashboard-list')),
+        const Offset(0, -90));
+    await tester.pump();
+    await tester.tap(more);
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-trade-0-0')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-more-trades-0')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('Replay Results loads all 23 historical sessions in bounded pages',
+      (tester) async {
+    final controller = _ConnectedReadOnlyController();
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final requests = <(int, int)>[];
+    final stored = List<Map<String, Object?>>.generate(23, (index) => {
+      'sessionId': 'private-session-$index',
+      'sourceKey': 'private-ctrader-account',
+      'savedAtMs': 1795262400000 - index * 1000,
+      'tradeCount': 1,
+      'openTradeCount': 1,
+      'closedTradeCount': 0,
+      'realizedPricePnl': 0.0,
+      'trades': <Map<String, Object?>>[{
+        'side': 'buy', 'entryPrice': 100.0 + index, 'quantity': 1.0,
+        'exitPrice': null, 'isOpen': true, 'realizedPricePnl': 0.0,
+      }],
+    });
+    Future<List<Map<String, Object?>>> readPage({
+      required int limit,
+      required int offset,
+    }) async {
+      requests.add((limit, offset));
+      return stored.skip(offset).take(limit).toList(growable: false);
+    }
+
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: ResultsScreen(
+        controller: controller, active: true,
+        replayArchivePageReader: readPage,
+      ),
+    )));
+    await tester.pump();
+    expect(requests, [(21, 0)]);
+    await tester.ensureVisible(find.byKey(const Key('results-tab-5')));
+    await tester.tap(find.byKey(const Key('results-tab-5')));
+    await tester.pump();
+    expect(find.byKey(const Key('results-replay-session-4')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-session-5')), findsNothing);
+
+    final more = find.byKey(const Key('results-replay-more-sessions'));
+    for (var page = 1; page <= 4; page++) {
+      await tester.ensureVisible(more);
+      await tester.pump();
+      await tester.drag(find.byKey(const Key('results-dashboard-list')),
+          const Offset(0, -90));
+      await tester.pump();
+      await tester.tap(more);
+      await tester.pump();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      if (page < 4) {
+        expect(requests, [(21, 0)],
+            reason: 'Local reveal must not query SQLite on every five rows');
+      }
+    }
+    expect(requests, [(21, 0), (21, 20)]);
+    expect(find.byKey(const Key('results-replay-session-22')), findsOneWidget);
+    expect(find.byKey(const Key('results-replay-trade-22-0')), findsOneWidget);
+    expect(more, findsNothing,
+        reason: 'All 23 durable sessions can be reached after four taps');
+    expect(find.textContaining('private-ctrader-account'), findsNothing);
+    expect(find.textContaining('private-session-'), findsNothing);
+  });
 }

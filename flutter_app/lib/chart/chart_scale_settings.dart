@@ -28,6 +28,7 @@ class ChartScaleSettings {
     this.scaleButtons = ChartScaleVisibility.onTap,
     this.lockPriceToBar = false,
     this.scaleMode = 'تلقائي',
+    this.inverted = false,
     this.avoidOverlappingLabels = true,
     this.plusButton = true,
     this.countdown = true,
@@ -51,6 +52,7 @@ class ChartScaleSettings {
   final ChartScaleVisibility scaleButtons;
   final bool lockPriceToBar;
   final String scaleMode;
+  final bool inverted;
   final bool avoidOverlappingLabels;
   final bool plusButton;
   final bool countdown;
@@ -74,6 +76,7 @@ class ChartScaleSettings {
     ChartScaleVisibility? scaleButtons,
     bool? lockPriceToBar,
     String? scaleMode,
+    bool? inverted,
     bool? avoidOverlappingLabels,
     bool? plusButton,
     bool? countdown,
@@ -96,6 +99,7 @@ class ChartScaleSettings {
     scaleButtons: scaleButtons ?? this.scaleButtons,
     lockPriceToBar: lockPriceToBar ?? this.lockPriceToBar,
     scaleMode: scaleMode ?? this.scaleMode,
+    inverted: inverted ?? this.inverted,
     avoidOverlappingLabels: avoidOverlappingLabels ?? this.avoidOverlappingLabels,
     plusButton: plusButton ?? this.plusButton,
     countdown: countdown ?? this.countdown,
@@ -120,6 +124,7 @@ class ChartScaleSettings {
     'scaleButtons': scaleButtons.name,
     'lockPriceToBar': lockPriceToBar,
     'scaleMode': scaleMode,
+    'inverted': inverted,
     'avoidOverlappingLabels': avoidOverlappingLabels,
     'plusButton': plusButton,
     'countdown': countdown,
@@ -157,6 +162,7 @@ class ChartScaleSettings {
       scaleButtons: selected(ChartScaleVisibility.values, 'scaleButtons', defaults.scaleButtons),
       lockPriceToBar: flag('lockPriceToBar', defaults.lockPriceToBar),
       scaleMode: data['scaleMode'] is String ? data['scaleMode'] as String : defaults.scaleMode,
+      inverted: flag('inverted', defaults.inverted),
       avoidOverlappingLabels: flag('avoidOverlappingLabels', defaults.avoidOverlappingLabels),
       plusButton: flag('plusButton', defaults.plusButton),
       countdown: flag('countdown', defaults.countdown),
@@ -181,7 +187,10 @@ class ChartScaleSettings {
   static const weekdays = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس',
     'الجمعة', 'السبت', 'الأحد'];
 
-  /// The reference's weekday switch uses the phone's local trading-time axis.
-  static String localWeekday(DateTime timestamp) =>
-      weekdays[timestamp.toLocal().weekday - 1];
+  /// The chart has ALREADY converted the source UTC timestamp into the
+  /// chosen display zone (New York, UTC, or the phone's local time).
+  /// Calling toLocal() again shifts New York wall-clock dates a second time,
+  /// causing the weekday label to disagree with the displayed calendar day.
+  static String weekdayForDisplayedDate(DateTime displayedDate) =>
+      weekdays[displayedDate.weekday - 1];
 }

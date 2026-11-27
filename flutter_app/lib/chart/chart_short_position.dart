@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+enum ChartPositionDirection { short, long }
+
 /// A chart drawing, NOT an order. All prices are taken from chart gestures;
 /// no position size, commission, account balance or monetary P/L is inferred.
 class ChartShortPosition {
@@ -9,19 +11,25 @@ class ChartShortPosition {
     required this.entry,
     required this.stop,
     required this.target,
+    this.direction = ChartPositionDirection.short,
   }) : assert(startIndex >= 0),
        assert(endIndex >= startIndex),
-       assert(stop > entry),
-       assert(entry > target);
+       assert(direction == ChartPositionDirection.short
+           ? stop > entry && entry > target
+           : stop < entry && entry < target);
 
   final int startIndex;
   final int endIndex;
   final double entry;
   final double stop;
   final double target;
+  /// Legacy class name retained for compatibility with existing drawing
+  /// data; both sides are chart annotations, never actual broker orders.
+  final ChartPositionDirection direction;
+  bool get isLong => direction == ChartPositionDirection.long;
 
-  double get risk => stop - entry;
-  double get reward => entry - target;
+  double get risk => isLong ? entry - stop : stop - entry;
+  double get reward => isLong ? target - entry : entry - target;
   double get riskPercent => risk / entry.abs() * 100;
   double get rewardPercent => reward / entry.abs() * 100;
   double get rewardRisk => reward / risk;
@@ -31,12 +39,14 @@ class ChartShortPosition {
         startIndex: startIndex + olderCount,
         endIndex: endIndex + olderCount,
         entry: entry, stop: stop, target: target,
+        direction: direction,
       );
 
   ChartShortPosition reanchored(int start, int end) => ChartShortPosition(
         startIndex: math.min(start, end),
         endIndex: math.max(start, end),
         entry: entry, stop: stop, target: target,
+        direction: direction,
       );
 
   ChartShortPosition moved(int bars, double priceDelta) => ChartShortPosition(
@@ -45,10 +55,11 @@ class ChartShortPosition {
         entry: entry + priceDelta,
         stop: stop + priceDelta,
         target: target + priceDelta,
+        direction: direction,
       );
 
-  /// Returns null if a handle would cross the entry level or a bar boundary.
-  /// That keeps the sell tool meaningful without inventing a minimum stop.
+  /// Returns null if a handle crosses entry, flips the chosen direction or
+  /// changes the source bar order. Long stop is below entry; short above.
   ChartShortPosition? edited({
     double? stop,
     double? entry,
@@ -62,9 +73,11 @@ class ChartShortPosition {
     final from = startIndex ?? this.startIndex;
     final to = endIndex ?? this.endIndex;
     if (![s, e, t].every((v) => v.isFinite && v > 0) ||
-        !(s > e && e > t) || from < 0 || to < from) return null;
+        !(isLong ? s < e && e < t : s > e && e > t) ||
+        from < 0 || to < from) return null;
     return ChartShortPosition(
       startIndex: from, endIndex: to, entry: e, stop: s, target: t,
+      direction: direction,
     );
   }
 

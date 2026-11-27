@@ -10,18 +10,34 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'market_api.dart';
 import 'tradelab_data.dart';
+import 'ctrader_session_token_write_queue.dart';
 
 /// Owns authentication and explicit source states; never fabricates a quote.
 class MarketController extends ChangeNotifier {
   MarketController({MarketApi? api, FlutterSecureStorage? storage})
       : _storage = storage ?? const FlutterSecureStorage() {
-    _api = api ?? MarketApi(onSessionRefresh: _onRefreshedToken);
+    _api = api ?? MarketApi();
+    // Keep authorization rotation wired for BOTH default and injected APIs.
+    // A custom MarketApi HTTP client must not silently disable the broker
+    // token refresh that the production controller is responsible for.
+    _api.onSessionRefresh = _onRefreshedToken;
   }
 
   late final MarketApi _api;
   final FlutterSecureStorage _storage;
   static const _tokenKey = 'tradelab_flutter_ctrader_session';
+  late final CTraderSessionTokenWriteQueue _sessionWrites =
+      CTraderSessionTokenWriteQueue((token) => token == null
+          ? _storage.delete(key: _tokenKey)
+          : _storage.write(key: _tokenKey, value: token));
+  bool _replacingOAuthAuthorization = false;
   static const _selectedAccountKey = 'tradelab_flutter_ctrader_selected_account';
+  // Account choices can be changed A -> B -> A very quickly on Android.
+  // Serialize preference writes so an earlier slow operation never wins.
+  late final CTraderSerializedSecureValueWriteQueue _accountSelectionWrites =
+      CTraderSerializedSecureValueWriteQueue((account) => account == null
+          ? _storage.delete(key: _selectedAccountKey)
+          : _storage.write(key: _selectedAccountKey, value: account));
   static const _pendingKey = 'tradelab_flutter_oauth_pending';
   String? _token;
   String? accountId;
@@ -31,6 +47,42 @@ class MarketController extends ChangeNotifier {
   // Read-only, short-lived source quotes for optional bid/ask scale labels.
   // Changing a chart setting must never trigger a quote/network request.
   final Map<String, MarketQuote> _recentQuotes = {};
+  // A broker may switch A -> B -> A while the first request is still in
+  // flight. Matching account IDs alone cannot validate that old response.
+  int _quoteAccountEpoch = 0;
+
+  /// Changes whenever broker authorization or the selected account changes,
+  /// including A -> B -> A and OAuth re-link to the SAME account number.
+  /// Token rotation for an unchanged session does not invalidate history.
+  int get ctraderAuthorizationRevision => _quoteAccountEpoch;
+
+  void _assertCurrentCTraderRead(
+      String account, int revision, String errorMessage) {
+    if (_replacingOAuthAuthorization ||
+        !ctraderConnected || accountId != account ||
+        _quoteAccountEpoch != revision) {
+      throw MarketDataException(errorMessage);
+    }
+  }
+
+  void _invalidateCTraderQuoteSession() {
+    _quoteAccountEpoch++;
+    forexPrices.clear();
+    _recentQuotes.removeWhere((_, quote) => quote.source == TradeSource.ctrader);
+  }
+
+  /// Markets and the chart can request the same source price concurrently.
+  /// Keep the broker's newest timestamp instead of allowing a late response
+  /// from an older request to roll the displayed BID/ASK backwards.
+  MarketQuote _rememberNewestQuote(MarketQuote incoming) {
+    final previous = _recentQuotes[incoming.symbol];
+    if (previous != null && previous.source == incoming.source &&
+        previous.timestampMs >= incoming.timestampMs) {
+      return previous;
+    }
+    _recentQuotes[incoming.symbol] = incoming;
+    return incoming;
+  }
 
   MarketQuote? recentQuoteFor(TradeSymbol symbol) {
     final quote = _recentQuotes[symbol.code];
@@ -106,6 +158,7 @@ class MarketController extends ChangeNotifier {
     final ticket = uri.queryParameters['ticket'];
     if (ticket == null || ticket.isEmpty) return;
     busy = true;
+    _replacingOAuthAuthorization = true;
     error = null;
     notifyListeners();
     try {
@@ -121,17 +174,46 @@ class MarketController extends ChangeNotifier {
       // Verify account access before activating a token or claiming connection.
       final authorized = await _api.accounts(issued);
       if (authorized.isEmpty) throw const MarketDataException('لا توجد حسابات cTrader مصرح بها.');
+      // Keep the user's currently selected LIVE broker when the new OAuth
+      // grant still authorizes it. Otherwise choose the first permitted
+      // account rather than reviving an unapproved stored preference.
+      final chosenAccount = authorized.any((item) => item.id == accountId)
+          ? accountId! : authorized.first.id;
       _api.forgetCTraderSymbols();
-      await _storage.write(key: _tokenKey, value: issued);
+      // A newly authorized session must never inherit BID/ASK from the old
+      // token, including when the selected account number is unchanged.
+      _invalidateCTraderQuoteSession();
+      // Complete earlier, possibly slow token-rotation writes BEFORE the
+      // new OAuth credential is persisted. Incoming old-session headers are
+      // ignored throughout re-authorization.
+      await _sessionWrites.persist(issued);
       _token = issued;
       accounts = authorized;
-      accountId = authorized.first.id;
+      accountId = chosenAccount;
+      try {
+        // This preference write follows any still-pending A->B->A tap, so
+        // a stale choice cannot override the confirmed OAuth account.
+        await _accountSelectionWrites.persist(chosenAccount);
+      } catch (_) {
+        // Authentication succeeded, but a failure to save the preference
+        // must be clearly reported without falsely disconnecting the user.
+        error = 'تم ربط cTrader، لكن تعذر حفظ الحساب المختار على الجهاز.';
+      }
     } catch (e) {
       error = e is MarketDataException ? e.message : 'فشل تأكيد تسجيل الدخول. حاول مرة أخرى.';
     } finally {
-      await _storage.delete(key: _pendingKey);
-      busy = false;
-      notifyListeners();
+      // A secure-storage failure while deleting the temporary PKCE challenge
+      // must not leave all market history permanently blocked behind a
+      // lingering "OAuth replacement in progress" gate.
+      try {
+        await _storage.delete(key: _pendingKey);
+      } catch (_) {
+        error ??= 'تعذر تنظيف محاولة تفويض cTrader المؤقتة من التخزين الآمن.';
+      } finally {
+        _replacingOAuthAuthorization = false;
+        busy = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -154,7 +236,9 @@ class MarketController extends ChangeNotifier {
           ? current
           : accounts.any((a) => a.id == preferred)
               ? preferred : null;
-      accountId = accounts.isEmpty ? null : selected ?? accounts.first.id;
+      final nextAccount = accounts.isEmpty ? null : selected ?? accounts.first.id;
+      if (nextAccount != accountId) _invalidateCTraderQuoteSession();
+      accountId = nextAccount;
       _api.forgetCTraderSymbols();
       if (accounts.isEmpty) {
         error = 'لا توجد حسابات cTrader متاحة لهذا التفويض.';
@@ -169,12 +253,10 @@ class MarketController extends ChangeNotifier {
   void chooseAccount(String id) {
     if (accounts.any((a) => a.id == id)) {
       accountId = id;
-      unawaited(_storage.write(
-        key: _selectedAccountKey, value: id,
-      ).then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+      unawaited(_accountSelectionWrites.persist(id).then<void>(
+          (_) {}, onError: (Object _, StackTrace __) {}));
       _api.forgetCTraderSymbols();
-      forexPrices.clear();
-      _recentQuotes.clear();
+      _invalidateCTraderQuoteSession();
       notifyListeners();
     }
   }
@@ -183,18 +265,31 @@ class MarketController extends ChangeNotifier {
     _token = null;
     accountId = null;
     accounts = const [];
-    forexPrices.clear();
-    _recentQuotes.clear();
+    _invalidateCTraderQuoteSession();
     _api.forgetCTraderSymbols();
-    await _storage.delete(key: _tokenKey);
+    // A queued refresh write cannot finish AFTER logout and restore the
+    // stale credential: deletion waits for all earlier secure writes.
+    await _sessionWrites.persist(null);
     await _storage.delete(key: _pendingKey);
-    await _storage.delete(key: _selectedAccountKey);
+    // The last selected-account write may still be in progress; logout
+    // must remove it AFTER all earlier account choices have finished.
+    await _accountSelectionWrites.persist(null);
     notifyListeners();
   }
 
-  void _onRefreshedToken(String newToken) {
+  void _onRefreshedToken(String newToken, String requestToken) {
+    // A late old-session HTTP response must not restore a disconnected
+    // OAuth credential or replace a newly authorized session's token.
+    if (_replacingOAuthAuthorization ||
+        _token == null || _token != requestToken || newToken.isEmpty) {
+      return;
+    }
     _token = newToken;
-    unawaited(_storage.write(key: _tokenKey, value: newToken));
+    // A failed best-effort rotation write must not create an unhandled
+    // asynchronous error; the next logout/re-link operation still proceeds
+    // through the serialization barrier.
+    unawaited(_sessionWrites.persist(newToken).then<void>(
+      (_) {}, onError: (Object _, StackTrace __) {}));
   }
 
   Future<List<MarketBar>> history(TradeSymbol symbol, String timeframe,
@@ -202,10 +297,20 @@ class MarketController extends ChangeNotifier {
     if (symbol.source == TradeSource.binance) {
       return _api.binanceCandles(symbol: symbol.code, timeframe: timeframe, before: before);
     }
-    if (!ctraderConnected) throw const MarketDataException('اربط حساب cTrader لعرض أسعار الذهب والفوركس.');
-    return _api.ctraderCandles(token: _token!, accountId: accountId!,
+    final account = accountId;
+    final token = _token;
+    final revision = _quoteAccountEpoch;
+    if (account == null || token == null) {
+      throw const MarketDataException(
+          'اربط حساب cTrader لعرض أسعار الذهب والفوركس.');
+    }
+    final bars = await _api.ctraderCandles(
+        token: token, accountId: account,
         symbol: symbol.code, timeframe: timeframe,
         before: before ?? DateTime.now().toUtc());
+    _assertCurrentCTraderRead(account, revision,
+        'تغيّر تفويض cTrader أثناء تحميل الشموع. أعد المحاولة.');
+    return bars;
   }
 
   /// Poll only closed broker Trendbars since the last displayed candle.
@@ -214,6 +319,7 @@ class MarketController extends ChangeNotifier {
       TradeSymbol symbol, String timeframe, int lastBarTimestampMs) async {
     final account = accountId;
     final token = _token;
+    final revision = _quoteAccountEpoch;
     if (symbol.source != TradeSource.ctrader ||
         account == null || token == null) {
       throw const MarketDataException(
@@ -227,19 +333,27 @@ class MarketController extends ChangeNotifier {
       before: DateTime.now().toUtc(),
       fromTimestampMs: lastBarTimestampMs,
     );
-    if (accountId != account || _token == null) {
-      throw const MarketDataException(
-          'تغيّر حساب cTrader أثناء تحديث الشموع. أعد المحاولة.');
-    }
+    _assertCurrentCTraderRead(account, revision,
+        'تغيّر تفويض cTrader أثناء تحديث الشموع. أعد المحاولة.');
     return bars;
   }
 
-  Future<List<MarketTick>> rangeTicks(TradeSymbol symbol, {DateTime? before}) async {
-    if (symbol.source != TradeSource.ctrader || !ctraderConnected) {
-      throw const MarketDataException('شموع المدى تتطلب تيكات BID حقيقية من cTrader.');
+  Future<List<MarketTick>> rangeTicks(
+      TradeSymbol symbol, {DateTime? before}) async {
+    final account = accountId;
+    final token = _token;
+    final revision = _quoteAccountEpoch;
+    if (symbol.source != TradeSource.ctrader ||
+        account == null || token == null) {
+      throw const MarketDataException(
+          'شموع المدى تتطلب تيكات BID حقيقية من cTrader.');
     }
-    return _api.ctraderBidTicks(token: _token!, accountId: accountId!,
+    final ticks = await _api.ctraderBidTicks(
+        token: token, accountId: account,
         symbol: symbol.code, before: before ?? DateTime.now().toUtc());
+    _assertCurrentCTraderRead(account, revision,
+        'تغيّر تفويض cTrader أثناء تحميل تاريخ BID. أعد المحاولة.');
+    return ticks;
   }
 
   /// Refresh just the uncovered interval after a cached six-day window.
@@ -252,6 +366,7 @@ class MarketController extends ChangeNotifier {
   }) async {
     final account = accountId;
     final token = _token;
+    final revision = _quoteAccountEpoch;
     if (symbol.source != TradeSource.ctrader ||
         account == null || token == null) {
       throw const MarketDataException(
@@ -264,18 +379,25 @@ class MarketController extends ChangeNotifier {
       fromMs: fromMs,
       toMs: toMs,
     );
-    if (accountId != account || _token == null) {
-      throw const MarketDataException(
-          'تغيّر حساب cTrader أثناء تحديث تيكات المدى. أعد المحاولة.');
-    }
+    _assertCurrentCTraderRead(account, revision,
+        'تغيّر تفويض cTrader أثناء تحديث تيكات المدى. أعد المحاولة.');
     return ticks;
   }
 
   Future<double> pointSize(TradeSymbol symbol) async {
-    if (!ctraderConnected || symbol.source != TradeSource.ctrader) {
-      throw const MarketDataException('يلزم ربط cTrader لدقة تسعير شموع المدى.');
+    final account = accountId;
+    final token = _token;
+    final revision = _quoteAccountEpoch;
+    if (account == null || token == null ||
+        symbol.source != TradeSource.ctrader) {
+      throw const MarketDataException(
+          'يلزم ربط cTrader لدقة تسعير شموع المدى.');
     }
-    return _api.ctraderPointSize(token: _token!, accountId: accountId!, symbol: symbol.code);
+    final point = await _api.ctraderPointSize(
+        token: token, accountId: account, symbol: symbol.code);
+    _assertCurrentCTraderRead(account, revision,
+        'تغيّر تفويض cTrader أثناء تحميل دقة الرمز. أعد المحاولة.');
+    return point;
   }
 
   /// Returns a fresh source quote on demand; never submits broker orders.
@@ -288,17 +410,19 @@ class MarketController extends ChangeNotifier {
     }
     final account = accountId;
     final token = _token;
+    final quoteEpoch = _quoteAccountEpoch;
     if (!ctraderConnected || token == null || account == null) {
       throw const MarketDataException('اربط حساب cTrader للحصول على سعر فعلي للصفقة التجريبية.');
     }
     final quote = await _api.ctraderQuote(token: token,
       accountId: account, symbol: symbol.code);
-    if (accountId != account || _token == null) {
+    if (accountId != account || _token == null ||
+        quoteEpoch != _quoteAccountEpoch) {
       throw const MarketDataException('تغير حساب cTrader أثناء طلب السعر. أعد المحاولة.');
     }
-    _recentQuotes[symbol.code] = quote;
+    final newest = _rememberNewestQuote(quote);
     notifyListeners();
-    return quote;
+    return newest;
   }
 
   Future<void> refreshQuotes() async {
@@ -306,6 +430,7 @@ class MarketController extends ChangeNotifier {
     loadingQuotes = true;
     notifyListeners();
     final requestedAccount = accountId;
+    final requestedQuoteEpoch = _quoteAccountEpoch;
     await Future.wait(tradeSymbols.map((symbol) async {
       try {
         if (symbol.source == TradeSource.binance) {
@@ -313,16 +438,28 @@ class MarketController extends ChangeNotifier {
         } else if (ctraderConnected && requestedAccount != null) {
           final quote = await _api.ctraderQuote(
               token: _token!, accountId: requestedAccount, symbol: symbol.code);
-          if (ctraderConnected && accountId == requestedAccount) {
-            forexPrices[symbol.code] = quote.bid;
-            _recentQuotes[symbol.code] = quote;
+          if (ctraderConnected && accountId == requestedAccount &&
+              requestedQuoteEpoch == _quoteAccountEpoch) {
+            // A concurrent chart quote may have completed more recently.
+            final newest = _rememberNewestQuote(quote);
+            forexPrices[symbol.code] = newest.bid;
           }
         }
       } catch (_) {
         if (symbol.source == TradeSource.binance) {
           cryptoPrices.remove(symbol.code);
-        } else {forexPrices.remove(symbol.code);}
-        _recentQuotes.remove(symbol.code);
+        } else if (accountId == requestedAccount &&
+            requestedQuoteEpoch == _quoteAccountEpoch) {
+          // A failed batch request must not erase a newer valid quote
+          // returned by the chart while the batch was in flight.
+          final stillFresh = recentQuoteFor(symbol);
+          if (stillFresh != null) {
+            forexPrices[symbol.code] = stillFresh.bid;
+          } else {
+            forexPrices.remove(symbol.code);
+            _recentQuotes.remove(symbol.code);
+          }
+        }
       }
     }));
     loadingQuotes = false;

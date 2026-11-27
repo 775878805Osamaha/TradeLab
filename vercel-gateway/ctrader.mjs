@@ -41,10 +41,10 @@ export function normalizeBar(raw) {
   const deltaOpen = Number(raw.deltaOpen ?? 0);
   const deltaHigh = Number(raw.deltaHigh ?? 0);
   const deltaClose = Number(raw.deltaClose ?? 0);
-  const volume = Number(raw.volume ?? 0);
-  if (![tsMinutes,rawLow,deltaOpen,deltaHigh,deltaClose,volume]
-    .every(Number.isSafeInteger) || tsMinutes <= 0 || rawLow <= 0 ||
-    deltaOpen < 0 || deltaHigh < 0 || deltaClose < 0 || volume < 0 ||
+  const volume = raw.volume == null ? null : Number(raw.volume);
+  if (![tsMinutes,rawLow,deltaOpen,deltaHigh,deltaClose]
+    .every(Number.isSafeInteger) || (volume !== null && !Number.isSafeInteger(volume)) || tsMinutes <= 0 || rawLow <= 0 ||
+    deltaOpen < 0 || deltaHigh < 0 || deltaClose < 0 || (volume !== null && volume < 0) ||
     deltaOpen > deltaHigh || deltaClose > deltaHigh)
     throw Error('invalid_ctrader_trendbar');
   const timestamp=tsMinutes*60000;
@@ -249,7 +249,22 @@ class Channel {
       throw Error('invalid_trendbar_window');
     await this.account(accountId,accessToken);
     try {
-      return await this.trendbarSlice(accountId,symbolId,period,from,to,count);
+      const page=await this.trendbarSlice(
+        accountId,symbolId,period,from,to,count);
+      if(page.hasMore===true && page.candles.length===0) {
+        // The broker can return a dense/truncated response whose bars ALL
+        // precede the requested lower bound (e.g. Sunday/Monday around
+        // closed gold sessions). Filtering those out leaves hasMore=true
+        // but zero source candles, which Flutter correctly refuses.
+        //
+        // Retry ONCE using cTrader's documented (count,to) request. This
+        // keeps the real authenticated source, allows older market bars,
+        // and never invents a weekend candle or hides a second empty page.
+        const fallback=await this.trendbarSlice(
+          accountId,symbolId,period,from,to,count,{countBack:true});
+        return {...fallback,queryMode:'count_back'};
+      }
+      return page;
     } catch(error) {
       // cTrader's allowed timestamp span is broker- and timeframe-specific.
       // Its documented Trendbars request permits omitting fromTimestamp when
@@ -300,8 +315,9 @@ class Channel {
         // conflicting OHLC for a single broker candle is a hard error.
         if(previous.open!==bar.open || previous.high!==bar.high ||
            previous.low!==bar.low || previous.close!==bar.close ||
-           previous.volume!==bar.volume)
+           (previous.volume!==null && bar.volume!==null && previous.volume!==bar.volume))
           throw Error('invalid_ctrader_trendbar_timestamps');
+        if(previous.volume===null && bar.volume!==null) previous.volume=bar.volume;
         continue;
       }
       candles.push(bar);

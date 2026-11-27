@@ -1,0 +1,360 @@
+[
+  {
+    "name": "ta.sma",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  },
+  {
+    "name": "ta.ema",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "verified_scoped_capture",
+    "longReference": "seeded-360-ohlcv-v2 (CI passed; lengths 14 and 50, internal only)",
+    "externalReference": {
+      "symbol": "TVC:GOLD",
+      "timeframe": "1h",
+      "length": 14,
+      "absoluteTolerance": 0.000001,
+      "startIndex": 300,
+      "endIndexExclusive": 998,
+      "status": "verified_scoped_capture",
+      "classification": "مطابقة لـ TradingView على TVC:GOLD 1h بطول 14 بتسامح 1e-6",
+      "testedHead": "0ce365013639f70d2fc588f562e6dbb9dd2ebb9d",
+      "ciRun": 45407514078,
+      "evidencePath": "docs/evidence/PINE_STAGE3B_TVC_GOLD_DART_CI_45407514078.json",
+      "referenceCount": 698,
+      "warmup": {
+        "startIndex": 0,
+        "endIndexExclusive": 300,
+        "reference": false,
+        "knownLimitation": "When available history starts later than TradingView's calculation history, EMA/RMA/ATR/RSI can differ or be na during early bars. Indices 0..299 of this capture are diagnostic only; approximately 300 preceding available bars is a tested cutoff for this capture, not a universal convergence guarantee. Replay near the beginning of available history may show different values; never use future candles or seed from reference outputs.",
+        "replayMayDiffer": true
+      },
+      "metrics": [
+        {
+          "route": "library",
+          "maxAbs": 5.093170329928398e-11,
+          "maxAbsIndex": 458,
+          "maxRel": 1.3511059087501156e-14,
+          "maxRelIndex": 980
+        },
+        {
+          "route": "pine",
+          "maxAbs": 5.093170329928398e-11,
+          "maxAbsIndex": 458,
+          "maxRel": 1.3511059087501156e-14,
+          "maxRelIndex": 980
+        },
+        {
+          "route": "legacy",
+          "maxAbs": 5.093170329928398e-11,
+          "maxAbsIndex": 395,
+          "maxRel": 1.3672296876791657e-14,
+          "maxRelIndex": 970
+        }
+      ]
+    },
+    "knownLimitation": "When available history starts later than TradingView's calculation history, EMA/RMA/ATR/RSI can differ or be na during early bars. Indices 0..299 of this capture are diagnostic only; approximately 300 preceding available bars is a tested cutoff for this capture, not a universal convergence guarantee. Replay near the beginning of available history may show different values; never use future candles or seed from reference outputs."
+  },
+  {
+    "name": "ta.rma",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "verified_scoped_capture",
+    "longReference": "seeded-360-ohlcv-v2 (CI passed; lengths 14 and 50, internal only)",
+    "externalReference": {
+      "symbol": "TVC:GOLD",
+      "timeframe": "1h",
+      "length": 14,
+      "absoluteTolerance": 0.000001,
+      "startIndex": 300,
+      "endIndexExclusive": 998,
+      "status": "verified_scoped_capture",
+      "classification": "مطابقة لـ TradingView على TVC:GOLD 1h بطول 14 بتسامح 1e-6",
+      "testedHead": "0ce365013639f70d2fc588f562e6dbb9dd2ebb9d",
+      "ciRun": 45407514078,
+      "evidencePath": "docs/evidence/PINE_STAGE3B_TVC_GOLD_DART_CI_45407514078.json",
+      "referenceCount": 698,
+      "warmup": {
+        "startIndex": 0,
+        "endIndexExclusive": 300,
+        "reference": false,
+        "knownLimitation": "When available history starts later than TradingView's calculation history, EMA/RMA/ATR/RSI can differ or be na during early bars. Indices 0..299 of this capture are diagnostic only; approximately 300 preceding available bars is a tested cutoff for this capture, not a universal convergence guarantee. Replay near the beginning of available history may show different values; never use future candles or seed from reference outputs.",
+        "replayMayDiffer": true
+      },
+      "metrics": [
+        {
+          "route": "library",
+          "maxAbs": 6.13727024756372e-9,
+          "maxAbsIndex": 300,
+          "maxRel": 1.4702244473361661e-12,
+          "maxRelIndex": 300
+        },
+        {
+          "route": "pine",
+          "maxAbs": 6.13727024756372e-9,
+          "maxAbsIndex": 300,
+          "maxRel": 1.4702244473361661e-12,
+          "maxRelIndex": 300
+        }
+      ]
+    },
+    "knownLimitation": "When available history starts later than TradingView's calculation history, EMA/RMA/ATR/RSI can differ or be na during early bars. Indices 0..299 of this capture are diagnostic only; approximately 300 preceding available bars is a tested cutoff for this capture, not a universal convergence guarantee. Replay near the beginning of available history may show different values; never use future candles or seed from reference outputs."
+  },
+  {
+    "name": "ta.wma",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  },
+  {
+    "name": "ta.rsi",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "verified_scoped_capture",
+    "longReference": "seeded-360-ohlcv-v2 (CI passed; lengths 14 and 50, internal only)",
+    "externalReference": {
+      "symbol": "TVC:GOLD",
+      "timeframe": "1h",
+      "length": 14,
+      "absoluteTolerance": 0.000001,
+      "startIndex": 300,
+      "endIndexExclusive": 998,
+      "status": "verified_scoped_capture",
+      "classification": "مطابقة لـ TradingView على TVC:GOLD 1h بطول 14 بتسامح 1e-6",
+      "testedHead": "0ce365013639f70d2fc588f562e6dbb9dd2ebb9d",
+      "ciRun": 45407514078,
+      "evidencePath": "docs/evidence/PINE_STAGE3B_TVC_GOLD_DART_CI_45407514078.json",
+      "referenceCount": 698,
+      "warmup": {
+        "startIndex": 0,
+        "endIndexExclusive": 300,
+        "reference": false,
+        "knownLimitation": "When available history starts later than TradingView's calculation history, EMA/RMA/ATR/RSI can differ or be na during early bars. Indices 0..299 of this capture are diagnostic only; approximately 300 preceding available bars is a tested cutoff for this capture, not a universal convergence guarantee. Replay near the beginning of available history may show different values; never use future candles or seed from reference outputs.",
+        "replayMayDiffer": true
+      },
+      "metrics": [
+        {
+          "route": "library",
+          "maxAbs": 3.2247626791104267e-9,
+          "maxAbsIndex": 300,
+          "maxRel": 5.418948883780874e-11,
+          "maxRelIndex": 300
+        },
+        {
+          "route": "pine",
+          "maxAbs": 3.2247626791104267e-9,
+          "maxAbsIndex": 300,
+          "maxRel": 5.418948883780874e-11,
+          "maxRelIndex": 300
+        },
+        {
+          "route": "legacy",
+          "maxAbs": 3.2247626791104267e-9,
+          "maxAbsIndex": 300,
+          "maxRel": 5.418948883780874e-11,
+          "maxRelIndex": 300
+        }
+      ]
+    },
+    "knownLimitation": "When available history starts later than TradingView's calculation history, EMA/RMA/ATR/RSI can differ or be na during early bars. Indices 0..299 of this capture are diagnostic only; approximately 300 preceding available bars is a tested cutoff for this capture, not a universal convergence guarantee. Replay near the beginning of available history may show different values; never use future candles or seed from reference outputs."
+  },
+  {
+    "name": "ta.atr",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "2",
+    "verification": "internal_independent_formula",
+    "tradingView": "verified_scoped_capture",
+    "longReference": "seeded-360-ohlcv-v2 (CI passed; lengths 14 and 50, internal only)",
+    "externalReference": {
+      "symbol": "TVC:GOLD",
+      "timeframe": "1h",
+      "length": 14,
+      "absoluteTolerance": 0.000001,
+      "startIndex": 300,
+      "endIndexExclusive": 998,
+      "status": "verified_scoped_capture",
+      "classification": "مطابقة لـ TradingView على TVC:GOLD 1h بطول 14 بتسامح 1e-6",
+      "testedHead": "0ce365013639f70d2fc588f562e6dbb9dd2ebb9d",
+      "ciRun": 45407514078,
+      "evidencePath": "docs/evidence/PINE_STAGE3B_TVC_GOLD_DART_CI_45407514078.json",
+      "referenceCount": 698,
+      "warmup": {
+        "startIndex": 0,
+        "endIndexExclusive": 300,
+        "reference": false,
+        "knownLimitation": "When available history starts later than TradingView's calculation history, EMA/RMA/ATR/RSI can differ or be na during early bars. Indices 0..299 of this capture are diagnostic only; approximately 300 preceding available bars is a tested cutoff for this capture, not a universal convergence guarantee. Replay near the beginning of available history may show different values; never use future candles or seed from reference outputs.",
+        "replayMayDiffer": true
+      },
+      "metrics": [
+        {
+          "route": "library",
+          "maxAbs": 4.646079077019749e-10,
+          "maxAbsIndex": 300,
+          "maxRel": 3.770779633847076e-11,
+          "maxRelIndex": 300
+        },
+        {
+          "route": "pine",
+          "maxAbs": 4.646079077019749e-10,
+          "maxAbsIndex": 300,
+          "maxRel": 3.770779633847076e-11,
+          "maxRelIndex": 300
+        }
+      ]
+    },
+    "knownLimitation": "When available history starts later than TradingView's calculation history, EMA/RMA/ATR/RSI can differ or be na during early bars. Indices 0..299 of this capture are diagnostic only; approximately 300 preceding available bars is a tested cutoff for this capture, not a universal convergence guarantee. Replay near the beginning of available history may show different values; never use future candles or seed from reference outputs."
+  },
+  {
+    "name": "ta.tr",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "true",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  },
+  {
+    "name": "ta.macd",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "library-only",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "library prefix rebuild only",
+    "call": "close, 2, 3, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  },
+  {
+    "name": "ta.bb",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "library-only",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "library prefix rebuild only",
+    "call": "close, 2, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  },
+  {
+    "name": "ta.stdev",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  },
+  {
+    "name": "ta.highest",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  },
+  {
+    "name": "ta.lowest",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  },
+  {
+    "name": "ta.change",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  },
+  {
+    "name": "ta.roc",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 2",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  },
+  {
+    "name": "ta.crossover",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 13.5",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  },
+  {
+    "name": "ta.crossunder",
+    "formulaReference": "manual-ohlcv-v1",
+    "runtime": "closed-bar scalar",
+    "status": "مختبرة داخليًا بمعادلة مستقلة",
+    "na": "internal policy tests",
+    "replay": "runtime guarded prefix rebuild",
+    "call": "close, 13.5",
+    "verification": "internal_independent_formula",
+    "tradingView": "not_verified",
+    "longReference": "not included in long fixture"
+  }
+]

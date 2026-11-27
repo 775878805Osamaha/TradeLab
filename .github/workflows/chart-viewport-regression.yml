@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 jobs:
   viewport:
+    # Android instrumentation and screenshots create APKs internally.
+    # Paused until TradeLab features are complete and the owner approves builds.
+    if: ${{ false }}
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:

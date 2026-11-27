@@ -8,6 +8,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:tradelab_flutter/data/market_api.dart';
 import 'package:tradelab_flutter/data/market_controller.dart';
 import 'package:tradelab_flutter/main.dart';
+import 'package:tradelab_flutter/replay/replay_training_session.dart';
+import 'package:tradelab_flutter/replay/replay_mobile_controls.dart';
+import 'package:tradelab_flutter/replay/replay_trade_overlay.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +19,9 @@ void main() {
       (tester) async {
     // Reuse the fixed, known-good Binance fixture from widget_test.dart,
     // which already proves the real chart and Replay entry point work.
+    var sourcePageRequests = 0;
     final client = MockClient((request) async {
+      sourcePageRequests++;
       expect(request.url.host, 'api.binance.com');
       expect(request.url.path, '/api/v3/klines');
       expect(request.url.queryParameters['symbol'], 'BTCUSDT');
@@ -58,23 +63,188 @@ void main() {
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
     await tester.tap(find.byTooltip('تشغيل Replay داخل الشارت'));
     await tester.pumpAndSettle();
+    // Replay first lets the user choose a verified source candle: no
+    // historical future data is hidden or training session opened until OK.
+    expect(find.byKey(const Key('replay-start-overlay')), findsOneWidget);
+    expect(find.byKey(const Key('replay-start-scissors')), findsOneWidget);
+    expect(find.byKey(const Key('replay-play-pause')), findsNothing);
+    await tester.tap(find.byKey(const Key('replay-confirm-start')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-start-overlay')), findsNothing);
     expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+    // A historical Replay header must never reveal contemporary BID/ASK,
+    // current feed status, or the later of these two verified source bars.
+    final evidence = find.byKey(const Key('chart-provenance-header'));
+    expect(tester.widget<Text>(evidence).data, 'Replay تاريخي · Binance');
+    final tooltipFinder = find.ancestor(
+      of: evidence, matching: find.byType(Tooltip));
+    expect(tooltipFinder, findsOneWidget);
+    final message = tester.widget<Tooltip>(tooltipFinder).message!;
+    expect(message, contains('BTCUSDT'));
+    expect(message, contains('آخر شمعة مكشوفة'));
+    expect(message, isNot(contains('BID/ASK')));
+    expect(message, isNot(contains('آخر شمعة مغلقة')));
+    final firstBar = DateTime.fromMillisecondsSinceEpoch(
+        1700000000000, isUtc: true);
+    final firstTime = '${firstBar.hour.toString().padLeft(2, '0')}:'
+        '${firstBar.minute.toString().padLeft(2, '0')} UTC';
+    expect(message, contains(firstTime));
     expect(find.byKey(const Key('replay-speed-picker')), findsOneWidget);
-    expect(find.byKey(const Key('replay-practice-order')), findsOneWidget);
+    final requestsBeforeReplayPan = sourcePageRequests;
+    // Replay with no practice levels or rectangles has no viewport-snapshot
+    // overlays. Touch samples should repaint the chart without rebuilding the
+    // toolbar (same fast path used by the normal chart).
+    final replayChart = find.byKey(const Key('chart-gesture-area'));
+    // This test measures paint-only viewport updates, NOT inertia.
+    // A 40px/500ms drag stays below chartShouldFling's 180 px/s
+    // threshold: pumpAndSettle must not wait for an active fling animation.
+    // Dedicated momentum tests exercise high-velocity gestures separately.
+    await tester.timedDrag(replayChart, const Offset(-40, 0),
+        const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(sourcePageRequests, requestsBeforeReplayPan,
+        reason: 'Replay pan must not automatically request older broker data');
+    final replayHeader = find.byKey(const Key('chart-reference-header'));
+    final previousReplayHeader = tester.widget(replayHeader);
+    await tester.timedDrag(replayChart, const Offset(-45, 0),
+        const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(identical(previousReplayHeader, tester.widget(replayHeader)), isTrue,
+        reason: 'Normal Replay panning should not rebuild its toolbar');
+    expect(tester.takeException(), isNull);
+    // The user complained that toolbars and a giant trading strip obscure
+    // the candles. They are HIDDEN until deliberately opened from settings.
+    expect(find.byKey(const Key('chart-reference-toolbar')), findsNothing);
+    expect(find.byKey(const Key('drawing-rail-cursor')), findsNothing);
+    expect(find.byKey(const Key('replay-trading-buttons')), findsNothing);
+    expect(find.byKey(const Key('replay-inline-trading')), findsNothing);
+    expect(tester.getSize(find.byKey(const Key('chart-reference-header'))).height,
+        48);
+    await tester.tap(find.byKey(const Key('replay-start-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('replay-show-trading-menu')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-inline-trading')), findsOneWidget);
+    expect(find.byKey(const Key('replay-inline-buy')), findsOneWidget);
+    expect(find.byKey(const Key('replay-inline-sell')), findsOneWidget);
+    final flatten = tester.widget<OutlinedButton>(
+        find.byKey(const Key('replay-flatten-trades')));
+    expect(flatten.onPressed, isNull,
+        reason: 'No open practice position may be flattened');
+    await tester.tap(find.byKey(const Key('replay-inline-sell')));
+    await tester.pumpAndSettle();
+    expect(find.text('صفقة تدريب داخل Replay'), findsOneWidget);
+    expect(tester.widget<DropdownButton<ReplaySide>>(
+        find.byKey(const Key('replay-trade-side'))).value, ReplaySide.sell,
+        reason: 'Sell ticket preselects SELL, never silently opens BUY');
+    await tester.tap(find.text('إلغاء').last);
+    await tester.pumpAndSettle();
 
+    // Hide again, proving trading tools do not occupy chart space by default.
+    await tester.tap(find.byKey(const Key('replay-start-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('replay-show-trading-menu')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('replay-inline-trading')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('replay-more-actions')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('replay-practice-order')));
     await tester.pumpAndSettle();
     expect(find.text('صفقة تدريب داخل Replay'), findsOneWidget);
     await tester.tap(find.byKey(const Key('replay-trade-confirm')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('صفقاتي (1)'), findsOneWidget);
+    expect(tester.widget<ReplayMobileControls>(
+        find.byType(ReplayMobileControls)).tradeCount, 1);
+    expect(find.byKey(const Key('replay-practice-levels-overlay')),
+        findsOneWidget,
+        reason: 'An entered practice trade should have chart markers');
+
+    // Real verified Replay candles + actual local practice order: gestures
+    // must move the chart and its independent SL/TP painter together,
+    // without rebuilding the enclosing Replay header for every sample.
+    final gestureArea = find.byKey(const Key('chart-gesture-area'));
+    final practiceLayer =
+        find.byKey(const Key('replay-practice-levels-overlay'));
+    await tester.timedDrag(gestureArea, const Offset(-35, 0),
+        const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    final headerWithOrder = tester.widget(
+        find.byKey(const Key('chart-reference-header')));
+    final firstPainter = tester.widget<CustomPaint>(practiceLayer)
+        .painter! as ReplayTradeOverlayPainter;
+    final firstViewport = firstPainter.currentViewport;
+    await tester.timedDrag(gestureArea, const Offset(-40, 0),
+        const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 400));
+    final secondPainter = tester.widget<CustomPaint>(practiceLayer)
+        .painter! as ReplayTradeOverlayPainter;
+    expect(identical(firstPainter, secondPainter), isTrue,
+        reason: 'Practice level overlay must repaint, not rebuild');
+    expect(secondPainter.currentViewport, isNot(firstViewport),
+        reason: 'Practice levels must read the current moving viewport');
+    expect(
+      identical(
+        headerWithOrder,
+        tester.widget(find.byKey(const Key('chart-reference-header'))),
+      ),
+      isTrue,
+      reason: 'Replay toolbar must remain stable with practice levels',
+    );
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const Key('replay-more-actions')));
+    await tester.pumpAndSettle();
+    expect(find.text('صفقاتي (1)'), findsOneWidget);
     await tester.tap(find.byKey(const Key('replay-practice-list')));
     await tester.pumpAndSettle();
     expect(find.text('صفقات التدريب التاريخية'), findsOneWidget);
     expect(find.textContaining('مفتوحة'), findsWidgets);
     await tester.tap(find.text('إغلاق').last);
     await tester.pumpAndSettle();
+
+    // Reset may not destroy the settled trade without an explicit decision.
+    final reset = find.byKey(const Key('replay-reset-start'));
+    expect(reset, findsOneWidget);
+    await tester.ensureVisible(reset);
+    await tester.pumpAndSettle();
+    await tester.tap(reset);
+    await tester.pumpAndSettle();
+    expect(find.text('العودة إلى بداية Replay'), findsOneWidget);
+    expect(find.text('حفظ والعودة للبداية'), findsOneWidget);
+    await tester.tap(find.text('إلغاء').last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<ReplayMobileControls>(
+        find.byType(ReplayMobileControls)).tradeCount, 1,
+        reason: 'Cancelling reset must keep the existing practice trade');
+
+    await tester.ensureVisible(reset);
+    await tester.tap(reset);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('replay-confirm-reset')));
+    await tester.pumpAndSettle();
+    // The confirmed reset deliberately awaits a REAL durable FFI SQLite
+    // write. FakeAsync pump(duration) advances widget time but not native
+    // database I/O; yield to the real event loop as Flutter recommends.
+    for (var attempt = 0;
+        attempt < 25 &&
+            tester.widget<ReplayMobileControls>(
+                find.byType(ReplayMobileControls)).tradeCount != 0;
+        attempt++) {
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('العودة إلى بداية Replay'), findsNothing,
+        reason: 'The approved reset dialog should have closed');
+    expect(tester.widget<ReplayMobileControls>(
+        find.byType(ReplayMobileControls)).tradeCount, 0,
+        reason: 'Approved reset creates a new empty Replay practice session');
+    expect(find.byKey(const Key('replay-play-pause')), findsOneWidget);
+    expect(find.byKey(const Key('replay-practice-levels-overlay')),
+        findsNothing,
+        reason: 'A prior trade must not remain visible in the rewound chart');
 
     expect(find.byKey(const Key('chart-gesture-area')), findsOneWidget);
     expect(tester.takeException(), isNull);

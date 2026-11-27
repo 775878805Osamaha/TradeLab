@@ -1,0 +1,209 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:tradelab_flutter/chart/chart_indicator_engine.dart';
+import 'package:tradelab_flutter/chart/chart_indicator_library.dart';
+import 'package:tradelab_flutter/chart/chart_indicator_pane.dart';
+import 'package:tradelab_flutter/chart/chart_viewport.dart';
+import 'package:tradelab_flutter/data/tradelab_data.dart';
+
+void main() {
+  Future<void> open(WidgetTester tester, {
+    required ChartIndicatorDefinition indicator,
+    List<TradeCandle>? candles,
+    Size size = const Size(390,844),
+    VoidCallback? remove,
+    GestureScaleUpdateCallback? drag,
+  }) async {
+    await tester.binding.setSurfaceSize(size);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source = candles ?? List<TradeCandle>.generate(100,(i) {
+      final close = 100+(i%13).toDouble();
+      return TradeCandle(close,close+1,close-1,close);
+    });
+    final controller = ValueNotifier<int>(0);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: Center(child: ChartIndicatorPane(
+        candles: source, indicator: indicator,
+        cache: ChartIndicatorSeriesCache(),
+        viewport: () => const ChartViewport(
+          barWidth: 10, scrollBars: 0, rightMarginBars: 4),
+        repaint: controller,
+        onRemove: remove ?? () {},
+        onScaleStart: (_) {},
+        onScaleUpdate: drag ?? (_) {},
+      ))),
+    ));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('RSI is an independent visible pane with its own axis',
+      (tester) async {
+    await open(tester,
+      indicator: const ChartIndicatorDefinition('rsi-14','RSI 14',14));
+    expect(find.byKey(const Key('chart-indicator-pane-rsi-14')),
+        findsOneWidget);
+    expect(find.text('RSI 14'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('MACD draws 3 series with honest own-value axis at 320dp',
+      (tester) async {
+    await open(tester,
+      indicator: const ChartIndicatorDefinition('macd','MACD',12),
+      size: const Size(320,640));
+    expect(find.byKey(const Key('chart-indicator-pane-macd')),
+        findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('pane close removes only its own study', (tester) async {
+    var removed = 0;
+    await open(tester,
+      indicator: const ChartIndicatorDefinition('atr-14','ATR 14',14),
+      remove: () => removed++);
+    await tester.tap(find.byKey(
+      const Key('chart-indicator-remove-atr-14')));
+    await tester.pumpAndSettle();
+    expect(removed,1);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('gesture listener is wired to the shared chart viewport',
+      (tester) async {
+    var gestures = 0;
+    await open(tester,
+      indicator: const ChartIndicatorDefinition('rsi-14','RSI 14',14),
+      drag: (_) => gestures++);
+    await tester.drag(find.byKey(
+      const Key('chart-indicator-pane-rsi-14')),const Offset(120,0));
+    await tester.pumpAndSettle();
+    expect(gestures,greaterThan(0));
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('source-empty pane stays blank instead of inventing quotes',
+      (tester) async {
+    await open(tester,
+      indicator: const ChartIndicatorDefinition('macd','MACD',12),
+      candles: []);
+    expect(find.byKey(const Key('chart-indicator-pane-macd')),
+        findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+  testWidgets('Stochastic has independently scaled 0–100 pane at 320dp',
+      (tester) async {
+    await open(tester,
+      indicator: const ChartIndicatorDefinition(
+        'stoch-14','Stochastic 14',14),
+      size: const Size(320, 640));
+    expect(find.byKey(const Key('chart-indicator-pane-stoch-14')),
+      findsOneWidget);
+    expect(find.text('Stochastic 14'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ROC zero-axis pane does not alter price chart placement',
+      (tester) async {
+    await open(tester,
+      indicator: const ChartIndicatorDefinition('roc-9','ROC 9',9));
+    expect(find.byKey(const Key('chart-indicator-pane-roc-9')),
+      findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+
+  testWidgets('pane move and resize controls are real accessible actions',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var up = 0;
+    var down = 0;
+    var resized = 0;
+    final source = List<TradeCandle>.generate(90, (i) {
+      final close = 100.0 + i;
+      return TradeCandle(close,close+1,close-1,close);
+    });
+    final redraw = ValueNotifier<int>(0);
+    addTearDown(redraw.dispose);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Column(
+      children: [ChartIndicatorPane(
+        indicator: const ChartIndicatorDefinition('rsi-14','RSI 14',14),
+        candles: source, cache: ChartIndicatorSeriesCache(),
+        viewport: () => const ChartViewport(
+          barWidth: 10,scrollBars: 0,rightMarginBars: 4),
+        repaint: redraw,
+        height: 128,
+        onRemove: () {},
+        onMoveUp: () => up++,
+        onMoveDown: () => down++,
+        onResize: () => resized++,
+        onScaleStart: (_) {},
+        onScaleUpdate: (_) {},
+      )],
+    ))));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byKey(
+      const Key('chart-indicator-pane-rsi-14'))).height,128);
+    await tester.tap(find.byKey(
+      const Key('chart-indicator-up-rsi-14')));
+    await tester.tap(find.byKey(
+      const Key('chart-indicator-down-rsi-14')));
+    await tester.tap(find.byKey(
+      const Key('chart-indicator-resize-rsi-14')));
+    await tester.pumpAndSettle();
+    expect(up,1);
+    expect(down,1);
+    expect(resized,1);
+    expect(tester.takeException(),isNull);
+  });
+
+
+  test('Pine oscillator scale preserves negative-only source output', () {
+    const indicator = ChartIndicatorDefinition('script-neg', 'Negative', 1,
+      custom: true, kindOverride: ChartIndicatorKind.pine,
+      pineOverlay: false);
+    final range = ChartIndicatorPaneScale.domain(
+      indicator: indicator,
+      plots: const [ChartIndicatorPlot('Bearish',
+          <double?>[-4, -8, -12, -16])],
+      start: 0, end: 4);
+    expect(range, isNotNull);
+    expect(range!.$1, lessThan(-16));
+    expect(range.$2, lessThan(0),
+      reason: 'All-negative custom Pine pane must not be forced above zero');
+  });
+
+  test('Pine histogram keeps the genuine zero baseline visible', () {
+    const indicator = ChartIndicatorDefinition('script-hist', 'Histogram', 1,
+      custom: true, kindOverride: ChartIndicatorKind.pine,
+      pineOverlay: false);
+    final range = ChartIndicatorPaneScale.domain(
+      indicator: indicator,
+      plots: const [
+        ChartIndicatorPlot('One', <double?>[3, -4, 2],
+          histogram: true),
+        ChartIndicatorPlot('Line', <double?>[2, 2, 1]),
+      ],
+      start: 0, end: 3);
+    expect(range!.$1, lessThan(-4));
+    expect(range.$2, greaterThan(3));
+    final unchanged = ChartIndicatorPaneScale.domain(
+      indicator: const ChartIndicatorDefinition('rsi-14','RSI',14),
+      plots: const [ChartIndicatorPlot('RSI', <double?>[20,60,99])],
+      start: 0, end: 3);
+    expect(unchanged, (0.0,100.0));
+  });
+
+  test('source-empty Pine pane has no invented oscillator scale', () {
+    const indicator = ChartIndicatorDefinition('script-na', 'Empty', 1,
+      custom: true, kindOverride: ChartIndicatorKind.pine,
+      pineOverlay: false);
+    expect(ChartIndicatorPaneScale.domain(
+      indicator: indicator,
+      plots: const [ChartIndicatorPlot('Plot',
+        <double?>[null,null,null])],
+      start: 0, end: 3), isNull);
+  });
+
+}

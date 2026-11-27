@@ -1,4 +1,5 @@
 import '../data/tradelab_data.dart';
+import 'replay_revealed_exit_index.dart';
 
 /// Replay practice is entirely local and never submits an order to a broker
 /// or the live/paper trading journal. P&L is PRICE DELTA x quantity, not USD.
@@ -92,11 +93,91 @@ class ReplayTrainingTrade {
 
 /// Deterministic trade simulation. It can only advance through revealed bars.
 /// If the user rewinds, entries and exits from unrevealed bars are rolled back.
-/// Intrabar SL+TP ambiguity is always resolved conservatively (SL first).
+/// Historical SL/TP ties follow TradingView's default OHLC price-path
+/// assumption (open -> nearer extreme -> farther extreme -> close).
+/// Only an exactly equidistant/unknown path keeps the conservative SL tie.
 class ReplayTrainingSession {
   final List<ReplayTrainingTrade> _trades = [];
   int _visibleCount = 0;
   int _nextId = 1;
+  ReplayRevealedExitIndex? _exitIndex;
+
+  // For a handful of practice trades or normal one-bar playback, the
+  // existing sequential loop avoids an unnecessary tree allocation.
+  // A deep seek with MANY bracketed trades would otherwise perform
+  // thousands of source-bar reads per trade on Flutter's UI isolate.
+  static bool shouldUseIndexedExitSearch({
+    required int newlyRevealedBars,
+    required int watchedTrades,
+  }) => newlyRevealedBars >= 2048 && watchedTrades >= 8 &&
+      newlyRevealedBars * watchedTrades >= 100000;
+
+  /// One authoritative fill policy shared by small-step playback and the
+  /// indexed long-seek path. The trade never fills on its own entry bar;
+  /// price-order gaps fill at the actual next open, before intrabar
+  /// extremes. If SL and TP both touch inside that bar, TradingView's
+  /// default OHLC path uses the nearer extreme first; exact equidistance
+  /// remains conservative (SL), since no source tick order is available.
+  static ReplayTrainingTrade? _exitOnBar(
+      ReplayTrainingTrade trade, TradeCandle candle, int bar) {
+    if (trade.entryIndex >= bar) return null;
+    final stopped = trade.stopLoss != null &&
+        (trade.side == ReplaySide.buy
+            ? candle.low <= trade.stopLoss!
+            : candle.high >= trade.stopLoss!);
+    final targeted = trade.takeProfit != null &&
+        (trade.side == ReplaySide.buy
+            ? candle.high >= trade.takeProfit!
+            : candle.low <= trade.takeProfit!);
+    // TradingView's default broker emulator fills a price-based order
+    // at the NEXT bar's opening price when it crosses the order level
+    // inside the inter-bar gap (not at the old limit/target price).
+    // This also means a TP filled immediately at OPEN wins over a later
+    // stop hit within that same candle. These are verified OHLC prices,
+    // not inferred sub-bar ticks or future Replay data.
+    final targetAtOpen = targeted && (trade.side == ReplaySide.buy
+        ? candle.open >= trade.takeProfit!
+        : candle.open <= trade.takeProfit!);
+    if (targetAtOpen) {
+      return trade.close(
+          bar, candle.open, ReplayExitReason.takeProfit);
+    }
+    // A protective stop crossed in the inter-bar gap is already
+    // executable at the genuine opening price, before either OHLC extreme.
+    final stopAtOpen = stopped && (trade.side == ReplaySide.buy
+        ? candle.open <= trade.stopLoss!
+        : candle.open >= trade.stopLoss!);
+    if (stopAtOpen) {
+      return trade.close(bar, candle.open, ReplayExitReason.stopLoss);
+    }
+    if (stopped && targeted) {
+      // TradingView's default historical broker emulator chooses the
+      // first path extremum by proximity to OPEN, not unconditional SL.
+      // This is an explicit OHLC assumption, NOT a claim that the broker
+      // supplied intrabar BID ticks or that Bar Magnifier is enabled.
+      final towardHigh = candle.high - candle.open;
+      final towardLow = candle.open - candle.low;
+      final highFirst = towardHigh < towardLow;
+      final lowFirst = towardLow < towardHigh;
+      final targetFirst = trade.side == ReplaySide.buy
+          ? highFirst : lowFirst;
+      if (targetFirst) {
+        return trade.close(
+            bar, trade.takeProfit!, ReplayExitReason.takeProfit);
+      }
+      // On an exactly symmetric candle, neither extreme is proven first:
+      // remain conservative instead of inventing a sub-bar sequence.
+      return trade.close(bar, trade.stopLoss!, ReplayExitReason.stopLoss);
+    }
+    if (stopped) {
+      return trade.close(bar, trade.stopLoss!, ReplayExitReason.stopLoss);
+    }
+    if (targeted) {
+      return trade.close(
+          bar, trade.takeProfit!, ReplayExitReason.takeProfit);
+    }
+    return null;
+  }
 
   int get visibleCount => _visibleCount;
   List<ReplayTrainingTrade> get trades =>
@@ -109,11 +190,14 @@ class ReplayTrainingSession {
     _trades.clear();
     _visibleCount = 0;
     _nextId = 1;
+    _exitIndex = null;
   }
 
   void prepend(int count) {
     if (count < 0) throw ArgumentError.value(count, 'count');
     if (count == 0) return;
+    // A prepended verified prefix changes source indices and identity.
+    _exitIndex = null;
     for (var index = 0; index < _trades.length; index++) {
       _trades[index] = _trades[index].shifted(count);
     }
@@ -125,6 +209,9 @@ class ReplayTrainingSession {
       throw RangeError.range(newVisibleCount, 0, candles.length);
     }
     if (newVisibleCount < _visibleCount) {
+      // Previously revealed bars are now future history again; drop their
+      // extrema even though every query is separately prefix-bounded.
+      _exitIndex = null;
       _trades.removeWhere((trade) => trade.entryIndex >= newVisibleCount);
       for (var i = 0; i < _trades.length; i++) {
         final trade = _trades[i];
@@ -136,38 +223,71 @@ class ReplayTrainingSession {
       _visibleCount = newVisibleCount;
       return;
     }
-    // Normal chart seeking must stay O(1) while no practice trades exist.
-    if (_trades.isEmpty) {
+    // Seeking 100k historical bars must not revisit already closed trades,
+    // or open practice trades with no automatic stop/target. Those cannot
+    // change until the user explicitly closes them at a revealed candle.
+    final watchedTrades = <int>[];
+    for (var i = 0; i < _trades.length; i++) {
+      final trade = _trades[i];
+      if (trade.isOpen &&
+          (trade.stopLoss != null || trade.takeProfit != null)) {
+        watchedTrades.add(i);
+      }
+    }
+    if (watchedTrades.isEmpty) {
       _visibleCount = newVisibleCount;
       return;
     }
+
+    if (shouldUseIndexedExitSearch(
+      newlyRevealedBars: newVisibleCount - _visibleCount,
+      watchedTrades: watchedTrades.length,
+    )) {
+      // The index reads ONLY source candles already revealed by THIS move.
+      // Source swaps, Range prepend and rewind invalidate the old tree;
+      // it cannot accidentally use the later OHLC bars hidden by Replay.
+      final prior = _exitIndex;
+      final tree = prior != null && identical(prior.source, candles) &&
+              prior.indexedThrough <= newVisibleCount
+          ? prior
+          : ReplayRevealedExitIndex(candles);
+      tree.indexThrough(newVisibleCount);
+      _exitIndex = tree;
+      for (final slot in watchedTrades) {
+        final trade = _trades[slot];
+        final fromBar = trade.entryIndex + 1 > _visibleCount
+            ? trade.entryIndex + 1 : _visibleCount;
+        if (fromBar >= newVisibleCount) continue;
+        final firstHit = tree.firstCrossing(
+          fromInclusive: fromBar,
+          throughExclusive: newVisibleCount,
+          lowAtMost: trade.side == ReplaySide.buy
+              ? trade.stopLoss : trade.takeProfit,
+          highAtLeast: trade.side == ReplaySide.buy
+              ? trade.takeProfit : trade.stopLoss,
+        );
+        if (firstHit == null) continue;
+        final settled = _exitOnBar(trade, candles[firstHit], firstHit);
+        if (settled != null) _trades[slot] = settled;
+      }
+      _visibleCount = newVisibleCount;
+      return;
+    }
+
+    // Fast, allocation-free sequential processing for ordinary 1-bar Replay
+    // playback and small groups of trades. Exact fill policy is shared
+    // with indexed long seeks above.
     for (var bar = _visibleCount; bar < newVisibleCount; bar++) {
       final candle = candles[bar];
-      for (var i = 0; i < _trades.length; i++) {
-        final trade = _trades[i];
-        // A trade entered at a candle's close is NOT exposed to its
-        // earlier high/low: only subsequent revealed candles can fill exits.
-        if (!trade.isOpen || trade.entryIndex >= bar) continue;
-        final stopped = trade.stopLoss != null &&
-            (trade.side == ReplaySide.buy
-                ? candle.low <= trade.stopLoss!
-                : candle.high >= trade.stopLoss!);
-        final targeted = trade.takeProfit != null &&
-            (trade.side == ReplaySide.buy
-                ? candle.high >= trade.takeProfit!
-                : candle.low <= trade.takeProfit!);
-        if (stopped) {
-          // A gap past the stop is filled at the more adverse opening price.
-          final fill = trade.side == ReplaySide.buy
-              ? (candle.open < trade.stopLoss! ? candle.open : trade.stopLoss!)
-              : (candle.open > trade.stopLoss! ? candle.open : trade.stopLoss!);
-          _trades[i] = trade.close(
-              bar, fill, ReplayExitReason.stopLoss);
-        } else if (targeted) {
-          _trades[i] = trade.close(
-              bar, trade.takeProfit!, ReplayExitReason.takeProfit);
-        }
+      for (var slot = watchedTrades.length - 1; slot >= 0; slot--) {
+        final index = watchedTrades[slot];
+        final settled = _exitOnBar(_trades[index], candle, bar);
+        if (settled == null) continue;
+        _trades[index] = settled;
+        watchedTrades[slot] = watchedTrades.last;
+        watchedTrades.removeLast();
       }
+      if (watchedTrades.isEmpty) break;
     }
     _visibleCount = newVisibleCount;
   }

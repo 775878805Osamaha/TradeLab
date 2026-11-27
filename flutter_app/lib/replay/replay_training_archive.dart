@@ -11,6 +11,24 @@ class ReplayTrainingArchive {
   ReplayTrainingArchive._();
 
   static Future<Database>? _opening;
+  // A Replay trade may be saved asynchronously while the user immediately
+  // switches from the chart to Results. A plain SQLite SELECT can otherwise
+  // overtake that pending write and show an incorrect empty history.
+  //
+  // ChartScreen registers each scheduled write SYNCHRONOUSLY, before its
+  // first SQLite await. We track its outcome without consuming or discarding
+  // the writer's own error. The latest completed snapshot is authoritative.
+  static Future<bool> _pendingVisibleSave = Future<bool>.value(true);
+
+  static void trackScheduledSave(Future<void> write) {
+    // Attach the error handler IMMEDIATELY, not in a later microtask after
+    // _pendingVisibleSave completes. A failed SQLite Future can complete
+    // synchronously before that microtask, yielding an unhandled-zone error.
+    // The original writer still receives its own failure notification.
+    final outcome = write.then<bool>(
+        (_) => true, onError: (Object _) => false);
+    _pendingVisibleSave = _pendingVisibleSave.then((_) => outcome);
+  }
 
   static Future<Database> _open() =>
       _opening ??= _openDatabase().catchError((Object error) {
@@ -65,26 +83,86 @@ class ReplayTrainingArchive {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  static Future<List<Map<String, Object?>>> recent({int limit = 20}) async {
+  static Future<List<Map<String, Object?>>> recent({
+    int limit = 20,
+    int offset = 0,
+  }) async {
     if (limit < 1 || limit > 100) {
       throw RangeError.range(limit, 1, 100);
+    }
+    if (offset < 0) {
+      throw RangeError.value(offset, 'offset', 'Must not be negative');
+    }
+    // Freeze the barrier at invocation time: this results view must include
+    // every Replay save scheduled before its navigation began. Never display
+    // an old snapshot as if a failed trade write meant zero trades.
+    final pending = _pendingVisibleSave;
+    if (!await pending) {
+      throw StateError('A Replay training snapshot could not be saved.');
     }
     final db = await _open();
     final rows = await db.query('replay_sessions',
       columns: ['session_id', 'source_key', 'saved_at_ms', 'payload'],
-      orderBy: 'saved_at_ms DESC', limit: limit);
+      orderBy: 'saved_at_ms DESC, session_id DESC',
+      limit: limit, offset: offset);
     return List<Map<String, Object?>>.unmodifiable(rows.map((row) {
       final payload = jsonDecode(row['payload'] as String);
       if (payload is! Map<String, dynamic> || payload['schema'] != 1) {
         throw const FormatException('Invalid archived replay session');
       }
+      final trades = payload['trades'];
+      if (trades is! List ||
+          trades.any((entry) => entry is! Map ||
+              (entry['exitIndex'] == null) !=
+                  (entry['exitPrice'] == null))) {
+        throw const FormatException('Invalid archived Replay trade entries');
+      }
+      // The Results page previously received counts only. Preserve a small,
+      // typed, account-agnostic projection of each real archived practice
+      // entry so an OPEN order is visible immediately, not just its count.
+      // Never pass sourceKey, sessionId or an internal trade identifier into
+      // individual result rows. Recompute price-delta P&L from the entry and
+      // exit values rather than trusting a separately stored display total.
+      final details = <Map<String, Object?>>[];
+      for (final rawTrade in trades) {
+        final trade = rawTrade as Map;
+        final side = trade['side'];
+        final entry = trade['entryPrice'];
+        final quantity = trade['quantity'];
+        final rawExit = trade['exitPrice'];
+        if ((side != 'buy' && side != 'sell') ||
+            entry is! num || quantity is! num ||
+            !entry.toDouble().isFinite || entry <= 0 ||
+            !quantity.toDouble().isFinite || quantity <= 0 ||
+            (rawExit != null &&
+                (rawExit is! num ||
+                    !rawExit.toDouble().isFinite || rawExit <= 0))) {
+          throw const FormatException('Invalid archived Replay trade prices');
+        }
+        final exit = rawExit is num ? rawExit.toDouble() : null;
+        final entryPrice = entry.toDouble();
+        final amount = quantity.toDouble();
+        details.add(Map<String, Object?>.unmodifiable({
+          'side': side,
+          'entryPrice': entryPrice,
+          'quantity': amount,
+          'exitPrice': exit,
+          'isOpen': exit == null,
+          'realizedPricePnl': exit == null ? 0.0 :
+              (exit - entryPrice) * (side == 'buy' ? 1 : -1) * amount,
+        }));
+      }
+      final closed = details.where((trade) => trade['isOpen'] == false).length;
       return Map<String, Object?>.unmodifiable({
         'sessionId': row['session_id'],
         'sourceKey': row['source_key'],
         'savedAtMs': row['saved_at_ms'],
         'visibleCount': payload['visibleCount'],
-        'tradeCount': (payload['trades'] as List).length,
+        'tradeCount': trades.length,
+        'openTradeCount': trades.length - closed,
+        'closedTradeCount': closed,
         'realizedPricePnl': payload['realizedPricePnl'],
+        'trades': List<Map<String, Object?>>.unmodifiable(details),
       });
     }));
   }

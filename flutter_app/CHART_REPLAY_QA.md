@@ -69,6 +69,35 @@ This smoke confirms the unlinked state and that Replay does not reveal
 unverified data. A live authenticated cTrader scenario must be verified on a
 device with the user's account. Never use private tokens in CI fixtures.
 
+## Native SQLite journal verification (manual Android)
+
+The source-level regression suite includes `test/paper_journal_sqlite_test.dart`
+with `sqflite_common_ffi` on Linux. It verifies the real SQL schema, reopen,
+double-close safety and account isolation, but it **cannot** prove Android
+plugin behavior.
+
+A separate, manual-only integration scenario verifies the Android `sqflite`
+plugin and the actual TradeLab Results tab:
+
+```bash
+cd flutter_app
+flutter pub get
+flutter test integration_test/paper_journal_device_test.dart -d <android-device>
+```
+
+The device test uses `tradelab_paper_android_smoke_<unique>.db`, **never** the
+production `tradelab_flutter_paper_v1.db`. It creates a local deposit and a
+practice trade, closes the trade, tears down the app widget and SQLite handle,
+reopens the database in a new controller, and checks that saved P&L returns
+in Results for account 101 but not account 202. It deletes only its temporary
+test database at the end. It never logs in to cTrader or submits broker orders.
+
+Rebuilding the app widget and reopening SQLite verifies native persistence,
+**not** a full Android process kill, phone reboot, old Kotlin Room migration
+or production-APK upgrade. Those remain manual device acceptance checks.
+Record the device, OS, APK commit, observed P&L and test output. Do not mark
+these checks as passed unless device logs exist.
+
 ## Frame performance measurements (physical Android)
 
 ```bash
@@ -100,3 +129,7 @@ faster without before/after measurements.
 - authenticated cTrader OAuth and runtime market feed on a real device;
 - workload-specific performance budgets and device frame-timing results;
 - full migrated Kotlin trading ledger parity and production-ready APK.
+
+## 2026-11-16 side-by-side integration test build
+
+This unmerged test candidate combines PR #445 (Replay trade level overlay), #446 (measured axis labels), #447 (cTrader quote/closed-candle recovery and account isolation), #448 (SQLite practice journal safety). The CI APK uses a separate Android application ID `com.example.tradelab_flutter.test` so the prior TradeLab install is not replaced and its private SQLite records stay untouched. New variant stores its own separate practice data and does not import old records. Both variants can register `tradelabflutter://oauth/ctrader`; if Android prompts for an OAuth callback handler, choose TradeLab Test for testing. Only code and APK packaging are verified by CI; authenticated broker data and physical phone interactions require user testing.

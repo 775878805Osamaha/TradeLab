@@ -1,11 +1,12 @@
 /// Drawing objects use candle positions and real market prices, not pixel
 /// coordinates. Historical pagination shifts indices but never prices.
 enum ChartDrawingTool {
-  horizontal, trendLine, fibonacci,
-  ray, extendedLine, horizontalRay, verticalLine, parallelChannel;
+  horizontal, trendLine, infoLine, trendAngle, fibonacci,
+  ray, extendedLine, horizontalRay, verticalLine, crossLine,
+  parallelChannel;
 
   bool get oneAnchor =>
-      this == horizontalRay || this == verticalLine;
+      this == horizontalRay || this == verticalLine || this == crossLine;
   bool get threeAnchors => this == parallelChannel;
 }
 enum ChartAnchorEndpoint { start, end, offset }
@@ -14,22 +15,46 @@ enum ChartAnchorEndpoint { start, end, offset }
 enum ChartMagnetMode { off, weak, strong }
 
 /// Price-axis snapping is based on the *displayed* real candle, not a made-up
-/// price grid. Weak magnet only engages within [weakPriceTolerance].
+/// price grid. Weak magnet uses [weakPixelTolerance] on projected charts,
+/// falling back to [weakPriceTolerance] without a screen transform.
 double snapDrawingPrice({
   required double requestedPrice,
   required List<double> ohlc,
   required ChartMagnetMode mode,
   required double weakPriceTolerance,
+  double Function(double)? screenYForPrice,
+  double? weakPixelTolerance,
 }) {
-  if (mode == ChartMagnetMode.off || ohlc.isEmpty) return requestedPrice;
-  var nearest = ohlc.first;
-  for (final value in ohlc.skip(1)) {
-    if ((value - requestedPrice).abs() <
-        (nearest - requestedPrice).abs()) nearest = value;
-  }
-  if (mode == ChartMagnetMode.weak &&
-      (nearest - requestedPrice).abs() > weakPriceTolerance) {
+  if (!requestedPrice.isFinite ||
+      mode == ChartMagnetMode.off || ohlc.isEmpty) return requestedPrice;
+  // Visual snapping must use on-screen distance on LOG and inverted charts;
+  // market-price differences are not uniform in pixels on those scales.
+  // Keep the original price-space API for clients without a chart scale.
+  final projected = screenYForPrice != null && weakPixelTolerance != null;
+  final requestedY = projected ? screenYForPrice(requestedPrice) : null;
+  if (projected && (requestedY == null || !requestedY.isFinite)) {
     return requestedPrice;
+  }
+  double? nearest;
+  var smallestDistance = double.infinity;
+  for (final value in ohlc) {
+    if (!value.isFinite) continue;
+    final projectedY = projected ? screenYForPrice(value) : null;
+    if (projected && (projectedY == null || !projectedY.isFinite)) continue;
+    final distance = projected
+        ? (projectedY! - requestedY!).abs()
+        : (value - requestedPrice).abs();
+    if (!distance.isFinite) continue;
+    if (nearest == null || distance < smallestDistance) {
+      nearest = value;
+      smallestDistance = distance;
+    }
+  }
+  if (nearest == null) return requestedPrice;
+  if (mode == ChartMagnetMode.weak) {
+    final tolerance = projected ? weakPixelTolerance : weakPriceTolerance;
+    if (!tolerance.isFinite || tolerance < 0 ||
+        smallestDistance > tolerance) return requestedPrice;
   }
   return nearest;
 }
@@ -135,6 +160,12 @@ class ChartPattern {
   /// A replayed historical series may show only a prefix. Never display an
   /// annotation whose endpoint refers to an as-yet-unrevealed candle.
   bool visibleAt(int revealedCount) =>
+      revealedCount > 0 &&
+      start.index >= 0 && end.index >= 0 &&
       start.index < revealedCount && end.index < revealedCount &&
-      (offsetAnchor == null || offsetAnchor!.index < revealedCount);
+      start.price.isFinite && end.price.isFinite &&
+      (offsetAnchor == null ||
+          (offsetAnchor!.index >= 0 &&
+           offsetAnchor!.index < revealedCount &&
+           offsetAnchor!.price.isFinite));
 }

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/chart_annotations.dart';
+import 'package:tradelab_flutter/chart/chart_viewport.dart';
 
 void main() {
   test('older pages preserve the same market-price drawing anchors', () {
@@ -141,6 +142,31 @@ void main() {
     expect(rebased.offsetAnchor!.price, 4070);
   });
 
+  test('one-tap Crossline stays at one source-time price through Replay',
+      () {
+    expect(ChartDrawingTool.crossLine.oneAnchor, isTrue);
+    const crossing = ChartPattern(
+      tool: ChartDrawingTool.crossLine,
+      start: ChartAnchor(80, 4025),
+      end: ChartAnchor(80, 4025),
+    );
+    expect(crossing.visibleAt(80), isFalse,
+        reason: 'Replay cannot reveal a future line or its time label');
+    expect(crossing.visibleAt(81), isTrue);
+    final shifted = crossing.shifted(20000);
+    expect(shifted.start.index, 20080);
+    expect(shifted.end.index, 20080);
+    expect(shifted.start.price, 4025);
+    final moved = shifted.withEndpoint(
+        ChartAnchorEndpoint.start, const ChartAnchor(20090, 4050));
+    expect(moved.start.index, 20090);
+    expect(moved.end.index, 20090);
+    expect(moved.start.price, 4050);
+    expect(moved.end.price, 4050);
+    expect(moved.visibleAt(20090), isFalse);
+    expect(moved.visibleAt(20091), isTrue);
+  });
+
   test('one-anchor vertical lines move their only handle as a unit', () {
     const vertical = ChartPattern(
       tool: ChartDrawingTool.verticalLine,
@@ -154,4 +180,121 @@ void main() {
     expect(moved.start.price, 4080);
     expect(moved.end.price, 4080);
   });
+  test('Replay hides negative-index, invisible and malformed drawing anchors', () {
+    for (final pattern in <ChartPattern>[
+      const ChartPattern(
+        tool: ChartDrawingTool.trendLine,
+        start: ChartAnchor(-1, 100),
+        end: ChartAnchor(8, 110)),
+      const ChartPattern(
+        tool: ChartDrawingTool.trendAngle,
+        start: ChartAnchor(1, double.nan),
+        end: ChartAnchor(8, 110)),
+      const ChartPattern(
+        tool: ChartDrawingTool.infoLine,
+        start: ChartAnchor(1, 100),
+        end: ChartAnchor(8, double.infinity)),
+      const ChartPattern(
+        tool: ChartDrawingTool.parallelChannel,
+        start: ChartAnchor(1, 100),
+        end: ChartAnchor(8, 110),
+        offsetAnchor: ChartAnchor(-2, 105)),
+      const ChartPattern(
+        tool: ChartDrawingTool.parallelChannel,
+        start: ChartAnchor(1, 100),
+        end: ChartAnchor(8, 110),
+        offsetAnchor: ChartAnchor(5, double.negativeInfinity)),
+    ]) {
+      expect(pattern.visibleAt(10), isFalse,
+          reason: 'No invalid source endpoint may enter Replay paint');
+    }
+    const valid = ChartPattern(
+      tool: ChartDrawingTool.infoLine,
+      start: ChartAnchor(0, 0),
+      end: ChartAnchor(9, -2.5),
+    );
+    expect(valid.visibleAt(0), isFalse);
+    expect(valid.visibleAt(9), isFalse);
+    expect(valid.visibleAt(10), isTrue,
+        reason: 'Zero and negative finite values are valid source geometry');
+    expect(valid.shifted(120000).visibleAt(120010), isTrue);
+  });
+
+  test('OHLC magnet ignores invalid data and bad weak tolerances', () {
+    double snap(double requested, List<double> ohlc,
+        ChartMagnetMode mode, double tolerance) => snapDrawingPrice(
+      requestedPrice: requested, ohlc: ohlc, mode: mode,
+      weakPriceTolerance: tolerance,
+    );
+    const mixed = <double>[double.nan, double.infinity,
+        double.negativeInfinity, 4010, 4020];
+    expect(snap(4011, mixed, ChartMagnetMode.strong, 0), 4010);
+    expect(snap(4011, mixed, ChartMagnetMode.weak, 2), 4010);
+    expect(snap(4011, mixed, ChartMagnetMode.weak, .5), 4011);
+    expect(snap(4011, mixed, ChartMagnetMode.weak, double.nan), 4011);
+    expect(snap(4011, mixed, ChartMagnetMode.weak, -1), 4011);
+    expect(snap(4011, mixed, ChartMagnetMode.strong,
+        double.infinity), 4010);
+    expect(snap(4011, const [double.nan, double.infinity],
+        ChartMagnetMode.strong, 5), 4011);
+    expect(snap(double.nan, mixed, ChartMagnetMode.strong, 5).isNaN, isTrue,
+        reason: 'Never manufacture a market price for an invalid touch');
+  });
+
+  test('weak magnet uses real pixel distance on LOG and inverted scale', () {
+    for (final height in <double>[320, 390]) {
+      final logScale = ChartPriceScale(100, 400, height,
+          logarithmic: true);
+      final invertedScale = ChartPriceScale(100, 400, height,
+          logarithmic: true, inverted: true);
+      final linearScale = ChartPriceScale(100, 400, height);
+      double snap(ChartPriceScale scale, ChartMagnetMode mode,
+          double pixelTolerance) => snapDrawingPrice(
+        requestedPrice: 200,
+        ohlc: const <double>[150, 260],
+        mode: mode,
+        weakPriceTolerance: 0,
+        screenYForPrice: scale.y,
+        weakPixelTolerance: pixelTolerance,
+      );
+      expect(snap(logScale, ChartMagnetMode.weak, 75), 260,
+          reason: 'LOG uses visual rather than linear price distance');
+      expect(snap(invertedScale, ChartMagnetMode.weak, 75), 260,
+          reason: 'Inverting the ruler cannot change the nearest bar');
+      expect(snap(linearScale, ChartMagnetMode.weak, 75), 150);
+      expect(snap(logScale, ChartMagnetMode.weak, 12), 200,
+          reason: 'A visually distant bar must not steal a weak snap');
+      expect(snap(logScale, ChartMagnetMode.strong, 0), 260,
+          reason: 'Strong magnet snaps to visually nearest valid OHLC');
+    }
+  });
+
+  test('pixel magnet excludes unpaintable or malformed projected prices', () {
+    final scale = ChartPriceScale(100, 400, 320, logarithmic: true);
+    double projection(double price) =>
+        price <= 0 ? double.nan : scale.y(price);
+    double snap(List<double> prices, double tolerance) => snapDrawingPrice(
+      requestedPrice: 200,
+      ohlc: prices,
+      mode: ChartMagnetMode.weak,
+      weakPriceTolerance: 200,
+      screenYForPrice: projection,
+      weakPixelTolerance: tolerance,
+    );
+    expect(snap(const [double.nan, -10, 260], 70), 260);
+    expect(snap(const [double.nan, -10, double.infinity], 70), 200);
+    expect(snap(const [260], double.nan), 200);
+    expect(snap(const [260], -1), 200);
+    expect(snapDrawingPrice(
+      requestedPrice: 200, ohlc: const [260],
+      mode: ChartMagnetMode.strong, weakPriceTolerance: 0,
+      screenYForPrice: (_) => double.nan, weakPixelTolerance: 12,
+    ), 200);
+    expect(snapDrawingPrice(
+      requestedPrice: 200, ohlc: const [260],
+      mode: ChartMagnetMode.off, weakPriceTolerance: 0,
+      screenYForPrice: (_) => double.nan, weakPixelTolerance: 12,
+    ), 200);
+  });
+
 }

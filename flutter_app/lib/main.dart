@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'data/market_controller.dart';
+import 'data/theme_preference_store.dart';
 import 'paper/paper_journal_controller.dart';
 import 'paper/paper_journal_store.dart';
 
@@ -44,10 +47,12 @@ void main() {
 }
 
 class TradeLabApp extends StatefulWidget {
-  const TradeLabApp({this.controller, this.journal, super.key});
+  const TradeLabApp({this.controller, this.journal, this.themeStore, super.key});
 
   final MarketController? controller;
   final PaperJournalController? journal;
+  /// Override for isolated tests; production uses app-private storage.
+  final ThemePreferenceStore? themeStore;
 
   @override
   State<TradeLabApp> createState() => _TradeLabAppState();
@@ -55,6 +60,43 @@ class TradeLabApp extends StatefulWidget {
 
 class _TradeLabAppState extends State<TradeLabApp> {
   ThemeMode _themeMode = ThemeMode.light;
+  late final ThemePreferenceStore _themeStore =
+      widget.themeStore ?? SecureThemePreferenceStore();
+  int _themeSelectionRevision = 0;
+  Future<void> _pendingThemeWrite = Future<void>.value();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreDarkMode());
+  }
+
+  Future<void> _restoreDarkMode() async {
+    final revision = _themeSelectionRevision;
+    try {
+      final saved = await _themeStore.loadDarkMode();
+      // A slow read must not override a new switch choice made on the phone.
+      if (!mounted || revision != _themeSelectionRevision || saved == null) {
+        return;
+      }
+      setState(() => _themeMode =
+          saved ? ThemeMode.dark : ThemeMode.light);
+    } catch (_) {
+      // Storage failures leave the safe default; the user can still switch
+      // appearance for this session without blocking the main chart.
+    }
+  }
+
+  void _changeDarkMode(bool enabled) {
+    _themeSelectionRevision++;
+    setState(() => _themeMode =
+        enabled ? ThemeMode.dark : ThemeMode.light);
+    // Keep the final selection authoritative even after rapid toggle taps,
+    // regardless of how long a platform-channel write takes to finish.
+    _pendingThemeWrite = _pendingThemeWrite.then((_) =>
+        _themeStore.saveDarkMode(enabled)).catchError(
+        (Object _, StackTrace __) {});
+  }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -78,9 +120,7 @@ class _TradeLabAppState extends State<TradeLabApp> {
           controller: widget.controller,
           journal: widget.journal,
           darkMode: _themeMode == ThemeMode.dark,
-          onDarkModeChanged: (enabled) => setState(() {
-            _themeMode = enabled ? ThemeMode.dark : ThemeMode.light;
-          }),
+          onDarkModeChanged: _changeDarkMode,
         ),
       );
 }
@@ -108,6 +148,8 @@ class _TradeLabShellState extends State<TradeLabShell> {
   // TradingView community/discovery screens to fill a five-tab reference.
   // Chart opens in ANALYSIS mode, never an implicit Replay session.
   int _selectedIndex = 1;
+  bool _chartFocusMode = false;
+  String _requestedChartSymbol = 'XAUUSD';
   late final MarketController _market = widget.controller ?? MarketController();
   late final PaperJournalController _journal = widget.journal ??
       PaperJournalController(store: SqlitePaperJournalStore());
@@ -159,22 +201,42 @@ class _TradeLabShellState extends State<TradeLabShell> {
       ),
     ];
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_chartFocusMode,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _chartFocusMode) {
+          setState(() => _chartFocusMode = false);
+        }
+      },
+      child: Scaffold(
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
-            if (_selectedIndex != 1)
-              AnimatedBuilder(animation: _market,
-                builder: (context, _) => MarketSourceNotice(controller: _market)),
+            // Each redesigned dashboard owns its verified source indicator.
+            // The duplicated global blue ribbon hid useful chart/list space.
             Expanded(
               child: IndexedStack(
                 index: _selectedIndex,
                 children: [
-                  MarketsScreen(controller: _market),
+                  MarketsScreen(controller: _market,
+                    onSymbolSelected: (symbol) => setState(() {
+                      _requestedChartSymbol = symbol.code;
+                      _chartFocusMode = false;
+                      _selectedIndex = 1;
+                    })),
                   ChartScreen(controller: _market, journal: _journal,
-                    onOpenAccount: () => setState(() => _selectedIndex = 3)),
-                  ResultsScreen(controller: _market, journal: _journal),
+                    requestedSymbolCode: _requestedChartSymbol,
+                    active: _selectedIndex == 1,
+                    focusMode: _chartFocusMode,
+                    onToggleFocusMode: () => setState(
+                      () => _chartFocusMode = !_chartFocusMode),
+                    onOpenAccount: () => setState(() {
+                      _chartFocusMode = false;
+                      _selectedIndex = 3;
+                    })),
+                  ResultsScreen(controller: _market, journal: _journal,
+                    active: _selectedIndex == 2),
                   AccountScreen(
                     controller: _market,
                     darkMode: widget.darkMode,
@@ -186,7 +248,9 @@ class _TradeLabShellState extends State<TradeLabShell> {
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: _chartFocusMode && _selectedIndex == 1
+        ? null : NavigationBar(
+        height: 70,
         selectedIndex: _selectedIndex,
         destinations: destinations,
         onDestinationSelected: (index) {
@@ -194,7 +258,7 @@ class _TradeLabShellState extends State<TradeLabShell> {
           if (index == 0) _market.refreshQuotes();
         },
       ),
-    );
+    ));
   }
 }
 

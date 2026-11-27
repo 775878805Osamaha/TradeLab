@@ -1,0 +1,36 @@
+name: Verify SQLite pre-upgrade backup
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, test/flutter-all-fixes-20261116]
+    paths:
+      - 'flutter_app/lib/data/market_candle_store.dart'
+      - 'flutter_app/lib/data/market_candle_migration_backup.dart'
+      - 'flutter_app/test/market_candle_migration_backup_test.dart'
+      - '.github/workflows/verify-sqlite-migration-backup.yml'
+permissions:
+  contents: read
+jobs:
+  backup-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Test automatic backup and recovery
+        run: |
+          mkdir -p build/sqlite_migration_backup
+          flutter test --reporter expanded --file-reporter json:build/sqlite_migration_backup/tests.jsonl test/market_candle_migration_backup_test.dart test/market_candle_metadata_migration_test.dart
+      - name: Upload actual results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-migration-backup-${{ github.run_id }}
+          path: flutter_app/build/sqlite_migration_backup/
