@@ -1,12 +1,13 @@
 import 'pine_runtime_core.dart';
 import 'pine_v6_ast.dart';
+import 'pine_security_dispatch.dart';
 
 /// Closed-bar context supplied explicitly by the chart adapter. No device
 /// clock, fake tick size, invented symbol, or inferred provider metadata.
 final class PineExecutionContext {
   PineExecutionContext({this.ticker,this.tickerId,this.symbolType,this.minTick,
     this.timeframePeriod,this.isStandard,this.rightVisibleBarTime,
-    this.fixedExchangeUtcOffsetMinutes,Map<int,int> exchangeOffsetsByOpenTime=const {},
+    this.fixedExchangeUtcOffsetMinutes,this.externalLookup,Map<int,int> exchangeOffsetsByOpenTime=const {},
     Map<String,Object> overrides=const {}})
     :overrides=Map.unmodifiable(overrides),exchangeOffsetsByOpenTime=Map.unmodifiable(exchangeOffsetsByOpenTime);
   final String? ticker,tickerId,symbolType,timeframePeriod;
@@ -14,6 +15,7 @@ final class PineExecutionContext {
   final bool? isStandard;
   final int? rightVisibleBarTime,fixedExchangeUtcOffsetMinutes;
   final Map<int,int> exchangeOffsetsByOpenTime;
+  final PineExternalLookup? externalLookup;
   final Map<String,Object> overrides;
   static const members={'syminfo.ticker','syminfo.tickerid','syminfo.type',
     'syminfo.mintick','timeframe.period','timeframe.isminutes',
