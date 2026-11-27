@@ -11,6 +11,7 @@ import 'pine_series_dispatch.dart';
 import 'pine_indicator_dispatch.dart';
 import 'pine_execution_context.dart';
 import 'pine_runtime_map.dart';
+import 'pine_security_dispatch.dart';
 
 /// Stage 3a, closed-bar Pine language execution. The old PineSubsetProgram
 /// remains the sole runtime for source it already supports. This interpreter
@@ -22,7 +23,7 @@ import 'pine_runtime_map.dart';
 /// historical candles: there is no speculative tick/rollback.
 class PineV6LanguageProgram {
   PineV6LanguageProgram._(this.source, this.ast, this.legacy,
-      this._functions, this._plotCalls, this._types, this.context,this._inputs);
+      this._functions, this._plotCalls, this._types, this.context,this._inputs,this._securitySpecs);
 
   final String source;
   final PineScriptAst ast;
@@ -32,6 +33,7 @@ class PineV6LanguageProgram {
   final Map<PineExpression,PineTypeInfo> _types;
   final PineExecutionContext context;
   final Map<PineCallExpression,Object> _inputs;
+  final Map<PineCallExpression,PineSecuritySpec> _securitySpecs;
 
   bool get overlay {
     for(final statement in ast.statements){
@@ -62,6 +64,7 @@ class PineV6LanguageProgram {
     final functions=<String,PineFunctionStatement>{};
     final plots=<PineCallExpression>[];
     final constants=<String,Object?>{},inputs=<PineCallExpression,Object>{};
+    final securitySpecs=<PineCallExpression,PineSecuritySpec>{};
     for(final stmt in prepared.ast.statements) {
       if(stmt is PineFunctionStatement)functions[stmt.name]=stmt;
     }
@@ -114,6 +117,20 @@ class PineV6LanguageProgram {
       }
       if(expr is PineCallExpression) {
         final name=expr.name;
+        if(name=='request.security'){
+          if(executionContext.tickerId==null||executionContext.timeframePeriod==null){
+            throw const PineRuntimeException('unsupported_security_context','Verified chart symbol and timeframe required');
+          }
+          final spec=PineSecuritySpec.parse(expr);
+          securitySpecs[expr]=spec;
+          validateExpr(spec.symbol);validateExpr(spec.timeframe);
+          usesNewTa=true;return;
+        }
+        if(name=='ticker.standard'||name=='ticker.heikinashi'){
+          if(executionContext.tickerId==null)throw const PineRuntimeException('unsupported_ticker_context','Verified chart ticker required');
+          if(expr.arguments.length!=1)throw const PineRuntimeException('unsupported_ticker_arguments','Explicit ticker argument required');
+          validateExpr(expr.arguments.single.value);usesNewTa=true;return;
+        }
         if(name=='time'){
           executionContext.validateTimeCall(expr);
           usesNewTa=true;
@@ -280,7 +297,7 @@ class PineV6LanguageProgram {
       }
     }
     return PineV6LanguageProgram._(
-        source,prepared.ast,legacy,functions,plots,prepared.semantic.inferred,executionContext,Map.unmodifiable(inputs));
+        source,prepared.ast,legacy,functions,plots,prepared.semantic.inferred,executionContext,Map.unmodifiable(inputs),Map.unmodifiable(securitySpecs));
   }
 
   PineV6LanguageInstance newInstance({
@@ -344,6 +361,7 @@ class PineV6LanguageInstance {
   int _bar=-1;
   bool _stopped=false;
   final Map<(String,PineCallExpression),PineIndicatorDispatch> _indicators={};
+  final Map<(String,PineCallExpression),PineSecurityState> _security={};
 
   int get completedBars=>_bar+1;
   Object? persistentValue(String name) {
@@ -528,6 +546,19 @@ class PineV6LanguageInstance {
     if(expr is PineCallExpression) {
       final name=expr.name??'';
       if(name=='indicator')return null;
+      if(name=='ticker.standard'||name=='ticker.heikinashi'){
+        final raw=_eval(expr.arguments.single.value,frame);
+        final ticker=PineRequestedTicker.from(raw);
+        return PineRequestedTicker(ticker.symbol,name=='ticker.heikinashi');
+      }
+      if(name=='request.security'){
+        final spec=program._securitySpecs[expr]!;
+        final ticker=PineRequestedTicker.from(_eval(spec.symbol,frame));
+        final timeframe=_eval(spec.timeframe,frame);
+        final state=_security.putIfAbsent((_callPath,expr),()=>PineSecurityState(budget,spec));
+        return state.step(_bar,_seen.last,ticker,timeframe,program.context.tickerId!,
+          program.context.timeframePeriod!,program.context.externalLookup);
+      }
       if(name=='plot') {
         final index=program._plotCalls.indexOf(expr);
         if(index<0||expr.arguments.isEmpty) {
@@ -834,6 +865,7 @@ class PineV6LanguageInstance {
     _pivots..clear()..addAll(candidate._pivots);
     _seriesLastBar..clear()..addAll(candidate._seriesLastBar);
     _indicators..clear()..addAll(candidate._indicators);
+    _security..clear()..addAll(candidate._security);
     _history..clear()..addAll(candidate._history);
     _seen..clear()..addAll(candidate._seen);
     _plots=candidate._plots;

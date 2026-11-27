@@ -142,6 +142,7 @@ jobs:
             test/pine_series_interpreter_v2_test.dart \
             test/pine_tuple_indicator_interpreter_v2_test.dart \
             test/pine_execution_context_test.dart \
+            test/pine_security_interpreter_test.dart \
             test/pine_scalar_primitives_test.dart \
             test/market_api_test.dart \
             test/ctrader_closed_bar_cutoff_test.dart \
