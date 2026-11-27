@@ -109,7 +109,7 @@ final class PineExecutionContext {
     if(period!=timeframePeriod||minutes==null||minutes<1||session is! String){
       throw const PineRuntimeException('unsupported_timeframe','Only aligned chart-minute timeframe session supported');
     }
-    final match=RegExp(r'^([0-9]{2})([0-9]{2})-([0-9]{2})([0-9]{2})(?::([1-7]+))?).firstMatch(session);
+    final match=RegExp(r'^([0-9]{2})([0-9]{2})-([0-9]{2})([0-9]{2})(?::([1-7]+))?$').firstMatch(session);
     if(match==null)throw const PineRuntimeException('unsupported_session','Only single daytime session supported');
     final sh=int.parse(match[1]!),sm=int.parse(match[2]!),eh=int.parse(match[3]!),em=int.parse(match[4]!);
     final start=sh*60+sm,end=eh*60+em;
