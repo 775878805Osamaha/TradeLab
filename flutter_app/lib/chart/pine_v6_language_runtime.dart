@@ -20,7 +20,7 @@ import 'pine_indicator_dispatch.dart';
 /// historical candles: there is no speculative tick/rollback.
 class PineV6LanguageProgram {
   PineV6LanguageProgram._(this.source, this.ast, this.legacy,
-      this._functions, this._plotCalls, this._types, this._seededEma);
+      this._functions, this._plotCalls, this._types);
 
   final String source;
   final PineScriptAst ast;
@@ -28,8 +28,6 @@ class PineV6LanguageProgram {
   final Map<String, PineFunctionStatement> _functions;
   final List<PineCallExpression> _plotCalls;
   final Map<PineExpression,PineTypeInfo> _types;
-  // Explicit preferGeneral opt-in only; default AST and legacy EMA keep their historical seed.
-  final bool _seededEma;
 
   bool get overlay {
     for(final statement in ast.statements){
@@ -109,7 +107,7 @@ class PineV6LanguageProgram {
           PineSeriesDispatch.validate(expr);
           usesNewTa=true;
         }
-        if(PineIndicatorDispatch.supports(name)&&(name!='ta.ema'||preferGeneral)){
+        if(PineIndicatorDispatch.supports(name)){
           PineIndicatorDispatch.validate(expr,prepared.semantic.inferred);
           usesNewTa=true;
         }
@@ -243,7 +241,7 @@ class PineV6LanguageProgram {
       }
     }
     return PineV6LanguageProgram._(
-        source,prepared.ast,legacy,functions,plots,prepared.semantic.inferred,preferGeneral);
+        source,prepared.ast,legacy,functions,plots,prepared.semantic.inferred);
   }
 
   PineV6LanguageInstance newInstance({
@@ -504,7 +502,7 @@ class PineV6LanguageInstance {
         return expr.arguments.length>1
             ?_eval(expr.arguments[1].value,frame):0.0;
       }
-      if(PineIndicatorDispatch.supports(name)&&(name!='ta.ema'||program._seededEma)){
+      if(PineIndicatorDispatch.supports(name)){
         final key=(_callPath,expr);
         final args=PineIndicatorDispatch.bind(expr,[for(final arg in expr.arguments)_eval(arg.value,frame)]);
         return _indicators.putIfAbsent(key,()=>PineIndicatorDispatch(name,budget)).step(_bar,args,_seen.last);

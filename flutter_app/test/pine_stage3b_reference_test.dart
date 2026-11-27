@@ -7,7 +7,7 @@ import 'package:tradelab_flutter/chart/pine_runtime_core.dart';
 import 'package:tradelab_flutter/chart/pine_ta_library.dart';
 import 'package:tradelab_flutter/chart/pine_v6_language_runtime.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
-import 'pine_stage3b_ta_test.dart' show GuardedBars;
+import 'pine_stage3b_ta_test.dart' show GuardedBars, smaSeededEmaReference;
 
 const names=['ta.ema','ta.rsi','ta.atr','ta.rma'];
 const classification='مختبرة داخليًا بمعادلة مستقلة';
@@ -75,6 +75,7 @@ void main(){
   for(final n in [14,50]){
     for(final name in names){
       final ref=expected['$n'][name] as List;
+      final generalRef=name=='ta.ema'?smaSeededEmaReference(bars,n):ref;
       test('$name($n) full 360-bar independent reference and warmup',(){
         final actual=libraryValues(name,n,bars);
         compareSeries(actual,ref,'library $name($n)');
@@ -84,7 +85,7 @@ void main(){
         for(final bar in checkpoints){
           equalValue(actual[bar-1],ref[bar-1],'explicit checkpoint $name($n) bar $bar');
         }
-        compareSeries(program(name,n).evaluate(bars).single.values,ref,'advanced $name($n)');
+        compareSeries(program(name,n).evaluate(bars).single.values,generalRef,'advanced $name($n)');
       });
       test('$name($n) long Replay seeks and continuation',(){
         final instance=program(name,n).newInstance();
@@ -92,11 +93,11 @@ void main(){
         try{
           for(final count in [360,1,10,50,300]){
             guarded.cutoff=count;instance.rebuild(guarded,count);
-            compareSeries(instance.outputs.single.values,ref.take(count).toList(),'Replay $name($n) cutoff $count');
+            compareSeries(instance.outputs.single.values,generalRef.take(count).toList(),'Replay $name($n) cutoff $count');
           }
           guarded.cutoff=360;
           for(var i=300;i<360;i++){instance.advance(guarded[i]);}
-          compareSeries(instance.outputs.single.values,ref,'Replay continuation $name($n)');
+          compareSeries(instance.outputs.single.values,generalRef,'Replay continuation $name($n)');
         }finally{instance.close();}
       });
       if(name=='ta.ema'||name=='ta.rsi'){
