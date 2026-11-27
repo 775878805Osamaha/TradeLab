@@ -9,6 +9,8 @@ import 'pine_scalar_dispatch.dart';
 import 'pine_series_primitives.dart';
 import 'pine_series_dispatch.dart';
 import 'pine_indicator_dispatch.dart';
+import 'pine_execution_context.dart';
+import 'pine_runtime_map.dart';
 
 /// Stage 3a, closed-bar Pine language execution. The old PineSubsetProgram
 /// remains the sole runtime for source it already supports. This interpreter
@@ -20,7 +22,7 @@ import 'pine_indicator_dispatch.dart';
 /// historical candles: there is no speculative tick/rollback.
 class PineV6LanguageProgram {
   PineV6LanguageProgram._(this.source, this.ast, this.legacy,
-      this._functions, this._plotCalls, this._types);
+      this._functions, this._plotCalls, this._types, this.context,this._inputs);
 
   final String source;
   final PineScriptAst ast;
@@ -28,6 +30,8 @@ class PineV6LanguageProgram {
   final Map<String, PineFunctionStatement> _functions;
   final List<PineCallExpression> _plotCalls;
   final Map<PineExpression,PineTypeInfo> _types;
+  final PineExecutionContext context;
+  final Map<PineCallExpression,Object> _inputs;
 
   bool get overlay {
     for(final statement in ast.statements){
@@ -44,18 +48,20 @@ class PineV6LanguageProgram {
     return false;
   }
 
-  static PineV6LanguageProgram compile(String source,{bool preferGeneral=false}) {
+  static PineV6LanguageProgram compile(String source,{bool preferGeneral=false,PineExecutionContext? context}) {
     final prepared=const PineV6Frontend().prepare(source);
     if(prepared.hasErrors) {
       throw PineRuntimeException('compile_invalid',
           prepared.message??'Invalid Pine syntax or semantics');
     }
-    final legacy=preferGeneral?null:prepared.legacyProgram;
+    final legacy=preferGeneral||context!=null?null:prepared.legacyProgram;
+    final executionContext=context??PineExecutionContext();
     if(prepared.diagnostics.any((d)=>d.code=='tuple_shape_unknown')){
       throw const PineRuntimeException('tuple_shape_unknown','Tuple result shape must be resolved before execution');
     }
     final functions=<String,PineFunctionStatement>{};
     final plots=<PineCallExpression>[];
+    final constants=<String,Object?>{},inputs=<PineCallExpression,Object>{};
     for(final stmt in prepared.ast.statements) {
       if(stmt is PineFunctionStatement)functions[stmt.name]=stmt;
     }
@@ -63,9 +69,15 @@ class PineV6LanguageProgram {
     var usesNewTa=false;
     void validateExpr(PineExpression expr, {bool global=false}) {
       if(expr is PineLiteralExpression || expr is PineIdentifierExpression) {
+        if(expr is PineIdentifierExpression&&const {'time','volume'}.contains(expr.name))usesNewTa=true;
         return;
       }
       if(expr is PineMemberExpression) {
+        if(PineExecutionContext.members.contains(expr.qualifiedName)){
+          executionContext.member(expr.qualifiedName!);
+          usesNewTa=true;
+          return;
+        }
         if(!PineScalarDispatch.isColorMember(expr.qualifiedName)) {
           throw PineRuntimeException('unsupported_member',
             'Unimplemented Pine member: '+(expr.qualifiedName??'unknown'));
@@ -73,6 +85,9 @@ class PineV6LanguageProgram {
         return;
       }
       if(expr is PineHistoryExpression) {
+        if(prepared.semantic.inferred[expr.target]?.type==PineBaseType.mapType){
+          throw const PineRuntimeException('unsupported_map_history','Map history is not enabled');
+        }
         if(expr.target is PineCallExpression){
           validateExpr(expr.target);
           usesNewTa=true;
@@ -99,6 +114,20 @@ class PineV6LanguageProgram {
       }
       if(expr is PineCallExpression) {
         final name=expr.name;
+        if(name=='time'){
+          executionContext.validateTimeCall(expr);
+          usesNewTa=true;
+        }
+        if(name=='int')usesNewTa=true;
+        if(PineRuntimeMap.names.contains(name)){
+          PineRuntimeMap.validate(expr);
+          usesNewTa=true;
+        }
+        if(PineExecutionContext.inputs.contains(name)){
+          inputs[expr]=executionContext.input(expr,constants:constants);
+          usesNewTa=true;
+          return;
+        }
         if(PineScalarDispatch.supports(name)){
           PineScalarDispatch.validate(expr);
           usesNewTa=true;
@@ -138,8 +167,9 @@ class PineV6LanguageProgram {
           if(!ta.legacy)usesNewTa=true;
         }
         if(name==null || !(<String>{
-          'indicator','plot','na','nz','input.int','input.float',
+          'indicator','plot','na','nz','input.int','input.float','int','time',
           'math.abs','math.min','math.max',
+          ...PineRuntimeMap.names,
           ...PineScalarDispatch.names,
           ...PineSeriesDispatch.names,
           ...PineIndicatorDispatch.names,
@@ -177,8 +207,17 @@ class PineV6LanguageProgram {
         }else if(stmt is PineSequenceStatement){
           usesNewTa=true;
           validateStatements(stmt.statements,global:global);
+        }else if(stmt is PineReferenceVariableStatement){
+          if(stmt.typeName!='map'||stmt.value is! PineCallExpression||(stmt.value as PineCallExpression).name!='map.new'){
+            throw const PineRuntimeException('unsupported_reference','Only typed map.new reference declarations are enabled');
+          }
+          validateExpr(stmt.value);usesNewTa=true;
         }else if(stmt is PineVariableStatement) {
           validateExpr(stmt.value);
+          if(global&&prepared.semantic.inferred[stmt.value]?.qualifier==PineQualifier.constant){
+            try{constants[stmt.name]=PineExecutionContext.constantValue(stmt.value,constants);}
+            on PineRuntimeException{/* Only literal constants are accepted as input metadata. */}
+          }
         } else if(stmt is PineAssignmentStatement) {
           validateExpr(stmt.value);
         } else if(stmt is PineExpressionStatement) {
@@ -231,7 +270,7 @@ class PineV6LanguageProgram {
         return false;
       }
       validateStatements(prepared.ast.statements,global:true);
-      if(!advanced(prepared.ast.statements)&&!usesNewTa&&!(preferGeneral&&prepared.legacyProgram!=null)){
+      if(!advanced(prepared.ast.statements)&&!usesNewTa&&!((preferGeneral||context!=null)&&prepared.legacyProgram!=null)){
         throw const PineRuntimeException('unsupported_legacy',
             'Only previously executable numeric programs or verified Stage 3a language are supported');
       }
@@ -241,7 +280,7 @@ class PineV6LanguageProgram {
       }
     }
     return PineV6LanguageProgram._(
-        source,prepared.ast,legacy,functions,plots,prepared.semantic.inferred);
+        source,prepared.ast,legacy,functions,plots,prepared.semantic.inferred,executionContext,Map.unmodifiable(inputs));
   }
 
   PineV6LanguageInstance newInstance({
@@ -266,7 +305,7 @@ class PineV6LanguageProgram {
 class _PineBinding {
   _PineBinding(this.value,{this.definition,this.callPath=''});
   Object? value;
-  final PineVariableStatement? definition;
+  final PineStatement? definition;
   final String callPath;
 }
 class _PineFrame {
@@ -290,7 +329,7 @@ class PineV6LanguageInstance {
   final PineRuntimeLimits limits;
   final int maxLoopIterations;
   PineRuntimeBudget budget;
-  final Map<(String,PineVariableStatement),Object?> _persistent={};
+  final Map<(String,PineStatement),Object?> _persistent={};
   final Map<(String,PineCallExpression),PineTaState> _ta={};
   final Map<String,List<Object?>> _history={};
   final Map<(String,PineCallExpression),PineRollingSum> _sums={};
@@ -309,7 +348,8 @@ class PineV6LanguageInstance {
   int get completedBars=>_bar+1;
   Object? persistentValue(String name) {
     for(final entry in _persistent.entries) {
-      if(entry.key.$2.name==name && entry.key.$1=='')return entry.value;
+      final stmt=entry.key.$2;
+      if(stmt is PineVariableStatement&&stmt.name==name&&entry.key.$1=='')return entry.value;
     }
     return null;
   }
@@ -375,6 +415,7 @@ class PineV6LanguageInstance {
       };
     }
     if(expr is PineMemberExpression){
+      if(PineExecutionContext.members.contains(expr.qualifiedName))return program.context.member(expr.qualifiedName!);
       return PineScalarDispatch.memberColor(expr.qualifiedName);
     }
     if(expr is PineIdentifierExpression){
@@ -384,6 +425,8 @@ class PineV6LanguageInstance {
       if(found!=null)return found.value;
       final candle=_seen.last;
       return switch(name){
+        'time'=>candle.timestampMs?.toDouble(),
+        'volume'=>candle.volume,
         'close'=>candle.close,
         'open'=>candle.open,
         'high'=>candle.high,
@@ -417,10 +460,11 @@ class PineV6LanguageInstance {
       final index=_bar-offset;
       if(index<0)return missing;
       if(name=='bar_index')return index.toDouble();
-      if(<String>{'close','open','high','low','hl2','hlc3','ohlc4'}
+      if(<String>{'time','volume','close','open','high','low','hl2','hlc3','ohlc4'}
           .contains(name)){
         final c=_seen[index];
         return switch(name){
+          'time'=>c.timestampMs?.toDouble(),'volume'=>c.volume,
           'close'=>c.close,'open'=>c.open,'high'=>c.high,'low'=>c.low,
           'hl2'=>(c.high+c.low)/2,
           'hlc3'=>(c.high+c.low+c.close)/3,
@@ -515,8 +559,16 @@ class PineV6LanguageInstance {
         final state=_ta.putIfAbsent(key,()=>PineTaState(ta,budget));
         return state.step(args,_seen.last,_bar==0?null:_seen[_bar-1].close);
       }
-      if(name=='input.int'||name=='input.float') {
-        return _eval(expr.arguments.first.value,frame);
+      if(PineExecutionContext.inputs.contains(name))return program._inputs[expr]!;
+      if(name=='int'){
+        final n=_num(_eval(expr.arguments.single.value,frame));
+        return n==null?null:n.truncateToDouble();
+      }
+      if(name=='time'){
+        return program.context.sessionTime(expr,[for(final a in expr.arguments)_eval(a.value,frame)],_seen.last.timestampMs);
+      }
+      if(PineRuntimeMap.names.contains(name)){
+        return PineRuntimeMap.execute(expr,[for(final a in expr.arguments)_eval(a.value,frame)],budget);
       }
       if(PineSeriesDispatch.supports(name)){
         final key=(_callPath,expr);
@@ -613,6 +665,15 @@ class PineV6LanguageInstance {
         last=result;
       }else if(stmt is PineSequenceStatement){
         last=_execute(stmt.statements,frame);
+      }else if(stmt is PineReferenceVariableStatement){
+        final persistent=stmt.mode=='var'||stmt.mode=='varip';
+        final key=(_callPath,stmt);
+        final value=persistent&&_persistent.containsKey(key)?_persistent[key]:_eval(stmt.value,frame);
+        if(persistent&&!_persistent.containsKey(key)){
+          budget.consume(work:0,values:1);_persistent[key]=value;
+        }
+        frame.locals[stmt.name]=_PineBinding(value,definition:persistent?stmt:null,callPath:_callPath);
+        last=value;
       }else if(stmt is PineVariableStatement) {
         final persistent=stmt.mode=='var'||stmt.mode=='varip';
         final key=(_callPath,stmt);
@@ -638,6 +699,9 @@ class PineV6LanguageInstance {
         }
         final rhs=_eval(stmt.value,frame);
         final op=stmt.operator;
+        if(binding.value is PineRuntimeMap||rhs is PineRuntimeMap){
+          throw const PineRuntimeException('unsupported_map_reassign','Map reference reassignment is not enabled');
+        }
         if(op==':=') {
           binding.value=rhs;
         }else{
@@ -729,6 +793,7 @@ class PineV6LanguageInstance {
       final global=_PineFrame(null);
       _execute(program.ast.statements,global);
       for(final entry in global.locals.entries){
+        if(entry.value.value is PineRuntimeMap)continue;
         final history=_history.putIfAbsent(entry.key,()=>[]);
         while(history.length<_bar)history.add(null);
         history.add(entry.value.value);

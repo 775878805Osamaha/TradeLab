@@ -129,7 +129,7 @@ void main(){
   test('recognized unsupported calls cannot enter existing execution paths',(){
     for(final body in ['x = time("60","0700-2000")','x = ticker.standard("X")',
       'var table t = table.new(position.top_right,1,1)',
-      'var map<int,float> m = map.new<int,float>()','strategy.entry("L",strategy.long)']){
+      'strategy.entry("L",strategy.long)']){
       final source='//@version=6\nindicator("Guard")\n$body\nplot(close)';
       final r=const PineV6Frontend().prepare(source);
       expect(r.hasErrors,isFalse,reason:r.diagnostics.join('\n'));
@@ -149,8 +149,6 @@ void main(){
     'strategy.closedtrades.exit_price':'x = strategy.closedtrades.exit_price(0)',
     'strategy.closedtrades.entry_price':'x = strategy.closedtrades.entry_price(0)',
     'strategy.closedtrades.size':'x = strategy.closedtrades.size(0)',
-    'map.get':'var map<int,float> m = map.new<int,float>()\nx = map.get(m,1)',
-    'map.put':'var map<int,float> m = map.new<int,float>()\nx = map.put(m,1,2.0)',
     'position.top_right':'x = position.top_right',
     'table.new':'var table t = table.new(position.top_right,1,1)',
     'table.cell':'var table t = table.new(position.top_right,1,1)\ntable.cell(t,0,0,"ok")',
@@ -164,6 +162,22 @@ void main(){
       assertRejectedBeforeEvaluation('//@version=6\n$header\nplot(close)\n${entry.value}',entry.key);
     });
   }
+  test('D map get/put now execute, missing key and prior value preserved',(){
+    const source='''//@version=6
+indicator("Map")
+var map<int,float> m = map.new<int,float>()
+old = map.put(m,1,close)
+plot(old)
+plot(map.get(m,1))
+plot(map.get(m,2))''';
+    final r=const PineV6Frontend().prepare(source);
+    expect(r.hasErrors,isFalse,reason:r.diagnostics.join('\n'));
+    expect(r.canExecute,isFalse,reason:'Standalone legacy route still gated');
+    final p=PineV6LanguageProgram.compile(source);
+    expect(p.legacy,isNull);
+    final v=p.evaluate([const TradeCandle(1,3,0,2),const TradeCandle(2,4,1,3)]);
+    expect(v.map((p)=>p.values).toList(),[[null,2],[2,3],[null,null]]);
+  });
   test('D rejects unsupported call in unreachable branch before execution',(){
     assertRejectedBeforeEvaluation(
         '//@version=6\nindicator("Guard")\nplot(close)\nif false\n    x = ticker.standard("X")',
