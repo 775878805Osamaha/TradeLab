@@ -114,7 +114,7 @@ void main(){
     expect(r.semantic.diagnostics.where((d)=>d.code=='syntax_only'),hasLength(48));
     expect(r.hasErrors,isTrue);
   });
-  test('na literal and callable are distinct; int cast parses and is gated',(){
+  test('na literal and callable are distinct; int cast parses and executes',(){
     final r=prepare('float a = na\nx = na(a)\ny = int(close)');
     expect(r.hasErrors,isFalse,reason:r.diagnostics.join('\n'));
     expect((r.ast.statements[1] as PineVariableStatement).value,isA<PineLiteralExpression>());
@@ -123,7 +123,7 @@ void main(){
     expect(r.semantic.inferred[call]!.type,PineBaseType.boolType);
     final cast=(r.ast.statements[3] as PineVariableStatement).value;
     expect(r.semantic.inferred[cast]!.type,PineBaseType.intType);
-    refuses('x = int(close)');
+    expect(executes('x = int(close / 3)', ['x'],count:2),[[3,3]]);
     expect(error(prepare('x = int("x")'),'cast_type').line,3);
     expect(error(prepare('x = int(1,2)'),'cast_arity').line,3);
   });
@@ -138,7 +138,7 @@ void main(){
     expect(constructor.name,'map.new');
     expect(constructor.callee,isA<PineGenericReferenceExpression>());
     expect((r.ast.statements[2] as PineVariableStatement).value,isA<PineBinaryExpression>());
-    refuses('var map<int,float> m = map.new<int,float>()');
+    expect(executes('var map<int,float> m = map.new<int,float>()\nmap.put(m,1,close)', ['map.get(m,1)'],count:2),[[10,10]]);
   });
   test('map type mismatch and invalid generic arity diagnosed',(){
     expect(error(prepare('var map<int,float> m = map.new<int,int>()'),'reference_type_mismatch').line,3);
