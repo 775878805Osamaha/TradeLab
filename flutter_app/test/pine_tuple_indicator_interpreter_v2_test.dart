@@ -93,6 +93,19 @@ void main(){
     final v=PineV6LanguageProgram.compile(code,preferGeneral:true).evaluate(bars.take(8).toList()).single.values;
     expect(v.take(3),[null,null,null]);expect(v[3],closeTo((bars[0].close+bars[1].close+bars[2].close)/3,1e-6));
   });
+  test('default general AST EMA retains first-close seed; opt-in uses SMA',(){
+    const code='//@version=6\nindicator("AST EMA compatibility")\nf(float x) => ta.ema(x,3)\nplot(f(close))';
+    final candles=[for(final x in [2.0,4.0,8.0,16.0]) TradeCandle(x,x+1,x-1,x)];
+    final old=PineV6LanguageProgram.compile(code);
+    final seeded=PineV6LanguageProgram.compile(code,preferGeneral:true);
+    expect(old.legacy,isNull);
+    expect(seeded.legacy,isNull);
+    expect(old.evaluate(candles).single.values,[2,3,5.5,10.75]);
+    final v=seeded.evaluate(candles).single.values;
+    expect(v.take(2),[null,null]);
+    expect(v[2],closeTo(14/3,1e-6));
+    expect(v[3],closeTo((14/3+16)/2,1e-6));
+  });
   test('real Pine tuple-returning UDF and nested independent call paths',(){
     const code='''//@version=6
 indicator("Tuple function")

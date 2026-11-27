@@ -20,7 +20,7 @@ import 'pine_indicator_dispatch.dart';
 /// historical candles: there is no speculative tick/rollback.
 class PineV6LanguageProgram {
   PineV6LanguageProgram._(this.source, this.ast, this.legacy,
-      this._functions, this._plotCalls, this._types);
+      this._functions, this._plotCalls, this._types, this._seededEma);
 
   final String source;
   final PineScriptAst ast;
@@ -28,6 +28,8 @@ class PineV6LanguageProgram {
   final Map<String, PineFunctionStatement> _functions;
   final List<PineCallExpression> _plotCalls;
   final Map<PineExpression,PineTypeInfo> _types;
+  // Explicit preferGeneral opt-in only; default AST and legacy EMA keep their historical seed.
+  final bool _seededEma;
 
   bool get overlay {
     for(final statement in ast.statements){
@@ -51,6 +53,9 @@ class PineV6LanguageProgram {
           prepared.message??'Invalid Pine syntax or semantics');
     }
     final legacy=preferGeneral?null:prepared.legacyProgram;
+    if(prepared.diagnostics.any((d)=>d.code=='tuple_shape_unknown')){
+      throw const PineRuntimeException('tuple_shape_unknown','Tuple result shape must be resolved before execution');
+    }
     final functions=<String,PineFunctionStatement>{};
     final plots=<PineCallExpression>[];
     for(final stmt in prepared.ast.statements) {
@@ -104,7 +109,7 @@ class PineV6LanguageProgram {
           PineSeriesDispatch.validate(expr);
           usesNewTa=true;
         }
-        if(PineIndicatorDispatch.supports(name)){
+        if(PineIndicatorDispatch.supports(name)&&(name!='ta.ema'||preferGeneral)){
           PineIndicatorDispatch.validate(expr,prepared.semantic.inferred);
           usesNewTa=true;
         }
@@ -172,6 +177,7 @@ class PineV6LanguageProgram {
         if(stmt is PineTupleDeclarationStatement){
           validateExpr(stmt.value);usesNewTa=true;
         }else if(stmt is PineSequenceStatement){
+          usesNewTa=true;
           validateStatements(stmt.statements,global:global);
         }else if(stmt is PineVariableStatement) {
           validateExpr(stmt.value);
@@ -237,7 +243,7 @@ class PineV6LanguageProgram {
       }
     }
     return PineV6LanguageProgram._(
-        source,prepared.ast,legacy,functions,plots,prepared.semantic.inferred);
+        source,prepared.ast,legacy,functions,plots,prepared.semantic.inferred,preferGeneral);
   }
 
   PineV6LanguageInstance newInstance({
@@ -498,7 +504,7 @@ class PineV6LanguageInstance {
         return expr.arguments.length>1
             ?_eval(expr.arguments[1].value,frame):0.0;
       }
-      if(PineIndicatorDispatch.supports(name)){
+      if(PineIndicatorDispatch.supports(name)&&(name!='ta.ema'||program._seededEma)){
         final key=(_callPath,expr);
         final args=PineIndicatorDispatch.bind(expr,[for(final arg in expr.arguments)_eval(arg.value,frame)]);
         return _indicators.putIfAbsent(key,()=>PineIndicatorDispatch(name,budget)).step(_bar,args,_seen.last);
