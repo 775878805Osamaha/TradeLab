@@ -1,0 +1,18 @@
+//@version=6
+indicator("TradeLab Security Reference Capture V1", overlay=false)
+htf = input.timeframe("120", "Higher timeframe (greater than chart)")
+external = input.symbol("OANDA:XAGUSD", "External symbol")
+sess = input.session("0700-2000", "Session")
+ha = ticker.heikinashi(ticker.standard(syminfo.tickerid))
+std = ticker.standard(syminfo.tickerid)
+[haO,haH,haL,haC] = request.security(ha,timeframe.period,[open,high,low,close],lookahead=barmerge.lookahead_off)
+[htfO,htfC,htfPrevTime] = request.security(ha,htf,[open[1],close[1],time[1]],lookahead=barmerge.lookahead_on)
+[htfTime,htfRawO,htfRawH,htfRawL,htfRawC,htfRawV] = request.security(std,htf,[time,open,high,low,close,volume],gaps=barmerge.gaps_on,lookahead=barmerge.lookahead_off)
+[extTime,extO,extH,extL,extC,extV] = request.security(external,timeframe.period,[time,open,high,low,close,volume],gaps=barmerge.gaps_on,lookahead=barmerge.lookahead_off)
+[extFillH,extFillL] = request.security(external,timeframe.period,[high,low],gaps=barmerge.gaps_off,lookahead=barmerge.lookahead_off)
+fmt(float v) => str.tostring(v,"#.################")
+fmtInt(int v) => str.tostring(v)
+htfDirection = htfC > htfO ? 1 : htfC < htfO ? -1 : 0
+if barstate.isconfirmed
+    log.info("TLSEC1|" + syminfo.tickerid + "|" + timeframe.period + "|" + syminfo.timezone + "|" + fmt(syminfo.mintick) + "|" + htf + "|" + external + "|" + sess + "|" + fmtInt(time) + "|" + fmtInt(time_close) + "|" + fmt(open) + "|" + fmt(high) + "|" + fmt(low) + "|" + fmt(close) + "|" + fmt(volume) + "|" + fmtInt(time(timeframe.period,sess)) + "|" + fmt(haO) + "|" + fmt(haH) + "|" + fmt(haL) + "|" + fmt(haC) + "|" + fmtInt(htfPrevTime) + "|" + fmt(htfO) + "|" + fmt(htfC) + "|" + fmtInt(htfDirection) + "|" + fmtInt(htfTime) + "|" + fmt(htfRawO) + "|" + fmt(htfRawH) + "|" + fmt(htfRawL) + "|" + fmt(htfRawC) + "|" + fmt(htfRawV) + "|" + fmtInt(extTime) + "|" + fmt(extO) + "|" + fmt(extH) + "|" + fmt(extL) + "|" + fmt(extC) + "|" + fmt(extV) + "|" + fmt(extFillH) + "|" + fmt(extFillL))
+plot(htfDirection, "Prior HTF HA direction")
