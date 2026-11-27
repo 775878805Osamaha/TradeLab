@@ -90,26 +90,7 @@ class PineV6LanguageProgram {
       }
       if(expr is PineCallExpression) {
         final name=expr.name;
-        if(PineSeriesDispatch.supports(name)){
-        final key=(_callPath,expr);
-        if((_seriesLastBar[key]??-1)+1!=_bar){
-          throw const PineRuntimeException('history_order',
-            'Stateful series call must execute once on every closed bar in this tier');
-        }
-        _seriesLastBar[key]=_bar;
-        final args=PineSeriesDispatch.bind(expr,[for(final arg in expr.arguments)_eval(arg.value,frame)],_seen.last);
-        if(name=='ta.barssince'){
-          return _since.putIfAbsent(key,()=>PineBarsSinceState(budget)).step(_bool(args[0]));
-        }
-        final capacity=limits.maxHistory<1001?limits.maxHistory:1001;
-        final state=_pivots.putIfAbsent(key,()=>PinePivotState(budget,capacity:capacity,high:name=='ta.pivothigh'));
-        final left=_integer(args[1]),right=_integer(args[2]);
-        if(left<1||right<1||left>500||right>500){
-          throw const PineRuntimeException('pivot_length','Pivot legs must be positive bounded integers (1..500)');
-        }
-        return state.step(_bar,_num(args[0]),left,right);
-      }
-      if(PineScalarDispatch.supports(name)){
+        if(PineScalarDispatch.supports(name)){
           PineScalarDispatch.validate(expr);
           usesNewTa=true;
         }
@@ -509,6 +490,25 @@ class PineV6LanguageInstance {
       }
       if(name=='input.int'||name=='input.float') {
         return _eval(expr.arguments.first.value,frame);
+      }
+      if(PineSeriesDispatch.supports(name)){
+        final key=(_callPath,expr);
+        if((_seriesLastBar[key]??-1)+1!=_bar){
+          throw const PineRuntimeException('history_order',
+            'Stateful series call must execute once on every closed bar in this tier');
+        }
+        _seriesLastBar[key]=_bar;
+        final args=PineSeriesDispatch.bind(expr,[for(final arg in expr.arguments)_eval(arg.value,frame)],_seen.last);
+        if(name=='ta.barssince'){
+          return _since.putIfAbsent(key,()=>PineBarsSinceState(budget)).step(_bool(args[0]));
+        }
+        final capacity=limits.maxHistory<1001?limits.maxHistory:1001;
+        final state=_pivots.putIfAbsent(key,()=>PinePivotState(budget,capacity:capacity,high:name=='ta.pivothigh'));
+        final left=_integer(args[1]),right=_integer(args[2]);
+        if(left<1||right<1||left>500||right>500){
+          throw const PineRuntimeException('pivot_length','Pivot legs must be positive bounded integers (1..500)');
+        }
+        return state.step(_bar,_num(args[0]),left,right);
       }
       if(PineScalarDispatch.supports(name)){
         final values=PineScalarDispatch.bind(expr,
