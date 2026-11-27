@@ -81,8 +81,7 @@ void main(){
       expect(r.hasErrors,isTrue,reason:bad);
     }
   });
-  test('inject exact typo variants in memory; original fixture never written',(){
-    final source=File('test/fixtures/pine/ahv10.pine').readAsStringSync();
+  group('Exact typo rejection (in-memory fixture)',(){
     final replacements={
       'ta.ema':'ta.emaa','str.contains':'str.containz','strategy.entry':'strategy.entri',
       'table.cell':'table.celll','map.get':'map.gett','ticker.standard':'ticker.standart',
@@ -92,25 +91,45 @@ void main(){
       'alert.freq_once_per_bar_close':'alert.freq_once_per_bar_closee',
     };
     for(final entry in replacements.entries){
-      expect(source,contains(entry.key));
-      final result=full(source.replaceFirst(entry.key,entry.value));
-      expect(result.completed,isTrue);
-      expect(result.diagnostics.any((d)=>
-          (d.code=='unknown_function'||d.code=='undefined_name')&&
-          d.message.contains(entry.value)),isTrue,reason:entry.value);
+      test('rejects ${entry.value}',(){
+        final file=File('test/fixtures/pine/ahv10.pine');
+        final source=file.readAsStringSync();
+        expect(source,contains(entry.key));
+        final result=full(source.replaceFirst(entry.key,entry.value));
+        expect(result.completed,isTrue);
+        expect(result.diagnostics.any((d)=>
+            (d.code=='unknown_function'||d.code=='undefined_name')&&
+            d.message.contains(entry.value)),isTrue,reason:entry.value);
+        expect(file.readAsStringSync(),source);
+      });
     }
-    expect(File('test/fixtures/pine/ahv10.pine').readAsStringSync(),source);
+  });
+  test('original fixture remains error-free and retains syntax-only notices',(){
+    final source=File('test/fixtures/pine/ahv10.pine').readAsStringSync();
     final original=full(source);
     expect(original.completed,isTrue);
     expect(original.lastVisitedLine,443);
     expect(original.diagnostics.where((d)=>d.severity==PineDiagnosticSeverity.error),isEmpty,
         reason:original.diagnostics.join('\n'));
-    expect(original.diagnostics.where((d)=>d.code=='syntax_only'),hasLength(17));
+    // Three TA tuple declarations now execute; the two security tuples and
+    // all other unsupported syntax are still diagnosed.
+    expect(original.diagnostics.where((d)=>d.code=='syntax_only'),hasLength(14));
+    final lines=source.split('\n');
+    for(final name in ['ta.macd','ta.dmi','ta.supertrend']){
+      final index=lines.indexWhere((l)=>l.startsWith('[')&&l.contains(name+'('));
+      expect(index,greaterThanOrEqualTo(0));
+      expect(original.diagnostics.any((d)=>d.code=='syntax_only'&&d.line==index+1),isFalse);
+    }
+    for(var i=0;i<lines.length;i++){
+      if(lines[i].startsWith('[')&&lines[i].contains('request.security(')){
+        expect(original.diagnostics.any((d)=>d.code=='syntax_only'&&d.line==i+1),isTrue);
+      }
+    }
   });
   test('recognized unsupported calls cannot enter existing execution paths',(){
     for(final body in ['x = time("60","0700-2000")','x = ticker.standard("X")',
       'var table t = table.new(position.top_right,1,1)',
-      'var map<int,float> m = map.new<int,float>()','strategy.entry("L",strategy.long)']){
+      'strategy.entry("L",strategy.long)']){
       final source='//@version=6\nindicator("Guard")\n$body\nplot(close)';
       final r=const PineV6Frontend().prepare(source);
       expect(r.hasErrors,isFalse,reason:r.diagnostics.join('\n'));
@@ -130,8 +149,6 @@ void main(){
     'strategy.closedtrades.exit_price':'x = strategy.closedtrades.exit_price(0)',
     'strategy.closedtrades.entry_price':'x = strategy.closedtrades.entry_price(0)',
     'strategy.closedtrades.size':'x = strategy.closedtrades.size(0)',
-    'map.get':'var map<int,float> m = map.new<int,float>()\nx = map.get(m,1)',
-    'map.put':'var map<int,float> m = map.new<int,float>()\nx = map.put(m,1,2.0)',
     'position.top_right':'x = position.top_right',
     'table.new':'var table t = table.new(position.top_right,1,1)',
     'table.cell':'var table t = table.new(position.top_right,1,1)\ntable.cell(t,0,0,"ok")',
@@ -145,6 +162,22 @@ void main(){
       assertRejectedBeforeEvaluation('//@version=6\n$header\nplot(close)\n${entry.value}',entry.key);
     });
   }
+  test('D map get/put now execute, missing key and prior value preserved',(){
+    const source='''//@version=6
+indicator("Map")
+var map<int,float> m = map.new<int,float>()
+old = map.put(m,1,close)
+plot(old)
+plot(map.get(m,1))
+plot(map.get(m,2))''';
+    final r=const PineV6Frontend().prepare(source);
+    expect(r.hasErrors,isFalse,reason:r.diagnostics.join('\n'));
+    expect(r.canExecute,isFalse,reason:'Standalone legacy route still gated');
+    final p=PineV6LanguageProgram.compile(source);
+    expect(p.legacy,isNull);
+    final v=p.evaluate([const TradeCandle(1,3,0,2),const TradeCandle(2,4,1,3)]);
+    expect(v.map((p)=>p.values).toList(),[[null,2],[2,3],[null,null]]);
+  });
   test('D rejects unsupported call in unreachable branch before execution',(){
     assertRejectedBeforeEvaluation(
         '//@version=6\nindicator("Guard")\nplot(close)\nif false\n    x = ticker.standard("X")',

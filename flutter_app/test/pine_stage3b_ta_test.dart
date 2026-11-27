@@ -43,6 +43,16 @@ List<Object?> argsFor(String name,double? x){
     default:return [x,2];
   }
 }
+// Independent recurrence for the general interpreter; legacy fixture stays intact.
+List<double?> smaSeededEmaReference(List<TradeCandle> bars,int length){
+  double sum=0;double? previous;
+  return [for(var i=0;i<bars.length;i++) (() {
+    final x=bars[i].close;
+    if(i<length){sum+=x;if(i==length-1)previous=sum/length;}
+    else{previous=(2*x+(length-1)*previous!)/(length+1);}
+    return previous;
+  })()];
+}
 void main(){
   final fixture=jsonDecode(File('test/fixtures/pine_stage3b_ohlcv.json').readAsStringSync()) as Map;
   final matrix=jsonDecode(File('test/fixtures/pine_stage3b_support.json').readAsStringSync()) as List;
@@ -117,7 +127,7 @@ void main(){
       // Force the advanced route for legacy names, preserving the legacy executor.
       final program=PineV6LanguageProgram.compile('indicator("Batch 1")\nvar int marker = 0\nplot($expression)');
       final instance=program.newInstance();
-      final values=[for(final v in series) v is bool?(v?1:0):v];
+      final values=name=='ta.ema'?smaSeededEmaReference(bars,2):[for(final v in series) v is bool?(v?1:0):v];
       try{
         instance.rebuild(guarded,6);compare(instance.outputs.single.values,values);
         guarded.cutoff=2;instance.rebuild(guarded,2);

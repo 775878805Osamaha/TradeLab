@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/pine_v6_frontend.dart';
 import 'package:tradelab_flutter/chart/pine_v6_language_runtime.dart';
 import 'package:tradelab_flutter/chart/pine_runtime_core.dart';
+import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 const frontend=PineV6Frontend();
 PineFrontendResult prepare(String body)=>frontend.prepare('//@version=6\nindicator("syntax")\n$body\nplot(close)');
@@ -14,6 +15,16 @@ void refuses(String body){
   expect(result.canExecute,isFalse);
   expect(()=>result.evaluateSupported([]),throwsA(isA<PineFrontendExecutionException>()));
   expect(()=>PineV6LanguageProgram.compile(source),throwsA(isA<PineRuntimeException>()));
+}
+
+// Preserve frontend/AST assertions; newly executable syntax must now prove values.
+List<List<double?>> executes(String body,List<String> plots,{int count=40}){
+  final source='//@version=6\nindicator("syntax execution")\n$body\n'+
+      plots.map((p)=>'plot($p)').join('\n');
+  final p=PineV6LanguageProgram.compile(source);
+  expect(p.legacy,isNull);
+  final bars=List.generate(count,(_)=>const TradeCandle(10,11,9,10));
+  return p.evaluate(bars).map((p)=>p.values).toList();
 }
 
 void main(){
@@ -31,15 +42,26 @@ void main(){
     final use=r.ast.statements[3] as PineVariableStatement;
     expect(r.semantic.inferred[use.value]!.type,PineBaseType.floatType);
     expect(r.semantic.inferred[use.value]!.qualifier,PineQualifier.series);
-    refuses('f() => [1,2]\n[a, b] = f()');
+    expect(executes('f() => [1,2]\n[a, b] = f()', ['a','b'],count:2), [[1,1],[2,2]]);
   });
-  test('known tuple function signatures: only semantic binding',(){
-    for(final expr in ['ta.macd(close, 12, 26, 9)','ta.dmi(14, 14)','ta.bb(close,20,2)']){
-      refuses('[a, b, c] = $expr');
+  test('known tuple signatures execute verified values; unsupported tuples stay gated',(){
+    final macd=executes('[a,b,c] = ta.macd(close,12,26,9)', ['a','b','c']);
+    expect(macd[0], [for(var i=0;i<40;i++) i<25?null:0]);
+    for(final p in macd.skip(1)){
+      expect(p, [for(var i=0;i<40;i++) i<33?null:0]);
     }
-    refuses('[a, b] = ta.supertrend(3,10)');
+    final dmi=executes('[a,b,c] = ta.dmi(14,14)', ['a','b','c']);
+    for(final p in dmi.take(2)){
+      expect(p,[for(var i=0;i<40;i++) i<14?null:0]);
+    }
+    expect(dmi[2],[for(var i=0;i<40;i++) i<27?null:0]);
+    final st=executes('[a,b] = ta.supertrend(3,10)', ['a','b']);
+    expect(st[0],[for(var i=0;i<40;i++) i==0?0:i<9?null:16]);
+    expect(st[1],List.filled(40,1));
+    refuses('[a,b,c] = ta.bb(close,20,2)');
     refuses('[a, b] = request.security("X", "60", [open, close])');
-    refuses('f() => [1, true]\n[a,b] = f()\nflag = b and true');
+    expect(executes('f() => [1, true]\n[a,b] = f()\nflag = b and true',
+      ['a','flag ? 1 : 0'],count:2),[[1,1],[1,1]]);
   });
   test('tuple arity and scalar reject at exact location',(){
     final a=error(prepare('[a,b] = ta.macd(close,12,26,9)'),'tuple_arity');
@@ -55,7 +77,8 @@ void main(){
     expect(error(prepare('a = 1\n[a,b] = ta.supertrend(3,10)'),'duplicate_name').line,4);
     final q=error(prepare('[a,b] := [1,2]'),'tuple_reassignment');
     expect([q.line,q.column],[3,7]);
-    refuses('[_, _, x] = ta.macd(close,12,26,9)');
+    expect(executes('[_, _, x] = ta.macd(close,12,26,9)', ['x']).single,
+      [for(var i=0;i<40;i++) i<33?null:0]);
     expect(error(prepare('[_, x] = ta.supertrend(3,10)\ny = _'),'undefined_name').line,4);
   });
   test('tuple invalid target and local scope diagnostics',(){
@@ -73,8 +96,8 @@ void main(){
     expect(seq.statements[0].span.column,5);
     expect(seq.statements[1].span.column,24);
     expect((seq.statements[2] as PineExpressionStatement).expression,isA<PineCallExpression>());
-    refuses('a = 1, b = a + 1');
-    refuses('f() => a = 1, [a, close]\n[x,y] = f()');
+    expect(executes('a = 1, b = a + 1', ['a','b'],count:2),[[1,1],[2,2]]);
+    expect(executes('f() => a = 1, [a, close]\n[x,y] = f()', ['x','y'],count:2),[[1,1],[10,10]]);
   });
   test('comma sequence still checks scope and errors',(){
     final d=error(prepare('if true\n    a = 1, b = missing'),'undefined_name');
@@ -91,7 +114,7 @@ void main(){
     expect(r.semantic.diagnostics.where((d)=>d.code=='syntax_only'),hasLength(48));
     expect(r.hasErrors,isTrue);
   });
-  test('na literal and callable are distinct; int cast parses and is gated',(){
+  test('na literal and callable are distinct; int cast parses and executes',(){
     final r=prepare('float a = na\nx = na(a)\ny = int(close)');
     expect(r.hasErrors,isFalse,reason:r.diagnostics.join('\n'));
     expect((r.ast.statements[1] as PineVariableStatement).value,isA<PineLiteralExpression>());
@@ -100,7 +123,7 @@ void main(){
     expect(r.semantic.inferred[call]!.type,PineBaseType.boolType);
     final cast=(r.ast.statements[3] as PineVariableStatement).value;
     expect(r.semantic.inferred[cast]!.type,PineBaseType.intType);
-    refuses('x = int(close)');
+    expect(executes('x = int(close / 3)', ['x'],count:2),[[3,3]]);
     expect(error(prepare('x = int("x")'),'cast_type').line,3);
     expect(error(prepare('x = int(1,2)'),'cast_arity').line,3);
   });
@@ -115,7 +138,7 @@ void main(){
     expect(constructor.name,'map.new');
     expect(constructor.callee,isA<PineGenericReferenceExpression>());
     expect((r.ast.statements[2] as PineVariableStatement).value,isA<PineBinaryExpression>());
-    refuses('var map<int,float> m = map.new<int,float>()');
+    expect(executes('var map<int,float> m = map.new<int,float>()\nmap.put(m,1,close)', ['map.get(m,1)'],count:2),[[10,10]]);
   });
   test('map type mismatch and invalid generic arity diagnosed',(){
     expect(error(prepare('var map<int,float> m = map.new<int,int>()'),'reference_type_mismatch').line,3);

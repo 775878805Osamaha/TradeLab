@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 import 'pine_stage3b_reference_test.dart' show libraryValues, program;
-import 'pine_stage3b_ta_test.dart' show GuardedBars;
+import 'pine_stage3b_ta_test.dart' show GuardedBars, smaSeededEmaReference;
 
 const capturePath='test/fixtures/tradingview/4_5778588908598075071.csv';
 const functions=['ta.ema','ta.rsi','ta.atr','ta.rma'];
@@ -120,7 +120,16 @@ void main(){
       final direct=script.evaluate(closed).single.values;
       compareCapture('library',name,library,ref);
       compareCapture('pine',name,direct,ref);
-      expect(direct,library,reason:'Advanced script and library agree across full prefix');
+      if(name=='ta.ema'){
+        final seeded=smaSeededEmaReference(closed,14);
+        for(var i=0;i<direct.length;i++){
+          if(seeded[i]==null){expect(direct[i],isNull);}
+          else{expect(direct[i],closeTo(seeded[i]!,tolerance));}
+          if(i>=startIndex){expect(direct[i],closeTo(library[i]!,tolerance));}
+        }
+      }else{
+        expect(direct,library,reason:'Advanced script and library agree across full prefix');
+      }
       if(name=='ta.ema'||name=='ta.rsi'){
         final legacy=program(name,14,advanced:false);
         expect(legacy.legacy,isNotNull);
