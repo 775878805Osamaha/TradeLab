@@ -38,7 +38,10 @@ class _Factory implements SqfliteDatabaseFactory {
       .listSync().whereType<File>().where((f)=>f.path.endsWith('.sqlite')).toList();
     final sourceHash=await hash(File(file));
     sawBackup=false;
-    for(final f in snapshots){if(await hash(f)==sourceHash)sawBackup=true;}
+    for(final f in snapshots){
+      final stamp=int.parse(path.basename(f.path).split('-').last.split('.').first);
+      if(stamp>4&&await hash(f)==sourceHash)sawBackup=true;
+    }
     expect(sawBackup,isTrue);
     try{
       final db=await delegate.openDatabase(file,options:OpenDatabaseOptions(
@@ -135,4 +138,55 @@ void main(){
       print('SQLITE_BACKUP_GATE '+jsonEncode(evidence));
     }
   },timeout:const Timeout(Duration(minutes:4)));
+
+  test('blocked backup destination prevents versioned open and preserves v1',()async{
+    databaseFactory=databaseFactoryFfi;
+    final root=await Directory.systemTemp.createTemp('blocked-backup-');
+    final f=path.join(root.path,'blocked.db');
+    final db=await databaseFactoryFfi.openDatabase(f,options:OpenDatabaseOptions(version:1,onCreate:(db,_)async{
+      await db.execute('CREATE TABLE records(value INTEGER)');
+      await db.insert('records',{'value':42});
+    }));
+    await db.close();
+    final before=await hash(File(f));
+    await File(MarketCandleMigrationBackup.directoryFor(f)).writeAsString('blocked directory');
+    var attempted=false;
+    await expectLater(MarketCandleMigrationBackup.open(filename:f,targetVersion:2,
+      openTarget:()async{attempted=true;throw StateError('must not attempt');}),throwsA(anything));
+    expect(attempted,isFalse);
+    expect(await hash(File(f)),before);
+    final original=await databaseFactoryFfi.openDatabase(f,options:OpenDatabaseOptions(version:1));
+    expect(await original.getVersion(),1);
+    expect((await original.query('records')).single['value'],42);
+    await original.close();
+    await root.delete(recursive:true);
+  });
+
+  test('WAL archive is checkpointed before verified upgrade snapshot',()async{
+    databaseFactory=databaseFactoryFfi;
+    final root=await Directory.systemTemp.createTemp('wal-backup-');
+    final f=path.join(root.path,'wal.db');
+    final db=await databaseFactoryFfi.openDatabase(f,options:OpenDatabaseOptions(version:1,onCreate:(db,_)async{
+      await db.execute('CREATE TABLE records(value INTEGER)');
+    }));
+    expect((await db.rawQuery('PRAGMA journal_mode=WAL')).single.values.single,'wal');
+    await db.insert('records',{'value':73});
+    await db.close();
+    final migrated=await MarketCandleMigrationBackup.open(filename:f,targetVersion:2,
+      openTarget:()async{
+        final dir=Directory(MarketCandleMigrationBackup.directoryFor(f));
+        final snapshot=dir.listSync().whereType<File>().single;
+        final verified=await databaseFactoryFfi.openDatabase(snapshot.path,
+          options:OpenDatabaseOptions(readOnly:true,singleInstance:false));
+        expect(await verified.getVersion(),1);
+        expect((await verified.query('records')).single['value'],73);
+        await verified.close();
+        return databaseFactoryFfi.openDatabase(f,options:OpenDatabaseOptions(version:2,
+          onUpgrade:(db,_,__)async{await db.execute('ALTER TABLE records ADD COLUMN note TEXT');}));
+      });
+    expect(await migrated.getVersion(),2);
+    expect((await migrated.query('records')).single['value'],73);
+    await migrated.close();
+    await root.delete(recursive:true);
+  });
 }
