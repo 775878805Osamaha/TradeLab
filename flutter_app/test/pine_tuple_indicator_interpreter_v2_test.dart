@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tradelab_flutter/chart/pine_v6_language_runtime.dart';
+import 'package:tradelab_flutter/chart/pine_subset_program.dart';
+import 'dart:typed_data';
 import 'package:tradelab_flutter/data/tradelab_data.dart';
 
 class _Poison extends ListBase<TradeCandle>{
@@ -69,12 +71,22 @@ void main(){
       }
     }finally{r.close();}
   });
-  test('EMA new explicit SMA seed vs unchanged default legacy, V2 independent oracle',(){
+  test('EMA general SMA seed vs unchanged standalone legacy, V2 independent oracle',(){
     for(final length in [3,20,50,200]){
       final script='//@version=6\nindicator("EMA compatibility")\nplot(ta.ema(close,$length))';
       final old=PineV6LanguageProgram.compile(script),fresh=PineV6LanguageProgram.compile(script,preferGeneral:true);
       expect(old.legacy,isNotNull);expect(fresh.legacy,isNull);
       final legacy=old.evaluate(bars).single.values,v=fresh.evaluate(bars).single.values;
+      final standalone=PineSubsetProgram.compile(script).evaluateIncrementally(bars).single.values;
+      final legacyBits=ByteData(8),standaloneBits=ByteData(8);
+      for(var i=0;i<bars.length;i++){
+        expect(legacy[i]==null,standalone[i]==null);
+        if(legacy[i]!=null){
+          legacyBits.setFloat64(0,legacy[i]!);standaloneBits.setFloat64(0,standalone[i]!);
+          expect(legacyBits.getUint64(0),standaloneBits.getUint64(0),reason:'legacy bit pattern $length/$i');
+        }
+      }
+      const warmupEnd={3:21,20:179,50:451,200:1872};
       double? expected;int mask=0,changed=0,last=-1;double sum=0;
       for(var i=0;i<bars.length;i++){
         final x=bars[i].close;
@@ -85,13 +97,28 @@ void main(){
         else if(legacy[i]!=null&&v[i]!=null&&(legacy[i]!-v[i]!).abs()>1e-6){changed++;last=i;}
       }
       expect(mask,length-1);
-      // Explicit warm-up boundary, no relaxation of the tolerance.
-      for(var i=last+1;i<bars.length;i++)expect(v[i],closeTo(legacy[i]!,1e-6));
+      // Fixed per-length V2 boundary, measured on prior CI, not derived from the candidate.
+      final boundary=warmupEnd[length]!;
+      expect(last,lessThan(boundary));
+      for(var i=boundary;i<bars.length;i++)expect(v[i],closeTo(legacy[i]!,1e-6));
       print('EMA_COMPAT '+jsonEncode({'length':length,'na_mismatch':mask,'numeric_over_1e6':changed,'last_affected_index':last,'affected':mask+changed}));
     }
     const code='//@version=6\nindicator("Leading na")\nplot(ta.ema(close[1],3))';
     final v=PineV6LanguageProgram.compile(code,preferGeneral:true).evaluate(bars.take(8).toList()).single.values;
     expect(v.take(3),[null,null,null]);expect(v[3],closeTo((bars[0].close+bars[1].close+bars[2].close)/3,1e-6));
+  });
+  test('default general AST EMA and explicit general route both use SMA',(){
+    const code='//@version=6\nindicator("AST EMA compatibility")\nf(float x) => ta.ema(x,3)\nplot(f(close))';
+    final candles=[for(final x in [2.0,4.0,8.0,16.0]) TradeCandle(x,x+1,x-1,x)];
+    final old=PineV6LanguageProgram.compile(code);
+    final seeded=PineV6LanguageProgram.compile(code,preferGeneral:true);
+    expect(old.legacy,isNull);
+    expect(seeded.legacy,isNull);
+    final v=old.evaluate(candles).single.values;
+    expect(seeded.evaluate(candles).single.values,v);
+    expect(v.take(2),[null,null]);
+    expect(v[2],closeTo(14/3,1e-6));
+    expect(v[3],closeTo((14/3+16)/2,1e-6));
   });
   test('real Pine tuple-returning UDF and nested independent call paths',(){
     const code='''//@version=6

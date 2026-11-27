@@ -51,6 +51,9 @@ class PineV6LanguageProgram {
           prepared.message??'Invalid Pine syntax or semantics');
     }
     final legacy=preferGeneral?null:prepared.legacyProgram;
+    if(prepared.diagnostics.any((d)=>d.code=='tuple_shape_unknown')){
+      throw const PineRuntimeException('tuple_shape_unknown','Tuple result shape must be resolved before execution');
+    }
     final functions=<String,PineFunctionStatement>{};
     final plots=<PineCallExpression>[];
     for(final stmt in prepared.ast.statements) {
@@ -172,6 +175,7 @@ class PineV6LanguageProgram {
         if(stmt is PineTupleDeclarationStatement){
           validateExpr(stmt.value);usesNewTa=true;
         }else if(stmt is PineSequenceStatement){
+          usesNewTa=true;
           validateStatements(stmt.statements,global:global);
         }else if(stmt is PineVariableStatement) {
           validateExpr(stmt.value);
