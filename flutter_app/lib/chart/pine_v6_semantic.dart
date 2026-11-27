@@ -292,7 +292,11 @@ class PineV6SemanticAnalyzer {
           _define(scope,target.name,_PineSymbol(target.name,type),target.span);
         }
       }
-      _syntaxOnly(stmt.span,'Tuple declaration');
+      final tupleSource=stmt.value;
+      if(tupleSource is! PineCallExpression||
+          !const {'ta.macd','ta.dmi','ta.supertrend'}.contains(tupleSource.name)){
+        _syntaxOnly(stmt.span,'Tuple declaration');
+      }
     }else if(stmt is PineReferenceVariableStatement){
       final rhs=_expression(stmt.value,scope);
       if(stmt.typeName=='map'){

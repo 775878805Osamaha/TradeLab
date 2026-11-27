@@ -127,8 +127,8 @@ const _pineCalls=<String,_LibrarySignature>{
   'request.security':_LibrarySignature([
     'symbol:string timeframe:string expression:any gaps?:gaps lookahead?:lookahead ignore_invalid_symbol?:bool currency?:string calc_bars_count?:int'
   ],'security'),
-  'ta.dmi':_LibrarySignature(['diLength:int/simple adxSmoothing:int/simple'],'tuple'),
-  'ta.supertrend':_LibrarySignature(['factor:float atrPeriod:int/simple'],'tuple'),
+  'ta.dmi':_LibrarySignature(['diLength:int/simple adxSmoothing:int/simple'],'tuple',unimplemented:false),
+  'ta.supertrend':_LibrarySignature(['factor:float atrPeriod:int/simple'],'tuple',unimplemented:false),
   'ta.barssince':_LibrarySignature(['condition:bool'],'int',unimplemented:false),
   'ta.pivothigh':_LibrarySignature(['source:float leftbars:float rightbars:float','leftbars:float rightbars:float'],'float'),
   'ta.pivotlow':_LibrarySignature(['source:float leftbars:float rightbars:float','leftbars:float rightbars:float'],'float'),

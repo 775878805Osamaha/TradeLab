@@ -111,7 +111,20 @@ void main(){
     expect(original.lastVisitedLine,443);
     expect(original.diagnostics.where((d)=>d.severity==PineDiagnosticSeverity.error),isEmpty,
         reason:original.diagnostics.join('\n'));
-    expect(original.diagnostics.where((d)=>d.code=='syntax_only'),hasLength(17));
+    // Three TA tuple declarations now execute; the two security tuples and
+    // all other unsupported syntax are still diagnosed.
+    expect(original.diagnostics.where((d)=>d.code=='syntax_only'),hasLength(14));
+    final lines=source.split('\n');
+    for(final name in ['ta.macd','ta.dmi','ta.supertrend']){
+      final index=lines.indexWhere((l)=>l.startsWith('[')&&l.contains(name+'('));
+      expect(index,greaterThanOrEqualTo(0));
+      expect(original.diagnostics.any((d)=>d.code=='syntax_only'&&d.line==index+1),isFalse);
+    }
+    for(var i=0;i<lines.length;i++){
+      if(lines[i].startsWith('[')&&lines[i].contains('request.security(')){
+        expect(original.diagnostics.any((d)=>d.code=='syntax_only'&&d.line==i+1),isTrue);
+      }
+    }
   });
   test('recognized unsupported calls cannot enter existing execution paths',(){
     for(final body in ['x = time("60","0700-2000")','x = ticker.standard("X")',
